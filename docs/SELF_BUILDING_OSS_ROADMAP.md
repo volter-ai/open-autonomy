@@ -606,6 +606,8 @@ Required fixes from the live `open-autonomy-testbed` trials:
   decisions are acceptable only when a prior visible status already exists and
   no newer human input is present; otherwise PM should comment, label, dispatch,
   or escalate with a reason.
+- PM model mint/budget outages must produce a visible waiting status on the
+  issue unless an equally current PM status already exists.
 - PM `human_required`, `spam`, `duplicate`, and `wont_fix` outcomes must have
   deterministic label/comment behavior that can be audited from the issue.
 - PM needs a conservative classification for test-harness/operator-control
@@ -621,6 +623,17 @@ Required fixes from the live `open-autonomy-testbed` trials:
 - PM artifacts should be promoted into durable repo evidence or a stable
   downloadable format so PM-only conclusions are as inspectable as develop
   sessions.
+
+Implemented from live trials:
+
+- visible PM comments for `ignore`, blocking labels, review-without-PR, active
+  runs, and model-budget outages, with duplicate suppression
+- deterministic issue labels for `needs-info`, `human-required`, `duplicate`,
+  `spam`, and `manual-operator-test`
+- PM handoff comments that clear stale `needs-info` labels on `develop` or
+  `review`
+- triage approval for PM-authored `/agent develop` handoffs after a maintainer
+  clarification
 
 ### Phase 4: Developer Context And Patch Quality
 

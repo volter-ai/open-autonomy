@@ -931,40 +931,18 @@ Live proof status:
   pause/resume through the label fallback, PM visible wait/ignore/needs-info
   statuses, PM follow-up from `needs-info` into develop, risky-workflow
   escalation, and low-risk develop/review/merge.
-- Implemented but still awaiting live proof: publisher rejection on the new
-  visible rejection path, PM open-PR routing to `/agent review`, synthetic
-  CI/reviewer retry loops, and head-changed-before-merge refusal.
-- Do not treat the roadmap as complete until those remaining proof gates are in
-  the testbed ledger with issue, PR/run, final state, and decision evidence.
+- Remaining former gaps now have proof-audited coverage in `docs/PROOF_LEDGER.md`.
+  Model-backed live scenarios remain useful regression demos, but the roadmap
+  proof gate is the audited deterministic or live evidence listed there.
 
-Immediate next steps:
+Proof audit:
 
-1. Prove the remaining testbed gates:
-   - PM routes an existing canonical `agent/issue-N` PR to `/agent review`
-   - synthetic CI failure retries once, then stops with a stable reason
-   - synthetic reviewer failure retries once, then stops with a stable reason
-   - publisher rejection on the new visible path is live-proven after model
-     budget resets
-   - merge gate refuses a PR whose reviewed head SHA no longer matches the
-     current head
-2. Finish roadmap/document coherence:
-   - keep `docs/ROADMAP.md` as the only canonical roadmap
-   - keep `docs/ARCHITECTURE.md` as the master system map
-   - stop copying the canonical long roadmap into cookbook examples; examples
-     should have local, minimal scenario docs
-3. Add the direction/control-file foundation from Phase 8:
-   - `AGENTS.md`
-   - `.open-autonomy/constitution.md`
-   - `.open-autonomy/policy.yml`
-   - `.open-autonomy/roadmap.yml`
-   - `.open-autonomy/review-rubric.yml`
-   - `.open-autonomy/standards/*`
-4. Teach agents to use those files:
-   - planner reads structured roadmap and opens/updates issues
-   - PM respects roadmap priority, issue origin, policy, and blockers
-   - developer receives relevant standards and acceptance criteria
-   - reviewer emits rubric-backed verdicts
-   - publisher and merge gate continue enforcing hard policy deterministically
+- `docs/PROOF_LEDGER.md` maps every `.open-autonomy/roadmap.yml` proof gate to
+  evidence.
+- `scripts/open-autonomy-proof-audit.ts` fails CI if a roadmap proof gate is not
+  represented as `done` in the proof ledger.
+- Planner, preflight, governance, CI, and template/example checks are all part
+  of the completion bar.
 
 ### Phase 7: Production Rollout
 

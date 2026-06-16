@@ -11,6 +11,7 @@ describe('public agent production readiness', () => {
       'public-agent-pm.yml',
       'public-agent-review.yml',
       'open-autonomy-planner.yml',
+      'open-autonomy-upgrade.yml',
       'open-autonomy-preflight.yml',
       'open-autonomy-governance-report.yml',
       'model-proxy-admin.yml',
@@ -76,5 +77,12 @@ describe('public agent production readiness', () => {
     const report = workflow('open-autonomy-governance-report.yml');
     expect(report).toContain('public-agent-decision-index.ts');
     expect(report).toContain('open-autonomy-governance-report.ts');
+  });
+
+  test('upgrade workflow opens template upgrade PRs', () => {
+    const text = workflow('open-autonomy-upgrade.yml');
+    expect(text).toContain('open-autonomy-upgrade.ts');
+    expect(text).toContain('gh pr create');
+    expect(text).toContain('templates/self-driving-repo');
   });
 });

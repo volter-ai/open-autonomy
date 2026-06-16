@@ -68,6 +68,8 @@ describe('github-agent-session', () => {
     expect(manifest.schema_version).toBe(1);
     expect(manifest.status).toBe('pr-ready');
     expect(manifest.repo).toBe('volter/twin');
+    expect(manifest.open_autonomy.version).toMatch(/^\d+\.\d+\.\d+|0\.0\.0-dev/);
+    expect(manifest.open_autonomy.profile).toBe('default');
     expect(manifest.run_receipt).toBe('run-receipt.json');
     expect(manifest.transcript).toBe('transcript.md');
     expect(manifest.artifacts).toContain('artifacts/result.json');

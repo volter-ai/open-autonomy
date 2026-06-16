@@ -159,6 +159,21 @@ describe('public agent PM dispatcher', () => {
     expect(decision.comment).toContain('PM agent is waiting.');
   });
 
+  test('honors autonomy mode labels before develop', () => {
+    const decision = decidePolicy({
+      issue: { number: 70, labels: [{ name: 'agent-audit-only' }] },
+      target: { branch: 'agent/issue-70' },
+      comments: [],
+      openPrs: [],
+      maxDevelopAttempts: 2,
+      maxOpenAgentPrs: 5,
+      staleNeedsInfoMinutes: 60,
+    });
+    expect(decision.decision).toBe('policy_blocked');
+    expect(decision.autonomy_mode).toBe('audit-only');
+    expect(decision.reason).toContain('does not allow develop');
+  });
+
   test('does not auto-develop manual operator test issues', () => {
     const decision = decideDispatch(
       { number: 50, labels: [{ name: 'manual-operator-test' }], comments: [] },
@@ -513,6 +528,17 @@ describe('public agent CI, review, and merge gates', () => {
     );
     expect(decision.decision).toBe('human_required');
     expect(decision.reason).toContain('blocking label');
+  });
+
+  test('does not auto-merge develop-only autonomy mode', () => {
+    const decision = decideMerge(
+      { kind: 'pull_request', issue: 7, pull_request: 7, branch: 'agent/issue-7', head_sha: 'abc123', can_develop: true },
+      { decision: 'pass', reason: 'ok', required: [{ name: 'ci', status: 'pass', conclusion: 'SUCCESS' }] },
+      { verdict: 'pass', risk: 'low', human_required: false, summary: 'ok', findings: [] },
+      { blockers: { labels: [{ name: 'agent-develop-only' }], comments: [] } },
+    );
+    expect(decision.decision).toBe('human_required');
+    expect(decision.reason).toContain('agent-develop-only');
   });
 
   test('does not merge after a maintainer hold comment', () => {

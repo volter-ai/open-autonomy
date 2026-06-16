@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'bun:test';
+import { readFileSync } from 'node:fs';
 import { buildGovernanceReport } from './open-autonomy-governance-report.js';
 import { buildPreflightReport } from './open-autonomy-preflight.js';
 import { summarizeAgentStatus, renderStatusComment } from './public-agent-control.js';
@@ -11,6 +12,14 @@ describe('open autonomy fleet and audit surfaces', () => {
     expect(report.ready).toBe(true);
     expect(report.checks.some((check) => check.id === 'file:AGENTS.md' && check.status === 'pass')).toBe(true);
     expect(report.checks.some((check) => check.id === 'env:MODEL_PROXY_URL' && check.status === 'warn')).toBe(true);
+  });
+
+  test('version metadata exists for run evidence', () => {
+    const version = readFileSync('VERSION', 'utf8').trim();
+    const metadata = JSON.parse(readFileSync('.open-autonomy/version.json', 'utf8'));
+    expect(version).toBe('0.1.0');
+    expect(metadata.version).toBe(version);
+    expect(metadata.profile).toBe('default');
   });
 
   test('preflight blocks when required files are missing', () => {

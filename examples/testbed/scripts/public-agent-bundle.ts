@@ -16,6 +16,10 @@ export interface AgentBundleManifest {
   schema_version: 1;
   run_id: string;
   repo: string;
+  open_autonomy?: {
+    version: string;
+    profile: string;
+  };
   issue: number;
   actor: string;
   status: AgentStatus;
@@ -171,6 +175,13 @@ export function validateManifest(value: unknown): AgentBundleManifest {
   if (manifest.schema_version !== 1) throw new Error('unsupported bundle schema_version');
   if (!manifest.run_id || typeof manifest.run_id !== 'string') throw new Error('manifest.run_id is required');
   if (!manifest.repo || typeof manifest.repo !== 'string') throw new Error('manifest.repo is required');
+  if (manifest.open_autonomy !== undefined) {
+    if (!manifest.open_autonomy || typeof manifest.open_autonomy !== 'object') throw new Error('manifest.open_autonomy is invalid');
+    const version = (manifest.open_autonomy as { version?: unknown }).version;
+    const profile = (manifest.open_autonomy as { profile?: unknown }).profile;
+    if (typeof version !== 'string' || !version) throw new Error('manifest.open_autonomy.version is invalid');
+    if (typeof profile !== 'string' || !profile) throw new Error('manifest.open_autonomy.profile is invalid');
+  }
   if (!Number.isInteger(manifest.issue) || Number(manifest.issue) <= 0) throw new Error('manifest.issue is invalid');
   if (!manifest.actor || typeof manifest.actor !== 'string') throw new Error('manifest.actor is required');
   if (manifest.status !== 'pr-ready' && manifest.status !== 'blocked' && manifest.status !== 'failed') throw new Error('manifest.status is invalid');

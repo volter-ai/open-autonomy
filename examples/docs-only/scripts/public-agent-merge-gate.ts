@@ -91,7 +91,7 @@ export function decideMerge(target: AgentTarget, ci: CiDecision, review: Reviewe
 export function findMergeBlocker(context: MergeBlockerContext | undefined): string | undefined {
   const blockingLabel = context?.labels
     ?.map((label) => (label.name ?? '').toLowerCase())
-    .find((name) => ['agent-blocked', 'human-required', 'security', 'do-not-merge', 'no-automerge', 'hold'].includes(name));
+    .find((name) => ['agent-blocked', 'human-required', 'security', 'do-not-merge', 'no-automerge', 'hold', 'agent-develop-only', 'agent-review-only'].includes(name));
   if (blockingLabel) return `maintainer blocking label present: ${blockingLabel}`;
 
   const latestSignal = context?.comments

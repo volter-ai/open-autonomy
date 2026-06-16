@@ -26,6 +26,7 @@ interface Options {
 }
 
 const root = resolve(import.meta.dir, '..');
+const OPEN_AUTONOMY_VERSION = readOptionalText(join(root, 'VERSION'))?.trim() || '0.0.0-dev';
 
 function usage(): never {
   throw new Error(`Usage:
@@ -290,6 +291,10 @@ async function main(): Promise<void> {
     schema_version: 1,
     run_id: options.runId,
     repo: options.repoName,
+    open_autonomy: {
+      version: OPEN_AUTONOMY_VERSION,
+      profile: process.env.OPEN_AUTONOMY_PROFILE || process.env.PUBLIC_AGENT_PROFILE || 'default',
+    },
     issue: issueNumber,
     actor: options.actor,
     status,
@@ -358,6 +363,10 @@ function writeBlockedBundle(input: {
     schema_version: 1,
     run_id: input.runId,
     repo: input.repo,
+    open_autonomy: {
+      version: OPEN_AUTONOMY_VERSION,
+      profile: process.env.OPEN_AUTONOMY_PROFILE || process.env.PUBLIC_AGENT_PROFILE || 'default',
+    },
     issue: input.issue,
     actor: input.actor,
     status: 'blocked',
@@ -376,6 +385,11 @@ function writeBlockedBundle(input: {
     patchPath,
     ...decisionRels.map((rel) => join(input.bundleDir, rel)),
   ]);
+}
+
+function readOptionalText(path: string): string | undefined {
+  if (!existsSync(path)) return undefined;
+  return readFileSync(path, 'utf8');
 }
 
 main().catch((error) => {

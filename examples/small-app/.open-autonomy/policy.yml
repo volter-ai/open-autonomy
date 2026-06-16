@@ -1,0 +1,40 @@
+schema: open-autonomy.policy.v1
+autonomy:
+  default_mode: develop-review-merge
+  max_open_agent_prs: 5
+  max_develop_attempts: 2
+  max_ci_retries: 2
+  max_review_retries: 2
+  stale_needs_info_minutes: 10080
+  require_visible_pm_status: true
+  require_decision_records: true
+  require_testbed_proof: true
+risk:
+  human_required_paths:
+    - ".github/workflows/**"
+    - ".open-autonomy/policy.yml"
+    - ".open-autonomy/constitution.md"
+    - "services/**/wrangler.toml"
+  human_required_topics:
+    - auth
+    - secrets
+    - billing
+    - deployment
+    - destructive data migration
+    - dependency trust
+merge:
+  require_ci: true
+  require_low_risk_review: true
+  require_current_head_sha: true
+  maintainer_block_labels:
+    - do-not-merge
+    - human-required
+    - agent-blocked
+planner:
+  enabled: true
+  issue_origin_label_prefix: "origin:"
+  phase_label_prefix: "roadmap:"
+  priority_labels:
+    high: "priority:high"
+    medium: "priority:medium"
+    low: "priority:low"

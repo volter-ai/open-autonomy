@@ -18,6 +18,7 @@ export interface PolicyDecision {
   decision: 'allow' | 'blocked' | 'needs_info' | 'needs_info_stale' | 'budget_exhausted' | 'policy_blocked';
   reason: string;
   next_action: 'triage' | 'human_required' | 'wait';
+  autonomy_mode: 'default' | 'audit-only' | 'pm-comment' | 'develop-only' | 'review-only';
   develop_attempts: number;
   max_develop_attempts: number;
   open_agent_prs: number;
@@ -78,30 +79,35 @@ export function decidePolicy(input: {
   const ownPr = input.target.pull_request;
   const hasOwnOpenPr = openAgentPrs.some((pr) => pr.number === ownPr || pr.headRefName === ownBranch);
   const labels = new Set((input.issue.labels ?? []).map((label) => (label.name ?? '').toLowerCase()));
+  const autonomyMode = autonomyModeFromLabels(labels);
   const developAttempts = countDevelopAttempts(comments);
 
+  if (autonomyMode === 'audit-only' || autonomyMode === 'pm-comment' || autonomyMode === 'review-only') {
+    return decision('policy_blocked', `autonomy mode ${autonomyMode} does not allow develop`, 'human_required', input, developAttempts, openAgentPrs.length, autonomyMode);
+  }
+
   if (labels.has('agent-paused') || labels.has('agent-blocked') || labels.has('human-required') || labels.has('security')) {
-    return decision('policy_blocked', `blocking label present: ${[...labels].find((label) => ['agent-paused', 'agent-blocked', 'human-required', 'security'].includes(label))}`, 'human_required', input, developAttempts, openAgentPrs.length);
+    return decision('policy_blocked', `blocking label present: ${[...labels].find((label) => ['agent-paused', 'agent-blocked', 'human-required', 'security'].includes(label))}`, 'human_required', input, developAttempts, openAgentPrs.length, autonomyMode);
   }
 
   const needsInfo = latestNeedsInfoWithoutHumanReply(comments);
   if (needsInfo) {
     const ageMinutes = ageInMinutes(needsInfo.createdAt, input.now ?? new Date());
     if (ageMinutes >= input.staleNeedsInfoMinutes) {
-      return decision('needs_info_stale', `needs-info has no human response after ${Math.floor(ageMinutes)} minutes`, 'human_required', input, developAttempts, openAgentPrs.length);
+      return decision('needs_info_stale', `needs-info has no human response after ${Math.floor(ageMinutes)} minutes`, 'human_required', input, developAttempts, openAgentPrs.length, autonomyMode);
     }
-    return decision('needs_info', 'needs-info has no newer human response', 'wait', input, developAttempts, openAgentPrs.length);
+    return decision('needs_info', 'needs-info has no newer human response', 'wait', input, developAttempts, openAgentPrs.length, autonomyMode);
   }
 
   if (developAttempts >= input.maxDevelopAttempts) {
-    return decision('budget_exhausted', `develop attempt budget exhausted: ${developAttempts}/${input.maxDevelopAttempts}`, 'human_required', input, developAttempts, openAgentPrs.length);
+    return decision('budget_exhausted', `develop attempt budget exhausted: ${developAttempts}/${input.maxDevelopAttempts}`, 'human_required', input, developAttempts, openAgentPrs.length, autonomyMode);
   }
 
   if (!hasOwnOpenPr && openAgentPrs.length >= input.maxOpenAgentPrs) {
-    return decision('policy_blocked', `open agent PR limit reached: ${openAgentPrs.length}/${input.maxOpenAgentPrs}`, 'human_required', input, developAttempts, openAgentPrs.length);
+    return decision('policy_blocked', `open agent PR limit reached: ${openAgentPrs.length}/${input.maxOpenAgentPrs}`, 'human_required', input, developAttempts, openAgentPrs.length, autonomyMode);
   }
 
-  return decision('allow', 'policy allows develop triage', 'triage', input, developAttempts, openAgentPrs.length);
+  return decision('allow', 'policy allows develop triage', 'triage', input, developAttempts, openAgentPrs.length, autonomyMode);
 }
 
 function decision(
@@ -111,16 +117,26 @@ function decision(
   input: { maxDevelopAttempts: number; maxOpenAgentPrs: number },
   developAttempts: number,
   openAgentPrs: number,
+  autonomyMode: PolicyDecision['autonomy_mode'],
 ): PolicyDecision {
   return {
     decision: status,
     reason,
     next_action: nextAction,
+    autonomy_mode: autonomyMode,
     develop_attempts: developAttempts,
     max_develop_attempts: input.maxDevelopAttempts,
     open_agent_prs: openAgentPrs,
     max_open_agent_prs: input.maxOpenAgentPrs,
   };
+}
+
+function autonomyModeFromLabels(labels: Set<string>): PolicyDecision['autonomy_mode'] {
+  if (labels.has('agent-audit-only')) return 'audit-only';
+  if (labels.has('agent-pm-comment')) return 'pm-comment';
+  if (labels.has('agent-review-only')) return 'review-only';
+  if (labels.has('agent-develop-only')) return 'develop-only';
+  return 'default';
 }
 
 function countDevelopAttempts(comments: CommentLike[]): number {

@@ -38,6 +38,8 @@ can be published, reviewed, and merged.
 - `templates/self-driving-repo/` - copyable starter for another self-driving
   repository.
 - `examples/docs-only/` - minimal full-repo example.
+- `examples/small-app/` - small TypeScript app cookbook.
+- `examples/library/` - small TypeScript library cookbook.
 - `examples/testbed/` - full demo repo for live PM/operator/develop testing.
 - `docs/` - architecture, runbook, rollout, and the continuous roadmap.
 

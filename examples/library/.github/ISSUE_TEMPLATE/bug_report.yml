@@ -1,0 +1,38 @@
+name: Bug Report
+description: Report a reproducible bug in the public-agent workflow or model proxy.
+title: "[bug]: "
+labels: ["bug"]
+body:
+  - type: textarea
+    id: summary
+    attributes:
+      label: Summary
+      description: What broke, and what did you expect instead?
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: Reproduction
+      description: Include exact commands, issue/PR links, workflow run ids, and relevant logs.
+      value: |
+        ```bash
+        bun install
+        bun run check
+        ```
+    validations:
+      required: true
+  - type: textarea
+    id: artifacts
+    attributes:
+      label: Artifacts
+      description: Paste non-secret logs, session.json snippets, or links to public artifacts.
+    validations:
+      required: false
+  - type: checkboxes
+    id: secret-policy
+    attributes:
+      label: Secret Policy
+      options:
+        - label: I did not include real API keys, tokens, cookies, private URLs, or customer data.
+          required: true

@@ -228,6 +228,9 @@ jobs:
                   continue
                 fi
                 case "$pm_action" in
+                  develop|review)
+                    gh issue edit "$number" --remove-label needs-info || true
+                    ;;
                   needs_info)
                     gh issue edit "$number" --add-label needs-info || true
                     ;;

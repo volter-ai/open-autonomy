@@ -30,4 +30,13 @@ describe('public agent production readiness', () => {
     expect(text).toContain('/admin/limits/status');
     expect(text).toContain('/admin/runs/${RUN_ID}/revoke');
   });
+
+  test('publisher rejections are surfaced before the job fails', () => {
+    const text = workflow('public-agent.yml');
+    expect(text).toContain('Agent run blocked: publisher rejected the generated bundle.');
+    expect(text).toContain('--decision "rejected"');
+    expect(text).toContain('agent-publisher-decisions-${{ needs.agent-runner.outputs.run_id }}');
+    expect(text.indexOf('Comment on publisher rejection')).toBeLessThan(text.indexOf('Stop after publisher rejection'));
+    expect(text.indexOf('Stop after publisher rejection')).toBeLessThan(text.indexOf('Create or update pull request'));
+  });
 });

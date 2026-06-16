@@ -659,7 +659,9 @@ jobs:
           path: .agent-run/bundle
 
       - name: Validate and apply bundle
+        id: validate_bundle
         run: |
+          set +e
           branch="${{ needs.setup.outputs.target_branch }}"
           git fetch origin "$branch" && git checkout -B "$branch" "origin/$branch" || git checkout -B "$branch"
           bun scripts/github-agent-publish.ts \
@@ -672,8 +674,37 @@ jobs:
             --expected-issue "${{ needs.setup.outputs.issue_number }}" \
             --expected-actor "${{ github.actor }}" \
             --allowed-paths "${{ vars.PUBLIC_AGENT_ALLOWED_PATHS || '**' }}" \
-            --apply
+            --apply 2>.agent-run/publish-error.log
+          publish_status="$?"
+          set -e
           mkdir -p "agent-sessions/${{ needs.agent-runner.outputs.run_id }}/decisions"
+          if [[ "$publish_status" != "0" ]]; then
+            reason="$(head -c 1000 .agent-run/publish-error.log | tr '\n' ' ' | sed 's/[[:space:]]\\+/ /g')"
+            if [[ -z "$reason" ]]; then
+              reason="publisher rejected the agent bundle"
+            fi
+            printf '{"ok":false,"run_id":"%s","repo":"%s","issue":%s,"status":"publisher-rejected","reason":%s}\n' \
+              "${{ needs.agent-runner.outputs.run_id }}" \
+              "${{ github.repository }}" \
+              "${{ needs.setup.outputs.issue_number }}" \
+              "$(jq -Rn --arg reason "$reason" '$reason')" \
+              > .agent-run/publish-summary.json
+            bun scripts/public-agent-decision.ts \
+              --stage publish \
+              --issue "${{ needs.setup.outputs.issue_number }}" \
+              --run-id "${{ needs.agent-runner.outputs.run_id }}" \
+              --actor "public-agent-publisher" \
+              --decision "rejected" \
+              --reason "$reason" \
+              --subject-json "{\"type\":\"issue\",\"number\":${{ needs.setup.outputs.issue_number }},\"branch\":\"${branch}\"}" \
+              --failure-signature "publisher-rejected" \
+              --evidence "publish:.agent-run/publish-summary.json,bundle:.agent-run/bundle/manifest.json" \
+              --next-action "human_required" \
+              --out-dir "agent-sessions/${{ needs.agent-runner.outputs.run_id }}/decisions"
+            echo "ok=false" >> "$GITHUB_OUTPUT"
+            echo "reason=$reason" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
           bun scripts/public-agent-decision.ts \
             --stage publish \
             --issue "${{ needs.setup.outputs.issue_number }}" \
@@ -685,9 +716,38 @@ jobs:
             --evidence "publish:.agent-run/publish-summary.json,bundle:.agent-run/bundle/manifest.json" \
             --next-action "create_or_update_pr" \
             --out-dir "agent-sessions/${{ needs.agent-runner.outputs.run_id }}/decisions"
+          echo "ok=true" >> "$GITHUB_OUTPUT"
+
+      - name: Comment on publisher rejection
+        if: steps.validate_bundle.outputs.ok == 'false'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          reason="$(jq -r '.reason // "publisher rejected the agent bundle"' .agent-run/publish-summary.json)"
+          cat > /tmp/public-agent-publish-rejected.md <<EOF
+          Agent run blocked: publisher rejected the generated bundle.
+
+          ${reason}
+          EOF
+          gh issue comment "${{ needs.setup.outputs.issue_number }}" --body-file /tmp/public-agent-publish-rejected.md
+
+      - uses: actions/upload-artifact@v4
+        if: always() && hashFiles('agent-sessions/${{ needs.agent-runner.outputs.run_id }}/decisions/*.json') != ''
+        with:
+          name: agent-publisher-decisions-${{ needs.agent-runner.outputs.run_id }}
+          path: |
+            agent-sessions/${{ needs.agent-runner.outputs.run_id }}/decisions
+            .agent-run/publish-summary.json
+            .agent-run/publish-error.log
+          if-no-files-found: warn
+
+      - name: Stop after publisher rejection
+        if: steps.validate_bundle.outputs.ok == 'false'
+        run: exit 1
 
       - name: Create or update pull request
         id: publish_pr
+        if: steps.validate_bundle.outputs.ok == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |

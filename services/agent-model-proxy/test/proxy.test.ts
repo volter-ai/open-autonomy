@@ -345,6 +345,28 @@ describe('agent model proxy', () => {
     expect(await blocked.json()).toEqual({ error: { code: 'forbidden_workflow' } });
   });
 
+  test('allows GitHub OIDC exchange from any configured workflow prefix', async () => {
+    const oidc = await githubOidcSigner();
+    const env = testEnv({
+      GITHUB_OIDC_JWKS_URL: 'https://jwks.test/keys',
+      GITHUB_OIDC_ALLOWED_WORKFLOW: 'volter-ai/open-autonomy/.github/workflows/public-agent.yml@,volter-ai/volter-public-agent-trial/.github/workflows/public-agent.yml@',
+    });
+    globalThis.fetch = oidc.fetch;
+    const minted = await mint(env, ['gpt-5-mini'], 100, 3, { repo: 'volter-ai/open-autonomy' });
+    const jwt = await oidc.sign({
+      repository: 'volter-ai/open-autonomy',
+      actor: 'octocat',
+      job_workflow_ref: 'volter-ai/open-autonomy/.github/workflows/public-agent.yml@refs/heads/main',
+    });
+
+    const exchanged = await requestJson(env, `/v1/runs/${minted.run.run_id}/exchange`, {
+      method: 'POST',
+      headers: { authorization: `Bearer ${jwt}` },
+    });
+
+    expect(exchanged.ok).toBe(true);
+  });
+
   test('rejects GitHub OIDC exchange from a different run id', async () => {
     const oidc = await githubOidcSigner();
     const env = testEnv({ GITHUB_OIDC_JWKS_URL: 'https://jwks.test/keys' });

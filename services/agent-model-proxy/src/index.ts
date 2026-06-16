@@ -168,8 +168,13 @@ async function exchangeRunToken(req: Request, env: Env, runId: string): Promise<
 
   const workflowRef = oidc.job_workflow_ref ?? oidc.workflow_ref ?? '';
   if (claims.github_workflow_ref && workflowRef !== claims.github_workflow_ref) return error('forbidden_workflow', 403);
-  const allowedWorkflow = env.GITHUB_OIDC_ALLOWED_WORKFLOW ?? `${claims.repo}/.github/workflows/public-agent.yml@`;
-  if (!workflowRef.startsWith(allowedWorkflow)) return error('forbidden_workflow', 403);
+  const allowedWorkflows = (env.GITHUB_OIDC_ALLOWED_WORKFLOW ?? `${claims.repo}/.github/workflows/public-agent.yml@`)
+    .split(',')
+    .map((value) => value.trim())
+    .filter(Boolean);
+  if (!allowedWorkflows.some((allowedWorkflow) => workflowRef.startsWith(allowedWorkflow))) {
+    return error('forbidden_workflow', 403);
+  }
 
   return json({ ok: true, run: claims, token: await signRunToken(env, claims) });
 }

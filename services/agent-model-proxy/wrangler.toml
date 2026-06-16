@@ -18,7 +18,7 @@ MAX_RUNS_PER_ACTOR_PER_DAY = "200"
 MAX_RUNS_PER_ISSUE_PER_DAY = "50"
 MAX_GLOBAL_DAILY_USD_CENTS = "5000"
 GITHUB_OIDC_AUDIENCE = "volter-agent-model-proxy"
-GITHUB_OIDC_ALLOWED_WORKFLOW = "volter-ai/open-autonomy/.github/workflows/public-agent.yml@"
+GITHUB_OIDC_ALLOWED_WORKFLOW = "volter-ai/open-autonomy/.github/workflows/public-agent.yml@,volter-ai/volter-public-agent-trial/.github/workflows/public-agent.yml@"
 
 [[durable_objects.bindings]]
 name = "RUNS"

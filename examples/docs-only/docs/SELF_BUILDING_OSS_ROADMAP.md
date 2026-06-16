@@ -772,6 +772,18 @@ Implemented:
 - publisher policy rejections now write a visible issue comment plus a rejected
   publish decision artifact before the workflow fails
 
+Live proof status:
+
+- Proven in `open-autonomy-testbed`: issue-level pause/status/resume, repo-level
+  pause/resume through the label fallback, PM visible wait/ignore/needs-info
+  statuses, PM follow-up from `needs-info` into develop, risky-workflow
+  escalation, and low-risk develop/review/merge.
+- Implemented but still awaiting live proof: publisher rejection on the new
+  visible rejection path, PM open-PR routing to `/agent review`, synthetic
+  CI/reviewer retry loops, and head-changed-before-merge refusal.
+- Do not treat the roadmap as complete until those remaining proof gates are in
+  the testbed ledger with issue, PR/run, final state, and decision evidence.
+
 ### Phase 7: Production Rollout
 
 Goal: move from self-hosting confidence to production-grade self-building OSS.
@@ -813,3 +825,109 @@ Acceptance criteria:
 - Whether raw artifacts should be mirrored to permanent object storage.
 - Whether trusted maintainers can opt into workflow edits per run. Default is
   no.
+
+## Expanded Roadmap After Current Proof Gates
+
+Begin this expansion only after the remaining live testbed gaps above are
+proven or explicitly marked as intentionally deferred.
+
+### Phase 8: Self-Hosted Repository Fleet
+
+Goal: make open-autonomy easy to install, upgrade, and compare across many
+repositories.
+
+Build:
+
+- template initialization command or script that installs workflows, scripts,
+  docs, labels, and required repo variables
+- versioned policy/profile file so each repo can declare allowed paths,
+  required checks, retry budgets, PM mode, and merge mode
+- upgrade workflow that opens a PR when the open-autonomy template changes
+- compatibility checks that report missing secrets, variables, labels, branch
+  protection, and workflow permissions before autonomous work starts
+
+Acceptance criteria:
+
+- A fresh repo can be converted into a self-driving repo with a documented,
+  repeatable command sequence.
+- The testbed can verify both a new install and an upgrade from an older
+  template revision.
+- Each autonomous run records which open-autonomy version/profile it used.
+
+### Phase 9: Durable State And Audit Trail
+
+Goal: make autonomous decisions queryable without scraping Actions logs.
+
+Build:
+
+- committed or published decision index keyed by issue, PR, run ID, and head SHA
+- stable schema for PM, develop, publish, CI, review, retry, merge, pause, and
+  close decisions
+- artifact mirroring option for long-term retention outside GitHub Actions
+- issue/PR status summary command that reads the durable index first
+
+Acceptance criteria:
+
+- A maintainer can answer why an issue was skipped, developed, retried, merged,
+  or escalated from repo-visible evidence.
+- Decision records survive Actions artifact expiration.
+- The testbed has a scenario that rebuilds status from durable records only.
+
+### Phase 10: Agent Quality And Repair Loops
+
+Goal: improve success rate without loosening safety gates.
+
+Build:
+
+- richer developer context from prior failed attempts, review findings, CI
+  summaries, and relevant docs
+- bounded repair plans that explain what changed between retry attempts
+- evaluator fixtures for docs-only, code-only, test-fix, and refactor tasks
+- regression detection for repeated failure signatures and low-value churn
+
+Acceptance criteria:
+
+- Retry attempts demonstrably use the previous failure evidence.
+- Repeated bad approaches are stopped and escalated with a stable reason.
+- Testbed fixtures cover successful repair, repeated failure, and human handoff.
+
+### Phase 11: Maintainer Governance
+
+Goal: give maintainers clear control over autonomy level and repository risk.
+
+Build:
+
+- per-label and per-path autonomy levels such as audit-only, PM-comment,
+  develop-only, review-only, and auto-merge
+- maintainer approval gates for risky classes such as workflow, security,
+  dependency, release, or billing changes
+- project/backlog policy for stale `needs-info`, duplicate/spam suggestions,
+  and priority ordering
+- safety reports showing cost, retry counts, skipped issues, and escalations
+
+Acceptance criteria:
+
+- Maintainers can change autonomy level without editing workflow code.
+- Risky changes are routed to explicit human approval before publisher or merge.
+- Weekly status can be generated from repository-visible data.
+
+### Phase 12: Public OSS Readiness
+
+Goal: make open-autonomy usable by external maintainers without private Volter
+assumptions.
+
+Build:
+
+- clean OSS README with quickstart, architecture, threat model, and limitations
+- cookbook examples for docs-only repo, small app repo, library repo, and the
+  live testbed
+- contribution guide for adding new policies, workflows, and test scenarios
+- release process with changelog, migration notes, and template versioning
+
+Acceptance criteria:
+
+- A maintainer outside Volter can run the docs-only cookbook and understand the
+  trust boundaries.
+- The examples are self-contained repos or documented submodules that can be
+  pushed independently.
+- The canonical repo dogfoods the same released open-autonomy workflow it ships.

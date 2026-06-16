@@ -1,0 +1,19 @@
+{
+  "schema": "volter.agent.decision.v1",
+  "stage": "target",
+  "issue": 2,
+  "actor": "yueranyuan",
+  "decision": "can_develop",
+  "subject": {
+    "type": "issue",
+    "number": 2,
+    "branch": "agent/issue-2"
+  },
+  "reason": "target can be developed",
+  "evidence": [
+    "target:.agent-run/target.json"
+  ],
+  "next_action": "triage",
+  "created_at": "2026-06-16T17:19:48.875Z",
+  "id": "dec_8d1fa08974d86c38"
+}

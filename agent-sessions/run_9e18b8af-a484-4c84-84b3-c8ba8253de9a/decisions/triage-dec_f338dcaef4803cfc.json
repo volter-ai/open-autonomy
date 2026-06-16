@@ -1,0 +1,21 @@
+{
+  "schema": "volter.agent.decision.v1",
+  "stage": "triage",
+  "issue": 2,
+  "run_id": "run_4d610dda-03a9-444c-a5a0-e713037ac052",
+  "actor": "yueranyuan",
+  "decision": "approve_run",
+  "subject": {
+    "type": "issue",
+    "number": 2,
+    "branch": "agent/issue-2"
+  },
+  "reason": "The issue proposes a clarification to documentation that supports the self-hosting demo, which aligns with improving the project's usability.",
+  "evidence": [
+    "target:.agent-run/target.json",
+    "triage:.agent-run/triage.json"
+  ],
+  "next_action": "mint_agent",
+  "created_at": "2026-06-16T17:19:52.614Z",
+  "id": "dec_f338dcaef4803cfc"
+}

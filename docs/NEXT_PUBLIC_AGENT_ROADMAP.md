@@ -27,6 +27,7 @@ same loop against itself.
    - Configure `volter-ai/open-autonomy` variables and secrets.
    - Run the operator-control smoke.
    - Run one low-risk `/agent develop` against this repo.
+   - Issue #1 proved the setup-only operator controls; this issue should prove a real self-hosted develop path.
 
 2. Make the template excellent.
    - Keep `templates/self-driving-repo/` copyable.

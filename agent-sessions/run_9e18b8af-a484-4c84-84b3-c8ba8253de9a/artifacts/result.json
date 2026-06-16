@@ -1,0 +1,8 @@
+{
+  "ok": true,
+  "issue": 2,
+  "summary": "Added a short roadmap sentence clarifying that issue #1 proved setup-only operator controls and this issue is intended to prove a real self-hosted develop path.",
+  "tests": [
+    "Not run. Docs-only change."
+  ]
+}

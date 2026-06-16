@@ -1,0 +1,33 @@
+name = "volter-agent-model-proxy"
+main = "src/index.ts"
+compatibility_date = "2026-06-15"
+
+[vars]
+DEFAULT_MAX_USD_CENTS = "500"
+DEFAULT_MAX_REQUESTS = "200"
+DEFAULT_EXPIRES_SECONDS = "7200"
+MAX_BODY_BYTES = "1048576"
+MODEL_PRICES_JSON = "{}"
+MAX_RUN_USD_CENTS = "500"
+MAX_RUN_REQUESTS = "200"
+MAX_ACTIVE_RUNS_GLOBAL = "10"
+MAX_ACTIVE_RUNS_PER_REPO = "3"
+MAX_ACTIVE_RUNS_PER_ACTOR = "1"
+MAX_RUNS_PER_REPO_PER_DAY = "500"
+MAX_RUNS_PER_ACTOR_PER_DAY = "200"
+MAX_RUNS_PER_ISSUE_PER_DAY = "50"
+MAX_GLOBAL_DAILY_USD_CENTS = "5000"
+GITHUB_OIDC_AUDIENCE = "volter-agent-model-proxy"
+GITHUB_OIDC_ALLOWED_WORKFLOW = "volter-ai/open-autonomy/.github/workflows/public-agent.yml@"
+
+[[durable_objects.bindings]]
+name = "RUNS"
+class_name = "RunBudget"
+
+[[durable_objects.bindings]]
+name = "LIMITS"
+class_name = "LimitLedger"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["RunBudget", "LimitLedger"]

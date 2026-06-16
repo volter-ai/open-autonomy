@@ -1,0 +1,257 @@
+import { json } from './errors.js';
+import type { RunClaims } from './types.js';
+
+interface LedgerState {
+  day_key: string;
+  active_global: number;
+  active_by_repo: Record<string, number>;
+  active_by_actor: Record<string, number>;
+  runs_by_repo_day: Record<string, number>;
+  runs_by_actor_day: Record<string, number>;
+  runs_by_issue_day: Record<string, number>;
+  consumed_usd_cents: number;
+  reserved_usd_cents: number;
+  reservations: Record<string, { amount: number; expires_at_ms: number }>;
+  runs: Record<string, { repo: string; issue: number; actor: string; active: boolean }>;
+}
+
+export interface LimitConfig {
+  max_active_runs_global: number;
+  max_active_runs_per_repo: number;
+  max_active_runs_per_actor: number;
+  max_runs_per_repo_per_day: number;
+  max_runs_per_actor_per_day: number;
+  max_runs_per_issue_per_day: number;
+  max_global_daily_usd_cents: number;
+}
+
+export class LimitLedger implements DurableObject {
+  private loaded = false;
+  private state: LedgerState = emptyState();
+
+  constructor(private readonly ctx: DurableObjectState) {}
+
+  async fetch(req: Request): Promise<Response> {
+    await this.load();
+    const body = await req.json().catch(() => ({})) as Record<string, unknown>;
+    const op = body.op;
+
+    if (op === 'register') return json(await this.register(body.claims as RunClaims, body.config as LimitConfig));
+    if (op === 'complete') return json(await this.complete(String(body.run_id)));
+    if (op === 'reserve') return json(await this.reserve(String(body.request_id), Number(body.amount_usd_cents), body.config as LimitConfig));
+    if (op === 'consume') {
+      await this.consume(String(body.request_id), Number(body.actual_usd_cents));
+      return json({ ok: true });
+    }
+    if (op === 'release') {
+      await this.release(String(body.request_id));
+      return json({ ok: true });
+    }
+    if (op === 'status') return json(this.snapshot());
+    return json({ ok: false, error: 'unknown_op' }, { status: 400 });
+  }
+
+  private async load(): Promise<void> {
+    if (this.loaded) return;
+    const stored = await this.ctx.storage.get<LedgerState>('state');
+    if (stored) this.state = stored;
+    this.normalizeState();
+    this.rolloverIfNeeded();
+    this.gcReservations();
+    this.loaded = true;
+  }
+
+  private async save(): Promise<void> {
+    await this.ctx.storage.put('state', this.state);
+  }
+
+  private async register(claims: RunClaims, config: LimitConfig): Promise<Record<string, unknown>> {
+    this.rolloverIfNeeded();
+    if (this.state.runs[claims.run_id]) return { ok: false, error: 'run_already_registered' };
+
+    const issueKey = issueKeyFor(claims);
+    const repoRuns = this.state.runs_by_repo_day[claims.repo] ?? 0;
+    const actorRuns = this.state.runs_by_actor_day[claims.actor] ?? 0;
+    const issueRuns = this.state.runs_by_issue_day[issueKey] ?? 0;
+    const repoActive = this.state.active_by_repo[claims.repo] ?? 0;
+    const actorActive = this.state.active_by_actor[claims.actor] ?? 0;
+
+    if (this.state.active_global >= config.max_active_runs_global) return { ok: false, error: 'global_active_run_limit_reached' };
+    if (repoActive >= config.max_active_runs_per_repo) return { ok: false, error: 'repo_active_run_limit_reached' };
+    if (actorActive >= config.max_active_runs_per_actor) return { ok: false, error: 'actor_active_run_limit_reached' };
+    if (repoRuns >= config.max_runs_per_repo_per_day) return { ok: false, error: 'repo_daily_run_limit_reached' };
+    if (actorRuns >= config.max_runs_per_actor_per_day) return { ok: false, error: 'actor_daily_run_limit_reached' };
+    if (issueRuns >= config.max_runs_per_issue_per_day) return { ok: false, error: 'issue_daily_run_limit_reached' };
+
+    this.state.active_global += 1;
+    this.state.active_by_repo[claims.repo] = repoActive + 1;
+    this.state.active_by_actor[claims.actor] = actorActive + 1;
+    this.state.runs_by_repo_day[claims.repo] = repoRuns + 1;
+    this.state.runs_by_actor_day[claims.actor] = actorRuns + 1;
+    this.state.runs_by_issue_day[issueKey] = issueRuns + 1;
+    this.state.runs[claims.run_id] = { repo: claims.repo, issue: claims.issue, actor: claims.actor, active: true };
+    await this.save();
+    return { ok: true };
+  }
+
+  private async complete(runId: string): Promise<{ ok: true }> {
+    const run = this.state.runs[runId];
+    if (!run || !run.active) return { ok: true };
+    run.active = false;
+    this.state.active_global = Math.max(0, this.state.active_global - 1);
+    this.state.active_by_repo[run.repo] = Math.max(0, (this.state.active_by_repo[run.repo] ?? 0) - 1);
+    this.state.active_by_actor[run.actor] = Math.max(0, (this.state.active_by_actor[run.actor] ?? 0) - 1);
+    await this.save();
+    return { ok: true };
+  }
+
+  private async reserve(requestId: string, amount: number, config: LimitConfig): Promise<Record<string, unknown>> {
+    this.rolloverIfNeeded();
+    this.gcReservations();
+    const available = config.max_global_daily_usd_cents - this.state.consumed_usd_cents - this.state.reserved_usd_cents;
+    if (amount > available) {
+      return {
+        ok: false,
+        error: 'global_daily_spend_limit_reached',
+        consumed_usd_cents: this.state.consumed_usd_cents,
+        reserved_usd_cents: this.state.reserved_usd_cents,
+        max_global_daily_usd_cents: config.max_global_daily_usd_cents,
+      };
+    }
+
+    this.state.reserved_usd_cents += amount;
+    this.state.reservations[requestId] = { amount, expires_at_ms: Date.now() + 10 * 60_000 };
+    await this.save();
+    return { ok: true, remaining_global_usd_cents: available - amount };
+  }
+
+  private async consume(requestId: string, actual: number): Promise<void> {
+    const reservation = this.state.reservations[requestId];
+    if (reservation) {
+      this.state.reserved_usd_cents = Math.max(0, this.state.reserved_usd_cents - reservation.amount);
+      delete this.state.reservations[requestId];
+    }
+    this.state.consumed_usd_cents += Math.max(0, actual);
+    await this.save();
+  }
+
+  private async release(requestId: string): Promise<void> {
+    const reservation = this.state.reservations[requestId];
+    if (!reservation) return;
+    this.state.reserved_usd_cents = Math.max(0, this.state.reserved_usd_cents - reservation.amount);
+    delete this.state.reservations[requestId];
+    await this.save();
+  }
+
+  private snapshot() {
+    return {
+      day_key: this.state.day_key,
+      active_global: this.state.active_global,
+      active_by_repo: this.state.active_by_repo,
+      active_by_actor: this.state.active_by_actor,
+      runs_by_repo_day: this.state.runs_by_repo_day,
+      runs_by_actor_day: this.state.runs_by_actor_day,
+      runs_by_issue_day: this.state.runs_by_issue_day,
+      consumed_usd_cents: this.state.consumed_usd_cents,
+      reserved_usd_cents: this.state.reserved_usd_cents,
+      runs: this.state.runs,
+    };
+  }
+
+  private rolloverIfNeeded(): void {
+    const today = dayKey();
+    if (this.state.day_key === today) return;
+    this.state.day_key = today;
+    this.state.runs_by_repo_day = {};
+    this.state.runs_by_actor_day = {};
+    this.state.runs_by_issue_day = {};
+    this.state.consumed_usd_cents = 0;
+    this.state.reserved_usd_cents = 0;
+    this.state.reservations = {};
+  }
+
+  private normalizeState(): void {
+    this.state.runs_by_repo_day ??= {};
+    this.state.runs_by_actor_day ??= {};
+    this.state.runs_by_issue_day ??= {};
+    this.state.runs ??= {};
+  }
+
+  private gcReservations(): void {
+    const now = Date.now();
+    for (const [id, reservation] of Object.entries(this.state.reservations)) {
+      if (reservation.expires_at_ms < now) {
+        this.state.reserved_usd_cents = Math.max(0, this.state.reserved_usd_cents - reservation.amount);
+        delete this.state.reservations[id];
+      }
+    }
+  }
+}
+
+function emptyState(): LedgerState {
+  return {
+    day_key: dayKey(),
+    active_global: 0,
+    active_by_repo: {},
+    active_by_actor: {},
+    runs_by_repo_day: {},
+    runs_by_actor_day: {},
+    runs_by_issue_day: {},
+    consumed_usd_cents: 0,
+    reserved_usd_cents: 0,
+    reservations: {},
+    runs: {},
+  };
+}
+
+function dayKey(): string {
+  return new Date().toISOString().slice(0, 10);
+}
+
+function issueKeyFor(claims: Pick<RunClaims, 'repo' | 'issue'>): string {
+  return `${claims.repo}#${claims.issue}`;
+}
+
+export class LimitLedgerClient {
+  constructor(private readonly ns: DurableObjectNamespace) {}
+
+  private stub() {
+    return this.ns.get(this.ns.idFromName('global'));
+  }
+
+  private async rpc<T>(op: string, args: Record<string, unknown> = {}): Promise<T> {
+    const res = await this.stub().fetch('https://limit-ledger.local/', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ op, ...args }),
+    });
+    return await res.json() as T;
+  }
+
+  register(claims: RunClaims, config: LimitConfig) {
+    return this.rpc<{ ok: true } | { ok: false; error: string }>('register', { claims, config });
+  }
+
+  complete(runId: string) {
+    return this.rpc<{ ok: true }>('complete', { run_id: runId });
+  }
+
+  reserve(requestId: string, amountUsdCents: number, config: LimitConfig) {
+    return this.rpc<{ ok: true; remaining_global_usd_cents: number } | { ok: false; error: string }>(
+      'reserve',
+      { request_id: requestId, amount_usd_cents: amountUsdCents, config },
+    );
+  }
+
+  consume(requestId: string, actualUsdCents: number) {
+    return this.rpc<{ ok: true }>('consume', { request_id: requestId, actual_usd_cents: actualUsdCents });
+  }
+
+  release(requestId: string) {
+    return this.rpc<{ ok: true }>('release', { request_id: requestId });
+  }
+
+  status() {
+    return this.rpc<unknown>('status');
+  }
+}

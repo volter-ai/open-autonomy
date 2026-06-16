@@ -83,6 +83,7 @@ export function renderPmPrompt(issueJson: string): string {
     'Choose ignore when an agent run for this issue is queued or in_progress.',
     'Choose review when open_agent_pr exists and the PR appears ready for reviewer attention.',
     'Choose develop again only when there is no queued/in_progress run and the issue has new human information after the last PM or agent action.',
+    'If a human reply after a PM needs_info comment provides an exact file and concrete requested text or acceptance criteria, choose develop.',
     'For failed, blocked, or stalled agent work with no new human input, choose ignore unless human_required is warranted by risk or ambiguity.',
     'Choose needs_info when reproduction, scope, or desired behavior is missing.',
     'Choose human_required for security-sensitive, workflow, policy, legal, credential, maintainer-trust, or ambiguous product decisions.',

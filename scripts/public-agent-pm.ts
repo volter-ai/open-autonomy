@@ -86,6 +86,7 @@ export function renderPmPrompt(issueJson: string): string {
     'For failed, blocked, or stalled agent work with no new human input, choose ignore unless human_required is warranted by risk or ambiguity.',
     'Choose needs_info when reproduction, scope, or desired behavior is missing.',
     'Choose human_required for security-sensitive, workflow, policy, legal, credential, maintainer-trust, or ambiguous product decisions.',
+    'Choose human_required for test-harness or operator-control issues whose purpose is to exercise commands such as pause, status, retry, resume, or repo pause instead of changing repository files.',
     'If labels include agent-blocked, human-required, security, or agent-paused, choose ignore unless you are explaining human_required from new human input.',
     'Use open_agent_pr, open_agent_pr.comments, agent_runs, labels, previous_decisions, and issue comments in the issue context to avoid duplicate starts and duplicate reviews, and to notice stuck or blocked work.',
     'If previous_decisions show policy_blocked, budget_exhausted, needs_info_stale, ci-repeated-failure, or review-repeated-failure with no newer human input, choose ignore or human_required instead of develop.',

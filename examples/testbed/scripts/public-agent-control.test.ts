@@ -144,8 +144,9 @@ describe('public agent PM dispatcher', () => {
       { number: 50, labels: [], comments: [], agent_runs: [{ status: 'in_progress' }] },
       { action: 'develop', risk: 'low', human_required: false, reason: 'clear docs issue' },
     );
-    expect(decision.action).toBe('skip');
+    expect(decision.action).toBe('comment');
     expect(decision.reason).toContain('already queued or in progress');
+    expect(decision.comment).toContain('PM agent is waiting.');
   });
 
   test('does not dispatch when blocking labels are present', () => {
@@ -153,8 +154,19 @@ describe('public agent PM dispatcher', () => {
       { number: 50, labels: [{ name: 'agent-blocked' }], comments: [] },
       { action: 'develop', risk: 'low', human_required: false, reason: 'clear docs issue' },
     );
-    expect(decision.action).toBe('skip');
+    expect(decision.action).toBe('comment');
     expect(decision.reason).toContain('blocking label present');
+    expect(decision.comment).toContain('PM agent is waiting.');
+  });
+
+  test('does not auto-develop manual operator test issues', () => {
+    const decision = decideDispatch(
+      { number: 50, labels: [{ name: 'manual-operator-test' }], comments: [] },
+      { action: 'develop', risk: 'low', human_required: false, reason: 'exercise pause and resume commands' },
+    );
+    expect(decision.action).toBe('comment');
+    expect(decision.reason).toContain('manual-operator-test');
+    expect(decision.command).toBeUndefined();
   });
 
   test('does not start develop when an open agent PR needs review', () => {
@@ -167,8 +179,9 @@ describe('public agent PM dispatcher', () => {
       },
       { action: 'develop', risk: 'low', human_required: false, reason: 'clear docs issue' },
     );
-    expect(decision.action).toBe('skip');
+    expect(decision.action).toBe('comment');
     expect(decision.reason).toContain('open agent PR #60 already exists');
+    expect(decision.comment).toContain('PM agent is waiting for review.');
   });
 
   test('does not start another develop when the prior agent attempt has no newer human input', () => {
@@ -344,7 +357,32 @@ describe('public agent PM dispatcher', () => {
       { number: 54, labels: [], comments: [] },
       { action: 'review', risk: 'low', human_required: false, reason: 'ready' },
     );
+    expect(decision.action).toBe('comment');
+    expect(decision.comment).toContain('PM agent cannot review yet.');
+  });
+
+  test('turns ignore into a visible no-action status once', () => {
+    const decision = decideDispatch(
+      { number: 54, labels: [], comments: [] },
+      { action: 'ignore', risk: 'low', human_required: false, reason: 'no newer human input after prior work' },
+    );
+    expect(decision.action).toBe('comment');
+    expect(decision.comment).toContain('PM agent is not taking action.');
+  });
+
+  test('does not repeat visible no-action statuses without newer human input', () => {
+    const decision = decideDispatch(
+      {
+        number: 54,
+        labels: [],
+        comments: [
+          { author: { login: 'github-actions' }, createdAt: '2026-06-16T07:10:00Z', body: 'PM agent is not taking action.\n\nNo newer human input.' },
+        ],
+      },
+      { action: 'ignore', risk: 'low', human_required: false, reason: 'still no newer human input' },
+    );
     expect(decision.action).toBe('skip');
+    expect(decision.reason).toContain('prior PM status exists');
   });
 });
 

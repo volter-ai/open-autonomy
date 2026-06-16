@@ -44,13 +44,18 @@ export function decideDispatch(issue: unknown, pm: PmDecision): DispatchDecision
   const issueNumber = item.number;
   if (!issueNumber) return { action: 'skip', reason: 'issue number is missing' };
   const blockingLabel = blockingLabelName(item.labels);
-  if (blockingLabel) return { action: 'skip', reason: `blocking label present: ${blockingLabel}` };
+  if (blockingLabel) {
+    const reason = `blocking label present: ${blockingLabel}`;
+    return repeatedPmStatus(item.comments) ?? visibleStatus(issueNumber, 'PM agent is waiting.', reason);
+  }
   if (hasActiveRun(item.agent_runs)) {
-    return { action: 'skip', reason: 'an agent run is already queued or in progress for this issue' };
+    const reason = 'an agent run is already queued or in progress for this issue';
+    return repeatedPmStatus(item.comments) ?? visibleStatus(issueNumber, 'PM agent is waiting.', reason);
   }
   if (pm.action === 'develop') {
     if (item.open_agent_pr?.number && !hasNewHumanCommentAfter(item.comments, item.open_agent_pr.updatedAt)) {
-      return { action: 'skip', reason: `open agent PR #${item.open_agent_pr.number} already exists; review it before starting another develop pass` };
+      const reason = `open agent PR #${item.open_agent_pr.number} already exists; review it before starting another develop pass`;
+      return repeatedPmStatus(item.comments) ?? visibleStatus(issueNumber, 'PM agent is waiting for review.', reason);
     }
     const latestAgentMarker = latestPublicWorkMarker(item.comments);
     if (latestAgentMarker && !hasNewHumanCommentAfter(item.comments, latestAgentMarker.createdAt)) {
@@ -67,7 +72,10 @@ export function decideDispatch(issue: unknown, pm: PmDecision): DispatchDecision
   }
   if (pm.action === 'review') {
     const pr = item.open_agent_pr?.number;
-    if (!pr) return { action: 'skip', reason: 'PM requested review, but no open agent PR was found' };
+    if (!pr) {
+      const reason = 'PM requested review, but no open agent PR was found';
+      return repeatedPmStatus(item.comments) ?? visibleStatus(issueNumber, 'PM agent cannot review yet.', reason);
+    }
     const latestReviewMarker = latestPublicWorkMarker(item.open_agent_pr?.comments);
     if (latestReviewMarker && !hasNewHumanCommentAfter(item.open_agent_pr?.comments, latestReviewMarker.createdAt)) {
       return { action: 'skip', reason: `prior agent review exists on PR #${pr} with no newer human input` };
@@ -114,7 +122,19 @@ export function decideDispatch(issue: unknown, pm: PmDecision): DispatchDecision
       comment: `PM agent marked this as ${pm.action.replaceAll('_', ' ')}.\n\n${pm.reason}`,
     };
   }
-  return { action: 'skip', reason: pm.reason };
+  const repeat = repeatedPmStatus(item.comments);
+  if (repeat) return repeat;
+  return visibleStatus(issueNumber, 'PM agent is not taking action.', pm.reason);
+}
+
+function visibleStatus(issueNumber: number, heading: string, reason: string): DispatchDecision {
+  return {
+    action: 'comment',
+    reason,
+    target: 'issue',
+    target_number: issueNumber,
+    comment: `${heading}\n\n${reason}`,
+  };
 }
 
 function hasActiveRun(runs: Array<{ status?: string }> | undefined): boolean {
@@ -172,7 +192,7 @@ function isAgentStatusComment(body: string | undefined): boolean {
 }
 
 function isPmStatusComment(body: string | undefined): boolean {
-  return /^PM agent (needs more information|thinks this may be a duplicate|marked this as)/i.test(body?.trim() ?? '');
+  return /^PM agent (needs more information|thinks this may be a duplicate|marked this as|is waiting|cannot review yet|is not taking action)/i.test(body?.trim() ?? '');
 }
 
 function isBotAuthor(author: string): boolean {
@@ -180,7 +200,7 @@ function isBotAuthor(author: string): boolean {
 }
 
 function blockingLabelName(labels: Array<{ name?: string }> | undefined): string | undefined {
-  const blocking = new Set(['agent-paused', 'agent-blocked', 'human-required', 'security']);
+  const blocking = new Set(['agent-paused', 'agent-blocked', 'human-required', 'security', 'manual-operator-test']);
   return labels?.map((label) => (label.name ?? '').toLowerCase()).find((name) => blocking.has(name));
 }
 

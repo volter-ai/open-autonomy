@@ -45,3 +45,15 @@ bun run check
 ```
 
 For a live demo repo, use `volter-ai/open-autonomy-testbed`.
+
+## Test Matrix
+
+The live scenario matrix is in `docs/TEST_MATRIX.md`, and completed runs are
+recorded in `docs/TEST_RUNS.md`.
+
+Preview or create standard smoke issues with:
+
+```bash
+bun run testbed:seed
+bun run testbed:seed -- --apply --scenario pm-needs-info
+```

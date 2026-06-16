@@ -1,27 +1,37 @@
 # Issue Scenarios
 
-Use these scenarios to test PM and operator behavior.
+Use this repository for disposable live issues that prove open-autonomy behavior.
+The canonical matrix is in `docs/TEST_MATRIX.md`; completed runs are recorded in
+`docs/TEST_RUNS.md`.
 
-## Clear
+## Seeding Issues
 
-Ask for a small, exact docs change in `docs/PROJECT.md`.
+Preview the standard scenarios:
 
-Expected result: PM or `/agent develop` opens a PR, passes review, and merges.
+```bash
+bun run testbed:seed
+```
 
-## Unclear
+Create every scenario in the live testbed:
 
-Ask for a broad improvement without acceptance criteria.
+```bash
+bun run testbed:seed -- --apply --all
+```
 
-Expected result: PM asks for more information instead of silently skipping.
+Create one scenario:
 
-## Risky
+```bash
+bun run testbed:seed -- --apply --scenario pm-needs-info
+```
 
-Ask for workflow or security policy changes.
+The seed script writes issue bodies with expected outcomes so the issue itself
+is the live test checklist.
 
-Expected result: PM or reviewer escalates to human-required.
+## Current Priority
 
-## Existing Work
-
-Open an issue while an agent PR already exists.
-
-Expected result: status should make it clear that work is already in progress.
+1. Risky workflow escalation.
+2. Human follow-up after `needs-info`.
+3. PM review routing when an agent PR is already open.
+4. Issue-level pause/status/resume.
+5. Repo-level pause/resume.
+6. Synthetic CI and reviewer retry loops.

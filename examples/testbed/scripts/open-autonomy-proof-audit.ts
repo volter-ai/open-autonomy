@@ -1,11 +1,11 @@
 #!/usr/bin/env bun
-import { readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { parseRoadmapItems } from './public-agent-planner.js';
 
 export interface ProofAuditResult {
   schema: 'open-autonomy.proof-audit.v1';
   passed: boolean;
-  proof_gates: Array<{ id: string; status: 'present' | 'missing' }>;
+  proof_gates: Array<{ id: string; status: 'present' | 'missing'; evidence: string[] }>;
 }
 
 interface Options {
@@ -32,10 +32,15 @@ function parseArgs(argv: string[]): Options {
 
 export function auditProofLedger(roadmapText: string, ledgerText: string): ProofAuditResult {
   const gates = parseRoadmapItems(roadmapText).map((item) => item.proof_gate);
-  const proof_gates = gates.map((id) => ({
-    id,
-    status: ledgerText.includes(`\`${id}\``) && rowStatus(ledgerText, id) === 'done' ? 'present' as const : 'missing' as const,
-  }));
+  const proof_gates = gates.map((id) => {
+    const row = ledgerRow(ledgerText, id);
+    const evidence = row ? validatedEvidence(row.evidence) : [];
+    return {
+      id,
+      status: row?.status === 'done' && evidence.length > 0 ? 'present' as const : 'missing' as const,
+      evidence,
+    };
+  });
   return {
     schema: 'open-autonomy.proof-audit.v1',
     passed: proof_gates.every((item) => item.status === 'present'),
@@ -43,9 +48,33 @@ export function auditProofLedger(roadmapText: string, ledgerText: string): Proof
   };
 }
 
-function rowStatus(text: string, id: string): string {
+function ledgerRow(text: string, id: string): { evidence: string; status: string } | undefined {
   const row = text.split(/\r?\n/).find((line) => line.includes(`\`${id}\``)) ?? '';
-  return row.split('|').map((part) => part.trim()).at(-2) ?? '';
+  const cells = row.split('|').map((part) => part.trim());
+  if (cells.length < 5) return undefined;
+  return { evidence: cells.at(-3) ?? '', status: cells.at(-2) ?? '' };
+}
+
+function validatedEvidence(text: string): string[] {
+  const evidence = new Set<string>();
+  for (const match of text.matchAll(/`([^`]+)`/g)) {
+    const value = match[1] ?? '';
+    if (isExistingPath(value) || isRunId(value)) evidence.add(value);
+  }
+  for (const match of text.matchAll(/https:\/\/github\.com\/[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+\/actions\/runs\/(\d+)/g)) {
+    evidence.add(match[0] ?? '');
+  }
+  return Array.from(evidence).sort();
+}
+
+function isExistingPath(value: string): boolean {
+  if (!value.includes('/') && !value.startsWith('.')) return false;
+  if (value.startsWith('/') || value.includes('\\') || value.split('/').includes('..')) return false;
+  return existsSync(value);
+}
+
+function isRunId(value: string): boolean {
+  return /^\d{8,}$/.test(value);
 }
 
 async function main(): Promise<void> {

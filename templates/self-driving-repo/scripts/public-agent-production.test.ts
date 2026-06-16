@@ -81,8 +81,11 @@ describe('public agent production readiness', () => {
 
   test('upgrade workflow opens template upgrade PRs', () => {
     const text = workflow('open-autonomy-upgrade.yml');
+    expect(text).toContain('Resolve upgrade template');
+    expect(text).toContain('OPEN_AUTONOMY_TEMPLATE_REPO');
+    expect(text).toContain('.agent-run/open-autonomy-template/templates/self-driving-repo');
     expect(text).toContain('open-autonomy-upgrade.ts');
     expect(text).toContain('gh pr create');
-    expect(text).toContain('templates/self-driving-repo');
+    expect(text).toContain('pull-requests: write');
   });
 });

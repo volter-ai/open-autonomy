@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
-import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
-import { dirname, join, relative, resolve } from 'node:path';
+import { existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { dirname, join, resolve } from 'node:path';
 
 export interface UpgradePlanEntry {
   path: string;
@@ -15,6 +15,11 @@ export interface UpgradePlan {
   migration_notes: string[];
 }
 
+interface ManagedFilesManifest {
+  schema: 'open-autonomy.managed-files.v1';
+  files: string[];
+}
+
 interface Options {
   template: string;
   target: string;
@@ -22,16 +27,7 @@ interface Options {
   apply: boolean;
 }
 
-const MANAGED_PREFIXES = [
-  '.github/workflows/',
-  '.open-autonomy/',
-  'scripts/',
-  'docs/PUBLIC_AGENT_ACTIONS.md',
-  'docs/PUBLIC_AGENT_PRODUCTION_ROLLOUT.md',
-  'docs/OSS_AGENT_RUNBOOK.md',
-  'AGENTS.md',
-  'VERSION',
-];
+const MANAGED_FILES_PATH = '.open-autonomy/managed-files.json';
 
 function usage(): never {
   throw new Error(`Usage:
@@ -55,8 +51,8 @@ function parseArgs(argv: string[]): Options {
 }
 
 export function buildUpgradePlan(template: string, target: string): UpgradePlan {
-  const templateFiles = managedFiles(template);
-  const targetFiles = managedFiles(target);
+  const templateFiles = readManagedFilesManifest(template, { required: true });
+  const targetFiles = readManagedFilesManifest(target, { required: false });
   const changes: UpgradePlanEntry[] = [];
 
   for (const file of templateFiles) {
@@ -69,7 +65,7 @@ export function buildUpgradePlan(template: string, target: string): UpgradePlan 
     }
   }
   for (const file of targetFiles) {
-    if (!templateFiles.includes(file) && isManaged(file)) changes.push({ path: file, action: 'delete' });
+    if (!templateFiles.includes(file)) changes.push({ path: file, action: 'delete' });
   }
 
   return {
@@ -102,28 +98,35 @@ function renderMigrationNotes(changes: UpgradePlanEntry[]): string[] {
   ];
 }
 
-function managedFiles(root: string): string[] {
-  return walk(root)
-    .map((path) => relative(root, path))
-    .filter((path) => isManaged(path))
-    .sort();
-}
-
-function walk(root: string): string[] {
-  if (!existsSync(root)) return [];
-  const out: string[] = [];
-  for (const name of readdirSync(root)) {
-    if (name === '.git' || name === 'node_modules' || name === '.agent-run') continue;
-    const path = join(root, name);
-    const stat = statSync(path);
-    if (stat.isDirectory()) out.push(...walk(path));
-    else if (stat.isFile()) out.push(path);
+function readManagedFilesManifest(root: string, options: { required: boolean }): string[] {
+  if (!existsSync(root) || !statSync(root).isDirectory()) {
+    if (options.required) throw new Error(`template directory does not exist: ${root}`);
+    return [];
   }
-  return out;
+  const manifestPath = join(root, MANAGED_FILES_PATH);
+  if (!existsSync(manifestPath)) {
+    if (options.required) throw new Error(`managed files manifest is missing: ${manifestPath}`);
+    return [];
+  }
+  const manifest = JSON.parse(readFileSync(manifestPath, 'utf8')) as ManagedFilesManifest;
+  if (manifest.schema !== 'open-autonomy.managed-files.v1' || !Array.isArray(manifest.files)) {
+    throw new Error(`managed files manifest is invalid: ${manifestPath}`);
+  }
+  const files = Array.from(new Set([...manifest.files, MANAGED_FILES_PATH])).sort();
+  for (const file of files) {
+    validateManagedPath(file, manifestPath);
+    const path = join(root, file);
+    if (options.required && (!existsSync(path) || !statSync(path).isFile())) {
+      throw new Error(`managed file listed in template manifest is missing: ${file}`);
+    }
+  }
+  return files;
 }
 
-function isManaged(path: string): boolean {
-  return MANAGED_PREFIXES.some((prefix) => path === prefix || path.startsWith(prefix));
+function validateManagedPath(path: string, manifestPath: string): void {
+  if (path.startsWith('/') || path.includes('\\') || path.split('/').includes('..') || path === '') {
+    throw new Error(`managed files manifest contains unsafe path in ${manifestPath}: ${path}`);
+  }
 }
 
 async function main(): Promise<void> {

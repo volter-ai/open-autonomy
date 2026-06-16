@@ -14,9 +14,12 @@ describe('open autonomy proof audit', () => {
       '    acceptance:',
       '      - done',
     ].join('\n');
-    const pass = auditProofLedger(roadmap, '| `gate-one` | test | done |');
+    const pass = auditProofLedger(roadmap, '| `gate-one` | `scripts/open-autonomy-proof-audit.ts` | done |');
     expect(pass.passed).toBe(true);
-    const fail = auditProofLedger(roadmap, '| `gate-one` | test | missing |');
-    expect(fail.passed).toBe(false);
+    expect(pass.proof_gates[0]?.evidence).toContain('scripts/open-autonomy-proof-audit.ts');
+    const wrongStatus = auditProofLedger(roadmap, '| `gate-one` | `scripts/open-autonomy-proof-audit.ts` | missing |');
+    expect(wrongStatus.passed).toBe(false);
+    const noEvidence = auditProofLedger(roadmap, '| `gate-one` | copied sentence | done |');
+    expect(noEvidence.passed).toBe(false);
   });
 });

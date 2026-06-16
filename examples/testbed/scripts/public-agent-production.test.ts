@@ -5,7 +5,16 @@ const workflow = (name: string) => readFileSync(new URL(`../.github/workflows/${
 
 describe('public agent production readiness', () => {
   test('workflows opt into Node 24 JavaScript actions', () => {
-    for (const name of ['ci.yml', 'public-agent.yml', 'public-agent-pm.yml', 'public-agent-review.yml', 'open-autonomy-planner.yml', 'model-proxy-admin.yml']) {
+    for (const name of [
+      'ci.yml',
+      'public-agent.yml',
+      'public-agent-pm.yml',
+      'public-agent-review.yml',
+      'open-autonomy-planner.yml',
+      'open-autonomy-preflight.yml',
+      'open-autonomy-governance-report.yml',
+      'model-proxy-admin.yml',
+    ]) {
       expect(workflow(name)).toContain('FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"');
     }
   });
@@ -58,5 +67,14 @@ describe('public agent production readiness', () => {
     expect(text).toContain('origin:roadmap-planner');
     expect(text).toContain('gh issue create');
     expect(text).toContain('gh issue edit');
+  });
+
+  test('fleet preflight and governance workflows are wired', () => {
+    const preflight = workflow('open-autonomy-preflight.yml');
+    expect(preflight).toContain('open-autonomy-preflight.ts');
+    expect(preflight).toContain('gh label list');
+    const report = workflow('open-autonomy-governance-report.yml');
+    expect(report).toContain('public-agent-decision-index.ts');
+    expect(report).toContain('open-autonomy-governance-report.ts');
   });
 });

@@ -3,7 +3,7 @@
   "configVersion": 1,
   "workspaces": {
     "": {
-      "name": "volter-public-agent-trial",
+      "name": "self-driving-repo-template",
       "devDependencies": {
         "@types/bun": "^1.3.14",
         "@types/node": "^24.13.2",

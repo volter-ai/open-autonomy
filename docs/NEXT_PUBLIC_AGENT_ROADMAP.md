@@ -18,8 +18,8 @@ Implemented:
 - operator controls: pause, resume, cancel, retry, status
 - production rollout checklist and readiness tests
 
-The legacy private trial proved the full issue-to-merge loop. This repo now
-packages that work as OSS and should prove the same loop against itself.
+This repo packages the autonomy loop as OSS and should continuously prove the
+same loop against itself.
 
 ## Near-Term OSS Work
 
@@ -43,7 +43,7 @@ packages that work as OSS and should prove the same loop against itself.
    - clearer proxy saturation runbook
    - stronger organization policy hooks
 
-## Legacy Acceptance Evidence
+## Acceptance Evidence
 
-See [`LEGACY_TRIAL_EVIDENCE.md`](./LEGACY_TRIAL_EVIDENCE.md) for private-trial
-run IDs and PR evidence.
+Keep current self-hosting run IDs and PR evidence in issues and PRs in this
+repository.

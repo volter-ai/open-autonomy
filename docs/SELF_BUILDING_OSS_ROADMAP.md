@@ -431,10 +431,10 @@ Done:
   an issue has queued, running, successful, or failed agent work
 - PM direct-dispatches `/agent develop` and `/agent review` after writing the
   corresponding visible command comment
-- live trial repo smoke tests for issue-to-PR flow
-- live trial repo smoke test for issue -> develop -> publish -> read-only CI ->
+- live self-hosting smoke tests for issue-to-PR flow
+- live self-hosting smoke test for issue -> develop -> publish -> read-only CI ->
   reviewer pass -> merge gate -> merged PR
-- live trial repo smoke test for PM -> command comment/workflow dispatch develop
+- live self-hosting smoke test for PM -> command comment/workflow dispatch develop
   -> publish -> read-only CI -> reviewer pass -> merge gate -> merged PR ->
   source issue closed
 
@@ -692,11 +692,11 @@ Acceptance criteria:
 Tests:
 
 - unit tests for status summarization
-- trial smoke for stop/resume behavior
+- self-hosting smoke for stop/resume behavior
 
 ### Phase 7: Production Rollout
 
-Goal: move from trial repo confidence to production-grade self-building OSS.
+Goal: move from self-hosting confidence to production-grade self-building OSS.
 
 Build:
 

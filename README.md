@@ -81,13 +81,6 @@ The short version:
 a paid hosted product with managed proxy infrastructure, dashboards, org policy,
 and support.
 
-## Legacy Trial
-
-The first working implementation was proven in
-`volter-ai/volter-public-agent-trial`. See
-[`docs/LEGACY_TRIAL_EVIDENCE.md`](./docs/LEGACY_TRIAL_EVIDENCE.md) for the live
-smoke history that seeded this repository.
-
 ## License
 
 Apache-2.0.

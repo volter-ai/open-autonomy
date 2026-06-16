@@ -895,6 +895,7 @@ jobs:
             > .agent-run/issue.json
           gh issue view "$issue" --json comments > .agent-run/issue-comments.json
           gh issue view "$pr" --json comments > .agent-run/pr-comments.json
+          gh issue view "$pr" --json labels,comments > .agent-run/merge-blockers.json
           head_sha="$(gh pr view "$pr" --json headRefOid --jq .headRefOid)"
           jq -n \
             --arg branch "$TARGET_BRANCH" \
@@ -1033,6 +1034,7 @@ jobs:
             --target .agent-run/target.json \
             --ci .agent-run/ci.json \
             --review .agent-run/review.json \
+            --blockers .agent-run/merge-blockers.json \
             --reviewed-head-sha "$reviewed_head_sha" \
             --current-head-sha "$current_head_sha" \
             --out .agent-run/merge-gate.json

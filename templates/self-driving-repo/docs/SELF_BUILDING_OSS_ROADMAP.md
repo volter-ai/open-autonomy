@@ -706,6 +706,14 @@ Required fixes from the live `open-autonomy-testbed` plan:
 - Add a live head-changed-before-merge fixture so the merge gate SHA binding is
   proven against an actual PR race.
 
+Implemented:
+
+- merge gate refuses auto-merge when the PR has maintainer blocking labels such
+  as `do-not-merge`, `human-required`, `agent-blocked`, or `security`
+- merge gate refuses auto-merge after a non-bot blocking comment such as
+  "do not merge" or "hold", while allowing a later maintainer unblock comment
+  such as "ok to merge"
+
 ### Phase 6: Observability And Operator Controls
 
 Goal: make the autonomous system operable by maintainers.

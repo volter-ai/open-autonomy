@@ -504,6 +504,45 @@ describe('public agent CI, review, and merge gates', () => {
     expect(decision.reason).toContain('PR head changed after review');
   });
 
+  test('does not merge when a maintainer blocking label is present', () => {
+    const decision = decideMerge(
+      { kind: 'pull_request', issue: 7, pull_request: 7, branch: 'agent/issue-7', head_sha: 'abc123', can_develop: true },
+      { decision: 'pass', reason: 'ok', required: [{ name: 'ci', status: 'pass', conclusion: 'SUCCESS' }] },
+      { verdict: 'pass', risk: 'low', human_required: false, summary: 'ok', findings: [] },
+      { blockers: { labels: [{ name: 'do-not-merge' }], comments: [] } },
+    );
+    expect(decision.decision).toBe('human_required');
+    expect(decision.reason).toContain('blocking label');
+  });
+
+  test('does not merge after a maintainer hold comment', () => {
+    const decision = decideMerge(
+      { kind: 'pull_request', issue: 7, pull_request: 7, branch: 'agent/issue-7', head_sha: 'abc123', can_develop: true },
+      { decision: 'pass', reason: 'ok', required: [{ name: 'ci', status: 'pass', conclusion: 'SUCCESS' }] },
+      { verdict: 'pass', risk: 'low', human_required: false, summary: 'ok', findings: [] },
+      { blockers: { comments: [{ author: { login: 'maintainer' }, createdAt: '2026-06-16T12:00:00Z', body: 'hold, do not merge yet' }] } },
+    );
+    expect(decision.decision).toBe('human_required');
+    expect(decision.reason).toContain('blocking comment');
+  });
+
+  test('ignores bot hold comments and later maintainer unblock comments', () => {
+    const base = { kind: 'pull_request' as const, issue: 7, pull_request: 7, branch: 'agent/issue-7', head_sha: 'abc123', can_develop: true };
+    const ci = { decision: 'pass' as const, reason: 'ok', required: [{ name: 'ci', status: 'pass' as const, conclusion: 'SUCCESS' }] };
+    const review = { verdict: 'pass' as const, risk: 'low' as const, human_required: false, summary: 'ok', findings: [] };
+    expect(decideMerge(base, ci, review, {
+      blockers: { comments: [{ author: { login: 'github-actions[bot]' }, createdAt: '2026-06-16T12:00:00Z', body: 'do not merge' }] },
+    }).decision).toBe('merge');
+    expect(decideMerge(base, ci, review, {
+      blockers: {
+        comments: [
+          { author: { login: 'maintainer' }, createdAt: '2026-06-16T12:00:00Z', body: 'do not merge' },
+          { author: { login: 'maintainer' }, createdAt: '2026-06-16T12:05:00Z', body: 'ok to merge' },
+        ],
+      },
+    }).decision).toBe('merge');
+  });
+
   test('allows the first bounded autopilot retry', () => {
     const decision = decideLoopBudget({
       kind: 'ci',

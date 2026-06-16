@@ -26,8 +26,10 @@ can be published, reviewed, and merged.
 ## Repository Layout
 
 - `.github/workflows/` - self-driving workflows for this repo.
-- `scripts/public-agent-*` - command parsing, policy, PM dispatch, review, CI,
-  merge-gate, status, and control logic.
+- `.open-autonomy/` and `AGENTS.md` - planner-readable direction,
+  constitution, policy, rubric, and standards.
+- `scripts/public-agent-*` - command parsing, policy, PM dispatch, planner,
+  review, CI, merge-gate, status, and control logic.
 - `scripts/github-agent-session.ts` - session wrapper that emits publisher
   bundles and evidence.
 - `scripts/codex-agent-run.ts` - Codex runner configured for the bounded model
@@ -65,7 +67,9 @@ bun run check
 
 ## Setup Another Repo
 
-Use `templates/self-driving-repo/` as the starting point, then follow
+`open-autonomy` is both the reusable kit and its own self-driving repo. To make
+another self-driving repo, use `templates/self-driving-repo/` as the starting
+point, then follow
 [`docs/PUBLIC_AGENT_PRODUCTION_ROLLOUT.md`](./docs/PUBLIC_AGENT_PRODUCTION_ROLLOUT.md).
 
 The short version:
@@ -74,12 +78,15 @@ The short version:
    ```bash
    bun run scaffold -- --target ../my-repo
    ```
-2. Deploy or reuse the model proxy.
-3. Set GitHub variables and secrets.
-4. Run `bun run check`.
-5. Smoke `/agent pause`, paused `/agent develop`, `/agent status`, and
+2. Edit `AGENTS.md` and `.open-autonomy/*` for that repository's direction,
+   policy, rubric, and standards.
+3. Deploy or reuse the model proxy.
+4. Set GitHub variables and secrets.
+5. Run `bun run check`.
+6. Smoke `/agent pause`, paused `/agent develop`, `/agent status`, and
    `/agent resume`.
-6. Run one low-risk `/agent develop`.
+7. Run the planner workflow in dry mode, then create one low-risk issue and run
+   `/agent develop`.
 
 ## Commercial Boundary
 

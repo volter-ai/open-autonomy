@@ -1,5 +1,6 @@
 #!/usr/bin/env bun
 import { appendFileSync, readFileSync, writeFileSync } from 'node:fs';
+import { readControlFileContext, renderControlFilePrompt } from './public-agent-control-files.js';
 
 export interface ReviewerVerdict {
   verdict: 'pass' | 'fail';
@@ -15,12 +16,13 @@ interface Options {
   model: string;
   diff: string;
   ci?: string;
+  controlFiles?: string;
   out: string;
 }
 
 function usage(): never {
   throw new Error(`Usage:
-  MODEL_PROXY_URL=... MODEL_PROXY_TOKEN=... bun scripts/public-agent-review.ts --diff diff.patch --provider openai|anthropic --model model --out review.json`);
+  MODEL_PROXY_URL=... MODEL_PROXY_TOKEN=... bun scripts/public-agent-review.ts --diff diff.patch [--control-files control-files.json] --provider openai|anthropic --model model --out review.json`);
 }
 
 function parseArgs(argv: string[]): Options {
@@ -32,7 +34,7 @@ function parseArgs(argv: string[]): Options {
   const model = value('--model');
   const provider = value('--provider') ?? 'openai';
   if (!diff || !model || (provider !== 'openai' && provider !== 'anthropic')) usage();
-  return { diff, model, provider, ci: value('--ci'), out: value('--out') ?? '.agent-run/review.json' };
+  return { diff, model, provider, ci: value('--ci'), controlFiles: value('--control-files'), out: value('--out') ?? '.agent-run/review.json' };
 }
 
 export function parseReviewerVerdict(text: string): ReviewerVerdict {
@@ -48,13 +50,17 @@ export function parseReviewerVerdict(text: string): ReviewerVerdict {
   return parsed as ReviewerVerdict;
 }
 
-export function renderReviewPrompt(diff: string, ci = ''): string {
+export function renderReviewPrompt(diff: string, ci = '', controlContext = ''): string {
   return [
     'You are the reviewer agent for a self-building OSS repository.',
     'Review the PR diff and CI result. Return strict JSON only.',
     'Schema: verdict pass|fail, risk low|medium|high, human_required boolean, summary string, findings string[].',
     'Mark human_required true for workflow changes, secret exposure, auth/security-sensitive behavior, unclear broad rewrites, or changes you cannot confidently review.',
     'A broad non-workflow code change can be low risk when the diff is focused, tested, and understandable.',
+    'Apply the repository constitution, policy, standards, and review rubric when provided.',
+    '',
+    'Control files:',
+    controlContext || '(not provided)',
     '',
     'CI:',
     ci || '(not provided)',
@@ -84,6 +90,7 @@ async function main(): Promise<void> {
   const prompt = renderReviewPrompt(
     readFileSync(options.diff, 'utf8'),
     options.ci ? readFileSync(options.ci, 'utf8') : '',
+    options.controlFiles ? renderControlFilePrompt(JSON.parse(readFileSync(options.controlFiles, 'utf8'))) : renderControlFilePrompt(readControlFileContext('.')),
   );
   let verdict: ReviewerVerdict;
   try {

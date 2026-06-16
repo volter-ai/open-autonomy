@@ -1,11 +1,13 @@
 #!/usr/bin/env bun
 import { readFileSync, writeFileSync } from 'node:fs';
+import { readControlFileContext } from './public-agent-control-files.js';
 
 export interface DeveloperContext {
   target: unknown;
   issue: unknown;
   recent_issue_comments: unknown[];
   previous_decisions: unknown[];
+  control_files: unknown;
   current_pr: null | {
     number?: number;
     title?: string;
@@ -23,6 +25,7 @@ interface Options {
   issue: string;
   comments?: string;
   decisions?: string;
+  controlFiles?: string;
   pr?: string;
   prDiff?: string;
   out: string;
@@ -34,7 +37,7 @@ const MAX_DIFF_CHARS = 30_000;
 
 function usage(): never {
   throw new Error(`Usage:
-  bun scripts/public-agent-context.ts --target target.json --issue issue.json [--comments comments.json] [--decisions decisions.json] [--pr pr.json] [--pr-diff diff.patch] --out context.json`);
+  bun scripts/public-agent-context.ts --target target.json --issue issue.json [--comments comments.json] [--decisions decisions.json] [--control-files control-files.json] [--pr pr.json] [--pr-diff diff.patch] --out context.json`);
 }
 
 function parseArgs(argv: string[]): Options {
@@ -51,6 +54,7 @@ function parseArgs(argv: string[]): Options {
     issue,
     comments: value('--comments'),
     decisions: value('--decisions'),
+    controlFiles: value('--control-files'),
     pr: value('--pr'),
     prDiff: value('--pr-diff'),
     out,
@@ -62,6 +66,7 @@ export function buildDeveloperContext(input: {
   issue: unknown;
   comments?: unknown;
   decisions?: unknown;
+  controlFiles?: unknown;
   pr?: unknown;
   prDiff?: string;
 }): DeveloperContext {
@@ -72,9 +77,11 @@ export function buildDeveloperContext(input: {
     .sort((a, b) => Date.parse(String((b as { created_at?: string }).created_at ?? '')) - Date.parse(String((a as { created_at?: string }).created_at ?? '')))
     .slice(0, MAX_DECISIONS);
   const pr = normalizePr(input.pr);
+  const controlFiles = input.controlFiles ?? readControlFileContext('.');
   const sources = ['target', 'issue'];
   if (comments.length) sources.push('issue_comments');
   if (decisions.length) sources.push('previous_decisions');
+  if (controlFiles) sources.push('control_files');
   if (pr) sources.push('current_pr');
   if (pr && input.prDiff) sources.push('current_pr_diff');
   return {
@@ -82,6 +89,7 @@ export function buildDeveloperContext(input: {
     issue: input.issue,
     recent_issue_comments: comments,
     previous_decisions: decisions,
+    control_files: controlFiles,
     current_pr: pr ? {
       ...pr,
       diff: input.prDiff ? truncate(input.prDiff, MAX_DIFF_CHARS) : undefined,
@@ -122,6 +130,7 @@ async function main(): Promise<void> {
     issue: readJson(options.issue),
     comments: readJson(options.comments),
     decisions: readJson(options.decisions),
+    controlFiles: readJson(options.controlFiles),
     pr: readJson(options.pr),
     prDiff: options.prDiff ? readFileSync(options.prDiff, 'utf8') : undefined,
   });

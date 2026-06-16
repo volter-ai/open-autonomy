@@ -78,6 +78,7 @@ jobs:
             --jq '{number,title,body,user:{login:.author.login}}' \
             > .agent-run/issue.json
           gh issue view "$pr" --json labels,comments > .agent-run/merge-blockers.json
+          gh issue view "$pr" --json comments --jq '.comments' > .agent-run/pr-comments.json
           if [[ "$EVENT_NAME" == "issue_comment" || "$EVENT_NAME" == "workflow_dispatch" ]]; then
             gh pr view "$pr" \
               --json number,headRefName,headRepositoryOwner,headRepository,isCrossRepository,baseRefName \
@@ -112,6 +113,10 @@ jobs:
           pr="$(jq -r '.pull_request' .agent-run/target.json)"
           gh pr diff "$pr" > .agent-run/diff.patch
 
+      - name: Read control files
+        run: |
+          bun scripts/public-agent-control-files.ts --out .agent-run/control-files.json
+
       - name: Read current CI state
         id: ci
         env:
@@ -138,20 +143,36 @@ jobs:
 
       - name: Dispatch CI fix or stop on non-passing CI
         if: steps.ci.outputs.decision != 'pass'
+        id: ci_followup
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           pr="$(jq -r '.pull_request' .agent-run/target.json)"
+          issue="$(jq -r '.issue' .agent-run/target.json)"
           decision="$(jq -r '.decision' .agent-run/ci.json)"
           reason="$(jq -r '.reason' .agent-run/ci.json)"
-          attempts="$(gh issue view "$pr" --json comments --jq '[.comments[].body | select(contains("Deterministic dispatcher: CI failed"))] | length')"
-          if [[ "$decision" == "develop_retry" && "$attempts" -lt 2 ]]; then
-            cat > /tmp/public-agent-ci-retry.md <<EOF
-          /agent develop
-
-          Deterministic dispatcher: CI failed (${reason}). Attempt $((attempts + 1)) of 2.
-          EOF
-            gh issue comment "$pr" --body-file /tmp/public-agent-ci-retry.md
+          if [[ "$decision" == "develop_retry" ]]; then
+            bun scripts/public-agent-loop-budget.ts \
+              --kind ci \
+              --reason "$reason" \
+              --max-attempts "${{ vars.PUBLIC_AGENT_MAX_CI_RETRIES || '2' }}" \
+              --issue-comments .agent-run/pr-comments.json \
+              --pr-comments .agent-run/pr-comments.json \
+              --out .agent-run/loop-budget.json
+            loop_decision="$(jq -r '.decision' .agent-run/loop-budget.json)"
+            loop_reason="$(jq -r '.reason' .agent-run/loop-budget.json)"
+            if [[ "$loop_decision" == "retry" ]]; then
+              {
+                echo "/agent develop"
+                echo
+                jq -r '.comment' .agent-run/loop-budget.json
+              } > /tmp/public-agent-ci-retry.md
+              gh issue comment "$pr" --body-file /tmp/public-agent-ci-retry.md
+              echo "decision=retry" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+            gh issue comment "$pr" --body "Agent review blocked: ${loop_reason}. ${reason}"
+            echo "decision=${loop_decision}" >> "$GITHUB_OUTPUT"
             exit 0
           fi
           if [[ "$decision" == "human_required" ]]; then
@@ -163,6 +184,7 @@ jobs:
           ${message}
           EOF
           gh issue comment "$pr" --body-file /tmp/public-agent-ci-human.md
+          echo "decision=${decision}" >> "$GITHUB_OUTPUT"
           exit 0
 
       - name: Mint reviewer model token
@@ -190,6 +212,7 @@ jobs:
           bun scripts/public-agent-review.ts \
             --diff .agent-run/diff.patch \
             --ci .agent-run/ci.json \
+            --control-files .agent-run/control-files.json \
             --provider "${{ vars.PUBLIC_AGENT_REVIEW_PROVIDER || 'openai' }}" \
             --model "${{ vars.PUBLIC_AGENT_REVIEW_MODEL || vars.PUBLIC_AGENT_TRIAGE_MODEL || 'gpt-4o-mini' }}" \
             --out .agent-run/review.json
@@ -244,6 +267,34 @@ jobs:
           ${reason}
           EOF
           gh issue comment "$pr" --body-file /tmp/public-agent-review.md
+
+      - name: Retry safe review failures
+        if: steps.merge_gate.outputs.decision == 'develop_retry'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          pr="$(jq -r '.pull_request' .agent-run/target.json)"
+          issue="$(jq -r '.issue' .agent-run/target.json)"
+          reason="$(jq -r '.reason // "review did not pass"' .agent-run/merge-gate.json)"
+          bun scripts/public-agent-loop-budget.ts \
+            --kind review \
+            --reason "$reason" \
+            --max-attempts "${{ vars.PUBLIC_AGENT_MAX_REVIEW_RETRIES || '2' }}" \
+            --issue-comments .agent-run/pr-comments.json \
+            --pr-comments .agent-run/pr-comments.json \
+            --out .agent-run/loop-budget.json
+          loop_decision="$(jq -r '.decision' .agent-run/loop-budget.json)"
+          loop_reason="$(jq -r '.reason' .agent-run/loop-budget.json)"
+          if [[ "$loop_decision" == "retry" ]]; then
+            {
+              echo "/agent develop"
+              echo
+              jq -r '.comment' .agent-run/loop-budget.json
+            } > /tmp/public-agent-review-retry.md
+            gh issue comment "$pr" --body-file /tmp/public-agent-review-retry.md
+            exit 0
+          fi
+          gh issue comment "$pr" --body "Agent review blocked: ${loop_reason}. ${reason}"
 
       - name: Auto-merge low-risk passing review
         if: steps.merge_gate.outputs.decision == 'merge'

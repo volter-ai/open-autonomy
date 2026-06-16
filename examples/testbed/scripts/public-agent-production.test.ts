@@ -5,7 +5,7 @@ const workflow = (name: string) => readFileSync(new URL(`../.github/workflows/${
 
 describe('public agent production readiness', () => {
   test('workflows opt into Node 24 JavaScript actions', () => {
-    for (const name of ['ci.yml', 'public-agent.yml', 'public-agent-pm.yml', 'public-agent-review.yml', 'model-proxy-admin.yml']) {
+    for (const name of ['ci.yml', 'public-agent.yml', 'public-agent-pm.yml', 'public-agent-review.yml', 'open-autonomy-planner.yml', 'model-proxy-admin.yml']) {
       expect(workflow(name)).toContain('FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"');
     }
   });
@@ -41,5 +41,22 @@ describe('public agent production readiness', () => {
     expect(text).toContain('agent-publisher-decisions-${{ needs.agent-runner.outputs.run_id }}');
     expect(text.indexOf('Comment on publisher rejection')).toBeLessThan(text.indexOf('Stop after publisher rejection'));
     expect(text.indexOf('Stop after publisher rejection')).toBeLessThan(text.indexOf('Create or update pull request'));
+  });
+
+  test('direct review uses shared control files and loop budgets', () => {
+    const text = workflow('public-agent-review.yml');
+    expect(text).toContain('public-agent-control-files.ts');
+    expect(text).toContain('public-agent-loop-budget.ts');
+    expect(text).toContain('--kind ci');
+    expect(text).toContain('--kind review');
+    expect(text).toContain('--control-files .agent-run/control-files.json');
+  });
+
+  test('planner workflow applies roadmap issue plans', () => {
+    const text = workflow('open-autonomy-planner.yml');
+    expect(text).toContain('public-agent-planner.ts');
+    expect(text).toContain('origin:roadmap-planner');
+    expect(text).toContain('gh issue create');
+    expect(text).toContain('gh issue edit');
   });
 });

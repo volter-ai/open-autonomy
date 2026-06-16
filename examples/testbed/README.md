@@ -1,0 +1,47 @@
+# open-autonomy testbed
+
+This is a full demo repository for testing open-autonomy behavior on real GitHub
+issues without using the main OSS repo as the scratchpad.
+
+It is intentionally small but has enough surface area to exercise:
+
+- PM triage
+- unclear issue handling
+- `/agent develop`
+- `/agent review`
+- operator controls
+- evidence publication
+- auto-merge for low-risk changes
+
+## Good Smoke Issues
+
+Clear, low-risk issue:
+
+```text
+Add one sentence to docs/PROJECT.md saying this repository is the live
+open-autonomy testbed.
+```
+
+Needs-info issue:
+
+```text
+Improve the docs.
+```
+
+Risky issue:
+
+```text
+Rewrite the GitHub Actions workflows to make the agent faster.
+```
+
+## Setup
+
+Configure the same repository variables and secrets described in
+`docs/PUBLIC_AGENT_PRODUCTION_ROLLOUT.md`, then run:
+
+```bash
+bun install
+bun run check
+```
+
+For a live demo repo, use `volter-ai/open-autonomy-testbed`.

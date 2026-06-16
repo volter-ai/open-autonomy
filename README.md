@@ -36,6 +36,7 @@ can be published, reviewed, and merged.
 - `templates/self-driving-repo/` - copyable starter for another self-driving
   repository.
 - `examples/docs-only/` - minimal full-repo example.
+- `examples/testbed/` - full demo repo for live PM/operator/develop testing.
 - `docs/` - architecture, runbook, rollout, and roadmap.
 
 ## Checks

@@ -1,0 +1,33 @@
+import { readFileSync } from 'node:fs';
+import { describe, expect, test } from 'bun:test';
+
+const workflow = (name: string) => readFileSync(new URL(`../.github/workflows/${name}`, import.meta.url), 'utf8');
+
+describe('public agent production readiness', () => {
+  test('workflows opt into Node 24 JavaScript actions', () => {
+    for (const name of ['ci.yml', 'public-agent.yml', 'public-agent-pm.yml', 'public-agent-review.yml', 'model-proxy-admin.yml']) {
+      expect(workflow(name)).toContain('FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"');
+    }
+  });
+
+  test('operator controls are wired before model minting', () => {
+    const text = workflow('public-agent.yml');
+    expect(text).toContain("startsWith(github.event.comment.body, '/agent pause')");
+    expect(text).toContain("startsWith(github.event.comment.body, '/agent status')");
+    expect(text).toContain('Handle operator control');
+    expect(text.indexOf('Handle operator control')).toBeLessThan(text.indexOf('Mint triage model token'));
+    expect(text).toContain('Agent retry did not find a failed infrastructure run');
+  });
+
+  test('PM and direct develop respect pause/backpressure controls', () => {
+    expect(workflow('public-agent-pm.yml')).toContain('-label:agent-paused');
+    expect(workflow('public-agent-pm.yml')).toContain('public agent repo pause is enabled; PM sweep skipped');
+    expect(workflow('public-agent.yml')).toContain('repo-level agent pause is enabled');
+  });
+
+  test('model proxy admin exposes status and revoke operations', () => {
+    const text = workflow('model-proxy-admin.yml');
+    expect(text).toContain('/admin/limits/status');
+    expect(text).toContain('/admin/runs/${RUN_ID}/revoke');
+  });
+});

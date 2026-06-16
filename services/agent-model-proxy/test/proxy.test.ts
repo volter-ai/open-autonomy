@@ -349,7 +349,7 @@ describe('agent model proxy', () => {
     const oidc = await githubOidcSigner();
     const env = testEnv({
       GITHUB_OIDC_JWKS_URL: 'https://jwks.test/keys',
-      GITHUB_OIDC_ALLOWED_WORKFLOW: 'volter-ai/open-autonomy/.github/workflows/public-agent.yml@,volter-ai/open-autonomy-example/.github/workflows/public-agent.yml@',
+      GITHUB_OIDC_ALLOWED_WORKFLOW: 'volter-ai/open-autonomy/.github/workflows/public-agent.yml@,volter-ai/open-autonomy-testbed/.github/workflows/public-agent.yml@',
     });
     globalThis.fetch = oidc.fetch;
     const minted = await mint(env, ['gpt-5-mini'], 100, 3, { repo: 'volter-ai/open-autonomy' });

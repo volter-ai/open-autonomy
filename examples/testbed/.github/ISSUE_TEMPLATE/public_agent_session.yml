@@ -1,0 +1,53 @@
+name: Public Agent Session
+description: Ask the public agent to attempt a bounded repository change.
+title: "[agent]: "
+labels: ["agent-session"]
+body:
+  - type: textarea
+    id: task
+    attributes:
+      label: Task
+      description: What should the agent change or investigate?
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance Criteria
+      description: What concrete commands, tests, or artifacts prove the task is done?
+      value: |
+        - `bun run check` passes
+        - The PR summary explains the change and verification
+    validations:
+      required: true
+  - type: textarea
+    id: allowed
+    attributes:
+      label: Allowed Agent Actions
+      description: List any limits. Agents may read/edit this repo and run local checks by default.
+      value: |
+        Allowed:
+        - read and edit this repo
+        - run local checks
+        - create PR-ready artifacts
+
+        Not allowed:
+        - use real API keys
+        - contact live vendor APIs unless maintainers explicitly approve it
+        - include secrets or private data in artifacts
+    validations:
+      required: true
+  - type: textarea
+    id: context
+    attributes:
+      label: Context
+      description: Relevant files, commands, docs, or prior discussion.
+    validations:
+      required: false
+  - type: checkboxes
+    id: secret-policy
+    attributes:
+      label: Secret Policy
+      options:
+        - label: I did not include real API keys, tokens, cookies, private URLs, or customer data.
+          required: true

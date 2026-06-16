@@ -600,6 +600,28 @@ Tests:
   `/agent review`, directly dispatches `public-agent-review.yml`, and the
   review completes
 
+Required fixes from the live `open-autonomy-testbed` trials:
+
+- PM must always move an issue toward a visible conclusion. Silent `skip`
+  decisions are acceptable only when a prior visible status already exists and
+  no newer human input is present; otherwise PM should comment, label, dispatch,
+  or escalate with a reason.
+- PM `human_required`, `spam`, `duplicate`, and `wont_fix` outcomes must have
+  deterministic label/comment behavior that can be audited from the issue.
+- PM needs a conservative classification for test-harness/operator-control
+  issues. It should not start `/agent develop` for issues whose requested work
+  is to exercise controls such as pause/status/resume; those should be handled
+  by explicit operator commands or marked human-required/test-only.
+- PM must not repeat a stale `needs-info` comment, but after a human provides
+  clarifying acceptance criteria it should remove or supersede the blocker and
+  start an appropriate develop run.
+- PM open-PR routing needs a live fixture: when a canonical `agent/issue-N` PR
+  exists, PM should avoid duplicate develop and should route to `/agent review`
+  when CI/review state allows it.
+- PM artifacts should be promoted into durable repo evidence or a stable
+  downloadable format so PM-only conclusions are as inspectable as develop
+  sessions.
+
 ### Phase 4: Developer Context And Patch Quality
 
 Goal: give the developer agent enough context to make the right change without
@@ -661,6 +683,16 @@ Tests:
 - trial PR where review passes, head changes, merge is refused
 - trial PR with blocking label/comment, merge is refused
 
+Required fixes from the live `open-autonomy-testbed` plan:
+
+- Build synthetic CI-failure and reviewer-failure fixtures in the testbed so
+  retry loops can be exercised without damaging real workflows.
+- Record retry stop reasons as stable public comments and decision files:
+  `ci-repeated-failure`, `review-repeated-failure`, `budget-exhausted`, or
+  `human-required`.
+- Add a live head-changed-before-merge fixture so the merge gate SHA binding is
+  proven against an actual PR race.
+
 ### Phase 6: Observability And Operator Controls
 
 Goal: make the autonomous system operable by maintainers.
@@ -693,6 +725,20 @@ Tests:
 
 - unit tests for status summarization
 - self-hosting smoke for stop/resume behavior
+
+Required fixes from the live `open-autonomy-testbed` trials:
+
+- Add first-class testbed fixture labels, for example `testbed-control` or
+  `manual-operator-test`, that exclude an issue from PM auto-develop while still
+  allowing explicit `/agent pause`, `/agent status`, `/agent develop`, and
+  `/agent resume` checks.
+- Add a visible status path for skipped control issues so maintainers can tell
+  whether PM intentionally ignored the issue because it is a manual operator
+  test.
+- Publisher policy rejections, such as blocked workflow edits, must post a
+  stable issue/PR comment and decision record before the workflow exits failed.
+- Add repo-pause smoke coverage proving scheduled PM sweeps and direct develop
+  stop before model token minting while `PUBLIC_AGENT_REPO_PAUSED` is enabled.
 
 ### Phase 7: Production Rollout
 

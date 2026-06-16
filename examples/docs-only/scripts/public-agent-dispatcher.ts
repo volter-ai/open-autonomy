@@ -13,13 +13,15 @@ export interface DispatchDecision {
 
 interface Options {
   issue: string;
-  pm: string;
+  pm?: string;
+  pmUnavailableReason?: string;
   out: string;
 }
 
 function usage(): never {
   throw new Error(`Usage:
-  bun scripts/public-agent-dispatcher.ts --issue issue.json --pm pm.json --out dispatch.json`);
+  bun scripts/public-agent-dispatcher.ts --issue issue.json --pm pm.json --out dispatch.json
+  bun scripts/public-agent-dispatcher.ts --issue issue.json --pm-unavailable-reason reason --out dispatch.json`);
 }
 
 function parseArgs(argv: string[]): Options {
@@ -29,8 +31,9 @@ function parseArgs(argv: string[]): Options {
   };
   const issue = value('--issue');
   const pm = value('--pm');
-  if (!issue || !pm) usage();
-  return { issue, pm, out: value('--out') ?? '.agent-run/dispatch.json' };
+  const pmUnavailableReason = value('--pm-unavailable-reason');
+  if (!issue || (!pm && !pmUnavailableReason) || (pm && pmUnavailableReason)) usage();
+  return { issue, pm, pmUnavailableReason, out: value('--out') ?? '.agent-run/dispatch.json' };
 }
 
 export function decideDispatch(issue: unknown, pm: PmDecision): DispatchDecision {
@@ -127,6 +130,16 @@ export function decideDispatch(issue: unknown, pm: PmDecision): DispatchDecision
   return visibleStatus(issueNumber, 'PM agent is not taking action.', pm.reason);
 }
 
+export function decidePmUnavailable(issue: unknown, reason: string): DispatchDecision {
+  const item = issue as {
+    number?: number;
+    comments?: Array<{ body?: string; createdAt?: string; author?: { login?: string } }>;
+  };
+  const issueNumber = item.number;
+  if (!issueNumber) return { action: 'skip', reason: 'issue number is missing' };
+  return repeatedPmStatus(item.comments) ?? visibleStatus(issueNumber, 'PM agent is waiting.', reason);
+}
+
 function visibleStatus(issueNumber: number, heading: string, reason: string): DispatchDecision {
   return {
     action: 'comment',
@@ -206,10 +219,10 @@ function blockingLabelName(labels: Array<{ name?: string }> | undefined): string
 
 async function main(): Promise<void> {
   const options = parseArgs(process.argv.slice(2));
-  const decision = decideDispatch(
-    JSON.parse(readFileSync(options.issue, 'utf8')),
-    JSON.parse(readFileSync(options.pm, 'utf8')) as PmDecision,
-  );
+  const issue = JSON.parse(readFileSync(options.issue, 'utf8'));
+  const decision = options.pmUnavailableReason
+    ? decidePmUnavailable(issue, options.pmUnavailableReason)
+    : decideDispatch(issue, JSON.parse(readFileSync(options.pm!, 'utf8')) as PmDecision);
   writeFileSync(options.out, `${JSON.stringify(decision, null, 2)}\n`);
   process.stdout.write(`dispatch=${decision.action}\n`);
 }

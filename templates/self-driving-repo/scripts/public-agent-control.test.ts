@@ -3,7 +3,7 @@ import { parseAgentCommand } from './public-agent-command.js';
 import { buildDeveloperContext } from './public-agent-context.js';
 import { parseControlScope, renderStatusComment, summarizeAgentStatus } from './public-agent-control.js';
 import { evaluateCi } from './public-agent-ci.js';
-import { decideDispatch } from './public-agent-dispatcher.js';
+import { decideDispatch, decidePmUnavailable } from './public-agent-dispatcher.js';
 import { decideLoopBudget } from './public-agent-loop-budget.js';
 import { decideMerge } from './public-agent-merge-gate.js';
 import { decidePolicy } from './public-agent-policy.js';
@@ -380,6 +380,35 @@ describe('public agent PM dispatcher', () => {
         ],
       },
       { action: 'ignore', risk: 'low', human_required: false, reason: 'still no newer human input' },
+    );
+    expect(decision.action).toBe('skip');
+    expect(decision.reason).toContain('prior PM status exists');
+  });
+
+  test('turns PM budget outages into a visible waiting status', () => {
+    const decision = decidePmUnavailable(
+      { number: 54, labels: [], comments: [] },
+      'PM model budget is temporarily unavailable; the PM agent will retry on a later sweep.',
+    );
+    expect(decision.action).toBe('comment');
+    expect(decision.comment).toContain('PM agent is waiting.');
+    expect(decision.reason).toContain('temporarily unavailable');
+  });
+
+  test('does not repeat PM budget outage statuses without newer human input', () => {
+    const decision = decidePmUnavailable(
+      {
+        number: 54,
+        labels: [],
+        comments: [
+          {
+            author: { login: 'github-actions' },
+            createdAt: '2026-06-16T07:10:00Z',
+            body: 'PM agent is waiting.\n\nPM model budget is temporarily unavailable.',
+          },
+        ],
+      },
+      'PM model budget is temporarily unavailable; the PM agent will retry on a later sweep.',
     );
     expect(decision.action).toBe('skip');
     expect(decision.reason).toContain('prior PM status exists');

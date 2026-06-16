@@ -137,6 +137,7 @@ jobs:
               --max-requests "2" \
               --purpose pm)"; then
               echo "::warning::skip issue #${number}: PM token mint failed"
+              unavailable_reason="PM model budget is temporarily unavailable; the PM agent will retry on a later sweep."
               bun scripts/public-agent-decision.ts \
                 --stage pm_triage \
                 --issue "$number" \
@@ -147,16 +148,31 @@ jobs:
                 --evidence "issue:${number}" \
                 --next-action "skip" \
                 --out-dir "$decision_dir"
+              bun scripts/public-agent-dispatcher.ts \
+                --issue "$issue_path" \
+                --pm-unavailable-reason "$unavailable_reason" \
+                --out "$dispatch_path"
+              action="$(jq -r '.action' "$dispatch_path")"
+              comment="$(jq -r '.comment // empty' "$dispatch_path")"
+              target_number="$(jq -r '.target_number // empty' "$dispatch_path")"
+              reason="$(jq -r '.reason' "$dispatch_path")"
               bun scripts/public-agent-decision.ts \
                 --stage dispatch \
                 --issue "$number" \
                 --actor "${GITHUB_ACTOR}" \
-                --decision "skip" \
-                --reason "PM token mint failed before model triage" \
+                --decision "$action" \
+                --reason "$reason" \
                 --subject-json "{\"type\":\"issue\",\"number\":${number}}" \
-                --evidence "decision:pm_triage" \
-                --next-action "backpressure" \
+                --evidence "decision:pm_triage,dispatch:${dispatch_path}" \
+                --next-action "$action" \
                 --out-dir "$decision_dir"
+              if [[ "$action" == "comment" && -n "$comment" ]]; then
+                if ! GH_TOKEN="$PM_COMMENT_TOKEN" gh issue comment "${target_number:-$number}" --body "$comment"; then
+                  echo "::warning::skip issue #${number}: failed to write visible PM-unavailable comment"
+                fi
+              else
+                echo "skip issue #${number}: ${reason}"
+              fi
               continue
             fi
             run_id="$(printf '%s\n' "$mint_output" | sed -n 's/^run_id=//p' | tail -1)"

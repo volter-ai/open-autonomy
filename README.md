@@ -37,10 +37,12 @@ can be published, reviewed, and merged.
   repository.
 - `examples/docs-only/` - minimal full-repo example.
 - `examples/testbed/` - full demo repo for live PM/operator/develop testing.
-- `docs/` - architecture, runbook, rollout, and roadmap.
+- `docs/` - architecture, runbook, rollout, and the continuous roadmap.
 
 Start with [`docs/ARCHITECTURE.md`](./docs/ARCHITECTURE.md) for the master map
 of the system, agent roles, trust boundaries, and how the docs fit together.
+Use [`docs/ROADMAP.md`](./docs/ROADMAP.md) as the single source for roadmap,
+proof-gate, and next-step planning.
 
 ## Checks
 

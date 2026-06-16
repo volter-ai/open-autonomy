@@ -71,13 +71,13 @@ workflow code enforce limits.
 | `docs/PUBLIC_AGENT_ACTIONS.md` | Detailed workflow/trust model and command architecture | maintainers, implementers |
 | `docs/OSS_AGENT_RUNBOOK.md` | Local checks, live smoke tests, operator commands | maintainers/operators |
 | `docs/PUBLIC_AGENT_PRODUCTION_ROLLOUT.md` | Enablement checklist for a target repo | maintainers |
-| `docs/SELF_BUILDING_OSS_ROADMAP.md` | Long-form roadmap and proof gates | planner/maintainers |
-| `docs/NEXT_PUBLIC_AGENT_ROADMAP.md` | Short near-term roadmap | maintainers |
+| `docs/ROADMAP.md` | Continuous roadmap, proof gates, and expanded product direction | planner/maintainers |
 | `examples/testbed/docs/TEST_MATRIX.md` | Live scenario catalog | testbed operators |
 | `examples/testbed/docs/TEST_RUNS.md` | Live proof ledger | testbed operators, roadmap audit |
 
-The roadmap should explain direction; issues should execute work; runbooks
-should explain operation; decision records should prove what happened.
+`docs/ROADMAP.md` is the only canonical roadmap. The roadmap should explain
+direction; issues should execute work; runbooks should explain operation;
+decision records should prove what happened.
 
 ## Target Repo Control Files
 
@@ -114,7 +114,8 @@ docs/
 - `standards/*`: scoped implementation guidance.
 
 The current repo is still converging toward this shape. Until those structured
-files exist, the roadmap, runbook, and action docs remain the canonical source.
+files exist, `docs/ROADMAP.md`, the runbook, and action docs remain the
+canonical source.
 
 ## Evidence And State
 
@@ -140,4 +141,3 @@ audit trail.
 - Publisher policy handles write safety; reviewer handles product/code quality;
   merge gate handles final merge safety.
 - Live proof in the testbed is required before claiming roadmap completion.
-

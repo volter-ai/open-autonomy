@@ -1,10 +1,14 @@
-# Self-Building OSS Roadmap
+# open-autonomy Roadmap
 
 This is the roadmap for turning the public agent workflow into a self-building
 OSS project. The current system can turn a trusted trigger into a bounded agent
 run and a policy-gated PR. The next system should develop, review, and merge
 safe changes autonomously, escalating only when risk or ambiguity requires a
 maintainer.
+
+This is the single continuous roadmap for the canonical repo. Short plans,
+proof-gate notes, and expanded product direction should be folded into this
+file instead of creating parallel roadmap documents.
 
 Core rule:
 
@@ -784,6 +788,35 @@ Live proof status:
 - Do not treat the roadmap as complete until those remaining proof gates are in
   the testbed ledger with issue, PR/run, final state, and decision evidence.
 
+Immediate next steps:
+
+1. Prove the remaining testbed gates:
+   - PM routes an existing canonical `agent/issue-N` PR to `/agent review`
+   - synthetic CI failure retries once, then stops with a stable reason
+   - synthetic reviewer failure retries once, then stops with a stable reason
+   - publisher rejection on the new visible path is live-proven after model
+     budget resets
+   - merge gate refuses a PR whose reviewed head SHA no longer matches the
+     current head
+2. Finish roadmap/document coherence:
+   - keep `docs/ROADMAP.md` as the only canonical roadmap
+   - keep `docs/ARCHITECTURE.md` as the master system map
+   - stop copying the canonical long roadmap into cookbook examples; examples
+     should have local, minimal scenario docs
+3. Add the direction/control-file foundation from Phase 8:
+   - `AGENTS.md`
+   - `.open-autonomy/constitution.md`
+   - `.open-autonomy/policy.yml`
+   - `.open-autonomy/roadmap.yml`
+   - `.open-autonomy/review-rubric.yml`
+   - `.open-autonomy/standards/*`
+4. Teach agents to use those files:
+   - planner reads structured roadmap and opens/updates issues
+   - PM respects roadmap priority, issue origin, policy, and blockers
+   - developer receives relevant standards and acceptance criteria
+   - reviewer emits rubric-backed verdicts
+   - publisher and merge gate continue enforcing hard policy deterministically
+
 ### Phase 7: Production Rollout
 
 Goal: move from self-hosting confidence to production-grade self-building OSS.
@@ -831,7 +864,52 @@ Acceptance criteria:
 Begin this expansion only after the remaining live testbed gaps above are
 proven or explicitly marked as intentionally deferred.
 
-### Phase 8: Self-Hosted Repository Fleet
+### Phase 8: Direction, Constitution, And Planning Loop
+
+Goal: make the repo self-driving from committed direction, not only reactive to
+human-created issues.
+
+Build:
+
+- root `AGENTS.md` as the compatibility layer for coding agents
+- `.open-autonomy/constitution.md` for non-negotiable operating principles
+- `.open-autonomy/policy.yml` for machine-readable path, retry, budget,
+  autonomy, and merge limits
+- `.open-autonomy/roadmap.yml` for planner-readable phases, priorities,
+  dependencies, proof gates, and acceptance criteria
+- `.open-autonomy/review-rubric.yml` for structured reviewer criteria
+- `.open-autonomy/standards/` for scoped code, docs, tests, and security
+  standards
+- planner workflow that reads roadmap, policy, open issues, PRs, and decision
+  evidence to create, update, prioritize, or defer GitHub issues
+- issue-origin metadata for `human`, `roadmap-planner`, `testbed-seed`,
+  `security-alert`, `dependency-update`, `ci-failure`, `reviewer-followup`,
+  `pm-followup`, and `external-ticket`
+
+Acceptance criteria:
+
+- The architecture doc, roadmap, and target repo control files agree on one
+  document model.
+- Planner-created issues include phase, priority, origin, dependency, roadmap
+  item, and acceptance criteria.
+- Planner does not create duplicate issues for existing open/closed work.
+- Develop prompts include relevant issue acceptance criteria, `AGENTS.md`,
+  constitution, policy summary, matching standards, and prior decisions.
+- Review verdicts explicitly evaluate constitution, policy, issue acceptance
+  criteria, standards, tests, and scope.
+- Maintainers can change direction by editing committed roadmap/constitution
+  files, while hard permissions remain enforced by policy and workflow code.
+
+Tests:
+
+- unit tests for roadmap parsing, issue dedupe, and issue metadata rendering
+- testbed fixture where planner creates missing proof-gate issues from
+  `.open-autonomy/roadmap.yml`
+- testbed fixture where edited roadmap priority changes PM issue ordering
+- review fixture proving rubric/constitution failures produce
+  `human_required` or `develop_retry`
+
+### Phase 9: Self-Hosted Repository Fleet
 
 Goal: make open-autonomy easy to install, upgrade, and compare across many
 repositories.
@@ -854,7 +932,7 @@ Acceptance criteria:
   template revision.
 - Each autonomous run records which open-autonomy version/profile it used.
 
-### Phase 9: Durable State And Audit Trail
+### Phase 10: Durable State And Audit Trail
 
 Goal: make autonomous decisions queryable without scraping Actions logs.
 
@@ -873,7 +951,7 @@ Acceptance criteria:
 - Decision records survive Actions artifact expiration.
 - The testbed has a scenario that rebuilds status from durable records only.
 
-### Phase 10: Agent Quality And Repair Loops
+### Phase 11: Agent Quality And Repair Loops
 
 Goal: improve success rate without loosening safety gates.
 
@@ -891,7 +969,7 @@ Acceptance criteria:
 - Repeated bad approaches are stopped and escalated with a stable reason.
 - Testbed fixtures cover successful repair, repeated failure, and human handoff.
 
-### Phase 11: Maintainer Governance
+### Phase 12: Maintainer Governance
 
 Goal: give maintainers clear control over autonomy level and repository risk.
 
@@ -911,7 +989,7 @@ Acceptance criteria:
 - Risky changes are routed to explicit human approval before publisher or merge.
 - Weekly status can be generated from repository-visible data.
 
-### Phase 12: Public OSS Readiness
+### Phase 13: Public OSS Readiness
 
 Goal: make open-autonomy usable by external maintainers without private Volter
 assumptions.

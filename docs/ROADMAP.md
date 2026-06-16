@@ -514,6 +514,22 @@ Tests:
   `failure_signature`,
   and `supersedes` are available for loop-budget logic
 
+Testbed proof plan:
+
+- `decision-memory-e2e`
+  - Trigger: PM or maintainer starts a low-risk docs issue.
+  - Expected: issue closes through develop, publish, CI, review, and merge gate.
+  - Evidence: issue URL, PR URL, run URL, session path, decision files for
+    target, triage, develop, publish, CI, review, merge gate, and issue close.
+  - Final state: `done`.
+- `decision-memory-pm-only`
+  - Trigger: PM sweep on an underspecified issue.
+  - Expected: PM asks one question and writes a durable PM-only decision
+    artifact or equivalent durable record.
+  - Evidence: issue URL, PM run URL, visible comment, `needs-info` label,
+    PM decision artifact.
+  - Final state: `needs-info`.
+
 ### Phase 2: Unified Loop Budget And Stop Conditions
 
 Goal: prevent runaway loops while allowing useful retries.
@@ -559,6 +575,23 @@ Tests:
 - synthetic CI-failure smoke proving retry then stop
 - synthetic reviewer-failure smoke proving retry then stop
 
+Testbed proof plan:
+
+- `retry-ci-failure`
+  - Trigger: testbed fixture makes a required CI check fail on an agent PR.
+  - Expected: first failure creates one bounded develop retry; repeated same
+    failure stops with `ci-repeated-failure` or `budget-exhausted`.
+  - Evidence: issue URL, PR URL, failing CI run, retry run, stop comment,
+    retry/merge-gate decision records.
+  - Final state: `human-required`.
+- `retry-review-failure`
+  - Trigger: reviewer fixture returns `develop_retry` for a stable finding.
+  - Expected: first reviewer failure creates one bounded develop retry; repeated
+    same finding stops with `review-repeated-failure` or `budget-exhausted`.
+  - Evidence: issue URL, PR URL, review decision, retry run, stop comment,
+    retry/merge-gate decision records.
+  - Final state: `human-required`.
+
 ### Phase 3: PM Operations And Backlog Policy
 
 Goal: make PM useful as a backlog operator, not just an auto-develop starter.
@@ -603,6 +636,39 @@ Tests:
 - live trial PR proving PM sees an open canonical agent PR, comments
   `/agent review`, directly dispatches `public-agent-review.yml`, and the
   review completes
+
+Testbed proof plan:
+
+- `pm-clear-docs`
+  - Trigger: PM sweep on a small exact docs issue.
+  - Expected: PM posts `/agent develop`, workflow dispatch starts, PR opens,
+    CI/review pass, merge gate closes the issue.
+  - Evidence: issue URL, PR URL, PM run URL, develop run URL, session path.
+  - Final state: `done`.
+- `pm-needs-info`
+  - Trigger: PM sweep on a broad issue without acceptance criteria.
+  - Expected: PM asks one concrete question and applies `needs-info`.
+  - Evidence: issue URL, PM run URL, visible comment, labels.
+  - Final state: `needs-info`.
+- `pm-follow-up-after-needs-info`
+  - Trigger: maintainer clarifies a `needs-info` issue, then PM sweeps again.
+  - Expected: PM does not repeat stale status; it starts `/agent develop` and
+    clears or supersedes `needs-info`.
+  - Evidence: issue URL, PM run URLs before/after clarification, develop run,
+    final labels.
+  - Final state: `done` or `in-progress`.
+- `pm-open-pr-review`
+  - Trigger: issue has an open canonical `agent/issue-N` PR.
+  - Expected: PM does not start duplicate develop; it comments `/agent review`
+    on the PR and dispatches review.
+  - Evidence: issue URL, PR URL, PM run URL, review run URL, review decision.
+  - Final state: `done`, `human-required`, or `in-progress`.
+- `pm-blocking-visible`
+  - Trigger: PM sweep on a `manual-operator-test` or blocking-label issue.
+  - Expected: PM posts a visible waiting/no-action status once, then suppresses
+    duplicates until newer human input appears.
+  - Evidence: issue URL, two PM run URLs, one visible status comment.
+  - Final state: `human-required` or `blocked`.
 
 Required fixes from the live `open-autonomy-testbed` trials:
 
@@ -668,6 +734,29 @@ Tests:
   addresses it
 - live trial where human adds follow-up info and PM starts a second develop
 
+Testbed proof plan:
+
+- `developer-context-review-fix`
+  - Trigger: reviewer requests a specific small change on an agent PR.
+  - Expected: follow-up develop run receives reviewer findings and changes the
+    relevant file without unrelated churn.
+  - Evidence: PR URL, review decision, context-sources artifact, retry run URL,
+    updated diff.
+  - Final state: `done` or `in-progress`.
+- `developer-context-ci-fix`
+  - Trigger: CI fixture fails with a known summary.
+  - Expected: follow-up develop run receives failed check name/summary and
+    applies a targeted fix.
+  - Evidence: PR URL, CI decision, context-sources artifact, retry run URL,
+    later passing CI.
+  - Final state: `done`.
+- `developer-context-human-clarification`
+  - Trigger: human clarifies acceptance criteria after `needs-info`.
+  - Expected: next develop run receives the newer human comment and implements
+    the clarified acceptance criteria.
+  - Evidence: issue URL, context-sources artifact, develop run URL, PR diff.
+  - Final state: `done`.
+
 ### Phase 5: Review And Merge Gate Parity
 
 Goal: ensure all review paths have the same reliable behavior.
@@ -699,6 +788,33 @@ Tests:
 - unit tests for head SHA mismatch and blocking comments
 - trial PR where review passes, head changes, merge is refused
 - trial PR with blocking label/comment, merge is refused
+
+Testbed proof plan:
+
+- `review-low-risk-merge`
+  - Trigger: low-risk docs PR from an agent run.
+  - Expected: CI passes, reviewer returns low risk, merge gate merges and
+    closes the source issue.
+  - Evidence: issue URL, PR URL, CI run, review decision, merge-gate decision.
+  - Final state: `done`.
+- `review-human-block`
+  - Trigger: maintainer adds blocking label or comment before merge gate.
+  - Expected: merge gate refuses auto-merge and explains the blocker.
+  - Evidence: PR URL, blocker label/comment, merge-gate decision, visible
+    comment.
+  - Final state: `human-required`.
+- `head-changed-before-merge`
+  - Trigger: PR head changes after review decision but before merge gate.
+  - Expected: merge gate refuses because reviewed SHA differs from current head.
+  - Evidence: PR URL, reviewed head SHA, current head SHA, merge-gate decision.
+  - Final state: `blocked` or `human-required`.
+- `direct-review-retry`
+  - Trigger: maintainer comments `/agent review` on an agent PR where reviewer
+    returns `develop_retry`.
+  - Expected: standalone review workflow starts a bounded develop retry without
+    relying on comment-trigger side effects.
+  - Evidence: PR URL, review run URL, retry dispatch/comment, retry decision.
+  - Final state: `in-progress` or `human-required`.
 
 Required fixes from the live `open-autonomy-testbed` plan:
 
@@ -750,6 +866,39 @@ Tests:
 
 - unit tests for status summarization
 - self-hosting smoke for stop/resume behavior
+
+Testbed proof plan:
+
+- `operator-pause-resume`
+  - Trigger: `/agent pause`, `/agent status`, `/agent develop`, `/agent resume`
+    on a manual fixture issue.
+  - Expected: pause label gates develop before model minting; status explains
+    labels/runs; resume clears the label.
+  - Evidence: issue URL, pause/status/develop/resume run URLs, labels, visible
+    comments.
+  - Final state: `manual fixture` or `blocked`.
+- `operator-repo-pause`
+  - Trigger: `/agent pause repo`, then PM/develop, then `/agent resume repo`.
+  - Expected: PM and direct develop stop before model minting while paused;
+    resume clears the repo-pause variable or label fallback.
+  - Evidence: issue URL, pause run, paused PM/develop run, resume run, labels
+    or variable state.
+  - Final state: `manual fixture`.
+- `publisher-policy-rejection`
+  - Trigger: explicit maintainer `/agent develop` fixture attempts a forbidden
+    workflow edit.
+  - Expected: publisher rejects before push, comments visibly, records rejected
+    publish decision, and fails the job.
+  - Evidence: issue URL, run URL, rejection comment, publish-summary artifact,
+    publish decision artifact.
+  - Final state: `blocked`.
+- `operator-cancel`
+  - Trigger: `/agent cancel` while an issue has active workflow/proxy runs.
+  - Expected: active workflow runs are cancelled and matching active proxy runs
+    are revoked.
+  - Evidence: issue URL, cancel run URL, cancelled workflow run IDs, proxy
+    status before/after.
+  - Final state: `blocked` or `manual fixture`.
 
 Required fixes from the live `open-autonomy-testbed` trials:
 
@@ -848,6 +997,36 @@ Acceptance criteria:
 - At least five trial issues have completed without manual repair across
   develop, review, merge, and issue closure.
 
+Testbed proof plan:
+
+- `production-preflight`
+  - Trigger: run preflight against the testbed repository.
+  - Expected: reports configured secrets/variables, labels, permissions, branch
+    protection expectations, and missing items without starting agent work.
+  - Evidence: workflow run URL, preflight report artifact, issue comment or
+    summary.
+  - Final state: `done`.
+- `production-emergency-disable`
+  - Trigger: enable emergency disable, then attempt PM sweep and direct develop.
+  - Expected: both paths stop before model minting with a visible disable
+    reason; disabling the switch resumes normal routing.
+  - Evidence: issue URL, disable run, blocked PM/develop runs, resume run.
+  - Final state: `blocked` then `manual fixture`.
+- `production-branch-protection`
+  - Trigger: run a low-risk agent PR under the configured branch protection
+    strategy.
+  - Expected: required checks and merge gate agree; auto-merge only happens
+    after current CI/review/current head pass.
+  - Evidence: PR URL, required checks, review decision, merge-gate decision,
+    merge event.
+  - Final state: `done`.
+- `production-five-issue-trial`
+  - Trigger: run five low-risk public issues through PM/develop/review/merge.
+  - Expected: all five complete without manual repair, or each escalation has a
+    stable reason.
+  - Evidence: five issue URLs, PR/run URLs, final states in `TEST_RUNS`.
+  - Final state: `done` or documented escalation.
+
 ## Open Design Choices
 
 - Final structured schema for decision records.
@@ -909,6 +1088,35 @@ Tests:
 - review fixture proving rubric/constitution failures produce
   `human_required` or `develop_retry`
 
+Testbed proof plan:
+
+- `planning-control-files-present`
+  - Trigger: scaffold or update testbed with `AGENTS.md` and
+    `.open-autonomy/*` files.
+  - Expected: preflight validates required files and reports their role.
+  - Evidence: PR URL, preflight run URL, validated file list.
+  - Final state: `done`.
+- `planner-creates-proof-gate-issues`
+  - Trigger: planner scans `.open-autonomy/roadmap.yml` with missing proof
+    gates.
+  - Expected: planner creates or updates issues with phase, priority, origin,
+    roadmap item, dependencies, and acceptance criteria.
+  - Evidence: planner run URL, created/updated issue URLs, dedupe decision
+    records.
+  - Final state: `in-progress`.
+- `planner-dedupes-existing-work`
+  - Trigger: roadmap item already has an open or closed issue.
+  - Expected: planner updates/linkbacks instead of creating a duplicate.
+  - Evidence: planner run URL, existing issue URL, dedupe decision.
+  - Final state: `done`.
+- `review-rubric-enforcement`
+  - Trigger: PR intentionally violates constitution/rubric while passing basic
+    CI.
+  - Expected: reviewer returns `human_required` or `develop_retry` with the
+    rubric item named.
+  - Evidence: PR URL, review decision, visible review comment.
+  - Final state: `human-required`.
+
 ### Phase 9: Self-Hosted Repository Fleet
 
 Goal: make open-autonomy easy to install, upgrade, and compare across many
@@ -932,6 +1140,32 @@ Acceptance criteria:
   template revision.
 - Each autonomous run records which open-autonomy version/profile it used.
 
+Testbed proof plan:
+
+- `fleet-fresh-install`
+  - Trigger: scaffold open-autonomy into a clean throwaway repository.
+  - Expected: workflows/scripts/docs/control files are installed, checks pass,
+    and preflight reports ready or exactly what is missing.
+  - Evidence: repo URL, scaffold output, CI run URL, preflight report.
+  - Final state: `done`.
+- `fleet-template-upgrade`
+  - Trigger: testbed repo starts from an older template revision, then upgrade
+    workflow runs.
+  - Expected: upgrade opens a PR with template changes and migration notes.
+  - Evidence: repo URL, upgrade run URL, PR URL, template version before/after.
+  - Final state: `in-progress` or `done`.
+- `fleet-missing-config`
+  - Trigger: preflight runs in a repo with missing secret/variable/label/branch
+    protection.
+  - Expected: preflight blocks autonomous work and lists exact remediation.
+  - Evidence: preflight run URL, report artifact, visible issue/summary comment.
+  - Final state: `blocked`.
+- `fleet-version-recorded`
+  - Trigger: low-risk develop run in a scaffolded repo.
+  - Expected: session evidence records open-autonomy version/profile.
+  - Evidence: session path, manifest, decision record, PR URL.
+  - Final state: `done`.
+
 ### Phase 10: Durable State And Audit Trail
 
 Goal: make autonomous decisions queryable without scraping Actions logs.
@@ -951,6 +1185,27 @@ Acceptance criteria:
 - Decision records survive Actions artifact expiration.
 - The testbed has a scenario that rebuilds status from durable records only.
 
+Testbed proof plan:
+
+- `audit-index-build`
+  - Trigger: build/update decision index after several PM/develop/review/merge
+    runs.
+  - Expected: index contains issue, PR, run, head SHA, decision, and evidence
+    links for each run.
+  - Evidence: index artifact or committed file, source session paths, summary.
+  - Final state: `done`.
+- `audit-status-from-index`
+  - Trigger: `/agent status` or equivalent status command runs with Actions
+    artifacts ignored.
+  - Expected: status reconstructs current state from durable records.
+  - Evidence: issue URL, status run URL, status comment, index source.
+  - Final state: `done`.
+- `audit-artifact-expiration-simulation`
+  - Trigger: hide or omit raw workflow artifacts from status lookup in test.
+  - Expected: durable records still answer why the issue stopped or merged.
+  - Evidence: test run URL, status output, index records.
+  - Final state: `done`.
+
 ### Phase 11: Agent Quality And Repair Loops
 
 Goal: improve success rate without loosening safety gates.
@@ -968,6 +1223,29 @@ Acceptance criteria:
 - Retry attempts demonstrably use the previous failure evidence.
 - Repeated bad approaches are stopped and escalated with a stable reason.
 - Testbed fixtures cover successful repair, repeated failure, and human handoff.
+
+Testbed proof plan:
+
+- `quality-ci-repair`
+  - Trigger: CI fixture fails due to a known small error.
+  - Expected: retry uses failure summary and repairs the issue.
+  - Evidence: failing run, retry run, context-sources artifact, passing CI.
+  - Final state: `done`.
+- `quality-review-repair`
+  - Trigger: reviewer asks for a specific small fix.
+  - Expected: retry uses reviewer finding and produces a targeted change.
+  - Evidence: review decision, retry run, updated diff, later review pass.
+  - Final state: `done`.
+- `quality-repeated-bad-approach`
+  - Trigger: fixture causes the agent to repeat the same failed approach.
+  - Expected: repeated failure signature stops further retries and escalates.
+  - Evidence: repeated failure decisions, stop comment, retry budget record.
+  - Final state: `human-required`.
+- `quality-human-handoff`
+  - Trigger: repair loop reaches ambiguity or low-value churn.
+  - Expected: system asks for a specific human decision instead of continuing.
+  - Evidence: issue URL, stop comment, final decision record.
+  - Final state: `human-required`.
 
 ### Phase 12: Maintainer Governance
 
@@ -989,6 +1267,33 @@ Acceptance criteria:
 - Risky changes are routed to explicit human approval before publisher or merge.
 - Weekly status can be generated from repository-visible data.
 
+Testbed proof plan:
+
+- `governance-audit-only`
+  - Trigger: policy/profile sets a path or label to audit-only.
+  - Expected: PM/reviewer may comment, but develop/publish/merge do not run.
+  - Evidence: issue URL, PM/review comment, policy decision.
+  - Final state: `human-required` or `blocked`.
+- `governance-develop-only`
+  - Trigger: policy/profile allows develop but not auto-merge.
+  - Expected: PR opens and review runs, but merge gate stops for maintainer
+    approval.
+  - Evidence: PR URL, review decision, merge-gate human-required decision.
+  - Final state: `human-required`.
+- `governance-risky-approval`
+  - Trigger: issue requests workflow, dependency, security, release, or billing
+    change.
+  - Expected: system routes to explicit maintainer approval before publisher or
+    merge.
+  - Evidence: issue URL, policy decision, approval request comment.
+  - Final state: `human-required`.
+- `governance-weekly-report`
+  - Trigger: scheduled report workflow.
+  - Expected: report summarizes cost, retry counts, skipped issues, escalations,
+    open PRs, and paused state from repo-visible data.
+  - Evidence: report artifact or issue comment, source index.
+  - Final state: `done`.
+
 ### Phase 13: Public OSS Readiness
 
 Goal: make open-autonomy usable by external maintainers without private Volter
@@ -1009,3 +1314,29 @@ Acceptance criteria:
 - The examples are self-contained repos or documented submodules that can be
   pushed independently.
 - The canonical repo dogfoods the same released open-autonomy workflow it ships.
+
+Testbed proof plan:
+
+- `oss-docs-only-cookbook`
+  - Trigger: external-style clean clone follows docs-only quickstart.
+  - Expected: checks pass, one low-risk docs issue runs through PR/review/merge
+    or documented manual merge gate.
+  - Evidence: repo URL or local transcript, CI run URL, issue/PR URLs.
+  - Final state: `done`.
+- `oss-testbed-independent-push`
+  - Trigger: create/push the testbed example as a standalone repository.
+  - Expected: its workflows, seed script, test matrix, and checks work without
+    relying on canonical repo state.
+  - Evidence: repo URL, CI run URL, seeded issue URLs.
+  - Final state: `done`.
+- `oss-small-app-cookbook`
+  - Trigger: scaffold and run the future small app example.
+  - Expected: agent can make a bounded app change with tests and review.
+  - Evidence: repo URL, issue URL, PR URL, CI/review decisions.
+  - Final state: `done`.
+- `oss-release-dogfood`
+  - Trigger: canonical repo updates to use its released template/version.
+  - Expected: self-hosted open-autonomy run records the release version and
+    passes the same gates shipped to users.
+  - Evidence: release tag, PR URL, session manifest, CI/review/merge decisions.
+  - Final state: `done`.

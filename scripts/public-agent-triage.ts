@@ -16,6 +16,14 @@ interface TriageResult {
   question?: string;
 }
 
+interface IssueContext {
+  title?: string;
+  body?: string;
+  number?: number;
+  user?: { login?: string };
+  comments?: Array<{ body?: string; author?: { login?: string }; createdAt?: string }>;
+}
+
 interface Options {
   issue: string;
   provider: 'anthropic' | 'openai';
@@ -64,11 +72,45 @@ export function parseTriageDecision(text: string): TriageResult {
 
 async function main(): Promise<void> {
   const options = parseArgs(process.argv.slice(2));
+  const issue = JSON.parse(readFileSync(options.issue, 'utf8')) as IssueContext;
+  const pmApproved = pmApprovedDevelop(issue);
+  if (pmApproved) {
+    writeResult(options.out, pmApproved);
+    return;
+  }
   const proxyUrl = process.env.MODEL_PROXY_URL;
   const token = process.env.MODEL_PROXY_TOKEN;
   if (!proxyUrl || !token) throw new Error('MODEL_PROXY_URL and MODEL_PROXY_TOKEN are required');
-  const issue = JSON.parse(readFileSync(options.issue, 'utf8')) as { title?: string; body?: string; number?: number; user?: { login?: string } };
-  const prompt = [
+  const prompt = renderTriagePrompt(issue);
+
+  const result = options.provider === 'anthropic'
+    ? await callAnthropic(proxyUrl, token, options.model, prompt)
+    : await callOpenAI(proxyUrl, token, options.model, prompt);
+  writeResult(options.out, result);
+}
+
+export function pmApprovedDevelop(issue: IssueContext): TriageResult | undefined {
+  const latestPmDevelop = issue.comments
+    ?.filter((comment) => /^\/agent\s+(develop|run|continue)\b[\s\S]*\n\s*PM reason:/i.test(comment.body?.trim() ?? ''))
+    .sort((a, b) => Date.parse(b.createdAt ?? '') - Date.parse(a.createdAt ?? ''))[0];
+  if (!latestPmDevelop) return undefined;
+  return {
+    decision: 'approve_run',
+    reason: `PM already approved develop for this issue: ${pmReason(latestPmDevelop.body)}`,
+  };
+}
+
+function pmReason(body: string | undefined): string {
+  const match = body?.match(/PM reason:\s*([\s\S]*)/i);
+  return match?.[1]?.trim() || 'no PM reason provided';
+}
+
+function renderTriagePrompt(issue: IssueContext): string {
+  const comments = (issue.comments ?? [])
+    .slice(-10)
+    .map((comment) => `- ${comment.author?.login ?? 'unknown'} at ${comment.createdAt ?? 'unknown'}: ${comment.body ?? ''}`)
+    .join('\n');
+  return [
     'You are a public OSS issue triage gate for an automated coding agent.',
     'Decide whether spending agent tokens is appropriate.',
     'Return strict JSON only with decision, reason, and optional question.',
@@ -77,12 +119,12 @@ async function main(): Promise<void> {
     `Issue #${issue.number ?? 'unknown'} by ${issue.user?.login ?? 'unknown'}`,
     `Title: ${issue.title ?? ''}`,
     `Body:\n${issue.body ?? ''}`,
+    `Recent comments:\n${comments || 'none'}`,
   ].join('\n');
+}
 
-  const result = options.provider === 'anthropic'
-    ? await callAnthropic(proxyUrl, token, options.model, prompt)
-    : await callOpenAI(proxyUrl, token, options.model, prompt);
-  writeFileSync(options.out, `${JSON.stringify(result, null, 2)}\n`);
+function writeResult(out: string, result: TriageResult): void {
+  writeFileSync(out, `${JSON.stringify(result, null, 2)}\n`);
   const approved = result.decision === 'approve_run';
   if (process.env.GITHUB_OUTPUT) {
     appendFileSync(process.env.GITHUB_OUTPUT, `approved=${approved ? 'true' : 'false'}\ndecision=${result.decision}\n`);

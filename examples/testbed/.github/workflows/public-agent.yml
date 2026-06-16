@@ -78,14 +78,11 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           mkdir -p .agent-run
-          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
-            gh issue view "${{ inputs.issue_number }}" \
-              --json number,title,body,author,labels \
-              --jq '{number,title,body,user:{login:.author.login},labels}' \
-              > .agent-run/issue.json
-          else
-            jq '.issue' "$GITHUB_EVENT_PATH" > .agent-run/issue.json
-          fi
+          issue_number="${{ github.event.issue.number || inputs.issue_number }}"
+          gh issue view "$issue_number" \
+            --json number,title,body,author,labels,comments \
+            --jq '{number,title,body,user:{login:.author.login},labels,comments}' \
+            > .agent-run/issue.json
 
       - name: Parse agent command
         id: command

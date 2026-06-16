@@ -21,8 +21,11 @@ describe('public agent production readiness', () => {
 
   test('PM and direct develop respect pause/backpressure controls', () => {
     expect(workflow('public-agent-pm.yml')).toContain('-label:agent-paused');
+    expect(workflow('public-agent-pm.yml')).toContain('-label:agent-repo-paused');
     expect(workflow('public-agent-pm.yml')).toContain('public agent repo pause is enabled; PM sweep skipped');
     expect(workflow('public-agent.yml')).toContain('repo-level agent pause is enabled');
+    expect(workflow('public-agent.yml')).toContain('agent-repo-paused');
+    expect(workflow('public-agent.yml')).toContain('steps.repo_pause.outputs.paused');
   });
 
   test('model proxy admin exposes status and revoke operations', () => {

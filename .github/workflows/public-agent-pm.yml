@@ -53,13 +53,15 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p .agent-run/pm
-          if [[ "$PUBLIC_AGENT_REPO_PAUSED" == "true" ]]; then
+          gh label create agent-repo-paused --description "Repo-level autonomous public-agent work is paused" --color FBCA04 2>/dev/null || true
+          repo_pause_count="$(gh issue list --state open --label agent-repo-paused --limit 1 --json number --jq 'length' 2>/dev/null || echo 0)"
+          if [[ "$PUBLIC_AGENT_REPO_PAUSED" == "true" || "$repo_pause_count" != "0" ]]; then
             echo "public agent repo pause is enabled; PM sweep skipped"
             exit 0
           fi
           gh issue list \
             --state open \
-            --search "is:issue is:open -label:agent-paused -label:agent-blocked -label:human-required -label:security sort:updated-asc" \
+            --search "is:issue is:open -label:agent-paused -label:agent-repo-paused -label:agent-blocked -label:human-required -label:security sort:updated-asc" \
             --limit "$PUBLIC_AGENT_PM_LIMIT" \
             --json number \
             --jq '.[].number' > .agent-run/pm/issues.txt

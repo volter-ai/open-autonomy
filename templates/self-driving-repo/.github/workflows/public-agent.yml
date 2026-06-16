@@ -63,6 +63,7 @@ jobs:
       target_kind: ${{ steps.target.outputs.kind }}
       target_pr: ${{ steps.target.outputs.pull_request }}
       policy_allowed: ${{ steps.policy.outputs.allowed }}
+      repo_paused: ${{ steps.repo_pause.outputs.paused }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -226,6 +227,7 @@ jobs:
           fi
 
           gh label create agent-paused --description "Autonomous public-agent work is paused" --color FBCA04 2>/dev/null || true
+          gh label create agent-repo-paused --description "Repo-level autonomous public-agent work is paused" --color FBCA04 2>/dev/null || true
           gh label create agent-blocked --description "Blocks autonomous public-agent development" --color B60205 2>/dev/null || true
           gh label create human-required --description "Requires maintainer attention before autonomous work" --color B60205 2>/dev/null || true
 
@@ -248,7 +250,8 @@ jobs:
           case "$COMMAND_VERB" in
             pause)
               if [[ "$scope" == "repo" ]]; then
-                gh variable set PUBLIC_AGENT_REPO_PAUSED --body true
+                gh variable set PUBLIC_AGENT_REPO_PAUSED --body true || true
+                gh issue edit "$issue" --add-label agent-repo-paused
                 gh issue comment "$issue" --body "Agent repo pause enabled. PM and develop starts will wait until \`/agent resume repo\`."
               else
                 gh issue edit "$issue" --add-label agent-paused
@@ -257,7 +260,12 @@ jobs:
               ;;
             resume)
               if [[ "$scope" == "repo" ]]; then
-                gh variable set PUBLIC_AGENT_REPO_PAUSED --body false
+                gh variable set PUBLIC_AGENT_REPO_PAUSED --body false || true
+                while IFS= read -r paused_issue; do
+                  if [[ -n "$paused_issue" ]]; then
+                    gh issue edit "$paused_issue" --remove-label agent-repo-paused || true
+                  fi
+                done < <(gh issue list --state open --label agent-repo-paused --limit 100 --json number --jq '.[].number')
                 gh issue comment "$issue" --body "Agent repo pause cleared."
               else
                 gh issue edit "$issue" --remove-label agent-paused || true
@@ -307,11 +315,13 @@ jobs:
               active_count="$(active_runs | jq -s 'length')"
               labels="$(jq -r '[.labels[]?.name] | join(", ")' .agent-run/issue.json)"
               blocking="$(jq -r '[.labels[]?.name | ascii_downcase | select(. == "agent-paused" or . == "agent-blocked" or . == "human-required" or . == "security")] | if length == 0 then "none" else join(", ") end' .agent-run/issue.json)"
+              repo_pause_count="$(gh issue list --state open --label agent-repo-paused --limit 1 --json number --jq 'length' 2>/dev/null || echo 0)"
+              repo_paused="$([[ "$PUBLIC_AGENT_REPO_PAUSED" == "true" || "$repo_pause_count" != "0" ]] && echo yes || echo no)"
               status_json="$(proxy_status)"
               proxy_runs="$(jq -r --argjson issue "$issue" '[.runs // {} | to_entries[] | select(.value.issue == $issue and .value.active == true) | .key] | if length == 0 then "none" else join(", ") end' <<<"$status_json")"
               {
                 echo "Agent status for issue #${issue}:"
-                echo "- repo paused: $([[ "$PUBLIC_AGENT_REPO_PAUSED" == "true" ]] && echo yes || echo no)"
+                echo "- repo paused: ${repo_paused}"
                 echo "- labels: ${labels:-none}"
                 echo "- blocking labels: ${blocking}"
                 echo "- open agent PR: $([[ -n "$open_pr" ]] && echo "#${open_pr}" || echo none)"
@@ -326,6 +336,19 @@ jobs:
               ;;
           esac
 
+      - name: Read repo pause state
+        id: repo_pause
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PUBLIC_AGENT_REPO_PAUSED: ${{ vars.PUBLIC_AGENT_REPO_PAUSED || 'false' }}
+        run: |
+          repo_pause_count="$(gh issue list --state open --label agent-repo-paused --limit 1 --json number --jq 'length' 2>/dev/null || echo 0)"
+          paused=false
+          if [[ "$PUBLIC_AGENT_REPO_PAUSED" == "true" || "$repo_pause_count" != "0" ]]; then
+            paused=true
+          fi
+          echo "paused=${paused}" >> "$GITHUB_OUTPUT"
+
       - name: Stop if target cannot be developed
         if: steps.command.outputs.verb == 'develop' && steps.target.outputs.can_develop != 'true'
         env:
@@ -336,14 +359,14 @@ jobs:
           exit 1
 
       - name: Stop if repo is paused
-        if: steps.command.outputs.verb == 'develop' && vars.PUBLIC_AGENT_REPO_PAUSED == 'true'
+        if: steps.command.outputs.verb == 'develop' && steps.repo_pause.outputs.paused == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh issue comment "${{ steps.target.outputs.issue }}" --body "Agent develop is waiting: repo-level agent pause is enabled. Use \`/agent resume repo\` to clear it."
 
       - name: Stop if develop policy blocks
-        if: steps.command.outputs.verb == 'develop' && vars.PUBLIC_AGENT_REPO_PAUSED != 'true' && steps.policy.outputs.allowed != 'true'
+        if: steps.command.outputs.verb == 'develop' && steps.repo_pause.outputs.paused != 'true' && steps.policy.outputs.allowed != 'true'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -357,7 +380,7 @@ jobs:
           fi
 
       - name: Mint triage model token
-        if: steps.command.outputs.verb == 'develop' && vars.PUBLIC_AGENT_REPO_PAUSED != 'true' && steps.policy.outputs.allowed == 'true'
+        if: steps.command.outputs.verb == 'develop' && steps.repo_pause.outputs.paused != 'true' && steps.policy.outputs.allowed == 'true'
         id: triage_mint
         env:
           MODEL_PROXY_URL: ${{ vars.MODEL_PROXY_URL }}
@@ -371,7 +394,7 @@ jobs:
             --purpose triage
 
       - name: Triage issue
-        if: steps.command.outputs.verb == 'develop' && vars.PUBLIC_AGENT_REPO_PAUSED != 'true' && steps.policy.outputs.allowed == 'true'
+        if: steps.command.outputs.verb == 'develop' && steps.repo_pause.outputs.paused != 'true' && steps.policy.outputs.allowed == 'true'
         id: triage
         continue-on-error: true
         env:
@@ -395,7 +418,7 @@ jobs:
             "${MODEL_PROXY_URL}/admin/runs/${{ steps.triage_mint.outputs.run_id }}/revoke"
 
       - name: Record triage decision
-        if: always() && steps.command.outputs.verb == 'develop' && vars.PUBLIC_AGENT_REPO_PAUSED != 'true' && steps.policy.outputs.allowed == 'true' && hashFiles('.agent-run/target.json') != ''
+        if: always() && steps.command.outputs.verb == 'develop' && steps.repo_pause.outputs.paused != 'true' && steps.policy.outputs.allowed == 'true' && hashFiles('.agent-run/target.json') != ''
         run: |
           mkdir -p .agent-run/setup-decisions
           issue="$(jq -r '.issue' .agent-run/target.json)"
@@ -420,7 +443,7 @@ jobs:
             --out-dir .agent-run/setup-decisions
 
       - name: Stop if triage did not approve
-        if: steps.command.outputs.verb == 'develop' && vars.PUBLIC_AGENT_REPO_PAUSED != 'true' && steps.policy.outputs.allowed == 'true' && steps.triage.outputs.approved != 'true'
+        if: steps.command.outputs.verb == 'develop' && steps.repo_pause.outputs.paused != 'true' && steps.policy.outputs.allowed == 'true' && steps.triage.outputs.approved != 'true'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -435,7 +458,7 @@ jobs:
           exit 1
 
       - name: Mint bounded model token
-        if: steps.command.outputs.verb == 'develop' && vars.PUBLIC_AGENT_REPO_PAUSED != 'true' && steps.policy.outputs.allowed == 'true' && steps.triage.outputs.approved == 'true'
+        if: steps.command.outputs.verb == 'develop' && steps.repo_pause.outputs.paused != 'true' && steps.policy.outputs.allowed == 'true' && steps.triage.outputs.approved == 'true'
         id: mint
         env:
           MODEL_PROXY_URL: ${{ vars.MODEL_PROXY_URL }}

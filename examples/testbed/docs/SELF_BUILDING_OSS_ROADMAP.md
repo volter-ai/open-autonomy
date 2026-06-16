@@ -761,6 +761,17 @@ Required fixes from the live `open-autonomy-testbed` trials:
 - Add repo-pause smoke coverage proving scheduled PM sweeps and direct develop
   stop before model token minting while `PUBLIC_AGENT_REPO_PAUSED` is enabled.
 
+Implemented:
+
+- issue-level pause/status/resume commands operate before model token minting
+- repo-level pause honors `PUBLIC_AGENT_REPO_PAUSED` when set externally and
+  also supports an `agent-repo-paused` issue-label fallback that works with the
+  default GitHub workflow token
+- PM sweeps and direct develop both stop while the repo-pause label fallback is
+  present
+- publisher policy rejections now write a visible issue comment plus a rejected
+  publish decision artifact before the workflow fails
+
 ### Phase 7: Production Rollout
 
 Goal: move from self-hosting confidence to production-grade self-building OSS.

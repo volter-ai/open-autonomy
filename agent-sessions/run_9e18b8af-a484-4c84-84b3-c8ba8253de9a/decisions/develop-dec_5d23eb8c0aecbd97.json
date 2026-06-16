@@ -1,0 +1,25 @@
+{
+  "schema": "volter.agent.decision.v1",
+  "stage": "develop",
+  "issue": 2,
+  "run_id": "run_9e18b8af-a484-4c84-84b3-c8ba8253de9a",
+  "actor": "yueranyuan",
+  "decision": "pr-ready",
+  "subject": {
+    "type": "issue",
+    "number": 2,
+    "branch": "agent/issue-2"
+  },
+  "evidence": [
+    "session:session.json",
+    "patch:changes.patch",
+    "artifact:artifacts/codex-final.md",
+    "artifact:artifacts/context-sources.json",
+    "artifact:artifacts/pr.md",
+    "artifact:artifacts/result.json",
+    "artifact:artifacts/transcript.md"
+  ],
+  "next_action": "publish",
+  "created_at": "2026-06-16T17:20:44.173Z",
+  "id": "dec_5d23eb8c0aecbd97"
+}

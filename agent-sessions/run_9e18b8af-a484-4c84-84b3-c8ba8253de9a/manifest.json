@@ -1,0 +1,53 @@
+{
+  "schema_version": 1,
+  "run_id": "run_9e18b8af-a484-4c84-84b3-c8ba8253de9a",
+  "repo": "volter-ai/open-autonomy",
+  "issue": 2,
+  "actor": "yueranyuan",
+  "status": "pr-ready",
+  "created_at": "2026-06-16T17:20:44.174Z",
+  "session": "session.json",
+  "run_receipt": "run-receipt.json",
+  "transcript": "transcript.md",
+  "patch": "changes.patch",
+  "decisions": [
+    "decisions/dispatch-dec_04fb77a4d2e0a889.json",
+    "decisions/target-dec_8d1fa08974d86c38.json",
+    "decisions/triage-dec_f338dcaef4803cfc.json",
+    "decisions/develop-dec_5d23eb8c0aecbd97.json"
+  ],
+  "artifacts": [
+    "artifacts/codex-final.md",
+    "artifacts/context-sources.json",
+    "artifacts/pr.md",
+    "artifacts/result.json",
+    "artifacts/transcript.md"
+  ],
+  "evidence": [
+    {
+      "path": "artifacts/codex-final.md",
+      "kind": "artifact",
+      "media_type": "text/markdown"
+    },
+    {
+      "path": "artifacts/context-sources.json",
+      "kind": "artifact",
+      "media_type": "application/json"
+    },
+    {
+      "path": "artifacts/pr.md",
+      "kind": "artifact",
+      "media_type": "text/markdown"
+    },
+    {
+      "path": "artifacts/result.json",
+      "kind": "artifact",
+      "media_type": "application/json"
+    },
+    {
+      "path": "artifacts/transcript.md",
+      "kind": "artifact",
+      "media_type": "text/markdown"
+    }
+  ]
+}

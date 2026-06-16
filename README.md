@@ -39,6 +39,9 @@ can be published, reviewed, and merged.
 - `examples/testbed/` - full demo repo for live PM/operator/develop testing.
 - `docs/` - architecture, runbook, rollout, and roadmap.
 
+Start with [`docs/ARCHITECTURE.md`](./docs/ARCHITECTURE.md) for the master map
+of the system, agent roles, trust boundaries, and how the docs fit together.
+
 ## Checks
 
 ```bash

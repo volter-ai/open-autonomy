@@ -61,7 +61,7 @@ jobs:
           fi
           gh issue list \
             --state open \
-            --search "is:issue is:open -label:agent-paused -label:agent-repo-paused -label:agent-blocked -label:human-required -label:security sort:updated-asc" \
+            --search "is:issue is:open -label:agent-paused -label:agent-repo-paused -label:agent-blocked -label:human-required -label:needs-info -label:agent-maintainer-hold -label:security sort:updated-asc" \
             --limit "$PUBLIC_AGENT_PM_LIMIT" \
             --json number \
             --jq '.[].number' > .agent-run/pm/issues.txt

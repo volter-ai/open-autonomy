@@ -58,3 +58,65 @@ State legend matches `TEST_MATRIX.md`: `done`, `needs-info`, `human-required`, `
   deterministic gate behavior is already covered by unit tests (`scripts/public-agent-loop-budget.ts`,
   `scripts/public-agent-merge-gate.ts`, `scripts/github-agent-publish.ts` and matching `*.test.ts`);
   the rows above track the remaining *live* demonstrations.
+
+## Proctor session — 2026-06-17 (T+60 verdict)
+
+Driven per `docs/LIVE_TESTING_STRATEGY.md` with an AI proctor as the human-in-the-loop operator
+(filing issues, answering `needs-info`, operator commands, maintainer clarifications) and the
+autonomy driving all triage/develop/review/merge decisions. Coverage scenarios seeded as issues
+#42–#59 (plus clean line #62). PM was triggered via `workflow_dispatch` because GitHub did not honor
+the testbed `*/5` cron during the window (platform-timer lag; PM still made its own decisions).
+
+### Proven live this session
+
+| Scenario | Evidence | State |
+| --- | --- | --- |
+| `pm-clear-docs` + `review-low-risk-merge` (full loop) | #62 → develop → review → merge gate merged **PR #63** → issue closed. Marquee clean end-to-end. | `done` |
+| `pm-needs-info` | #43 — PM asked one question, applied `needs-info`. | `needs-info` |
+| `pm-human-required-risky-workflow` | #44 — PM escalated `human-required` + `agent-blocked`. | `human-required` |
+| `operator-pause-resume` | #45 — `/agent pause`→`agent-paused`, `/agent status` reported pause, `/agent develop` → `policy_blocked`, `/agent resume` cleared it. | `done` |
+| `operator-retry-no-failure` | #55 — `/agent retry` → "no failed infrastructure run found". | `done` |
+
+The review-retry loop mechanism also fired live (real `develop_retry` verdict → autopilot retry on
+PR #60), but via the fixture bug below, so it is not counted as a clean scenario proof.
+
+### Proven in prior sessions (already in the proof ledger)
+
+`five-issue-dogfood` (#29–#33 → PRs #34–#38), `review-low-risk-merge`, `repo-pause` (#14),
+`pm-follow-up-after-needs-info` (#11 → PR #12), `governance-maintainer-hold` (#10),
+`operator-pause-resume` (#5).
+
+### Partial / blocked this session — with reason (not faked)
+
+- `retry-ci-failure` (#49) — develop created the `.testbed/force-ci-failure` sentinel, but GitHub
+  does not run the `ci` workflow on GITHUB_TOKEN bot PRs (runs sit `action_required`), so the
+  sentinel never becomes a *failed* required check; the session sees a missing check instead. The
+  CI-failure fixture needs the session's in-process CI step to honor the sentinel, not the PR `ci`
+  workflow.
+- `retry-review-failure` (#50) / `publisher-policy-rejection` (#48) — develop triage gated the
+  terse fixture issues; even after maintainer clarification they did not produce a clean PR within
+  the window.
+- `head-changed-before-merge`, `pm-open-pr-review`, `governance-develop-only`,
+  `governance-risky-approval`, `planner-creates-proof-gate-issues`, `decision-memory-smoke`,
+  `operator-cancel` — not reached cleanly in the window; deterministic behavior remains covered by
+  unit tests, but the live demonstration is outstanding.
+
+### Findings (the testbed surfaced real issues — its job)
+
+1. **Review-retry fixture over-matched.** `forcedReviewRetryVerdict` matched the marker string
+   anywhere in the diff, including the marker quoted inside committed session transcripts, so it
+   false-triggered `develop_retry` on unrelated PRs (#42, #60) and caused cascading retries that hit
+   `git apply` conflicts. Fixed to match the real `diff --git a/.testbed/force-review-retry` header
+   and re-synced to the testbed; the subsequent clean line (#62) merged without issue.
+2. **CI does not run on bot PRs.** GITHUB_TOKEN-authored PRs do not trigger the `ci` workflow
+   (`action_required`); open-autonomy handles CI in-process. The sentinel CI-failure fixture must
+   move into that in-process step to drive the retry loop live.
+3. **Develop triage gates terse fixture issues.** `manual-operator-test` fixture issues with short
+   bodies are sent to `needs_clarification`; fixture issues need explicit, approvable acceptance
+   criteria to reach the develop session.
+
+### Next live work
+
+- Move the CI-failure fixture into the in-process CI step so `retry-ci-failure` runs live.
+- Give the publisher/review fixture issues approvable acceptance criteria in the seed.
+- Re-run the proctor for the remaining partial/blocked scenarios once the above land.

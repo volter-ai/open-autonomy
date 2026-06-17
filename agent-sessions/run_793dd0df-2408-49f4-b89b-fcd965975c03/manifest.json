@@ -1,0 +1,57 @@
+{
+  "schema_version": 1,
+  "run_id": "run_793dd0df-2408-49f4-b89b-fcd965975c03",
+  "repo": "volter-ai/open-autonomy",
+  "open_autonomy": {
+    "version": "0.1.0",
+    "profile": "default"
+  },
+  "issue": 16,
+  "actor": "github-actions[bot]",
+  "status": "pr-ready",
+  "created_at": "2026-06-17T15:49:19.004Z",
+  "session": "session.json",
+  "run_receipt": "run-receipt.json",
+  "transcript": "transcript.md",
+  "patch": "changes.patch",
+  "decisions": [
+    "decisions/dispatch-dec_e1e4773e418f9c0e.json",
+    "decisions/target-dec_d9de7b57df04fe8e.json",
+    "decisions/triage-dec_910ba6ad3c91e06f.json",
+    "decisions/develop-dec_b89c25c0b0f5144a.json"
+  ],
+  "artifacts": [
+    "artifacts/codex-final.md",
+    "artifacts/context-sources.json",
+    "artifacts/pr.md",
+    "artifacts/result.json",
+    "artifacts/transcript.md"
+  ],
+  "evidence": [
+    {
+      "path": "artifacts/codex-final.md",
+      "kind": "artifact",
+      "media_type": "text/markdown"
+    },
+    {
+      "path": "artifacts/context-sources.json",
+      "kind": "artifact",
+      "media_type": "application/json"
+    },
+    {
+      "path": "artifacts/pr.md",
+      "kind": "artifact",
+      "media_type": "text/markdown"
+    },
+    {
+      "path": "artifacts/result.json",
+      "kind": "artifact",
+      "media_type": "application/json"
+    },
+    {
+      "path": "artifacts/transcript.md",
+      "kind": "artifact",
+      "media_type": "text/markdown"
+    }
+  ]
+}

@@ -3,6 +3,8 @@
 This example follows the root Open Autonomy roadmap and keeps only local demo
 notes here.
 
+Root roadmap: [`../../docs/ROADMAP.md`](../../docs/ROADMAP.md)
+
 Local proof focus:
 
 - small documentation edits through PM, develop, review, and merge

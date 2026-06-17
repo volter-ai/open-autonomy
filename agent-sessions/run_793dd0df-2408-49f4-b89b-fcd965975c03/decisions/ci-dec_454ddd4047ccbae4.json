@@ -1,0 +1,23 @@
+{
+  "schema": "volter.agent.decision.v1",
+  "stage": "ci",
+  "issue": 16,
+  "pr": 20,
+  "run_id": "run_793dd0df-2408-49f4-b89b-fcd965975c03",
+  "actor": "public-agent-ci",
+  "decision": "pass",
+  "subject": {
+    "type": "pr",
+    "number": 20,
+    "branch": "agent/issue-16",
+    "head_sha": "a874c5c9946f249c91d9184ac1aac84278025942"
+  },
+  "reason": "all required checks passed",
+  "evidence": [
+    "ci:.agent-run/ci.json",
+    "checks:.agent-run/checks.json"
+  ],
+  "next_action": "review",
+  "created_at": "2026-06-17T15:50:30.639Z",
+  "id": "dec_454ddd4047ccbae4"
+}

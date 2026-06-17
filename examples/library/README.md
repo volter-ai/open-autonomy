@@ -3,6 +3,10 @@
 This is a minimal full repository shape for using open-autonomy on a small
 TypeScript library.
 
+This cookbook is a pushable standalone repo: copy `examples/library/` into a
+new GitHub repository, keep the local docs in `docs/`, and follow the local
+roadmap in [`docs/ROADMAP.md`](./docs/ROADMAP.md).
+
 It is intentionally small:
 
 - issues can request bounded library and documentation edits

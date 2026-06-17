@@ -1,0 +1,58 @@
+{
+  "startedAt": "2026-06-17T15:48:06.789Z",
+  "completedAt": "2026-06-17T15:49:18.989Z",
+  "issue": {
+    "body": "Roadmap item: `public-oss-readiness`\nPhase: 13\nPriority: medium\nProof gate: `release-dogfood`\n\nAcceptance criteria:\n- Cookbook examples are pushable repos with local docs and root roadmap links.\n- Release evidence is reproducible from committed artifacts.\n\nPlanner origin: roadmap-planner",
+    "comments": [
+      {
+        "author": {
+          "login": "github-actions"
+        },
+        "authorAssociation": "CONTRIBUTOR",
+        "body": "/agent develop\n\nPM reason: The issue includes clear acceptance criteria and is fully scoped for development.",
+        "createdAt": "2026-06-17T15:46:58Z",
+        "id": "IC_kwDOS8izs88AAAABGhNT_g",
+        "includesCreatedEdit": false,
+        "isMinimized": false,
+        "minimizedReason": "",
+        "reactionGroups": [],
+        "url": "https://github.com/volter-ai/open-autonomy/issues/16#issuecomment-4732441598",
+        "viewerDidAuthor": true
+      }
+    ],
+    "labels": [
+      {
+        "color": "0E8A16",
+        "description": "Issue created or managed by the Open Autonomy planner",
+        "id": "LA_kwDOS8izs88AAAACnxBoZA",
+        "name": "origin:roadmap-planner"
+      },
+      {
+        "color": "FBCA04",
+        "description": "Roadmap priority",
+        "id": "LA_kwDOS8izs88AAAACnxBpFA",
+        "name": "priority:medium"
+      },
+      {
+        "color": "5319E7",
+        "description": "Open Autonomy planner label",
+        "id": "LA_kwDOS8izs88AAAACnxBrjA",
+        "name": "proof:release-dogfood"
+      },
+      {
+        "color": "1D76DB",
+        "description": "Open Autonomy planner label",
+        "id": "LA_kwDOS8izs88AAAACnxBtFg",
+        "name": "roadmap:phase-13"
+      }
+    ],
+    "number": 16,
+    "title": "[roadmap:public-oss-readiness] Public OSS Readiness",
+    "user": {
+      "login": "app/github-actions"
+    }
+  },
+  "taskDir": "/home/runner/work/open-autonomy/open-autonomy/.agent-run/out/task",
+  "status": "pr-ready",
+  "exitCode": 0
+}

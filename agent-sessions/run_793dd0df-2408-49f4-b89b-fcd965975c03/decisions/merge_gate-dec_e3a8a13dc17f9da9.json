@@ -1,0 +1,24 @@
+{
+  "schema": "volter.agent.decision.v1",
+  "stage": "merge_gate",
+  "issue": 16,
+  "pr": 20,
+  "run_id": "run_793dd0df-2408-49f4-b89b-fcd965975c03",
+  "actor": "public-agent-merge-gate",
+  "decision": "merge",
+  "subject": {
+    "type": "pr",
+    "number": 20,
+    "branch": "agent/issue-16",
+    "head_sha": "a874c5c9946f249c91d9184ac1aac84278025942"
+  },
+  "reason": "review passed with low risk and required CI passed",
+  "evidence": [
+    "ci:pass",
+    "review:pass",
+    "merge_gate:merge"
+  ],
+  "next_action": "merge",
+  "created_at": "2026-06-17T15:50:30.702Z",
+  "id": "dec_e3a8a13dc17f9da9"
+}

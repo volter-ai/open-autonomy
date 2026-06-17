@@ -10,8 +10,9 @@ Release checklist:
 3. Run planner, preflight, and governance-report workflows on `main`.
 4. Scaffold `templates/self-driving-repo/` into a clean directory and run its
    `bun run check`.
-5. Verify `examples/docs-only`, `examples/small-app`, `examples/library`, and
-   `examples/testbed` can run their local checks.
+5. Verify the committed release evidence in [`docs/PROOF_LEDGER.md`](./PROOF_LEDGER.md)
+   and confirm `examples/docs-only`, `examples/small-app`, `examples/library`,
+   and `examples/testbed` can run their local checks.
 6. Tag the release as `vX.Y.Z`.
 7. Record migration notes for template changes in the changelog.
 

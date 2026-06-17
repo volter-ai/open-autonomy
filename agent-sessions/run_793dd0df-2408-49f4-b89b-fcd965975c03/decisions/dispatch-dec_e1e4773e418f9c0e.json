@@ -1,0 +1,25 @@
+{
+  "schema": "volter.agent.decision.v1",
+  "stage": "dispatch",
+  "issue": 16,
+  "actor": "public-agent-policy",
+  "decision": "allow",
+  "subject": {
+    "type": "issue",
+    "number": 16,
+    "branch": "agent/issue-16"
+  },
+  "attempt": {
+    "kind": "develop",
+    "index": 2,
+    "max": 3
+  },
+  "reason": "policy allows develop triage",
+  "evidence": [
+    "target:.agent-run/target.json",
+    "policy:.agent-run/policy.json"
+  ],
+  "next_action": "triage",
+  "created_at": "2026-06-17T15:47:25.460Z",
+  "id": "dec_e1e4773e418f9c0e"
+}

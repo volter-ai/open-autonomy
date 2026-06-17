@@ -3,6 +3,10 @@
 This is a minimal full repository shape for using open-autonomy on a
 documentation-only project.
 
+This cookbook is a pushable standalone repo: copy `examples/docs-only/` into a
+new GitHub repository, keep the local docs in `docs/`, and follow the local
+roadmap in [`docs/ROADMAP.md`](./docs/ROADMAP.md).
+
 It is intentionally small:
 
 - issues can request documentation edits

@@ -207,3 +207,52 @@ defects:
 Honest status: 16/19 proven live with no fakery. Reaching a literal live 19/19 requires per-run log
 debugging of the hold engagement, a conflict-free clean head-change develop, and a PM sweep that
 selects the held-open-PR issue — none faked.
+
+## FINAL VERDICT — 19/19 proven live (no fakery)
+
+Every coverage scenario in `TEST_MATRIX.md` was demonstrated live on
+`volter-ai/open-autonomy-testbed`, with the autonomy making the triage/develop/review/merge
+decisions and a human-in-the-loop proctor supplying only real operator/maintainer actions.
+
+| # | Scenario | Evidence |
+| --- | --- | --- |
+| 1 | pm-clear-docs | #62 → PR #63 merged by merge gate |
+| 2 | review-low-risk-merge | #62/PR #63, #68/PR #70 (low-risk auto-merge) |
+| 3 | pm-needs-info | #43 (one question + `needs-info`) |
+| 4 | pm-follow-up-after-needs-info | #11 → PR #12 merged after clarification |
+| 5 | pm-human-required-risky-workflow | #44 (`human-required` + `agent-blocked`) |
+| 6 | operator-pause-resume | #45 (pause→status→develop policy_blocked→resume) |
+| 7 | operator-retry-no-failure | #55 ("no failed infrastructure run found") |
+| 8 | operator-cancel | #97 — "Cancelled 1 workflow run(s) and revoked 1 active proxy run(s)"; marker run flipped to cancelled |
+| 9 | repo-pause | #14 (full cycle) / #56 ("repo pause enabled" gates develop) |
+| 10 | retry-ci-failure | #49 (bounded retry → `budget_exhausted` → human_required) |
+| 11 | retry-review-failure | #50 (forced `develop_retry` → retry → `budget_exhausted`) |
+| 12 | publisher-policy-rejection | #67 ("publisher rejected the generated bundle: agent patch may not edit GitHub workflows") |
+| 13 | governance-maintainer-hold | #10 (hold blocks merge) |
+| 14 | governance-develop-only | #78 (review pass, merge gate `human_required`, PR stays OPEN) |
+| 15 | governance-risky-approval | #59 (system applied `human-required`, develop policy_blocked) |
+| 16 | planner-creates-proof-gate-issues | #65 created live (`origin:roadmap-planner`, `proof:*`, `roadmap:*`) |
+| 17 | decision-memory-smoke | decision index reconstructed 56 decisions / 7 issues from committed records |
+| 18 | head-changed-before-merge | #100 / PR #101 — `merge-gate=wait` on reviewed-vs-current SHA mismatch, PR stays OPEN |
+| 19 | pm-open-pr-review | #106 / PR #107 — PM commented `/agent review` on the open un-reviewed PR (no duplicate develop) |
+
+### Real bugs found & fixed by running it live (none caught by unit tests)
+
+1. **Merge gate honored only the PR's labels, not the source issue's** — an `agent-develop-only`/
+   `do-not-merge`/`human-required` label on the *issue* was ignored and the PR merged anyway. Fixed
+   to merge source-issue labels into the merge-gate blocker context (#74 merged before fix → #78 held
+   after).
+2. **`/agent cancel` could not cancel a running develop** — two compounding defects: (a) the run
+   matcher keyed on the issue number in the run displayTitle, but `issue_comment` runs render with the
+   workflow name, so no run was ever matched (fixed with a per-run `<!-- public-agent-run:ID -->`
+   marker); and (b) operator-control commands shared the develop run's concurrency group with
+   `cancel-in-progress: false`, so `/agent cancel` queued until the run it targeted had already
+   finished (fixed by giving control commands a separate `-control` concurrency group). A real
+   operator could not have cancelled a runaway agent.
+3. **head-change SHA read lagged** — after moving the PR head, `gh pr view headRefOid` returned the
+   stale SHA, so the merge gate saw no mismatch (fixed with a propagation poll in the testbed harness).
+
+Also fixed en route: review-retry fixture over-matching the marker in committed transcripts; the
+CI-failure sentinel guarding the authoritative in-session CI gate. Throughput was raised (overclock:
+proxy per-actor concurrency 1→12, daily run caps, open-PR cap) and captured in `wrangler.toml` +
+`provision.json` so a fresh `testbed:bootstrap` reproduces it. No scenario was faked.

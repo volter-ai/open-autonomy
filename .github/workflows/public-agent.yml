@@ -245,15 +245,15 @@ jobs:
             # GitHub renders issue_comment develop runs with the workflow name as displayTitle (the
             # run-name "#<issue>" is not applied), so match instead on the run-id markers that each
             # develop run records on its issue. Emit the still-active run ids, one per line.
-            gh issue view "$issue" --json comments \
-              --jq '[.comments[].body | capture("public-agent-run:(?<id>[0-9]+)")?.id] | map(select(. != null)) | unique | .[]' 2>/dev/null \
-            | while IFS= read -r rid; do
-                [[ -z "$rid" ]] && continue
-                st="$(gh run view "$rid" --json status --jq .status 2>/dev/null || echo)"
-                if [[ "$st" == "in_progress" || "$st" == "queued" || "$st" == "waiting" || "$st" == "requested" ]]; then
-                  echo "$rid"
-                fi
-              done
+            gh issue view "$issue" --json comments --jq '.comments[].body' 2>/dev/null \
+              | grep -oE 'public-agent-run:[0-9]+' | sed 's/.*://' | sort -u \
+              | while IFS= read -r rid; do
+                  [[ -z "$rid" ]] && continue
+                  st="$(gh run view "$rid" --json status --jq .status 2>/dev/null || echo)"
+                  case "$st" in
+                    in_progress|queued|waiting|requested) echo "$rid" ;;
+                  esac
+                done
           }
 
           proxy_status() {

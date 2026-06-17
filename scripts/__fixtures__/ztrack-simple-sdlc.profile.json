@@ -1,0 +1,72 @@
+{
+  "schema": "ztrack.profile.v1",
+  "name": "simple-sdlc",
+  "preset": "simple-sdlc",
+  "readme": "profiles/simple-sdlc/README.md",
+  "scheduler": {
+    "schedule": "profiles/simple-sdlc/scheduler/schedule.json",
+    "scripts": [
+      "profiles/simple-sdlc/scheduler/scripts/recover-develop.mjs",
+      "profiles/simple-sdlc/scheduler/scripts/pm-tick.mjs",
+      "profiles/simple-sdlc/scheduler/scripts/recover-review.mjs",
+      "profiles/simple-sdlc/scheduler/scripts/cleanup-pm.mjs",
+      "profiles/simple-sdlc/scheduler/scripts/run.mjs"
+    ]
+  },
+  "scripts": {
+    "runAgent": "profiles/simple-sdlc/scripts/run-agent.mjs"
+  },
+  "skills": {
+    "pm": {
+      "name": "ztrack-simple-sdlc-pm",
+      "source": "profiles/simple-sdlc/skills/pm/SKILL.md",
+      "codex": ".agents/skills/ztrack-simple-sdlc-pm/SKILL.md",
+      "claude": ".claude/skills/ztrack-simple-sdlc-pm/SKILL.md"
+    },
+    "draft": {
+      "name": "ztrack-simple-sdlc-draft",
+      "source": "profiles/simple-sdlc/skills/draft/SKILL.md",
+      "codex": ".agents/skills/ztrack-simple-sdlc-draft/SKILL.md",
+      "claude": ".claude/skills/ztrack-simple-sdlc-draft/SKILL.md"
+    },
+    "develop": {
+      "name": "ztrack-simple-sdlc-develop",
+      "source": "profiles/simple-sdlc/skills/develop/SKILL.md",
+      "codex": ".agents/skills/ztrack-simple-sdlc-develop/SKILL.md",
+      "claude": ".claude/skills/ztrack-simple-sdlc-develop/SKILL.md"
+    },
+    "review": {
+      "name": "ztrack-simple-sdlc-review",
+      "source": "profiles/simple-sdlc/skills/review/SKILL.md",
+      "codex": ".agents/skills/ztrack-simple-sdlc-review/SKILL.md",
+      "claude": ".claude/skills/ztrack-simple-sdlc-review/SKILL.md"
+    }
+  },
+  "standards": [
+    "profiles/simple-sdlc/standards/workflow.md",
+    "profiles/simple-sdlc/standards/issue-and-evidence.md",
+    "profiles/simple-sdlc/standards/risk-and-review.md"
+  ],
+  "policy": {
+    "wip": {
+      "maxInProgress": 1,
+      "maxInReview": 1
+    },
+    "humanRequiredPaths": [
+      ".github/workflows/**",
+      ".agents/skills/**",
+      ".claude/skills/**",
+      "profiles/**/skills/**",
+      "profiles/**/scheduler/**",
+      ".volter/tracker/validation/**"
+    ],
+    "humanRequiredTopics": [
+      "auth",
+      "secrets",
+      "billing",
+      "deployment",
+      "destructive data migration",
+      "dependency trust"
+    ]
+  }
+}

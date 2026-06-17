@@ -1097,6 +1097,13 @@ jobs:
             newsha="$(gh api -X POST "repos/$repo/git/commits" -f message="Testbed head-change fixture: head moved after review SHA recorded" -f tree="$tree" -f 'parents[]'="$parent" --jq .sha)"
             gh api -X PATCH "repos/$repo/git/refs/heads/$branch" -f sha="$newsha" >/dev/null
             echo "Testbed fixture: moved $branch head $parent -> $newsha after review."
+            # Wait for the PR's headRefOid to reflect the moved ref so the merge gate (which reads
+            # `gh pr view --json headRefOid`) observes the reviewed-vs-current mismatch.
+            for _ in $(seq 1 20); do
+              cur="$(gh pr view "$pr" --json headRefOid --jq .headRefOid 2>/dev/null || echo)"
+              [[ "$cur" == "$newsha" ]] && { echo "PR head now $cur"; break; }
+              sleep 3
+            done
           fi
 
       - name: Decide merge

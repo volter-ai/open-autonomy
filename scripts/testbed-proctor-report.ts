@@ -147,8 +147,12 @@ function gh(args: string[]): string {
 
 async function main(): Promise<void> {
   const argv = process.argv.slice(2);
-  const repo = argv[argv.indexOf('--repo') + 1] ?? 'volter-ai/open-autonomy-testbed';
-  const at = argv[argv.indexOf('--at') + 1] ?? 'unknown';
+  const value = (name: string, fallback: string) => {
+    const index = argv.indexOf(name);
+    return index >= 0 && argv[index + 1] ? (argv[index + 1] as string) : fallback;
+  };
+  const repo = value('--repo', 'volter-ai/open-autonomy-testbed');
+  const at = value('--at', new Date().toISOString());
   const issues = JSON.parse(gh(['issue', 'list', '-R', repo, '--state', 'all', '--limit', '100', '--json', 'number,title,state,labels'])) as Array<{ number: number; title: string; state: string; labels: Array<{ name: string }> }>;
   const prs = JSON.parse(gh(['pr', 'list', '-R', repo, '--state', 'all', '--limit', '100', '--json', 'number,title,state,headRefName'])) as PrLite[];
   const runs = JSON.parse(gh(['run', 'list', '-R', repo, '--limit', '40', '--json', 'name,conclusion,status'])) as RunLite[];

@@ -1,0 +1,11 @@
+{
+  "context_sources": [
+    "target",
+    "issue",
+    "issue_comments",
+    "control_files"
+  ],
+  "recent_issue_comments": 1,
+  "previous_decisions": 0,
+  "has_current_pr": false
+}

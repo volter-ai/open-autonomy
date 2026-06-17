@@ -4,9 +4,9 @@ import { join } from 'node:path';
 import { readAutonomyConfig } from './open-autonomy-config.js';
 
 export interface ControlFileContext {
+  autonomy?: string;
   agents?: string;
   constitution?: string;
-  policy?: string;
   roadmap?: string;
   review_rubric?: string;
   documents: Record<string, string>;
@@ -46,9 +46,9 @@ export function readControlFileContext(root = '.'): ControlFileContext {
     const value = readOptional(join(root, path));
     if (value) {
       documents[key] = value;
-      if (key === 'agents') context.agents = value;
+      if (key === 'autonomy') context.autonomy = value;
+      else if (key === 'agents') context.agents = value;
       else if (key === 'constitution') context.constitution = value;
-      else if (key === 'policy') context.policy = value;
       else if (key === 'roadmap') context.roadmap = value;
       else if (key === 'review_rubric') context.review_rubric = value;
       sources.push(path);
@@ -76,11 +76,11 @@ export function readControlFileContext(root = '.'): ControlFileContext {
 export function renderControlFilePrompt(context: ControlFileContext): string {
   const sections: string[] = [];
   if (context.agents) sections.push(section('AGENTS.md', context.agents));
+  if (context.autonomy) sections.push(section('autonomy.yml', context.autonomy));
   if (context.constitution) sections.push(section('constitution.md', context.constitution));
-  if (context.policy) sections.push(section('policy.yml', context.policy));
   if (context.roadmap) sections.push(section('roadmap.yml', context.roadmap));
   if (context.review_rubric) sections.push(section('review-rubric.yml', context.review_rubric));
-  for (const [name, body] of Object.entries(context.documents).filter(([name]) => !['agents', 'constitution', 'policy', 'roadmap', 'review_rubric'].includes(name)).sort(([a], [b]) => a.localeCompare(b))) {
+  for (const [name, body] of Object.entries(context.documents).filter(([name]) => !['agents', 'autonomy', 'constitution', 'roadmap', 'review_rubric'].includes(name)).sort(([a], [b]) => a.localeCompare(b))) {
     sections.push(section(name, body));
   }
   for (const [name, body] of Object.entries(context.standards).sort(([a], [b]) => a.localeCompare(b))) {

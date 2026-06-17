@@ -1,11 +1,11 @@
 schema: open-autonomy.autonomy.v1
 documents:
+  autonomy: .open-autonomy/autonomy.yml
   agents: AGENTS.md
   architecture: docs/ARCHITECTURE.md
   constitution: docs/CONSTITUTION.md
   project: docs/PROJECT.md
   roadmap: .open-autonomy/roadmap.yml
-  policy: .open-autonomy/policy.yml
   review_rubric: .open-autonomy/review-rubric.yml
   standards:
     code: docs/standards/code.md
@@ -54,3 +54,43 @@ agents:
     capabilities:
       - pr:open
       - pr:update
+policy:
+  autonomy:
+    max_open_agent_prs: 5
+    max_develop_attempts: 2
+    max_ci_retries: 2
+    max_review_retries: 2
+    stale_needs_info_minutes: 10080
+    require_visible_pm_status: true
+    require_decision_records: true
+    require_acceptance_evidence: true
+  risk:
+    human_required_paths:
+      - ".github/workflows/**"
+      - ".open-autonomy/autonomy.yml"
+      - "docs/CONSTITUTION.md"
+      - ".codex/skills/**"
+      - "services/**/wrangler.toml"
+    human_required_topics:
+      - auth
+      - secrets
+      - billing
+      - deployment
+      - destructive data migration
+      - dependency trust
+  merge:
+    require_ci: true
+    require_low_risk_review: true
+    require_current_head_sha: true
+    maintainer_block_labels:
+      - do-not-merge
+      - human-required
+      - agent-blocked
+  planner:
+    enabled: true
+    issue_origin_label_prefix: "origin:"
+    phase_label_prefix: "roadmap:"
+    priority_labels:
+      high: "priority:high"
+      medium: "priority:medium"
+      low: "priority:low"

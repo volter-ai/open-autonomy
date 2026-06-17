@@ -36,8 +36,8 @@ Rewrite the GitHub Actions workflows to make the agent faster.
 
 ## Setup
 
-Configure the same repository variables and secrets described in
-`docs/PUBLIC_AGENT_PRODUCTION_ROLLOUT.md`, then run:
+Configure the model proxy URL, model names, budget variables, and
+`MODEL_PROXY_ADMIN_TOKEN` secret used by the workflows, then run:
 
 ```bash
 bun install

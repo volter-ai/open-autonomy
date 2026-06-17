@@ -11,5 +11,6 @@ It is intentionally small:
 - operator controls can pause, resume, status, retry, and cancel
 
 To make this a standalone demo repo, copy `examples/small-app/` into a new
-GitHub repository, configure the variables and secrets from
-`docs/PUBLIC_AGENT_PRODUCTION_ROLLOUT.md`, and run the smoke checklist.
+GitHub repository, configure the model proxy URL, model names, budget variables,
+and `MODEL_PROXY_ADMIN_TOKEN` secret used by the workflows, then run
+`bun install` and `bun run check`.

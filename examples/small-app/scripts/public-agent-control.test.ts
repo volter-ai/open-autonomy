@@ -174,13 +174,13 @@ describe('public agent PM dispatcher', () => {
     expect(decision.reason).toContain('does not allow develop');
   });
 
-  test('does not auto-develop manual operator test issues', () => {
+  test('does not auto-develop maintainer-held issues', () => {
     const decision = decideDispatch(
-      { number: 50, labels: [{ name: 'manual-operator-test' }], comments: [] },
+      { number: 50, labels: [{ name: 'agent-maintainer-hold' }], comments: [] },
       { action: 'develop', risk: 'low', human_required: false, reason: 'exercise pause and resume commands' },
     );
     expect(decision.action).toBe('comment');
-    expect(decision.reason).toContain('manual-operator-test');
+    expect(decision.reason).toContain('agent-maintainer-hold');
     expect(decision.command).toBeUndefined();
   });
 

@@ -74,7 +74,7 @@ jobs:
             --target . \
             --apply \
             --out .agent-run/upgrade/plan-applied.json
-          git add AGENTS.md VERSION .open-autonomy .github/workflows scripts docs/PUBLIC_AGENT_ACTIONS.md docs/PUBLIC_AGENT_PRODUCTION_ROLLOUT.md docs/OSS_AGENT_RUNBOOK.md
+          git add AGENTS.md VERSION .open-autonomy .github/workflows scripts docs
           git commit -m "chore: upgrade open-autonomy template"
           git push --set-upstream origin "$branch"
           jq -r '.migration_notes[]' .agent-run/upgrade/plan.json > .agent-run/upgrade/body.md

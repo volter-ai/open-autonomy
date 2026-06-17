@@ -26,9 +26,6 @@ const MANAGED_PREFIXES = [
   '.github/workflows/',
   '.open-autonomy/',
   'scripts/',
-  'docs/PUBLIC_AGENT_ACTIONS.md',
-  'docs/PUBLIC_AGENT_PRODUCTION_ROLLOUT.md',
-  'docs/OSS_AGENT_RUNBOOK.md',
   'AGENTS.md',
   'VERSION',
 ];

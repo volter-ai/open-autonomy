@@ -32,7 +32,6 @@ interface Options {
 const REQUIRED_FILES = [
   'AGENTS.md',
   '.open-autonomy/autonomy.yml',
-  '.open-autonomy/policy.yml',
   '.open-autonomy/roadmap.yml',
   '.open-autonomy/review-rubric.yml',
   '.github/workflows/public-agent.yml',

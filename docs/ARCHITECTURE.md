@@ -4,7 +4,8 @@
 bounded agent runs, deterministic write gates, reviewer checks, and maintainer
 controls. The repository remains the source of truth: issues define executable
 work, PRs carry proposed changes, committed/session evidence explains what
-happened, and policy gates decide what automation may do.
+happened, and committed autonomy config plus workflow gates decide what
+automation may do.
 
 ## System Shape
 
@@ -12,7 +13,7 @@ happened, and policy gates decide what automation may do.
 roadmap + repo standards + issues
   -> planner/PM triage
   -> visible /agent command
-  -> trusted setup + target/policy/triage checks
+  -> trusted setup + target/autonomy/triage checks
   -> untrusted developer agent in GitHub Actions
   -> trusted publisher validates bundle and opens/updates PR
   -> CI + reviewer
@@ -32,17 +33,18 @@ published, retried, merged, or escalated.
 - `open-autonomy-testbed`: live external repo used to prove behavior on GitHub.
 
 Future target repositories should install the workflows/scripts/template, then
-keep repo-specific direction and policy in their own committed files.
+keep repo-specific direction, policy, and standards in their own committed
+files.
 
 ## Agent Roles
 
 | Role | Purpose | Main inputs | Main output |
 | --- | --- | --- | --- |
 | Planner | Turns roadmap direction into issues | roadmap, issue/PR state, decision history | created/updated/prioritized issues |
-| PM/Triage | Decides what should happen to an issue now | issue, labels, comments, open PRs, active runs, policy | visible comment, labels, dispatch decision |
+| PM/Triage | Decides what should happen to an issue now | issue, labels, comments, open PRs, active runs, autonomy config | visible comment, labels, dispatch decision |
 | Developer | Produces a bounded patch proposal | issue, acceptance criteria, repo guidance, prior decisions | publisher bundle |
-| Publisher | Applies only policy-valid bundles | bundle, manifest, patch, policy | PR or rejected publish decision |
-| Reviewer | Judges PR quality and risk | PR diff, CI, issue, rubric, standards, policy | structured review decision |
+| Publisher | Applies only valid bundles | bundle, manifest, patch, autonomy config | PR or rejected publish decision |
+| Reviewer | Judges PR quality and risk | PR diff, CI, issue, rubric, standards, autonomy config | structured review decision |
 | Merge Gate | Makes final deterministic merge decision | publisher, CI, review, PR head SHA, blockers, retry budget | merge/retry/wait/human-required |
 | Operator | Lets maintainers control the system | issue comments, labels, run/proxy state | pause/resume/status/cancel/retry effects |
 
@@ -57,10 +59,10 @@ judgment. Publisher and merge gate are deterministic enforcement points.
 - The agent emits a bundle; it does not push to the repository.
 - The trusted publisher validates the bundle before writing a branch or PR.
 - The merge gate only merges when current CI, current review, current PR head,
-  policy, and maintainer blockers all agree.
+  autonomy config, and maintainer blockers all agree.
 
-This split is the core safety model. Prose instructions guide agents; policy and
-workflow code enforce limits.
+This split is the core safety model. Prose instructions guide agents; the
+policy section of `autonomy.yml` and workflow code enforce limits.
 
 ## Documentation Map
 
@@ -94,7 +96,6 @@ AGENTS.md
     open-autonomy-upgrade/SKILL.md
 .open-autonomy/
   autonomy.yml
-  policy.yml
   roadmap.yml
   review-rubric.yml
 docs/
@@ -107,20 +108,14 @@ docs/
     docs.md
     tests.md
     security.md
-  COMMANDS.md
-  OPERATIONS.md
-  SECURITY.md
-  TEST_MATRIX.md
-  TEST_RUNS.md
 ```
 
 - `AGENTS.md`: short always-loaded guidance shared across coding agents.
 - `.codex/skills/*/SKILL.md`: repo-local Codex skills for each agent role.
 - `autonomy.yml`: Open Autonomy index of docs, skills, agents, triggers, and
-  capabilities.
+  capabilities, plus machine-readable path, retry, budget, autonomy, and merge
+  policy.
 - `docs/CONSTITUTION.md`: non-negotiable principles and product standards.
-- `policy.yml`: machine-readable hard limits for paths, budgets, retries, and
-  autonomy levels.
 - `roadmap.yml`: planner-readable direction, priorities, dependencies, and proof
   gates.
 - `review-rubric.yml`: structured reviewer criteria.

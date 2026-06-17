@@ -9,10 +9,10 @@ export interface AutonomyConfig {
 
 export const DEFAULT_AUTONOMY_CONFIG: AutonomyConfig = {
   documents: {
+    autonomy: '.open-autonomy/autonomy.yml',
     agents: 'AGENTS.md',
     constitution: 'docs/CONSTITUTION.md',
     roadmap: '.open-autonomy/roadmap.yml',
-    policy: '.open-autonomy/policy.yml',
     review_rubric: '.open-autonomy/review-rubric.yml',
   },
   standards: {

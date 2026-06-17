@@ -7,7 +7,7 @@ items:
     priority: high
     status: active
     title: Durable Decision Memory
-    proof_gate: decision-memory-smoke
+    proof_gate: decision-memory-audit
     acceptance:
       - Build a durable index from committed decision records.
       - Reconstruct issue, PR, retry, and merge state from the index.
@@ -79,7 +79,7 @@ items:
     priority: medium
     status: planned
     title: Self-Hosted Repository Fleet
-    proof_gate: scaffold-install-smoke
+    proof_gate: scaffold-install-check
     acceptance:
       - A new repo can be scaffolded from the template and run checks.
       - Setup docs explain secrets, variables, and first issue flow.

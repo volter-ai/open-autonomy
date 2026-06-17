@@ -1,9 +1,0 @@
-{
-  "ok": true,
-  "issue": 12,
-  "summary": "Expanded the self-driving scaffold docs with explicit repository variables/secrets guidance and a first-issue flow for newly scaffolded repos.",
-  "tests": [
-    "bun scripts/scaffold-target-repo.ts --target /tmp/open-autonomy-scaffold-smoke --force",
-    "bun test scripts/open-autonomy-fleet.test.ts in /tmp/open-autonomy-scaffold-smoke"
-  ]
-}

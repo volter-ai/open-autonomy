@@ -1031,10 +1031,8 @@ Build:
 - root `AGENTS.md` as the compatibility layer for coding agents
 - `.codex/skills/open-autonomy-*/SKILL.md` for repo-local agent roles
 - `.open-autonomy/autonomy.yml` for the Open Autonomy index of docs, skills,
-  agents, triggers, and capabilities
+  agents, triggers, capabilities, and machine-readable policy
 - `docs/CONSTITUTION.md` for non-negotiable operating principles
-- `.open-autonomy/policy.yml` for machine-readable path, retry, budget,
-  autonomy, and merge limits
 - `.open-autonomy/roadmap.yml` for planner-readable phases, priorities,
   dependencies, proof gates, and acceptance criteria
 - `.open-autonomy/review-rubric.yml` for structured reviewer criteria

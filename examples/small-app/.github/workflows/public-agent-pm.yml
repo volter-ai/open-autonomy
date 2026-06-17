@@ -72,7 +72,7 @@ jobs:
           gh label create spam --description "Likely spam or abuse" --color 000000 2>/dev/null || true
           gh label create agent-blocked --description "Blocks autonomous public-agent development" --color B60205 2>/dev/null || true
           gh label create agent-paused --description "Autonomous public-agent work is paused" --color FBCA04 2>/dev/null || true
-          gh label create manual-operator-test --description "Manual test of operator controls; PM should not auto-develop" --color 5319E7 2>/dev/null || true
+          gh label create agent-maintainer-hold --description "Maintainer hold; autonomous development should not start" --color 5319E7 2>/dev/null || true
 
           while IFS= read -r number; do
             if [[ -z "$number" ]]; then

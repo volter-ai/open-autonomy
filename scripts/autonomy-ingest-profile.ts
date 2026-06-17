@@ -41,8 +41,11 @@ export function ingestProfile(profile: ZtrackProfile, schedule?: ZtrackSchedule)
     // ztrack's WIP caps map to per-agent concurrency for the work-bearing roles.
     const maxConcurrent =
       name === 'develop' ? wip.maxInProgress ?? 1 : name === 'review' ? wip.maxInReview ?? 1 : 1;
+    // Skill identity is the folder basename (portable); the target path prefix
+    // (profiles/<name>/skills, .codex/skills, …) is a harness/driver convention.
+    const folder = s.source.replace(/\/SKILL\.md$/, '');
     agents[name] = {
-      skill: s.source.replace(/\/SKILL\.md$/, ''),
+      skill: folder.split('/').pop() ?? folder,
       maxConcurrent,
       config: {},
     };

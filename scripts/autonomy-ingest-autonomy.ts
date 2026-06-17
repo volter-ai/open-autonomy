@@ -29,8 +29,10 @@ export function ingestAutonomy(m: OAManifest): AutonomyIR {
     // Non-cron triggers aren't core; carry them so they survive the round-trip.
     if (a.triggers?.workflow_dispatch) config.workflow_dispatch = true;
     if (a.triggers?.issue_comment) config.issue_comment = true;
+    // Skill identity is the folder basename (portable); the .codex/skills prefix is harness convention.
+    const skillRef = m.skills?.[name] ?? a.skill ?? '';
     agents[name] = {
-      skill: m.skills?.[name] ?? a.skill ?? '',
+      skill: skillRef.split('/').pop() ?? skillRef,
       maxConcurrent: 1,
       config,
     };

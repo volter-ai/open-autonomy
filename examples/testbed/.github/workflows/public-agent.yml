@@ -923,7 +923,10 @@ jobs:
             > .agent-run/issue.json
           gh issue view "$issue" --json comments > .agent-run/issue-comments.json
           gh issue view "$pr" --json comments > .agent-run/pr-comments.json
-          gh issue view "$pr" --json labels,comments > .agent-run/merge-blockers.json
+          gh issue view "$pr" --json labels,comments > .agent-run/pr-blockers.json
+          gh issue view "$issue" --json labels > .agent-run/issue-labels.json
+          jq -s '{labels: ((.[0].labels // []) + (.[1].labels // []) | unique_by(.name)), comments: (.[0].comments // [])}' \
+            .agent-run/pr-blockers.json .agent-run/issue-labels.json > .agent-run/merge-blockers.json
           head_sha="$(gh pr view "$pr" --json headRefOid --jq .headRefOid)"
           jq -n \
             --arg branch "$TARGET_BRANCH" \

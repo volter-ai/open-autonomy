@@ -31,6 +31,17 @@ export interface AutonomyIR {
   policy: IRPolicy;
 }
 
+/** The output of a full compile: files the compiler writes, plus bundle files copied verbatim. */
+export interface CompileOutput {
+  generated: Record<string, string>; // path → content (manifests, driver/launcher files, workflow yml)
+  copies: Array<{ from: string; to: string }>; // bundle files copied as-is (skills, standards, scripts)
+}
+
+/** The complete installed path set (generated + copy destinations), sorted. */
+export function compiledPaths(out: CompileOutput): string[] {
+  return [...Object.keys(out.generated), ...out.copies.map((c) => c.to)].sort();
+}
+
 /** Returns a list of validation errors; empty array means valid. */
 export function validateIR(ir: AutonomyIR): string[] {
   const errors: string[] = [];

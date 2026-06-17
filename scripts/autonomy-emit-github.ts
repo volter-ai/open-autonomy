@@ -1,7 +1,7 @@
 // Emit autonomy.ir.v1 → an open-autonomy manifest (autonomy.yml shape).
 // Substrate = github-actions; the .codex/skills prefix and the workflow .yml files are adapter
 // conventions. Capabilities/triggers/policy are restored from the IR's config + policy boxes.
-import type { AutonomyIR } from './autonomy-ir';
+import type { AutonomyIR, CompileOutput, IRWorkflow } from './autonomy-ir';
 import type { OAManifest } from './autonomy-ingest-autonomy';
 
 export function emitAutonomy(ir: AutonomyIR): OAManifest {
@@ -39,4 +39,42 @@ export function emitAutonomy(ir: AutonomyIR): OAManifest {
     agents,
     policy,
   };
+}
+
+// --- Full file-tree compile (github-actions substrate, codex harness) ---
+// Each IR workflow becomes a standalone .github/workflows/*.yml: launch → dispatch the agent
+// session job; run → run the script on a cron schedule. (autonomy.yml only carries agent-triggers.)
+function workflowYml(wf: IRWorkflow): string {
+  const action = wf.launch
+    ? `      - run: echo "dispatch agent ${wf.launch}"  # github driver invokes the session job`
+    : `      - run: node ${wf.run}`;
+  return [
+    `name: ${wf.name}`,
+    `on:`,
+    `  schedule:`,
+    `    - cron: "${wf.cron}"`,
+    `  workflow_dispatch: {}`,
+    `jobs:`,
+    `  ${wf.name}:`,
+    `    runs-on: ubuntu-latest`,
+    `    steps:`,
+    action,
+    ``,
+  ].join('\n');
+}
+
+export function compileGithub(ir: AutonomyIR): CompileOutput {
+  const manifest = emitAutonomy(ir);
+  const generated: Record<string, string> = {
+    '.open-autonomy/autonomy.yml': Bun.YAML.stringify(manifest as Record<string, unknown>),
+  };
+  for (const wf of ir.workflows) generated[`.github/workflows/${wf.name}.yml`] = workflowYml(wf);
+
+  const copies: Array<{ from: string; to: string }> = [];
+  for (const agent of Object.values(ir.agents)) {
+    copies.push({ from: `skills/${agent.skill}/SKILL.md`, to: `.codex/skills/${agent.skill}/SKILL.md` });
+  }
+  for (const r of ir.resources) copies.push({ from: r, to: r }); // resources mirror
+
+  return { generated, copies };
 }

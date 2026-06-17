@@ -8,7 +8,7 @@ status, and reversible maintainer control.
 Read these files before changing behavior:
 
 - `docs/ARCHITECTURE.md` for the system model and document map.
-- `docs/ROADMAP.md` for current direction and proof gates.
+- `docs/ROADMAP.md` for current direction.
 - `docs/CONSTITUTION.md` for non-negotiable operating principles.
 - `.open-autonomy/policy.yml` for machine-readable autonomy limits.
 - `.open-autonomy/review-rubric.yml` for review criteria.

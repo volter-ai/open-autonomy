@@ -8,7 +8,7 @@ autonomy:
   stale_needs_info_minutes: 10080
   require_visible_pm_status: true
   require_decision_records: true
-  require_testbed_proof: true
+  require_acceptance_evidence: true
 risk:
   human_required_paths:
     - ".github/workflows/**"

@@ -74,6 +74,9 @@ jobs:
       target_pr: ${{ steps.target.outputs.pull_request }}
       policy_allowed: ${{ steps.policy.outputs.allowed }}
       repo_paused: ${{ steps.repo_pause.outputs.paused }}
+      # Testbed fixture: leave the PR open and UN-REVIEWED for the pm-open-pr-review scenario so a
+      # later PM sweep can route it to /agent review (skips the in-session review+merge below).
+      pm_open_pr_fixture: ${{ contains(github.event.issue.title || '', '[oa-test:pm-open-pr-review]') }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -911,7 +914,7 @@ jobs:
 
   post-publish-review:
     needs: [setup, publisher, post-publish-ci]
-    if: needs.publisher.result == 'success' && needs.publisher.outputs.pr_number != '' && needs.post-publish-ci.result == 'success'
+    if: needs.publisher.result == 'success' && needs.publisher.outputs.pr_number != '' && needs.post-publish-ci.result == 'success' && needs.setup.outputs.pm_open_pr_fixture != 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     permissions:

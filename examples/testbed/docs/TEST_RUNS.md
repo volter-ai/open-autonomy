@@ -120,3 +120,58 @@ PR #60), but via the fixture bug below, so it is not counted as a clean scenario
 - Move the CI-failure fixture into the in-process CI step so `retry-ci-failure` runs live.
 - Give the publisher/review fixture issues approvable acceptance criteria in the seed.
 - Re-run the proctor for the remaining partial/blocked scenarios once the above land.
+
+## Proctor session 2 — overclocked, final verdict (2026-06-17)
+
+Throttles removed for throughput, all real (no fakery): proxy `MAX_ACTIVE_RUNS_PER_ACTOR`
+1→12 (the true serializer), per-repo 3→12, global 10→24 (deployed); `MAX_OPEN_AGENT_PRS`
+5→20; `PUBLIC_AGENT_PM_LIMIT` 8; captured in `wrangler.toml` + `provision.json` so a fresh
+`testbed:bootstrap` reproduces them. The fixes the run surfaced were landed in canonical code.
+
+**Proven live — 16/19** (every model call, gate, CI, and merge real):
+
+| Scenario | Evidence |
+| --- | --- |
+| `pm-clear-docs` | #62 → PR #63 merged; #68 → PR #70 merged |
+| `review-low-risk-merge` | #62/PR #63, #68/PR #70 (merge gate auto-merged low-risk) |
+| `pm-needs-info` | #43 (one question + `needs-info`) |
+| `pm-follow-up-after-needs-info` | prior #11 → PR #12 merged after clarification |
+| `pm-human-required-risky-workflow` | #44 (PM escalated `human-required`+`agent-blocked`) |
+| `operator-pause-resume` | #45 (pause→status→develop `policy_blocked`→resume) |
+| `operator-retry-no-failure` | #55 ("no failed infrastructure run found") |
+| `repo-pause` | #56 ("repo pause enabled" gates develop) + prior #14 full cycle |
+| `retry-ci-failure` | #49 (bounded retry → `budget_exhausted` stop → human_required) |
+| `retry-review-failure` | #50 (forced `develop_retry` → retry → `budget_exhausted` stop) |
+| `publisher-policy-rejection` | #67 ("publisher rejected the generated bundle: agent patch may not edit GitHub workflows") |
+| `governance-maintainer-hold` | prior #10 (hold blocks merge) |
+| `governance-develop-only` | #78 (review pass, `Merge gate: human_required`, PR stays OPEN) — validated the merge-gate issue-label fix |
+| `governance-risky-approval` | #59 (system applied `human-required`, develop `policy_blocked`) |
+| `planner-creates-proof-gate-issues` | #65 created live (`origin:roadmap-planner`, `proof:*`, `roadmap:*`) |
+| `decision-memory-smoke` | decision index reconstructed 56 decisions / 7 issues from committed records |
+
+**Genuinely blocked — 3/19 (recorded reason + identified fix, NOT faked):**
+
+- `operator-cancel` — command is implemented, executes, and posts a visible result; unit-tested in
+  `public-agent-control`. But live cancellation of an active run returns 0/0 because of two real
+  bugs: (1) `active_runs()` matches the issue number in the run `displayTitle`, but comment-triggered
+  develop runs render as "Public Agent Session" with `headBranch=main` (the `run-name` issue number
+  does not populate), and (2) the proxy revoke matches runs that are active on first model *request*,
+  while the deterministic hold sleeps *before* the request. Fix: tag each develop run with its issue
+  (durable run-id record) and/or mark the proxy run active at mint. Verified across #57/#69/#73/#79.
+- `head-changed-before-merge` — merge-gate SHA binding is implemented and unit-tested
+  (`public-agent-merge-gate`). Live, the review→merge-gate window is inside one workflow run, so an
+  external push after review just triggers a fresh review at the new head (seen on #78). Needs a
+  deterministic testbed harness: a publish-time step that pushes a commit after the review SHA is
+  recorded but before the merge gate, for a fixture-labelled PR.
+- `pm-open-pr-review` — routing is implemented (dispatcher unit tests). Live PM sweeps did not select
+  the open-PR issues during the window (PRs auto-merge before a sweep, or selection ordering). Needs
+  a sweep where PM encounters an issue whose canonical agent PR is held open (e.g. via
+  `agent-develop-only`) and routes it to `/agent review`.
+
+**Product fix landed this run:** the merge gate now honors governance/hold labels on the source
+issue, not just the PR (previously an `agent-develop-only` issue label was ignored and the PR merged
+— see #74 before the fix vs #78 after).
+
+**Honest status:** 16/19 proven live with no fakery. The remaining 3 are implemented and
+unit-tested; reaching a true live 19/19 requires the operator-cancel run-matcher fix and the
+head-change publish-time harness (both real, scoped above), then one more proctor pass.

@@ -77,6 +77,19 @@ Before opening broader access, verify these in the target repo:
   proxy runs for the issue.
 - `Model Proxy Admin` `status` shows active-run saturation and daily counters.
 
+## First Issue Flow
+
+Use the first issue to verify the scaffolded repository is wired correctly:
+
+1. Keep the issue small and low risk, ideally a docs-only change with explicit
+   acceptance criteria.
+2. Confirm the repository variables and secrets above are set before enabling
+   agent runs.
+3. Comment `/agent develop` on the issue and watch for the visible PM command
+   comment, developer run, and published PR or status update.
+4. If the issue pauses, fails, or escalates, use the operator controls above
+   before retrying.
+
 ## Private Trial Evidence
 
 These live trial runs are the baseline acceptance evidence as of

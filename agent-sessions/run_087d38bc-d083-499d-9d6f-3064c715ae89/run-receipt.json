@@ -1,0 +1,34 @@
+{
+  "schema": "volter.agent.run_receipt.v1",
+  "run_id": "run_087d38bc-d083-499d-9d6f-3064c715ae89",
+  "repo": "volter-ai/open-autonomy",
+  "issue": 12,
+  "actor": "github-actions[bot]",
+  "status": "pr-ready",
+  "started_at": "2026-06-17T14:14:45.679Z",
+  "completed_at": "2026-06-17T14:16:02.767Z",
+  "exit_code": 0,
+  "github": {
+    "run_id": "27695418406",
+    "run_attempt": "1",
+    "workflow": "Public Agent Session",
+    "ref": "main",
+    "sha": "b58494e2bfe4b66d21c02e5b3397fe583d73c9f7"
+  },
+  "model_proxy": {
+    "host": "volter-agent-model-proxy.aaron-0ed.workers.dev",
+    "model": "gpt-5.4-mini",
+    "token_present": true
+  },
+  "limits": {
+    "max_usd_cents": null,
+    "max_requests": null
+  },
+  "artifacts": [
+    "artifacts/codex-final.md",
+    "artifacts/context-sources.json",
+    "artifacts/pr.md",
+    "artifacts/result.json",
+    "artifacts/transcript.md"
+  ]
+}

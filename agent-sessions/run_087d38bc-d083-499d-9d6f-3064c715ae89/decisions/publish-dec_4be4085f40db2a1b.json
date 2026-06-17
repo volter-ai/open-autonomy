@@ -1,0 +1,21 @@
+{
+  "schema": "volter.agent.decision.v1",
+  "stage": "publish",
+  "issue": 12,
+  "run_id": "run_087d38bc-d083-499d-9d6f-3064c715ae89",
+  "actor": "public-agent-publisher",
+  "decision": "applied",
+  "subject": {
+    "type": "issue",
+    "number": 12,
+    "branch": "agent/issue-12"
+  },
+  "reason": "publisher validated and applied the agent bundle",
+  "evidence": [
+    "publish:.agent-run/publish-summary.json",
+    "bundle:.agent-run/bundle/manifest.json"
+  ],
+  "next_action": "create_or_update_pr",
+  "created_at": "2026-06-17T14:16:16.219Z",
+  "id": "dec_4be4085f40db2a1b"
+}

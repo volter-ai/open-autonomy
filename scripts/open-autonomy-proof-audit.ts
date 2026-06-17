@@ -55,16 +55,38 @@ function ledgerRow(text: string, id: string): { evidence: string; status: string
   return { evidence: cells.at(-3) ?? '', status: cells.at(-2) ?? '' };
 }
 
+const RUN_URL_PATTERN = /https:\/\/github\.com\/[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+\/actions\/runs\/\d+/;
+
 function validatedEvidence(text: string): string[] {
   const evidence = new Set<string>();
   for (const match of text.matchAll(/`([^`]+)`/g)) {
     const value = match[1] ?? '';
-    if (isExistingPath(value) || isRunId(value)) evidence.add(value);
+    if (isRunId(value)) {
+      evidence.add(value);
+      continue;
+    }
+    if (!isExistingPath(value)) continue;
+    // A live-run ledger only counts as evidence when it actually records at least one
+    // workflow run. An empty TEST_RUNS.md template must not pass on a file-exists technicality.
+    if (isLiveRunLedger(value) && !ledgerHasRunRecord(value)) continue;
+    evidence.add(value);
   }
-  for (const match of text.matchAll(/https:\/\/github\.com\/[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+\/actions\/runs\/(\d+)/g)) {
+  for (const match of text.matchAll(new RegExp(RUN_URL_PATTERN, 'g'))) {
     evidence.add(match[0] ?? '');
   }
   return Array.from(evidence).sort();
+}
+
+function isLiveRunLedger(value: string): boolean {
+  return value.split('/').at(-1) === 'TEST_RUNS.md';
+}
+
+function ledgerHasRunRecord(value: string): boolean {
+  try {
+    return RUN_URL_PATTERN.test(readFileSync(value, 'utf8'));
+  } catch {
+    return false;
+  }
 }
 
 function isExistingPath(value: string): boolean {

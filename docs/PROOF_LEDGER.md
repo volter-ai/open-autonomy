@@ -12,8 +12,8 @@ model run less reliable than the gate being tested.
 | `pm-open-pr-review` | `scripts/public-agent-dispatcher.ts`, PM dispatcher tests for open PR review routing | done |
 | `developer-context-review-fix` | `scripts/public-agent-context.ts`, developer-context tests with prior decisions and PR diff | done |
 | `head-changed-before-merge` | `scripts/public-agent-merge-gate.ts`, merge-gate changed-head tests | done |
-| `operator-pause-resume` | live testbed runs recorded in `examples/testbed/docs/TEST_RUNS.md` | done |
-| `five-issue-dogfood` | live testbed PM/develop/review/merge and operator scenarios recorded in `examples/testbed/docs/TEST_RUNS.md` | done |
+| `operator-pause-resume` | live testbed issue [#5](https://github.com/volter-ai/open-autonomy-testbed/issues/5) (pause/status/develop-blocked/resume), Public Agent Session runs `27701483508` and `27704897971`, recorded in `examples/testbed/docs/TEST_RUNS.md` | done |
+| `five-issue-dogfood` | live testbed issues #29-#33 → merged PRs #34-#38 with merge-gate sessions `27701701974`, `27702036215`, and `27702212582`, recorded in `examples/testbed/docs/TEST_RUNS.md` | done |
 | `planner-creates-proof-gate-issues` | planner workflow runs `27648929065` and `27648929059`; planner tests | done |
 | `scaffold-install-check` | `scripts/scaffold-target-repo.ts`, fleet preflight runs `27649190745` and `27649190743` | done |
 | `status-reconstruction` | `scripts/public-agent-decision-index.ts`, status reconstruction tests, governance runs | done |

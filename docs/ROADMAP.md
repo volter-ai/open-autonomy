@@ -927,22 +927,48 @@ Implemented:
 
 Live proof status:
 
-- Proven in `open-autonomy-testbed`: issue-level pause/status/resume, repo-level
-  pause/resume through the label fallback, PM visible wait/ignore/needs-info
-  statuses, PM follow-up from `needs-info` into develop, risky-workflow
-  escalation, and low-risk develop/review/merge.
-- Remaining former gaps now have proof-audited coverage in `docs/PROOF_LEDGER.md`.
-  Model-backed live scenarios remain useful regression demos, but the roadmap
-  proof gate is the audited deterministic or live evidence listed there.
+- Proven live in `open-autonomy-testbed` and recorded with run IDs in
+  `examples/testbed/docs/TEST_RUNS.md`: issue-level pause/status/resume (#5),
+  repo-level pause/resume through the label fallback (#14), PM visible
+  wait/ignore/needs-info statuses, PM follow-up from `needs-info` into develop and
+  merge (#11 → PR #12), risky-workflow escalation (#4), maintainer-hold block
+  (#10), `/agent retry` with no failed run (#40), and the five-issue dogfood
+  (#29-#33 → merged PRs #34-#38).
+- The testbed repo is provisioned reproducibly with `bun run testbed:provision`
+  (`scripts/provision-target-repo.ts` + `examples/testbed/provision.json`), not a
+  one-off manual setup.
+- Remaining live demonstrations require synthetic fixtures that do not exist yet:
+  `retry-ci-failure`, `retry-review-failure`, `head-changed-before-merge`, and
+  `publisher-policy-rejection`. Their deterministic gate behavior is already
+  covered by unit tests; only the *live* testbed demonstration is outstanding.
+  `pm-open-pr-review` is awaiting a clean scheduled sweep after a transient
+  reviewer-model outage.
 
 Proof audit:
 
 - `docs/PROOF_LEDGER.md` maps every `.open-autonomy/roadmap.yml` proof gate to
   evidence.
 - `scripts/open-autonomy-proof-audit.ts` fails CI if a roadmap proof gate is not
-  represented as `done` in the proof ledger.
+  represented as `done` in the proof ledger. A live-run ledger
+  (`TEST_RUNS.md`) only counts as evidence when it records at least one real
+  workflow run, so an empty ledger template can no longer satisfy a live gate on a
+  file-exists technicality.
 - Planner, preflight, governance, CI, and template/example checks are all part
   of the completion bar.
+
+Remaining live testbed proof work:
+
+- Build testbed-only synthetic fixtures so retry/merge edge cases can be driven
+  live without damaging real workflows: a required-CI-failure toggle, a reviewer
+  `develop_retry` toggle, a head-changed-before-merge race harness, and a
+  maintainer-triggered forbidden-workflow-edit develop bundle.
+- With those fixtures, let the scheduled autonomy drive `retry-ci-failure`,
+  `retry-review-failure`, `head-changed-before-merge`, and
+  `publisher-policy-rejection`, then record run IDs and final states in
+  `examples/testbed/docs/TEST_RUNS.md`.
+- Capture one clean scheduled `pm-open-pr-review` sweep once the reviewer-model
+  path is healthy. The human-in-the-loop rule applies: set preconditions, then
+  let the cron-driven PM/agents/merge gate run unattended.
 
 ### Phase 7: Production Rollout
 
@@ -1103,7 +1129,11 @@ repositories.
 Build:
 
 - template initialization command or script that installs workflows, scripts,
-  docs, labels, and required repo variables
+  docs, labels, and required repo variables (`scripts/scaffold-target-repo.ts`
+  copies template files; `scripts/provision-target-repo.ts` idempotently creates
+  the GitHub repo and reconciles variables, labels, and branch protection from a
+  committed `provision.json` manifest, reporting required secrets as manual
+  follow-up)
 - versioned policy/profile file so each repo can declare allowed paths,
   required checks, retry budgets, PM mode, and merge mode
 - upgrade workflow that opens a PR when the open-autonomy template changes

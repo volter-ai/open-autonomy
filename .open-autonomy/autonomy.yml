@@ -5,6 +5,7 @@ documents:
   architecture: docs/ARCHITECTURE.md
   constitution: docs/CONSTITUTION.md
   project: docs/PROJECT.md
+  live_testing: docs/LIVE_TESTING_STRATEGY.md
   roadmap: .open-autonomy/roadmap.yml
   review_rubric: .open-autonomy/review-rubric.yml
   standards:

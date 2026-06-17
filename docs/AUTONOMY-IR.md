@@ -1,6 +1,7 @@
 # Autonomy IR (`autonomy.ir.v1`) — a substrate-agnostic format
 
-> **Status:** design sketch, for review. Nothing here is wired into code yet.
+> **Status:** validated against both real systems by a working ingest/emit/compile
+> harness — see §12. 12 tests pass.
 > **Home:** open-autonomy is the host format; ztrack is one *bundle* you plug in,
 > not a dependency (§7).
 
@@ -299,8 +300,38 @@ export const AutonomyIR = z.object({
 - **Decision/audit trail** is currently substrate-specific (ztrack `.audit.jsonl` vs
   `volter.agent.decision.v1`). Left out of the IR for now; may want a thin contract.
 
----
+## 12. Validation (working harness)
 
-*Companion artifacts (not yet written): `ingest/{profile,autonomy}.ts` (format → IR,
-with a round-trip proof like ztrack's `markdownPort`) and `emit/{local,github}.ts`
-(IR → target).*
+The design is backed by a dependency-free harness in `scripts/` (plain TS + `Bun.YAML`),
+exercised against the two real systems — the vendored ztrack profile and the live
+`.open-autonomy/autonomy.yml`.
+
+| file | role |
+|---|---|
+| `autonomy-ir.ts` | IR types, `validateIR`, `irShape`, `CompileOutput`/`compiledPaths` |
+| `autonomy-ingest-{profile,autonomy}.ts` | format → IR |
+| `autonomy-emit-{local,github}.ts` | IR → manifests, and `compile{Local,Github}` → full file tree |
+| `autonomy-ingest.test.ts` | both systems fall into the four nouns |
+| `autonomy-roundtrip.test.ts` | `ingest = ingest∘emit∘ingest` (emit is IR-faithful) |
+| `autonomy-compile.test.ts` | **local compile reproduces ztrack's installed set exactly**; github compile matches the `.open-autonomy`/`.github`/`.codex` shape |
+| `autonomy-crosscompile.test.ts` | each system → the opposite substrate, asserting the lossy seams |
+
+**Empirically confirmed findings:**
+
+- **Both systems populate the four nouns** — universality holds at ingest.
+- **Imperative vs declarative dispatch** — ztrack yields all `run:` workflows (dispatch buried
+  in scripts); open-autonomy yields `launch:` workflows (declarative). The split surfaces it.
+- **Per-agent vs global concurrency** — ztrack fills per-agent (WIP), open-autonomy fills global
+  (`max_open_agent_prs`). Both IR slots earn their place.
+- **The local compile is byte-faithful** to the demo's `required[]` install set; the github
+  compile can only match a *subset* (the github driver adds baseline infra workflows the IR
+  doesn't carry) — an honest asymmetry.
+- **Cross-compile is lossy where the substrate can't express the source:** ztrack→github drops
+  boxed `humanRequired*` guardrails (box-key mismatch — needs an explicit cross-format remap);
+  open-autonomy→local degrades declarative triggers to imperative launchers and turns
+  capability/merge/risk enforcement advisory.
+
+**Next steps surfaced by the harness:** a cross-format **box remapper** (so guardrails like
+`humanRequired*` survive ztrack↔open-autonomy translation), and a decision on whether the IR
+should physically own the source of truth (`.open-autonomy/ir.yml`) with the two manifests as
+emitted artifacts.

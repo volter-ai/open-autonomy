@@ -21,8 +21,11 @@ Use the first low-risk issue to prove the template works in the new repository:
 1. Open a small docs-only issue with clear acceptance criteria.
 2. Confirm repository variables and secrets are configured before enabling
    agent runs.
-3. Comment `/agent develop` on the issue and verify the PM/agent loop starts.
-4. Confirm the resulting PR or status comment reflects the issue context and
+3. Comment `/agent develop` on the issue and verify the direct develop loop
+   starts.
+4. Run `Public Agent PM` with a small limit and verify PM either dispatches a
+   clear issue or writes a visible status such as `needs-info`.
+5. Confirm the resulting PR or status comment reflects the issue context and
    the repository checks still pass.
 
 This template assumes the target repo keeps the agent scripts in `scripts/` and

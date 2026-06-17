@@ -7,6 +7,19 @@ operator controls.
 This repository is also the first demo target: the `open-autonomy` repo is wired
 to run open-autonomy against itself.
 
+## What This Repo Is
+
+This repo has three jobs:
+
+- It is the canonical OSS implementation of the self-driving repository loop.
+- It is a template source for installing that loop into other repositories.
+- It is itself a self-driving target, so changes to open-autonomy can be driven
+  by open-autonomy issues, workflows, skills, and gates.
+
+The important distinction is that open-autonomy is not only a template. The
+same scripts, workflows, skills, and control files shipped here are also active
+in this repository.
+
 ## What It Does
 
 ```text
@@ -22,6 +35,19 @@ issue or PM sweep
 
 The agent can propose changes. Deterministic gates decide whether those changes
 can be published, reviewed, and merged.
+
+## How The Pieces Fit
+
+- Direction lives in committed docs and `.open-autonomy/roadmap.yml`.
+- Agent roles live as repo-local Codex skills in `.codex/skills/`.
+- `.open-autonomy/autonomy.yml` indexes the docs, skills, agent capabilities,
+  triggers, and enforced policy.
+- GitHub Actions are the runtime that turns that config into PM, planner,
+  develop, review, merge, preflight, and upgrade workflows.
+- The model proxy gives agent jobs bounded model access without exposing raw
+  provider keys.
+- The publisher and merge gate are trusted deterministic code. The developer
+  agent is untrusted and can only emit a proposed bundle.
 
 ## Repository Layout
 
@@ -87,8 +113,11 @@ The short version:
 5. Run `bun run check`.
 6. Smoke `/agent pause`, paused `/agent develop`, `/agent status`, and
    `/agent resume`.
-7. Run the planner workflow in dry mode, then create one low-risk issue and run
-   `/agent develop`.
+7. Run the planner workflow in dry mode.
+8. Create one low-risk issue with concrete acceptance criteria.
+9. Prove both entry points:
+   - comment `/agent develop` to test direct maintainer dispatch
+   - run `Public Agent PM` with a small limit to test PM triage and dispatch
 
 ## Commercial Boundary
 

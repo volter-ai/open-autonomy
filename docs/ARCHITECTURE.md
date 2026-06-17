@@ -29,12 +29,28 @@ published, retried, merged, or escalated.
 - `open-autonomy`: canonical OSS implementation and first dogfooding target.
 - `templates/self-driving-repo`: copyable starter for another self-driving repo.
 - `examples/docs-only`: minimal cookbook repo.
-- `examples/testbed`: disposable cookbook/test fixture.
+- `examples/testbed`: cookbook repo shape used to prove live autonomy behavior.
 - `open-autonomy-testbed`: live external repo used to prove behavior on GitHub.
 
 Future target repositories should install the workflows/scripts/template, then
 keep repo-specific direction, policy, and standards in their own committed
 files.
+
+## Template Versus Runtime
+
+Open Autonomy has a source side and a target side.
+
+- Source side: this repository contains the reusable implementation, examples,
+  model proxy, scaffold tooling, and `templates/self-driving-repo`.
+- Target side: a repository that has installed Open Autonomy contains the
+  generated workflows, scripts, repo-local skills, and `.open-autonomy/*`
+  control files.
+- Meta side: this repository is also a target, so the source implementation is
+  maintained by the same loop it ships.
+
+Generated target files are not inert examples. They are the runnable autonomy
+surface for that target repository. The target still owns its own project
+direction, constitution, roadmap, standards, labels, secrets, and risk policy.
 
 ## Agent Roles
 
@@ -50,6 +66,20 @@ files.
 
 Planner is directional. PM is operational. Developer and reviewer use model
 judgment. Publisher and merge gate are deterministic enforcement points.
+
+## Entry Points
+
+There are two normal ways work starts:
+
+- Maintainer-directed: a maintainer comments `/agent develop`, `/agent review`,
+  `/agent pause`, `/agent status`, or another supported command.
+- PM-directed: the scheduled or manual PM workflow sweeps eligible issues,
+  writes a visible status or command comment, and dispatches the matching
+  workflow only when the issue is clear enough.
+
+If PM asks for `needs-info`, that is not a failed dispatch. It is the expected
+outcome for broad, risky, or underspecified work. The next useful step is a
+human clarification, after which PM can reconsider the issue.
 
 ## Trust Boundaries
 

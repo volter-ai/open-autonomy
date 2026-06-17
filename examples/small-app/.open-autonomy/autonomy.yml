@@ -1,0 +1,56 @@
+schema: open-autonomy.autonomy.v1
+documents:
+  agents: AGENTS.md
+  architecture: docs/ARCHITECTURE.md
+  constitution: docs/CONSTITUTION.md
+  project: docs/PROJECT.md
+  roadmap: .open-autonomy/roadmap.yml
+  policy: .open-autonomy/policy.yml
+  review_rubric: .open-autonomy/review-rubric.yml
+  standards:
+    code: docs/standards/code.md
+    docs: docs/standards/docs.md
+    security: docs/standards/security.md
+    tests: docs/standards/tests.md
+skills:
+  pm: .codex/skills/open-autonomy-pm
+  developer: .codex/skills/open-autonomy-developer
+  reviewer: .codex/skills/open-autonomy-reviewer
+  planner: .codex/skills/open-autonomy-planner
+  upgrade: .codex/skills/open-autonomy-upgrade
+agents:
+  pm:
+    skill: open-autonomy-pm
+    triggers:
+      schedule: "*/30 * * * *"
+      workflow_dispatch: true
+      issue_comment: true
+    capabilities:
+      - issue:comment
+      - issue:label
+      - workflow:dispatch
+  developer:
+    skill: open-autonomy-developer
+    capabilities:
+      - branch:write
+      - pr:open
+      - pr:update
+      - issue:comment
+  reviewer:
+    skill: open-autonomy-reviewer
+    capabilities:
+      - pr:comment
+      - pr:review
+      - workflow:dispatch
+  planner:
+    skill: open-autonomy-planner
+    capabilities:
+      - issue:comment
+      - issue:label
+      - issue:create
+      - issue:update
+  upgrade:
+    skill: open-autonomy-upgrade
+    capabilities:
+      - pr:open
+      - pr:update

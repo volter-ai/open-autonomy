@@ -1,6 +1,7 @@
 #!/usr/bin/env bun
 import { existsSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { readAutonomyConfig } from './open-autonomy-config.js';
 
 export interface ControlFileContext {
   agents?: string;
@@ -8,6 +9,7 @@ export interface ControlFileContext {
   policy?: string;
   roadmap?: string;
   review_rubric?: string;
+  documents: Record<string, string>;
   standards: Record<string, string>;
   sources: string[];
 }
@@ -34,33 +36,37 @@ function parseArgs(argv: string[]): Options {
 }
 
 export function readControlFileContext(root = '.'): ControlFileContext {
-  const standardsDir = join(root, '.open-autonomy', 'standards');
   const standards: Record<string, string> = {};
+  const documents: Record<string, string> = {};
   const sources: string[] = [];
-  const context: ControlFileContext = { standards, sources };
+  const context: ControlFileContext = { documents, standards, sources };
+  const config = readAutonomyConfig(root);
 
-  for (const [key, path] of [
-    ['agents', 'AGENTS.md'],
-    ['constitution', '.open-autonomy/constitution.md'],
-    ['policy', '.open-autonomy/policy.yml'],
-    ['roadmap', '.open-autonomy/roadmap.yml'],
-    ['review_rubric', '.open-autonomy/review-rubric.yml'],
-  ] as const) {
+  for (const [key, path] of Object.entries(config.documents).sort(([a], [b]) => a.localeCompare(b))) {
     const value = readOptional(join(root, path));
     if (value) {
-      context[key] = value;
+      documents[key] = value;
+      if (key === 'agents') context.agents = value;
+      else if (key === 'constitution') context.constitution = value;
+      else if (key === 'policy') context.policy = value;
+      else if (key === 'roadmap') context.roadmap = value;
+      else if (key === 'review_rubric') context.review_rubric = value;
       sources.push(path);
     }
   }
 
-  if (existsSync(standardsDir)) {
-    for (const name of readdirSync(standardsDir).filter((item) => item.endsWith('.md')).sort()) {
-      const path = join(standardsDir, name);
-      const value = readOptional(path);
-      if (value) {
-        standards[name.replace(/\.md$/, '')] = value;
-        sources.push(`.open-autonomy/standards/${name}`);
-      }
+  for (const [name, path] of Object.entries(config.standards).sort(([a], [b]) => a.localeCompare(b))) {
+    const value = readOptional(join(root, path));
+    if (value) {
+      standards[name] = value;
+      sources.push(path);
+    }
+  }
+
+  const skillsDir = join(root, '.codex', 'skills');
+  if (existsSync(skillsDir)) {
+    for (const name of readdirSync(skillsDir).filter((item) => existsSync(join(skillsDir, item, 'SKILL.md'))).sort()) {
+      sources.push(`.codex/skills/${name}/SKILL.md`);
     }
   }
 
@@ -74,6 +80,9 @@ export function renderControlFilePrompt(context: ControlFileContext): string {
   if (context.policy) sections.push(section('policy.yml', context.policy));
   if (context.roadmap) sections.push(section('roadmap.yml', context.roadmap));
   if (context.review_rubric) sections.push(section('review-rubric.yml', context.review_rubric));
+  for (const [name, body] of Object.entries(context.documents).filter(([name]) => !['agents', 'constitution', 'policy', 'roadmap', 'review_rubric'].includes(name)).sort(([a], [b]) => a.localeCompare(b))) {
+    sections.push(section(name, body));
+  }
   for (const [name, body] of Object.entries(context.standards).sort(([a], [b]) => a.localeCompare(b))) {
     sections.push(section(`standards/${name}.md`, body));
   }

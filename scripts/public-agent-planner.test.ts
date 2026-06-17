@@ -31,8 +31,9 @@ describe('open autonomy planner and control files', () => {
   test('loads root control files into prompt context', () => {
     const context = readControlFileContext('.');
     expect(context.sources).toContain('AGENTS.md');
-    expect(context.sources).toContain('.open-autonomy/constitution.md');
+    expect(context.sources).toContain('docs/CONSTITUTION.md');
     expect(context.sources).toContain('.open-autonomy/review-rubric.yml');
+    expect(context.sources).toContain('.codex/skills/open-autonomy-developer/SKILL.md');
     const prompt = renderControlFilePrompt(context);
     expect(prompt).toContain('Open Autonomy Constitution');
     expect(prompt).toContain('review-rubric.yml');

@@ -1029,14 +1029,16 @@ human-created issues.
 Build:
 
 - root `AGENTS.md` as the compatibility layer for coding agents
-- `.open-autonomy/constitution.md` for non-negotiable operating principles
+- `.codex/skills/open-autonomy-*/SKILL.md` for repo-local agent roles
+- `.open-autonomy/autonomy.yml` for the Open Autonomy index of docs, skills,
+  agents, triggers, and capabilities
+- `docs/CONSTITUTION.md` for non-negotiable operating principles
 - `.open-autonomy/policy.yml` for machine-readable path, retry, budget,
   autonomy, and merge limits
 - `.open-autonomy/roadmap.yml` for planner-readable phases, priorities,
   dependencies, proof gates, and acceptance criteria
 - `.open-autonomy/review-rubric.yml` for structured reviewer criteria
-- `.open-autonomy/standards/` for scoped code, docs, tests, and security
-  standards
+- `docs/standards/` for scoped code, docs, tests, and security standards
 - planner workflow that reads roadmap, policy, open issues, PRs, and decision
   evidence to create, update, prioritize, or defer GitHub issues
 - issue-origin metadata for `human`, `roadmap-planner`, `testbed-seed`,

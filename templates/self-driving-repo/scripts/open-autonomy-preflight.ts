@@ -1,5 +1,6 @@
 #!/usr/bin/env bun
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
+import { readAutonomyConfig, referencedAutonomyPaths } from './open-autonomy-config.js';
 
 export interface PreflightInput {
   root?: string;
@@ -30,7 +31,7 @@ interface Options {
 
 const REQUIRED_FILES = [
   'AGENTS.md',
-  '.open-autonomy/constitution.md',
+  '.open-autonomy/autonomy.yml',
   '.open-autonomy/policy.yml',
   '.open-autonomy/roadmap.yml',
   '.open-autonomy/review-rubric.yml',
@@ -84,6 +85,15 @@ export function buildPreflightReport(input: PreflightInput = {}): PreflightRepor
       id: `file:${file}`,
       status: existsSync(`${root}/${file}`) ? 'pass' : 'fail',
       message: existsSync(`${root}/${file}`) ? `found ${file}` : `missing ${file}`,
+    });
+  }
+
+  const config = readAutonomyConfig(root);
+  for (const path of referencedAutonomyPaths(config)) {
+    checks.push({
+      id: `autonomy-ref:${path}`,
+      status: existsSync(`${root}/${path}`) ? 'pass' : 'fail',
+      message: existsSync(`${root}/${path}`) ? `found referenced asset ${path}` : `missing referenced asset ${path}`,
     });
   }
 

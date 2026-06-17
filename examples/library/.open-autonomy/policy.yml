@@ -13,7 +13,9 @@ risk:
   human_required_paths:
     - ".github/workflows/**"
     - ".open-autonomy/policy.yml"
-    - ".open-autonomy/constitution.md"
+    - ".open-autonomy/autonomy.yml"
+    - "docs/CONSTITUTION.md"
+    - ".codex/skills/**"
     - "services/**/wrangler.toml"
   human_required_topics:
     - auth

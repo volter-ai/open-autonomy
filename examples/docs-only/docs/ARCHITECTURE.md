@@ -85,18 +85,28 @@ The clean target shape is:
 
 ```text
 AGENTS.md
+.codex/
+  skills/
+    open-autonomy-pm/SKILL.md
+    open-autonomy-developer/SKILL.md
+    open-autonomy-reviewer/SKILL.md
+    open-autonomy-planner/SKILL.md
+    open-autonomy-upgrade/SKILL.md
 .open-autonomy/
-  constitution.md
+  autonomy.yml
   policy.yml
   roadmap.yml
   review-rubric.yml
+docs/
+  CONSTITUTION.md
+  PROJECT.md
+  ROADMAP.md
+  ARCHITECTURE.md
   standards/
     code.md
     docs.md
     tests.md
     security.md
-docs/
-  ROADMAP.md
   COMMANDS.md
   OPERATIONS.md
   SECURITY.md
@@ -105,17 +115,16 @@ docs/
 ```
 
 - `AGENTS.md`: short always-loaded guidance shared across coding agents.
-- `constitution.md`: non-negotiable principles and product standards.
+- `.codex/skills/*/SKILL.md`: repo-local Codex skills for each agent role.
+- `autonomy.yml`: Open Autonomy index of docs, skills, agents, triggers, and
+  capabilities.
+- `docs/CONSTITUTION.md`: non-negotiable principles and product standards.
 - `policy.yml`: machine-readable hard limits for paths, budgets, retries, and
   autonomy levels.
 - `roadmap.yml`: planner-readable direction, priorities, dependencies, and proof
   gates.
 - `review-rubric.yml`: structured reviewer criteria.
-- `standards/*`: scoped implementation guidance.
-
-The current repo is still converging toward this shape. Until those structured
-files exist, `docs/ROADMAP.md`, the runbook, and action docs remain the
-canonical source.
+- `docs/standards/*`: scoped implementation guidance.
 
 ## Evidence And State
 

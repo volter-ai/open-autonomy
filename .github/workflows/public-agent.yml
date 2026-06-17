@@ -25,7 +25,17 @@ env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
 
 concurrency:
-  group: public-agent-${{ github.event.issue.number || inputs.issue_number }}
+  # Operator-control commands (cancel/pause/resume/status/retry) get a separate group so they are
+  # NOT serialized behind the develop/review run they are meant to control — otherwise `/agent cancel`
+  # would queue until the run it targets has already finished.
+  group: >-
+    public-agent-${{ github.event.issue.number || inputs.issue_number }}${{
+    (startsWith(github.event.comment.body || inputs.command || '', '/agent cancel')
+    || startsWith(github.event.comment.body || inputs.command || '', '/agent pause')
+    || startsWith(github.event.comment.body || inputs.command || '', '/agent resume')
+    || startsWith(github.event.comment.body || inputs.command || '', '/agent status')
+    || startsWith(github.event.comment.body || inputs.command || '', '/agent retry'))
+    && '-control' || '' }}
   cancel-in-progress: false
 
 jobs:

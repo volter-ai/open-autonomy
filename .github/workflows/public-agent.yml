@@ -232,11 +232,17 @@ jobs:
           gh label create human-required --description "Requires maintainer attention before autonomous work" --color B60205 2>/dev/null || true
 
           active_runs() {
+            # Match runs for this issue. GitHub renders issue_comment-triggered runs with the issue
+            # TITLE as displayTitle (run-name does not apply), so match the issue title as well as a
+            # "#<issue>" run-name in case that is present.
+            local issue_title
+            issue_title="$(gh issue view "$issue" --json title --jq .title 2>/dev/null || echo)"
             gh run list \
               --workflow public-agent.yml \
               --limit 50 \
               --json databaseId,status,conclusion,displayTitle,url \
-              --jq ".[] | select((.displayTitle | contains(\"#${issue}\")) and (.status == \"queued\" or .status == \"in_progress\" or .status == \"waiting\" or .status == \"requested\"))"
+              --jq --arg t "$issue_title" --arg n "#${issue}" \
+                '.[] | select((($t != "" and .displayTitle == $t) or (.displayTitle | contains($n))) and (.status == "queued" or .status == "in_progress" or .status == "waiting" or .status == "requested"))'
           }
 
           proxy_status() {

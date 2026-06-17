@@ -232,11 +232,17 @@ jobs:
           gh label create human-required --description "Requires maintainer attention before autonomous work" --color B60205 2>/dev/null || true
 
           active_runs() {
+            # Match runs for this issue. GitHub renders issue_comment-triggered runs with the issue
+            # TITLE as displayTitle (run-name does not apply), so match the issue title as well as a
+            # "#<issue>" run-name in case that is present.
+            local issue_title
+            issue_title="$(gh issue view "$issue" --json title --jq .title 2>/dev/null || echo)"
             gh run list \
               --workflow public-agent.yml \
               --limit 50 \
               --json databaseId,status,conclusion,displayTitle,url \
-              --jq ".[] | select((.displayTitle | contains(\"#${issue}\")) and (.status == \"queued\" or .status == \"in_progress\" or .status == \"waiting\" or .status == \"requested\"))"
+              --jq --arg t "$issue_title" --arg n "#${issue}" \
+                '.[] | select((($t != "" and .displayTitle == $t) or (.displayTitle | contains($n))) and (.status == "queued" or .status == "in_progress" or .status == "waiting" or .status == "requested"))'
           }
 
           proxy_status() {
@@ -1050,6 +1056,27 @@ jobs:
           curl -fsS -X POST \
             -H "x-admin-token: ${MODEL_PROXY_ADMIN_TOKEN}" \
             "${MODEL_PROXY_URL}/admin/runs/${{ steps.review_mint.outputs.run_id }}/revoke"
+
+      - name: Testbed head-change fixture
+        # Deterministic head-changed-before-merge fixture: for the fixture issue, move the PR head
+        # AFTER the reviewed SHA was recorded but BEFORE the merge gate, so the merge gate sees a
+        # real reviewed-vs-current SHA mismatch. Real branch ref change, not a stub.
+        if: steps.ci_followup.outputs.continue_review == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          src_issue="${{ needs.setup.outputs.issue_number }}"
+          src_title="$(gh issue view "$src_issue" --json title --jq .title 2>/dev/null || echo)"
+          if [[ "$src_title" == *"[oa-test:head-changed-before-merge]"* ]]; then
+            pr="$(jq -r '.pull_request' .agent-run/target.json)"
+            branch="$(gh pr view "$pr" --json headRefName --jq .headRefName)"
+            repo="${{ github.repository }}"
+            parent="$(gh api "repos/$repo/git/refs/heads/$branch" --jq .object.sha)"
+            tree="$(gh api "repos/$repo/git/commits/$parent" --jq .tree.sha)"
+            newsha="$(gh api -X POST "repos/$repo/git/commits" -f message="Testbed head-change fixture: head moved after review SHA recorded" -f tree="$tree" -f 'parents[]'="$parent" --jq .sha)"
+            gh api -X PATCH "repos/$repo/git/refs/heads/$branch" -f sha="$newsha" >/dev/null
+            echo "Testbed fixture: moved $branch head $parent -> $newsha after review."
+          fi
 
       - name: Decide merge
         if: steps.ci_followup.outputs.continue_review == 'true'

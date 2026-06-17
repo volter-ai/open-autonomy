@@ -77,26 +77,51 @@ describe('open autonomy planner and control files', () => {
     expect(action?.action).toBe('skip');
   });
 
-  test('decision index reconstructs latest state by issue and stage', () => {
-    const first = makeDecision({
+  test('decision index reconstructs issue, PR, retry, and merge state', () => {
+    const issue = makeDecision({
       stage: 'pm_triage',
       issue: 7,
       actor: 'planner',
       decision: 'develop',
       next_action: 'develop',
     }, new Date('2026-06-16T10:00:00Z'));
-    const second = makeDecision({
+    const pr = makeDecision({
+      stage: 'publish',
+      issue: 7,
+      pr: 8,
+      actor: 'publisher',
+      decision: 'published',
+      subject: { type: 'pr', number: 8, head_sha: 'abc123', branch: 'agent/issue-7' },
+      next_action: 'review',
+    }, new Date('2026-06-16T10:02:00Z'));
+    const retry = makeDecision({
+      stage: 'retry',
+      issue: 7,
+      actor: 'retry-budget',
+      decision: 'budget_exhausted',
+      attempt: { kind: 'retry', index: 2, max: 3 },
+      reason: 'retry budget exhausted',
+      next_action: 'human_required',
+    }, new Date('2026-06-16T10:04:00Z'));
+    const merge = makeDecision({
       stage: 'merge_gate',
       issue: 7,
       pr: 8,
       actor: 'merge-gate',
       decision: 'merge',
+      subject: { type: 'pr', number: 8, head_sha: 'abc123', branch: 'agent/issue-7' },
       next_action: 'close',
-    }, new Date('2026-06-16T10:05:00Z'));
-    const index = buildDecisionIndex([second, first], new Date('2026-06-16T10:10:00Z'));
-    expect(index.decisions).toBe(2);
+    }, new Date('2026-06-16T10:06:00Z'));
+    const index = buildDecisionIndex([merge, retry, pr, issue], new Date('2026-06-16T10:10:00Z'));
+    expect(index.decisions).toBe(4);
     expect(index.issues[0]?.latest_pr).toBe(8);
     expect(index.issues[0]?.latest_decision?.stage).toBe('merge_gate');
     expect(index.issues[0]?.latest_by_stage.pm_triage.decision).toBe('develop');
+    expect(index.issues[0]?.latest_issue_decision?.stage).toBe('merge_gate');
+    expect(index.issues[0]?.latest_pr_decision?.stage).toBe('publish');
+    expect(index.issues[0]?.latest_retry_decision?.decision).toBe('budget_exhausted');
+    expect(index.issues[0]?.latest_merge_decision?.decision).toBe('merge');
+    expect(index.issues[0]?.latest_by_stage.retry.attempt?.index).toBe(2);
+    expect(index.issues[0]?.latest_by_stage.merge_gate.subject?.number).toBe(8);
   });
 });

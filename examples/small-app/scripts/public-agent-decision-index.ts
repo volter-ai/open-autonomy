@@ -6,6 +6,10 @@ import { validateDecision, type AgentDecision } from './public-agent-decision.js
 export interface DecisionIndexSubject {
   issue: number;
   latest_decision?: AgentDecision;
+  latest_issue_decision?: AgentDecision;
+  latest_pr_decision?: AgentDecision;
+  latest_retry_decision?: AgentDecision;
+  latest_merge_decision?: AgentDecision;
   latest_by_stage: Record<string, AgentDecision>;
   latest_pr?: number;
   latest_next_action?: string;
@@ -48,8 +52,23 @@ export function buildDecisionIndex(decisions: AgentDecision[], now = new Date())
       latest_by_stage: {},
     };
     subject.latest_decision = decision;
+    subject.latest_issue_decision = decision;
     subject.latest_by_stage[decision.stage] = decision;
-    subject.latest_pr = decision.pr ?? subject.latest_pr;
+    const relatedPr = decision.pr ?? (decision.subject?.type === 'pr' ? decision.subject.number : undefined);
+    const isRetryDecision = decision.stage === 'retry' || decision.attempt?.kind === 'retry';
+    const isMergeDecision = decision.stage === 'merge_gate' || decision.attempt?.kind === 'merge';
+    if (relatedPr !== undefined) {
+      subject.latest_pr = relatedPr;
+    }
+    if (relatedPr !== undefined && !isRetryDecision && !isMergeDecision) {
+      subject.latest_pr_decision = decision;
+    }
+    if (isRetryDecision) {
+      subject.latest_retry_decision = decision;
+    }
+    if (isMergeDecision) {
+      subject.latest_merge_decision = decision;
+    }
     subject.latest_next_action = decision.next_action ?? subject.latest_next_action;
     subject.latest_risk = decision.risk ?? subject.latest_risk;
     subject.updated_at = decision.created_at;

@@ -1,0 +1,25 @@
+{
+  "schema": "volter.agent.decision.v1",
+  "stage": "develop",
+  "issue": 4,
+  "run_id": "run_65282f6a-5a4e-491d-8147-34ff2ad76da6",
+  "actor": "github-actions[bot]",
+  "decision": "pr-ready",
+  "subject": {
+    "type": "issue",
+    "number": 4,
+    "branch": "agent/issue-4"
+  },
+  "evidence": [
+    "session:session.json",
+    "patch:changes.patch",
+    "artifact:artifacts/codex-final.md",
+    "artifact:artifacts/context-sources.json",
+    "artifact:artifacts/pr.md",
+    "artifact:artifacts/result.json",
+    "artifact:artifacts/transcript.md"
+  ],
+  "next_action": "publish",
+  "created_at": "2026-06-17T09:15:33.476Z",
+  "id": "dec_087368430ea66c90"
+}

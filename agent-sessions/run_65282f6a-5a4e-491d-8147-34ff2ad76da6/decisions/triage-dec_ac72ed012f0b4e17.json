@@ -1,0 +1,21 @@
+{
+  "schema": "volter.agent.decision.v1",
+  "stage": "triage",
+  "issue": 4,
+  "run_id": "run_9d5cd948-e404-4e46-8e79-b31993fea2b5",
+  "actor": "github-actions[bot]",
+  "decision": "approve_run",
+  "subject": {
+    "type": "issue",
+    "number": 4,
+    "branch": "agent/issue-4"
+  },
+  "reason": "PM already approved develop for this issue: The issue is clear, scoped, and has defined acceptance criteria for the development of a durable index from committed decision records.",
+  "evidence": [
+    "target:.agent-run/target.json",
+    "triage:.agent-run/triage.json"
+  ],
+  "next_action": "mint_agent",
+  "created_at": "2026-06-17T09:11:39.979Z",
+  "id": "dec_ac72ed012f0b4e17"
+}

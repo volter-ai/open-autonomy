@@ -1,0 +1,13 @@
+{
+  "ok": true,
+  "issue": 4,
+  "summary": "Extended the durable decision index to retain latest issue, PR, retry, and merge decision snapshots and updated planner smoke tests across the root repo and example packages.",
+  "tests": [
+    "bun test scripts/public-agent-planner.test.ts (root)",
+    "bun test scripts/public-agent-planner.test.ts (examples/testbed)",
+    "bun test scripts/public-agent-planner.test.ts (examples/small-app)",
+    "bun test scripts/public-agent-planner.test.ts (examples/library)",
+    "bun test scripts/open-autonomy-fleet.test.ts (root)",
+    "bun test scripts/open-autonomy-fleet.test.ts (examples/testbed)"
+  ]
+}

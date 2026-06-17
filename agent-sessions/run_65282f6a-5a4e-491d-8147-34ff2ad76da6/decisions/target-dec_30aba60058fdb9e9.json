@@ -1,0 +1,19 @@
+{
+  "schema": "volter.agent.decision.v1",
+  "stage": "target",
+  "issue": 4,
+  "actor": "github-actions[bot]",
+  "decision": "can_develop",
+  "subject": {
+    "type": "issue",
+    "number": 4,
+    "branch": "agent/issue-4"
+  },
+  "reason": "target can be developed",
+  "evidence": [
+    "target:.agent-run/target.json"
+  ],
+  "next_action": "triage",
+  "created_at": "2026-06-17T09:11:37.726Z",
+  "id": "dec_30aba60058fdb9e9"
+}

@@ -1,0 +1,58 @@
+{
+  "startedAt": "2026-06-17T09:12:10.702Z",
+  "completedAt": "2026-06-17T09:15:33.465Z",
+  "issue": {
+    "body": "Roadmap item: `durable-decision-memory`\nPhase: 1\nPriority: high\nProof gate: `decision-memory-smoke`\n\nAcceptance criteria:\n- Build a durable index from committed decision records.\n- Reconstruct issue, PR, retry, and merge state from the index.\n\nPlanner origin: roadmap-planner",
+    "comments": [
+      {
+        "author": {
+          "login": "github-actions"
+        },
+        "authorAssociation": "CONTRIBUTOR",
+        "body": "/agent develop\n\nPM reason: The issue is clear, scoped, and has defined acceptance criteria for the development of a durable index from committed decision records.",
+        "createdAt": "2026-06-17T09:11:15Z",
+        "id": "IC_kwDOS8izs88AAAABGc-cNA",
+        "includesCreatedEdit": false,
+        "isMinimized": false,
+        "minimizedReason": "",
+        "reactionGroups": [],
+        "url": "https://github.com/volter-ai/open-autonomy/issues/4#issuecomment-4728003636",
+        "viewerDidAuthor": true
+      }
+    ],
+    "labels": [
+      {
+        "color": "0E8A16",
+        "description": "Issue created or managed by the Open Autonomy planner",
+        "id": "LA_kwDOS8izs88AAAACnxBoZA",
+        "name": "origin:roadmap-planner"
+      },
+      {
+        "color": "FBCA04",
+        "description": "Roadmap priority",
+        "id": "LA_kwDOS8izs88AAAACnxBouQ",
+        "name": "priority:high"
+      },
+      {
+        "color": "5319E7",
+        "description": "Open Autonomy planner label",
+        "id": "LA_kwDOS8izs88AAAACnxBqCQ",
+        "name": "proof:decision-memory-smoke"
+      },
+      {
+        "color": "1D76DB",
+        "description": "Open Autonomy planner label",
+        "id": "LA_kwDOS8izs88AAAACnxBsOQ",
+        "name": "roadmap:phase-1"
+      }
+    ],
+    "number": 4,
+    "title": "[roadmap:durable-decision-memory] Durable Decision Memory",
+    "user": {
+      "login": "app/github-actions"
+    }
+  },
+  "taskDir": "/home/runner/work/open-autonomy/open-autonomy/.agent-run/out/task",
+  "status": "pr-ready",
+  "exitCode": 0
+}

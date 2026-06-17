@@ -183,8 +183,8 @@ async function main(): Promise<void> {
   // Testbed-only fixture: hold the run active so a maintainer `/agent cancel` reliably catches an
   // in-progress run/proxy token. This is a real, running session — just paused — not a stub.
   if (readIssue(issuePath).title?.includes('[oa-test:operator-cancel]')) {
-    process.stdout.write('Testbed fixture: operator-cancel hold (keeping the run active ~120s)\n');
-    await Bun.sleep(120_000);
+    process.stdout.write('Testbed fixture: operator-cancel hold (keeping the run active ~300s)\n');
+    await Bun.sleep(300_000);
   }
   const artifactsDir = join(taskDir, 'artifacts');
   const codexHome = join(taskDir, 'codex-home');

@@ -246,6 +246,7 @@ async function main(): Promise<void> {
   });
   const artifactTranscript = join(bundleDir, 'artifacts', 'transcript.md');
   if (existsSync(artifactTranscript)) writeFileSync(bundleTranscript, readFileSync(artifactTranscript));
+  maybeApplyPublisherRejectionFixture(options.repo, issue);
   const patchPath = join(bundleDir, 'changes.patch');
   writePatch(options.repo, patchPath);
   const preDecisionRels = copyPreDecisions(bundleDecisions);
@@ -385,6 +386,19 @@ function writeBlockedBundle(input: {
     patchPath,
     ...decisionRels.map((rel) => join(input.bundleDir, rel)),
   ]);
+}
+
+// Testbed-only fixture: for the publisher-policy-rejection scenario, inject a real forbidden
+// `.github/workflows/*` edit into the working tree so the publisher rejects a genuine workflow
+// edit (not a stub). No-op for every other issue.
+function maybeApplyPublisherRejectionFixture(repo: string, issue: { title?: string }): void {
+  if (!issue.title?.includes('[oa-test:publisher-policy-rejection]')) return;
+  const target = join(repo, '.github/workflows/ci.yml');
+  if (!existsSync(target)) return;
+  const current = readFileSync(target, 'utf8');
+  const marker = '# testbed publisher-policy-rejection fixture: this workflow edit must be rejected\n';
+  if (current.includes(marker)) return;
+  writeFileSync(target, `${current}${current.endsWith('\n') ? '' : '\n'}${marker}`);
 }
 
 function readOptionalText(path: string): string | undefined {

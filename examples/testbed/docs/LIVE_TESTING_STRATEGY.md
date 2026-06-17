@@ -78,18 +78,25 @@ The seed (`examples/testbed/scripts/testbed-seed-issues.ts`) plus a small set of
 **testbed-only fixtures** must cover every feature. Fixtures are explicit,
 labelled `manual-operator-test`, and never touch real production behavior.
 
-Required fixtures (build these into the testbed; they are the current gap):
+Fixtures (implemented as testbed-only mechanisms — the testbed runs its own copies
+of the scripts/workflows, so these never touch canonical production code). Each
+creates a **real** condition keyed off a per-PR sentinel file the develop agent
+actually writes, so there is no model/CI stubbing:
 
-- **CI-failure toggle** — a marker in a seeded issue/PR that makes the testbed
-  `ci` workflow fail deterministically for that agent PR, so the CI-retry loop and
-  `ci-repeated-failure`/`budget-exhausted` stop can run live.
-- **Reviewer `develop_retry` toggle** — a marker that makes the reviewer return a
-  stable `develop_retry` finding, so the review-retry loop and
-  `review-repeated-failure` stop can run live.
-- **Head-change harness** — a documented maintainer step that pushes a commit to a
-  reviewed PR before the merge gate, to prove SHA-binding refusal.
-- **Forbidden-edit develop bundle** — a maintainer-triggered develop fixture whose
-  produced bundle attempts a workflow edit, to prove publisher rejection.
+- **CI-failure** — `.github/workflows/ci.yml` fails when `.testbed/force-ci-failure`
+  is present. The `retry-ci-failure` seed issue asks the agent to add that file, so
+  the required check really fails and the CI-retry loop + `ci-repeated-failure` /
+  `budget-exhausted` stop run live.
+- **Reviewer `develop_retry`** — `scripts/public-agent-review.ts` returns a stable
+  `develop_retry` verdict when the PR diff adds `.testbed/force-review-retry`
+  (`forcedReviewRetryVerdict`). The `retry-review-failure` seed issue asks for that
+  marker, exercising the review-retry loop + `review-repeated-failure` stop.
+- **Forbidden-edit** — `scripts/github-agent-session.ts`
+  (`maybeApplyPublisherRejectionFixture`) injects a real `.github/workflows/ci.yml`
+  edit into the bundle for the `publisher-policy-rejection` fixture issue, so the
+  publisher rejects a genuine forbidden edit.
+- **Head-change** — a proctor procedure (no code): push a commit to a reviewed PR
+  before the merge gate to prove SHA-binding refusal.
 
 ### Coverage map (feature → live scenario → human unblock → proof)
 
@@ -220,13 +227,22 @@ work between proctor ticks.
 - The 60-minute coverage report is the qualitative+quantitative summary the proctor
   writes at T+60.
 
-## 7. What still needs to be built
+## 7. Tooling
 
-- `testbed:bootstrap` wrapper (provision → secret check → fast cron → seed →
-  preflight).
-- The four testbed fixtures in Section 4 (CI-failure, reviewer-retry, head-change,
-  forbidden-edit).
-- Seed coverage for `operator-retry-no-failure`, `repo-pause`, `operator-cancel`,
-  and the governance develop-only / risky-approval lines.
-- A proctor runner (a scheduled agent or `/loop`) that executes Section 5 and writes
-  the report.
+Built and committed:
+
+- `bun run testbed:bootstrap` (`scripts/bootstrap-testbed.ts`) — provision → secret
+  check → seed-all → preflight, idempotent.
+- `bun run testbed:provision` (`scripts/provision-target-repo.ts`) — repo, variables,
+  labels, branch protection from `examples/testbed/provision.json`.
+- `bun run testbed:proctor` (`scripts/testbed-proctor-report.ts`) — the quantitative
+  snapshot + coverage classification the proctor records each tick.
+- The four Section-4 fixtures and the expanded seed (`operator-retry-no-failure`,
+  `repo-pause`, `operator-cancel`, `governance-develop-only`,
+  `governance-risky-approval`).
+- The testbed PM cron is `*/5` so a 60-minute session sees frequent sweeps.
+
+Still operational, not code:
+
+- The proctor itself — a maintainer or an AI agent running Section 5 on an interval
+  (e.g. via `/loop`), taking the allowed human actions and writing the T+60 report.

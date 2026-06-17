@@ -70,6 +70,19 @@ export function renderReviewPrompt(diff: string, ci = '', controlContext = ''): 
   ].join('\n');
 }
 
+// Testbed-only deterministic fixture. Returns a stable develop_retry verdict when the PR diff adds
+// the `.testbed/force-review-retry` marker; returns undefined otherwise so normal model review runs.
+export function forcedReviewRetryVerdict(diff: string): ReviewerVerdict | undefined {
+  if (!diff.includes('.testbed/force-review-retry')) return undefined;
+  return {
+    verdict: 'fail',
+    risk: 'medium',
+    human_required: false,
+    summary: 'Testbed fixture: forced reviewer develop_retry (.testbed/force-review-retry present).',
+    findings: ['Remove the .testbed/force-review-retry marker to pass review.'],
+  };
+}
+
 export function modelFailureVerdict(error: unknown): ReviewerVerdict {
   const message = error instanceof Error ? error.message : String(error);
   return {
@@ -87,18 +100,25 @@ async function main(): Promise<void> {
   const proxyUrl = process.env.MODEL_PROXY_URL;
   const token = process.env.MODEL_PROXY_TOKEN;
   if (!proxyUrl || !token) throw new Error('MODEL_PROXY_URL and MODEL_PROXY_TOKEN are required');
-  const prompt = renderReviewPrompt(
-    readFileSync(options.diff, 'utf8'),
-    options.ci ? readFileSync(options.ci, 'utf8') : '',
-    options.controlFiles ? renderControlFilePrompt(JSON.parse(readFileSync(options.controlFiles, 'utf8'))) : renderControlFilePrompt(readControlFileContext('.')),
-  );
+  const diffText = readFileSync(options.diff, 'utf8');
   let verdict: ReviewerVerdict;
-  try {
-    verdict = options.provider === 'anthropic'
-      ? await callAnthropic(proxyUrl, token, options.model, prompt)
-      : await callOpenAI(proxyUrl, token, options.model, prompt);
-  } catch (error) {
-    verdict = modelFailureVerdict(error);
+  if (forcedReviewRetryVerdict(diffText)) {
+    // Testbed-only fixture: a develop run that adds `.testbed/force-review-retry` (per its seed
+    // issue) gets a stable reviewer develop_retry, exercising the review retry loop and stop.
+    verdict = forcedReviewRetryVerdict(diffText) as ReviewerVerdict;
+  } else {
+    const prompt = renderReviewPrompt(
+      diffText,
+      options.ci ? readFileSync(options.ci, 'utf8') : '',
+      options.controlFiles ? renderControlFilePrompt(JSON.parse(readFileSync(options.controlFiles, 'utf8'))) : renderControlFilePrompt(readControlFileContext('.')),
+    );
+    try {
+      verdict = options.provider === 'anthropic'
+        ? await callAnthropic(proxyUrl, token, options.model, prompt)
+        : await callOpenAI(proxyUrl, token, options.model, prompt);
+    } catch (error) {
+      verdict = modelFailureVerdict(error);
+    }
   }
   writeFileSync(options.out, `${JSON.stringify(verdict, null, 2)}\n`);
   if (process.env.GITHUB_OUTPUT) {

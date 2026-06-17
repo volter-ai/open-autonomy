@@ -1,0 +1,24 @@
+{
+  "schema": "volter.agent.decision.v1",
+  "stage": "review",
+  "issue": 4,
+  "pr": 17,
+  "run_id": "run_65282f6a-5a4e-491d-8147-34ff2ad76da6",
+  "actor": "agent-reviewer",
+  "decision": "fail",
+  "risk": "high",
+  "subject": {
+    "type": "pr",
+    "number": 17,
+    "branch": "agent/issue-4",
+    "head_sha": "7288d86bb9e9343d2eaff58ee611fa200f49c7dd"
+  },
+  "evidence": [
+    "ci:pass",
+    "review:fail",
+    "risk:high"
+  ],
+  "next_action": "blocked",
+  "created_at": "2026-06-17T09:16:38.875Z",
+  "id": "dec_d2b72ba4875d3002"
+}

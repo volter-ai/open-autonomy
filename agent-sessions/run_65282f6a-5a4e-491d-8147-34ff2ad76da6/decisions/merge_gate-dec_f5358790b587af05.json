@@ -1,0 +1,24 @@
+{
+  "schema": "volter.agent.decision.v1",
+  "stage": "merge_gate",
+  "issue": 4,
+  "pr": 17,
+  "run_id": "run_65282f6a-5a4e-491d-8147-34ff2ad76da6",
+  "actor": "public-agent-merge-gate",
+  "decision": "blocked",
+  "subject": {
+    "type": "pr",
+    "number": 17,
+    "branch": "agent/issue-4",
+    "head_sha": "7288d86bb9e9343d2eaff58ee611fa200f49c7dd"
+  },
+  "reason": "review did not complete: Reviewer model call failed.",
+  "evidence": [
+    "ci:pass",
+    "review:fail",
+    "merge_gate:blocked"
+  ],
+  "next_action": "blocked",
+  "created_at": "2026-06-17T09:16:38.907Z",
+  "id": "dec_f5358790b587af05"
+}

@@ -73,7 +73,10 @@ export function renderReviewPrompt(diff: string, ci = '', controlContext = ''): 
 // Testbed-only deterministic fixture. Returns a stable develop_retry verdict when the PR diff adds
 // the `.testbed/force-review-retry` marker; returns undefined otherwise so normal model review runs.
 export function forcedReviewRetryVerdict(diff: string): ReviewerVerdict | undefined {
-  if (!diff.includes('.testbed/force-review-retry')) return undefined;
+  // Match only an actual diff header that adds the marker file, not the marker string quoted inside
+  // committed session transcripts/artifacts (those appear as `+`-prefixed content lines, never as a
+  // line-start `diff --git a/.testbed/force-review-retry` header).
+  if (!/^diff --git a\/\.testbed\/force-review-retry /m.test(diff)) return undefined;
   return {
     verdict: 'fail',
     risk: 'medium',
@@ -102,10 +105,11 @@ async function main(): Promise<void> {
   if (!proxyUrl || !token) throw new Error('MODEL_PROXY_URL and MODEL_PROXY_TOKEN are required');
   const diffText = readFileSync(options.diff, 'utf8');
   let verdict: ReviewerVerdict;
-  if (forcedReviewRetryVerdict(diffText)) {
+  const forced = forcedReviewRetryVerdict(diffText);
+  if (forced) {
     // Testbed-only fixture: a develop run that adds `.testbed/force-review-retry` (per its seed
     // issue) gets a stable reviewer develop_retry, exercising the review retry loop and stop.
-    verdict = forcedReviewRetryVerdict(diffText) as ReviewerVerdict;
+    verdict = forced;
   } else {
     const prompt = renderReviewPrompt(
       diffText,

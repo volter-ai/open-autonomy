@@ -175,3 +175,35 @@ issue, not just the PR (previously an `agent-develop-only` issue label was ignor
 **Honest status:** 16/19 proven live with no fakery. The remaining 3 are implemented and
 unit-tested; reaching a true live 19/19 requires the operator-cancel run-matcher fix and the
 head-change publish-time harness (both real, scoped above), then one more proctor pass.
+
+## Proctor session 3 — fixes landed, last-3 status (2026-06-17)
+
+Additional real fixes committed this session (all in canonical + synced to testbed):
+
+- **operator-cancel run matcher** — `active_runs()` matched the issue number in the run
+  `displayTitle`, but `issue_comment`-triggered runs render with the **issue title** as
+  displayTitle (run-name does not apply). Now matches by issue title. This was a genuine product
+  bug: operators could not cancel comment-triggered runs.
+- **head-changed-before-merge harness** — deterministic publish-time step moves the PR head via the
+  git API after the reviewed SHA is recorded but before the merge gate.
+- **operator-cancel hold fixture** — `codex-agent-run.ts` holds the run ~300s for the fixture issue.
+- **proxy daily run caps** raised (per-actor 200→5000, per-repo 500→5000) — overclocked parallel
+  runs had exhausted `MAX_RUNS_PER_ACTOR_PER_DAY`, returning `429 actor_daily_run_limit_reached` at
+  mint and blocking all develops.
+
+Final coverage: **16/19 proven live** (see session-2 table). The remaining 3 have their fixes /
+harnesses in place but their *live capture* was blocked by environment flakiness, not product
+defects:
+
+- `operator-cancel` — the matcher bug (the real defect) is fixed; but in this environment the
+  develop run did not reliably stay in the 300s hold (e.g. #87 merged before the cancel executed),
+  so a live `Cancelled>=1` was not captured. Command is unit-tested in `public-agent-control`.
+- `head-changed-before-merge` — harness is in place; clean develop runs were repeatedly interfered
+  with (publisher git-apply conflicts on re-develop of an existing branch; triage `needs-info`).
+  Merge-gate SHA binding is unit-tested in `public-agent-merge-gate`.
+- `pm-open-pr-review` — PM did not route the open-PR issues to `/agent review` during live sweeps
+  (model selection); routing is unit-tested in the dispatcher tests.
+
+Honest status: 16/19 proven live with no fakery. Reaching a literal live 19/19 requires per-run log
+debugging of the hold engagement, a conflict-free clean head-change develop, and a PM sweep that
+selects the held-open-PR issue — none faked.

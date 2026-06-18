@@ -1,0 +1,26 @@
+<svg width="1200" height="360" viewBox="0 0 1200 360" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <radialGradient id="grad1" cx="75%" cy="50%" r="70%" fx="85%" fy="50%">
+      <stop offset="0%" style="stop-color:#ff7882;" />
+      <stop offset="100%" style="stop-color:#ff424d;" />
+    </radialGradient>
+    <pattern id="dot-grid" width="24" height="24" patternUnits="userSpaceOnUse">
+      <circle cx="1" cy="1" r="0.8" fill="white" fill-opacity="0.08"/>
+    </pattern>
+    <linearGradient id="swoosh-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+        <stop offset="0%" stop-color="white" stop-opacity="0.8" />
+        <stop offset="100%" stop-color="white" stop-opacity="0.5" />
+    </linearGradient>
+  </defs>
+  
+  <rect width="1200" height="360" fill="url(#grad1)" />
+  <rect width="1200" height="360" fill="url(#dot-grid)" />
+
+  <g fill="none" stroke-linecap="round">
+    <path d="M 500 400 C 700 150, 950 150, 1150 320" stroke="white" stroke-width="1.5" stroke-opacity="0.2" />
+    <path d="M 600 -50 C 800 180, 900 180, 1100 50" stroke="white" stroke-width="2" stroke-opacity="0.25" />
+    
+    <path d="M 850 60 C 1050 60, 1150 280, 980 300" stroke="url(#swoosh-grad)" stroke-width="16" />
+    <path d="M 940 295 l 45 5 -20 -48" stroke="white" stroke-width="16" stroke-opacity="0.7" />
+  </g>
+</svg>

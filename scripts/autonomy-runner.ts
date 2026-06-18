@@ -92,18 +92,25 @@ export class TermfleetRunner implements Runner {
     return this.list().find((s) => s.id === id);
   }
   list(): Session[] {
-    const r = spawnSync(`${this.cli} list --url '${this.url}'`, { shell: true, encoding: 'utf8' });
+    // termfleet's agent CRUD: `<agent> list` returns this agent's windows ([{id,name,agent,...}]).
+    const r = spawnSync(`${this.cli} ${this.agent} list --url '${this.url}'`, { shell: true, encoding: 'utf8' });
     if (r.status || !r.stdout.trim()) return [];
-    return (JSON.parse(r.stdout) as Array<{ name: string; agent: string }>)
-      .filter((p) => p.agent !== 'no-agent')
-      .map((p) => ({ id: p.name, role: p.name.replace(/^ztrack-/, ''), status: 'running' as const }));
+    return (JSON.parse(r.stdout) as Array<{ name: string }>).map((w) => ({
+      id: w.name,
+      role: w.name.replace(/^ztrack-/, ''),
+      status: 'running' as const,
+    }));
   }
   update(id: string, patch: { status?: SessionStatus }): boolean {
     // termfleet tracks only liveness; the one meaningful transition it can honor is cancellation.
     return patch.status === 'cancelled' ? this.cancel(id) : true;
   }
   cancel(id: string): boolean {
-    return !spawnSync(`${this.cli} kill '${id}' --url '${this.url}'`, { shell: true, stdio: 'inherit' }).status;
+    // `<agent> kill --name <window name>` (id is the session/window name, e.g. ztrack-develop).
+    return !spawnSync(`${this.cli} ${this.agent} kill --url '${this.url}' --name '${id}'`, {
+      shell: true,
+      stdio: 'inherit',
+    }).status;
   }
 }
 

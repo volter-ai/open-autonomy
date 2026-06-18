@@ -31,7 +31,12 @@ function parseArgs(argv: string[]): Options {
 }
 
 export function auditProofLedger(roadmapText: string, ledgerText: string): ProofAuditResult {
-  const gates = parseRoadmapItems(roadmapText).map((item) => item.proof_gate);
+  // Proposed items are aspirational roadmap candidates awaiting human ratification. They carry
+  // no proven evidence yet, so they are exempt from the ledger audit until a human promotes them
+  // to active work. Every non-proposed item must still cite real evidence.
+  const gates = parseRoadmapItems(roadmapText)
+    .filter((item) => item.status !== 'proposed')
+    .map((item) => item.proof_gate);
   const proof_gates = gates.map((id) => {
     const row = ledgerRow(ledgerText, id);
     const evidence = row ? validatedEvidence(row.evidence) : [];

@@ -3,7 +3,7 @@ import { mkdirSync, mkdtempSync, readdirSync, readFileSync, symlinkSync, writeFi
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { spawnSync } from 'node:child_process';
-import { writeJson, type AgentBundleManifest } from './public-agent-bundle.js';
+import { assertPatchSafe, writeJson, type AgentBundleManifest } from './public-agent-bundle.js';
 import { makeDecision, writeDecision } from './public-agent-decision.js';
 
 const root = join(import.meta.dir, '..');
@@ -245,5 +245,33 @@ describe('github-agent-publish', () => {
     const result = runPublish(['--bundle', bundle, '--repo', repo]);
     expect(result.status).toBe(1);
     expect(result.stderr).toContain('unsupported decision schema');
+  });
+});
+
+describe('governance files are immutable to agents', () => {
+  const patchFor = (path: string): string =>
+    [
+      `diff --git a/${path} b/${path}`,
+      `--- a/${path}`,
+      `+++ b/${path}`,
+      '@@ -1 +1 @@',
+      '-old',
+      '+new',
+      '',
+    ].join('\n');
+
+  for (const path of [
+    'docs/CONSTITUTION.md',
+    '.open-autonomy/autonomy.yml',
+    '.open-autonomy/strategy-rubric.yml',
+    '.codex/skills/open-autonomy-strategist/SKILL.md',
+  ]) {
+    test(`rejects a patch that edits ${path}`, () => {
+      expect(() => assertPatchSafe(patchFor(path))).toThrow('may not edit governance file');
+    });
+  }
+
+  test('still allows a normal roadmap edit', () => {
+    expect(() => assertPatchSafe(patchFor('.open-autonomy/roadmap.yml'))).not.toThrow();
   });
 });

@@ -1,0 +1,181 @@
+name: Open Autonomy Strategy Review
+
+on:
+  workflow_dispatch:
+    inputs:
+      pr:
+        description: Strategist PR number to ratify
+        required: true
+        type: string
+  issue_comment:
+    types: [created]
+
+permissions:
+  contents: read
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+
+jobs:
+  strategy-review:
+    # Run on explicit dispatch, or a maintainer "/agent strategy-review" comment on a PR.
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.issue.pull_request != null &&
+       startsWith(github.event.comment.body, '/agent strategy-review'))
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: write
+      pull-requests: write
+      issues: write
+    steps:
+      - name: Resolve PR number
+        id: pr
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "number=${{ inputs.pr }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "number=${{ github.event.issue.number }}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - uses: oven-sh/setup-bun@v2
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile || bun install
+
+      - name: Load PR diff and metadata
+        id: load
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          pr="${{ steps.pr.outputs.number }}"
+          mkdir -p .agent-run/strategy-review
+          gh pr view "$pr" --json number,headRefName,headRefOid,labels,body \
+            > .agent-run/strategy-review/pr.json
+          # Strategy review only applies to strategist-authored proposals.
+          if ! jq -e '.labels[]?.name == "origin:strategist"' .agent-run/strategy-review/pr.json >/dev/null; then
+            echo "not_strategist=true" >> "$GITHUB_OUTPUT"
+            echo "PR #$pr is not a strategist proposal; skipping."
+            exit 0
+          fi
+          gh pr diff "$pr" --name-only > .agent-run/strategy-review/changed.txt
+          gh pr diff "$pr" > .agent-run/strategy-review/roadmap.diff
+          jq -r '.body // ""' .agent-run/strategy-review/pr.json > .agent-run/strategy-review/proposal.txt
+          jq -r '.headRefName' .agent-run/strategy-review/pr.json > .agent-run/strategy-review/branch.txt
+          echo "head_sha=$(jq -r '.headRefOid' .agent-run/strategy-review/pr.json)" >> "$GITHUB_OUTPUT"
+
+      # Deterministic governance guard: a strategist PR may only add roadmap items. Anything
+      # touching the constitution, merit rubric, proof gates, workflows, or skills is hard-blocked.
+      - name: Enforce governance guard
+        if: steps.load.outputs.not_strategist != 'true'
+        id: guard
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          if ! bun scripts/public-agent-strategy-ratify.ts \
+            --roadmap .open-autonomy/roadmap.yml \
+            --changed-files .agent-run/strategy-review/changed.txt; then
+            gh pr edit "${{ steps.pr.outputs.number }}" --add-label human-required || true
+            gh pr comment "${{ steps.pr.outputs.number }}" \
+              --body "Strategy review blocked: a strategist proposal may only add roadmap items, not edit governance files. Human review required."
+            echo "blocked=true" >> "$GITHUB_OUTPUT"
+            exit 1
+          fi
+
+      - name: Mint strategy-review token
+        id: mint
+        if: steps.load.outputs.not_strategist != 'true'
+        env:
+          MODEL_PROXY_URL: ${{ vars.MODEL_PROXY_URL }}
+          MODEL_PROXY_ADMIN_TOKEN: ${{ secrets.MODEL_PROXY_ADMIN_TOKEN }}
+        run: |
+          set -euo pipefail
+          printf '{"number":%s,"title":"Strategy review","body":"","user":{"login":"%s"}}\n' \
+            "${{ steps.pr.outputs.number }}" "${GITHUB_ACTOR}" > .agent-run/strategy-review/issue.json
+          mint_output="$(bun scripts/model-proxy-mint.ts \
+            --issue .agent-run/strategy-review/issue.json \
+            --models "${{ vars.PUBLIC_AGENT_STRATEGY_REVIEW_MODEL || vars.PUBLIC_AGENT_REVIEW_MODEL || vars.PUBLIC_AGENT_PM_MODEL || 'gpt-4o-mini' }}" \
+            --max-usd-cents "${{ vars.PUBLIC_AGENT_STRATEGY_REVIEW_MAX_USD_CENTS || '50' }}" \
+            --max-requests "2" \
+            --purpose review)"
+          run_id="$(printf '%s\n' "$mint_output" | sed -n 's/^run_id=//p' | tail -1)"
+          token="$(printf '%s\n' "$mint_output" | sed -n 's/^token=//p' | tail -1)"
+          echo "::add-mask::$token"
+          echo "run_id=$run_id" >> "$GITHUB_OUTPUT"
+          echo "token=$token" >> "$GITHUB_OUTPUT"
+
+      - name: Ratify proposal against merit criteria
+        id: review
+        if: steps.load.outputs.not_strategist != 'true'
+        env:
+          MODEL_PROXY_URL: ${{ vars.MODEL_PROXY_URL }}
+          MODEL_PROXY_TOKEN: ${{ steps.mint.outputs.token }}
+        run: |
+          set +e
+          bun scripts/public-agent-strategy-review.ts \
+            --diff .agent-run/strategy-review/roadmap.diff \
+            --proposal .agent-run/strategy-review/proposal.txt \
+            --rubric .open-autonomy/strategy-rubric.yml \
+            --constitution docs/CONSTITUTION.md \
+            --provider "${{ vars.PUBLIC_AGENT_STRATEGY_REVIEW_PROVIDER || 'openai' }}" \
+            --model "${{ vars.PUBLIC_AGENT_STRATEGY_REVIEW_MODEL || vars.PUBLIC_AGENT_REVIEW_MODEL || vars.PUBLIC_AGENT_PM_MODEL || 'gpt-4o-mini' }}" \
+            --out .agent-run/strategy-review/verdict.json
+          echo "exit=$?" >> "$GITHUB_OUTPUT"
+          echo "verdict=$(jq -r '.verdict' .agent-run/strategy-review/verdict.json)" >> "$GITHUB_OUTPUT"
+          echo "human_required=$(jq -r '.human_required' .agent-run/strategy-review/verdict.json)" >> "$GITHUB_OUTPUT"
+
+      - name: Revoke strategy-review run
+        if: always() && steps.mint.outputs.run_id != ''
+        env:
+          MODEL_PROXY_URL: ${{ vars.MODEL_PROXY_URL }}
+          MODEL_PROXY_ADMIN_TOKEN: ${{ secrets.MODEL_PROXY_ADMIN_TOKEN }}
+        run: |
+          curl -fsS -X POST -H "x-admin-token: ${MODEL_PROXY_ADMIN_TOKEN}" \
+            "${MODEL_PROXY_URL}/admin/runs/${{ steps.mint.outputs.run_id }}/revoke" || true
+
+      - name: Record decision and ratify
+        if: steps.load.outputs.not_strategist != 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          pr="${{ steps.pr.outputs.number }}"
+          verdict="${{ steps.review.outputs.verdict }}"
+          human_required="${{ steps.review.outputs.human_required }}"
+          summary="$(jq -r '.summary' .agent-run/strategy-review/verdict.json)"
+          bun scripts/public-agent-decision.ts \
+            --stage strategy_review \
+            --issue 0 --pr "$pr" \
+            --actor "open-autonomy-strategy-reviewer" \
+            --decision "$verdict" \
+            --reason "$summary" \
+            --next-action "$([ "$verdict" = "pass" ] && [ "$human_required" != "true" ] && echo merge || echo human_required)" \
+            --out-dir .agent-run/strategy-review/decisions || true
+          gh pr comment "$pr" --body "Strategy review: **${verdict}** (human_required: ${human_required}). ${summary}"
+          if [ "$verdict" = "pass" ] && [ "$human_required" != "true" ]; then
+            branch="$(cat .agent-run/strategy-review/branch.txt)"
+            git config user.name "open-autonomy-strategy-reviewer"
+            git config user.email "open-autonomy-strategy-reviewer@users.noreply.github.com"
+            git fetch origin "$branch"
+            git checkout "$branch"
+            bun scripts/public-agent-strategy-ratify.ts --roadmap .open-autonomy/roadmap.yml --promote
+            if ! git diff --quiet -- .open-autonomy/roadmap.yml; then
+              git add .open-autonomy/roadmap.yml
+              git commit -m "strategy-review: ratify and promote proposed items to planned"
+              git push origin "$branch"
+            fi
+            gh pr merge "$pr" --squash --delete-branch \
+              --subject "strategy: ratify roadmap proposal #${pr}" || \
+              gh pr comment "$pr" --body "Strategy review passed but auto-merge could not complete; human merge required."
+          else
+            gh pr edit "$pr" --add-label human-required || true
+          fi

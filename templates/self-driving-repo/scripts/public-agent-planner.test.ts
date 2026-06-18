@@ -25,6 +25,14 @@ items:
     proof_gate: complete-proof
     acceptance:
       - Nothing left.
+  - id: proposed-item
+    phase: 5
+    priority: high
+    status: proposed
+    title: Proposed Future Work
+    proof_gate: proposed-proof
+    acceptance:
+      - Awaiting human ratification.
 `;
 
 describe('open autonomy planner and control files', () => {
@@ -53,6 +61,13 @@ describe('open autonomy planner and control files', () => {
     expect(actions[0]?.title).toContain('[roadmap:pm-proactive-backlog]');
     expect(actions[0]?.labels).toContain('origin:roadmap-planner');
     expect(actions[0]?.body).toContain('Proof gate: `pm-open-pr-review`');
+  });
+
+  test('planner skips proposed roadmap items until they are ratified', () => {
+    const items = parseRoadmapItems(roadmap);
+    const actions = planRoadmapIssues(items, []);
+    expect(actions.every((action) => action.item.status !== 'proposed')).toBe(true);
+    expect(actions.map((action) => action.item.id)).not.toContain('proposed-item');
   });
 
   test('planner updates existing roadmap issues that are missing labels', () => {

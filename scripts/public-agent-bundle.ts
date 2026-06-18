@@ -241,6 +241,24 @@ export function patchTouchedPaths(patchText: string): string[] {
   return [...paths].sort();
 }
 
+// Governance files the autonomy may never patch. Changing these would let the system
+// rewrite the rules that govern it — the constitution and its merit criteria, the agent
+// skills, and the autonomy policy. The optimizer must not edit its own oracle, so this
+// floor is hard-coded here rather than read from a config file that is itself in the set
+// (which would be circular and editable). Workflows and .git are blocked separately below.
+export const IMMUTABLE_AGENT_PATHS = [
+  'docs/CONSTITUTION.md',
+  '.open-autonomy/autonomy.yml',
+  '.open-autonomy/strategy-rubric.yml',
+  '.codex/skills/**',
+];
+
+// Returns the first changed path that is a governance file (immutable to agents), or undefined.
+// Used to guard direct-PR paths (e.g. the strategist's roadmap PR) that bypass the patch publisher.
+export function touchesGovernancePath(paths: string[]): string | undefined {
+  return paths.find((path) => matchesAnyAllowedPath(path, IMMUTABLE_AGENT_PATHS) || path.startsWith('.github/workflows/'));
+}
+
 export function assertPatchSafe(patchText: string, policy = DEFAULT_PATCH_POLICY): void {
   assertPatchTextSafe(patchText);
   for (const path of patchTouchedPaths(patchText)) {
@@ -248,6 +266,9 @@ export function assertPatchSafe(patchText: string, policy = DEFAULT_PATCH_POLICY
     if (path === '.gitmodules') throw new Error('agent patch may not edit .gitmodules');
     if (path.startsWith('.github/workflows/')) throw new Error('agent patch may not edit GitHub workflows');
     if (path.startsWith('.git/')) throw new Error('agent patch may not edit .git');
+    if (matchesAnyAllowedPath(path, IMMUTABLE_AGENT_PATHS)) {
+      throw new Error(`agent patch may not edit governance file: ${path}`);
+    }
     if (!matchesAnyAllowedPath(path, policy.allowedPaths)) throw new Error(`agent patch path is not allowed by policy: ${path}`);
   }
   assertNoRealLookingSecretsFromText(patchText);

@@ -1,6 +1,7 @@
 schema: open-autonomy.roadmap.v1
-direction: Build an OSS self-driving repository template that can maintain itself
-  and install the same autonomy loop into other repositories.
+direction: Pursue the north star and merit criteria in docs/CONSTITUTION.md. The strategist
+  proposes strategy toward that north star and humans ratify it; this file records the
+  resulting roadmap items and their proof gates.
 items:
   - id: durable-decision-memory
     phase: 1

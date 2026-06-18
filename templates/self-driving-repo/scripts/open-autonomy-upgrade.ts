@@ -22,12 +22,27 @@ interface Options {
   apply: boolean;
 }
 
+// Template-owned files: propagated verbatim (overwrite on drift). These are the shared
+// mechanism — workflows, scripts, agent skills, coding standards, rubrics, policy wiring.
 const MANAGED_PREFIXES = [
   '.github/workflows/',
   '.open-autonomy/',
+  '.codex/skills/',
   'scripts/',
-  'AGENTS.md',
+  'docs/standards/',
   'VERSION',
+];
+
+// Local-owned files: seeded into a new repo if missing, but NEVER overwritten by upgrade,
+// because each installed repo customizes its own roadmap, agent config, and constitution
+// (its north star and merit criteria). Propagating these verbatim would clobber the very
+// things the repo is meant to own.
+const SEED_ONLY_PATHS = [
+  '.open-autonomy/roadmap.yml',
+  '.open-autonomy/autonomy.yml',
+  '.open-autonomy/strategist-sources.json',
+  'docs/CONSTITUTION.md',
+  'AGENTS.md',
 ];
 
 function usage(): never {
@@ -60,6 +75,9 @@ export function buildUpgradePlan(template: string, target: string): UpgradePlan 
     const targetPath = join(target, file);
     if (!existsSync(targetPath)) {
       changes.push({ path: file, action: 'add' });
+    } else if (isSeedOnly(file)) {
+      // Local-owned and already present: never overwrite the repo's own roadmap/config/constitution.
+      continue;
     } else if (readFileSync(targetPath, 'utf8') !== templateText) {
       changes.push({ path: file, action: 'update' });
     }
@@ -96,7 +114,7 @@ function managedFiles(root: string): string[] {
   }
   return walk(root)
     .map((path) => relative(root, path))
-    .filter((path) => isManaged(path))
+    .filter((path) => isInScope(path))
     .sort();
 }
 
@@ -114,6 +132,14 @@ function walk(root: string): string[] {
 
 function isManaged(path: string): boolean {
   return MANAGED_PREFIXES.some((prefix) => path === prefix || path.startsWith(prefix));
+}
+
+function isSeedOnly(path: string): boolean {
+  return SEED_ONLY_PATHS.includes(path);
+}
+
+function isInScope(path: string): boolean {
+  return isManaged(path) || isSeedOnly(path);
 }
 
 async function main(): Promise<void> {

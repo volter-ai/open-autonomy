@@ -25,7 +25,17 @@ env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
 
 concurrency:
-  group: public-agent-${{ github.event.issue.number || inputs.issue_number }}
+  # Operator-control commands (cancel/pause/resume/status/retry) get a separate group so they are
+  # NOT serialized behind the develop/review run they are meant to control — otherwise `/agent cancel`
+  # would queue until the run it targets has already finished.
+  group: >-
+    public-agent-${{ github.event.issue.number || inputs.issue_number }}${{
+    (startsWith(github.event.comment.body || inputs.command || '', '/agent cancel')
+    || startsWith(github.event.comment.body || inputs.command || '', '/agent pause')
+    || startsWith(github.event.comment.body || inputs.command || '', '/agent resume')
+    || startsWith(github.event.comment.body || inputs.command || '', '/agent status')
+    || startsWith(github.event.comment.body || inputs.command || '', '/agent retry'))
+    && '-control' || '' }}
   cancel-in-progress: false
 
 jobs:
@@ -133,6 +143,16 @@ jobs:
           fi
           bun scripts/public-agent-target.ts "${args[@]}" || true
 
+      - name: Record run id for cancel
+        if: steps.command.outputs.verb == 'develop' && steps.target.outputs.issue != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # Durable run->issue link so `/agent cancel` can find this run regardless of how GitHub
+          # renders the run displayTitle (issue_comment runs show the workflow name, not the issue).
+          gh issue comment "${{ steps.target.outputs.issue }}" \
+            --body "<!-- public-agent-run:${GITHUB_RUN_ID} -->" || true
+
       - name: Read policy context
         if: steps.target.outputs.can_develop == 'true'
         env:
@@ -232,11 +252,18 @@ jobs:
           gh label create human-required --description "Requires maintainer attention before autonomous work" --color B60205 2>/dev/null || true
 
           active_runs() {
-            gh run list \
-              --workflow public-agent.yml \
-              --limit 50 \
-              --json databaseId,status,conclusion,displayTitle,url \
-              --jq ".[] | select((.displayTitle | contains(\"#${issue}\")) and (.status == \"queued\" or .status == \"in_progress\" or .status == \"waiting\" or .status == \"requested\"))"
+            # GitHub renders issue_comment develop runs with the workflow name as displayTitle (the
+            # run-name "#<issue>" is not applied), so match instead on the run-id markers that each
+            # develop run records on its issue. Emit the still-active run ids, one per line.
+            gh issue view "$issue" --json comments --jq '.comments[].body' 2>/dev/null \
+              | grep -oE 'public-agent-run:[0-9]+' | sed 's/.*://' | sort -u \
+              | while IFS= read -r rid; do
+                  [[ -z "$rid" ]] && continue
+                  st="$(gh run view "$rid" --json status --jq .status 2>/dev/null || echo)"
+                  case "$st" in
+                    in_progress|queued|waiting|requested) echo "$rid" ;;
+                  esac
+                done
           }
 
           proxy_status() {
@@ -280,7 +307,7 @@ jobs:
                 fi
                 gh run cancel "$run_id" || true
                 cancelled=$((cancelled + 1))
-              done < <(active_runs | jq -r '.databaseId')
+              done < <(active_runs)
 
               revoked=0
               status_json="$(proxy_status)"
@@ -918,7 +945,10 @@ jobs:
             > .agent-run/issue.json
           gh issue view "$issue" --json comments > .agent-run/issue-comments.json
           gh issue view "$pr" --json comments > .agent-run/pr-comments.json
-          gh issue view "$pr" --json labels,comments > .agent-run/merge-blockers.json
+          gh issue view "$pr" --json labels,comments > .agent-run/pr-blockers.json
+          gh issue view "$issue" --json labels > .agent-run/issue-labels.json
+          jq -s '{labels: ((.[0].labels // []) + (.[1].labels // []) | unique_by(.name)), comments: (.[0].comments // [])}' \
+            .agent-run/pr-blockers.json .agent-run/issue-labels.json > .agent-run/merge-blockers.json
           head_sha="$(gh pr view "$pr" --json headRefOid --jq .headRefOid)"
           jq -n \
             --arg branch "$TARGET_BRANCH" \

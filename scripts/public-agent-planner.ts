@@ -103,7 +103,9 @@ export function parseRoadmapItems(text: string): RoadmapItem[] {
 
 export function planRoadmapIssues(items: RoadmapItem[], existingIssues: ExistingIssue[] = []): PlannerAction[] {
   return items
-    .filter((item) => item.status !== 'done')
+    // Skip done items (already proven) and proposed items (await human ratification before
+    // they become tracked work).
+    .filter((item) => item.status !== 'done' && item.status !== 'proposed')
     .map((item) => {
       const labels = [`roadmap:phase-${item.phase}`, `priority:${item.priority}`, 'origin:roadmap-planner', `proof:${item.proof_gate}`];
       const title = `[roadmap:${item.id}] ${item.title}`;

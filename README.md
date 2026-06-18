@@ -1,5 +1,7 @@
 # open-autonomy
 
+[![funding](https://volter-agent-model-proxy.aaron-0ed.workers.dev/v1/funding/runway.svg)](https://github.com/sponsors/volter-ai)
+
 `open-autonomy` is an open-source kit for making a GitHub repository drive its
 own maintenance work through issues, bounded agent runs, review gates, and
 operator controls.

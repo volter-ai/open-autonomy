@@ -5,17 +5,23 @@ import { spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname } from 'node:path';
 
+// A session's whole lifecycle. Without `done`/`failed`, list() never reflects reality —
+// a finished session would read as `running` forever. So update is not optional.
+export type SessionStatus = 'running' | 'paused' | 'cancelled' | 'done' | 'failed';
+
 export interface Session {
   id: string;
   role: string;
   issue?: string;
-  status: 'running' | 'cancelled';
+  status: SessionStatus;
 }
 
 export interface Runner {
-  launch(role: string, issue?: string): Session; // create
-  list(): Session[]; // read (running only)
-  cancel(id: string): boolean; // delete
+  launch(role: string, issue?: string): Session; // C — create
+  get(id: string): Session | undefined; // R — read one
+  list(): Session[]; // R — read all (running)
+  update(id: string, patch: { status?: SessionStatus; issue?: string }): boolean; // U — transition
+  cancel(id: string): boolean; // D — delete
 }
 
 // Default backend: records sessions to a JSON state file and invokes a pluggable launch command
@@ -47,16 +53,23 @@ export class ExecRunner implements Runner {
     }
     return session;
   }
+  get(id: string): Session | undefined {
+    return this.read().find((s) => s.id === id);
+  }
   list(): Session[] {
     return this.read().filter((s) => s.status === 'running');
   }
-  cancel(id: string): boolean {
+  update(id: string, patch: { status?: SessionStatus; issue?: string }): boolean {
     const sessions = this.read();
     const target = sessions.find((s) => s.id === id);
     if (!target) return false;
-    target.status = 'cancelled';
+    if (patch.status) target.status = patch.status;
+    if (patch.issue !== undefined) target.issue = patch.issue;
     this.write(sessions);
     return true;
+  }
+  cancel(id: string): boolean {
+    return this.update(id, { status: 'cancelled' });
   }
 }
 
@@ -75,12 +88,19 @@ export class TermfleetRunner implements Runner {
     );
     return { id, role, issue, status: 'running' };
   }
+  get(id: string): Session | undefined {
+    return this.list().find((s) => s.id === id);
+  }
   list(): Session[] {
     const r = spawnSync(`${this.cli} list --url '${this.url}'`, { shell: true, encoding: 'utf8' });
     if (r.status || !r.stdout.trim()) return [];
     return (JSON.parse(r.stdout) as Array<{ name: string; agent: string }>)
       .filter((p) => p.agent !== 'no-agent')
       .map((p) => ({ id: p.name, role: p.name.replace(/^ztrack-/, ''), status: 'running' as const }));
+  }
+  update(id: string, patch: { status?: SessionStatus }): boolean {
+    // termfleet tracks only liveness; the one meaningful transition it can honor is cancellation.
+    return patch.status === 'cancelled' ? this.cancel(id) : true;
   }
   cancel(id: string): boolean {
     return !spawnSync(`${this.cli} kill '${id}' --url '${this.url}'`, { shell: true, stdio: 'inherit' }).status;

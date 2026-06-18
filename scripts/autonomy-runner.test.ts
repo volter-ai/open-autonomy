@@ -34,6 +34,25 @@ test('autonomy CLI: launch → list → cancel over the exec backend', () => {
   expect(listed[0].issue).toBe('I2');
 });
 
+test('autonomy get reads one session; update transitions it out of list (done ≠ running)', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'autonomy-cli-'));
+
+  const s = JSON.parse(run(dir, ['launch', 'develop', '--issue', 'I7']).stdout);
+
+  // R (read one)
+  const got = JSON.parse(run(dir, ['get', s.id]).stdout);
+  expect(got.role).toBe('develop');
+  expect(got.status).toBe('running');
+
+  // a missing id reads as not-found
+  expect(run(dir, ['get', 'nope']).status).toBe(1);
+
+  // U (transition): mark the finished session done — the fix for "list shows it as running forever"
+  expect(run(dir, ['update', s.id, '--status', 'done']).status).toBe(0);
+  expect(JSON.parse(run(dir, ['list']).stdout).length).toBe(0); // gone from running
+  expect(JSON.parse(run(dir, ['get', s.id]).stdout).status).toBe('done'); // still readable
+});
+
 test('autonomy launch invokes the pluggable backend with the role in env', () => {
   const dir = mkdtempSync(join(tmpdir(), 'autonomy-cli-'));
   const log = join(dir, 'backend.log');

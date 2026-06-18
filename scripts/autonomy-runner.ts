@@ -97,17 +97,29 @@ export class TermfleetRunner implements Runner {
       promptFile && existsSync(promptFile)
         ? `--prompt-file ${JSON.stringify(promptFile)}`
         : `--prompt ${JSON.stringify(agent)}`;
+    // --name is only a LABEL (which agent). The session IDENTITY is whatever termfleet assigns and
+    // RETURNS (terminalId) — the runner RECEIVES it and never invents one, so repeat launches of the
+    // same agent get distinct ids instead of colliding.
     const r = spawnSync(
       `${this.cli} ${this.model} new -y --url ${JSON.stringify(this.url)} --name ${JSON.stringify(agent)} --cwd ${JSON.stringify(process.cwd())} ${promptArg} --setup-command ${JSON.stringify(setup)}`,
       { shell: true, encoding: 'utf8' },
     );
-    let ref: string | undefined;
+    let created: { terminalId?: string; agentSessionId?: string } = {};
     try {
-      ref = JSON.parse(r.stdout)?.agentSessionId;
+      created = JSON.parse(r.stdout);
     } catch {
-      /* non-JSON (e.g. -y review) → no ref */
+      /* non-JSON (e.g. -y review) */
     }
-    return { id: agent, agent, status: 'running', ...(ref ? { ref } : {}), ...(Object.keys(params).length ? { params } : {}) };
+    if (!created.terminalId) {
+      throw new Error(`termfleet returned no terminalId for agent "${agent}": ${r.stdout || r.stderr}`);
+    }
+    return {
+      id: created.terminalId,
+      agent,
+      status: 'running',
+      ...(created.agentSessionId ? { ref: created.agentSessionId } : {}),
+      ...(Object.keys(params).length ? { params } : {}),
+    };
   }
   get(id: string): Session | undefined {
     return this.list().find((s) => s.id === id);
@@ -118,8 +130,9 @@ export class TermfleetRunner implements Runner {
       encoding: 'utf8',
     });
     if (r.status || !r.stdout.trim()) return [];
-    return (JSON.parse(r.stdout) as Array<{ name: string }>).map((w) => ({
-      id: w.name,
+    // id = the terminalId termfleet owns; agent = the label we launched it under (the window name).
+    return (JSON.parse(r.stdout) as Array<{ name: string; terminalId: string }>).map((w) => ({
+      id: w.terminalId,
       agent: w.name,
       status: 'running' as const,
     }));
@@ -128,7 +141,16 @@ export class TermfleetRunner implements Runner {
     return patch.status === 'cancelled' ? this.cancel(id) : true;
   }
   cancel(id: string): boolean {
-    return !spawnSync(`${this.cli} ${this.model} kill --url ${JSON.stringify(this.url)} --name ${JSON.stringify(id)}`, {
+    // id is the terminalId; resolve it to termfleet's numeric window id, then kill that one window.
+    const r = spawnSync(`${this.cli} ${this.model} list --url ${JSON.stringify(this.url)}`, { shell: true, encoding: 'utf8' });
+    let windowId: number | undefined;
+    try {
+      windowId = (JSON.parse(r.stdout) as Array<{ id: number; terminalId: string }>).find((w) => w.terminalId === id)?.id;
+    } catch {
+      /* ignore */
+    }
+    if (windowId === undefined) return false;
+    return !spawnSync(`${this.cli} ${this.model} kill --url ${JSON.stringify(this.url)} --id ${windowId}`, {
       shell: true,
       stdio: 'inherit',
     }).status;

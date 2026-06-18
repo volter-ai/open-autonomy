@@ -18,11 +18,13 @@ env:
 
 jobs:
   strategy-review:
-    # Run on explicit dispatch, or a maintainer "/agent strategy-review" comment on a PR.
+    # Run on explicit dispatch, a "/agent strategy-review" comment (model review), or a maintainer
+    # "/agent ratify" comment (human-in-the-loop approval of a proposal the reviewer escalated).
     if: >-
       github.event_name == 'workflow_dispatch' ||
       (github.event.issue.pull_request != null &&
-       startsWith(github.event.comment.body, '/agent strategy-review'))
+       (startsWith(github.event.comment.body, '/agent strategy-review') ||
+        startsWith(github.event.comment.body, '/agent ratify')))
     runs-on: ubuntu-latest
     timeout-minutes: 20
     permissions:
@@ -41,6 +43,21 @@ jobs:
           else
             echo "number=${{ github.event.issue.number }}" >> "$GITHUB_OUTPUT"
           fi
+
+      # Mode: "ratify" is a maintainer's human-in-the-loop approval (overrides the model verdict,
+      # but NOT the deterministic governance guard); anything else runs the model review.
+      - name: Determine mode
+        id: mode
+        run: |
+          case "${{ github.event_name }}|${{ github.event.comment.body }}" in
+            "workflow_dispatch|"*) echo "mode=review" >> "$GITHUB_OUTPUT" ;;
+            *"|/agent ratify"*)
+              case "${{ github.event.comment.author_association }}" in
+                OWNER|MEMBER|COLLABORATOR) echo "mode=ratify" >> "$GITHUB_OUTPUT" ;;
+                *) echo "::error::only a maintainer (OWNER/MEMBER/COLLABORATOR) may /agent ratify"; exit 1 ;;
+              esac ;;
+            *) echo "mode=review" >> "$GITHUB_OUTPUT" ;;
+          esac
 
       - uses: actions/checkout@v4
 
@@ -92,7 +109,7 @@ jobs:
 
       - name: Mint strategy-review token
         id: mint
-        if: steps.load.outputs.not_strategist != 'true'
+        if: steps.load.outputs.not_strategist != 'true' && steps.mode.outputs.mode == 'review'
         env:
           MODEL_PROXY_URL: ${{ vars.MODEL_PROXY_URL }}
           MODEL_PROXY_ADMIN_TOKEN: ${{ secrets.MODEL_PROXY_ADMIN_TOKEN }}
@@ -114,7 +131,7 @@ jobs:
 
       - name: Ratify proposal against merit criteria
         id: review
-        if: steps.load.outputs.not_strategist != 'true'
+        if: steps.load.outputs.not_strategist != 'true' && steps.mode.outputs.mode == 'review'
         env:
           MODEL_PROXY_URL: ${{ vars.MODEL_PROXY_URL }}
           MODEL_PROXY_TOKEN: ${{ steps.mint.outputs.token }}
@@ -147,19 +164,26 @@ jobs:
         run: |
           set -euo pipefail
           pr="${{ steps.pr.outputs.number }}"
-          verdict="${{ steps.review.outputs.verdict }}"
-          human_required="${{ steps.review.outputs.human_required }}"
-          summary="$(jq -r '.summary' .agent-run/strategy-review/verdict.json)"
+          if [ "${{ steps.mode.outputs.mode }}" = "ratify" ]; then
+            # Human-in-the-loop approval: overrides the model verdict (the governance guard above
+            # still ran). The promote->CI->merge mechanics below stay fully automated.
+            verdict="pass"; human_required="false"; actor="human-operator"
+            summary="Ratified by maintainer ${{ github.actor }} (human-in-the-loop)."
+          else
+            verdict="${{ steps.review.outputs.verdict }}"; human_required="${{ steps.review.outputs.human_required }}"; actor="open-autonomy-strategy-reviewer"
+            summary="$(jq -r '.summary' .agent-run/strategy-review/verdict.json)"
+          fi
           bun scripts/public-agent-decision.ts \
             --stage strategy_review \
             --issue 0 --pr "$pr" \
-            --actor "open-autonomy-strategy-reviewer" \
+            --actor "$actor" \
             --decision "$verdict" \
             --reason "$summary" \
             --next-action "$([ "$verdict" = "pass" ] && [ "$human_required" != "true" ] && echo merge || echo human_required)" \
             --out-dir .agent-run/strategy-review/decisions || true
-          gh pr comment "$pr" --body "Strategy review: **${verdict}** (human_required: ${human_required}). ${summary}"
+          gh pr comment "$pr" --body "Strategy review (${actor}): **${verdict}** (human_required: ${human_required}). ${summary}"
           if [ "$verdict" = "pass" ] && [ "$human_required" != "true" ]; then
+            gh pr edit "$pr" --remove-label human-required || true
             branch="$(cat .agent-run/strategy-review/branch.txt)"
             git config user.name "open-autonomy-strategy-reviewer"
             git config user.email "open-autonomy-strategy-reviewer@users.noreply.github.com"

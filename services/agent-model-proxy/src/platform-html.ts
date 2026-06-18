@@ -118,7 +118,9 @@ function topbar(): string {
 
 export function renderExplore(entries: DirectoryEntry[]): string {
   const listed = entries.filter((e) => e.listed);
-  const totalIn = listed.reduce((s, e) => s + e.granted_in_usd_cents, 0);
+  // Net money into listed projects: granted_in minus granted_out cancels internal redistribution
+  // (a grant is one project's inflow and another's outflow), so the fleet total isn't double-counted.
+  const totalIn = listed.reduce((s, e) => s + (e.granted_in_usd_cents - e.granted_out_usd_cents), 0);
   const totalSpent = listed.reduce((s, e) => s + e.consumed_usd_cents, 0);
   const patrons = listed.reduce((s, e) => s + e.patron_count, 0);
 
@@ -225,7 +227,7 @@ export function renderProject(v: ProjectView): string {
         <div class="panel">
           <h2>Transparency</h2>
           <img src="/v1/accounts/${enc}/runway.svg" width="460" height="116" style="max-width:100%;border-radius:8px" alt="runway">
-          <div class="stats" style="margin-top:10px"><span>in ${usd(v.granted_in_usd_cents)}</span><span>spent ${usd(v.consumed_usd_cents)}</span><span>balance ${usd(v.balance_usd_cents)}</span></div>
+          <div class="stats" style="margin-top:10px"><span>in ${usd(v.granted_in_usd_cents)}</span>${v.granted_out_usd_cents > 0 ? `<span>funded onward ${usd(v.granted_out_usd_cents)}</span>` : ''}<span>spent ${usd(v.consumed_usd_cents)}</span><span>balance ${usd(v.balance_usd_cents)}</span></div>
         </div>
         <div class="panel">
           <h2>Patrons</h2>

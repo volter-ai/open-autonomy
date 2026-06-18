@@ -532,6 +532,7 @@ export class LimitLedger implements DurableObject {
       paused: f.paused,
       balance_usd_cents: f.balance_usd_cents,
       granted_in_usd_cents: f.granted_in_usd_cents,
+      granted_out_usd_cents: f.granted_out_usd_cents,
       consumed_usd_cents: f.consumed_usd_cents,
       burn_per_day_usd_cents: f.burn_per_day_usd_cents,
       runway_days: f.runway_days,
@@ -662,6 +663,7 @@ export interface DirectoryEntry {
   paused: boolean;
   balance_usd_cents: number;
   granted_in_usd_cents: number;
+  granted_out_usd_cents: number;
   consumed_usd_cents: number;
   burn_per_day_usd_cents: number;
   runway_days: number | null;

@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import { LimitLedger, LimitLedgerClient, type LimitConfig } from '../src/limit-ledger.js';
+import { renderExplore, renderProject } from '../src/platform-html.js';
 import { MemoryDurableObjectNamespace } from './memory-do.js';
 
 function ledger(): LimitLedgerClient {
@@ -145,5 +146,34 @@ describe('platform: surplus-above-goal redistribution', () => {
     expect((patron?.amount_label ?? '').includes('granted')).toBe(true);
     // the funding project also counts toward the recipient's patron total on its card
     expect(view.patron_count).toBe(1);
+  });
+});
+
+describe('platform: money reconciles (grants-out are not hidden or double-counted)', () => {
+  const now = () => new Date().toISOString();
+
+  test("a funder's page shows funded-onward so in − onward − spent = balance", async () => {
+    const l = ledger();
+    await l.mint('acme/widget', 10000);
+    await l.grantSurplus('acme/widget', 'beta/helper', 2000);
+    const v = await l.project('acme/widget');
+    expect(v.granted_out_usd_cents).toBe(2000);
+    expect(v.granted_in_usd_cents - v.granted_out_usd_cents - v.consumed_usd_cents).toBe(v.balance_usd_cents);
+    const html = renderProject(v);
+    expect(html.includes('funded onward')).toBe(true);
+    expect(html.includes('$20.00')).toBe(true);
+  });
+
+  test('explore fleet total nets internal grants instead of double-counting', async () => {
+    const l = ledger();
+    await l.mint('acme/widget', 10000);
+    await l.setProfile('acme/widget', { synced_at: now() });
+    await l.grantSurplus('acme/widget', 'beta/helper', 2000);
+    await l.setProfile('beta/helper', { synced_at: now() });
+    const { entries } = await l.directory();
+    const html = renderExplore(entries);
+    // only $100 of real money was minted; the $20 internal grant must not inflate it to $120
+    expect(html.includes('$100')).toBe(true);
+    expect(html.includes('$120')).toBe(false);
   });
 });

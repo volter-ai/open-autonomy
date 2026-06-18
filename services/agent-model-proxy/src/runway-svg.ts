@@ -32,7 +32,10 @@ function escapeXml(s: string): string {
 const fmtDays = (d: number) => (d > 9999 ? '9999+' : String(Math.max(0, Math.round(d))));
 
 export function renderRunwaySvg(f: FundingSnapshot): string {
-  const budget = f.granted_in_usd_cents;
+  // A project's own budget is what it received minus what it granted onward to other projects —
+  // money it passed down the tree was never its to spend, so excluding it keeps "X left of Y"
+  // reconciling with balance + spend.
+  const budget = f.granted_in_usd_cents - f.granted_out_usd_cents;
   const remaining = f.balance_usd_cents;
 
   // State -> color + fill fraction + line 1 (runway) + line 2 (small-font method note).

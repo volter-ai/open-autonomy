@@ -1,3 +1,4 @@
+import { estimateRunway } from './burn-estimate.js';
 import { json } from './errors.js';
 import type { RunClaims } from './types.js';
 
@@ -371,9 +372,8 @@ export class LimitLedger implements DurableObject {
     const grantedOut = a?.granted_out_usd_cents ?? 0;
     const consumed = a?.consumed_usd_cents ?? 0;
     const balance = grantedIn - grantedOut - consumed;
-    const burn = a ? burnPerDay(a) : 0;
     const funded = grantedIn > 0;
-    const runwayDays = !funded || burn <= 0 ? null : balance / burn;
+    const est = estimateRunway(balance, a ? completedDailySeries(a.daily_spend) : []);
     return {
       account,
       funded,
@@ -382,8 +382,12 @@ export class LimitLedger implements DurableObject {
       granted_in_usd_cents: grantedIn,
       granted_out_usd_cents: grantedOut,
       consumed_usd_cents: consumed,
-      burn_per_day_usd_cents: Math.round(burn),
-      runway_days: runwayDays,
+      burn_per_day_usd_cents: est.burn_per_day_usd_cents,
+      runway_days: funded ? est.runway_days : null,
+      runway_lo_days: funded ? est.runway_lo_days : null,
+      runway_hi_days: funded ? est.runway_hi_days : null,
+      days_observed: est.days_observed,
+      runway_confident: funded && est.confident,
       sponsors: a ? activeSponsors(a) : [],
     };
   }
@@ -455,10 +459,24 @@ function recordDailySpend(a: Account, amount: number): void {
   while (days.length > 14) delete a.daily_spend[days.shift() as string];
 }
 
-function burnPerDay(a: Account): number {
-  const amounts = Object.entries(a.daily_spend).sort(([x], [y]) => (x < y ? 1 : -1)).slice(0, 7).map(([, v]) => v);
-  if (!amounts.length) return 0;
-  return amounts.reduce((sum, v) => sum + v, 0) / amounts.length;
+// Completed-day spend series (idle days as 0, current partial day excluded), over the recorded
+// window capped to the trailing 14 days — the evidence fed to the Bayesian runway estimate.
+function completedDailySeries(daily: Record<string, number>): number[] {
+  const keys = Object.keys(daily).sort();
+  if (!keys.length) return [];
+  const today = dayKey();
+  const series: number[] = [];
+  for (let d = keys[0]; d < today; d = nextDay(d)) {
+    series.push(daily[d] ?? 0);
+    if (series.length > 14) series.shift();
+  }
+  return series;
+}
+
+function nextDay(key: string): string {
+  const dt = new Date(`${key}T00:00:00Z`);
+  dt.setUTCDate(dt.getUTCDate() + 1);
+  return dt.toISOString().slice(0, 10);
 }
 
 function activeSponsors(a: Account): Sponsor[] {
@@ -599,5 +617,9 @@ export interface FundingSnapshot {
   consumed_usd_cents: number;
   burn_per_day_usd_cents: number;
   runway_days: number | null;
+  runway_lo_days: number | null;
+  runway_hi_days: number | null;
+  days_observed: number;
+  runway_confident: boolean;
   sponsors: Sponsor[];
 }

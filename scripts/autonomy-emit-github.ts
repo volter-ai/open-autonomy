@@ -41,14 +41,28 @@ export function emitAutonomy(ir: AutonomyIR): OAManifest {
   };
 }
 
-// --- Full file-tree compile (github-actions = a TRIGGER TRANSPORT, not a runner) ---
-// github isn't a different runner — it's just an Actions cron that calls the SAME runner as local.
-// A launch: workflow runs `autonomy launch <agent>` (→ termfleet, reachable at TERMFLEET_PROVIDER_URL,
-// e.g. a tunneled/remote provider); a run: workflow runs the script. autonomy.yml carries agent-triggers.
+// --- Full file-tree compile (github runner = Actions + a model proxy, à la open-autonomy) ---
+// On github the runner is the Actions job itself: a launch: workflow RUNS the agent in-job, with model
+// access through a bounded proxy (MODEL_PROXY_URL) — exactly open-autonomy's public-agent model, not
+// termfleet. The agent's own nested dispatch uses the github runner (`gh workflow run <agent>.yml`).
+// A run: workflow just runs the script on cron.
 function workflowYml(wf: IRWorkflow): string {
-  const action = wf.launch
-    ? `      - run: autonomy launch ${wf.launch}`
-    : `      - run: node ${wf.run}`;
+  if (wf.run) {
+    return [
+      `name: ${wf.name}`,
+      `on:`,
+      `  schedule:`,
+      `    - cron: "${wf.cron}"`,
+      `  workflow_dispatch: {}`,
+      `jobs:`,
+      `  ${wf.name}:`,
+      `    runs-on: ubuntu-latest`,
+      `    steps:`,
+      `      - uses: actions/checkout@v4`,
+      `      - run: node ${wf.run}`,
+      ``,
+    ].join('\n');
+  }
   return [
     `name: ${wf.name}`,
     `on:`,
@@ -59,10 +73,13 @@ function workflowYml(wf: IRWorkflow): string {
     `  ${wf.name}:`,
     `    runs-on: ubuntu-latest`,
     `    env:`,
-    `      TERMFLEET_PROVIDER_URL: \${{ secrets.TERMFLEET_PROVIDER_URL }}`,
-    `      TERMFLEET_AGENT: claude`,
+    `      MODEL_PROXY_URL: \${{ vars.MODEL_PROXY_URL }}`,
+    `      MODEL_PROXY_TOKEN: \${{ secrets.MODEL_PROXY_TOKEN }}`,
     `    steps:`,
-    action,
+    `      - uses: actions/checkout@v4`,
+    `      - uses: oven-sh/setup-bun@v2`,
+    `      - run: bun install --frozen-lockfile || bun install`,
+    `      - run: bun scripts/run-agent.ts --agent ${wf.launch}  # runs the agent in-job via the model proxy`,
     ``,
   ].join('\n');
 }

@@ -45,12 +45,12 @@ function avatar(p: { avatar_url?: string }, size: number): string {
 }
 
 function goalLine(e: DirectoryEntry): { label: string; frac: number } {
-  if (e.runway_confident && e.runway_days !== null) {
-    const days = Math.max(0, Math.round(e.runway_days));
-    return { label: `${days} of ${e.goal_days} days funded`, frac: Math.min(1, days / e.goal_days) };
-  }
-  if (!e.funded || e.balance_usd_cents <= 0) return { label: `0 of ${e.goal_days} days funded`, frac: 0 };
-  return { label: `estimating runway…`, frac: 0 };
+  if (!e.funded || e.balance_usd_cents <= 0) return { label: 'awaiting funding', frac: 0 };
+  // Bayesian estimate is always available (prior-backed when data is thin), so always show days.
+  const raw = e.runway_days !== null ? Math.max(0, Math.round(e.runway_days)) : 0;
+  const shown = raw > 9999 ? '9999+' : String(raw);
+  const label = raw >= e.goal_days ? `${shown} days funded — goal met` : `${shown} of ${e.goal_days} days funded`;
+  return { label, frac: Math.min(1, raw / Math.max(1, e.goal_days)) };
 }
 
 function bar(frac: number, color: string): string {

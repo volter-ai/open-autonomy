@@ -460,7 +460,7 @@ export class LimitLedger implements DurableObject {
     const consumed = a?.consumed_usd_cents ?? 0;
     const balance = grantedIn - grantedOut - consumed;
     const funded = grantedIn > 0;
-    const est = estimateRunway(balance, a ? completedDailySeries(a.daily_spend) : []);
+    const est = estimateRunway(balance, a ? dailySpendSeries(a.daily_spend) : []);
     return {
       account,
       funded,
@@ -702,14 +702,15 @@ function recordDailySpend(a: Account, amount: number): void {
   while (days.length > 14) delete a.daily_spend[days.shift() as string];
 }
 
-// Completed-day spend series (idle days as 0, current partial day excluded), over the recorded
-// window capped to the trailing 14 days — the evidence fed to the Bayesian runway estimate.
-function completedDailySeries(daily: Record<string, number>): number[] {
+// Daily spend series (idle days as 0), including today's spend so far, over the recorded window
+// capped to the trailing 14 days — the evidence fed to the Bayesian runway estimate. With no spend
+// the series is empty and the estimate falls back to the prior (a posterior is never empty).
+function dailySpendSeries(daily: Record<string, number>): number[] {
   const keys = Object.keys(daily).sort();
   if (!keys.length) return [];
   const today = dayKey();
   const series: number[] = [];
-  for (let d = keys[0]; d < today; d = nextDay(d)) {
+  for (let d = keys[0]; d <= today; d = nextDay(d)) {
     series.push(daily[d] ?? 0);
     if (series.length > 14) series.shift();
   }

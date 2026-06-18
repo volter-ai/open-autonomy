@@ -58,15 +58,13 @@ export function renderRunwaySvg(f: FundingSnapshot): string {
     frac = Math.max(0.02, Math.min(1, remaining / budget));
     color = frac > 0.25 ? COLORS.green : COLORS.amber;
     headline = `${usd(remaining)} left of ${usd(budget)}`;
-    if (f.runway_confident && f.runway_days !== null) {
-      sub = `~${fmtDays(f.runway_days)} days of runway · ~${usd(f.burn_per_day_usd_cents)}/day`;
-      const lo = f.runway_lo_days !== null ? fmtDays(f.runway_lo_days) : '?';
-      const hi = f.runway_hi_days !== null ? fmtDays(f.runway_hi_days) : '?';
-      note = `Bayesian: posterior $/day from ${f.days_observed}d + prior · 80% CI ${lo}–${hi} days`;
-    } else {
-      sub = 'estimating runway…';
-      note = `Bayesian: weak prior + ${f.days_observed}d of spend — interval too wide to project yet`;
-    }
+    // A Bayesian posterior is never empty: always show the estimate; the 80% credible interval
+    // (wide when data is thin, tight as completed days accrue) carries the uncertainty.
+    const days = f.runway_days !== null ? fmtDays(f.runway_days) : '?';
+    const lo = f.runway_lo_days !== null ? fmtDays(f.runway_lo_days) : '?';
+    const hi = f.runway_hi_days !== null ? fmtDays(f.runway_hi_days) : '?';
+    sub = `~${days} days of runway · ~${usd(f.burn_per_day_usd_cents)}/day`;
+    note = `Bayesian: posterior $/day from ${f.days_observed}d + prior · 80% CI ${lo}–${hi} days`;
   }
 
   const padX = 16;

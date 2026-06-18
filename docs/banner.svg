@@ -1,26 +1,47 @@
-<svg width="1200" height="360" viewBox="0 0 1200 360" xmlns="http://www.w3.org/2000/svg">
+<svg width="1200" height="360" viewBox="0 0 1200 360" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!--
+  Cycle 1: "Autonomous Orbit"
+  Initial attempt. Establishing the basic composition, color palette, and layering.
+  Focus: Get the main elements on the canvas: background, central glowing loop, and a few orbiting nodes.
+  Critique Goal: Does it establish a sense of depth? Is the composition balanced?
+  -->
   <defs>
-    <radialGradient id="grad1" cx="75%" cy="50%" r="70%" fx="85%" fy="50%">
-      <stop offset="0%" style="stop-color:#ff7882;" />
-      <stop offset="100%" style="stop-color:#ff424d;" />
+    <!-- Palette & Effects -->
+    <radialGradient id="bg-grad" cx="50%" cy="50%" r="50%" fx="50%" fy="50%">
+      <stop offset="0%" stop-color="#2a0a1f"/>
+      <stop offset="100%" stop-color="#1a0612"/>
     </radialGradient>
-    <pattern id="dot-grid" width="24" height="24" patternUnits="userSpaceOnUse">
-      <circle cx="1" cy="1" r="0.8" fill="white" fill-opacity="0.08"/>
-    </pattern>
-    <linearGradient id="swoosh-grad" x1="0%" y1="0%" x2="100%" y2="100%">
-        <stop offset="0%" stop-color="white" stop-opacity="0.8" />
-        <stop offset="100%" stop-color="white" stop-opacity="0.5" />
+    <radialGradient id="glow-grad" cx="50%" cy="50%" r="50%" fx="50%" fy="50%">
+      <stop offset="0%" stop-color="#ff7a85" stop-opacity="0.75"/>
+      <stop offset="70%" stop-color="#ff424d" stop-opacity="0.25"/>
+      <stop offset="100%" stop-color="#ff424d" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="ring-grad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#ffe4e6" />
+      <stop offset="50%" stop-color="#ff424d" />
+      <stop offset="100%" stop-color="#c72c3a" />
     </linearGradient>
+    <filter id="glow-blur" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="15" result="coloredBlur"/>
+    </filter>
   </defs>
-  
-  <rect width="1200" height="360" fill="url(#grad1)" />
-  <rect width="1200" height="360" fill="url(#dot-grid)" />
 
-  <g fill="none" stroke-linecap="round">
-    <path d="M 500 400 C 700 150, 950 150, 1150 320" stroke="white" stroke-width="1.5" stroke-opacity="0.2" />
-    <path d="M 600 -50 C 800 180, 900 180, 1100 50" stroke="white" stroke-width="2" stroke-opacity="0.25" />
-    
-    <path d="M 850 60 C 1050 60, 1150 280, 980 300" stroke="url(#swoosh-grad)" stroke-width="16" />
-    <path d="M 940 295 l 45 5 -20 -48" stroke="white" stroke-width="16" stroke-opacity="0.7" />
-  </g>
+  <!-- Background -->
+  <rect width="1200" height="360" fill="url(#bg-grad)" />
+
+  <!-- Core Glow -->
+  <ellipse cx="600" cy="180" rx="200" ry="70" fill="url(#glow-grad)" filter="url(#glow-blur)" />
+
+  <!-- Central Ring -->
+  <ellipse cx="600" cy="180" rx="180" ry="60" fill="none" stroke="url(#ring-grad)" stroke-width="3" />
+
+  <!-- Orbits & Nodes -->
+  <!-- Orbit 1 (Foreground) -->
+  <ellipse cx="600" cy="180" rx="400" ry="130" fill="none" stroke="#ff424d" stroke-width="0.5" stroke-opacity="0.3" />
+  <circle cx="200" cy="180" r="8" fill="#ffe4e6" />
+
+  <!-- Orbit 2 (Background) -->
+  <ellipse cx="600" cy="180" rx="300" ry="100" fill="none" stroke="#ff424d" stroke-width="0.5" stroke-opacity="0.2" transform="rotate(-15, 600, 180)" />
+  <circle cx="850" cy="115" r="5" fill="#ff7a85" opacity="0.8" />
+
 </svg>

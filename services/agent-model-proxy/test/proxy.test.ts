@@ -718,6 +718,116 @@ describe('sponsorship coupons', () => {
   });
 });
 
+describe('funding platform pages', () => {
+  const enc = encodeURIComponent('volter/twin');
+  const now = () => new Date().toISOString();
+  const setProfile = (env: Env, id: string, body: unknown) => requestJson(env, `/admin/accounts/${encodeURIComponent(id)}/profile`, {
+    method: 'POST', headers: { 'x-admin-token': 'admin' }, body,
+  });
+
+  async function seedListedProject(env: Env) {
+    await mint(env, ['gpt-5-mini'], 100, 3); // registers volter/twin → materializes the account
+    await requestJson(env, `/admin/accounts/${enc}/mint`, { method: 'POST', headers: { 'x-admin-token': 'admin' }, body: { amount_usd_cents: 5000 } });
+    await setProfile(env, 'volter/twin', { profile: { tagline: 'a self-coding twin', avatar_url: 'https://github.com/volter.png', synced_at: now() } });
+  }
+
+  test('GET / renders the explore grid with a listed project', async () => {
+    const env = testEnv();
+    await seedListedProject(env);
+    const res = await request(env, '/');
+    expect(res.status).toBe(200);
+    expect(res.headers.get('content-type')?.includes('text/html')).toBe(true);
+    const body = await res.text();
+    expect(body.includes('Fund a self-driving repo')).toBe(true);
+    expect(body.includes('a self-coding twin')).toBe(true);
+  });
+
+  test('GET /p/:account renders the creator page with tiers + tagline', async () => {
+    const env = testEnv();
+    await seedListedProject(env);
+    const res = await request(env, `/p/${enc}`);
+    expect(res.status).toBe(200);
+    const body = await res.text();
+    expect(body.includes('Membership')).toBe(true);
+    expect(body.includes('Supporter')).toBe(true);
+    expect(body.includes('a self-coding twin')).toBe(true);
+    expect(body.includes(`/v1/accounts/${enc}/runway.svg`)).toBe(true);
+  });
+
+  test('synced GitHub copy is HTML-escaped (no injection)', async () => {
+    const env = testEnv();
+    await mint(env, ['gpt-5-mini'], 100, 3);
+    await setProfile(env, 'volter/twin', { profile: { tagline: '<script>alert(1)</script>', synced_at: now() } });
+    const res = await request(env, `/p/${enc}`);
+    const body = await res.text();
+    expect(body.includes('<script>alert(1)</script>')).toBe(false);
+    expect(body.includes('&lt;script&gt;')).toBe(true);
+  });
+
+  test('coupon redeem form credits the account and shows a result page', async () => {
+    const env = testEnv();
+    const created = await requestJson(env, '/admin/coupons', {
+      method: 'POST', headers: { 'x-admin-token': 'admin' }, body: { amount_usd_cents: 2500 },
+    });
+    const code = created.coupon.code as string;
+    const res = await worker.fetch(new Request(`https://proxy.test/p/${enc}/redeem`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/x-www-form-urlencoded' },
+      body: `code=${encodeURIComponent(code)}`,
+    }), env, ctx);
+    expect(res.status).toBe(200);
+    const body = await res.text();
+    expect(body.includes('redeemed')).toBe(true);
+    expect((await requestJson(env, `/v1/accounts/${enc}`)).balance_usd_cents).toBe(2500);
+  });
+
+  test('a hidden project drops off the explore grid but its page still works', async () => {
+    const env = testEnv();
+    await seedListedProject(env);
+    await requestJson(env, `/admin/accounts/${enc}/moderate`, { method: 'POST', headers: { 'x-admin-token': 'admin' }, body: { status: 'hidden' } });
+    const explore = await (await request(env, '/')).text();
+    expect(explore.includes('a self-coding twin')).toBe(false);
+    expect((await request(env, `/p/${enc}`)).status).toBe(200);
+  });
+});
+
+describe('oidc project→project redistribution', () => {
+  test('a project grants its surplus to another; recipient is credited', async () => {
+    const oidc = await githubOidcSigner();
+    const env = testEnv({ GITHUB_OIDC_JWKS_URL: 'https://jwks.test/keys' });
+    globalThis.fetch = oidc.fetch;
+    await requestJson(env, `/admin/accounts/${encodeURIComponent('volter/twin')}/mint`, {
+      method: 'POST', headers: { 'x-admin-token': 'admin' }, body: { amount_usd_cents: 50000 },
+    });
+    const jwt = await oidc.sign({
+      repository: 'volter/twin',
+      actor: 'octocat',
+      job_workflow_ref: 'volter/twin/.github/workflows/public-agent.yml@refs/heads/main',
+    });
+    const granted = await requestJson(env, `/v1/accounts/${encodeURIComponent('volter/twin')}/grant`, {
+      method: 'POST', headers: { authorization: `Bearer ${jwt}` }, body: { to: 'beta/helper', amount_usd_cents: 1000 },
+    });
+    expect(granted.ok).toBe(true);
+    expect(granted.to_balance_usd_cents).toBe(1000);
+  });
+
+  test('a project cannot grant from an account that is not its own repo', async () => {
+    const oidc = await githubOidcSigner();
+    const env = testEnv({ GITHUB_OIDC_JWKS_URL: 'https://jwks.test/keys' });
+    globalThis.fetch = oidc.fetch;
+    const jwt = await oidc.sign({
+      repository: 'volter/twin',
+      actor: 'octocat',
+      job_workflow_ref: 'volter/twin/.github/workflows/public-agent.yml@refs/heads/main',
+    });
+    const blocked = await request(env, `/v1/accounts/${encodeURIComponent('someone/else')}/grant`, {
+      method: 'POST', headers: { authorization: `Bearer ${jwt}` }, body: { to: 'beta/helper', amount_usd_cents: 1000 },
+    });
+    expect(blocked.status).toBe(403);
+    expect((await blocked.json() as { error?: { code?: string } }).error?.code).toBe('forbidden_account');
+  });
+});
+
 async function mint(
   env: Env,
   models: string[],

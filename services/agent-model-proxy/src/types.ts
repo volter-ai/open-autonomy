@@ -27,6 +27,7 @@ export interface Env {
   GITHUB_OIDC_ALLOWED_WORKFLOW?: string;
   GITHUB_OIDC_OPENID_CONFIGURATION_URL?: string;
   GITHUB_OIDC_JWKS_URL?: string;
+  GITHUB_API_BASE?: string;
   RUNS: DurableObjectNamespace;
   LIMITS: DurableObjectNamespace;
 }

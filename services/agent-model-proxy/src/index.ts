@@ -2,8 +2,10 @@ import { handleAnthropic } from './anthropic.js';
 import { limitsFromEnv } from './config.js';
 import { error, json, methodNotAllowed, parseJson } from './errors.js';
 import { verifyGitHubOidcToken } from './github-oidc.js';
-import { LimitLedger, LimitLedgerClient, type Sponsor } from './limit-ledger.js';
+import { isStale, syncAllStale, syncProfile } from './github-sync.js';
+import { LimitLedger, LimitLedgerClient, type Moderation, type Sponsor, type Tier, type AccountProfile } from './limit-ledger.js';
 import { handleOpenAI } from './openai.js';
+import { renderExplore, renderProject, renderRedeemResult } from './platform-html.js';
 import { RunBudget, RunBudgetClient } from './run-budget.js';
 import { renderRunwaySvg } from './runway-svg.js';
 import { handleSponsorsWebhook } from './sponsors-webhook.js';
@@ -30,6 +32,9 @@ export default {
     const account = sponsorAccount(env);
     const result = await new LimitLedgerClient(env.LIMITS).accrue(account, key);
     console.log('[agent-model-proxy] monthly accrue', account, key, JSON.stringify(result));
+    // Refresh every public project's GitHub-synced display metadata.
+    const synced = await syncAllStale(env);
+    console.log('[agent-model-proxy] profile sync', synced);
   },
 } satisfies ExportedHandler<Env>;
 
@@ -38,6 +43,39 @@ async function route(req: Request, env: Env, ctx: ExecutionContext): Promise<Res
   const path = url.pathname;
 
   if (path === '/healthz') return new Response('ok');
+  if (path === '/favicon.ico') return new Response(null, { status: 204 });
+
+  // ---- Funding platform (server-rendered HTML storefront) ----
+  // Explore grid: every discovered public project. Stale profiles refresh in the background.
+  if (path === '/') {
+    if (req.method !== 'GET') return methodNotAllowed();
+    const { entries } = await new LimitLedgerClient(env.LIMITS).directory();
+    for (const e of entries) if (e.is_project && isStale(e.profile.synced_at)) ctx.waitUntil(syncProfile(env, e.account));
+    return html(renderExplore(entries));
+  }
+  // Coupon redemption form (must precede the project-page match — greedy capture).
+  const redeemForm = path.match(/^\/p\/(.+)\/redeem$/);
+  if (redeemForm) {
+    if (req.method !== 'POST') return methodNotAllowed();
+    const account = decodeURIComponent(redeemForm[1]);
+    const form = await req.formData();
+    const code = String(form.get('code') ?? '').trim();
+    if (!code) return html(renderRedeemResult(account, false, 'Enter a coupon code.'), 400);
+    const result = await new LimitLedgerClient(env.LIMITS).couponRedeem(code, account);
+    const message = result.ok
+      ? `Added $${((result.amount_usd_cents ?? 0) / 100).toFixed(2)} to ${account}.`
+      : redeemMessage(result.error);
+    return html(renderRedeemResult(account, result.ok, message), result.ok ? 200 : 400);
+  }
+  // Creator page.
+  const projectPage = path.match(/^\/p\/(.+)$/);
+  if (projectPage) {
+    if (req.method !== 'GET') return methodNotAllowed();
+    const account = decodeURIComponent(projectPage[1]);
+    const view = await new LimitLedgerClient(env.LIMITS).project(account);
+    if (view.is_project && isStale(view.profile.synced_at)) ctx.waitUntil(syncProfile(env, account));
+    return html(renderProject(view));
+  }
 
   if (path === '/admin/runs/mint') return mintRun(req, env);
   if (path === '/v1/runs/mint') return mintRunOidc(req, env);
@@ -71,6 +109,21 @@ async function route(req: Request, env: Env, ctx: ExecutionContext): Promise<Res
     return json(await ledger.accrue(id, body.key));
   }
 
+  // Account curation (admin): set the operator-owned profile bits, moderate (ban/hide/pin), or force
+  // a GitHub metadata sync now instead of waiting for the cron / next view.
+  const acctAdmin = path.match(/^\/admin\/accounts\/([^/]+)\/(profile|moderate|sync)$/);
+  if (acctAdmin) {
+    if (!isAdmin(req, env)) return error('auth_failed', 401);
+    if (req.method !== 'POST') return methodNotAllowed();
+    const id = decodeURIComponent(acctAdmin[1]);
+    const ledger = new LimitLedgerClient(env.LIMITS);
+    if (acctAdmin[2] === 'sync') return json({ ok: await syncProfile(env, id), account: id });
+    const body = parseJson<{ profile?: Partial<AccountProfile>; goal_days?: number; tiers?: Tier[]; status?: Moderation; reason?: string; tagline_override?: string; cover_override?: string }>(await req.text()) ?? {};
+    if (acctAdmin[2] === 'profile') return json(await ledger.setProfile(id, body.profile ?? {}, body.goal_days, body.tiers));
+    if (!body.status) return error('invalid_request');
+    return json(await ledger.moderate(id, body.status, body.reason, { tagline_override: body.tagline_override, cover_override: body.cover_override }));
+  }
+
   // Sponsorship coupons: issue + list (admin). A coupon is a bearer grant; `from` makes it transfer
   // from that account's balance, otherwise it mints on redeem.
   if (path === '/admin/coupons') {
@@ -93,6 +146,21 @@ async function route(req: Request, env: Env, ctx: ExecutionContext): Promise<Res
     if (result.ok) return json(result);
     const status = result.error === 'coupon_not_found' ? 404 : result.error === 'coupon_already_redeemed' ? 409 : 400;
     return json(result, { status });
+  }
+
+  // Autonomous project→project redistribution. The OIDC repo claim must equal the source account, so
+  // a project can only spend its OWN balance; the ledger enforces the surplus-above-goal floor.
+  const acctGrant = path.match(/^\/v1\/accounts\/(.+)\/grant$/);
+  if (acctGrant) {
+    if (req.method !== 'POST') return methodNotAllowed();
+    const from = decodeURIComponent(acctGrant[1]);
+    const oidc = await verifyGitHubOidcToken(env, extractBearer(req));
+    if (!oidc) return error('auth_failed', 401);
+    if (oidc.repository !== from) return error('forbidden_account', 403);
+    const body = parseJson<{ to?: string; amount_usd_cents?: number }>(await req.text());
+    if (!body?.to || typeof body.amount_usd_cents !== 'number') return error('invalid_request');
+    const result = await new LimitLedgerClient(env.LIMITS).grantSurplus(from, body.to, body.amount_usd_cents);
+    return json(result, { status: result.ok ? 200 : 402 });
   }
 
   // Public per-account funding status + runway badge.
@@ -311,6 +379,20 @@ async function exchangeRunToken(req: Request, env: Env, runId: string): Promise<
 function isAdmin(req: Request, env: Env): boolean {
   const token = req.headers.get('x-admin-token');
   return Boolean(token && env.AGENT_PROXY_ADMIN_TOKEN && token === env.AGENT_PROXY_ADMIN_TOKEN);
+}
+
+function html(body: string, status = 200): Response {
+  return new Response(body, { status, headers: { 'content-type': 'text/html; charset=utf-8' } });
+}
+
+function redeemMessage(code?: string): string {
+  switch (code) {
+    case 'coupon_not_found': return 'That coupon code was not found.';
+    case 'coupon_already_redeemed': return 'That coupon has already been redeemed.';
+    case 'coupon_expired': return 'That coupon has expired.';
+    case 'insufficient_balance': return 'The coupon issuer no longer has the balance to back it.';
+    default: return 'Coupon could not be redeemed.';
+  }
 }
 
 // The account whose runway the default README badge (/v1/funding*) shows.

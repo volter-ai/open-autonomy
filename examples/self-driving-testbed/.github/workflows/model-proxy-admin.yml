@@ -1,0 +1,73 @@
+name: Model Proxy Admin
+run-name: Model Proxy Admin ${{ inputs.action }} ${{ inputs.run_id }}
+
+on:
+  workflow_dispatch:
+    inputs:
+      action:
+        description: Admin action to run
+        required: true
+        default: status
+        type: choice
+        options:
+          - status
+          - run-status
+          - revoke
+      run_id:
+        description: Required for run-status and revoke
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+
+jobs:
+  admin:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Run model proxy admin action
+        env:
+          ACTION: ${{ inputs.action }}
+          RUN_ID: ${{ inputs.run_id }}
+          MODEL_PROXY_URL: ${{ vars.MODEL_PROXY_URL }}
+          MODEL_PROXY_ADMIN_TOKEN: ${{ secrets.MODEL_PROXY_ADMIN_TOKEN }}
+        run: |
+          set -euo pipefail
+          if [[ -z "${MODEL_PROXY_URL}" || -z "${MODEL_PROXY_ADMIN_TOKEN}" ]]; then
+            echo "MODEL_PROXY_URL and MODEL_PROXY_ADMIN_TOKEN are required"
+            exit 1
+          fi
+
+          case "$ACTION" in
+            status)
+              curl -fsS \
+                -H "x-admin-token: ${MODEL_PROXY_ADMIN_TOKEN}" \
+                "${MODEL_PROXY_URL}/admin/limits/status" | jq .
+              ;;
+            run-status)
+              if [[ -z "$RUN_ID" ]]; then
+                echo "run_id is required for run-status"
+                exit 1
+              fi
+              curl -fsS \
+                -H "x-admin-token: ${MODEL_PROXY_ADMIN_TOKEN}" \
+                "${MODEL_PROXY_URL}/admin/runs/${RUN_ID}" | jq .
+              ;;
+            revoke)
+              if [[ -z "$RUN_ID" ]]; then
+                echo "run_id is required for revoke"
+                exit 1
+              fi
+              curl -fsS -X POST \
+                -H "x-admin-token: ${MODEL_PROXY_ADMIN_TOKEN}" \
+                "${MODEL_PROXY_URL}/admin/runs/${RUN_ID}/revoke" | jq .
+              ;;
+            *)
+              echo "unknown action: $ACTION"
+              exit 1
+              ;;
+          esac

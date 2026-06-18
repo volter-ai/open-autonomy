@@ -1,0 +1,290 @@
+name: Public Agent PM
+
+on:
+  schedule:
+    - cron: '*/30 * * * *'
+  workflow_dispatch:
+    inputs:
+      limit:
+        description: Maximum issues to triage
+        required: false
+        default: '10'
+        type: string
+
+permissions:
+  contents: read
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+
+concurrency:
+  group: public-agent-pm
+  cancel-in-progress: false
+
+jobs:
+  triage:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      issues: write
+      pull-requests: write
+      actions: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - uses: oven-sh/setup-bun@v2
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile || bun install
+
+      - name: Triage open issues
+        env:
+          GH_TOKEN: ${{ github.token }}
+          MODEL_PROXY_URL: ${{ vars.MODEL_PROXY_URL }}
+          MODEL_PROXY_ADMIN_TOKEN: ${{ secrets.MODEL_PROXY_ADMIN_TOKEN }}
+          PM_COMMENT_TOKEN: ${{ secrets.PUBLIC_AGENT_TRIGGER_TOKEN || github.token }}
+          PUBLIC_AGENT_PM_LIMIT: ${{ inputs.limit || vars.PUBLIC_AGENT_PM_LIMIT || '10' }}
+          PUBLIC_AGENT_PM_MODEL: ${{ vars.PUBLIC_AGENT_PM_MODEL || vars.PUBLIC_AGENT_TRIAGE_MODEL || 'gpt-4o-mini' }}
+          PUBLIC_AGENT_PM_PROVIDER: ${{ vars.PUBLIC_AGENT_PM_PROVIDER || vars.PUBLIC_AGENT_TRIAGE_PROVIDER || 'openai' }}
+          PUBLIC_AGENT_REPO_PAUSED: ${{ vars.PUBLIC_AGENT_REPO_PAUSED || 'false' }}
+        run: |
+          set -euo pipefail
+          mkdir -p .agent-run/pm
+          gh label create agent-repo-paused --description "Repo-level autonomous public-agent work is paused" --color FBCA04 2>/dev/null || true
+          repo_pause_count="$(gh issue list --state open --label agent-repo-paused --limit 1 --json number --jq 'length' 2>/dev/null || echo 0)"
+          if [[ "$PUBLIC_AGENT_REPO_PAUSED" == "true" || "$repo_pause_count" != "0" ]]; then
+            echo "public agent repo pause is enabled; PM sweep skipped"
+            exit 0
+          fi
+          gh issue list \
+            --state open \
+            --search "is:issue is:open -label:agent-paused -label:agent-repo-paused -label:agent-blocked -label:human-required -label:agent-maintainer-hold -label:needs-info -label:security sort:updated-asc" \
+            --limit "$PUBLIC_AGENT_PM_LIMIT" \
+            --json number \
+            --jq '.[].number' > .agent-run/pm/issues.txt
+
+          gh label create needs-info --description "Needs more information before autonomous work" --color D4C5F9 2>/dev/null || true
+          gh label create human-required --description "Requires maintainer attention before autonomous work" --color B60205 2>/dev/null || true
+          gh label create duplicate --description "Potential duplicate issue" --color CFD3D7 2>/dev/null || true
+          gh label create spam --description "Likely spam or abuse" --color 000000 2>/dev/null || true
+          gh label create agent-blocked --description "Blocks autonomous public-agent development" --color B60205 2>/dev/null || true
+          gh label create agent-paused --description "Autonomous public-agent work is paused" --color FBCA04 2>/dev/null || true
+          gh label create agent-maintainer-hold --description "Maintainer hold; autonomous development should not start" --color 5319E7 2>/dev/null || true
+
+          while IFS= read -r number; do
+            if [[ -z "$number" ]]; then
+              continue
+            fi
+
+            issue_path=".agent-run/pm/issue-${number}.json"
+            issue_raw_path=".agent-run/pm/issue-raw-${number}.json"
+            pm_path=".agent-run/pm/pm-${number}.json"
+            dispatch_path=".agent-run/pm/dispatch-${number}.json"
+            decision_dir=".agent-run/pm/decisions/issue-${number}"
+            open_pr_path=".agent-run/pm/open-pr-${number}.json"
+            pr_comments_path=".agent-run/pm/pr-comments-${number}.json"
+            runs_raw_path=".agent-run/pm/runs-raw-${number}.json"
+            runs_path=".agent-run/pm/runs-${number}.json"
+            decisions_path=".agent-run/pm/decisions-${number}.json"
+            mkdir -p "$decision_dir"
+
+            branch="agent/issue-${number}"
+            gh pr list \
+              --head "$branch" \
+              --state open \
+              --json number,title,state,url,headRefName,updatedAt \
+              --jq '.[0] // null' > "$open_pr_path"
+            open_pr_number="$(jq -r '.number // empty' "$open_pr_path")"
+            if [[ -n "$open_pr_number" ]]; then
+              gh pr view "$open_pr_number" --json comments --jq '.comments' > "$pr_comments_path"
+            else
+              printf '[]\n' > "$pr_comments_path"
+            fi
+
+            gh run list \
+              --workflow public-agent.yml \
+              --limit 50 \
+              --json databaseId,status,conclusion,displayTitle,event,createdAt,updatedAt,url \
+              > "$runs_raw_path"
+            jq --arg issue "#${number}" '[.[] | select(.displayTitle | contains($issue))]' "$runs_raw_path" > "$runs_path"
+            find agent-sessions -path "*/decisions/*.json" -type f -print0 2>/dev/null \
+              | xargs -0 jq -s --argjson issue "$number" '[.[] | select(.issue == $issue)] | sort_by(.created_at) | reverse | .[0:20]' \
+              > "$decisions_path" || printf '[]\n' > "$decisions_path"
+
+            gh issue view "$number" \
+              --json number,title,body,author,labels,comments,createdAt,updatedAt \
+              > "$issue_raw_path"
+
+            jq --slurpfile openPr "$open_pr_path" --slurpfile prComments "$pr_comments_path" --slurpfile runs "$runs_path" '{
+                number,
+                title,
+                body,
+                user: {login: .author.login},
+                labels,
+                comments,
+                createdAt,
+                updatedAt,
+                open_agent_pr: (if $openPr[0] == null then null else $openPr[0] + {comments: $prComments[0]} end),
+                agent_runs: $runs[0],
+                previous_decisions: (input)
+              }' "$issue_raw_path" "$decisions_path" > "$issue_path"
+
+            if ! mint_output="$(bun scripts/model-proxy-mint.ts \
+              --issue "$issue_path" \
+              --models "$PUBLIC_AGENT_PM_MODEL" \
+              --max-usd-cents "${{ vars.PUBLIC_AGENT_PM_MAX_USD_CENTS || '25' }}" \
+              --max-requests "2" \
+              --purpose pm)"; then
+              echo "::warning::skip issue #${number}: PM token mint failed"
+              unavailable_reason="PM model budget is temporarily unavailable; the PM agent will retry on a later sweep."
+              bun scripts/public-agent-decision.ts \
+                --stage pm_triage \
+                --issue "$number" \
+                --actor "${GITHUB_ACTOR}" \
+                --decision "mint_failed" \
+                --reason "PM token mint failed" \
+                --subject-json "{\"type\":\"issue\",\"number\":${number}}" \
+                --evidence "issue:${number}" \
+                --next-action "skip" \
+                --out-dir "$decision_dir"
+              bun scripts/public-agent-dispatcher.ts \
+                --issue "$issue_path" \
+                --pm-unavailable-reason "$unavailable_reason" \
+                --out "$dispatch_path"
+              action="$(jq -r '.action' "$dispatch_path")"
+              comment="$(jq -r '.comment // empty' "$dispatch_path")"
+              target_number="$(jq -r '.target_number // empty' "$dispatch_path")"
+              reason="$(jq -r '.reason' "$dispatch_path")"
+              bun scripts/public-agent-decision.ts \
+                --stage dispatch \
+                --issue "$number" \
+                --actor "${GITHUB_ACTOR}" \
+                --decision "$action" \
+                --reason "$reason" \
+                --subject-json "{\"type\":\"issue\",\"number\":${number}}" \
+                --evidence "decision:pm_triage,dispatch:${dispatch_path}" \
+                --next-action "$action" \
+                --out-dir "$decision_dir"
+              if [[ "$action" == "comment" && -n "$comment" ]]; then
+                if ! GH_TOKEN="$PM_COMMENT_TOKEN" gh issue comment "${target_number:-$number}" --body "$comment"; then
+                  echo "::warning::skip issue #${number}: failed to write visible PM-unavailable comment"
+                fi
+              else
+                echo "skip issue #${number}: ${reason}"
+              fi
+              continue
+            fi
+            run_id="$(printf '%s\n' "$mint_output" | sed -n 's/^run_id=//p' | tail -1)"
+            token="$(printf '%s\n' "$mint_output" | sed -n 's/^token=//p' | tail -1)"
+
+            MODEL_PROXY_TOKEN="$token" bun scripts/public-agent-pm.ts \
+              --issue "$issue_path" \
+              --provider "$PUBLIC_AGENT_PM_PROVIDER" \
+              --model "$PUBLIC_AGENT_PM_MODEL" \
+              --out "$pm_path"
+
+            pm_action="$(jq -r '.action' "$pm_path")"
+            pm_risk="$(jq -r '.risk' "$pm_path")"
+            pm_reason="$(jq -r '.reason' "$pm_path")"
+            bun scripts/public-agent-decision.ts \
+              --stage pm_triage \
+              --issue "$number" \
+              --actor "${GITHUB_ACTOR}" \
+              --decision "$pm_action" \
+              --risk "$pm_risk" \
+              --reason "$pm_reason" \
+              --run-id "$run_id" \
+              --subject-json "{\"type\":\"issue\",\"number\":${number}}" \
+              --evidence "issue:${number},pm:${pm_path}" \
+              --next-action "$pm_action" \
+              --out-dir "$decision_dir"
+
+            if [[ -n "$run_id" ]]; then
+              curl -fsS -X POST \
+                -H "x-admin-token: ${MODEL_PROXY_ADMIN_TOKEN}" \
+                "${MODEL_PROXY_URL}/admin/runs/${run_id}/revoke"
+            fi
+
+            bun scripts/public-agent-dispatcher.ts \
+              --issue "$issue_path" \
+              --pm "$pm_path" \
+              --out "$dispatch_path"
+
+            action="$(jq -r '.action' "$dispatch_path")"
+            comment="$(jq -r '.comment // empty' "$dispatch_path")"
+            target_number="$(jq -r '.target_number // empty' "$dispatch_path")"
+            command="$(jq -r '.command // empty' "$dispatch_path")"
+            reason="$(jq -r '.reason' "$dispatch_path")"
+            dispatch_args=(
+              --stage dispatch
+              --issue "$number"
+              --actor "${GITHUB_ACTOR}"
+              --decision "$action"
+              --reason "$reason"
+              --run-id "$run_id"
+              --evidence "decision:pm_triage,dispatch:${dispatch_path}"
+              --next-action "${command:-$action}"
+              --out-dir "$decision_dir"
+            )
+            if [[ "$(jq -r '.target // empty' "$dispatch_path")" == "pull_request" && -n "$target_number" ]]; then
+              dispatch_args+=(--pr "$target_number" --subject-json "{\"type\":\"pr\",\"number\":${target_number}}")
+            else
+              dispatch_args+=(--subject-json "{\"type\":\"issue\",\"number\":${number}}")
+            fi
+            bun scripts/public-agent-decision.ts "${dispatch_args[@]}"
+            case "$action" in
+              comment)
+                if [[ -z "$comment" ]]; then
+                  echo "skip issue #${number}: dispatcher selected comment action without comment body"
+                  continue
+                fi
+                if ! GH_TOKEN="$PM_COMMENT_TOKEN" gh issue comment "${target_number:-$number}" --body "$comment"; then
+                  echo "::warning::skip issue #${number}: failed to write visible command comment for target ${target_number:-$number}"
+                  continue
+                fi
+                case "$pm_action" in
+                  develop|review)
+                    gh issue edit "$number" --remove-label needs-info || true
+                    ;;
+                  needs_info)
+                    gh issue edit "$number" --add-label needs-info || true
+                    ;;
+                  human_required)
+                    gh issue edit "$number" --add-label human-required --add-label agent-blocked || true
+                    ;;
+                  duplicate)
+                    gh issue edit "$number" --add-label duplicate || true
+                    ;;
+                  spam)
+                    gh issue edit "$number" --add-label spam --add-label agent-blocked || true
+                    ;;
+                esac
+                case "$command" in
+                  "/agent develop")
+                    gh workflow run public-agent.yml \
+                      --ref "${GITHUB_REF_NAME}" \
+                      -f issue_number="$number" \
+                      -f command="$command"
+                    ;;
+                  "/agent review")
+                    gh workflow run public-agent-review.yml \
+                      --ref "${GITHUB_REF_NAME}" \
+                      -f pr_number="${target_number}"
+                    ;;
+                esac
+                ;;
+              *)
+                echo "skip issue #${number}: ${reason}"
+                ;;
+            esac
+          done < .agent-run/pm/issues.txt
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: public-agent-pm-${{ github.run_id }}
+          path: .agent-run/pm
+          if-no-files-found: warn

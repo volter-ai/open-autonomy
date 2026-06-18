@@ -1,14 +1,16 @@
 #!/usr/bin/env bun
-import { cpSync, mkdtempSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
-import { tmpdir } from 'node:os';
-import { join, resolve } from 'node:path';
 
 // Hands-free setup for a self-driving testbed: a repo whose only human-seeded artifact is the
-// constitution. Control files come from templates/self-driving-repo (scaffold); this overlays the
-// constitution-only seed (empty roadmap + provision manifest) and provisions. No scenario issues
-// are seeded — the strategist generates the first roadmap. The one unavoidable manual step is
-// setting MODEL_PROXY_ADMIN_TOKEN, which is reported, not performed.
+// constitution. The committed source (examples/self-driving-testbed) is a scaffold of
+// templates/self-driving-repo with an empty roadmap and a provisioning manifest — no scenario
+// issues. The bootstrap provisions the repo, verifies the admin-token secret, and dispatches the
+// strategist to generate the first roadmap. The strategist then proposes, the strategy reviewer
+// ratifies, and the loop executes. The only manual step is setting MODEL_PROXY_ADMIN_TOKEN.
+//
+// Keep the source in sync with the template with:
+//   bun scripts/open-autonomy-upgrade.ts --template templates/self-driving-repo \
+//     --target examples/self-driving-testbed --apply
 
 export interface BootstrapStep {
   id: string;
@@ -17,8 +19,6 @@ export interface BootstrapStep {
 
 export function selfDrivingBootstrapSteps(): BootstrapStep[] {
   return [
-    { id: 'scaffold', describe: 'copy templates/self-driving-repo into a build dir' },
-    { id: 'overlay', describe: 'overlay the constitution-only seed (empty roadmap + provision manifest)' },
     { id: 'provision', describe: 'create repo and reconcile variables, labels, branch protection' },
     { id: 'secret-check', describe: 'verify MODEL_PROXY_ADMIN_TOKEN is set (manual if missing)' },
     { id: 'strategist', describe: 'dispatch the strategist to generate the first roadmap' },
@@ -27,8 +27,7 @@ export function selfDrivingBootstrapSteps(): BootstrapStep[] {
 
 interface Options {
   repo: string;
-  seed: string;
-  template: string;
+  source: string;
   private: boolean;
 }
 
@@ -39,12 +38,7 @@ function parseArgs(argv: string[]): Options {
   };
   const repo = value('--repo');
   if (!repo) throw new Error('Usage: bun scripts/bootstrap-self-driving-testbed.ts --repo owner/name [--public]');
-  return {
-    repo,
-    seed: value('--seed') ?? 'examples/self-driving-testbed',
-    template: value('--template') ?? 'templates/self-driving-repo',
-    private: !argv.includes('--public'),
-  };
+  return { repo, source: value('--source') ?? 'examples/self-driving-testbed', private: !argv.includes('--public') };
 }
 
 function run(cmd: string, args: string[]): string {
@@ -70,20 +64,10 @@ async function main(): Promise<void> {
   const options = parseArgs(process.argv.slice(2));
   process.stdout.write(`Bootstrapping self-driving testbed ${options.repo}\n`);
 
-  process.stdout.write('\n[1/5] scaffold\n');
-  const build = mkdtempSync(join(tmpdir(), 'self-driving-'));
-  run('bun', ['scripts/scaffold-target-repo.ts', '--target', build, '--force']);
+  process.stdout.write('\n[1/3] provision\n');
+  run('bun', ['scripts/provision-target-repo.ts', '--repo', options.repo, '--source', options.source, ...(options.private ? ['--private'] : [])]);
 
-  process.stdout.write('\n[2/5] overlay constitution-only seed\n');
-  const seed = resolve(options.seed);
-  cpSync(join(seed, '.open-autonomy', 'roadmap.yml'), join(build, '.open-autonomy', 'roadmap.yml'));
-  cpSync(join(seed, 'provision.json'), join(build, 'provision.json'));
-  process.stdout.write(`overlaid empty roadmap + provision manifest into ${build}\n`);
-
-  process.stdout.write('\n[3/5] provision\n');
-  run('bun', ['scripts/provision-target-repo.ts', '--repo', options.repo, '--source', build, ...(options.private ? ['--private'] : [])]);
-
-  process.stdout.write('\n[4/5] secret-check\n');
+  process.stdout.write('\n[2/3] secret-check\n');
   if (secretPresent(options.repo)) {
     process.stdout.write('MODEL_PROXY_ADMIN_TOKEN is set.\n');
   } else {
@@ -91,7 +75,7 @@ async function main(): Promise<void> {
     process.exit(75);
   }
 
-  process.stdout.write('\n[5/5] dispatch strategist\n');
+  process.stdout.write('\n[3/3] dispatch strategist\n');
   run('gh', ['workflow', 'run', 'open-autonomy-strategist.yml', '-R', options.repo, '-f', 'apply=true']);
   process.stdout.write(`Strategist dispatched. Watch: gh run list -R ${options.repo} --workflow "Open Autonomy Strategist"\n`);
   process.stdout.write('\nBootstrap complete. The repo will now propose, ratify, and execute its own roadmap.\n');

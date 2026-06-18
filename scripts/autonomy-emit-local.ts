@@ -107,9 +107,12 @@ const r = spawnSync(cmd, { shell: true, stdio: 'inherit', env: Object.assign({},
 process.exit(r.status == null ? 1 : r.status);
 `;
 
-const launcherScript = (agent: string, base: string) => `#!/usr/bin/env node
+// A launch: workflow dispatches through the runner CLI — the same interface PM uses — not a
+// hardcoded backend. AUTONOMY_CLI lets you point at the binary (default 'autonomy' on PATH).
+const launcherScript = (agent: string) => `#!/usr/bin/env node
 import { spawnSync } from 'node:child_process';
-const r = spawnSync('node', ['${base}/scripts/run-agent.mjs'], { stdio: 'inherit', env: Object.assign({}, process.env, { AUTONOMY_AGENT: '${agent}' }) });
+const cli = process.env.AUTONOMY_CLI || 'autonomy';
+const r = spawnSync(cli + ' launch ${agent}', { shell: true, stdio: 'inherit' });
 process.exit(r.status == null ? 1 : r.status);
 `;
 
@@ -129,7 +132,7 @@ export function compileLocal(ir: AutonomyIR, opts: { name?: string } = {}): Comp
   // workflows: run → copy the script to its dest; launch → generate a launcher at its dest
   for (const wf of ir.workflows) {
     const { dest, source, generated: isGen } = workflowScriptPath(wf, name);
-    if (isGen) generated[dest] = launcherScript(wf.launch as string, base);
+    if (isGen) generated[dest] = launcherScript(wf.launch as string);
     else copies.push({ from: source as string, to: dest });
   }
 

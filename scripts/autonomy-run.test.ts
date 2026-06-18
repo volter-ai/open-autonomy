@@ -33,12 +33,17 @@ test('a compiled local setup actually runs: loop fires a run-script and dispatch
 
   const heartbeatFile = join(dir, 'heartbeat.txt');
   const launchLog = join(dir, 'launches.log');
+  const sessionsFile = join(dir, 'sessions.json');
 
   const r = spawnSync('node', ['profiles/app/scheduler/scripts/run.mjs', '--once'], {
     cwd: dir,
     encoding: 'utf8',
     env: {
       ...process.env,
+      // the workflow launcher dispatches through the runner CLI (exec backend)
+      AUTONOMY_CLI: `bun ${join(import.meta.dir, 'autonomy-cli.ts')}`,
+      AUTONOMY_RUNNER: 'exec',
+      AUTONOMY_STATE: sessionsFile,
       AUTONOMY_HEARTBEAT: heartbeatFile,
       AUTONOMY_LAUNCH_CMD: `printf '%s\\n' "$AUTONOMY_AGENT" >> ${JSON.stringify(launchLog)}`,
     },
@@ -48,7 +53,8 @@ test('a compiled local setup actually runs: loop fires a run-script and dispatch
   // the run: workflow executed
   expect(existsSync(heartbeatFile)).toBe(true);
   expect(readFileSync(heartbeatFile, 'utf8')).toBe('beat');
-  // the launch: workflow dispatched the right agent through run-agent → backend
+  // the launch: workflow went through the runner CLI → recorded a session AND hit the backend
+  expect(JSON.parse(readFileSync(sessionsFile, 'utf8')).some((s: { role: string }) => s.role === 'pm')).toBe(true);
   expect(existsSync(launchLog)).toBe(true);
   expect(readFileSync(launchLog, 'utf8').trim()).toBe('pm');
 });

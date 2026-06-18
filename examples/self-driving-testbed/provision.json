@@ -1,6 +1,6 @@
 {
-  "$comment": "Provisioning manifest for the self-driving testbed: a repo whose only human-seeded artifact is the constitution. The strategist generates the roadmap; the strategy reviewer ratifies it. No scenario issues are seeded. The model-proxy admin token is a SECRET set out of band.",
-  "description": "open-autonomy self-driving testbed (constitution-only seed)",
+  "$comment": "Provisioning manifest for the self-driving testbed (a regex-playground web app). Constitution-only seed: the strategist generates the roadmap; the strategy reviewer ratifies it; no scenario issues are seeded. The model-proxy admin token is a SECRET set out of band.",
+  "description": "open-autonomy self-driving testbed (regex playground; constitution-only seed)",
   "private": true,
   "required_secrets": ["MODEL_PROXY_ADMIN_TOKEN"],
   "variables": [

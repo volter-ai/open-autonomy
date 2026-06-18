@@ -1,32 +1,31 @@
-# Self-Driving Repository Template
+# Open Autonomy — Self-Driving Testbed (regex playground)
 
-Copy this directory into a GitHub repository to enable open-autonomy.
+A live testbed whose **only human-seeded artifact is the constitution**. This directory is a
+*thin seed*, not a full repo: it carries the product constitution (north star + merit), an empty
+roadmap, the research sources, and a provisioning manifest. All machinery (skills, workflows,
+scripts) comes from `templates/self-driving-repo` at bootstrap time — the testbed is a script
+that **uses** the template, so the template stays generic and this seed stays small.
 
-## Setup
+The product is a **browser-based regex playground** (a real UI, so the loop is exercised for
+real — building and visually verifying a frontend, not just passing unit tests). The roadmap
+starts empty; the autonomy proposes, ratifies, and builds it:
 
-1. Copy these files to the target repo root.
-2. Run `bun install`.
-3. Edit `AGENTS.md` and `.open-autonomy/*` for the target repository.
-4. Set the model proxy URL, model names, budget variables, and
-   `MODEL_PROXY_ADMIN_TOKEN` secret used by the workflows.
-5. Confirm `bun run check` passes.
-6. Run the planner workflow in dry mode.
-7. Smoke `/agent pause`, paused `/agent develop`, `/agent status`, and
-   `/agent resume`.
+```
+constitution (human, immutable)
+  → strategist: research + decompose north star → propose roadmap PR
+  → strategy reviewer: ratify against the merit criteria
+  → planner: mint issues → PM → developer → reviewer → merge gate
+  → outcomes feed the next strategist run
+```
 
-## First Issue Flow
+## Setup (repeatable)
 
-Use the first low-risk issue to prove the template works in the new repository:
+```
+bun scripts/bootstrap-self-driving-testbed.ts --repo <owner>/<name>
+# when prompted, set the one secret that cannot be set for you, then re-run:
+gh secret set MODEL_PROXY_ADMIN_TOKEN -R <owner>/<name>
+```
 
-1. Open a small docs-only issue with clear acceptance criteria.
-2. Confirm repository variables and secrets are configured before enabling
-   agent runs.
-3. Comment `/agent develop` on the issue and verify the direct develop loop
-   starts.
-4. Run `Public Agent PM` with a small limit and verify PM either dispatches a
-   clear issue or writes a visible status such as `needs-info`.
-5. Confirm the resulting PR or status comment reflects the issue context and
-   the repository checks still pass.
-
-This template assumes the target repo keeps the agent scripts in `scripts/` and
-the workflows in `.github/workflows/`.
+The bootstrap scaffolds `templates/self-driving-repo`, overlays this seed (constitution, empty
+roadmap, research sources, provision manifest), provisions the repo, and dispatches the
+strategist to generate the first roadmap.

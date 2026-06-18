@@ -194,6 +194,8 @@ export function renderStrategistPrompt(roadmap: string, constitution: string, pr
   return [
     'You are the strategist agent for a self-building OSS repository.',
     'Propose new roadmap items that advance the north star, discovered from the research signals.',
+    'When the roadmap is empty or signals are thin, also decompose the north star into the',
+    'foundational items needed to start building the product (scaffolding, core UI, first features).',
     'Optimize for recall over precision: surface every genuinely promising candidate; ranking happens later.',
     `Return strict JSON only. Propose at most ${maxItems} items.`,
     'Schema: { summary: string, items: [{ id, title, priority: high|medium|low, proof_gate, acceptance: string[],',

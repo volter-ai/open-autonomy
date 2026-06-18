@@ -1,16 +1,16 @@
 {
   "schema": "open-autonomy.strategist-sources.v1",
-  "note": "Where the strategist gathers research signals. Each repo's issues/discussions are scanned read-only. Customize per repo; this file is local-owned (seeded, never overwritten by upgrade).",
+  "note": "Where the strategist gathers research signals. Each repo's open issues are scanned read-only. REPLACE these with sources relevant to YOUR product. This file is local-owned (seeded, never overwritten by upgrade).",
   "customer_demand": {
-    "repos": ["volter-ai/open-autonomy"],
-    "note": "Our own issues and discussions — features users actually ask for."
+    "repos": [],
+    "note": "Your own repo and public feature requests in your product's domain."
   },
   "competitor_gaps": {
-    "repos": ["All-Hands-AI/OpenHands", "princeton-nlp/SWE-agent"],
-    "note": "Capabilities competing autonomous-engineering systems ship that we lack."
+    "repos": [],
+    "note": "Repos of competing products: capabilities they ship that you lack."
   },
   "analogous_fields": {
-    "repos": ["jennyzzt/dgm"],
-    "note": "Adjacent self-improving-agent work worth transferring ideas from."
+    "repos": [],
+    "note": "Adjacent domains worth transferring ideas from."
   }
 }

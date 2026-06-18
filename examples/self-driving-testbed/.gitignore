@@ -1,6 +1,0 @@
-node_modules/
-.agent-run/
-/.volter/
-*.log
-.dev.vars
-services/agent-model-proxy/.dev.vars

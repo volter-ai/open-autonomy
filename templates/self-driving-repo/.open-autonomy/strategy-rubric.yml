@@ -8,7 +8,7 @@ criteria:
     fail: An item is unrelated to the north star, or pursues a different goal.
   - id: merit
     title: Merit criteria
-    pass: Items serve the constitution's merit dimensions (portability, safety/visibility, proof, low human toil, robustness).
+    pass: Items serve the merit dimensions defined in the constitution.
     fail: An item trades against a merit dimension without justification.
   - id: justified
     title: Evidence and citation

@@ -1,16 +1,16 @@
 {
   "schema": "open-autonomy.strategist-sources.v1",
-  "note": "Where the strategist gathers research signals. Each repo's issues/discussions are scanned read-only. Customize per repo; this file is local-owned (seeded, never overwritten by upgrade).",
+  "note": "Research sources for the regex-playground testbed. Open issues are scanned read-only. Tune these as the product grows; until competitor/analogous repos are added, the strategist decomposes the north star into foundational work.",
   "customer_demand": {
-    "repos": ["volter-ai/open-autonomy"],
-    "note": "Our own issues and discussions — features users actually ask for."
+    "repos": ["volter-ai/open-autonomy-self-driving-testbed"],
+    "note": "The testbed's own issues — features users ask for as they accrue."
   },
   "competitor_gaps": {
-    "repos": ["All-Hands-AI/OpenHands", "princeton-nlp/SWE-agent"],
-    "note": "Capabilities competing autonomous-engineering systems ship that we lack."
+    "repos": [],
+    "note": "Add repos of open-source regex/dev-tool playgrounds to mine for capabilities we lack."
   },
   "analogous_fields": {
-    "repos": ["jennyzzt/dgm"],
-    "note": "Adjacent self-improving-agent work worth transferring ideas from."
+    "repos": [],
+    "note": "Add adjacent developer-tool repos (formatters, validators) worth transferring ideas from."
   }
 }

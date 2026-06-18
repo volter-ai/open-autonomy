@@ -25,6 +25,14 @@ items:
     proof_gate: complete-proof
     acceptance:
       - Nothing left.
+  - id: proposed-item
+    phase: 5
+    priority: high
+    status: proposed
+    title: Proposed Future Work
+    proof_gate: proposed-proof
+    acceptance:
+      - Awaiting human ratification.
 `;
 
 describe('open autonomy planner and control files', () => {
@@ -35,7 +43,10 @@ describe('open autonomy planner and control files', () => {
     expect(context.sources).toContain('.open-autonomy/review-rubric.yml');
     expect(context.sources).toContain('.codex/skills/open-autonomy-developer/SKILL.md');
     const prompt = renderControlFilePrompt(context);
-    expect(prompt).toContain('Open Autonomy Constitution');
+    // Title-agnostic: the generic template constitution is titled "# Constitution", canonical's is
+    // "# Open Autonomy Constitution". Assert on a stable rule clause present in both so the test
+    // passes in any scaffolded repo (otherwise greenfield CI is red and nothing can merge).
+    expect(prompt).toContain('User and maintainer intent is authoritative');
     expect(prompt).toContain('review-rubric.yml');
   });
 
@@ -53,6 +64,13 @@ describe('open autonomy planner and control files', () => {
     expect(actions[0]?.title).toContain('[roadmap:pm-proactive-backlog]');
     expect(actions[0]?.labels).toContain('origin:roadmap-planner');
     expect(actions[0]?.body).toContain('Proof gate: `pm-open-pr-review`');
+  });
+
+  test('planner skips proposed roadmap items until they are ratified', () => {
+    const items = parseRoadmapItems(roadmap);
+    const actions = planRoadmapIssues(items, []);
+    expect(actions.every((action) => action.item.status !== 'proposed')).toBe(true);
+    expect(actions.map((action) => action.item.id)).not.toContain('proposed-item');
   });
 
   test('planner updates existing roadmap issues that are missing labels', () => {

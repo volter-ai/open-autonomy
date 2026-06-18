@@ -1,0 +1,51 @@
+{
+  "$comment": "Provisioning manifest for the self-driving testbed (a regex-playground web app). Constitution-only seed: the strategist generates the roadmap; the strategy reviewer ratifies it; no scenario issues are seeded. No per-repo secret is required — the workflows mint and revoke model-proxy runs via GitHub OIDC (the repo's public-agent workflow must be in the proxy's OIDC allowlist).",
+  "description": "open-autonomy self-driving testbed (regex playground; constitution-only seed)",
+  "private": true,
+  "required_secrets": [],
+  "variables": [
+    { "name": "MODEL_PROXY_OIDC_AUDIENCE", "value": "volter-agent-model-proxy" },
+    { "name": "MODEL_PROXY_URL", "value": "https://volter-agent-model-proxy.aaron-0ed.workers.dev" },
+    { "name": "PUBLIC_AGENT_ALLOWED_PATHS", "value": "**" },
+    { "name": "PUBLIC_AGENT_MAX_DEVELOP_ATTEMPTS", "value": "3" },
+    { "name": "PUBLIC_AGENT_MAX_OPEN_AGENT_PRS", "value": "20" },
+    { "name": "PUBLIC_AGENT_MAX_REQUESTS", "value": "200" },
+    { "name": "PUBLIC_AGENT_MAX_USD_CENTS", "value": "500" },
+    { "name": "PUBLIC_AGENT_MODEL", "value": "gpt-5.4-mini" },
+    { "name": "PUBLIC_AGENT_MODELS", "value": "gpt-5.4-mini" },
+    { "name": "PUBLIC_AGENT_PM_LIMIT", "value": "8" },
+    { "name": "PUBLIC_AGENT_PM_MAX_USD_CENTS", "value": "25" },
+    { "name": "PUBLIC_AGENT_PM_MODEL", "value": "gpt-4o-mini" },
+    { "name": "PUBLIC_AGENT_PM_PROVIDER", "value": "openai" },
+    { "name": "PUBLIC_AGENT_REPO_PAUSED", "value": "false" },
+    { "name": "PUBLIC_AGENT_REVIEW_MAX_USD_CENTS", "value": "50" },
+    { "name": "PUBLIC_AGENT_REVIEW_MODEL", "value": "gpt-4o-mini" },
+    { "name": "PUBLIC_AGENT_REVIEW_PROVIDER", "value": "openai" },
+    { "name": "PUBLIC_AGENT_STALE_NEEDS_INFO_MINUTES", "value": "10080" },
+    { "name": "PUBLIC_AGENT_STRATEGIST_MODEL", "value": "gpt-4o-mini" },
+    { "name": "PUBLIC_AGENT_STRATEGIST_PROVIDER", "value": "openai" },
+    { "name": "PUBLIC_AGENT_STRATEGIST_MAX_USD_CENTS", "value": "150" },
+    { "name": "PUBLIC_AGENT_STRATEGIST_MAX_ITEMS", "value": "3" },
+    { "name": "PUBLIC_AGENT_STRATEGY_REVIEW_MODEL", "value": "gpt-4o-mini" },
+    { "name": "PUBLIC_AGENT_STRATEGY_REVIEW_PROVIDER", "value": "openai" },
+    { "name": "PUBLIC_AGENT_STRATEGY_REVIEW_MAX_USD_CENTS", "value": "50" },
+    { "name": "PUBLIC_AGENT_TRIAGE_MAX_USD_CENTS", "value": "25" },
+    { "name": "PUBLIC_AGENT_TRIAGE_MODEL", "value": "gpt-4o-mini" },
+    { "name": "PUBLIC_AGENT_TRIAGE_PROVIDER", "value": "openai" }
+  ],
+  "labels": [
+    { "name": "agent-paused", "color": "fbca04", "description": "Issue-level autonomy is paused" },
+    { "name": "agent-repo-paused", "color": "b60205", "description": "Repo-level autonomy pause fallback" },
+    { "name": "agent-blocked", "color": "d93f0b", "description": "Agent work is blocked" },
+    { "name": "human-required", "color": "b60205", "description": "A maintainer decision is required" },
+    { "name": "needs-info", "color": "fbca04", "description": "Waiting on clarifying information" },
+    { "name": "duplicate", "color": "cfd3d7", "description": "Duplicate of another issue" },
+    { "name": "do-not-merge", "color": "b60205", "description": "Maintainer merge block" },
+    { "name": "origin:roadmap-planner", "color": "1d76db", "description": "Created by the roadmap planner" },
+    { "name": "origin:strategist", "color": "5319e7", "description": "Roadmap proposal authored by the strategist" }
+  ],
+  "branch_protection": {
+    "branch": "main",
+    "required_checks": ["ci"]
+  }
+}

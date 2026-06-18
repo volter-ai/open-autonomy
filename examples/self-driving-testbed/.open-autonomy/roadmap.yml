@@ -1,0 +1,5 @@
+schema: open-autonomy.roadmap.v1
+direction: Pursue the north star and merit criteria in docs/CONSTITUTION.md (the best browser-based
+  regex playground). The strategist proposes strategy toward it and the strategy reviewer ratifies;
+  this file starts empty and records only ratified roadmap items.
+items: []

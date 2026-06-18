@@ -59,7 +59,7 @@ export function extractBearer(req: Request): string | null {
   return match?.[1] ?? null;
 }
 
-function constantTimeEqual(a: string, b: string): boolean {
+export function constantTimeEqual(a: string, b: string): boolean {
   const aa = new TextEncoder().encode(a);
   const bb = new TextEncoder().encode(b);
   const len = Math.max(aa.length, bb.length);

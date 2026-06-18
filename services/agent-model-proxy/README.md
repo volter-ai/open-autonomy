@@ -17,6 +17,61 @@ spend while GitHub Actions runs semi-untrusted agents.
 - `POST /openai/v1/chat/completions`
 - `POST /openai/v1/responses`
 
+## Funding: a tree of accounts
+
+Funding is a **tree of accounts** (every repo slug + named roots like `volter`). An account's spendable
+`balance = granted_in − granted_out − consumed`, on three operations:
+
+- **mint** — new credits enter at a node (real money). The only thing that increases the total.
+- **grant** — credits move between accounts (transfer; conserves the total).
+- **consume** — agent spend leaves the system (paid to the model provider), debiting that project's account.
+
+Invariant: **total minted = total consumed + total still held.** Volter mints the root, open-autonomy
+grants down to its testbeds, and each project spends its own balance and hard-stops at zero.
+
+Endpoints:
+
+- `POST /admin/accounts/:id/mint` — money in at `:id`. Body `{ amount_usd_cents, key?, sponsor? }`. Idempotent on `key`.
+- `POST /admin/accounts/:id/grant` — transfer from `:id`. Body `{ to, amount_usd_cents, key? }`. Refused if `:id` lacks the balance.
+- `POST /admin/accounts/:id/accrue` — mint `:id` with its active recurring sponsors' monthly total. Body `{ key }`. Also fired by the monthly cron.
+- `GET /v1/accounts/:id` — public funding snapshot (balance, granted in/out, consumed, burn, runway, sponsors).
+- `GET /v1/accounts/:id/runway.svg` — public, Camo-safe runway SVG for that account's README.
+- `GET /v1/funding` + `GET /v1/funding/runway.svg` — aliases for `DEFAULT_FUNDING_ACCOUNT`.
+- `POST /webhooks/github-sponsors` — GitHub Sponsors webhook (HMAC-verified, no token); maintains the
+  `DEFAULT_SPONSOR_ACCOUNT`'s recurring-sponsor list and mints one-time gifts.
+- `POST /admin/coupons` / `GET /admin/coupons` — issue/list **coupons** (bearer/deferred grants).
+- `POST /v1/coupons/redeem` — redeem a coupon into an account. Body `{ code, account }`.
+
+**Enforcement / rollout.** Spend is hard-stopped on the account balance only when
+`ENFORCE_ACCOUNT_BALANCE=true`. Default is `false` so the model can be deployed and the tree
+bootstrapped (mint root, grant to active repos) BEFORE the gate turns on — otherwise every unfunded
+repo would stop the instant this ships. Bootstrap with `bun scripts/fund-bootstrap.ts`, verify balances,
+then flip the var.
+
+**Coupons** decouple granting funding from paying: issue a coupon for a sponsor's committed amount (with
+their logo/tagline), hand them the code; redemption mints (or, with `from`, grants from an issuer
+account) into the recipient and puts them on the README. Money is settled out-of-band.
+
+```bash
+# fund the tree (root + grants down), idempotent
+MODEL_PROXY_URL=... MODEL_PROXY_ADMIN_TOKEN=... bun scripts/fund-bootstrap.ts
+# issue + redeem a coupon
+curl -X POST https://<proxy-host>/admin/accounts/volter/mint -H "x-admin-token: $TOK" -d '{"amount_usd_cents":50000}'
+curl -X POST https://<proxy-host>/admin/coupons -H "x-admin-token: $TOK" \
+  -d '{"amount_usd_cents":5000,"from":"volter-ai/open-autonomy","sponsor":{"login":"acme","name":"ACME Cloud","tagline":"infra for builders"}}'
+curl -X POST https://<proxy-host>/v1/coupons/redeem -d '{"code":"SPON-XXXX-XXXX-XXXX","account":"volter-ai/some-project"}'
+```
+
+GitHub Sponsors funding needs **no GitHub token**: set `GITHUB_SPONSORS_WEBHOOK_SECRET`, add the webhook
+in the org's Sponsors dashboard (URL `/webhooks/github-sponsors`, JSON, same secret); the monthly cron
+(`[triggers] crons`) accrues recurring sponsorships (GitHub sends no per-renewal event).
+
+Embed the runway in a README:
+
+```markdown
+[![funding](https://<proxy-host>/v1/funding/runway.svg)](https://github.com/sponsors/<org>)
+```
+
 Admin routes require:
 
 ```text

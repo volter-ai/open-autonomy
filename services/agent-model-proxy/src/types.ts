@@ -19,10 +19,15 @@ export interface Env {
   MAX_RUNS_PER_ACTOR_PER_DAY?: string;
   MAX_RUNS_PER_ISSUE_PER_DAY?: string;
   MAX_GLOBAL_DAILY_USD_CENTS?: string;
+  ENFORCE_ACCOUNT_BALANCE?: string;
+  DEFAULT_FUNDING_ACCOUNT?: string;
+  DEFAULT_SPONSOR_ACCOUNT?: string;
+  GITHUB_SPONSORS_WEBHOOK_SECRET?: string;
   GITHUB_OIDC_AUDIENCE?: string;
   GITHUB_OIDC_ALLOWED_WORKFLOW?: string;
   GITHUB_OIDC_OPENID_CONFIGURATION_URL?: string;
   GITHUB_OIDC_JWKS_URL?: string;
+  GITHUB_API_BASE?: string;
   RUNS: DurableObjectNamespace;
   LIMITS: DurableObjectNamespace;
 }

@@ -1,8 +1,6 @@
-# Open Autonomy Project
+# Project
 
-Open Autonomy is an OSS self-driving repository template and runtime. It uses
-repository-local control files, Codex skills, GitHub workflows, and deterministic
-guards to move issues toward reviewed pull requests.
-
-The canonical repository dogfoods Open Autonomy, and the live testbed proves
-agent behavior on disposable issues before expanding autonomy.
+<!-- REPLACE THIS for your project. -->
+Describe the product this repository builds: what it is, who it serves, and the problem it
+solves. The strategist and reviewer read this together with the constitution's north star to
+keep proposed work aligned with what you are actually building.

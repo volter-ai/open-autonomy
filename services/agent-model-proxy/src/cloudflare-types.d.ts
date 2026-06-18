@@ -29,6 +29,13 @@ interface DurableObjectStub {
   fetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response>;
 }
 
+interface ScheduledController {
+  readonly scheduledTime: number;
+  readonly cron: string;
+  noRetry(): void;
+}
+
 interface ExportedHandler<Env = unknown> {
   fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response>;
+  scheduled?(controller: ScheduledController, env: Env, ctx: ExecutionContext): Promise<void>;
 }

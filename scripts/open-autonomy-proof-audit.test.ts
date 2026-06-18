@@ -42,6 +42,31 @@ describe('open autonomy proof audit', () => {
   });
 
 
+  test('exempts proposed roadmap items from the ledger audit', () => {
+    const roadmap = [
+      'items:',
+      '  - id: one',
+      '    phase: 1',
+      '    priority: high',
+      '    status: active',
+      '    title: One',
+      '    proof_gate: gate-one',
+      '    acceptance:',
+      '      - done',
+      '  - id: future',
+      '    phase: 2',
+      '    priority: high',
+      '    status: proposed',
+      '    title: Future',
+      '    proof_gate: gate-future',
+      '    acceptance:',
+      '      - someday',
+    ].join('\n');
+    const result = auditProofLedger(roadmap, '| `gate-one` | `scripts/open-autonomy-proof-audit.ts` | done |');
+    expect(result.passed).toBe(true);
+    expect(result.proof_gates.map((gate) => gate.id)).not.toContain('gate-future');
+  });
+
   test('passes only when every roadmap proof gate is done in the ledger', () => {
     const roadmap = [
       'items:',

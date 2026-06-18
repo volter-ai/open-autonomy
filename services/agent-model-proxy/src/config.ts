@@ -10,5 +10,6 @@ export function limitsFromEnv(env: Env): LimitConfig {
     max_runs_per_actor_per_day: Number(env.MAX_RUNS_PER_ACTOR_PER_DAY ?? 200),
     max_runs_per_issue_per_day: Number(env.MAX_RUNS_PER_ISSUE_PER_DAY ?? 50),
     max_global_daily_usd_cents: Number(env.MAX_GLOBAL_DAILY_USD_CENTS ?? 5000),
+    enforce_account_balance: (env.ENFORCE_ACCOUNT_BALANCE ?? 'false') === 'true',
   };
 }

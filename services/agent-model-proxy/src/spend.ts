@@ -24,7 +24,7 @@ export async function reserveBudget(
   const runReservation = await runBudget.reserve(requestId, amountUsdCents);
   if (!runReservation.ok) return error(runReservation.error, 402);
 
-  const globalReservation = await ledger.reserve(requestId, amountUsdCents, limitConfig);
+  const globalReservation = await ledger.reserve(requestId, amountUsdCents, limitConfig, runId);
   if (!globalReservation.ok) {
     await runBudget.release(requestId);
     return error(globalReservation.error, 402);

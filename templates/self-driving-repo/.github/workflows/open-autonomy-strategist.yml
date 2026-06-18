@@ -1,0 +1,162 @@
+name: Open Autonomy Strategist
+
+on:
+  schedule:
+    - cron: '23 7 * * 1'
+  workflow_dispatch:
+    inputs:
+      apply:
+        description: Open a strategist roadmap proposal PR
+        required: false
+        default: 'false'
+        type: choice
+        options:
+          - 'false'
+          - 'true'
+
+permissions:
+  contents: read
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+
+jobs:
+  strategist:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    permissions:
+      contents: write
+      pull-requests: write
+      issues: read
+      id-token: write
+      actions: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile || bun install
+
+      # Research is networked but powerless: only the read-only GitHub token, no proxy admin
+      # secret. Fetched content is captured as untrusted data (signals.json), never executed.
+      - name: Gather research signals
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p .agent-run/strategist
+          sources=.open-autonomy/strategist-sources.json
+          signals=.agent-run/strategist/signals.json
+          echo '[]' > "$signals"
+          if [ ! -f "$sources" ]; then echo "no strategist-sources.json; empty signals"; else
+            for direction in customer_demand competitor_gaps analogous_fields; do
+              dir_label="$(echo "$direction" | tr '_' '-' | sed 's/-gaps/-gap/; s/-demand/-demand/; s/analogous-fields/analogous-field/')"
+              for repo in $(jq -r ".${direction}.repos[]? // empty" "$sources"); do
+                gh issue list --repo "$repo" --state open --limit 20 \
+                  --json number,title,url --jq \
+                  "[.[] | {id: (\"${repo}#\" + (.number|tostring)), title: .title, direction: \"${dir_label}\", source: .url}]" \
+                  > .agent-run/strategist/batch.json 2>/dev/null || echo '[]' > .agent-run/strategist/batch.json
+                jq -s '.[0] + .[1]' "$signals" .agent-run/strategist/batch.json > .agent-run/strategist/merged.json
+                mv .agent-run/strategist/merged.json "$signals"
+              done
+            done
+          fi
+          jq '{schema: "open-autonomy.strategist-signals.v1", signals: .}' "$signals" > .agent-run/strategist/signals.wrapped.json
+          mv .agent-run/strategist/signals.wrapped.json "$signals"
+          echo "gathered $(jq '.signals | length' "$signals") signals"
+
+      - name: Fetch prior strategist proposals
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh pr list --state all --label origin:strategist --limit 50 \
+            --json number,title,body,state --jq '[.[] | .title + " " + (.body // "")] | join("\n")' \
+            > .agent-run/strategist/prior.txt 2>/dev/null || printf '' > .agent-run/strategist/prior.txt
+
+      - name: Mint strategist model token
+        id: mint
+        env:
+          MODEL_PROXY_URL: ${{ vars.MODEL_PROXY_URL }}
+          MODEL_PROXY_ADMIN_TOKEN: ${{ secrets.MODEL_PROXY_ADMIN_TOKEN }}
+        run: |
+          set -euo pipefail
+          printf '{"number":0,"title":"Strategist run","body":"","user":{"login":"%s"}}\n' "${GITHUB_ACTOR}" \
+            > .agent-run/strategist/issue.json
+          mint_output="$(bun scripts/model-proxy-mint.ts \
+            --issue .agent-run/strategist/issue.json \
+            --models "${{ vars.PUBLIC_AGENT_STRATEGIST_MODEL || vars.PUBLIC_AGENT_PM_MODEL || 'gpt-4o-mini' }}" \
+            --max-usd-cents "${{ vars.PUBLIC_AGENT_STRATEGIST_MAX_USD_CENTS || '100' }}" \
+            --max-requests "2" \
+            --purpose pm)"
+          run_id="$(printf '%s\n' "$mint_output" | sed -n 's/^run_id=//p' | tail -1)"
+          token="$(printf '%s\n' "$mint_output" | sed -n 's/^token=//p' | tail -1)"
+          echo "::add-mask::$token"
+          echo "run_id=$run_id" >> "$GITHUB_OUTPUT"
+          echo "token=$token" >> "$GITHUB_OUTPUT"
+
+      - name: Synthesize roadmap proposal
+        env:
+          MODEL_PROXY_URL: ${{ vars.MODEL_PROXY_URL }}
+          MODEL_PROXY_TOKEN: ${{ steps.mint.outputs.token }}
+        run: |
+          touch .open-autonomy/strategist-archive.json
+          bun scripts/public-agent-strategist.ts \
+            --roadmap .open-autonomy/roadmap.yml \
+            --constitution docs/CONSTITUTION.md \
+            --signals .agent-run/strategist/signals.json \
+            --prior-proposals .agent-run/strategist/prior.txt \
+            --archive .open-autonomy/strategist-archive.json \
+            --provider "${{ vars.PUBLIC_AGENT_STRATEGIST_PROVIDER || 'openai' }}" \
+            --model "${{ vars.PUBLIC_AGENT_STRATEGIST_MODEL || vars.PUBLIC_AGENT_PM_MODEL || 'gpt-4o-mini' }}" \
+            --max-items "${{ vars.PUBLIC_AGENT_STRATEGIST_MAX_ITEMS || '3' }}" \
+            --out .agent-run/strategist/proposal.json \
+            --roadmap-out .open-autonomy/roadmap.yml \
+            --archive-out .open-autonomy/strategist-archive.json
+
+      - name: Revoke strategist run
+        if: always() && steps.mint.outputs.run_id != ''
+        env:
+          MODEL_PROXY_URL: ${{ vars.MODEL_PROXY_URL }}
+          MODEL_PROXY_ADMIN_TOKEN: ${{ secrets.MODEL_PROXY_ADMIN_TOKEN }}
+        run: |
+          bun scripts/model-proxy-revoke.ts --run-id "${{ steps.mint.outputs.run_id }}" || true
+
+      - name: Open strategist proposal PR
+        if: inputs.apply == 'true' || github.event_name == 'schedule'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          if git diff --quiet -- .open-autonomy/roadmap.yml; then
+            echo "Strategist proposed no new roadmap items."
+            exit 0
+          fi
+          gh label create origin:strategist --description "Roadmap proposal authored by the Open Autonomy strategist" --color 5319E7 2>/dev/null || true
+          git config user.name "open-autonomy-strategist"
+          git config user.email "open-autonomy-strategist@users.noreply.github.com"
+          branch="strategist/roadmap-${{ github.run_id }}"
+          git checkout -B "$branch"
+          git add .open-autonomy/roadmap.yml .open-autonomy/strategist-archive.json
+          git commit -m "strategist: propose roadmap items from research"
+          git push --force-with-lease origin "$branch"
+          summary="$(jq -r '.summary' .agent-run/strategist/proposal.json)"
+          body="$(jq -r '"## Strategist roadmap proposal\n\n" + .summary + "\n\n" + (.items | map("### " + .title + "\n- **Direction:** " + .direction + "\n- **Rationale:** " + .rationale + "\n- **Falsified if:** " + .falsified_if + "\n- **Sources:** " + (.sources | join(", "))) | join("\n\n")) + "\n\nProposed for strategy review. The strategist proposes; it does not merge."' .agent-run/strategist/proposal.json)"
+          pr_url="$(gh pr create --base main --head "$branch" \
+            --title "Strategist: roadmap proposal (${summary:0:60})" \
+            --body "$body" \
+            --label origin:strategist)" || { echo "pr create failed"; exit 0; }
+          pr_number="$(printf '%s\n' "$pr_url" | grep -oE '[0-9]+$' || true)"
+          # Hand off to the independent strategy reviewer. workflow_dispatch is dispatchable with the
+          # ambient token (unlike PR events, which GITHUB_TOKEN-created PRs do not trigger).
+          if [ -n "$pr_number" ]; then
+            gh workflow run public-agent-strategy-review.yml -f pr="$pr_number" || \
+              echo "could not dispatch strategy review; trigger /agent strategy-review on PR #${pr_number}"
+          fi
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: open-autonomy-strategist-${{ github.run_id }}
+          path: .agent-run/strategist
+          if-no-files-found: warn

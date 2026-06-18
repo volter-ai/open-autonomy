@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 import { execFileSync } from 'node:child_process';
-import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { cpSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 
@@ -159,29 +159,46 @@ function mainHasCommits(repo: string): boolean {
   return result.ok && result.out.trim().length > 0;
 }
 
-function trackedFiles(source: string): string[] {
-  const out = run('git', ['ls-files', '--cached', '--others', '--exclude-standard', '--', source]);
-  return out.split('\n').map((line) => line.trim()).filter(Boolean);
+const ALWAYS_EXCLUDE = new Set(['.git', 'node_modules', '.agent-run']);
+
+// Enumerate the files to push, relative to `source`. Works whether `source` is a directory inside
+// a git repo (committed example like examples/testbed) or a standalone build dir assembled by a
+// bootstrap (scaffold + overlay). Git enumeration respects .gitignore (excludes node_modules); the
+// filesystem-walk fallback applies when the source is not a git tree.
+export function sourceFiles(source: string): string[] {
+  const tracked = tryRun('git', ['-C', source, 'ls-files', '--cached', '--others', '--exclude-standard']);
+  if (tracked.ok) {
+    const files = tracked.out.split('\n').map((line) => line.trim()).filter(Boolean);
+    if (files.length > 0) return files;
+  }
+  const out: string[] = [];
+  const walk = (dir: string, prefix: string): void => {
+    for (const entry of readdirSync(dir, { withFileTypes: true })) {
+      if (ALWAYS_EXCLUDE.has(entry.name)) continue;
+      const rel = prefix ? `${prefix}/${entry.name}` : entry.name;
+      if (entry.isDirectory()) walk(join(dir, entry.name), rel);
+      else if (entry.isFile()) out.push(rel);
+    }
+  };
+  walk(source, '');
+  return out.sort();
 }
 
 function pushInitialContent(repo: string, source: string): void {
-  const repoRoot = run('git', ['rev-parse', '--show-toplevel']).trim();
-  const sourceRel = source.startsWith(repoRoot) ? source.slice(repoRoot.length + 1) : source;
   const tmp = mkdtempSync(join(tmpdir(), 'provision-'));
   try {
-    for (const rel of trackedFiles(source)) {
-      const abs = join(repoRoot, rel);
+    for (const rel of sourceFiles(source)) {
+      const abs = join(source, rel);
       if (!existsSync(abs)) continue;
-      const underSource = rel.startsWith(`${sourceRel}/`) ? rel.slice(sourceRel.length + 1) : rel;
-      const target = join(tmp, underSource);
+      const target = join(tmp, rel);
       mkdirSync(dirname(target), { recursive: true });
       cpSync(abs, target);
     }
     run('git', ['init', '-b', 'main'], { cwd: tmp });
     run('git', ['add', '-A'], { cwd: tmp });
-    run('git', ['commit', '-m', 'Initial open-autonomy testbed content'], { cwd: tmp });
+    run('git', ['commit', '-m', 'Initial open-autonomy content'], { cwd: tmp });
     run('git', ['remote', 'add', 'origin', `https://github.com/${repo}.git`], { cwd: tmp });
-    run('git', ['push', '-u', 'origin', 'main'], { cwd: tmp });
+    run('git', ['push', '-u', '--force', 'origin', 'main'], { cwd: tmp });
   } finally {
     rmSync(tmp, { recursive: true, force: true });
   }
@@ -200,7 +217,14 @@ async function main(): Promise<void> {
 
   const hasCommits = exists ? mainHasCommits(options.repo) : false;
   const shouldPush = (!hasCommits || options.forceContent) && !options.dryRun;
-  if (shouldPush) pushInitialContent(options.repo, options.source);
+  if (shouldPush) {
+    // A force-push to an existing protected branch is rejected, so drop protection before pushing;
+    // the branch-protection step below re-adds it. Keeps re-provisioning idempotent and hands-free.
+    if (exists && manifest.branch_protection) {
+      tryRun('gh', ['api', '-X', 'DELETE', `repos/${options.repo}/branches/${manifest.branch_protection.branch}/protection`]);
+    }
+    pushInitialContent(options.repo, options.source);
+  }
 
   const existingVars: Record<string, string> = {};
   if (exists || shouldPush) {

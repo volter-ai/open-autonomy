@@ -30,6 +30,7 @@ jobs:
       issues: write
       pull-requests: write
       actions: write
+      id-token: write
     steps:
       - uses: actions/checkout@v4
         with:
@@ -137,7 +138,19 @@ jobs:
               --models "$PUBLIC_AGENT_PM_MODEL" \
               --max-usd-cents "${{ vars.PUBLIC_AGENT_PM_MAX_USD_CENTS || '25' }}" \
               --max-requests "2" \
-              --purpose pm)"; then
+              --purpose pm 2>&1)"; then
+              # Lifetime budget exhausted is terminal, not transient: auto-pause the repo (the repo
+              # pause check skips future sweeps) until a sponsorship top-up raises the budget and a
+              # maintainer removes the agent-repo-paused issue/label to resume.
+              if printf '%s' "$mint_output" | grep -q 'repo_lifetime_budget_exhausted'; then
+                gh label create agent-repo-paused --color b60205 --description "Repo-level autonomy pause" 2>/dev/null || true
+                if [[ "$(gh issue list --state open --label agent-repo-paused --limit 1 --json number --jq 'length')" == "0" ]]; then
+                  gh issue create --title "Repo paused: lifetime model budget exhausted" --label agent-repo-paused \
+                    --body "This repository has spent its lifetime model budget and is paused. Top up its budget (sponsorship) via the model proxy, then remove the \`agent-repo-paused\` label / close this issue to resume." || true
+                fi
+                echo "lifetime budget exhausted; repo auto-paused"
+                exit 0
+              fi
               echo "::warning::skip issue #${number}: PM token mint failed"
               unavailable_reason="PM model budget is temporarily unavailable; the PM agent will retry on a later sweep."
               bun scripts/public-agent-decision.ts \
@@ -203,9 +216,7 @@ jobs:
               --out-dir "$decision_dir"
 
             if [[ -n "$run_id" ]]; then
-              curl -fsS -X POST \
-                -H "x-admin-token: ${MODEL_PROXY_ADMIN_TOKEN}" \
-                "${MODEL_PROXY_URL}/admin/runs/${run_id}/revoke"
+              bun scripts/model-proxy-revoke.ts --run-id "$run_id" || true
             fi
 
             bun scripts/public-agent-dispatcher.ts \

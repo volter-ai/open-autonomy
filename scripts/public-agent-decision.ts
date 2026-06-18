@@ -15,6 +15,7 @@ export const DECISION_STAGES = [
   'publish',
   'ci',
   'review',
+  'strategy_review',
   'retry',
   'merge_gate',
   'escalation',

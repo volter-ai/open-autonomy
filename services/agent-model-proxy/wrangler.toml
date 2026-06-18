@@ -17,8 +17,18 @@ MAX_RUNS_PER_REPO_PER_DAY = "5000"
 MAX_RUNS_PER_ACTOR_PER_DAY = "5000"
 MAX_RUNS_PER_ISSUE_PER_DAY = "200"
 MAX_GLOBAL_DAILY_USD_CENTS = "5000"
+# Account-balance hard-stop. The funding tree is bootstrapped (scripts/fund-bootstrap.ts: volter root
+# funds open-autonomy, which funds its testbeds), so enforcement is ON — a project's agent spend is
+# hard-stopped on its own balance, and a run won't start for an unfunded project.
+ENFORCE_ACCOUNT_BALANCE = "true"
+DEFAULT_FUNDING_ACCOUNT = "volter-ai/open-autonomy"
+DEFAULT_SPONSOR_ACCOUNT = "volter-ai/open-autonomy"
 GITHUB_OIDC_AUDIENCE = "volter-agent-model-proxy"
-GITHUB_OIDC_ALLOWED_WORKFLOW = "volter-ai/open-autonomy/.github/workflows/public-agent.yml@,volter-ai/open-autonomy-testbed/.github/workflows/public-agent.yml@"
+GITHUB_OIDC_ALLOWED_WORKFLOW = "volter-ai/open-autonomy/.github/workflows/public-agent.yml@,volter-ai/open-autonomy-testbed/.github/workflows/public-agent.yml@,volter-ai/open-autonomy-self-driving-testbed/.github/workflows/public-agent.yml@"
+
+# Monthly sponsorship accrual (credits active recurring sponsors into the pool; idempotent per month).
+[triggers]
+crons = ["0 6 1 * *"]
 
 [[durable_objects.bindings]]
 name = "RUNS"

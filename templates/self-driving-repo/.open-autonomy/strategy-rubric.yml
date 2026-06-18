@@ -1,0 +1,37 @@
+schema: open-autonomy.strategy-rubric.v1
+# How the strategy reviewer ratifies a strategist's roadmap proposal against the constitution's
+# north star and merit criteria. This is the human-owned rubric; the strategist may not edit it.
+criteria:
+  - id: north-star-alignment
+    title: North-star alignment
+    pass: Each proposed item demonstrably advances the constitution's north star.
+    fail: An item is unrelated to the north star, or pursues a different goal.
+  - id: merit
+    title: Merit criteria
+    pass: Items serve the merit dimensions defined in the constitution.
+    fail: An item trades against a merit dimension without justification.
+  - id: justified
+    title: Evidence and citation
+    pass: Each item cites the research signal/source behind it and gives a concrete rationale.
+    fail: An item asserts value without cited evidence or a clear rationale.
+  - id: falsifiable
+    title: Falsifiability
+    pass: Each item states what evidence would show it was the wrong bet.
+    fail: An item is unfalsifiable or self-justifying.
+  - id: non-redundant
+    title: Non-redundant
+    pass: Items are not duplicates of existing roadmap items or prior proposals.
+    fail: An item restates work already planned or proposed.
+  - id: governance-respect
+    title: Governance respect
+    pass: The proposal only adds roadmap items; it does not touch the constitution, merit criteria, proof gates, workflows, or skills.
+    fail: The proposal attempts to edit governance files. Always human-required (and hard-blocked).
+verdicts:
+  pass:
+    requires:
+      - all applicable criteria pass
+      - no governance files touched
+  fail:
+    use_when: An item is unaligned, unjustified, unfalsifiable, or redundant and should not be ratified.
+  human_required:
+    use_when: The proposal touches governance, intent is ambiguous, or strategic risk is high.

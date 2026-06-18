@@ -18,6 +18,8 @@ skills:
   reviewer: .codex/skills/open-autonomy-reviewer
   planner: .codex/skills/open-autonomy-planner
   upgrade: .codex/skills/open-autonomy-upgrade
+  strategist: .codex/skills/open-autonomy-strategist
+  strategy_reviewer: .codex/skills/open-autonomy-strategy-reviewer
 agents:
   pm:
     skill: open-autonomy-pm
@@ -54,6 +56,17 @@ agents:
     capabilities:
       - pr:open
       - pr:update
+  strategist:
+    skill: open-autonomy-strategist
+    capabilities:
+      - pr:open
+      - pr:update
+  strategy_reviewer:
+    skill: open-autonomy-strategy-reviewer
+    capabilities:
+      - pr:comment
+      - pr:review
+      - workflow:dispatch
 policy:
   autonomy:
     max_open_agent_prs: 5

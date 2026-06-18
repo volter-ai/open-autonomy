@@ -28,6 +28,7 @@ jobs:
       contents: write
       pull-requests: write
       issues: read
+      id-token: write
     steps:
       - uses: actions/checkout@v4
         with:
@@ -120,9 +121,7 @@ jobs:
           MODEL_PROXY_URL: ${{ vars.MODEL_PROXY_URL }}
           MODEL_PROXY_ADMIN_TOKEN: ${{ secrets.MODEL_PROXY_ADMIN_TOKEN }}
         run: |
-          curl -fsS -X POST \
-            -H "x-admin-token: ${MODEL_PROXY_ADMIN_TOKEN}" \
-            "${MODEL_PROXY_URL}/admin/runs/${{ steps.mint.outputs.run_id }}/revoke" || true
+          bun scripts/model-proxy-revoke.ts --run-id "${{ steps.mint.outputs.run_id }}" || true
 
       - name: Open strategist proposal PR
         if: inputs.apply == 'true' || github.event_name == 'schedule'

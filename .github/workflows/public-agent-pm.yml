@@ -30,6 +30,7 @@ jobs:
       issues: write
       pull-requests: write
       actions: write
+      id-token: write
     steps:
       - uses: actions/checkout@v4
         with:
@@ -203,9 +204,7 @@ jobs:
               --out-dir "$decision_dir"
 
             if [[ -n "$run_id" ]]; then
-              curl -fsS -X POST \
-                -H "x-admin-token: ${MODEL_PROXY_ADMIN_TOKEN}" \
-                "${MODEL_PROXY_URL}/admin/runs/${run_id}/revoke"
+              bun scripts/model-proxy-revoke.ts --run-id "$run_id" || true
             fi
 
             bun scripts/public-agent-dispatcher.ts \

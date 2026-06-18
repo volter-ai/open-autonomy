@@ -65,6 +65,7 @@ jobs:
       issues: write
       pull-requests: read
       actions: write
+      id-token: write
     outputs:
       approved: ${{ steps.triage.outputs.approved }}
       run_id: ${{ steps.mint.outputs.run_id }}
@@ -315,9 +316,7 @@ jobs:
                 if [[ -z "$proxy_run_id" ]]; then
                   continue
                 fi
-                curl -fsS -X POST \
-                  -H "x-admin-token: ${MODEL_PROXY_ADMIN_TOKEN}" \
-                  "${MODEL_PROXY_URL}/admin/runs/${proxy_run_id}/revoke" >/dev/null || true
+                bun scripts/model-proxy-revoke.ts --run-id "$proxy_run_id" >/dev/null 2>&1 || true
                 revoked=$((revoked + 1))
               done < <(jq -r --argjson issue "$issue" '.runs // {} | to_entries[] | select(.value.issue == $issue and .value.active == true) | .key' <<<"$status_json")
               gh issue comment "$issue" --body "Agent cancel requested. Cancelled ${cancelled} workflow run(s) and revoked ${revoked} active proxy run(s)."
@@ -440,9 +439,7 @@ jobs:
           MODEL_PROXY_URL: ${{ vars.MODEL_PROXY_URL }}
           MODEL_PROXY_ADMIN_TOKEN: ${{ secrets.MODEL_PROXY_ADMIN_TOKEN }}
         run: |
-          curl -fsS -X POST \
-            -H "x-admin-token: ${MODEL_PROXY_ADMIN_TOKEN}" \
-            "${MODEL_PROXY_URL}/admin/runs/${{ steps.triage_mint.outputs.run_id }}/revoke"
+          bun scripts/model-proxy-revoke.ts --run-id "${{ steps.triage_mint.outputs.run_id }}" || true
 
       - name: Record triage decision
         if: always() && steps.command.outputs.verb == 'develop' && steps.repo_pause.outputs.paused != 'true' && steps.policy.outputs.allowed == 'true' && hashFiles('.agent-run/target.json') != ''
@@ -675,15 +672,18 @@ jobs:
     timeout-minutes: 5
     permissions:
       contents: read
+      id-token: write
     steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+      - run: bun install --frozen-lockfile || bun install
       - name: Complete agent run
         env:
           MODEL_PROXY_URL: ${{ vars.MODEL_PROXY_URL }}
           MODEL_PROXY_ADMIN_TOKEN: ${{ secrets.MODEL_PROXY_ADMIN_TOKEN }}
+          MODEL_PROXY_OIDC_AUDIENCE: ${{ vars.MODEL_PROXY_OIDC_AUDIENCE || 'volter-agent-model-proxy' }}
         run: |
-          curl -fsS -X POST \
-            -H "x-admin-token: ${MODEL_PROXY_ADMIN_TOKEN}" \
-            "${MODEL_PROXY_URL}/admin/runs/${{ needs.setup.outputs.run_id }}/revoke"
+          bun scripts/model-proxy-revoke.ts --run-id "${{ needs.setup.outputs.run_id }}" || true
 
   publisher:
     needs: [setup, agent-runner]
@@ -915,6 +915,7 @@ jobs:
       pull-requests: write
       actions: write
       statuses: write
+      id-token: write
     steps:
       - uses: actions/checkout@v4
         with:
@@ -1069,9 +1070,7 @@ jobs:
           MODEL_PROXY_URL: ${{ vars.MODEL_PROXY_URL }}
           MODEL_PROXY_ADMIN_TOKEN: ${{ secrets.MODEL_PROXY_ADMIN_TOKEN }}
         run: |
-          curl -fsS -X POST \
-            -H "x-admin-token: ${MODEL_PROXY_ADMIN_TOKEN}" \
-            "${MODEL_PROXY_URL}/admin/runs/${{ steps.review_mint.outputs.run_id }}/revoke"
+          bun scripts/model-proxy-revoke.ts --run-id "${{ steps.review_mint.outputs.run_id }}" || true
 
       - name: Decide merge
         if: steps.ci_followup.outputs.continue_review == 'true'

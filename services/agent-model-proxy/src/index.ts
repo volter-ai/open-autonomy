@@ -28,6 +28,7 @@ async function route(req: Request, env: Env, ctx: ExecutionContext): Promise<Res
   if (path === '/healthz') return new Response('ok');
 
   if (path === '/admin/runs/mint') return mintRun(req, env);
+  if (path === '/v1/runs/mint') return mintRunOidc(req, env);
   if (path === '/admin/limits/status') {
     if (!isAdmin(req, env)) return error('auth_failed', 401);
     if (req.method !== 'GET') return methodNotAllowed();
@@ -63,6 +64,21 @@ async function route(req: Request, env: Env, ctx: ExecutionContext): Promise<Res
     return exchangeRunToken(req, env, decodeURIComponent(exchangeRun[1]));
   }
 
+  // OIDC-gated revoke: the owning repo (proven via OIDC) may revoke its own run, so fleet repos
+  // need no admin token for run cleanup. (Bounded tokens also expire on their own.)
+  const revokeRun = path.match(/^\/v1\/runs\/([^/]+)\/revoke$/);
+  if (revokeRun) {
+    if (req.method !== 'POST') return methodNotAllowed();
+    const oidc = await verifyGitHubOidcToken(env, extractBearer(req));
+    if (!oidc) return error('auth_failed', 401);
+    const runId = decodeURIComponent(revokeRun[1]);
+    const status = await new RunBudgetClient(env.RUNS, runId).status() as { claims?: RunClaims | null };
+    if (!status.claims || status.claims.repo !== oidc.repository) return error('forbidden_run', 403);
+    await new RunBudgetClient(env.RUNS, runId).revoke();
+    await new LimitLedgerClient(env.LIMITS).complete(runId);
+    return json({ ok: true, run_id: runId });
+  }
+
   const claims = await authedClaims(req, env);
   if (!claims) return error('auth_failed', 401);
 
@@ -76,10 +92,48 @@ async function route(req: Request, env: Env, ctx: ExecutionContext): Promise<Res
 async function mintRun(req: Request, env: Env): Promise<Response> {
   if (!isAdmin(req, env)) return error('auth_failed', 401);
   if (req.method !== 'POST') return methodNotAllowed();
-
-  const bodyText = await req.text();
-  const body = parseJson<MintRunRequest>(bodyText);
+  const body = parseJson<MintRunRequest>(await req.text());
   if (!body) return error('invalid_json');
+  return mintFromRequest(env, body);
+}
+
+// Repos in the OIDC allowlist may mint via OIDC instead of the admin token, so a fleet repo needs
+// no stored admin secret. Identity (repo/actor/run) comes from the verified OIDC token, never the
+// client body; caps are still clamped to the proxy's ceilings. Trust is at repo granularity for
+// mint: any workflow in a repo whose entry is in GITHUB_OIDC_ALLOWED_WORKFLOW may mint.
+async function mintRunOidc(req: Request, env: Env): Promise<Response> {
+  if (req.method !== 'POST') return methodNotAllowed();
+  const oidc = await verifyGitHubOidcToken(env, extractBearer(req));
+  if (!oidc) return error('auth_failed', 401);
+  const workflowRef = oidc.job_workflow_ref ?? oidc.workflow_ref ?? '';
+  if (!oidc.repository || !isTrustedRepoWorkflow(env, oidc.repository, workflowRef)) {
+    return error('forbidden_workflow', 403);
+  }
+  const body = parseJson<MintRunRequest>(await req.text()) ?? ({} as MintRunRequest);
+  const merged: MintRunRequest = {
+    ...body,
+    repo: oidc.repository,
+    actor: oidc.actor ?? body.actor ?? 'unknown',
+    issue: Number.isInteger(body.issue) && (body.issue as number) >= 0 ? body.issue : 0,
+    github_run_id: oidc.run_id ?? body.github_run_id,
+    github_run_attempt: oidc.run_attempt ?? body.github_run_attempt,
+    github_workflow_ref: workflowRef || body.github_workflow_ref,
+  };
+  return mintFromRequest(env, merged);
+}
+
+export function isTrustedRepoWorkflow(env: Env, repo: string, workflowRef: string): boolean {
+  const trustedRepos = new Set(
+    (env.GITHUB_OIDC_ALLOWED_WORKFLOW ?? '')
+      .split(',')
+      .map((value) => value.trim().split('/.github/')[0])
+      .filter(Boolean),
+  );
+  if (!trustedRepos.has(repo)) return false;
+  return workflowRef.startsWith(`${repo}/.github/workflows/`);
+}
+
+async function mintFromRequest(env: Env, body: MintRunRequest): Promise<Response> {
   const validation = validateMint(body);
   if (validation) return validation;
 
@@ -124,7 +178,7 @@ async function mintRun(req: Request, env: Env): Promise<Response> {
 function validateMint(body: MintRunRequest): Response | null {
   if (!body || typeof body !== 'object') return error('invalid_request');
   if (!body.repo || !/^[^/\s]+\/[^/\s]+$/.test(body.repo)) return error('invalid_repo');
-  if (!Number.isInteger(body.issue) || body.issue <= 0) return error('invalid_issue');
+  if (!Number.isInteger(body.issue) || body.issue < 0) return error('invalid_issue');
   if (!body.actor || typeof body.actor !== 'string') return error('invalid_actor');
   if (!Array.isArray(body.models) || body.models.length === 0 || body.models.some((m) => typeof m !== 'string' || !m)) {
     return error('invalid_models');

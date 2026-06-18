@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
-import worker from '../src/index.js';
+import worker, { isTrustedRepoWorkflow } from '../src/index.js';
 import { LimitLedger } from '../src/limit-ledger.js';
 import { parseUsageFromSse } from '../src/openai.js';
 import { RunBudget } from '../src/run-budget.js';
@@ -22,6 +22,26 @@ beforeEach(() => {
 
 afterEach(() => {
   globalThis.fetch = originalFetch;
+});
+
+describe('oidc mint trust (repo granularity)', () => {
+  const env = {
+    GITHUB_OIDC_ALLOWED_WORKFLOW:
+      'volter-ai/open-autonomy/.github/workflows/public-agent.yml@,volter-ai/open-autonomy-self-driving-testbed/.github/workflows/public-agent.yml@',
+  } as unknown as Env;
+
+  test('trusts any workflow in an allowlisted repo', () => {
+    expect(isTrustedRepoWorkflow(env, 'volter-ai/open-autonomy-self-driving-testbed',
+      'volter-ai/open-autonomy-self-driving-testbed/.github/workflows/open-autonomy-strategist.yml@refs/heads/main')).toBe(true);
+  });
+
+  test('rejects a repo not in the allowlist', () => {
+    expect(isTrustedRepoWorkflow(env, 'evil/repo', 'evil/repo/.github/workflows/public-agent.yml@x')).toBe(false);
+  });
+
+  test('rejects a workflow ref whose repo prefix does not match the claimed repo', () => {
+    expect(isTrustedRepoWorkflow(env, 'volter-ai/open-autonomy', 'other/repo/.github/workflows/x.yml@y')).toBe(false);
+  });
 });
 
 describe('agent model proxy', () => {

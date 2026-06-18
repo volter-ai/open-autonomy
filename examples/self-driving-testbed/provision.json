@@ -1,8 +1,8 @@
 {
-  "$comment": "Provisioning manifest for the self-driving testbed (a regex-playground web app). Constitution-only seed: the strategist generates the roadmap; the strategy reviewer ratifies it; no scenario issues are seeded. The model-proxy admin token is a SECRET set out of band.",
+  "$comment": "Provisioning manifest for the self-driving testbed (a regex-playground web app). Constitution-only seed: the strategist generates the roadmap; the strategy reviewer ratifies it; no scenario issues are seeded. No per-repo secret is required — the workflows mint and revoke model-proxy runs via GitHub OIDC (the repo's public-agent workflow must be in the proxy's OIDC allowlist).",
   "description": "open-autonomy self-driving testbed (regex playground; constitution-only seed)",
   "private": true,
-  "required_secrets": ["MODEL_PROXY_ADMIN_TOKEN"],
+  "required_secrets": [],
   "variables": [
     { "name": "MODEL_PROXY_OIDC_AUDIENCE", "value": "volter-agent-model-proxy" },
     { "name": "MODEL_PROXY_URL", "value": "https://volter-agent-model-proxy.aaron-0ed.workers.dev" },

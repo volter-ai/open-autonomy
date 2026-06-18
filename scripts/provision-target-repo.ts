@@ -217,7 +217,14 @@ async function main(): Promise<void> {
 
   const hasCommits = exists ? mainHasCommits(options.repo) : false;
   const shouldPush = (!hasCommits || options.forceContent) && !options.dryRun;
-  if (shouldPush) pushInitialContent(options.repo, options.source);
+  if (shouldPush) {
+    // A force-push to an existing protected branch is rejected, so drop protection before pushing;
+    // the branch-protection step below re-adds it. Keeps re-provisioning idempotent and hands-free.
+    if (exists && manifest.branch_protection) {
+      tryRun('gh', ['api', '-X', 'DELETE', `repos/${options.repo}/branches/${manifest.branch_protection.branch}/protection`]);
+    }
+    pushInitialContent(options.repo, options.source);
+  }
 
   const existingVars: Record<string, string> = {};
   if (exists || shouldPush) {

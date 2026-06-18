@@ -38,35 +38,61 @@ function parsePurpose(value: string | undefined): Options['purpose'] {
   return 'agent';
 }
 
+async function getOidcToken(audience: string): Promise<string> {
+  const requestUrl = process.env.ACTIONS_ID_TOKEN_REQUEST_URL;
+  const requestToken = process.env.ACTIONS_ID_TOKEN_REQUEST_TOKEN;
+  if (!requestUrl || !requestToken) {
+    throw new Error('no admin token and no GitHub Actions OIDC environment (need id-token: write permission)');
+  }
+  const oidcUrl = new URL(requestUrl);
+  oidcUrl.searchParams.set('audience', audience);
+  const res = await fetch(oidcUrl, { headers: { authorization: `Bearer ${requestToken}`, accept: 'application/json' } });
+  const body = await res.json() as { value?: string; error?: string };
+  if (!res.ok || !body.value) throw new Error(`GitHub OIDC token request failed: ${res.status} ${body.error ?? ''}`);
+  return body.value;
+}
+
 async function main(): Promise<void> {
   const options = parseArgs(process.argv.slice(2));
   const proxyUrl = process.env.MODEL_PROXY_URL;
+  if (!proxyUrl) throw new Error('MODEL_PROXY_URL is required');
   const adminToken = process.env.MODEL_PROXY_ADMIN_TOKEN;
-  if (!proxyUrl || !adminToken) throw new Error('MODEL_PROXY_URL and MODEL_PROXY_ADMIN_TOKEN are required');
 
   const issue = JSON.parse(readFileSync(options.issue, 'utf8')) as { number?: number; user?: { login?: string } };
   const actor = process.env.GITHUB_ACTOR ?? issue.user?.login ?? 'unknown';
   const repo = process.env.GITHUB_REPOSITORY ?? 'local/repo';
-  const res = await fetch(new URL('/admin/runs/mint', proxyUrl), {
-    method: 'POST',
-    headers: {
-      'content-type': 'application/json',
-      'x-admin-token': adminToken,
-    },
-    body: JSON.stringify({
-      run_id: options.runId,
-      repo,
-      issue: issue.number,
-      actor,
-      models: options.models,
-      max_usd_cents: options.maxUsdCents,
-      max_requests: options.maxRequests,
-      purpose: options.purpose,
-      github_run_id: process.env.GITHUB_RUN_ID,
-      github_run_attempt: process.env.GITHUB_RUN_ATTEMPT,
-      github_workflow_ref: process.env.GITHUB_WORKFLOW_REF,
-    }),
+  const payload = JSON.stringify({
+    run_id: options.runId,
+    repo,
+    issue: issue.number,
+    actor,
+    models: options.models,
+    max_usd_cents: options.maxUsdCents,
+    max_requests: options.maxRequests,
+    purpose: options.purpose,
+    github_run_id: process.env.GITHUB_RUN_ID,
+    github_run_attempt: process.env.GITHUB_RUN_ATTEMPT,
+    github_workflow_ref: process.env.GITHUB_WORKFLOW_REF,
   });
+
+  // Prefer the admin token when present (operator/canonical); otherwise mint via GitHub OIDC so a
+  // fleet repo needs no stored admin secret. The proxy derives repo/actor/run from the OIDC token.
+  let res: Response;
+  if (adminToken) {
+    res = await fetch(new URL('/admin/runs/mint', proxyUrl), {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-admin-token': adminToken },
+      body: payload,
+    });
+  } else {
+    const audience = process.env.MODEL_PROXY_OIDC_AUDIENCE ?? 'volter-agent-model-proxy';
+    const oidc = await getOidcToken(audience);
+    res = await fetch(new URL('/v1/runs/mint', proxyUrl), {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', authorization: `Bearer ${oidc}` },
+      body: payload,
+    });
+  }
   const body = await res.json() as { token?: string; run?: { run_id?: string }; error?: { code?: string } };
   if (!res.ok || !body.token || !body.run?.run_id) {
     throw new Error(`model proxy mint failed: ${res.status} ${body.error?.code ?? JSON.stringify(body)}`);

@@ -6,13 +6,14 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { spawnSync } from 'node:child_process';
 
-const cli = join(import.meta.dir, 'autonomy-cli.ts');
+// Drive the concrete pre-made exec runner directly — no AUTONOMY_RUNNER selection.
+const execRunner = join(import.meta.dir, 'autonomy-runner-exec.ts');
 
 function run(dir: string, args: string[], extraEnv: Record<string, string> = {}) {
-  return spawnSync('bun', [cli, ...args], {
+  return spawnSync('bun', [execRunner, ...args], {
     cwd: dir,
     encoding: 'utf8',
-    env: { ...process.env, AUTONOMY_RUNNER: 'exec', AUTONOMY_STATE: join(dir, 'sessions.json'), ...extraEnv },
+    env: { ...process.env, AUTONOMY_STATE: join(dir, 'sessions.json'), ...extraEnv },
   });
 }
 

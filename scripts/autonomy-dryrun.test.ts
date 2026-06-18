@@ -8,13 +8,13 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { spawnSync } from 'node:child_process';
 
-const cli = join(import.meta.dir, 'autonomy-cli.ts');
+// The compiler would wire the concrete runner; here the dry run drives it directly.
+const cli = join(import.meta.dir, 'autonomy-runner-exec.ts');
 
 type Issue = { id: string; state: string };
 
 function makeEnv(dir: string): Record<string, string> {
   return {
-    AUTONOMY_RUNNER: 'exec',
     AUTONOMY_STATE: join(dir, 'sessions.json'),
     AUTONOMY_LAUNCH_CMD: `printf '%s\\n' "$AUTONOMY_AGENT $AUTONOMY_ISSUE" >> ${JSON.stringify(join(dir, 'dispatch.log'))}`,
   };

@@ -107,8 +107,7 @@ export class TermfleetRunner implements Runner {
   }
 }
 
-export function getRunner(): Runner {
-  const kind = process.env.AUTONOMY_RUNNER || 'exec';
-  if (kind === 'termfleet') return new TermfleetRunner();
-  return new ExecRunner(process.env.AUTONOMY_STATE || '.autonomy/sessions.json', process.env.AUTONOMY_LAUNCH_CMD);
-}
+// The runners we actually ship and support. The compiler may only wire one of these — anything
+// else fails fast at compile time, rather than installing a runner that doesn't exist.
+export const SUPPORTED_RUNNERS = ['exec', 'termfleet'] as const;
+export type RunnerName = (typeof SUPPORTED_RUNNERS)[number];

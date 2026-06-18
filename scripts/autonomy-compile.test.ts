@@ -50,14 +50,26 @@ test('local compile reproduces the ztrack installed file set exactly', () => {
   expect(paths).toEqual(ZTRACK_REQUIRED);
 });
 
-test('the compiler WRITES the runner backend into the runtime config (not a runtime env)', () => {
-  const ir = ingestProfile(profile, schedule);
-  const out = compileLocal(ir, { name: 'simple-sdlc' });
-  const sched = JSON.parse(out.generated['profiles/simple-sdlc/scheduler/schedule.json']);
-  expect(sched.env.AUTONOMY_RUNNER).toBe('termfleet'); // baked by the compile, the local default
-  // and it's overridable at COMPILE time, not left to the operator
-  const exec = compileLocal(ir, { name: 'simple-sdlc', runner: 'exec' });
-  expect(JSON.parse(exec.generated['profiles/simple-sdlc/scheduler/schedule.json']).env.AUTONOMY_RUNNER).toBe('exec');
+test('the compiler wires a concrete supported runner into the launcher (no runtime selection)', () => {
+  const launchIr = {
+    schema: 'autonomy.ir.v1',
+    targets: ['local'],
+    agents: { pm: { skill: 'pm', maxConcurrent: 1, config: {} } },
+    workflows: [{ name: 'pm-tick', cron: '*/15 * * * *', launch: 'pm', config: {} }],
+    resources: [],
+    policy: { box: {} },
+  } as const;
+
+  // default local runner is termfleet; the launcher names it directly
+  const def = compileLocal(launchIr as never, { name: 'app' });
+  expect(def.generated['profiles/app/scheduler/scripts/pm-tick.mjs']).toContain('autonomy-termfleet');
+
+  // compile-time override to another SUPPORTED runner
+  const exec = compileLocal(launchIr as never, { name: 'app', runner: 'exec' });
+  expect(exec.generated['profiles/app/scheduler/scripts/pm-tick.mjs']).toContain('autonomy-exec');
+
+  // a runner we don't ship fails fast — we only install runners we support
+  expect(() => compileLocal(launchIr as never, { name: 'app', runner: 'github' as never })).toThrow(/unsupported runner/);
 });
 
 test('github compile produces the open-autonomy shape (manifest + workflows + codex skills)', () => {

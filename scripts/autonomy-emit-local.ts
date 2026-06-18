@@ -3,6 +3,7 @@
 // are supplied here by the adapter, NOT carried in the IR.
 import type { AutonomyIR, CompileOutput, IRWorkflow } from './autonomy-ir';
 import type { ZtrackProfile, ZtrackSchedule } from './autonomy-ingest-profile';
+import { SUPPORTED_RUNNERS, type RunnerName } from './autonomy-runner';
 
 // Every workflow's script lives at scheduler/scripts/<name>.mjs (the dest the schedule references).
 // A `run:` workflow copies its existing script there; a `launch:` workflow gets a generated launcher.
@@ -107,24 +108,29 @@ const r = spawnSync(cmd, { shell: true, stdio: 'inherit', env: Object.assign({},
 process.exit(r.status == null ? 1 : r.status);
 `;
 
-// A launch: workflow dispatches through the runner CLI — the same interface PM uses — not a
-// hardcoded backend. AUTONOMY_CLI lets you point at the binary (default 'autonomy' on PATH).
-const launcherScript = (agent: string) => `#!/usr/bin/env node
+// A launch: workflow dispatches through the concrete runner the compiler wired (runnerCmd),
+// the same interface PM uses — not a hardcoded backend, and not a runtime selection switch.
+const launcherScript = (agent: string, runnerCmd: string) => `#!/usr/bin/env node
 import { spawnSync } from 'node:child_process';
-const cli = process.env.AUTONOMY_CLI || 'autonomy';
-const r = spawnSync(cli + ' launch ${agent}', { shell: true, stdio: 'inherit' });
+const r = spawnSync(${JSON.stringify(runnerCmd)} + ' launch ${agent}', { shell: true, stdio: 'inherit' });
 process.exit(r.status == null ? 1 : r.status);
 `;
 
-export function compileLocal(ir: AutonomyIR, opts: { name?: string; runner?: string } = {}): CompileOutput {
+export function compileLocal(
+  ir: AutonomyIR,
+  opts: { name?: string; runner?: RunnerName; runnerCmd?: string } = {},
+): CompileOutput {
   const name = opts.name ?? 'app';
-  // The runner backend is a substrate decision — the COMPILER writes it (local → termfleet).
-  // It rides schedule.env, which the loop injects into every script (and thus into nested agent
-  // sessions), so the whole tree shares one backend. Env-override stays only for tests.
+  // The runner is a substrate decision the compiler makes. We only wire a runner we actually
+  // ship — pick one of SUPPORTED_RUNNERS or fail fast. The launcher invokes that concrete runner
+  // (`autonomy-<runner>`) directly; there is no runtime selection switch.
   const runner = opts.runner ?? 'termfleet';
+  if (!SUPPORTED_RUNNERS.includes(runner)) {
+    throw new Error(`unsupported runner "${runner}"; supported: ${SUPPORTED_RUNNERS.join(', ')}`);
+  }
+  const runnerCmd = opts.runnerCmd ?? `autonomy-${runner}`;
   const base = `profiles/${name}`;
   const { profile, schedule } = emitProfile(ir, { name });
-  schedule.env = { ...schedule.env, AUTONOMY_RUNNER: runner };
 
   const generated: Record<string, string> = {
     [`${base}/profile.json`]: JSON.stringify(profile, null, 2),
@@ -137,7 +143,7 @@ export function compileLocal(ir: AutonomyIR, opts: { name?: string; runner?: str
   // workflows: run → copy the script to its dest; launch → generate a launcher at its dest
   for (const wf of ir.workflows) {
     const { dest, source, generated: isGen } = workflowScriptPath(wf, name);
-    if (isGen) generated[dest] = launcherScript(wf.launch as string);
+    if (isGen) generated[dest] = launcherScript(wf.launch as string, runnerCmd);
     else copies.push({ from: source as string, to: dest });
   }
 

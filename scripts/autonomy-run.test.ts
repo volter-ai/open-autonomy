@@ -28,7 +28,11 @@ const ir: AutonomyIR = {
 
 test('a compiled local setup actually runs: loop fires a run-script and dispatches a launch-agent', () => {
   const dir = mkdtempSync(join(tmpdir(), 'autonomy-run-'));
-  const out = compileLocal(ir, { name: 'app' });
+  // the compiler wires the concrete exec runner into the launcher (runnerCmd)
+  const out = compileLocal(ir, {
+    name: 'app',
+    runnerCmd: `bun ${join(import.meta.dir, 'autonomy-runner-exec.ts')}`,
+  });
   materialize(out, dir, (from) => (from === 'scripts/heartbeat.mjs' ? HEARTBEAT_SRC : '# stub\n'));
 
   const heartbeatFile = join(dir, 'heartbeat.txt');
@@ -40,9 +44,6 @@ test('a compiled local setup actually runs: loop fires a run-script and dispatch
     encoding: 'utf8',
     env: {
       ...process.env,
-      // the workflow launcher dispatches through the runner CLI (exec backend)
-      AUTONOMY_CLI: `bun ${join(import.meta.dir, 'autonomy-cli.ts')}`,
-      AUTONOMY_RUNNER: 'exec',
       AUTONOMY_STATE: sessionsFile,
       AUTONOMY_HEARTBEAT: heartbeatFile,
       AUTONOMY_LAUNCH_CMD: `printf '%s\\n' "$AUTONOMY_AGENT" >> ${JSON.stringify(launchLog)}`,

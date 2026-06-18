@@ -143,9 +143,10 @@ function shell(title: string, body: string): string {
   .dot{width:9px;height:9px;border-radius:50%;display:inline-block;}
   .cardfoot{margin-top:auto;padding-top:14px;}
   .cover-hero{height:200px;border-radius:20px;background-size:cover;background-position:center;border:1px solid ${C.line};}
-  .phead{display:flex;gap:22px;align-items:flex-end;margin:-56px 0 32px 8px;}
-  @media(max-width:640px){.phead{flex-direction:column;align-items:flex-start;gap:12px;margin-top:-48px;}}
-  .phead .htext{padding-bottom:6px;}
+  .phead{display:flex;gap:22px;align-items:flex-end;margin:0 0 32px 8px;}
+  .phead .avatar{margin-top:-52px;}
+  @media(max-width:640px){.phead{flex-direction:column;align-items:flex-start;gap:12px;}}
+  .phead .htext{padding-bottom:2px;}
   .phead h1{font-size:34px;font-weight:800;letter-spacing:-.03em;margin:0 0 4px;}
   .phead .tag{color:${C.muted};font-size:17px;margin:0 0 12px;}
   .metarow{display:flex;gap:16px;align-items:center;flex-wrap:wrap;color:${C.body};font-size:15px;}

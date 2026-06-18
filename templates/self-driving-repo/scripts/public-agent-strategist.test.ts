@@ -53,22 +53,29 @@ describe('strategist proposal parsing', () => {
     expect(() => parseStrategistProposal('```json\n' + validJson + '\n```')).not.toThrow();
   });
 
-  test('rejects an item with no cited source', () => {
-    const bad = JSON.parse(validJson);
-    bad.items[0].sources = [];
-    expect(() => parseStrategistProposal(JSON.stringify(bad))).toThrow('at least one source');
+  test('greenfield-tolerant: defaults a missing source to north-star decomposition', () => {
+    const greenfield = JSON.parse(validJson);
+    greenfield.items[0].sources = [];
+    delete greenfield.items[0].falsified_if;
+    greenfield.items[0].direction = 'vibes';
+    const proposal = parseStrategistProposal(JSON.stringify(greenfield));
+    expect(proposal.items[0]?.sources).toEqual(['constitution: north-star decomposition']);
+    expect(proposal.items[0]?.falsified_if).toContain('No user need');
+    expect(proposal.items[0]?.direction).toBe('customer-demand');
   });
 
-  test('rejects an item with no falsification condition', () => {
-    const bad = JSON.parse(validJson);
-    delete bad.items[0].falsified_if;
-    expect(() => parseStrategistProposal(JSON.stringify(bad))).toThrow('falsified_if');
-  });
-
-  test('rejects an invalid direction', () => {
-    const bad = JSON.parse(validJson);
-    bad.items[0].direction = 'vibes';
-    expect(() => parseStrategistProposal(JSON.stringify(bad))).toThrow('invalid direction');
+  test('skips items missing the essentials (title or acceptance) but keeps the rest', () => {
+    const mixed = {
+      summary: 's',
+      items: [
+        { title: 'no acceptance' },
+        { acceptance: ['has no title'] },
+        { title: 'good', acceptance: ['does a thing'], sources: ['x'], falsified_if: 'y', direction: 'competitor-gap' },
+      ],
+    };
+    const proposal = parseStrategistProposal(JSON.stringify(mixed));
+    expect(proposal.items).toHaveLength(1);
+    expect(proposal.items[0]?.title).toBe('good');
   });
 });
 

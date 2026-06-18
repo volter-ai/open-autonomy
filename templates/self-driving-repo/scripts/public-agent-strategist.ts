@@ -92,29 +92,30 @@ export function parseStrategistProposal(text: string): StrategistProposal {
   if (!Array.isArray(parsed.items)) throw new Error('strategist returned invalid items');
   const directions = new Set(['customer-demand', 'competitor-gap', 'analogous-field']);
   const priorities = new Set(['high', 'medium', 'low']);
-  const items = parsed.items.map((raw, index) => {
+  // Recall-first and greenfield-tolerant: only title + acceptance are essential (skip items
+  // missing them); every other field gets a sensible default rather than dropping the whole run.
+  // A north-star decomposition legitimately has no external source, so default the citation.
+  const items: ProposedItem[] = [];
+  for (const raw of parsed.items) {
     const item = raw as Partial<ProposedItem>;
-    if (!item.title || typeof item.title !== 'string') throw new Error(`item ${index} has no title`);
-    if (!item.rationale || typeof item.rationale !== 'string') throw new Error(`item ${index} has no rationale`);
-    if (!item.falsified_if || typeof item.falsified_if !== 'string') throw new Error(`item ${index} has no falsified_if`);
-    if (!Array.isArray(item.sources) || item.sources.length === 0 || item.sources.some((s) => typeof s !== 'string')) {
-      throw new Error(`item ${index} must cite at least one source`);
-    }
-    if (!directions.has(item.direction as string)) throw new Error(`item ${index} has invalid direction`);
+    if (!item.title || typeof item.title !== 'string') continue;
     const acceptance = Array.isArray(item.acceptance) ? item.acceptance.filter((a): a is string => typeof a === 'string') : [];
-    if (acceptance.length === 0) throw new Error(`item ${index} has no acceptance criteria`);
-    return {
+    if (acceptance.length === 0) continue;
+    const sources = Array.isArray(item.sources) ? item.sources.filter((s): s is string => typeof s === 'string' && s.length > 0) : [];
+    items.push({
       id: item.id && typeof item.id === 'string' ? slug(item.id) : slug(item.title),
       title: item.title,
       priority: priorities.has(item.priority as string) ? (item.priority as ProposedItem['priority']) : 'medium',
       proof_gate: item.proof_gate && typeof item.proof_gate === 'string' ? slug(item.proof_gate) : `${slug(item.title)}-proof`,
       acceptance,
-      rationale: item.rationale,
-      sources: item.sources,
-      falsified_if: item.falsified_if,
-      direction: item.direction as ProposedItem['direction'],
-    };
-  });
+      rationale: item.rationale && typeof item.rationale === 'string' ? item.rationale : 'Decomposed from the north star.',
+      sources: sources.length > 0 ? sources : ['constitution: north-star decomposition'],
+      falsified_if: item.falsified_if && typeof item.falsified_if === 'string'
+        ? item.falsified_if
+        : 'No user need or competitor capability supports this within the planning cycle.',
+      direction: directions.has(item.direction as string) ? (item.direction as ProposedItem['direction']) : 'customer-demand',
+    });
+  }
   return { summary: parsed.summary, items };
 }
 

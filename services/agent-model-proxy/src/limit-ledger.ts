@@ -15,6 +15,9 @@ interface LedgerState {
   // the lifetime total a repo has spent, enforced against its lifetime budget so a repo stops for
   // good when its allotment is gone (rather than spending the daily cap forever).
   lifetime_usd_by_repo: Record<string, number>;
+  // Per-repo lifetime budget override. Absent => the config default applies. Sponsorship funding
+  // raises a repo's allotment by setting this higher (which also lets a paused repo resume).
+  budget_by_repo: Record<string, number>;
   reservations: Record<string, { amount: number; expires_at_ms: number; repo?: string }>;
   runs: Record<string, { repo: string; issue: number; actor: string; active: boolean }>;
 }
@@ -54,6 +57,7 @@ export class LimitLedger implements DurableObject {
       await this.release(String(body.request_id));
       return json({ ok: true });
     }
+    if (op === 'set_budget') return json(await this.setBudget(String(body.repo), Number(body.budget_usd_cents)));
     if (op === 'status') return json(this.snapshot());
     return json({ ok: false, error: 'unknown_op' }, { status: 400 });
   }
@@ -89,7 +93,7 @@ export class LimitLedger implements DurableObject {
     if (repoRuns >= config.max_runs_per_repo_per_day) return { ok: false, error: 'repo_daily_run_limit_reached' };
     if (actorRuns >= config.max_runs_per_actor_per_day) return { ok: false, error: 'actor_daily_run_limit_reached' };
     if (issueRuns >= config.max_runs_per_issue_per_day) return { ok: false, error: 'issue_daily_run_limit_reached' };
-    if ((this.state.lifetime_usd_by_repo[claims.repo] ?? 0) >= config.max_repo_lifetime_usd_cents) {
+    if ((this.state.lifetime_usd_by_repo[claims.repo] ?? 0) >= this.repoBudget(claims.repo, config)) {
       return { ok: false, error: 'repo_lifetime_budget_exhausted' };
     }
 
@@ -102,6 +106,24 @@ export class LimitLedger implements DurableObject {
     this.state.runs[claims.run_id] = { repo: claims.repo, issue: claims.issue, actor: claims.actor, active: true };
     await this.save();
     return { ok: true };
+  }
+
+  private repoBudget(repo: string, config: LimitConfig): number {
+    return this.state.budget_by_repo[repo] ?? config.max_repo_lifetime_usd_cents;
+  }
+
+  // Set a repo's lifetime budget (sponsorship funding). Raising it above current spend lets a
+  // repo that auto-paused on exhaustion resume.
+  private async setBudget(repo: string, budgetUsdCents: number): Promise<Record<string, unknown>> {
+    if (!repo || !Number.isFinite(budgetUsdCents) || budgetUsdCents < 0) return { ok: false, error: 'invalid_budget' };
+    this.state.budget_by_repo[repo] = Math.floor(budgetUsdCents);
+    await this.save();
+    return {
+      ok: true,
+      repo,
+      budget_usd_cents: this.state.budget_by_repo[repo],
+      lifetime_usd_cents: this.state.lifetime_usd_by_repo[repo] ?? 0,
+    };
   }
 
   private async complete(runId: string): Promise<{ ok: true }> {
@@ -123,12 +145,13 @@ export class LimitLedger implements DurableObject {
     const repo = runId ? this.state.runs[runId]?.repo : undefined;
     if (repo) {
       const repoLifetime = this.state.lifetime_usd_by_repo[repo] ?? 0;
-      if (repoLifetime + amount > config.max_repo_lifetime_usd_cents) {
+      const budget = this.repoBudget(repo, config);
+      if (repoLifetime + amount > budget) {
         return {
           ok: false,
           error: 'repo_lifetime_budget_exhausted',
           lifetime_usd_cents: repoLifetime,
-          max_repo_lifetime_usd_cents: config.max_repo_lifetime_usd_cents,
+          max_repo_lifetime_usd_cents: budget,
         };
       }
     }
@@ -183,6 +206,7 @@ export class LimitLedger implements DurableObject {
       consumed_usd_cents: this.state.consumed_usd_cents,
       reserved_usd_cents: this.state.reserved_usd_cents,
       lifetime_usd_by_repo: this.state.lifetime_usd_by_repo,
+      budget_by_repo: this.state.budget_by_repo,
       runs: this.state.runs,
     };
   }
@@ -204,6 +228,7 @@ export class LimitLedger implements DurableObject {
     this.state.runs_by_actor_day ??= {};
     this.state.runs_by_issue_day ??= {};
     this.state.lifetime_usd_by_repo ??= {};
+    this.state.budget_by_repo ??= {};
     this.state.runs ??= {};
   }
 
@@ -230,6 +255,7 @@ function emptyState(): LedgerState {
     consumed_usd_cents: 0,
     reserved_usd_cents: 0,
     lifetime_usd_by_repo: {},
+    budget_by_repo: {},
     reservations: {},
     runs: {},
   };
@@ -280,6 +306,13 @@ export class LimitLedgerClient {
 
   release(requestId: string) {
     return this.rpc<{ ok: true }>('release', { request_id: requestId });
+  }
+
+  setBudget(repo: string, budgetUsdCents: number) {
+    return this.rpc<{ ok: boolean; repo?: string; budget_usd_cents?: number; lifetime_usd_cents?: number; error?: string }>(
+      'set_budget',
+      { repo, budget_usd_cents: budgetUsdCents },
+    );
   }
 
   status() {

@@ -100,6 +100,27 @@ describe('agent model proxy', () => {
     expect(body.error?.code).toBe('repo_lifetime_budget_exhausted');
   });
 
+  test('a sponsorship top-up (set-budget) lets an exhausted repo mint again', async () => {
+    const env = testEnv({ MAX_REPO_LIFETIME_USD_CENTS: '0' });
+    const refused = await request(env, '/admin/runs/mint', {
+      method: 'POST',
+      headers: { 'x-admin-token': 'admin' },
+      body: { repo: 'volter/twin', issue: 1, actor: 'octocat', models: ['gpt-5-mini'], max_usd_cents: 100, max_requests: 3 },
+    });
+    expect(refused.status).toBe(429);
+
+    const funded = await requestJson(env, '/admin/limits/budget', {
+      method: 'POST',
+      headers: { 'x-admin-token': 'admin' },
+      body: { repo: 'volter/twin', budget_usd_cents: 5000 },
+    });
+    expect(funded.ok).toBe(true);
+    expect(funded.budget_usd_cents).toBe(5000);
+
+    const minted = await mint(env, ['gpt-5-mini'], 100, 3);
+    expect(minted.ok).toBe(true);
+  });
+
   test('proxies Anthropic calls and meters usage against the run', async () => {
     const env = testEnv();
     const minted = await mint(env, ['claude-sonnet-4-6'], 25, 5);

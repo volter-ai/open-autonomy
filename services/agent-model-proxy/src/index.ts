@@ -34,6 +34,14 @@ async function route(req: Request, env: Env, ctx: ExecutionContext): Promise<Res
     if (req.method !== 'GET') return methodNotAllowed();
     return json(await new LimitLedgerClient(env.LIMITS).status());
   }
+  if (path === '/admin/limits/budget') {
+    // Set a repo's lifetime budget (sponsorship funding lever). Admin-gated.
+    if (!isAdmin(req, env)) return error('auth_failed', 401);
+    if (req.method !== 'POST') return methodNotAllowed();
+    const body = parseJson<{ repo?: string; budget_usd_cents?: number }>(await req.text());
+    if (!body?.repo || typeof body.budget_usd_cents !== 'number') return error('invalid_request');
+    return json(await new LimitLedgerClient(env.LIMITS).setBudget(body.repo, body.budget_usd_cents));
+  }
 
   const adminRun = path.match(/^\/admin\/runs\/([^/]+)(?:\/(revoke))?$/);
   if (adminRun) {

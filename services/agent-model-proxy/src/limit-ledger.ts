@@ -11,7 +11,11 @@ interface LedgerState {
   runs_by_issue_day: Record<string, number>;
   consumed_usd_cents: number;
   reserved_usd_cents: number;
-  reservations: Record<string, { amount: number; expires_at_ms: number }>;
+  // Cumulative spend per repo. Unlike the daily counters, this is NEVER reset by rollover — it is
+  // the lifetime total a repo has spent, enforced against its lifetime budget so a repo stops for
+  // good when its allotment is gone (rather than spending the daily cap forever).
+  lifetime_usd_by_repo: Record<string, number>;
+  reservations: Record<string, { amount: number; expires_at_ms: number; repo?: string }>;
   runs: Record<string, { repo: string; issue: number; actor: string; active: boolean }>;
 }
 
@@ -23,6 +27,9 @@ export interface LimitConfig {
   max_runs_per_actor_per_day: number;
   max_runs_per_issue_per_day: number;
   max_global_daily_usd_cents: number;
+  // Default lifetime (cumulative) budget per repo. A future per-repo override (e.g. funded by
+  // sponsorships) can raise an individual repo's allotment above this default.
+  max_repo_lifetime_usd_cents: number;
 }
 
 export class LimitLedger implements DurableObject {
@@ -38,7 +45,7 @@ export class LimitLedger implements DurableObject {
 
     if (op === 'register') return json(await this.register(body.claims as RunClaims, body.config as LimitConfig));
     if (op === 'complete') return json(await this.complete(String(body.run_id)));
-    if (op === 'reserve') return json(await this.reserve(String(body.request_id), Number(body.amount_usd_cents), body.config as LimitConfig));
+    if (op === 'reserve') return json(await this.reserve(String(body.request_id), Number(body.amount_usd_cents), body.config as LimitConfig, body.run_id ? String(body.run_id) : undefined));
     if (op === 'consume') {
       await this.consume(String(body.request_id), Number(body.actual_usd_cents));
       return json({ ok: true });
@@ -82,6 +89,9 @@ export class LimitLedger implements DurableObject {
     if (repoRuns >= config.max_runs_per_repo_per_day) return { ok: false, error: 'repo_daily_run_limit_reached' };
     if (actorRuns >= config.max_runs_per_actor_per_day) return { ok: false, error: 'actor_daily_run_limit_reached' };
     if (issueRuns >= config.max_runs_per_issue_per_day) return { ok: false, error: 'issue_daily_run_limit_reached' };
+    if ((this.state.lifetime_usd_by_repo[claims.repo] ?? 0) >= config.max_repo_lifetime_usd_cents) {
+      return { ok: false, error: 'repo_lifetime_budget_exhausted' };
+    }
 
     this.state.active_global += 1;
     this.state.active_by_repo[claims.repo] = repoActive + 1;
@@ -105,9 +115,24 @@ export class LimitLedger implements DurableObject {
     return { ok: true };
   }
 
-  private async reserve(requestId: string, amount: number, config: LimitConfig): Promise<Record<string, unknown>> {
+  private async reserve(requestId: string, amount: number, config: LimitConfig, runId?: string): Promise<Record<string, unknown>> {
     this.rolloverIfNeeded();
     this.gcReservations();
+
+    // Lifetime (cumulative) per-repo budget — never resets, so a repo stops permanently once spent.
+    const repo = runId ? this.state.runs[runId]?.repo : undefined;
+    if (repo) {
+      const repoLifetime = this.state.lifetime_usd_by_repo[repo] ?? 0;
+      if (repoLifetime + amount > config.max_repo_lifetime_usd_cents) {
+        return {
+          ok: false,
+          error: 'repo_lifetime_budget_exhausted',
+          lifetime_usd_cents: repoLifetime,
+          max_repo_lifetime_usd_cents: config.max_repo_lifetime_usd_cents,
+        };
+      }
+    }
+
     const available = config.max_global_daily_usd_cents - this.state.consumed_usd_cents - this.state.reserved_usd_cents;
     if (amount > available) {
       return {
@@ -120,7 +145,7 @@ export class LimitLedger implements DurableObject {
     }
 
     this.state.reserved_usd_cents += amount;
-    this.state.reservations[requestId] = { amount, expires_at_ms: Date.now() + 10 * 60_000 };
+    this.state.reservations[requestId] = { amount, expires_at_ms: Date.now() + 10 * 60_000, repo };
     await this.save();
     return { ok: true, remaining_global_usd_cents: available - amount };
   }
@@ -129,6 +154,9 @@ export class LimitLedger implements DurableObject {
     const reservation = this.state.reservations[requestId];
     if (reservation) {
       this.state.reserved_usd_cents = Math.max(0, this.state.reserved_usd_cents - reservation.amount);
+      if (reservation.repo) {
+        this.state.lifetime_usd_by_repo[reservation.repo] = (this.state.lifetime_usd_by_repo[reservation.repo] ?? 0) + Math.max(0, actual);
+      }
       delete this.state.reservations[requestId];
     }
     this.state.consumed_usd_cents += Math.max(0, actual);
@@ -154,6 +182,7 @@ export class LimitLedger implements DurableObject {
       runs_by_issue_day: this.state.runs_by_issue_day,
       consumed_usd_cents: this.state.consumed_usd_cents,
       reserved_usd_cents: this.state.reserved_usd_cents,
+      lifetime_usd_by_repo: this.state.lifetime_usd_by_repo,
       runs: this.state.runs,
     };
   }
@@ -174,6 +203,7 @@ export class LimitLedger implements DurableObject {
     this.state.runs_by_repo_day ??= {};
     this.state.runs_by_actor_day ??= {};
     this.state.runs_by_issue_day ??= {};
+    this.state.lifetime_usd_by_repo ??= {};
     this.state.runs ??= {};
   }
 
@@ -199,6 +229,7 @@ function emptyState(): LedgerState {
     runs_by_issue_day: {},
     consumed_usd_cents: 0,
     reserved_usd_cents: 0,
+    lifetime_usd_by_repo: {},
     reservations: {},
     runs: {},
   };
@@ -236,10 +267,10 @@ export class LimitLedgerClient {
     return this.rpc<{ ok: true }>('complete', { run_id: runId });
   }
 
-  reserve(requestId: string, amountUsdCents: number, config: LimitConfig) {
+  reserve(requestId: string, amountUsdCents: number, config: LimitConfig, runId?: string) {
     return this.rpc<{ ok: true; remaining_global_usd_cents: number } | { ok: false; error: string }>(
       'reserve',
-      { request_id: requestId, amount_usd_cents: amountUsdCents, config },
+      { request_id: requestId, amount_usd_cents: amountUsdCents, config, run_id: runId },
     );
   }
 

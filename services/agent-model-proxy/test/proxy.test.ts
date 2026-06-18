@@ -88,6 +88,18 @@ describe('agent model proxy', () => {
     expect(status.runs_by_issue_day['volter/twin#1']).toBe(1);
   });
 
+  test('refuses to mint once the repo lifetime budget is exhausted', async () => {
+    const env = testEnv({ MAX_REPO_LIFETIME_USD_CENTS: '0' });
+    const res = await request(env, '/admin/runs/mint', {
+      method: 'POST',
+      headers: { 'x-admin-token': 'admin' },
+      body: { repo: 'volter/twin', issue: 1, actor: 'octocat', models: ['gpt-5-mini'], max_usd_cents: 100, max_requests: 3 },
+    });
+    expect(res.status).toBe(429);
+    const body = await res.json() as { error?: { code?: string } };
+    expect(body.error?.code).toBe('repo_lifetime_budget_exhausted');
+  });
+
   test('proxies Anthropic calls and meters usage against the run', async () => {
     const env = testEnv();
     const minted = await mint(env, ['claude-sonnet-4-6'], 25, 5);

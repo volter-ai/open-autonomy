@@ -54,16 +54,27 @@ function nameOf(account: string): string {
   return account.split('/')[1] ?? account;
 }
 
+// Only accept http(s) image URLs with no characters that could break out of an HTML attribute or a
+// CSS url('…') context. cover_url/avatar_url come from untrusted sources (a repo's README image, the
+// GitHub avatar, an operator override), so an unsanitized URL containing a quote/paren could inject
+// CSS into the style attribute (HTML-escaping the quote is decoded back inside the attribute, so the
+// CSS parser still sees it). Reject anything outside the safe set → falls back to the gradient.
+function safeUrl(url: string | undefined): string | undefined {
+  return url && /^https:\/\/[^\s'"()<>\\]+$/.test(url) ? url : undefined;
+}
+
 // Deterministic warm gradient so coverless projects still look intentional, not blank.
 function coverStyle(url: string | undefined, seed = ''): string {
-  if (url) return `background-image:url('${escapeHtml(url)}')`;
+  const safe = safeUrl(url);
+  if (safe) return `background-image:url('${safe}')`;
   let h = 0;
   for (let i = 0; i < seed.length; i++) h = (h * 31 + seed.charCodeAt(i)) % 360;
   return `background:linear-gradient(135deg,hsl(${h} 48% 64%),hsl(${(h + 40) % 360} 52% 54%))`;
 }
 
 function avatar(url: string | undefined, size: number, cls = ''): string {
-  if (url) return `<img class="avatar ${cls}" src="${escapeHtml(url)}" width="${size}" height="${size}" alt="" loading="lazy" style="width:${size}px;height:${size}px">`;
+  const safe = safeUrl(url);
+  if (safe) return `<img class="avatar ${cls}" src="${safe}" width="${size}" height="${size}" alt="" loading="lazy" style="width:${size}px;height:${size}px">`;
   return `<span class="avatar ph ${cls}" style="width:${size}px;height:${size}px"></span>`;
 }
 

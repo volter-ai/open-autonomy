@@ -177,3 +177,28 @@ describe('platform: money reconciles (grants-out are not hidden or double-counte
     expect(html.includes('$120')).toBe(false);
   });
 });
+
+describe('platform: review hardening', () => {
+  test('a malicious cover URL cannot inject CSS (falls back to the gradient)', async () => {
+    const l = ledger();
+    await l.mint('acme/widget', 10000);
+    // a quote/paren in the URL would break out of url('…') in the style attribute
+    await l.setProfile('acme/widget', { cover_url: "https://evil/x');background:red;//", synced_at: new Date().toISOString() });
+    const html = renderProject(await l.project('acme/widget'));
+    expect(html.includes('background:red')).toBe(false);
+    expect(html.includes('linear-gradient')).toBe(true);
+  });
+
+  test('non-finite spend cannot poison the ledger', async () => {
+    const l = ledger();
+    await l.mint('acme/widget', 10000);
+    await l.register(claims(), CONFIG); // run_1 → repo acme/widget
+    // NaN over JSON-RPC arrives as 0, and the DO guard clamps a true non-finite settle to $0 — either
+    // way the balance must never become NaN (which would silently disable enforcement).
+    await l.reserve('req-ok', 100, CONFIG, 'run_1');
+    await l.consume('req-ok', Number.NaN);
+    const v = await l.project('acme/widget');
+    expect(Number.isFinite(v.balance_usd_cents)).toBe(true);
+    expect(v.balance_usd_cents).toBe(10000);
+  });
+});

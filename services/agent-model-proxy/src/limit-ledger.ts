@@ -391,6 +391,10 @@ export class LimitLedger implements DurableObject {
     this.rolloverIfNeeded();
     this.gcReservations();
 
+    // A non-finite or negative amount would slip past the `>` gates below and poison reserved/balance
+    // arithmetic into NaN, permanently disabling enforcement for this Durable Object.
+    if (!Number.isFinite(amount) || amount < 0) return { ok: false, error: 'invalid_amount' };
+
     const run = runId ? this.state.runs[runId] : undefined;
     const account = run?.repo;
 
@@ -428,7 +432,7 @@ export class LimitLedger implements DurableObject {
 
   private async consume(requestId: string, actual: number): Promise<void> {
     const reservation = this.state.reservations[requestId];
-    const spent = Math.max(0, actual);
+    const spent = Number.isFinite(actual) ? Math.max(0, actual) : 0;
     if (reservation) {
       this.state.reserved_usd_cents = Math.max(0, this.state.reserved_usd_cents - reservation.amount);
       if (reservation.account) {

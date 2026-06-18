@@ -74,6 +74,8 @@ async function route(req: Request, env: Env, ctx: ExecutionContext): Promise<Res
     if (req.method !== 'GET') return methodNotAllowed();
     const account = decodeURIComponent(projectPage[1]);
     const view = await new LimitLedgerClient(env.LIMITS).project(account);
+    // Don't render a fake, zeroed-out page for an account that has never been seen.
+    if (!view.found) return html(renderRedeemResult(account, false, `No project found for ${account}.`), 404);
     if (view.is_project && isStale(view.profile.synced_at)) ctx.waitUntil(syncProfile(env, account));
     return html(renderProject(view));
   }

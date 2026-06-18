@@ -748,7 +748,7 @@ describe('funding platform pages', () => {
     const res = await request(env, `/p/${enc}`);
     expect(res.status).toBe(200);
     const body = await res.text();
-    expect(body.includes('Membership')).toBe(true);
+    expect(body.includes('Become a patron')).toBe(true);
     expect(body.includes('Supporter')).toBe(true);
     expect(body.includes('a self-coding twin')).toBe(true);
     expect(body.includes(`/v1/accounts/${enc}/runway.svg`)).toBe(true);

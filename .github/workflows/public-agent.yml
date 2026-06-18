@@ -660,7 +660,7 @@ jobs:
             --repo "${{ github.repository }}" \
             --actor "${{ github.actor }}" \
             -- \
-            bash -lc "${PUBLIC_AGENT_COMMAND:-bun scripts/codex-agent-run.ts}"
+            bash -lc "${PUBLIC_AGENT_COMMAND:-bun scripts/codex-agent-run.ts}; rc=\$?; bun scripts/agent-visual-verify.ts || true; exit \$rc"
 
       - uses: actions/upload-artifact@v4
         with:

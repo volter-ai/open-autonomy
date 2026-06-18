@@ -1,39 +1,39 @@
-// The Runner contract (docs/AUTONOMY-IR.md §4.1) as a concrete, swappable backend.
-// This is the connective tissue: a skill/script calls `autonomy launch|list|cancel` and never
-// knows whether it's termfleet on a laptop or a dispatch on github.
+// The runner: the system's entire knowledge is agents, running agents, and their lifecycle.
+// It knows nothing about what an agent does or what it works on — no "issues", no states like
+// "ready"/"in progress", no domain at all. That lives entirely in the agents and the scripts.
 import { spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname } from 'node:path';
 
-// A session's whole lifecycle. Without `done`/`failed`, list() never reflects reality —
-// a finished session would read as `running` forever. So update is not optional.
 export type SessionStatus = 'running' | 'paused' | 'cancelled' | 'done' | 'failed';
 
 export interface Session {
   id: string;
-  role: string;
-  issue?: string;
+  agent: string; // which agent is running; an opaque name from the config
   status: SessionStatus;
-  ref?: string; // backend-specific handle (e.g. termfleet agentSessionId) for get/wait
+  ref?: string; // backend handle (e.g. termfleet agentSessionId)
+  params?: Record<string, string>; // opaque pass-through; the system never interprets these
 }
+
+// Arbitrary parameters carried to a launched agent. The system passes them through verbatim — a
+// runner/bundle may give one meaning (e.g. "issue"), but the autonomy system never knows what they are.
+export type LaunchParams = Record<string, string>;
 
 export interface Runner {
-  launch(role: string, issue?: string): Session; // C — create
-  get(id: string): Session | undefined; // R — read one
-  list(): Session[]; // R — read all (running)
-  update(id: string, patch: { status?: SessionStatus; issue?: string }): boolean; // U — transition
-  cancel(id: string): boolean; // D — delete
+  launch(agent: string, params?: LaunchParams): Session; // C
+  get(id: string): Session | undefined; // R (one)
+  list(): Session[]; // R (running)
+  update(id: string, patch: { status?: SessionStatus }): boolean; // U
+  cancel(id: string): boolean; // D
 }
 
-// Default backend: records sessions to a JSON state file and invokes a pluggable launch command
-// (AUTONOMY_LAUNCH_CMD). Real and testable everywhere — no termfleet/cloud required.
+// Records running agents to a state file and invokes a pluggable launch command.
 export class ExecRunner implements Runner {
   constructor(
     private statePath: string,
     private launchCmd?: string,
     private now: () => string = () => `${Date.now()}-${Math.floor(Math.random() * 1e6)}`,
   ) {}
-
   private read(): Session[] {
     return existsSync(this.statePath) ? (JSON.parse(readFileSync(this.statePath, 'utf8')) as Session[]) : [];
   }
@@ -41,16 +41,17 @@ export class ExecRunner implements Runner {
     mkdirSync(dirname(this.statePath), { recursive: true });
     writeFileSync(this.statePath, JSON.stringify(sessions, null, 2));
   }
-
-  launch(role: string, issue?: string): Session {
-    const session: Session = { id: `${role}-${this.now()}`, role, issue, status: 'running' };
+  launch(agent: string, params: LaunchParams = {}): Session {
+    const session: Session = {
+      id: `${agent}-${this.now()}`,
+      agent,
+      status: 'running',
+      ...(Object.keys(params).length ? { params } : {}),
+    };
     this.write([...this.read(), session]);
     if (this.launchCmd) {
-      spawnSync(this.launchCmd, {
-        shell: true,
-        stdio: 'inherit',
-        env: { ...process.env, AUTONOMY_AGENT: role, AUTONOMY_ISSUE: issue ?? '' },
-      });
+      // params pass through as env, verbatim — the runner doesn't interpret them
+      spawnSync(this.launchCmd, { shell: true, stdio: 'inherit', env: { ...process.env, ...params, AUTONOMY_AGENT: agent } });
     }
     return session;
   }
@@ -60,12 +61,11 @@ export class ExecRunner implements Runner {
   list(): Session[] {
     return this.read().filter((s) => s.status === 'running');
   }
-  update(id: string, patch: { status?: SessionStatus; issue?: string }): boolean {
+  update(id: string, patch: { status?: SessionStatus }): boolean {
     const sessions = this.read();
     const target = sessions.find((s) => s.id === id);
     if (!target) return false;
     if (patch.status) target.status = patch.status;
-    if (patch.issue !== undefined) target.issue = patch.issue;
     this.write(sessions);
     return true;
   }
@@ -74,68 +74,67 @@ export class ExecRunner implements Runner {
   }
 }
 
-// Real local backend: drives termfleet (what ztrack's run-agent.mjs / recover-*.mjs use today).
+// Real local backend: drives termfleet. The window name IS the agent; the system never encodes
+// anything else into it.
 export class TermfleetRunner implements Runner {
   private cli = process.env.TERMFLEET_CLI || 'termfleet';
-  private agent = process.env.TERMFLEET_AGENT || 'codex';
+  private model = process.env.TERMFLEET_AGENT || 'codex'; // claude|codex — the model, not our agent
   private url = process.env.TERMFLEET_PROVIDER_URL || 'http://127.0.0.1:7376';
 
-  launch(role: string, issue?: string): Session {
-    const id = `ztrack-${role}`;
-    // Re-export the orchestration context so the agent's own nested `autonomy launch ...` calls
-    // reach this same provider/state (recursive dispatch: PM launches develop from inside its session).
-    const env: Record<string, string> = { ...(process.env as Record<string, string>) };
-    if (issue) env.AUTONOMY_ISSUE = issue;
-    const setup = Object.entries(env)
-      .filter(([k]) => /^(TERMFLEET_.*|AUTONOMY.*|PATH)$/.test(k))
+  launch(agent: string, params: LaunchParams = {}): Session {
+    // Re-export orchestration context so the agent's own nested `autonomy launch ...` reaches this
+    // provider, plus the opaque params verbatim (a bundle may read e.g. $issue; the system doesn't).
+    const exported: Record<string, string> = {
+      ...Object.fromEntries(Object.entries(process.env as Record<string, string>).filter(([k]) => /^(TERMFLEET_.*|AUTONOMY.*|PATH)$/.test(k))),
+      ...params,
+    };
+    const setup = Object.entries(exported)
       .map(([k, v]) => `export ${k}=${JSON.stringify(v ?? '')}`)
       .join('; ');
-    // Per-role prompt: a skill/prompt file if provided, else the bare role (+issue).
     const promptDir = process.env.AUTONOMY_PROMPT_DIR;
-    const promptFile = promptDir ? `${promptDir}/${role}.txt` : '';
+    const promptFile = promptDir ? `${promptDir}/${agent}.txt` : '';
     const promptArg =
       promptFile && existsSync(promptFile)
         ? `--prompt-file ${JSON.stringify(promptFile)}`
-        : `--prompt ${JSON.stringify(issue ? `${role}\n\nAssigned issue: ${issue}.` : role)}`;
+        : `--prompt ${JSON.stringify(agent)}`;
     const r = spawnSync(
-      `${this.cli} ${this.agent} new -y --url ${JSON.stringify(this.url)} --name ${JSON.stringify(id)} --cwd ${JSON.stringify(process.cwd())} ${promptArg} --setup-command ${JSON.stringify(setup)}`,
+      `${this.cli} ${this.model} new -y --url ${JSON.stringify(this.url)} --name ${JSON.stringify(agent)} --cwd ${JSON.stringify(process.cwd())} ${promptArg} --setup-command ${JSON.stringify(setup)}`,
       { shell: true, encoding: 'utf8' },
     );
     let ref: string | undefined;
     try {
       ref = JSON.parse(r.stdout)?.agentSessionId;
     } catch {
-      /* non-JSON output (e.g. needs -y review) → no ref */
+      /* non-JSON (e.g. -y review) → no ref */
     }
-    return { id, role, issue, status: 'running', ...(ref ? { ref } : {}) };
+    return { id: agent, agent, status: 'running', ...(ref ? { ref } : {}), ...(Object.keys(params).length ? { params } : {}) };
   }
   get(id: string): Session | undefined {
     return this.list().find((s) => s.id === id);
   }
   list(): Session[] {
-    // termfleet's agent CRUD: `<agent> list` returns this agent's windows ([{id,name,agent,...}]).
-    const r = spawnSync(`${this.cli} ${this.agent} list --url '${this.url}'`, { shell: true, encoding: 'utf8' });
+    const r = spawnSync(`${this.cli} ${this.model} list --url ${JSON.stringify(this.url)}`, {
+      shell: true,
+      encoding: 'utf8',
+    });
     if (r.status || !r.stdout.trim()) return [];
     return (JSON.parse(r.stdout) as Array<{ name: string }>).map((w) => ({
       id: w.name,
-      role: w.name.replace(/^ztrack-/, ''),
+      agent: w.name,
       status: 'running' as const,
     }));
   }
   update(id: string, patch: { status?: SessionStatus }): boolean {
-    // termfleet tracks only liveness; the one meaningful transition it can honor is cancellation.
     return patch.status === 'cancelled' ? this.cancel(id) : true;
   }
   cancel(id: string): boolean {
-    // `<agent> kill --name <window name>` (id is the session/window name, e.g. ztrack-develop).
-    return !spawnSync(`${this.cli} ${this.agent} kill --url '${this.url}' --name '${id}'`, {
+    return !spawnSync(`${this.cli} ${this.model} kill --url ${JSON.stringify(this.url)} --name ${JSON.stringify(id)}`, {
       shell: true,
       stdio: 'inherit',
     }).status;
   }
 }
 
-// The runners we actually ship and support. The compiler may only wire one of these — anything
-// else fails fast at compile time, rather than installing a runner that doesn't exist.
+// The runners we actually ship; the compiler may only wire one of these.
 export const SUPPORTED_RUNNERS = ['exec', 'termfleet'] as const;
 export type RunnerName = (typeof SUPPORTED_RUNNERS)[number];

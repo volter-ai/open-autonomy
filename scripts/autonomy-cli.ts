@@ -1,7 +1,22 @@
-// The CLI arg-handling, as a function OVER a runner. It never selects a runner — a concrete
-// pre-made runner is passed in by the entrypoint the compiler wired (autonomy-runner-<backend>.ts).
-//   launch <role> [--issue id]  ·  get <id>  ·  list  ·  update <id> --status <s>  ·  cancel <id>
-import type { Runner, SessionStatus } from './autonomy-runner';
+// CLI over a runner. The concrete runner is wired by the entrypoint the compiler chose
+// (autonomy-runner-<backend>.ts). Domain-free: it launches/observes/cancels agents, nothing more.
+//   launch <agent> [--k v ...]  ·  get <id>  ·  list  ·  update <id> --status <s>  ·  cancel <id>
+// `launch` accepts arbitrary --key value params and passes them through verbatim; the system never
+// interprets them (a bundle/runner may, e.g. as "issue").
+import type { Runner, SessionStatus, LaunchParams } from './autonomy-runner';
+
+function parseParams(args: string[]): LaunchParams {
+  const params: LaunchParams = {};
+  for (let i = 0; i < args.length; i++) {
+    const a = args[i];
+    if (a?.startsWith('--')) {
+      const key = a.slice(2);
+      const next = args[i + 1];
+      params[key] = next && !next.startsWith('--') ? (i++, next) : 'true';
+    }
+  }
+  return params;
+}
 
 export function runCli(runner: Runner, argv: string[]): number {
   const [cmd, ...rest] = argv;
@@ -11,12 +26,12 @@ export function runCli(runner: Runner, argv: string[]): number {
   };
 
   if (cmd === 'launch') {
-    const role = rest[0];
-    if (!role || role.startsWith('--')) {
-      console.error('usage: autonomy launch <role> [--issue <id>]');
+    const agent = rest[0];
+    if (!agent || agent.startsWith('--')) {
+      console.error('usage: autonomy launch <agent> [--key value ...]');
       return 2;
     }
-    console.log(JSON.stringify(runner.launch(role, opt('--issue'))));
+    console.log(JSON.stringify(runner.launch(agent, parseParams(rest.slice(1)))));
     return 0;
   }
   if (cmd === 'get') {
@@ -33,10 +48,10 @@ export function runCli(runner: Runner, argv: string[]): number {
     const id = rest[0];
     const status = opt('--status') as SessionStatus | undefined;
     if (!id || !status) {
-      console.error('usage: autonomy update <id> --status <running|paused|cancelled|done|failed> [--issue <id>]');
+      console.error('usage: autonomy update <id> --status <running|paused|cancelled|done|failed>');
       return 2;
     }
-    return runner.update(id, { status, issue: opt('--issue') }) ? 0 : 1;
+    return runner.update(id, { status }) ? 0 : 1;
   }
   if (cmd === 'cancel') {
     const id = rest[0];

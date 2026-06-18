@@ -1,5 +1,5 @@
 // End-to-end integration: the WHOLE real mechanism as spawned processes. Compile an IR to a local
-// setup, materialize it, run the actual scheduler loop once, and watch a work item converge
+// setup, materialize it, run the actual scheduler loop once, and watch an issue converge
 // Ready → In Progress → Done — driven entirely through the real launcher, the real runner CLI, and
 // the real CRUD. The ONLY fake is the agent's brain (scripts/__fixtures__/fake-agent.mjs); every
 // process boundary and every runner call is real. (Swap the backend for termfleet + a model and

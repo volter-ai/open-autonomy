@@ -87,7 +87,7 @@ export class TermfleetRunner implements Runner {
     const env: Record<string, string> = { ...(process.env as Record<string, string>) };
     if (issue) env.AUTONOMY_ISSUE = issue;
     const setup = Object.entries(env)
-      .filter(([k]) => /^(TERMFLEET_.*|AUTONOMY.*|WORK_STORE|PATH)$/.test(k))
+      .filter(([k]) => /^(TERMFLEET_.*|AUTONOMY.*|PATH)$/.test(k))
       .map(([k, v]) => `export ${k}=${JSON.stringify(v ?? '')}`)
       .join('; ');
     // Per-role prompt: a skill/prompt file if provided, else the bare role (+issue).

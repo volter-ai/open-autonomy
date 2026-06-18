@@ -173,9 +173,21 @@ jobs:
               git commit -m "strategy-review: ratify and promote proposed items to planned"
               git push origin "$branch"
             fi
-            gh pr merge "$pr" --squash --delete-branch \
-              --subject "strategy: ratify roadmap proposal #${pr}" || \
-              gh pr comment "$pr" --body "Strategy review passed but auto-merge could not complete; human merge required."
+            head_sha="$(git rev-parse HEAD)"
+            # The strategist PR was opened with GITHUB_TOKEN, so ci.yml's pull_request trigger never
+            # fires and the required "ci" status never reports. Run the check here and post the status
+            # to the head, exactly as the develop flow does, so branch protection can be satisfied.
+            if bun run check; then ci_state="success"; else ci_state="failure"; fi
+            gh api -X POST "repos/${GITHUB_REPOSITORY}/statuses/${head_sha}" \
+              -f state="$ci_state" -f context="ci" -f description="strategy roadmap PR check" || true
+            if [ "$ci_state" = "success" ]; then
+              gh pr merge "$pr" --squash --delete-branch \
+                --subject "strategy: ratify roadmap proposal #${pr}" || \
+                gh pr comment "$pr" --body "Strategy review passed and CI is green, but auto-merge could not complete; human merge required."
+            else
+              gh pr edit "$pr" --add-label human-required || true
+              gh pr comment "$pr" --body "Strategy review passed but the repository check failed on the proposal branch; human review required."
+            fi
           else
             gh pr edit "$pr" --add-label human-required || true
           fi

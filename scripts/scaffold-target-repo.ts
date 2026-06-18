@@ -22,10 +22,15 @@ function parseArgs(argv: string[]): Options {
   return { target: resolve(target), force: argv.includes('--force') };
 }
 
+// Never copy build/VCS artifacts into a scaffolded repo — they are regenerated locally and would
+// bloat the target (and the provisioner's pushed content).
+const SCAFFOLD_EXCLUDE = new Set(['node_modules', '.git', '.agent-run']);
+
 function copyTemplate(template: string, target: string, force: boolean): string[] {
   mkdirSync(target, { recursive: true });
   const copied: string[] = [];
   for (const name of readdirSync(template)) {
+    if (SCAFFOLD_EXCLUDE.has(name)) continue;
     const from = join(template, name);
     const to = join(target, name);
     if (existsSync(to) && !force) {

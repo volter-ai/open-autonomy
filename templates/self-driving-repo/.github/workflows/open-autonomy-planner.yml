@@ -82,10 +82,18 @@ jobs:
             title="$(jq -r '.title' <<< "$action")"
             body="$(jq -r '.body' <<< "$action")"
             labels="$(jq -r '.labels | join(",")' <<< "$action")"
+            # Apply labels best-effort and one at a time: a single bad label (e.g. one a strategist
+            # generated that exceeds GitHub's 50-char limit) must never block creating the issue.
             if [[ "$kind" == "create" ]]; then
-              gh issue create --title "$title" --body "$body" --label "$labels"
+              url="$(gh issue create --title "$title" --body "$body")"
+              number="$(printf '%s\n' "$url" | grep -oE '[0-9]+$' || true)"
             else
-              gh issue edit "$number" --title "$title" --body "$body" --add-label "$labels"
+              gh issue edit "$number" --title "$title" --body "$body" || true
+            fi
+            if [[ -n "$number" ]]; then
+              printf '%s\n' "$labels" | tr ',' '\n' | while IFS= read -r lbl; do
+                [[ -n "$lbl" ]] && gh issue edit "$number" --add-label "$lbl" || true
+              done
             fi
           done
 

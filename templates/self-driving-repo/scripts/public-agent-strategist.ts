@@ -82,7 +82,8 @@ function parseArgs(argv: string[]): Options {
 }
 
 function slug(value: string): string {
-  return value.toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+  // Cap length so derived GitHub labels (e.g. `proof:<id>`) stay under the 50-char limit.
+  return value.toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40).replace(/-+$/, '');
 }
 
 export function parseStrategistProposal(text: string): StrategistProposal {

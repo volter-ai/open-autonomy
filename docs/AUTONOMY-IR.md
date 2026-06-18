@@ -1,7 +1,8 @@
 # Autonomy IR (`autonomy.ir.v1`) — a substrate-agnostic format
 
-> **Status:** validated against both real systems by a working ingest/emit/compile
-> harness — see §12. 12 tests pass.
+> **Status:** the system is domain-free (it knows only agents, running agents, and
+> triggers). Proven by running the real app with real AI on a real project — no unit
+> tests. See §12.
 > **Home:** open-autonomy is the host format; ztrack is one *bundle* you plug in,
 > not a dependency (§7).
 
@@ -44,13 +45,13 @@ human-required paths — is either **prose in a skill prompt** or a value in a
 
 | Candidate | Verdict | Why |
 |---|---|---|
-| Standards docs | **resources** | The format never interprets them; a skill cites them. Dumb copy. |
-| Work store | **bundle-internal** | All reads/writes happen inside a skill or script via the box's CLI. The IR only passes an opaque `WorkRef`; it never models a store. |
+| Standards docs | **resources** | The format never interprets them; an agent cites them. Dumb copy. |
+| Where work lives | **not a concept** | The system has no notion of work, issues, or states. Whatever an agent or script reads/writes is entirely theirs; the system only launches agents. |
 | Gate (`ztrack check`) | **a workflow** | A cron that `run`s a script. Not a slot. |
-| Direction / roadmap | **a resource input** | A file the PM reads from the box. |
+| Direction / roadmap | **whatever an agent reads** | A file an agent chooses to read. The system never sees it. |
 | Capabilities | **`config` box** | `pr:open` means something on github, nothing locally. Passthrough. |
-| Sensitive topics | **review-skill prose** | Advisory judgment the reviewer agent applies, not a typed field. |
-| ztrack itself | **optional bundle** | One bundle providing a work store CLI + an evidence gate. Swappable. |
+| Domain (issues, "ready"/"done", what "pm" means) | **agents + scripts** | Lives entirely in prompts/skills/scripts. The system knows none of it. |
+| ztrack itself | **optional bundle** | One bundle providing an evidence gate + whatever tools its agents call. Swappable. |
 
 What survives is **four nouns over two substrate primitives, across three adapter
 axes.**
@@ -59,35 +60,37 @@ axes.**
 
 From a worker agent's seat there is only ever:
 
-1. **The Runner** — CRUD over sessions, and the **enforcement point for the
-   guardrails it understands** (concurrency, and any `config` keys it reads). The
-   *one* behavioral seam between a laptop loop and GitHub Actions.
+1. **The Runner** — CRUD over running agents. The *one* behavioral seam between a
+   laptop loop and GitHub Actions. It knows agents and their session lifecycle —
+   nothing about what they do or work on.
 2. **The Box** — a POSIX filesystem + shell + git + a model endpoint in env + the
    copied files on PATH. Docker, laptop, GHA runner, Firecracker microVM all satisfy
-   the same interface. The agent cannot tell which it is in. **Everything tool-shaped
-   — including the work-store CLI — lives here**, called from inside skills/scripts.
+   the same interface. The agent cannot tell which it is in. **Whatever tools an agent
+   uses live here**, called from inside the agent/scripts.
 
-A `Session` is *(a box) + (an agent process running role R against target T)*, and
-`launch()` decomposes into "acquire a box, provision it to the image spec, start the
-agent." Adding a substrate = writing a Runner over a box-source.
+A `Session` is *(a box) + (an agent process)*, and `launch()` decomposes into
+"acquire a box, provision it to the image spec, start the agent." Adding a substrate
+= writing a Runner over a box-source.
 
 ### 4.1 The Runner contract
 
-`launch` is the floor; the read/delete verbs exist so the runner can **enforce**
-guardrails (`maxConcurrent` needs `list()`; pause/cancel needs `cancel()`). `target`
-is an opaque `WorkRef` — the runner passes it to the session; the *skill* resolves it
-against the box's work-store CLI. The runner never touches the store.
+The system knows only **agents** and **running agents**. `launch` starts one;
+`get`/`list` observe; `update`/`cancel` transition. `launch` carries arbitrary
+**opaque params** through to the agent — the system never interprets them (a
+bundle/runner may give one meaning, e.g. `issue`). There is no notion of work,
+issues, or domain states anywhere in this contract.
 
 ```ts
-type SessionId = string;
-interface WorkRef { id: string }   // opaque handle; the runner never interprets or resolves it
-interface Session { id: SessionId; role: string; target: WorkRef; status: 'running'|'done'|'failed' }
+type SessionStatus = 'running' | 'paused' | 'cancelled' | 'done' | 'failed';
+type LaunchParams = Record<string, string>;   // opaque pass-through; the system never reads them
+interface Session { id: string; agent: string; status: SessionStatus; ref?: string; params?: LaunchParams }
 
 interface Runner {
-  launch(role: string, target: WorkRef): Promise<SessionId>;  // create — REQUIRED
-  list(): Promise<Session[]>;                                 // read   — enables maxConcurrent
-  cancel(id: SessionId): Promise<void>;                       // delete — enables pause / human-required
-  continue?(id: SessionId): Promise<void>;                    // update — enables retry budgets
+  launch(agent: string, params?: LaunchParams): Session;            // C
+  get(id: string): Session | undefined;                            // R (one)
+  list(): Session[];                                               // R (running)
+  update(id: string, patch: { status?: SessionStatus }): boolean;  // U
+  cancel(id: string): boolean;                                     // D
 }
 ```
 
@@ -119,7 +122,7 @@ tokens.
 |---|---|---|
 | **substrate driver** | local-loop / github-actions | trigger transport, runner glue, cron→loop/Actions, termfleet/proxy |
 | **harness adapter** | claude / codex | skill install path & filename, skill format |
-| **tooling / bundle** | ztrack / gh | work-store CLI, the gate command behind `run` |
+| **tooling / bundle** | ztrack / gh | whatever tools the agents call, the gate command behind `run` |
 
 `launch: pm` resolves to a prompt via the **harness** adapter (which also picks
 `.claude/skills` vs `.codex/skills`). `run: scripts/gate.sh` becomes `ztrack check`
@@ -190,8 +193,8 @@ opinionatedness — a deliberate trade.
 ztrack ships as the recommended bundle providing two things via the **tooling** axis,
 neither of which the IR knows about:
 
-- **Work-store CLI** — the skills/scripts call it to read and mutate work items. The
-  IR only ever passes an opaque `WorkRef`; the store is entirely behind the bundle.
+- **Agent tooling** — whatever its agents call to do their work; entirely behind the
+  bundle. The system never sees it (it only launches agents and passes opaque params).
 - **Evidence gate** — `ztrack check`, behind a `run:` in a gate workflow.
   `action.yml` already runs exactly this inside GitHub Actions, so the gate is the
   *same command* on both substrates.
@@ -300,38 +303,35 @@ export const AutonomyIR = z.object({
 - **Decision/audit trail** is currently substrate-specific (ztrack `.audit.jsonl` vs
   `volter.agent.decision.v1`). Left out of the IR for now; may want a thin contract.
 
-## 12. Validation (working harness)
+## 12. Validation — by running it for real, not by tests
 
-The design is backed by a dependency-free harness in `scripts/` (plain TS + `Bun.YAML`),
-exercised against the two real systems — the vendored ztrack profile and the live
-`.open-autonomy/autonomy.yml`.
+There are **no unit tests**. Deterministic tests give imaginary confidence; the only real
+confidence is running the actual app, with real AI, on a real project. The framework
+(`scripts/autonomy-*.ts`, dependency-free TS + `Bun.YAML`) is proven by live runs.
 
 | file | role |
 |---|---|
-| `autonomy-ir.ts` | IR types, `validateIR`, `irShape`, `CompileOutput`/`compiledPaths` |
+| `autonomy-ir.ts` | IR types (agents · workflows · resources · policy), `validateIR`, `CompileOutput` |
 | `autonomy-ingest-{profile,autonomy}.ts` | format → IR |
 | `autonomy-emit-{local,github}.ts` | IR → manifests, and `compile{Local,Github}` → full file tree |
-| `autonomy-ingest.test.ts` | both systems fall into the four nouns |
-| `autonomy-roundtrip.test.ts` | `ingest = ingest∘emit∘ingest` (emit is IR-faithful) |
-| `autonomy-compile.test.ts` | **local compile reproduces ztrack's installed set exactly**; github compile matches the `.open-autonomy`/`.github`/`.codex` shape |
-| `autonomy-crosscompile.test.ts` | each system → the opposite substrate, asserting the lossy seams |
+| `autonomy-runner.ts` | the domain-free runner: `ExecRunner`, `TermfleetRunner`, `Runner` contract |
+| `autonomy-cli.ts` / `autonomy-runner-{exec,termfleet}.ts` | `runCli` + the concrete pre-made runner entrypoints |
+| `autonomy-materialize.ts` | write a `CompileOutput` to disk |
 
-**Empirically confirmed findings:**
+**Proven by real runs:**
 
-- **Both systems populate the four nouns** — universality holds at ingest.
-- **Imperative vs declarative dispatch** — ztrack yields all `run:` workflows (dispatch buried
-  in scripts); open-autonomy yields `launch:` workflows (declarative). The split surfaces it.
-- **Per-agent vs global concurrency** — ztrack fills per-agent (WIP), open-autonomy fills global
-  (`max_open_agent_prs`). Both IR slots earn their place.
-- **The local compile is byte-faithful** to the demo's `required[]` install set; the github
-  compile can only match a *subset* (the github driver adds baseline infra workflows the IR
-  doesn't carry) — an honest asymmetry.
-- **Cross-compile is lossy where the substrate can't express the source:** ztrack→github drops
-  boxed `humanRequired*` guardrails (box-key mismatch — needs an explicit cross-format remap);
-  open-autonomy→local degrades declarative triggers to imperative launchers and turns
-  capability/merge/risk enforcement advisory.
+- **Domain-free end to end, with real AI.** `compileLocal({ runner: 'termfleet' })` →
+  materialized to a real git repo → the loop launched a real `claude` PM agent → which launched
+  a real `claude` developer via the domain-free runner → the developer wrote working code
+  (`math.js`, `add(2,3)=5`) and updated the agents' own backlog. The system carried no notion of
+  the task, the backlog, or its states — those lived only in the prompts and the agents' file.
+- **The runner CRUD against real termfleet:** `launch`/`list`/`get`/`cancel` exercised live with
+  real claude sessions (`[] → new → list → kill → []`).
+- **Opaque params pass through:** `launch develop --issue T1 --priority high` reached the agent as
+  env, recorded on the session — the system never interpreted them.
+- **Local compile reproduces ztrack's installed file set** (the path set asserted by
+  `demos/autonomous-profile-setup.sh`).
 
-**Next steps surfaced by the harness:** a cross-format **box remapper** (so guardrails like
-`humanRequired*` survive ztrack↔open-autonomy translation), and a decision on whether the IR
-should physically own the source of truth (`.open-autonomy/ir.yml`) with the two manifests as
-emitted artifacts.
+**Still unproven (needs real runs):** the github substrate end to end (no github runner yet, no
+Actions execution); the `codex` model agent (only `claude` run); concurrency/WIP, multiple agents,
+recovery, and failure modes under real load; an emitted manifest driving its real target system.

@@ -57,6 +57,8 @@ function workflowYml(wf: IRWorkflow): string {
     `jobs:`,
     `  ${wf.name}:`,
     `    runs-on: ubuntu-latest`,
+    `    env:`,
+    `      AUTONOMY_RUNNER: github`, // compiler-written backend (github → workflow dispatch)
     `    steps:`,
     action,
     ``,

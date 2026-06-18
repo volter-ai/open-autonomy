@@ -116,10 +116,15 @@ const r = spawnSync(cli + ' launch ${agent}', { shell: true, stdio: 'inherit' })
 process.exit(r.status == null ? 1 : r.status);
 `;
 
-export function compileLocal(ir: AutonomyIR, opts: { name?: string } = {}): CompileOutput {
+export function compileLocal(ir: AutonomyIR, opts: { name?: string; runner?: string } = {}): CompileOutput {
   const name = opts.name ?? 'app';
+  // The runner backend is a substrate decision — the COMPILER writes it (local → termfleet).
+  // It rides schedule.env, which the loop injects into every script (and thus into nested agent
+  // sessions), so the whole tree shares one backend. Env-override stays only for tests.
+  const runner = opts.runner ?? 'termfleet';
   const base = `profiles/${name}`;
   const { profile, schedule } = emitProfile(ir, { name });
+  schedule.env = { ...schedule.env, AUTONOMY_RUNNER: runner };
 
   const generated: Record<string, string> = {
     [`${base}/profile.json`]: JSON.stringify(profile, null, 2),

@@ -8,3 +8,4 @@ services/agent-model-proxy/.dev.vars
 
 # local secrets
 .env
+.playwright-mcp/

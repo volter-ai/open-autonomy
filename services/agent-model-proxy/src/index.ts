@@ -2,9 +2,11 @@ import { handleAnthropic } from './anthropic.js';
 import { limitsFromEnv } from './config.js';
 import { error, json, methodNotAllowed, parseJson } from './errors.js';
 import { verifyGitHubOidcToken } from './github-oidc.js';
-import { LimitLedger, LimitLedgerClient } from './limit-ledger.js';
+import { LimitLedger, LimitLedgerClient, type Sponsor } from './limit-ledger.js';
 import { handleOpenAI } from './openai.js';
 import { RunBudget, RunBudgetClient } from './run-budget.js';
+import { renderRunwaySvg } from './runway-svg.js';
+import { handleSponsorsWebhook } from './sponsors-webhook.js';
 import { extractBearer, signRunToken, verifyRunToken } from './token.js';
 import type { Env, MintRunRequest, RunClaims } from './types.js';
 
@@ -18,6 +20,15 @@ export default {
       console.error('[agent-model-proxy] unhandled error', err);
       return error('internal_error', 500);
     }
+  },
+
+  // Monthly cron (see [triggers] in wrangler.toml): credit the active recurring sponsorships into the
+  // pool. Idempotent on the YYYY-MM key, so an extra firing is harmless. This is the recurring-funding
+  // path GitHub's webhook can't provide (no per-renewal event).
+  async scheduled(event: ScheduledController, env: Env): Promise<void> {
+    const key = new Date(event.scheduledTime).toISOString().slice(0, 7); // YYYY-MM (UTC)
+    const result = await new LimitLedgerClient(env.LIMITS).accrue(key);
+    console.log('[agent-model-proxy] monthly accrue', key, JSON.stringify(result));
   },
 } satisfies ExportedHandler<Env>;
 
@@ -41,6 +52,79 @@ async function route(req: Request, env: Env, ctx: ExecutionContext): Promise<Res
     const body = parseJson<{ repo?: string; budget_usd_cents?: number }>(await req.text());
     if (!body?.repo || typeof body.budget_usd_cents !== 'number') return error('invalid_request');
     return json(await new LimitLedgerClient(env.LIMITS).setBudget(body.repo, body.budget_usd_cents));
+  }
+
+  // Org-wide sponsorship pool: add funding (idempotent on `key`, e.g. the billing month). Admin-gated.
+  if (path === '/admin/treasury/credit') {
+    if (!isAdmin(req, env)) return error('auth_failed', 401);
+    if (req.method !== 'POST') return methodNotAllowed();
+    const body = parseJson<{ amount_usd_cents?: number; key?: string; sponsors?: Sponsor[] }>(await req.text());
+    if (!body || typeof body.amount_usd_cents !== 'number') return error('invalid_request');
+    return json(await new LimitLedgerClient(env.LIMITS).credit(body.amount_usd_cents, body.key, body.sponsors));
+  }
+
+  // Credit the pool with this billing month's active recurring sponsorship total. Idempotent on
+  // `key`; also invoked by the monthly cron (scheduled handler). Admin-gated.
+  if (path === '/admin/treasury/accrue') {
+    if (!isAdmin(req, env)) return error('auth_failed', 401);
+    if (req.method !== 'POST') return methodNotAllowed();
+    const body = parseJson<{ key?: string }>(await req.text());
+    if (!body?.key) return error('invalid_request');
+    return json(await new LimitLedgerClient(env.LIMITS).accrue(body.key));
+  }
+
+  // GitHub Sponsors webhook: maintains the active-sponsor list (no token; HMAC-verified).
+  if (path === '/webhooks/github-sponsors') return handleSponsorsWebhook(req, env);
+
+  // Sponsorship coupons: issue + list (admin). A coupon grants funding decoupled from any payment rail.
+  if (path === '/admin/coupons') {
+    if (!isAdmin(req, env)) return error('auth_failed', 401);
+    const ledger = new LimitLedgerClient(env.LIMITS);
+    if (req.method === 'GET') return json(await ledger.couponList());
+    if (req.method !== 'POST') return methodNotAllowed();
+    const body = parseJson<{ amount_usd_cents?: number; sponsor?: Sponsor; code?: string; expires_at?: string }>(await req.text());
+    if (!body || typeof body.amount_usd_cents !== 'number') return error('invalid_request');
+    const result = await ledger.couponCreate(body as { amount_usd_cents: number; sponsor?: Sponsor; code?: string; expires_at?: string });
+    return json(result, { status: result.ok ? 200 : 409 });
+  }
+
+  // Redeem a coupon (public — the code is the bearer credential): credits the pool + attributes the sponsor.
+  if (path === '/v1/coupons/redeem') {
+    if (req.method !== 'POST') return methodNotAllowed();
+    const body = parseJson<{ code?: string }>(await req.text());
+    if (!body?.code) return error('invalid_request');
+    const result = await new LimitLedgerClient(env.LIMITS).couponRedeem(body.code);
+    if (result.ok) return json(result);
+    const status = result.error === 'coupon_not_found' ? 404 : result.error === 'coupon_already_redeemed' ? 409 : 400;
+    return json(result, { status });
+  }
+
+  // Set the org-wide pool to an absolute amount (ops correction / manual funding). Admin-gated.
+  if (path === '/admin/treasury/budget') {
+    if (!isAdmin(req, env)) return error('auth_failed', 401);
+    if (req.method !== 'POST') return methodNotAllowed();
+    const body = parseJson<{ budget_usd_cents?: number }>(await req.text());
+    if (!body || typeof body.budget_usd_cents !== 'number') return error('invalid_request');
+    return json(await new LimitLedgerClient(env.LIMITS).setGlobalBudget(body.budget_usd_cents));
+  }
+
+  // Public funding status (no auth — it's the data behind the README badge).
+  if (path === '/v1/funding') {
+    if (req.method !== 'GET') return methodNotAllowed();
+    return json(await new LimitLedgerClient(env.LIMITS).funding());
+  }
+
+  // Public funding runway as an embeddable, Camo-safe SVG for the README.
+  if (path === '/v1/funding/runway.svg') {
+    if (req.method !== 'GET') return methodNotAllowed();
+    const snapshot = await new LimitLedgerClient(env.LIMITS).funding();
+    return new Response(renderRunwaySvg(snapshot), {
+      headers: {
+        'content-type': 'image/svg+xml; charset=utf-8',
+        // Short cache so the README badge updates within minutes (GitHub's Camo proxy caches too).
+        'cache-control': 'max-age=300, s-maxage=300',
+      },
+    });
   }
 
   const adminRun = path.match(/^\/admin\/runs\/([^/]+)(?:\/(revoke))?$/);

@@ -21,6 +21,10 @@ MAX_REPO_LIFETIME_USD_CENTS = "20000"
 GITHUB_OIDC_AUDIENCE = "volter-agent-model-proxy"
 GITHUB_OIDC_ALLOWED_WORKFLOW = "volter-ai/open-autonomy/.github/workflows/public-agent.yml@,volter-ai/open-autonomy-testbed/.github/workflows/public-agent.yml@,volter-ai/open-autonomy-self-driving-testbed/.github/workflows/public-agent.yml@"
 
+# Monthly sponsorship accrual (credits active recurring sponsors into the pool; idempotent per month).
+[triggers]
+crons = ["0 6 1 * *"]
+
 [[durable_objects.bindings]]
 name = "RUNS"
 class_name = "RunBudget"

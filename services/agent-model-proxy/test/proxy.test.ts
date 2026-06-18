@@ -456,6 +456,258 @@ describe('agent model proxy', () => {
   });
 });
 
+describe('sponsorship funding pool', () => {
+  test('is unfunded (open) by default', async () => {
+    const env = testEnv();
+    const funding = await requestJson(env, '/v1/funding');
+    expect(funding.funded).toBe(false);
+    expect(funding.paused).toBe(false);
+    expect(funding.global_budget_usd_cents).toBe(null);
+    expect(funding.remaining_usd_cents).toBe(null);
+  });
+
+  test('credit raises the pool and funding reflects it', async () => {
+    const env = testEnv();
+    const credited = await requestJson(env, '/admin/treasury/credit', {
+      method: 'POST',
+      headers: { 'x-admin-token': 'admin' },
+      body: { amount_usd_cents: 20000, key: '2026-06', sponsors: [{ login: 'acme', monthly_usd_cents: 20000 }] },
+    });
+    expect(credited.ok).toBe(true);
+    expect(credited.global_budget_usd_cents).toBe(20000);
+
+    const funding = await requestJson(env, '/v1/funding');
+    expect(funding.funded).toBe(true);
+    expect(funding.global_budget_usd_cents).toBe(20000);
+    expect(funding.remaining_usd_cents).toBe(20000);
+    expect(funding.paused).toBe(false);
+    expect(funding.sponsors).toEqual([{ login: 'acme', monthly_usd_cents: 20000 }]);
+  });
+
+  test('credit is idempotent per key but accumulates across keys', async () => {
+    const env = testEnv();
+    const credit = (amount: number, key: string) => requestJson(env, '/admin/treasury/credit', {
+      method: 'POST',
+      headers: { 'x-admin-token': 'admin' },
+      body: { amount_usd_cents: amount, key },
+    });
+
+    expect((await credit(1000, '2026-06')).global_budget_usd_cents).toBe(1000);
+    const again = await credit(1000, '2026-06');
+    expect(again.idempotent).toBe(true);
+    expect(again.global_budget_usd_cents).toBe(1000);
+    expect((await credit(500, '2026-07')).global_budget_usd_cents).toBe(1500);
+  });
+
+  test('an empty pool hard-stops minting until a sponsorship credit lands', async () => {
+    const env = testEnv();
+    await requestJson(env, '/admin/treasury/budget', {
+      method: 'POST',
+      headers: { 'x-admin-token': 'admin' },
+      body: { budget_usd_cents: 0 },
+    });
+
+    const blocked = await request(env, '/admin/runs/mint', {
+      method: 'POST',
+      headers: { 'x-admin-token': 'admin' },
+      body: { repo: 'volter/twin', issue: 1, actor: 'octocat', models: ['gpt-5-mini'], max_usd_cents: 100, max_requests: 3 },
+    });
+    expect(blocked.status).toBe(429);
+    expect((await blocked.json() as { error?: { code?: string } }).error?.code).toBe('sponsorship_pool_exhausted');
+
+    await requestJson(env, '/admin/treasury/credit', {
+      method: 'POST',
+      headers: { 'x-admin-token': 'admin' },
+      body: { amount_usd_cents: 5000, key: '2026-06' },
+    });
+    const minted = await mint(env, ['gpt-5-mini'], 100, 3);
+    expect(minted.ok).toBe(true);
+  });
+
+  test('spend draws down the pool', async () => {
+    const env = testEnv();
+    await requestJson(env, '/admin/treasury/credit', {
+      method: 'POST',
+      headers: { 'x-admin-token': 'admin' },
+      body: { amount_usd_cents: 5000, key: '2026-06' },
+    });
+    const minted = await mint(env, ['claude-sonnet-4-6'], 100, 5);
+
+    globalThis.fetch = (async () => new Response(JSON.stringify({
+      id: 'msg_1',
+      usage: { input_tokens: 1000, output_tokens: 1000 },
+    }), { headers: { 'content-type': 'application/json' } })) as typeof fetch;
+
+    const proxied = await worker.fetch(new Request('https://proxy.test/anthropic/v1/messages', {
+      method: 'POST',
+      headers: { authorization: `Bearer ${minted.token}`, 'content-type': 'application/json' },
+      body: JSON.stringify({ model: 'claude-sonnet-4-6', max_tokens: 1000, messages: [] }),
+    }), env, ctx);
+    expect(proxied.status).toBe(200);
+
+    const funding = await requestJson(env, '/v1/funding');
+    expect(funding.lifetime_consumed_usd_cents).toBeGreaterThan(0);
+    expect(funding.remaining_usd_cents).toBeLessThan(5000);
+    expect(funding.remaining_usd_cents).toBe(5000 - funding.lifetime_consumed_usd_cents);
+  });
+
+  test('serves the runway as an embeddable SVG', async () => {
+    const env = testEnv();
+    await requestJson(env, '/admin/treasury/credit', {
+      method: 'POST',
+      headers: { 'x-admin-token': 'admin' },
+      body: { amount_usd_cents: 20000, key: '2026-06' },
+    });
+    const res = await request(env, '/v1/funding/runway.svg');
+    expect(res.status).toBe(200);
+    expect(res.headers.get('content-type')?.includes('image/svg+xml')).toBe(true);
+    const svg = await res.text();
+    expect(svg.includes('<svg')).toBe(true);
+    expect(svg.includes('of $200.00')).toBe(true);
+  });
+});
+
+describe('github sponsors webhook', () => {
+  async function sign(body: string): Promise<string> {
+    const key = await crypto.subtle.importKey(
+      'raw', new TextEncoder().encode('whsecret'), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign'],
+    );
+    const sig = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(body));
+    return `sha256=${[...new Uint8Array(sig)].map((b) => b.toString(16).padStart(2, '0')).join('')}`;
+  }
+
+  async function webhook(env: Env, event: string, payload: unknown, signature?: string): Promise<Response> {
+    const body = JSON.stringify(payload);
+    return await worker.fetch(new Request('https://proxy.test/webhooks/github-sponsors', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-github-event': event, 'x-hub-signature-256': signature ?? await sign(body) },
+      body,
+    }), env, ctx);
+  }
+
+  test('rejects a bad signature', async () => {
+    const env = testEnv();
+    const res = await webhook(env, 'sponsorship', { action: 'created' }, 'sha256=deadbeef');
+    expect(res.status).toBe(401);
+  });
+
+  test('acknowledges the ping event', async () => {
+    const env = testEnv();
+    const res = await webhook(env, 'ping', { zen: 'Keep it logically awesome.' });
+    expect(res.status).toBe(200);
+  });
+
+  test('created recurring sponsor shows in funding; accrue credits the pool (idempotent)', async () => {
+    const env = testEnv();
+    const created = await webhook(env, 'sponsorship', {
+      action: 'created',
+      sponsorship: { sponsor: { login: 'acme', avatar_url: 'https://x/a.png' }, tier: { monthly_price_in_cents: 5000, is_one_time: false } },
+    });
+    expect(created.status).toBe(200);
+
+    let funding = await requestJson(env, '/v1/funding');
+    expect(funding.sponsors).toEqual([{ login: 'acme', avatar_url: 'https://x/a.png', monthly_usd_cents: 5000 }]);
+    expect(funding.funded).toBe(false); // upsert alone does not fund; accrual does
+
+    const accrue = (key: string) => requestJson(env, '/admin/treasury/accrue', {
+      method: 'POST', headers: { 'x-admin-token': 'admin' }, body: { key },
+    });
+    expect((await accrue('2026-07')).global_budget_usd_cents).toBe(5000);
+    const again = await accrue('2026-07');
+    expect(again.idempotent).toBe(true);
+    expect(again.global_budget_usd_cents).toBe(5000);
+
+    funding = await requestJson(env, '/v1/funding');
+    expect(funding.funded).toBe(true);
+    expect(funding.remaining_usd_cents).toBe(5000);
+  });
+
+  test('tier_changed updates the amount; cancelled removes the sponsor', async () => {
+    const env = testEnv();
+    await webhook(env, 'sponsorship', { action: 'created', sponsorship: { sponsor: { login: 'acme' }, tier: { monthly_price_in_cents: 5000, is_one_time: false } } });
+    await webhook(env, 'sponsorship', { action: 'tier_changed', sponsorship: { sponsor: { login: 'acme' }, tier: { monthly_price_in_cents: 10000, is_one_time: false } } });
+    let funding = await requestJson(env, '/v1/funding');
+    expect(funding.sponsors).toEqual([{ login: 'acme', monthly_usd_cents: 10000 }]);
+
+    await webhook(env, 'sponsorship', { action: 'cancelled', sponsorship: { sponsor: { login: 'acme' }, tier: { monthly_price_in_cents: 10000, is_one_time: false } } });
+    funding = await requestJson(env, '/v1/funding');
+    expect(funding.sponsors).toEqual([]);
+  });
+
+  test('one-time sponsorship credits the pool immediately and idempotently', async () => {
+    const env = testEnv();
+    const payload = {
+      action: 'created',
+      sponsorship: { node_id: 'S_one', sponsor: { login: 'gift' }, tier: { monthly_price_in_cents: 2500, is_one_time: true } },
+    };
+    await webhook(env, 'sponsorship', payload);
+    expect((await requestJson(env, '/v1/funding')).global_budget_usd_cents).toBe(2500);
+    await webhook(env, 'sponsorship', payload); // replay
+    expect((await requestJson(env, '/v1/funding')).global_budget_usd_cents).toBe(2500);
+  });
+});
+
+describe('sponsorship coupons', () => {
+  const issue = (env: Env, body: unknown) => requestJson(env, '/admin/coupons', {
+    method: 'POST', headers: { 'x-admin-token': 'admin' }, body,
+  });
+
+  test('issue (admin) then redeem (public) credits the pool and attributes the sponsor', async () => {
+    const env = testEnv();
+    const created = await issue(env, {
+      amount_usd_cents: 5000,
+      sponsor: { login: 'acme', name: 'ACME Cloud', tagline: 'infra for builders', url: 'https://acme.example' },
+    });
+    expect(created.ok).toBe(true);
+    const code = created.coupon.code as string;
+    expect(code.startsWith('SPON-')).toBe(true);
+
+    // unredeemed coupon does not fund anything yet
+    expect((await requestJson(env, '/v1/funding')).funded).toBe(false);
+
+    const redeemed = await requestJson(env, '/v1/coupons/redeem', { method: 'POST', body: { code } });
+    expect(redeemed.ok).toBe(true);
+    expect(redeemed.amount_usd_cents).toBe(5000);
+
+    const funding = await requestJson(env, '/v1/funding');
+    expect(funding.funded).toBe(true);
+    expect(funding.remaining_usd_cents).toBe(5000);
+    expect(funding.sponsors).toEqual([{ login: 'acme', name: 'ACME Cloud', tagline: 'infra for builders', url: 'https://acme.example' }]);
+  });
+
+  test('a coupon can only be redeemed once', async () => {
+    const env = testEnv();
+    const code = (await issue(env, { amount_usd_cents: 1000 })).coupon.code as string;
+    const first = await request(env, '/v1/coupons/redeem', { method: 'POST', body: { code } });
+    expect(first.status).toBe(200);
+    const second = await request(env, '/v1/coupons/redeem', { method: 'POST', body: { code } });
+    expect(second.status).toBe(409);
+    expect((await second.json() as { error?: string }).error).toBe('coupon_already_redeemed');
+    // no double credit
+    expect((await requestJson(env, '/v1/funding')).global_budget_usd_cents).toBe(1000);
+  });
+
+  test('redeeming an unknown code is 404', async () => {
+    const env = testEnv();
+    const res = await request(env, '/v1/coupons/redeem', { method: 'POST', body: { code: 'SPON-NOPE-NOPE-NOPE' } });
+    expect(res.status).toBe(404);
+  });
+
+  test('an expired coupon is refused', async () => {
+    const env = testEnv();
+    const code = (await issue(env, { amount_usd_cents: 1000, code: 'OLD1', expires_at: '2000-01-01T00:00:00Z' })).coupon.code as string;
+    const res = await request(env, '/v1/coupons/redeem', { method: 'POST', body: { code } });
+    expect(res.status).toBe(400);
+    expect((await res.json() as { error?: string }).error).toBe('coupon_expired');
+  });
+
+  test('issuing requires admin', async () => {
+    const env = testEnv();
+    const res = await request(env, '/admin/coupons', { method: 'POST', body: { amount_usd_cents: 1000 } });
+    expect(res.status).toBe(401);
+  });
+});
+
 async function mint(
   env: Env,
   models: string[],
@@ -507,6 +759,7 @@ function testEnv(overrides: Partial<Env> = {}): Env {
   return {
     AGENT_PROXY_ADMIN_TOKEN: 'admin',
     AGENT_PROXY_HMAC_SECRET: 'secret',
+    GITHUB_SPONSORS_WEBHOOK_SECRET: 'whsecret',
     ANTHROPIC_API_KEY: 'anthropic-key',
     OPENAI_API_KEY: 'openai-key',
     DEFAULT_MAX_USD_CENTS: '500',

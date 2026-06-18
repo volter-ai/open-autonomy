@@ -17,6 +17,53 @@ spend while GitHub Actions runs semi-untrusted agents.
 - `POST /openai/v1/chat/completions`
 - `POST /openai/v1/responses`
 
+Sponsorship funding pool (org-wide):
+
+- `POST /admin/treasury/credit` — add funding directly. Body `{ amount_usd_cents, key?, sponsors? }`.
+  Idempotent on `key`.
+- `POST /admin/treasury/accrue` — credit this month's active recurring sponsorship total. Body `{ key }`
+  (e.g. `2026-06`). Idempotent; also fired by the monthly cron.
+- `POST /admin/treasury/budget` — set the pool to an absolute amount (ops correction). Body `{ budget_usd_cents }`.
+- `POST /webhooks/github-sponsors` — GitHub Sponsors webhook (HMAC-verified; no token). Maintains the
+  active recurring-sponsor list (created / tier_changed / edited / cancelled) and credits one-time gifts.
+- `POST /admin/coupons` / `GET /admin/coupons` — issue/list **sponsorship coupons** (admin). Body
+  `{ amount_usd_cents, sponsor?: {login,name,tagline,url,avatar_url}, code?, expires_at? }`.
+- `POST /v1/coupons/redeem` — redeem a coupon (public; the code is the bearer credential). Credits the
+  pool by the coupon amount and attributes the sponsor for the README. One-time, idempotent per code.
+- `GET /v1/funding` — public funding snapshot (balance, burn, runway days, sponsors).
+- `GET /v1/funding/runway.svg` — public, Camo-safe SVG for embedding the runway in a README.
+
+The pool is **org-wide**: once funded, cumulative spend across all repos hard-stops with
+`sponsorship_pool_exhausted` when it reaches the funded amount. Until the first credit lands the pool is
+unfunded-but-open (gate disabled), preserving prior behavior.
+
+Funding it from GitHub Sponsors needs **no GitHub token**:
+
+1. Set the secret `GITHUB_SPONSORS_WEBHOOK_SECRET` (`bunx wrangler secret put GITHUB_SPONSORS_WEBHOOK_SECRET`).
+2. In the org's Sponsors dashboard, add a webhook → URL `https://<proxy-host>/webhooks/github-sponsors`,
+   content-type `application/json`, the same secret. This keeps the active-sponsor list current.
+3. The monthly cron (`[triggers] crons` in `wrangler.toml`) calls `accrue` on the 1st of each month to
+   credit the active recurring total — GitHub sends no per-renewal event, so this is the recurring path.
+
+One-time sponsorships are credited the moment the webhook arrives.
+
+**Coupons** are the payment-rail-free path: issue a coupon for a sponsor's committed amount (with their
+logo/tagline), hand them the code, and redemption credits the pool and puts them on the README — the
+actual money is settled however you arrange it out-of-band. Issue one with:
+
+```bash
+curl -X POST https://<proxy-host>/admin/coupons -H "x-admin-token: $AGENT_PROXY_ADMIN_TOKEN" \
+  -d '{"amount_usd_cents":5000,"sponsor":{"login":"acme","name":"ACME Cloud","tagline":"infra for builders","url":"https://acme.example"}}'
+# → { "ok": true, "coupon": { "code": "SPON-XXXX-XXXX-XXXX", ... } }
+curl -X POST https://<proxy-host>/v1/coupons/redeem -d '{"code":"SPON-XXXX-XXXX-XXXX"}'
+```
+
+Embed the runway in a README:
+
+```markdown
+[![funding](https://<proxy-host>/v1/funding/runway.svg)](https://github.com/sponsors/<org>)
+```
+
 Admin routes require:
 
 ```text

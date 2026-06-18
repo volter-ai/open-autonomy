@@ -22,13 +22,14 @@ export default {
     }
   },
 
-  // Monthly cron (see [triggers] in wrangler.toml): credit the active recurring sponsorships into the
-  // pool. Idempotent on the YYYY-MM key, so an extra firing is harmless. This is the recurring-funding
-  // path GitHub's webhook can't provide (no per-renewal event).
+  // Monthly cron (see [triggers] in wrangler.toml): mint the sponsor account with its active recurring
+  // sponsorships. Idempotent on the YYYY-MM key. This is the recurring-funding path GitHub's webhook
+  // can't provide (no per-renewal event).
   async scheduled(event: ScheduledController, env: Env): Promise<void> {
     const key = new Date(event.scheduledTime).toISOString().slice(0, 7); // YYYY-MM (UTC)
-    const result = await new LimitLedgerClient(env.LIMITS).accrue(key);
-    console.log('[agent-model-proxy] monthly accrue', key, JSON.stringify(result));
+    const account = sponsorAccount(env);
+    const result = await new LimitLedgerClient(env.LIMITS).accrue(account, key);
+    console.log('[agent-model-proxy] monthly accrue', account, key, JSON.stringify(result));
   },
 } satisfies ExportedHandler<Env>;
 
@@ -45,87 +46,69 @@ async function route(req: Request, env: Env, ctx: ExecutionContext): Promise<Res
     if (req.method !== 'GET') return methodNotAllowed();
     return json(await new LimitLedgerClient(env.LIMITS).status());
   }
-  if (path === '/admin/limits/budget') {
-    // Set a repo's lifetime budget (sponsorship funding lever). Admin-gated.
+  // GitHub Sponsors webhook: maintains the sponsor account's active-sponsor list (no token; HMAC-verified).
+  if (path === '/webhooks/github-sponsors') return handleSponsorsWebhook(req, env, sponsorAccount(env));
+
+  // Account funding ops (admin). mint = money in at a node; grant = transfer down the tree; accrue =
+  // mint the month's recurring sponsorships.
+  const acctOp = path.match(/^\/admin\/accounts\/([^/]+)\/(mint|grant|accrue)$/);
+  if (acctOp) {
     if (!isAdmin(req, env)) return error('auth_failed', 401);
     if (req.method !== 'POST') return methodNotAllowed();
-    const body = parseJson<{ repo?: string; budget_usd_cents?: number }>(await req.text());
-    if (!body?.repo || typeof body.budget_usd_cents !== 'number') return error('invalid_request');
-    return json(await new LimitLedgerClient(env.LIMITS).setBudget(body.repo, body.budget_usd_cents));
+    const ledger = new LimitLedgerClient(env.LIMITS);
+    const id = decodeURIComponent(acctOp[1]);
+    const body = parseJson<{ amount_usd_cents?: number; to?: string; key?: string; sponsor?: Sponsor }>(await req.text()) ?? {};
+    if (acctOp[2] === 'mint') {
+      if (typeof body.amount_usd_cents !== 'number') return error('invalid_request');
+      return json(await ledger.mint(id, body.amount_usd_cents, body.key, body.sponsor));
+    }
+    if (acctOp[2] === 'grant') {
+      if (!body.to || typeof body.amount_usd_cents !== 'number') return error('invalid_request');
+      const result = await ledger.grant(id, body.to, body.amount_usd_cents, body.key);
+      return json(result, { status: result.ok ? 200 : 400 });
+    }
+    if (!body.key) return error('invalid_request'); // accrue
+    return json(await ledger.accrue(id, body.key));
   }
 
-  // Org-wide sponsorship pool: add funding (idempotent on `key`, e.g. the billing month). Admin-gated.
-  if (path === '/admin/treasury/credit') {
-    if (!isAdmin(req, env)) return error('auth_failed', 401);
-    if (req.method !== 'POST') return methodNotAllowed();
-    const body = parseJson<{ amount_usd_cents?: number; key?: string; sponsors?: Sponsor[] }>(await req.text());
-    if (!body || typeof body.amount_usd_cents !== 'number') return error('invalid_request');
-    return json(await new LimitLedgerClient(env.LIMITS).credit(body.amount_usd_cents, body.key, body.sponsors));
-  }
-
-  // Credit the pool with this billing month's active recurring sponsorship total. Idempotent on
-  // `key`; also invoked by the monthly cron (scheduled handler). Admin-gated.
-  if (path === '/admin/treasury/accrue') {
-    if (!isAdmin(req, env)) return error('auth_failed', 401);
-    if (req.method !== 'POST') return methodNotAllowed();
-    const body = parseJson<{ key?: string }>(await req.text());
-    if (!body?.key) return error('invalid_request');
-    return json(await new LimitLedgerClient(env.LIMITS).accrue(body.key));
-  }
-
-  // GitHub Sponsors webhook: maintains the active-sponsor list (no token; HMAC-verified).
-  if (path === '/webhooks/github-sponsors') return handleSponsorsWebhook(req, env);
-
-  // Sponsorship coupons: issue + list (admin). A coupon grants funding decoupled from any payment rail.
+  // Sponsorship coupons: issue + list (admin). A coupon is a bearer grant; `from` makes it transfer
+  // from that account's balance, otherwise it mints on redeem.
   if (path === '/admin/coupons') {
     if (!isAdmin(req, env)) return error('auth_failed', 401);
     const ledger = new LimitLedgerClient(env.LIMITS);
     if (req.method === 'GET') return json(await ledger.couponList());
     if (req.method !== 'POST') return methodNotAllowed();
-    const body = parseJson<{ amount_usd_cents?: number; sponsor?: Sponsor; code?: string; expires_at?: string }>(await req.text());
+    const body = parseJson<{ amount_usd_cents?: number; from?: string; sponsor?: Sponsor; code?: string; expires_at?: string }>(await req.text());
     if (!body || typeof body.amount_usd_cents !== 'number') return error('invalid_request');
-    const result = await ledger.couponCreate(body as { amount_usd_cents: number; sponsor?: Sponsor; code?: string; expires_at?: string });
+    const result = await ledger.couponCreate(body as { amount_usd_cents: number; from?: string; sponsor?: Sponsor; code?: string; expires_at?: string });
     return json(result, { status: result.ok ? 200 : 409 });
   }
 
-  // Redeem a coupon (public — the code is the bearer credential): credits the pool + attributes the sponsor.
+  // Redeem a coupon into an account (public — the code is the bearer credential).
   if (path === '/v1/coupons/redeem') {
     if (req.method !== 'POST') return methodNotAllowed();
-    const body = parseJson<{ code?: string }>(await req.text());
-    if (!body?.code) return error('invalid_request');
-    const result = await new LimitLedgerClient(env.LIMITS).couponRedeem(body.code);
+    const body = parseJson<{ code?: string; account?: string }>(await req.text());
+    if (!body?.code || !body.account) return error('invalid_request');
+    const result = await new LimitLedgerClient(env.LIMITS).couponRedeem(body.code, body.account);
     if (result.ok) return json(result);
     const status = result.error === 'coupon_not_found' ? 404 : result.error === 'coupon_already_redeemed' ? 409 : 400;
     return json(result, { status });
   }
 
-  // Set the org-wide pool to an absolute amount (ops correction / manual funding). Admin-gated.
-  if (path === '/admin/treasury/budget') {
-    if (!isAdmin(req, env)) return error('auth_failed', 401);
-    if (req.method !== 'POST') return methodNotAllowed();
-    const body = parseJson<{ budget_usd_cents?: number }>(await req.text());
-    if (!body || typeof body.budget_usd_cents !== 'number') return error('invalid_request');
-    return json(await new LimitLedgerClient(env.LIMITS).setGlobalBudget(body.budget_usd_cents));
+  // Public per-account funding status + runway badge.
+  const acctRunway = path.match(/^\/v1\/accounts\/([^/]+)\/runway\.svg$/);
+  if (acctRunway) return runwaySvg(env, decodeURIComponent(acctRunway[1]), req);
+  const acctStatus = path.match(/^\/v1\/accounts\/([^/]+)$/);
+  if (acctStatus) {
+    if (req.method !== 'GET') return methodNotAllowed();
+    return json(await new LimitLedgerClient(env.LIMITS).funding(decodeURIComponent(acctStatus[1])));
   }
-
-  // Public funding status (no auth — it's the data behind the README badge).
+  // Default-account aliases (the canonical README badge URL).
   if (path === '/v1/funding') {
     if (req.method !== 'GET') return methodNotAllowed();
-    return json(await new LimitLedgerClient(env.LIMITS).funding());
+    return json(await new LimitLedgerClient(env.LIMITS).funding(fundingAccount(env)));
   }
-
-  // Public funding runway as an embeddable, Camo-safe SVG for the README.
-  if (path === '/v1/funding/runway.svg') {
-    if (req.method !== 'GET') return methodNotAllowed();
-    const snapshot = await new LimitLedgerClient(env.LIMITS).funding();
-    return new Response(renderRunwaySvg(snapshot), {
-      headers: {
-        'content-type': 'image/svg+xml; charset=utf-8',
-        // Short cache so the README badge updates within minutes (GitHub's Camo proxy caches too).
-        'cache-control': 'max-age=300, s-maxage=300',
-      },
-    });
-  }
+  if (path === '/v1/funding/runway.svg') return runwaySvg(env, fundingAccount(env), req);
 
   const adminRun = path.match(/^\/admin\/runs\/([^/]+)(?:\/(revoke))?$/);
   if (adminRun) {
@@ -328,4 +311,26 @@ async function exchangeRunToken(req: Request, env: Env, runId: string): Promise<
 function isAdmin(req: Request, env: Env): boolean {
   const token = req.headers.get('x-admin-token');
   return Boolean(token && env.AGENT_PROXY_ADMIN_TOKEN && token === env.AGENT_PROXY_ADMIN_TOKEN);
+}
+
+// The account whose runway the default README badge (/v1/funding*) shows.
+function fundingAccount(env: Env): string {
+  return env.DEFAULT_FUNDING_ACCOUNT || 'volter-ai/open-autonomy';
+}
+
+// The account that org-level GitHub Sponsors funding lands on (the org's own project).
+function sponsorAccount(env: Env): string {
+  return env.DEFAULT_SPONSOR_ACCOUNT || fundingAccount(env);
+}
+
+async function runwaySvg(env: Env, account: string, req: Request): Promise<Response> {
+  if (req.method !== 'GET') return methodNotAllowed();
+  const snapshot = await new LimitLedgerClient(env.LIMITS).funding(account);
+  return new Response(renderRunwaySvg(snapshot), {
+    headers: {
+      'content-type': 'image/svg+xml; charset=utf-8',
+      // Short cache so the README badge updates within minutes (GitHub's Camo proxy caches too).
+      'cache-control': 'max-age=300, s-maxage=300',
+    },
+  });
 }

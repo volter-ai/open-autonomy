@@ -17,7 +17,11 @@ MAX_RUNS_PER_REPO_PER_DAY = "5000"
 MAX_RUNS_PER_ACTOR_PER_DAY = "5000"
 MAX_RUNS_PER_ISSUE_PER_DAY = "200"
 MAX_GLOBAL_DAILY_USD_CENTS = "5000"
-MAX_REPO_LIFETIME_USD_CENTS = "20000"
+# Account-balance hard-stop. Keep "false" until the funding tree is bootstrapped (mint root + grant to
+# active repos), then flip to "true" so unfunded repos don't strand the live fleet on deploy.
+ENFORCE_ACCOUNT_BALANCE = "false"
+DEFAULT_FUNDING_ACCOUNT = "volter-ai/open-autonomy"
+DEFAULT_SPONSOR_ACCOUNT = "volter-ai/open-autonomy"
 GITHUB_OIDC_AUDIENCE = "volter-agent-model-proxy"
 GITHUB_OIDC_ALLOWED_WORKFLOW = "volter-ai/open-autonomy/.github/workflows/public-agent.yml@,volter-ai/open-autonomy-testbed/.github/workflows/public-agent.yml@,volter-ai/open-autonomy-self-driving-testbed/.github/workflows/public-agent.yml@"
 

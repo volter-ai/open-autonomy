@@ -39,7 +39,7 @@ async function verifySignature(secret: string, body: string, header: string | nu
   return constantTimeEqual(header, expected);
 }
 
-export async function handleSponsorsWebhook(req: Request, env: Env): Promise<Response> {
+export async function handleSponsorsWebhook(req: Request, env: Env, account: string): Promise<Response> {
   if (req.method !== 'POST') return error('method_not_allowed', 405);
   if (!env.GITHUB_SPONSORS_WEBHOOK_SECRET) return error('webhook_not_configured', 503);
 
@@ -72,17 +72,17 @@ export async function handleSponsorsWebhook(req: Request, env: Env): Promise<Res
       if (s.tier.is_one_time) {
         // One-time gifts are funding right now; idempotent on the sponsorship identity.
         const key = `onetime:${s.node_id ?? `${login}:${s.created_at ?? ''}`}`;
-        await ledger.credit(amount, key, undefined);
+        await ledger.mint(account, amount, key, sponsor);
       } else {
-        await ledger.sponsorUpsert(sponsor);
+        await ledger.sponsorUpsert(account, sponsor);
       }
       break;
     case 'tier_changed':
     case 'edited':
-      if (!s.tier.is_one_time) await ledger.sponsorUpsert(sponsor);
+      if (!s.tier.is_one_time) await ledger.sponsorUpsert(account, sponsor);
       break;
     case 'cancelled':
-      await ledger.sponsorRemove(login);
+      await ledger.sponsorRemove(account, login);
       break;
     default:
       // pending_cancellation / pending_tier_change and anything else: acknowledge, no state change.

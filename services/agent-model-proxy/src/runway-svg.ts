@@ -30,8 +30,8 @@ function escapeXml(s: string): string {
 }
 
 export function renderRunwaySvg(f: FundingSnapshot): string {
-  const budget = f.global_budget_usd_cents;
-  const remaining = f.remaining_usd_cents;
+  const budget = f.granted_in_usd_cents;
+  const remaining = f.balance_usd_cents;
 
   // State -> color + fill fraction + sub-line.
   let color = COLORS.gray;
@@ -39,7 +39,7 @@ export function renderRunwaySvg(f: FundingSnapshot): string {
   let headline: string;
   let sub: string;
 
-  if (!f.funded || budget === null || remaining === null) {
+  if (!f.funded || budget <= 0) {
     color = COLORS.gray;
     frac = 0;
     headline = 'Not yet funded';

@@ -32,8 +32,10 @@ export async function syncProfile(env: Env, account: string): Promise<boolean> {
     if (!res.ok) return false; // 404 (incl. private) → not eligible for the public storefront
     const repo = await res.json() as GitHubRepo;
     if (repo.private) return false;
-    // Prefer the first real image in the README (a proper banner); fall back to the OG social card.
-    const cover = (await firstReadmeImage(env, account)) ?? `https://opengraph.githubassets.com/oa/${account}`;
+    // Cover = the first real image in the README (a proper banner) if the repo has one; otherwise leave
+    // it empty so the page renders a clean, deterministic coral gradient (the GitHub OG social card is
+    // a busy link-preview card with its own text, so it makes a poor banner).
+    const cover = (await firstReadmeImage(env, account)) ?? '';
     await new LimitLedgerClient(env.LIMITS).setProfile(account, {
       tagline: repo.description ?? undefined,
       avatar_url: repo.owner?.avatar_url ?? undefined,

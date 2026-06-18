@@ -22,6 +22,10 @@ const C = {
   gray: '#9a9ca1',
 };
 
+// Brand mark (Gemini-designed): an open loop ending in an arrow — autonomy + forward motion.
+// Coral so it reads on both light and dark. Used in the nav and served as the favicon.
+export const LOGO_SVG = '<svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg"><path fill-rule="evenodd" clip-rule="evenodd" fill="#ff424d" d="M50 0C22.3858 0 0 22.3858 0 50C0 77.6142 22.3858 100 50 100C77.6142 100 100 77.6142 100 50C100 38.0426 95.539 27.0133 88.0381 18.6863L76.9881 30.056C81.8211 36.192 84.2105 44.0927 84.2105 50C84.2105 68.9431 68.9431 84.2105 50 84.2105C31.0569 84.2105 15.7895 68.9431 15.7895 50C15.7895 31.0569 31.0569 15.7895 50 15.7895C55.9073 15.7895 62.1927 18.1789 67.2243 22.564L78.6923 11.458C70.9867 4.30074 61.0266 0 50 0Z"/></svg>';
+
 export function escapeHtml(s: string): string {
   return String(s).replace(/[<>&'"]/g, (c) => (
     c === '<' ? '&lt;' : c === '>' ? '&gt;' : c === '&' ? '&amp;' : c === "'" ? '&#39;' : '&quot;'
@@ -86,6 +90,7 @@ function shell(title: string, body: string): string {
 <html lang="en"><head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
@@ -98,7 +103,8 @@ function shell(title: string, body: string): string {
   .wrap{max-width:1080px;margin:0 auto;padding:0 24px 96px;}
   .nav{display:flex;align-items:center;height:68px;border-bottom:1px solid ${C.line};margin-bottom:48px;position:sticky;top:0;background:rgba(255,255,255,.85);backdrop-filter:saturate(180%) blur(12px);z-index:10;}
   .nav .inner{display:flex;align-items:center;gap:20px;width:100%;max-width:1080px;margin:0 auto;padding:0 24px;}
-  .nav .brand{font-weight:800;font-size:19px;letter-spacing:-.02em;}
+  .nav .brand{display:inline-flex;align-items:center;gap:9px;font-weight:800;font-size:19px;letter-spacing:-.02em;}
+  .nav .brand svg{width:26px;height:26px;display:block;}
   .nav .links a{color:${C.muted};font-weight:600;font-size:15px;}
   .nav .links a:hover{color:${C.ink};}
   .nav .spacer{flex:1;}
@@ -188,7 +194,7 @@ function shell(title: string, body: string): string {
 
 function nav(): string {
   return `<div class="nav"><div class="inner">
-    <a href="/" class="brand">⛽ open-autonomy</a>
+    <a href="/" class="brand">${LOGO_SVG}<span>open-autonomy</span></a>
     <span class="links"><a href="/">Explore</a></span>
     <span class="spacer"></span>
     <a class="btn" href="https://github.com/sponsors/volter-ai">Become a patron</a>
@@ -300,7 +306,7 @@ export function renderProject(v: ProjectView): string {
           ${feed}
         </div>
         <div class="panel">
-          <h3>Transparency</h3>
+          <h3>Funding</h3>
           <img src="/v1/accounts/${enc}/runway.svg" width="460" height="116" style="max-width:100%;border-radius:12px;border:1px solid ${C.line}" alt="funding runway">
           <div class="ledger">
             <div class="item"><div class="v">${usd(v.granted_in_usd_cents)}</div><div class="l">received</div></div>

@@ -5,7 +5,7 @@ import { verifyGitHubOidcToken } from './github-oidc.js';
 import { isStale, syncAllStale, syncProfile } from './github-sync.js';
 import { LimitLedger, LimitLedgerClient, type Moderation, type Sponsor, type Tier, type AccountProfile } from './limit-ledger.js';
 import { handleOpenAI } from './openai.js';
-import { renderExplore, renderProject, renderRedeemResult } from './platform-html.js';
+import { LOGO_SVG, renderExplore, renderProject, renderRedeemResult } from './platform-html.js';
 import { RunBudget, RunBudgetClient } from './run-budget.js';
 import { renderRunwaySvg } from './runway-svg.js';
 import { handleSponsorsWebhook } from './sponsors-webhook.js';
@@ -43,6 +43,7 @@ async function route(req: Request, env: Env, ctx: ExecutionContext): Promise<Res
   const path = url.pathname;
 
   if (path === '/healthz') return new Response('ok');
+  if (path === '/favicon.svg') return new Response(LOGO_SVG, { headers: { 'content-type': 'image/svg+xml; charset=utf-8', 'cache-control': 'max-age=86400' } });
   if (path === '/favicon.ico') return new Response(null, { status: 204 });
 
   // ---- Funding platform (server-rendered HTML storefront) ----

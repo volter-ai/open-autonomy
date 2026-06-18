@@ -332,6 +332,7 @@ confidence is running the actual app, with real AI, on a real project. The frame
 - **Local compile reproduces ztrack's installed file set** (the path set asserted by
   `demos/autonomous-profile-setup.sh`).
 
-**Still unproven (needs real runs):** the github substrate end to end (no github runner yet, no
-Actions execution); the `codex` model agent (only `claude` run); concurrency/WIP, multiple agents,
-recovery, and failure modes under real load; an emitted manifest driving its real target system.
+**Still unproven (needs a real remote):** the **github trigger transport** end to end — an Actions
+cron calling `autonomy launch <agent>` against a reachable (tunneled/remote) termfleet. github is
+NOT a separate runner; termfleet is the runner everywhere, github is just another trigger. Also
+unproven under real load: concurrency/WIP, recovery, and failure modes.

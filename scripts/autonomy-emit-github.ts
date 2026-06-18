@@ -41,12 +41,13 @@ export function emitAutonomy(ir: AutonomyIR): OAManifest {
   };
 }
 
-// --- Full file-tree compile (github-actions substrate, codex harness) ---
-// Each IR workflow becomes a standalone .github/workflows/*.yml: launch → dispatch the agent
-// session job; run → run the script on a cron schedule. (autonomy.yml only carries agent-triggers.)
+// --- Full file-tree compile (github-actions = a TRIGGER TRANSPORT, not a runner) ---
+// github isn't a different runner — it's just an Actions cron that calls the SAME runner as local.
+// A launch: workflow runs `autonomy launch <agent>` (→ termfleet, reachable at TERMFLEET_PROVIDER_URL,
+// e.g. a tunneled/remote provider); a run: workflow runs the script. autonomy.yml carries agent-triggers.
 function workflowYml(wf: IRWorkflow): string {
   const action = wf.launch
-    ? `      - run: echo "dispatch agent ${wf.launch}"  # github driver invokes the session job`
+    ? `      - run: autonomy launch ${wf.launch}`
     : `      - run: node ${wf.run}`;
   return [
     `name: ${wf.name}`,
@@ -57,6 +58,9 @@ function workflowYml(wf: IRWorkflow): string {
     `jobs:`,
     `  ${wf.name}:`,
     `    runs-on: ubuntu-latest`,
+    `    env:`,
+    `      TERMFLEET_PROVIDER_URL: \${{ secrets.TERMFLEET_PROVIDER_URL }}`,
+    `      TERMFLEET_AGENT: claude`,
     `    steps:`,
     action,
     ``,

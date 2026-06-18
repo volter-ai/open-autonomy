@@ -14,6 +14,7 @@ export interface Session {
   role: string;
   issue?: string;
   status: SessionStatus;
+  ref?: string; // backend-specific handle (e.g. termfleet agentSessionId) for get/wait
 }
 
 export interface Runner {
@@ -81,12 +82,32 @@ export class TermfleetRunner implements Runner {
 
   launch(role: string, issue?: string): Session {
     const id = `ztrack-${role}`;
-    const prompt = issue ? `${role}\\n\\nAssigned issue: ${issue}.` : role;
-    spawnSync(
-      `${this.cli} ${this.agent} new -y --url '${this.url}' --name '${id}' --cwd '${process.cwd()}' --prompt '${prompt}'`,
-      { shell: true, stdio: 'inherit' },
+    // Re-export the orchestration context so the agent's own nested `autonomy launch ...` calls
+    // reach this same provider/state (recursive dispatch: PM launches develop from inside its session).
+    const env: Record<string, string> = { ...(process.env as Record<string, string>) };
+    if (issue) env.AUTONOMY_ISSUE = issue;
+    const setup = Object.entries(env)
+      .filter(([k]) => /^(TERMFLEET_.*|AUTONOMY.*|WORK_STORE|PATH)$/.test(k))
+      .map(([k, v]) => `export ${k}=${JSON.stringify(v ?? '')}`)
+      .join('; ');
+    // Per-role prompt: a skill/prompt file if provided, else the bare role (+issue).
+    const promptDir = process.env.AUTONOMY_PROMPT_DIR;
+    const promptFile = promptDir ? `${promptDir}/${role}.txt` : '';
+    const promptArg =
+      promptFile && existsSync(promptFile)
+        ? `--prompt-file ${JSON.stringify(promptFile)}`
+        : `--prompt ${JSON.stringify(issue ? `${role}\n\nAssigned issue: ${issue}.` : role)}`;
+    const r = spawnSync(
+      `${this.cli} ${this.agent} new -y --url ${JSON.stringify(this.url)} --name ${JSON.stringify(id)} --cwd ${JSON.stringify(process.cwd())} ${promptArg} --setup-command ${JSON.stringify(setup)}`,
+      { shell: true, encoding: 'utf8' },
     );
-    return { id, role, issue, status: 'running' };
+    let ref: string | undefined;
+    try {
+      ref = JSON.parse(r.stdout)?.agentSessionId;
+    } catch {
+      /* non-JSON output (e.g. needs -y review) → no ref */
+    }
+    return { id, role, issue, status: 'running', ...(ref ? { ref } : {}) };
   }
   get(id: string): Session | undefined {
     return this.list().find((s) => s.id === id);

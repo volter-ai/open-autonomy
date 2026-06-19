@@ -63,15 +63,23 @@ compile(profile, substrate) → installation → provision → seed → run → 
 - **seed** — put work in (github: scenario issues; local: a seeded backlog).
 - **run** — github: Actions fires it; local: start the loop. **proctor** — score coverage.
 
-github and local are the **same recipe**; only `provision` differs. (`templates/` is gone: "adopt
-into my repo" = `compile(default-profile, github)`, not a hand-maintained starter — which also
-deletes the upgrade-tool drift bug by construction.)
+github and local are the **same recipe**; only `provision` differs. "Adopt into my repo" =
+`compile(repo-maintenance, github)`, not a hand-maintained starter.
 
 ## Status
 
 - **Done & proven:** the `packages/` engine (core + both substrate adapters) — typechecks strict,
   conformance core 6/6, round-trips stable, OA workflows byte-identical, legacy sweep clean.
-- **Coordinated follow-up** (touches other actors' actively-edited files): relocating the github
-  runtime (`public-agent-*`, `model-proxy-*`, `codex-agent-run`) into `substrate-github/src/runtime/`
-  and repointing the emitted workflow paths; removing `templates/`; extracting profile recipes into
-  `profiles/`; and the deep ztrack-strip of `AUTONOMY-IR.md`'s body.
+- **Done & proven:** the github runtime (`public-agent-*`, `model-proxy-*`, `codex-agent-run`, …) now
+  lives in `substrate-github/src/runtime/` and is **injected** by `compileGithub` (the substrate owns
+  its runtime, as `substrate-local` owns its runner). `profiles/repo-maintenance` is OA's setup as a
+  profile, and `compile(repo-maintenance, github)` reproduces `templates/self-driving-repo`
+  **byte-for-byte** — CI-gated by `check:regen`. So `templates/` is now a *generated artifact* whose
+  single source is the profile + the injected runtime; drift is impossible.
+- **Sequenced deletion** of `templates/`: it is still the published canonical that every adopter's
+  upgrade workflow git-clones and diffs against (`open-autonomy-upgrade.yml`). Physically removing it
+  requires first migrating that upgrade step to `compile(repo-maintenance, github)` and rolling the
+  new workflow out to live installations — an outward-facing change, sequenced behind the gate above.
+- **Remaining:** repoint `scaffold-target-repo`/`bootstrap` to compile-from-profile; dedup the runtime
+  copies still committed under `scripts/` and `examples/*/scripts/`; the deep ztrack-strip of
+  `AUTONOMY-IR.md`'s body.

@@ -1,5 +1,5 @@
 // Ingest a ztrack profile (profile.json + scheduler/schedule.json) → autonomy.ir.v1.
-import type { AutonomyIR, Box, IRWorkflow } from './autonomy-ir';
+import type { AutonomyIR, Box, IRWorkflow } from '@open-autonomy/core';
 
 export interface ZtrackProfile {
   schema: string;
@@ -51,15 +51,22 @@ export function ingestProfile(profile: ZtrackProfile, schedule?: ZtrackSchedule)
     };
   }
 
-  // ztrack expresses agent dispatch IMPERATIVELY (a scheduler script that internally calls
-  // run-agent). The manifest can't tell us which script launches which agent, so every
-  // scheduler entry becomes a generic `run:` workflow. run.mjs is the loop driver, not a workflow.
+  // ztrack expresses dispatch IMPERATIVELY (a scheduler script that internally calls run-agent),
+  // so in general a scheduler entry becomes a generic `run:` workflow. The one exception is the
+  // launch convention: a `<role>-tick` entry whose role is a known agent does nothing but launch
+  // that agent, so it round-trips as `launch: <role>` (a regenerable launcher) rather than an
+  // opaque script. run.mjs is the loop driver, not a workflow.
   const cron = secondsToCron(schedule?.intervalSeconds);
   const entries = schedule?.scripts ?? profile.scheduler?.scripts ?? [];
   const workflows: IRWorkflow[] = entries
     .map(extractScript)
     .filter((p): p is string => !!p && !/(^|\/)run\.mjs$/.test(p))
-    .map((p) => ({ name: basename(p), cron, run: p, config: {} }));
+    .map((p) => {
+      const name = basename(p);
+      const tick = /^(.+)-tick$/.exec(name);
+      if (tick && agents[tick[1]]) return { name, triggers: [{ cron }], launch: tick[1], config: {} };
+      return { name, triggers: [{ cron }], run: p, config: {} };
+    });
 
   // Guardrails ztrack interprets but the IR core doesn't → policy box (carried, not lost).
   const policyBox: Box = {};

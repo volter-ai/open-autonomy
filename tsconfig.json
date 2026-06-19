@@ -1,0 +1,21 @@
+{
+  "compilerOptions": {
+    "module": "ESNext",
+    "target": "ES2022",
+    "moduleResolution": "Bundler",
+    "strict": true,
+    "skipLibCheck": true,
+    "noEmit": true,
+    "allowImportingTsExtensions": true,
+    "verbatimModuleSyntax": true,
+    "types": ["bun"],
+    "baseUrl": ".",
+    "paths": {
+      "@open-autonomy/core": ["packages/core/src/index.ts"],
+      "@open-autonomy/core/runner": ["packages/core/src/runner.ts"],
+      "@open-autonomy/substrate-local": ["packages/substrate-local/src/index.ts"],
+      "@open-autonomy/substrate-github": ["packages/substrate-github/src/index.ts"]
+    }
+  },
+  "include": ["packages/*/src/**/*.ts", "bin/**/*.ts"]
+}

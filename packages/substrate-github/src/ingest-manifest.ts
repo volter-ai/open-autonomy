@@ -1,5 +1,5 @@
 // Ingest an open-autonomy manifest (autonomy.yml) → autonomy.ir.v1.
-import type { AutonomyIR, Box, IRWorkflow } from './autonomy-ir';
+import type { AutonomyIR, Box, IRWorkflow, Trigger } from '@open-autonomy/core';
 
 export interface OAManifest {
   schema?: string;
@@ -9,8 +9,14 @@ export interface OAManifest {
     string,
     {
       skill?: string;
-      triggers?: { schedule?: string; workflow_dispatch?: boolean; issue_comment?: boolean };
+      // `schedule` is the cron; any other key is an event trigger carried verbatim (workflow_dispatch,
+      // issue_comment, issues, pull_request_target, …) — the IR doesn't enumerate them.
+      triggers?: { schedule?: string; [event: string]: unknown };
       capabilities?: string[];
+      // structural job config the substrate renders (github) or a runner reads (local).
+      timeout?: number;
+      concurrency?: string;
+      env?: Record<string, string>;
     }
   >;
   policy?: {
@@ -26,9 +32,6 @@ export function ingestAutonomy(m: OAManifest): AutonomyIR {
   for (const [name, a] of Object.entries(m.agents ?? {})) {
     const config: Box = {};
     if (a.capabilities) config.capabilities = a.capabilities;
-    // Non-cron triggers aren't core; carry them so they survive the round-trip.
-    if (a.triggers?.workflow_dispatch) config.workflow_dispatch = true;
-    if (a.triggers?.issue_comment) config.issue_comment = true;
     // Skill identity is the folder basename (portable); the .codex/skills prefix is harness convention.
     const skillRef = m.skills?.[name] ?? a.skill ?? '';
     agents[name] = {
@@ -38,12 +41,23 @@ export function ingestAutonomy(m: OAManifest): AutonomyIR {
     };
   }
 
-  // open-autonomy expresses dispatch DECLARATIVELY: an agent carries its own schedule trigger.
+  // open-autonomy expresses dispatch DECLARATIVELY: an agent carries its own triggers. Each becomes
+  // a workflow; `schedule` is the cron the loop interprets, every other key is a carried event.
   const workflows: IRWorkflow[] = [];
   for (const [name, a] of Object.entries(m.agents ?? {})) {
-    if (a.triggers?.schedule) {
-      workflows.push({ name: `${name}-tick`, cron: a.triggers.schedule, launch: name, config: {} });
+    if (!a.triggers) continue;
+    const triggers: Trigger[] = [];
+    for (const [key, val] of Object.entries(a.triggers)) {
+      if (val === false || val == null) continue;
+      if (key === 'schedule' && typeof val === 'string') triggers.push({ cron: val });
+      else triggers.push({ event: key, ...(val && typeof val === 'object' ? { config: val as Box } : {}) });
     }
+    // structural job config rides the workflow's config box (the github adapter renders it).
+    const wfConfig: Box = {};
+    if (typeof a.timeout === 'number') wfConfig.timeout = a.timeout;
+    if (typeof a.concurrency === 'string') wfConfig.concurrency = a.concurrency;
+    if (a.env && typeof a.env === 'object') wfConfig.env = a.env;
+    if (triggers.length) workflows.push({ name: `${name}-tick`, triggers, launch: name, config: wfConfig });
   }
 
   // Closest global concurrency knob open-autonomy has; the rest of policy rides the box.

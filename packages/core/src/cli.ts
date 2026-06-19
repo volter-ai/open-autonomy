@@ -2,8 +2,8 @@
 // (autonomy-runner-<backend>.ts). Domain-free: it launches/observes/cancels agents, nothing more.
 //   launch <agent> [--k v ...]  ·  get <id>  ·  list  ·  update <id> --status <s>  ·  cancel <id>
 // `launch` accepts arbitrary --key value params and passes them through verbatim; the system never
-// interprets them (a bundle/runner may, e.g. as "issue").
-import type { Runner, SessionStatus, LaunchParams } from './autonomy-runner';
+// interprets them (a profile/runner may, e.g. as "issue").
+import type { Runner, SessionStatus, LaunchParams } from './runner';
 
 function parseParams(args: string[]): LaunchParams {
   const params: LaunchParams = {};

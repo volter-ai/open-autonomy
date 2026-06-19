@@ -2,21 +2,22 @@
 
 ## Editing shared control files
 
-`templates/self-driving-repo/` is the source of truth for shared control files
-(skills under `.codex/skills/`, `.open-autonomy/*`, `.github/workflows/`,
-`scripts/`, `AGENTS.md`, `docs/CONSTITUTION.md`). Edit them **there**, then
-propagate into the local/canonical repo with the upgrade tool — do not hand-edit
-canonical and the template separately, because they drift (the strategist skill
-once landed in canonical but was missing from the packet).
+`profiles/repo-maintenance/` is the source of a github installation. There is no hand-maintained
+template — the installation is `compile(profiles/repo-maintenance, github)`:
+
+- **Skills / control docs / workflows / manifest** (`.codex/skills/`, `.open-autonomy/*`,
+  `.github/workflows/`, `AGENTS.md`, `docs/*`): edit the files under `profiles/repo-maintenance/`
+  (workflows are real `.yml` files there). `check:compile` verifies the profile compiles.
+- **Runtime** (`scripts/*` — `public-agent-*`, `model-proxy-*`, `codex-agent-run`, …): the substrate
+  OWNS it. Edit it in `scripts/` (where it's tested), then `bun bin/sync-runtime.ts` to refresh the
+  vendored mirror; `check:runtime-sync` enforces they match. `compileGithub` injects it.
 
 ```
-bun scripts/open-autonomy-upgrade.ts --template templates/self-driving-repo --target . --apply
+bun bin/autonomy-compile.ts profiles/repo-maintenance github <dir>   # produce an installation
 ```
 
-After upgrading, the remaining plan should be empty; an empty plan doubles as a
-template↔canonical parity check.
+To upgrade an installed repo, the upgrade workflow compiles the profile and diffs it against the repo.
 
-Known gaps to fix before relying on this fully: `MANAGED_PREFIXES` in
-`scripts/open-autonomy-upgrade.ts` omits `.codex/skills/` and `docs/`, so those
-do not propagate yet, and the template is a subset of canonical (applying it can
-strip canonical-only managed content). Until fixed, mirror skills/docs by hand.
+Known gap: OA's own root installation (`.github/workflows`, `.codex/skills`, `.open-autonomy`) is still
+hand-maintained alongside the profile rather than regenerated from it; a dogfood sync-check (compile ==
+root) would close that. `MANAGED_PREFIXES` in `scripts/open-autonomy-upgrade.ts` also omits `docs/`.

@@ -61,9 +61,9 @@ loop with a scheduler loop + a termfleet runner instead of GitHub Actions.
 
 **Recipes & demos:**
 
-- `profiles/` — example profiles (recipes) that compile to any substrate. _(being populated)_
+- `profiles/` — profiles (recipes) that compile to any substrate: `hello` (minimal) and
+  `repo-maintenance` (open-autonomy's own self-driving setup; the single source of every github installation).
 - `examples/` — demo target repos the loop drives (`docs-only`, `library`, `small-app`, `testbed`).
-- `templates/self-driving-repo/` — the current copyable GitHub starter. _(legacy; being replaced by `compile(profile, github)`)_
 
 Docs: [`ARCHITECTURE.md`](./docs/ARCHITECTURE.md) (the github app's design + trust boundaries),
 [`AUTONOMY-IR.md`](./docs/AUTONOMY-IR.md) (the substrate-agnostic model),
@@ -78,9 +78,13 @@ bun run check                          # typecheck + conformance + tests (proxy 
 bun bin/autonomy-conformance.ts exec   # check the Runner contract on the reference runner
 ```
 
-To adopt into your own GitHub repo today, copy `templates/self-driving-repo/` and follow
-[`docs/PUBLIC_AGENT_PRODUCTION_ROLLOUT.md`](./docs/PUBLIC_AGENT_PRODUCTION_ROLLOUT.md). (The
-`compile(profile, github)` path that replaces the hand-copied template is in progress.)
+To adopt into your own GitHub repo, scaffold an installation by compiling the profile, then follow
+[`docs/PUBLIC_AGENT_PRODUCTION_ROLLOUT.md`](./docs/PUBLIC_AGENT_PRODUCTION_ROLLOUT.md):
+
+```bash
+bun bin/autonomy-compile.ts profiles/repo-maintenance github ../my-repo
+# or: bun scripts/scaffold-target-repo.ts --target ../my-repo
+```
 
 ## Operator commands
 

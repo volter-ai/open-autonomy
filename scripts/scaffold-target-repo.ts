@@ -1,6 +1,7 @@
 #!/usr/bin/env bun
-import { cpSync, existsSync, mkdirSync, readdirSync, statSync } from 'node:fs';
-import { join, resolve } from 'node:path';
+import { execFileSync } from 'node:child_process';
+import { existsSync, readdirSync, statSync } from 'node:fs';
+import { resolve } from 'node:path';
 
 interface Options {
   target: string;
@@ -22,39 +23,21 @@ function parseArgs(argv: string[]): Options {
   return { target: resolve(target), force: argv.includes('--force') };
 }
 
-// Never copy build/VCS artifacts into a scaffolded repo — they are regenerated locally and would
-// bloat the target (and the provisioner's pushed content).
-const SCAFFOLD_EXCLUDE = new Set(['node_modules', '.git', '.agent-run']);
-
-function copyTemplate(template: string, target: string, force: boolean): string[] {
-  mkdirSync(target, { recursive: true });
-  const copied: string[] = [];
-  for (const name of readdirSync(template)) {
-    if (SCAFFOLD_EXCLUDE.has(name)) continue;
-    const from = join(template, name);
-    const to = join(target, name);
-    if (existsSync(to) && !force) {
-      throw new Error(`${to} already exists. Re-run with --force to overwrite template files.`);
-    }
-    cpSync(from, to, { recursive: true, force });
-    copied.push(name);
-  }
-  return copied;
-}
-
-function assertTargetDirectory(path: string): void {
-  if (!existsSync(path)) return;
-  if (!statSync(path).isDirectory()) throw new Error(`target is not a directory: ${path}`);
-}
+// Scaffolding IS compiling the open-autonomy profile onto the github substrate — there is no
+// hand-maintained template. The installation = compile(profiles/repo-maintenance, github), which
+// injects the substrate runtime and copies the profile's skills/docs/manifest/workflows verbatim.
+const PROFILE = 'profiles/repo-maintenance';
 
 async function main(): Promise<void> {
-  const options = parseArgs(process.argv.slice(2));
-  assertTargetDirectory(options.target);
-  const template = resolve('templates/self-driving-repo');
-  if (!existsSync(template)) throw new Error(`template directory not found: ${template}`);
-  const copied = copyTemplate(template, options.target, options.force);
-  process.stdout.write(`Installed open-autonomy template into ${options.target}\n`);
-  process.stdout.write(`Copied: ${copied.sort().join(', ')}\n`);
+  const { target, force } = parseArgs(process.argv.slice(2));
+  if (existsSync(target)) {
+    if (!statSync(target).isDirectory()) throw new Error(`target is not a directory: ${target}`);
+    if (!force && readdirSync(target).some((name) => name !== '.git')) {
+      throw new Error(`${target} is not empty. Re-run with --force to write into it.`);
+    }
+  }
+  execFileSync('bun', ['bin/autonomy-compile.ts', PROFILE, 'github', target], { stdio: 'inherit' });
+  process.stdout.write(`Scaffolded open-autonomy into ${target} (compiled from ${PROFILE})\n`);
 }
 
 if (import.meta.main) {

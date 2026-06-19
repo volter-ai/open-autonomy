@@ -7,16 +7,20 @@
 //   bun bin/sync-runtime.ts            re-sync the mirror (scripts/ -> packages/.../runtime/)
 //   bun bin/sync-runtime.ts --check    verify they match (CI); nonzero exit on drift
 //
-// The runtime set (the scripts an installation actually gets, vs OA-only dev tooling like
-// scaffold/provision/bootstrap) is defined by the canonical installation: templates/self-driving-repo.
+// The runtime set = every scripts/*.ts EXCEPT open-autonomy's own dev tooling (scaffold/provision/
+// bootstrap/fund/proof-audit/testbed-proctor), which is NOT shipped into installations.
 import { readFileSync, writeFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
-import { execSync } from 'node:child_process';
 
 const SRC = 'scripts';
 const DEST = 'packages/substrate-github/src/runtime';
-const set = execSync('cd templates/self-driving-repo && git ls-files scripts', { encoding: 'utf8' })
-  .trim().split('\n').map((p) => p.replace(/^scripts\//, ''));
+const DEV_ONLY = new Set([
+  'bootstrap-self-driving-testbed.ts', 'bootstrap-testbed.ts', 'fund-bootstrap.ts',
+  'open-autonomy-proof-audit.ts', 'open-autonomy-proof-audit.test.ts',
+  'provision-target-repo.ts', 'provision-target-repo.test.ts',
+  'scaffold-target-repo.ts', 'testbed-proctor-report.ts', 'testbed-proctor-report.test.ts',
+]);
+const set = readdirSync(SRC).filter((f) => f.endsWith('.ts') && !DEV_ONLY.has(f)).sort();
 
 const check = process.argv.includes('--check');
 const drift: string[] = [];

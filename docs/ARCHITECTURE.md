@@ -27,21 +27,20 @@ published, retried, merged, or escalated.
 ## Repositories
 
 - `open-autonomy`: canonical OSS implementation and first dogfooding target.
-- `templates/self-driving-repo`: copyable starter for another self-driving repo.
+- `profiles/repo-maintenance`: the self-driving recipe; `compile(…, github)` is the starter installation.
 - `examples/docs-only`: minimal cookbook repo.
 - `examples/testbed`: cookbook repo shape used to prove live autonomy behavior.
 - `open-autonomy-testbed`: live external repo used to prove behavior on GitHub.
 
-Future target repositories should install the workflows/scripts/template, then
-keep repo-specific direction, policy, and standards in their own committed
-files.
+Future target repositories should install by compiling the profile, then keep
+repo-specific direction, policy, and standards in their own committed files.
 
 ## Template Versus Runtime
 
 Open Autonomy has a source side and a target side.
 
 - Source side: this repository contains the reusable implementation, examples,
-  model proxy, scaffold tooling, and `templates/self-driving-repo`.
+  model proxy, scaffold tooling, and the `profiles/` recipes (compiled into installations).
 - Target side: a repository that has installed Open Autonomy contains the
   generated workflows, scripts, repo-local skills, and `.open-autonomy/*`
   control files.

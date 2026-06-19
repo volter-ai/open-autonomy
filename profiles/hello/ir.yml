@@ -1,0 +1,20 @@
+# A minimal runnable profile (the canonical `autonomy.ir.v1` format). Compile it onto a substrate:
+#   bun bin/autonomy-compile.ts profiles/hello local        # dry run: list the local installation
+#   bun bin/autonomy-compile.ts profiles/hello github /tmp/hello-gh   # materialize a github installation
+schema: autonomy.ir.v1
+targets: [local, github]
+agents:
+  greeter:
+    skill: greeter
+    maxConcurrent: 1
+    config:
+      capabilities: [issue:comment]
+workflows:
+  - name: greeter-tick
+    triggers:
+      - { cron: "*/30 * * * *" }
+    launch: greeter
+    config: {}
+resources: []
+policy:
+  box: {}

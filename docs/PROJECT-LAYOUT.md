@@ -72,14 +72,15 @@ github and local are the **same recipe**; only `provision` differs. "Adopt into 
   conformance core 6/6, round-trips stable, OA workflows byte-identical, legacy sweep clean.
 - **Done & proven:** the github runtime (`public-agent-*`, `model-proxy-*`, `codex-agent-run`, …) now
   lives in `substrate-github/src/runtime/` and is **injected** by `compileGithub` (the substrate owns
-  its runtime, as `substrate-local` owns its runner). `profiles/repo-maintenance` is OA's setup as a
-  profile, and `compile(repo-maintenance, github)` reproduces `templates/self-driving-repo`
-  **byte-for-byte** — CI-gated by `check:regen`. So `templates/` is now a *generated artifact* whose
-  single source is the profile + the injected runtime; drift is impossible.
-- **Sequenced deletion** of `templates/`: it is still the published canonical that every adopter's
-  upgrade workflow git-clones and diffs against (`open-autonomy-upgrade.yml`). Physically removing it
-  requires first migrating that upgrade step to `compile(repo-maintenance, github)` and rolling the
-  new workflow out to live installations — an outward-facing change, sequenced behind the gate above.
-- **Remaining:** repoint `scaffold-target-repo`/`bootstrap` to compile-from-profile; dedup the runtime
-  copies still committed under `scripts/` and `examples/*/scripts/`; the deep ztrack-strip of
-  `AUTONOMY-IR.md`'s body.
+  its runtime, as `substrate-local` owns its runner; the vendored mirror is tied to `scripts/` by
+  `check:runtime-sync`). `profiles/repo-maintenance` is OA's setup as a profile.
+- **Done:** `templates/` is **deleted**. The installation is now produced solely by
+  `compile(profiles/repo-maintenance, github)`. Its consumers were migrated: `scaffold-target-repo`
+  compiles the profile; the upgrade workflow (`open-autonomy-upgrade.yml`) clones open-autonomy and
+  compiles the profile to get the canonical installation to diff against (verified behavior-preserving:
+  identical upgrade plan except the upgrade workflow itself). `check:compile` guards that the profile
+  compiles to a complete installation.
+- **Remaining:** OA's own root installation (`.github/workflows`, `.codex/skills`, `.open-autonomy`) is
+  still hand-maintained alongside the profile rather than regenerated from it (a dogfood sync-check
+  would close that); the `examples/*` are deliberately-older upgrade fixtures (their runtime + upgrade
+  workflow lag the canonical); the deep ztrack-strip of `AUTONOMY-IR.md`'s body.

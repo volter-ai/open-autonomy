@@ -29,11 +29,11 @@ bun bin/autonomy-compile.ts profiles/hello github /tmp/hello-gh
   both `local` (a scheduler-loop installation) and `github` (manifest + workflow + control plane).
   Start here to see the whole path.
 - **`repo-maintenance/`** — open-autonomy's own self-maintenance recipe (pm / developer / reviewer /
-  planner / upgrade / strategist / strategy-reviewer). `compile(repo-maintenance, github)` produces
-  exactly `templates/self-driving-repo`, **byte-for-byte** — proven and CI-gated (`check:regen`).
-  That template is therefore a *generated artifact*: the profile (+ the substrate's injected runtime)
-  is its single source. The github runtime (`scripts/*`) is **not** in the profile — the substrate
-  owns and injects it, the same way `substrate-local` injects its runner backend.
+  planner / upgrade / strategist / strategy-reviewer). `compile(repo-maintenance, github)` produces a
+  complete self-driving installation; it is the **single source** of that installation (there is no
+  hand-maintained template — `scaffold` and the upgrade workflow both compile this profile). The
+  github runtime (`scripts/*`) is **not** in the profile — the substrate owns and injects it, the same
+  way `substrate-local` injects its runner backend (`check:runtime-sync` + `check:compile` guard it).
 
 A profile's agents pick their own **tooling** (`ztrack`, or `gh` + `npm`); the core and substrates
 never name a tool.

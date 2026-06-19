@@ -4,130 +4,110 @@
 
 [![funding](https://volter-agent-model-proxy.aaron-0ed.workers.dev/v1/funding/runway.svg)](https://github.com/sponsors/volter-ai)
 
-`open-autonomy` is an open-source kit for making a GitHub repository drive its
-own maintenance work through issues, bounded agent runs, review gates, and
-operator controls.
+`open-autonomy` makes a repository drive its own maintenance work: issues become reviewed,
+gated, merged pull requests, produced by bounded AI agents under **deterministic guardrails**.
+It is **substrate-agnostic** — the same setup compiles onto **GitHub Actions** or onto a **local**
+machine loop. The repo also runs open-autonomy against itself (it's its own first user).
 
-This repository is also the first demo target: the `open-autonomy` repo is wired
-to run open-autonomy against itself.
+## The model
 
-## What This Repo Is
+You write a **profile** (a recipe) and **compile** it onto a **substrate**, producing an
+**installation** you run:
 
-This repo has three jobs:
-
-- It is the canonical OSS implementation of the self-driving repository loop.
-- It is a template source for installing that loop into other repositories.
-- It is itself a self-driving target, so changes to open-autonomy can be driven
-  by open-autonomy issues, workflows, skills, and gates.
-
-The important distinction is that open-autonomy is not only a template. The
-same scripts, workflows, skills, and control files shipped here are also active
-in this repository.
-
-## What It Does
-
-```text
-issue or PM sweep
-  -> visible /agent develop
-  -> GitHub Actions setup + policy + triage
-  -> bounded Codex runner through the model proxy
-  -> trusted publisher validates and opens/updates a PR
-  -> CI + reviewer
-  -> deterministic merge gate
-  -> merge or human-required escalation
+```
+compile(profile, substrate) → installation
 ```
 
-The agent can propose changes. Deterministic gates decide whether those changes
-can be published, reviewed, and merged.
+- **profile** — a substrate-agnostic recipe: which agents (skills), which workflows, which policy —
+  expressed as an IR (`autonomy.ir.v1`).
+- **substrate** — *where/how* it runs = a **trigger executor** (fires workflows) + a **runner**
+  (runs agents), over a **box** (the agent's POSIX environment). `github` and `local` are peers.
+- **installation** — the materialized files laid into a repo for one substrate.
 
-## How The Pieces Fit
+An agent only *proposes* changes; **deterministic gates** (the publisher and the merge gate) decide
+whether they are published, reviewed, and merged. The agent runs untrusted, gets bounded model
+access (no raw keys), and can only emit a proposed change — never push directly.
 
-- Direction lives in committed docs and `.open-autonomy/roadmap.yml`.
-- Agent roles live as repo-local Codex skills in `.codex/skills/`.
-- `.open-autonomy/autonomy.yml` indexes the docs, skills, agent capabilities,
-  triggers, and enforced policy.
-- GitHub Actions are the runtime that turns that config into PM, planner,
-  develop, review, merge, preflight, and upgrade workflows.
-- The model proxy gives agent jobs bounded model access without exposing raw
-  provider keys.
-- The publisher and merge gate are trusted deterministic code. The developer
-  agent is untrusted and can only emit a proposed bundle.
+Read [`docs/AUTONOMY-IR.md`](./docs/AUTONOMY-IR.md) for the full model and conformance contract, and
+[`docs/PROJECT-LAYOUT.md`](./docs/PROJECT-LAYOUT.md) for the vocabulary and layout.
 
-## Repository Layout
+## What it does (the GitHub substrate)
 
-- `.github/workflows/` - self-driving workflows for this repo.
-- `.open-autonomy/` and `AGENTS.md` - planner-readable direction,
-  constitution, policy, rubric, and standards.
-- `scripts/public-agent-*` - command parsing, policy, PM dispatch, planner,
-  review, CI, merge-gate, status, and control logic.
-- `scripts/github-agent-session.ts` - session wrapper that emits publisher
-  bundles and evidence.
-- `scripts/codex-agent-run.ts` - Codex runner configured for the bounded model
-  proxy.
-- `services/agent-model-proxy/` - Cloudflare Worker for bounded model access.
-- `templates/self-driving-repo/` - copyable starter for another self-driving
-  repository.
-- `examples/docs-only/` - minimal full-repo example.
-- `examples/small-app/` - small TypeScript app cookbook.
-- `examples/library/` - small TypeScript library cookbook.
-- `examples/testbed/` - full demo repo for live PM/operator/develop testing.
-- `docs/` - architecture, runbook, rollout, and the continuous roadmap.
+```text
+issue or PM sweep -> /agent develop -> policy + triage
+  -> bounded Codex run through the model proxy
+  -> trusted publisher opens/updates a PR
+  -> CI + reviewer -> deterministic merge gate
+  -> merge, or human-required escalation
+```
 
-Start with [`docs/ARCHITECTURE.md`](./docs/ARCHITECTURE.md) for the master map
-of the system, agent roles, trust boundaries, and how the docs fit together.
-Use [`docs/ROADMAP.md`](./docs/ROADMAP.md) as the single source for roadmap,
-proof-gate, and next-step planning.
+Operators steer it with `/agent` issue comments (see Commands). The `local` substrate runs the same
+loop with a scheduler loop + a termfleet runner instead of GitHub Actions.
 
-## Checks
+## Repository layout
+
+**The engine** — substrate-agnostic, reusable (`packages/`):
+
+- `packages/core` — the IR, the **Runner contract**, the conformance battery, the compiler framework.
+- `packages/substrate-local` — the **local** substrate: emit a local-loop installation + the termfleet runner.
+- `packages/substrate-github` — the **github** substrate: emit the manifest + workflows + operator control plane + the github runner.
+- `bin/autonomy-conformance.ts` — check any runner against the core contract.
+
+**The GitHub app** — open-autonomy running on the github substrate (the complete, dogfooded substrate today):
+
+- `scripts/` — the github runtime: PM / triage / policy / dispatch / review / CI / merge-gate / control, the Codex runner, the publisher bundle, and the strategy loop.
+- `services/agent-model-proxy/` — a Cloudflare Worker that mints bounded, revocable model tokens (no raw keys) and meters spend against a sponsor-funded budget ledger.
+- `.open-autonomy/`, `.codex/skills/`, `.github/workflows/` — this repo's own installation (the dogfood).
+
+**Recipes & demos:**
+
+- `profiles/` — example profiles (recipes) that compile to any substrate. _(being populated)_
+- `examples/` — demo target repos the loop drives (`docs-only`, `library`, `small-app`, `testbed`).
+- `templates/self-driving-repo/` — the current copyable GitHub starter. _(legacy; being replaced by `compile(profile, github)`)_
+
+Docs: [`ARCHITECTURE.md`](./docs/ARCHITECTURE.md) (the github app's design + trust boundaries),
+[`AUTONOMY-IR.md`](./docs/AUTONOMY-IR.md) (the substrate-agnostic model),
+[`PROJECT-LAYOUT.md`](./docs/PROJECT-LAYOUT.md) (vocabulary + layout),
+[`ROADMAP.md`](./docs/ROADMAP.md).
+
+## Quickstart
 
 ```bash
 bun install
-bun run check:public-agent
-bun run check:agent-proxy
-bun run check
+bun run check                          # typecheck + conformance + tests (proxy + runtime + examples)
+bun bin/autonomy-conformance.ts exec   # check the Runner contract on the reference runner
 ```
 
-## Commands
+To adopt into your own GitHub repo today, copy `templates/self-driving-repo/` and follow
+[`docs/PUBLIC_AGENT_PRODUCTION_ROLLOUT.md`](./docs/PUBLIC_AGENT_PRODUCTION_ROLLOUT.md). (The
+`compile(profile, github)` path that replaces the hand-copied template is in progress.)
 
-- `/agent develop` - ask the agent to work on an issue.
-- `/agent review` - run the reviewer on an agent PR.
-- `/agent pause` and `/agent resume` - pause or resume issue-level work.
-- `/agent pause repo` and `/agent resume repo` - pause or resume the whole repo.
-- `/agent status` - show issue agent state.
-- `/agent retry` - rerun failed infrastructure jobs without a fresh develop pass.
-- `/agent cancel` - cancel active workflow runs and revoke active proxy runs.
+## Operator commands
 
-## Setup Another Repo
+- `/agent develop` — ask the agent to work on an issue.
+- `/agent review` — run the reviewer on an agent PR.
+- `/agent pause` / `/agent resume` — pause or resume issue-level work.
+- `/agent pause repo` / `/agent resume repo` — pause or resume the whole repo.
+- `/agent status` — show issue agent state.
+- `/agent retry` — rerun failed infrastructure jobs without a fresh develop pass.
+- `/agent cancel` — cancel active workflow runs and revoke active proxy runs.
 
-`open-autonomy` is both the reusable kit and its own self-driving repo. To make
-another self-driving repo, use `templates/self-driving-repo/` as the starting
-point, then follow
-[`docs/PUBLIC_AGENT_PRODUCTION_ROLLOUT.md`](./docs/PUBLIC_AGENT_PRODUCTION_ROLLOUT.md).
+## Security
 
-The short version:
+open-autonomy runs semi-untrusted agents and operates a model-token/funding proxy. See
+[`SECURITY.md`](./SECURITY.md) for the trust model and **private** vulnerability reporting. Provided
+AS-IS (Apache-2.0, no warranty) — if you deploy it, you own the secrets, spend, and access you grant.
 
-1. Copy the template into the target repository:
-   ```bash
-   bun run scaffold -- --target ../my-repo
-   ```
-2. Edit `AGENTS.md` and `.open-autonomy/*` for that repository's direction,
-   policy, rubric, and standards.
-3. Deploy or reuse the model proxy.
-4. Set GitHub variables and secrets.
-5. Run `bun run check`.
-6. Smoke `/agent pause`, paused `/agent develop`, `/agent status`, and
-   `/agent resume`.
-7. Run the planner workflow in dry mode.
-8. Create one low-risk issue with concrete acceptance criteria.
-9. Prove both entry points:
-   - comment `/agent develop` to test direct maintainer dispatch
-   - run `Public Agent PM` with a small limit to test PM triage and dispatch
+## Why a funding platform lives here
 
-## Commercial Boundary
+`services/agent-model-proxy` is what makes autonomous runs safe and affordable: it mints bounded,
+revocable model tokens so untrusted agent jobs get model access without raw provider keys, and meters
+spend against a sponsor-funded budget. It is infrastructure for the agent loop, not a separate product.
 
-`open-autonomy` is the OSS implementation. `volter-autonomy` can build on it as
-a paid hosted product with managed proxy infrastructure, dashboards, org policy,
-and support.
+## Commercial boundary
+
+`open-autonomy` is the OSS implementation. `volter-autonomy` can build on it as a paid hosted product
+with managed proxy infrastructure, dashboards, org policy, and support.
 
 ## License
 

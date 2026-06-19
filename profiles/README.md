@@ -28,7 +28,12 @@ bun bin/autonomy-compile.ts profiles/hello github /tmp/hello-gh
 - **`hello/`** — the minimal runnable profile: one `greeter` agent on a cron trigger. Compiles to
   both `local` (a scheduler-loop installation) and `github` (manifest + workflow + control plane).
   Start here to see the whole path.
+- **`repo-maintenance/`** — open-autonomy's own self-maintenance recipe (pm / developer / reviewer /
+  planner / upgrade / strategist / strategy-reviewer). `compile(repo-maintenance, github)` produces
+  exactly `templates/self-driving-repo`, **byte-for-byte** — proven and CI-gated (`check:regen`).
+  That template is therefore a *generated artifact*: the profile (+ the substrate's injected runtime)
+  is its single source. The github runtime (`scripts/*`) is **not** in the profile — the substrate
+  owns and injects it, the same way `substrate-local` injects its runner backend.
 
-More recipes (e.g. a PM → develop → review SDLC loop, open-autonomy's own self-maintenance recipe)
-land here as they're extracted into the `ir.yml` form. A profile's agents pick their own **tooling**
-(`ztrack`, or `gh` + `npm`); the core and substrates never name a tool.
+A profile's agents pick their own **tooling** (`ztrack`, or `gh` + `npm`); the core and substrates
+never name a tool.

@@ -1,22 +1,34 @@
 # profiles
 
-Example **profiles** — substrate-agnostic recipes (agents + workflows + policy + resources, as IR).
-A profile is the *what*; a substrate is the *how/where*. The same profile compiles to any substrate:
+**Profiles** are substrate-agnostic recipes — a composition of agents (skills) + workflows + policy +
+resources, written as `autonomy.ir.v1` in an `ir.yml`. A profile is the *what*; a substrate is the
+*how/where*. The same profile compiles to any substrate:
 
 ```
 compile(profile, substrate) → installation
 ```
 
-These are **co-equal examples**, none privileged. Each is the *recipe* form (skills + standards + an
-IR manifest), **not** a compiled installation — `compile(profile, <substrate>)` produces the
-installation (a local-loop folder, or github `.open-autonomy/` + `.github/workflows/`).
+A profile is a directory with an `ir.yml` and a `skills/<name>/SKILL.md` per agent (plus any
+`standards/` it references). The compiler reads the `ir.yml`, validates it, and emits a
+substrate-specific installation — it is the *recipe*, not a compiled installation.
 
-Planned gallery (recipes to extract here):
+## Compile a profile
 
-- **`simple-sdlc/`** — a PM → develop → review SDLC loop. Uses `ztrack` as its tooling. (Currently
-  lives as a local installation in the ztrack repo; the recipe form lands here.)
-- **`repo-maintenance/`** — open-autonomy's own self-maintenance recipe (pm/developer/reviewer/
-  planner/strategist…). Compiled onto the github substrate, this is what drives open-autonomy itself.
+```bash
+# dry run — list the installation a substrate would produce
+bun bin/autonomy-compile.ts profiles/hello local
+bun bin/autonomy-compile.ts profiles/hello github
 
-A profile's agents pick their **tooling** (`ztrack`, or `gh` + `npm`); the core/substrates never
-name a tool.
+# materialize it into a directory
+bun bin/autonomy-compile.ts profiles/hello github /tmp/hello-gh
+```
+
+## Gallery
+
+- **`hello/`** — the minimal runnable profile: one `greeter` agent on a cron trigger. Compiles to
+  both `local` (a scheduler-loop installation) and `github` (manifest + workflow + control plane).
+  Start here to see the whole path.
+
+More recipes (e.g. a PM → develop → review SDLC loop, open-autonomy's own self-maintenance recipe)
+land here as they're extracted into the `ir.yml` form. A profile's agents pick their own **tooling**
+(`ztrack`, or `gh` + `npm`); the core and substrates never name a tool.

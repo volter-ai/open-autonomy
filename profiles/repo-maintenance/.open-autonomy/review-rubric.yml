@@ -1,0 +1,32 @@
+schema: open-autonomy.review-rubric.v1
+criteria:
+  - id: scope
+    title: Scope control
+    pass: Change matches the issue, roadmap item, and maintainer comments.
+    fail: Change includes unrelated refactors, hidden behavior, or broad rewrites.
+  - id: safety
+    title: Safety and policy
+    pass: Risky paths/topics are absent or clearly escalated.
+    fail: Workflow, auth, secret, billing, deployment, or trust changes lack human review.
+  - id: tests
+    title: Verification
+    pass: Tests or deterministic fixtures cover the changed behavior.
+    fail: User-facing or gate behavior changes without relevant verification.
+  - id: evidence
+    title: Evidence quality
+    pass: Decisions, comments, and artifacts explain what happened and why.
+    fail: The agent silently skips, retries indefinitely, or leaves ambiguous status.
+  - id: portability
+    title: OSS portability
+    pass: Behavior works in a newly scaffolded repository with documented setup.
+    fail: Behavior depends on private Volter-only code or uncommitted local state.
+verdicts:
+  pass_low:
+    requires:
+      - all applicable criteria pass
+      - CI passes
+      - no human-required policy trigger
+  develop_retry:
+    use_when: A focused fix can resolve a review finding without maintainer input.
+  human_required:
+    use_when: Risk is high, policy says so, or intent is ambiguous.

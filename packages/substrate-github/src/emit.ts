@@ -1,7 +1,7 @@
 // Emit autonomy.ir.v1 → an open-autonomy manifest (autonomy.yml shape).
 // Substrate = github-actions; the .codex/skills prefix and the workflow .yml files are adapter
 // conventions. Capabilities/triggers/policy are restored from the IR's config + policy boxes.
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { cronOf } from '@open-autonomy/core';
@@ -14,6 +14,17 @@ const AGENT_CONTROL = readFileSync(
   join(dirname(fileURLToPath(import.meta.url)), 'control-backend.mjs'),
   'utf8',
 );
+
+// The github substrate's runtime backend — the scripts every github installation runs (the agent
+// driver, model-proxy client, control/decision/merge logic). It is domain-free and identical for
+// every install, so the substrate OWNS it and injects it (vendored under ./runtime, mirrored to
+// scripts/), exactly as the local substrate injects autonomy-runner.mjs + run.mjs. A profile never
+// carries it. Read once at module load, like AGENT_CONTROL.
+const RUNTIME_DIR = join(dirname(fileURLToPath(import.meta.url)), 'runtime');
+const RUNTIME: Record<string, string> = {};
+for (const f of readdirSync(RUNTIME_DIR)) {
+  if (f.endsWith('.ts')) RUNTIME[`scripts/${f}`] = readFileSync(join(RUNTIME_DIR, f), 'utf8');
+}
 
 // The five Runner-contract operations an operator can issue against a running github agent.
 const CONTROL_VERBS = ['cancel', 'pause', 'resume', 'status', 'retry'];
@@ -243,10 +254,14 @@ function workflowYml(wf: IRWorkflow, ir: AutonomyIR): string {
 }
 
 export function compileGithub(ir: AutonomyIR): CompileOutput {
-  const manifest = emitAutonomy(ir);
-  const generated: Record<string, string> = {
-    '.open-autonomy/autonomy.yml': Bun.YAML.stringify(manifest as Record<string, unknown>),
-  };
+  const generated: Record<string, string> = {};
+  // The manifest is generated from the IR — UNLESS the profile carries a hand-authored autonomy.yml
+  // verbatim. A hand-authored manifest's exact YAML (structured `documents` map, key order, quoting)
+  // can't be regenerated faithfully, so when the profile carries one as a resource the verbatim copy
+  // wins. Same principle as raw-carried workflows: model what's modelable, carry the rest exactly.
+  if (!ir.resources.includes('.open-autonomy/autonomy.yml')) {
+    generated['.open-autonomy/autonomy.yml'] = Bun.YAML.stringify(emitAutonomy(ir) as Record<string, unknown>);
+  }
   // raw workflows are carried verbatim (a hand-authored body the IR doesn't model); the rest are
   // generated from the interpreted fields.
   for (const wf of ir.workflows) {
@@ -256,6 +271,8 @@ export function compileGithub(ir: AutonomyIR): CompileOutput {
   if (ir.workflows.some((wf) => wf.launch && wf.raw == null)) {
     generated['.github/agent-control.mjs'] = AGENT_CONTROL;
   }
+  // the substrate injects its runtime backend — the scripts the workflows invoke (`bun scripts/*`).
+  Object.assign(generated, RUNTIME);
 
   const copies: Array<{ from: string; to: string }> = [];
   for (const agent of Object.values(ir.agents)) {

@@ -9,3 +9,6 @@ services/agent-model-proxy/.dev.vars
 # local secrets
 .env
 .playwright-mcp/
+
+# agent run transcripts/artifacts (promote curated evidence explicitly)
+agent-sessions/

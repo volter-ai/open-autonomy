@@ -1,0 +1,9 @@
+# Sensitive paths require maintainer review (mirrors policy.risk.human_required_paths in
+# .open-autonomy/autonomy.yml). The autonomy agents are forbidden from editing these.
+.github/workflows/        @yueranyuan
+.open-autonomy/autonomy.yml @yueranyuan
+docs/CONSTITUTION.md      @yueranyuan
+.codex/skills/            @yueranyuan
+services/                 @yueranyuan
+LICENSE                   @yueranyuan
+SECURITY.md               @yueranyuan

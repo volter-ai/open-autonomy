@@ -10,7 +10,7 @@
 //   launch <agent> [--k v ...]  ·  get <id>  ·  list  ·  update <id> --status <s>  ·  cancel <id>
 //
 // `launch` accepts arbitrary --key value params and passes them through verbatim; the system never
-// interprets them (this profile gives one meaning: ZTRACK_ISSUE).
+// interprets them (a profile gives them meaning, e.g. a ztrack-using profile declares ZTRACK_ISSUE).
 import { spawnSync } from 'node:child_process';
 import { existsSync } from 'node:fs';
 

@@ -1,13 +1,21 @@
-// Emit autonomy.ir.v1 → a ztrack profile (profile.json + scheduler/schedule.json).
-// Substrate = local-loop; harness conventions (skill install paths, run-agent, run.mjs loop)
-// are supplied here by the adapter, NOT carried in the IR.
+// Emit autonomy.ir.v1 → a generic local-loop installation: schedule.json + the run.mjs loop + the
+// vendored runner + a run-agent adapter + per-harness skill prompts. The substrate is TOOLING-AGNOSTIC
+// — whatever an agent calls (ztrack, gh + npm, …) is the profile's concern, carried opaquely through
+// AUTONOMY_FORWARD; the substrate never names it. Harness conventions (skill install paths, run-agent,
+// the loop) are supplied here by the adapter, NOT carried in the IR.
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { cronOf } from '@open-autonomy/core';
 import type { AutonomyIR, CompileOutput, IRWorkflow } from '@open-autonomy/core';
-import type { ZtrackProfile, ZtrackSchedule } from './ingest';
 import { SUPPORTED_RUNNERS, type RunnerName } from '@open-autonomy/core';
+
+// The schedule the loop reads: an interval + the commands to run each tick. Generic, not tied to any tool.
+export interface LocalSchedule {
+  intervalSeconds: number;
+  env: Record<string, string>;
+  scripts: string[];
+}
 
 // Every workflow's script lives at scheduler/scripts/<name>.mjs (the dest the schedule references).
 // A `run:` workflow copies its existing script there; a `launch:` workflow gets a generated launcher.
@@ -24,66 +32,6 @@ export function workflowScriptPath(
 export function cronToSeconds(cron: string): number {
   const m = /^\*\/(\d+) \* \* \* \*$/.exec(cron.trim());
   return m ? Number(m[1]) * 60 : 900;
-}
-
-export function emitProfile(
-  ir: AutonomyIR,
-  opts: { name?: string } = {},
-): { profile: ZtrackProfile; schedule: ZtrackSchedule } {
-  const name = opts.name ?? 'app';
-
-  const skills: NonNullable<ZtrackProfile['skills']> = {};
-  for (const [role, agent] of Object.entries(ir.agents)) {
-    skills[role] = {
-      name: `ztrack-${name}-${role}`,
-      source: `profiles/${name}/skills/${agent.skill}/SKILL.md`,
-      codex: `.agents/skills/ztrack-${name}-${role}/SKILL.md`,
-      claude: `.claude/skills/ztrack-${name}-${role}/SKILL.md`,
-    };
-  }
-
-  // resources split back into the two buckets ztrack distinguishes.
-  const readme = ir.resources.find((r) => /readme\.md$/i.test(r));
-  const standards = ir.resources.filter((r) => !/readme\.md$/i.test(r));
-
-  // per-agent concurrency → WIP caps.
-  const wip: { maxInProgress?: number; maxInReview?: number } = {};
-  if (ir.agents.develop) wip.maxInProgress = ir.agents.develop.maxConcurrent;
-  if (ir.agents.review) wip.maxInReview = ir.agents.review.maxConcurrent;
-
-  const policy: NonNullable<ZtrackProfile['policy']> = { wip };
-  const box = ir.policy.box as Record<string, unknown>;
-  if (Array.isArray(box.humanRequiredPaths)) policy.humanRequiredPaths = box.humanRequiredPaths as string[];
-  if (Array.isArray(box.humanRequiredTopics)) policy.humanRequiredTopics = box.humanRequiredTopics as string[];
-
-  // The local loop can only honor cron triggers; event-only and raw (substrate-specific) workflows
-  // are skipped here (their agent stays launchable, just not auto-fired locally).
-  const localWorkflows = ir.workflows.filter((w) => !w.raw && cronOf(w));
-  const scriptPaths = localWorkflows.map((w) => workflowScriptPath(w, name).dest);
-  const intervalSeconds = localWorkflows[0] ? cronToSeconds(cronOf(localWorkflows[0]) as string) : 900;
-
-  const profile: ZtrackProfile = {
-    schema: 'ztrack.profile.v1',
-    name,
-    preset: name,
-    readme,
-    scheduler: {
-      schedule: `profiles/${name}/scheduler/schedule.json`,
-      scripts: [...scriptPaths, `profiles/${name}/scheduler/scripts/run.mjs`],
-    },
-    scripts: { runAgent: `profiles/${name}/scripts/run-agent.mjs` },
-    skills,
-    standards,
-    policy,
-  };
-
-  const schedule: ZtrackSchedule = {
-    intervalSeconds,
-    env: {},
-    scripts: scriptPaths.map((p) => `node ${p}`),
-  };
-
-  return { profile, schedule };
 }
 
 // --- Full file-tree compile (local-loop substrate, claude+codex harnesses) ---
@@ -115,10 +63,10 @@ const RUNNER_BACKEND = readFileSync(
 
 // run-agent: the launch adapter (the profile's domain seam). Reads AUTONOMY_AGENT (which agent) and
 // forwards any env names listed in AUTONOMY_FORWARD (comma-separated) to the runner as opaque
-// --key value params; the runner exports them verbatim into the launched agent. Domain vocabulary
-// (e.g. ZTRACK_ISSUE) is declared by the profile via AUTONOMY_FORWARD, never known to the system.
-// It defaults AUTONOMY_PROMPT_DIR to the emitted per-harness prompts so the runner uses the right
-// skill prompt, then delegates to the vendored runner.
+// --key value params; the runner exports them verbatim into the launched agent. Domain/tooling
+// vocabulary (e.g. a ztrack profile declares ZTRACK_ISSUE) is named by the profile via AUTONOMY_FORWARD,
+// never known to the system. It defaults AUTONOMY_PROMPT_DIR to the emitted per-harness prompts so the
+// runner uses the right skill prompt, then delegates to the vendored runner.
 const RUN_AGENT_DRIVER = `#!/usr/bin/env node
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
@@ -136,8 +84,8 @@ const r = spawnSync('node', [runner, 'launch', agent, ...params], { stdio: 'inhe
 process.exit(r.error?.code === 'ETIMEDOUT' ? 0 : (r.status ?? 1));
 `;
 
-// A launch: workflow dispatches through the same run-agent adapter PM uses (so prompts + param
-// forwarding apply uniformly) — not a hardcoded backend, and not a runtime selection switch.
+// A launch: workflow dispatches through the same run-agent adapter every agent uses (so prompts +
+// param forwarding apply uniformly) — not a hardcoded backend, and not a runtime selection switch.
 const launcherScript = (agent: string, base: string) => `#!/usr/bin/env node
 import { spawnSync } from 'node:child_process';
 const r = spawnSync('node', [${JSON.stringify(`${base}/scripts/run-agent.mjs`)}], { stdio: 'inherit', env: { ...process.env, AUTONOMY_AGENT: ${JSON.stringify(agent)} } });
@@ -145,11 +93,12 @@ process.exit(r.status == null ? 1 : r.status);
 `;
 
 // Per-agent skill prompts, split by harness (codex triggers a skill with `$name`, claude with
-// `/name`). The skill install name mirrors emitProfile's skills[role].name.
+// `/name`). The skill install name is `${profile}-${role}` — the profile name namespaces it, with no
+// tool baked in.
 function promptFiles(ir: AutonomyIR, name: string): Record<string, string> {
   const out: Record<string, string> = {};
   for (const role of Object.keys(ir.agents)) {
-    const skill = `ztrack-${name}-${role}`;
+    const skill = `${name}-${role}`;
     out[`profiles/${name}/scripts/prompts/codex/${role}.txt`] = `$${skill}\n`;
     out[`profiles/${name}/scripts/prompts/claude/${role}.txt`] = `/${skill}\n`;
   }
@@ -169,10 +118,19 @@ export function compileLocal(
     throw new Error(`unsupported runner "${runner}"; supported: ${SUPPORTED_RUNNERS.join(', ')}`);
   }
   const base = `profiles/${name}`;
-  const { profile, schedule } = emitProfile(ir, { name });
+
+  // The local loop can only honor cron triggers; event-only and raw (substrate-specific) workflows
+  // are skipped here (their agent stays launchable, just not auto-fired locally).
+  const localWorkflows = ir.workflows.filter((w) => !w.raw && cronOf(w));
+  const scriptPaths = localWorkflows.map((w) => workflowScriptPath(w, name).dest);
+  const intervalSeconds = localWorkflows[0] ? cronToSeconds(cronOf(localWorkflows[0]) as string) : 900;
+  const schedule: LocalSchedule = {
+    intervalSeconds,
+    env: {},
+    scripts: scriptPaths.map((p) => `node ${p}`),
+  };
 
   const generated: Record<string, string> = {
-    [`${base}/profile.json`]: JSON.stringify(profile, null, 2),
     [`${base}/scheduler/schedule.json`]: JSON.stringify(schedule, null, 2),
     [`${base}/scheduler/scripts/run.mjs`]: loopDriver(base),
     [`${base}/scripts/run-agent.mjs`]: RUN_AGENT_DRIVER,
@@ -183,19 +141,18 @@ export function compileLocal(
   const copies: Array<{ from: string; to: string }> = [];
 
   // workflows: run → copy the script to its dest; launch → generate a launcher at its dest.
-  // Only cron-bearing, non-raw workflows participate in the local loop (events/raw are github-only).
-  for (const wf of ir.workflows.filter((w) => !w.raw && cronOf(w))) {
+  for (const wf of localWorkflows) {
     const { dest, source, generated: isGen } = workflowScriptPath(wf, name);
     if (isGen) generated[dest] = launcherScript(wf.launch as string, base);
     else copies.push({ from: source as string, to: dest });
   }
 
-  // skills: source folder in the profile + the two harness installs
+  // skills: source folder in the profile + the two harness installs (named `${profile}-${role}`)
   for (const [role, agent] of Object.entries(ir.agents)) {
     const src = `skills/${agent.skill}/SKILL.md`;
     copies.push({ from: src, to: `${base}/skills/${agent.skill}/SKILL.md` });
-    copies.push({ from: src, to: `.claude/skills/ztrack-${name}-${role}/SKILL.md` });
-    copies.push({ from: src, to: `.agents/skills/ztrack-${name}-${role}/SKILL.md` });
+    copies.push({ from: src, to: `.claude/skills/${name}-${role}/SKILL.md` });
+    copies.push({ from: src, to: `.agents/skills/${name}-${role}/SKILL.md` });
   }
 
   // resources: readme → README.md; everything else → standards/<basename>

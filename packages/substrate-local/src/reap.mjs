@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // Reap finished agent sessions: cancel any whose turn has ended (endOfTurn) so they don't
-// accumulate over a long run. A recovery-style bundle script for the termfleet substrate; the
+// accumulate over a long run. A recovery-style script for the termfleet substrate; the
 // system itself stays domain-free (this only talks about running agents and their turn state).
 import { execSync } from 'node:child_process';
 

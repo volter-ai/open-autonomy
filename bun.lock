@@ -10,8 +10,32 @@
         "typescript": "^5.9.3",
       },
     },
+    "packages/core": {
+      "name": "@open-autonomy/core",
+      "version": "0.0.0",
+    },
+    "packages/substrate-github": {
+      "name": "@open-autonomy/substrate-github",
+      "version": "0.0.0",
+      "dependencies": {
+        "@open-autonomy/core": "workspace:*",
+      },
+    },
+    "packages/substrate-local": {
+      "name": "@open-autonomy/substrate-local",
+      "version": "0.0.0",
+      "dependencies": {
+        "@open-autonomy/core": "workspace:*",
+      },
+    },
   },
   "packages": {
+    "@open-autonomy/core": ["@open-autonomy/core@workspace:packages/core"],
+
+    "@open-autonomy/substrate-github": ["@open-autonomy/substrate-github@workspace:packages/substrate-github"],
+
+    "@open-autonomy/substrate-local": ["@open-autonomy/substrate-local@workspace:packages/substrate-local"],
+
     "@types/bun": ["@types/bun@1.3.14", "", { "dependencies": { "bun-types": "1.3.14" } }, "sha512-h1hFqFVcvAvD9j9K7ZW7vd82aSA+rTdznZa+5bwvCwqSB1jmmfLcbIWhOLx1/+boy/xmjgCs/OMUL8hRJSmnPw=="],
 
     "@types/node": ["@types/node@24.13.2", "", { "dependencies": { "undici-types": "~7.18.0" } }, "sha512-fRa09kZTgu8o71KFcDjUFuc7F+dEbZYZmkI0mg5YBTRs0yMKjYHsq/c0urDKeDb+D5qVgXOdFcuu+DZPKOITwA=="],

@@ -3,8 +3,33 @@
 > **Status:** the system is domain-free (it knows only agents, running agents, and
 > triggers). Proven by running the real app with real AI on a real project — no unit
 > tests. See §12.
-> **Home:** open-autonomy is the host format; ztrack is one *bundle* you plug in,
+> **Home:** open-autonomy is the host format; ztrack is one *profile* you plug in,
 > not a dependency (§7).
+
+## Vocabulary
+
+The canonical terms used throughout this doc and the codebase:
+
+| term | definition |
+|---|---|
+| **IR** (`autonomy.ir.v1`) | the substrate-agnostic intermediate representation a profile is written in (agents · workflows · resources · policy). |
+| **agents** / **skill** | the atomic agent content — a `skill` is one agent's instructions plus the standards/scripts it uses. The agents have **no collective noun**; they're just "the agents". |
+| **profile** | a substrate-agnostic **recipe**: a composition of agents + workflows + policy + resources, expressed as IR. Premade ones live in `profiles/`. |
+| **substrate** | the execution platform = a **trigger executor** + a **runner**, over a **box** (§4). e.g. `local`, `github`. |
+| **trigger executor** | fires a workflow when its triggers say so (cron is core, events expanded) and dispatches its action. Decides *when*. |
+| **runner** | runs agents and manages their session lifecycle (`launch`/`list`/`cancel`…), launching each into a box. Does the *running*. |
+| **box** | the environment an agent runs in: POSIX fs + shell + git + a model endpoint + the installed files. The runner provisions it. |
+| **installation** (*install*) | the materialized output of `compile(profile, substrate)` — the configs, installed skills, resources, and generated files laid into a repo. **Substrate-specific.** |
+| **tooling** | the tools an agent calls + the gate behind a `run:` (ztrack vs. gh + npm) — a swappable adapter axis (§5), not part of the IR. |
+
+The one relation that ties them together:
+
+```
+compile(profile, substrate) → installation
+```
+
+> **Deprecated: "bundle".** It conflated the *profile* (recipe), the *tooling*, and the
+> *installation* (compiled output). Use the precise term.
 
 ## 1. Thesis
 
@@ -33,7 +58,7 @@ What the IR genuinely reasons about:
 
 - which **agents** exist and their skill folders,
 - how many may run at once (`maxConcurrent`, per-agent and global),
-- which **cron** runs what (launch an agent, or run a script),
+- which **triggers** run what (launch an agent, or run a script) — only `cron` is interpreted,
 - which **files** to copy.
 
 Everything else — tool capabilities, edit-blocking, sensitive topics, merge rules,
@@ -56,21 +81,39 @@ human-required paths — is either **prose in a skill prompt** or a value in a
 What survives is **four nouns over two substrate primitives, across three adapter
 axes.**
 
-## 4. The substrate: two primitives
+## 4. The substrate: trigger executor + runner, over a box
 
-From a worker agent's seat there is only ever:
+A **substrate** is the concrete platform the system runs on. It factors into two executors you
+implement, over one shared environment:
 
-1. **The Runner** — CRUD over running agents. The *one* behavioral seam between a
-   laptop loop and GitHub Actions. It knows agents and their session lifecycle —
-   nothing about what they do or work on.
-2. **The Box** — a POSIX filesystem + shell + git + a model endpoint in env + the
-   copied files on PATH. Docker, laptop, GHA runner, Firecracker microVM all satisfy
-   the same interface. The agent cannot tell which it is in. **Whatever tools an agent
-   uses live here**, called from inside the agent/scripts.
+1. **The workflow trigger executor** — fires a workflow when its triggers say so and dispatches its
+   action (`launch` / `run` / `raw`). It decides *when*. (Contract: §13.2.)
+2. **The runner** — runs agents and manages their session lifecycle, launching each into a box. It
+   does the *running*, and is the *one* behavioral seam between a laptop loop and GitHub Actions —
+   it knows agents and their lifecycle, nothing about what they do. (Contract: §13.1.)
 
-A `Session` is *(a box) + (an agent process)*, and `launch()` decomposes into
-"acquire a box, provision it to the image spec, start the agent." Adding a substrate
-= writing a Runner over a box-source.
+over
+
+3. **The box** — the environment an agent runs in: a POSIX filesystem + shell + git + a model
+   endpoint in env + the copied files on PATH. Docker, laptop, GHA runner, Firecracker microVM all
+   satisfy the same interface; the agent cannot tell which it is in. **Whatever tools an agent uses
+   live here.** The box is the runner's responsibility — `launch()` decomposes into "acquire a box,
+   provision it to the image spec, start the agent," so a `Session` is *(a box) + (an agent process)*.
+
+**The two executors layer.** A `launch: pm` workflow on cron = the trigger executor fires → dispatches
+→ `runner.launch(pm)` into a box. A `run:` workflow needs no runner at all — the executor just runs
+the script.
+
+**Whether they are one component or two is a substrate detail:**
+
+- **local** — they are **separate**: the `run.mjs` loop (trigger executor) calls the runner (termfleet).
+- **github** — one platform fills **both**: Actions `on:` is the trigger executor, the Actions job is the runner.
+
+**An agent never sees the trigger executor.** From a worker agent's seat there is only ever the
+**runner** (its lifecycle) and the **box** (its environment) — triggers don't exist to it, it is
+simply launched. That is why §13 conforms two contracts (runner + trigger executor) while this
+agent's-eye view names only runner + box. Adding a substrate = implementing those two contracts over
+a box-source.
 
 ### 4.1 The Runner contract
 
@@ -98,6 +141,11 @@ The runner reads **per-agent `maxConcurrent`** and **global `policy.maxConcurren
 and enforces the binding one (the min). A substrate can be onboarded with `launch`
 alone (a runaway-but-working fleet with relaunch-on-interval recovery), then grow
 `list`/`cancel`/`continue` exactly as you turn on each guardrail.
+
+The runner is one of two things you implement to add a substrate (the other is the
+**workflow substrate** that fires triggers, §5). **§13 is the full conformance
+contract** — the core vs expanded feature set for each, every parameter's meaning, and
+a checklist for adding a substrate.
 
 ### 4.2 The Box (Environment)
 
@@ -143,10 +191,12 @@ agents:                          # agent → skill folder + config (only maxConc
   develop: { skill: skills/develop, maxConcurrent: 1, config: { capabilities: [branch:write, pr:open] } }
   review:  { skill: skills/review,  maxConcurrent: 1, config: {} }
 
-workflows:                       # cron → exactly one of launch | run (+ optional config box)
-  - { name: pm-tick,         cron: "*/15 * * * *", launch: pm }
-  - { name: recover-develop, cron: "*/15 * * * *", run: scripts/recover-develop.mjs }
-  - { name: gate,            cron: "*/15 * * * *", run: scripts/gate.sh }
+workflows:                       # triggers[] → exactly one of launch | run (+ optional config box)
+  - { name: pm-tick,         triggers: [{ cron: "*/15 * * * *" }], launch: pm }
+  - { name: recover-develop, triggers: [{ cron: "*/15 * * * *" }], run: scripts/recover-develop.mjs }
+  - { name: gate,            triggers: [{ cron: "*/15 * * * *" }], run: scripts/gate.sh }
+  # carried (substrate-rendered) event triggers ride alongside cron:
+  - { name: reviewer-tick,   triggers: [{ event: pull_request_target }, { event: issue_comment }], launch: reviewer }
 
 resources:                       # dumb copy — the loose remainder nothing else references
   - standards/workflow.md
@@ -160,7 +210,7 @@ policy:
 | section | compiler | meaning |
 |---|---|---|
 | `agents` | reasons | agent → skill folder; per-agent `maxConcurrent`; `config` is an opaque box |
-| `workflows` | reasons | `cron` + exactly one of `launch`(agent) / `run`(script); optional `config` box |
+| `workflows` | reasons | `triggers[]` (≥1; only `cron` is interpreted, the rest carried) + exactly one of `launch`(agent) / `run`(script); optional `config` box |
 | `policy` | reasons | global `maxConcurrent`; `box` is opaque |
 | `resources` | carries | verbatim copy of files referenced only inside skills/scripts |
 
@@ -170,12 +220,17 @@ policy:
   named. So the **copy set** = (skill folders from `agents`) ∪ (scripts from
   `workflows.run`) ∪ (`resources`). `resources` lists only the *unreferenced*
   remainder — no double-encoding.
-- **`workflows` actions are two keys, not a DSL.** Exactly one of `launch` (an agent
-  name that must exist in `agents`) or `run` (a script path). Nothing to parse.
-- **Cron is the only default trigger.** PM-on-cron is the dispatcher; an event-driven
-  triage trigger would launch PM, which the cron already does — it adds latency
-  reduction, not capability, so it is not core. A substrate may add event triggers as
-  an extra.
+- **`workflows` actions are three keys, not a DSL.** Exactly one of `launch` (an agent
+  name that must exist in `agents`), `run` (a script path), or `raw` (a substrate-specific
+  workflow body carried VERBATIM — a hand-authored github workflow the IR doesn't model;
+  emitted as-is, skipped on substrates that don't own it). `raw` is how the core stays
+  lossless over bespoke executable artifacts — the symmetric twin of a copied `run:` script.
+- **Triggers are a carried list; only cron is interpreted.** A workflow has `triggers[]`.
+  The local loop needs an interval, so `cron` is the one trigger the IR reasons about.
+  Every other trigger (`{event: issue_comment}`, `pull_request_target`,
+  `workflow_dispatch`, …) is carried verbatim and left to the substrate's workflow
+  implementation to fire — github renders each as `on: <event>`; the local loop skips
+  what it can't honor (the agent stays launchable). The IR never models event semantics.
 - **Boxes are opaque to the format, read by consumers.** A compile-time adapter reads
   what it understands (github maps `config.capabilities` → workflow `permissions:`);
   the **runner** reads what *it* understands at runtime (concurrency, edit-blocking).
@@ -211,7 +266,7 @@ Swap ztrack out (e.g. `gh` + `npm test`) and the IR is unchanged.
 | `agents.pm.skill` | harness copies to `.claude/skills/x-pm` + `.agents/skills/x-pm` | harness copies to `.codex/skills/open-autonomy-pm` |
 | `agents.*.config.capabilities` | ignored | adapter → workflow `permissions:` + tokens in `autonomy.yml` |
 | `agents.*.maxConcurrent` / `policy.maxConcurrent` | runner counts termfleet sessions (`list`) and holds at the limit | runner counts `gh run list` / open PRs and holds |
-| `workflows.launch: pm` | `schedule.json` entry → `run.mjs` loop → `run-agent.mjs` → termfleet `new` | `pm.yml` `on: schedule` → `workflow_dispatch` of the session job |
+| `workflows.launch: pm` | `schedule.json` entry → `run.mjs` loop → `run-agent.mjs` → `autonomy-runner.mjs` (the vendored runner) → termfleet `new` | `pm.yml` `on: schedule` → `workflow_dispatch` of the session job |
 | `workflows.run: scripts/gate.sh` | loop tick; `run` binds to `ztrack check` | `ztrack.yml` required status check (`volter-ai/ztrack@v0`) |
 | `cron: "*/15 * * * *"` | converted to the loop interval | emitted verbatim as `on: schedule` |
 | `resources/*` | copied (mirrored) | copied (mirrored) |
@@ -222,9 +277,11 @@ Swap ztrack out (e.g. `gh` + `npm test`) and the IR is unchanged.
 profiles/x/profile.json        (emitted)        .github/workflows/pm.yml         (cron)
 profiles/x/scheduler/schedule.json              .github/workflows/public-agent.yml
 profiles/x/scheduler/scripts/run.mjs  (loop)    .github/workflows/ztrack.yml      (gate)
-profiles/x/scripts/run-agent.mjs (termfleet)    services/agent-model-proxy/…      (runner launch)
-.claude/skills/x-pm/SKILL.md                    .codex/skills/open-autonomy-pm/SKILL.md
-.agents/skills/x-pm/SKILL.md                    docs/standards/…
+profiles/x/scripts/run-agent.mjs (adapter)      services/agent-model-proxy/…      (runner launch)
+profiles/x/scripts/autonomy-runner.mjs (runner) .codex/skills/open-autonomy-pm/SKILL.md
+profiles/x/scripts/prompts/<harness>/*.txt      docs/standards/…
+.claude/skills/x-pm/SKILL.md
+.agents/skills/x-pm/SKILL.md
 profiles/x/standards/…
 ```
 
@@ -232,6 +289,16 @@ Same `ir.yml`, same skills, same `maxConcurrent`, same gate command. What differ
 only the three generated categories: **trigger transport** (loop vs cron), **runner
 glue** (termfleet vs proxy+dispatch), **emitted manifest** (`profile.json` vs
 `autonomy.yml`).
+
+**The runner backend is the substrate primitive, emitted verbatim.** Local compile
+writes the domain-free runner (`autonomy-runner.mjs`) from its single source, plus a
+thin `run-agent.mjs` adapter and per-harness skill prompts (`$skill` for codex,
+`/skill` for claude). The adapter reads `AUTONOMY_AGENT` and forwards env names listed
+in `AUTONOMY_FORWARD` (comma-separated) to the runner as opaque `--key value` params;
+the runner exports them verbatim into the launched agent. A bundle gives those params
+meaning — ztrack declares `ZTRACK_ISSUE` and ships a thin domain-specialized adapter
+of the same shape, so its existing skills and scheduler stay untouched while every
+launch still flows through the identical vendored runner.
 
 ### Both in one repo
 
@@ -250,7 +317,7 @@ Lossless for the shared core; the substrate-specific extras survive by riding in
 | `agents[].skill` | `skills[role].source` | `skills[role]` | clean |
 | `agents[].config.capabilities` | absent → empty box | `agents[role].capabilities` → box | overflow rides the box; emitter defaults missing caps least-privilege |
 | `agents[].maxConcurrent` / `policy.maxConcurrent` | `policy.wip.*` | `policy.autonomy.*` | union into concurrency |
-| `workflows` | `scheduler.scripts[]` (cron/loop) | `agents[].triggers.schedule` | github event triggers, if any, drop on local |
+| `workflows` | `scheduler.scripts[]` (cron/loop) | `agents[].triggers.*` | a `<role>-tick` entry recovers as `launch: <role>` (regenerable launcher); other scripts stay opaque `run:`. Triggers are a carried list: `schedule`→cron, every other key→a carried event. Events round-trip in the manifest and render into github `on:`; the local loop just skips them (the agent stays launchable). |
 | gate `workflow` | `preset` via `ztrack check` | `merge` + `review-rubric` + CI | preset canonical; `merge` rides `config.box`, github-only |
 | human-required / topics | `policy.humanRequired*` → box / prose | `policy.risk.*` → box / prose | carried opaque, or in reviewer skill |
 | `resources` | `standards[]` | `documents`/`standards` | clean |
@@ -268,9 +335,14 @@ const Agent = z.object({
   config: Box.default({}),
 });
 
+const Trigger = z.union([
+  z.object({ cron: z.string() }),                          // interpreted by the local loop
+  z.object({ event: z.string(), config: Box.optional() }), // carried; the substrate renders it
+]);
+
 const Workflow = z.object({
   name: z.string(),
-  cron: z.string(),                                        // the one default trigger
+  triggers: z.array(Trigger).min(1),                       // ≥1; only cron is interpreted, rest carried
   launch: z.string().optional(),                           // agent name
   run: z.string().optional(),                              // script path
   config: Box.default({}),
@@ -312,9 +384,10 @@ confidence is running the actual app, with real AI, on a real project. The frame
 | file | role |
 |---|---|
 | `autonomy-ir.ts` | IR types (agents · workflows · resources · policy), `validateIR`, `CompileOutput` |
-| `autonomy-ingest-{profile,autonomy}.ts` | format → IR |
+| `autonomy-ingest-{profile,autonomy,github}.ts` | format → IR (`github` carries hand-authored workflow files verbatim as `raw` workflows) |
 | `autonomy-emit-{local,github}.ts` | IR → manifests, and `compile{Local,Github}` → full file tree |
 | `autonomy-runner.ts` | the domain-free runner: `ExecRunner`, `TermfleetRunner`, `Runner` contract |
+| `autonomy-runner-backend.mjs` | the emittable local-loop runner backend (`TermfleetRunner` + `runCli` in plain JS); `compileLocal` writes it verbatim into the profile as `autonomy-runner.mjs` |
 | `autonomy-cli.ts` / `autonomy-runner-{exec,termfleet}.ts` | `runCli` + the concrete pre-made runner entrypoints |
 | `autonomy-materialize.ts` | write a `CompileOutput` to disk |
 
@@ -331,8 +404,188 @@ confidence is running the actual app, with real AI, on a real project. The frame
   env, recorded on the session — the system never interpreted them.
 - **Local compile reproduces ztrack's installed file set** (the path set asserted by
   `demos/autonomous-profile-setup.sh`).
+- **ztrack cut over to the runner, proven with real AI.** The ztrack `simple-sdlc` profile now
+  launches every agent through the vendored `autonomy-runner.mjs` (this `compileLocal` emits it
+  byte-identical to the runner proved here). On a real ztrack repo with real `codex` (gpt-5.5), a
+  full **PM → develop → review → Done** lifecycle ran: PM was launched via the runner (session id =
+  termfleet `terminalId`, *received* not invented), PM dispatched develop and review through the
+  unchanged dispatch interface, the issue rode as the opaque `ZTRACK_ISSUE` param the runner
+  exported (the unchanged develop/review skills read `$ZTRACK_ISSUE`), the developer committed a
+  real `/health` endpoint with evidence, and review moved the issue to **Done** with `ztrack check`
+  green. No skill, scheduler, or PM change was needed — only the launch adapter + the vendored runner.
+- **Carried config is interpreted by whichever consumer understands it, whenever it suits.** The
+  box holds declarative intent; compile-time adapters and the runtime runner each read the keys they
+  understand. Proven: pm's `capabilities` (carried in `config`) render into a real github
+  `permissions: { contents: write, id-token: write, issues: write, actions: write }` at compile time
+  — the same value a local runner would read at runtime. Compile-time vs runtime is a substrate
+  choice, not an IR boundary; representability is bounded only by per-substrate interpreter coverage.
+  The structural job knobs ride the same way: `config.timeout` → `timeout-minutes:`, `config.concurrency`
+  → top-level `concurrency.group`, `config.env` → merged job `env:` (all proven rendering, and they
+  round-trip through the manifest content-identical).
+- **Operator control is mandatory on github — the github surface of the Runner contract.** Every
+  generated launch workflow emits a `control` job + an `issue_comment` trigger + a control-exempt
+  concurrency group + the `.github/agent-control.mjs` handler. `/agent cancel|pause|resume|status|retry`
+  map to the Runner ops (`cancel`→`gh run cancel`, `status`→`gh run list`+comment, `retry`→`gh workflow
+  run`, `pause/resume`→toggle the `agent-paused` label the agent job honors). Proven: renders into the
+  workflow, parses as valid YAML, and the handler dispatches each verb correctly (exercised with a
+  stubbed `gh`). It is deliberately **absent on local** — there the runner CLI (`autonomy cancel|update|
+  get|list`) already IS the operator's control surface, so the same contract needs no workflow. The
+  one concern still left in `raw` is policy gating (attempts/triage-approve), the same lift when wanted.
+- **Seamless both-way round-trip for both systems.** `ztrack → IR → ztrack` is shape-stable; the
+- **Seamless both-way round-trip for both systems.** `ztrack → IR → ztrack` is shape-stable; the
+  full open-autonomy checkout decompiles and recompiles losslessly — its `autonomy.yml` round-trips
+  content-identical and **all 11 hand-authored `.github/workflows/*.yml` recompile byte-identical**
+  (carried as `raw` workflows, with `on:` parsed into triggers for awareness). This is the symmetric
+  design: the IR interprets the declarative manifest and carries the executable artifacts verbatim
+  (ztrack copies `run:` scripts; github carries `raw` workflow bodies). Bespoke workflows the IR
+  doesn't model survive untouched; lifting a concern out of `raw` into interpreted config (capabilities,
+  triggers, timeout, …) is then opt-in, one concern at a time.
+- **Triggers round-trip (events no longer drop).** Ingesting the real `autonomy.yml`, pm's full
+  trigger set `[{cron}, {event: workflow_dispatch}, {event: issue_comment}]` survives the IR and
+  re-emits to a manifest **identical** to the original; the compiled `pm-tick.yml` renders all three
+  into `on:`. The local loop honors only the cron and skips events (the agent stays launchable). The
+  IR shape is stable under ingest∘emit∘ingest for both `profile.json` and `autonomy.yml`.
 
-**Still unproven (needs a real remote):** the **github trigger transport** end to end — an Actions
-cron calling `autonomy launch <agent>` against a reachable (tunneled/remote) termfleet. github is
-NOT a separate runner; termfleet is the runner everywhere, github is just another trigger. Also
-unproven under real load: concurrency/WIP, recovery, and failure modes.
+**Still unproven (needs a live GitHub remote):** end-to-end execution on real Actions — a scheduled
+run firing, and an `/agent` control comment actually driving `gh` against a live run. The github
+runner (Actions + bounded model proxy) and the control handler are proven by rendering + local
+dispatch (stubbed `gh`); only their live firing on a real repo is outstanding. Also unproven under
+real load: concurrency/WIP, recovery, and failure modes.
+
+## 13. Implementing a substrate (the conformance contract)
+
+A *substrate* is two implementable things over a shared environment:
+
+- a **runner** — runs agents (their session lifecycle), and
+- a **workflow substrate** — fires triggers (runs a workflow on time or event),
+
+both over a **Box** (§4.2): a POSIX fs + shell + git + a model endpoint in env + the copied bundle
+files on PATH. To add a substrate you implement a **core** contract (required — the IR targets only
+this, so any core-conformant substrate runs any IR) and, optionally, an **expanded** set
+(capabilities your substrate can enforce; honored where present, ignored where not). Litmus for
+"optional": if a substrate that ignores the feature still runs the fleet correctly — just with one
+guardrail off — it is expanded, not core.
+
+### 13.1 Runner — runs agents
+
+**Core (MUST):**
+
+| op | meaning |
+|---|---|
+| `launch(agent, params) → Session` | start `agent`; pass `params` into the agent's environment **verbatim** (never interpret them). The backend ASSIGNS the session id; the runner RECEIVES and returns it — it never invents one. |
+| `list() → Session[]` | the currently-running agents. |
+| `cancel(id) → bool` | stop session `id`. |
+
+`Session = { id, agent, status, ref?, params? }`, `status ∈ running|paused|cancelled|done|failed`.
+With `launch`+`list`+`cancel` you have a controllable fleet; `get` is derivable from `list`.
+
+**Expanded (MAY):**
+
+| feature | meaning | if unsupported |
+|---|---|---|
+| `get(id)` | one session by id | filter `list` |
+| `update(id,{status})` | transition a session (pause/resume) | no pause |
+| enforce `maxConcurrent` | refuse `launch` past the per-agent / global cap (count `list`) | the bundle enforces WIP agent-side (ztrack's PM skill does this today) |
+| enforce `budget` | a metered/revocable spend ceiling on the agent's model calls | unbounded (full-trust box) |
+| enforce `timeout` | kill a session after N minutes | runs to completion |
+| scope `permissions` | restrict the agent's blast radius (token / sandbox) | full box access |
+| isolation | a private checkout per session | shared tree (this is *why* `maxConcurrent: 1` exists) |
+
+### 13.2 Workflow substrate — runs triggers
+
+**Core (MUST):** fire a workflow on its **cron** trigger and dispatch the workflow's action —
+`launch` an agent, `run` a script, or emit `raw`. cron is the one trigger the IR interprets;
+PM-on-cron is the universal dispatcher, so cron alone yields a working system.
+
+**Expanded (MAY):**
+
+| feature | meaning | if unsupported |
+|---|---|---|
+| event triggers | fire on `issue_comment` / `issues.labeled` / `pull_request_target` / `workflow_dispatch` | skipped; the agent stays launchable on cron or by another agent |
+| manual dispatch | run-now with inputs | use cron / CLI |
+| operator control surface | `/agent cancel\|pause\|resume\|status\|retry` → the runner ops (13.3); mandatory **on github** because the operator has no CLI there | the runner CLI **is** the control surface (local) |
+| concurrency groups | serialize / exempt runs (e.g. control commands not queued behind the run they target) | runs may overlap |
+
+### 13.3 The parameters — meaning, tier, who interprets each
+
+**IR fields**
+
+| field | tier | meaning · consumer |
+|---|---|---|
+| `agents{}` | core | the agents a runner can launch |
+| `agents.*.skill` | core | skill folder (bundle-root-relative); the harness installs/locates it |
+| `agents.*.maxConcurrent` | expanded | per-agent cap; runner enforces if supported |
+| `agents.*.config` | optional box | per-agent expanded keys (below) |
+| `workflows[].name` | core | workflow id / filename stem |
+| `workflows[].triggers[]` | core=`{cron}`, expanded=`{event,config?}` | when to fire (13.1/13.2); only cron is interpreted, events are carried |
+| `workflows[].launch` | core | dispatch action: start this agent |
+| `workflows[].run` | core | dispatch action: run this script |
+| `workflows[].raw` | expanded | a verbatim substrate body the IR doesn't model; emit as-is, skip elsewhere |
+| `workflows[].config` | optional box | per-workflow expanded keys |
+| `resources[]` | core | files copied verbatim |
+| `policy.maxConcurrent` | expanded | global fleet cap; runner enforces `min(per-agent, global)` |
+| `policy.box` | optional | global expanded keys |
+
+Exactly one of `launch` / `run` / `raw` per workflow.
+
+**`config` box keys (the expanded params we define renderers for)**
+
+| key | on github (compile-time render) | on local |
+|---|---|---|
+| `capabilities: string[]` | → job `permissions:` (`issue:*`→issues, `pr:*`/`branch:write`→pull-requests, `workflow:dispatch`→actions; launch baseline `contents`+`id-token`) | ignored (full-trust box) |
+| `timeout: number` (minutes) | → job `timeout-minutes:` | runner kill-after (if supported) |
+| `concurrency: string` | → top-level `concurrency.group` (else a default control-exempt group) | ignored |
+| `env: {k: v}` | → merged into job `env:` | exported into the agent |
+| `humanRequiredPaths` / `humanRequiredTopics` (in `policy.box`) | carried; enforced by the **agent skill** (soft) | same |
+
+A consumer reads only the keys it understands and ignores the rest; the IR requires none beyond
+core. Unknown keys are preserved across a round-trip but inert.
+
+**launch params (opaque)**
+
+Arbitrary `--key value` pairs on `launch`. The system NEVER interprets them; a bundle assigns
+meaning (ztrack maps `ZTRACK_ISSUE`). A core runner MUST pass them into the agent's environment
+verbatim — that pass-through is the entire mechanism by which a bundle hands an agent its context.
+
+**operator control verbs → runner ops** (13.2 expanded)
+
+| `/agent …` | runner op |
+|---|---|
+| `cancel` | `cancel(id)` |
+| `pause` / `resume` | `update(id,{status})` |
+| `status` | `get(id)` / `list()` |
+| `retry` | `launch(agent, params)` |
+
+### 13.4 Who enforces what
+
+- **Runner** — the domain-free boundaries it supports (concurrency, budget, timeout, permissions). Hard, substrate-bound.
+- **Agent** (its skill + the scripts it calls) — domain boundaries the runner can't see (eligibility, attempt limits, triage, human-required paths). Soft; backed by the review/merge gate.
+- There is **no third layer.** If a boundary is neither runner-enforceable nor agent-enforced, it is simply not hard-enforced on that substrate — acceptable by design (full-trust local; bounded github).
+
+### 13.5 Checklist — adding a substrate
+
+1. **Runner core:** implement `launch`/`list`/`cancel` over your box-source; receive (don't invent) the session id; export `params` into the agent verbatim.
+2. **Workflow core:** fire `cron` → dispatch the workflow's `launch`/`run`/`raw` action.
+3. **Expanded, as your substrate allows:** enforce `maxConcurrent`/`timeout`/`budget`/`permissions`; honor `config` keys (`capabilities`/`concurrency`/`env`); add event triggers and the control surface.
+4. **Whatever you can't enforce** → leave to the agent skill, or accept it unenforced.
+5. **Prove it by running a real agent** end to end — no unit tests (§12).
+
+### 13.6 Conformance battery
+
+`scripts/autonomy-conformance.ts` plugs any runner into a deterministic check of the core contract
+(§13.1) and profiles its expanded support:
+
+```
+bun scripts/autonomy-conformance.ts <exec|termfleet|github> [probeAgent]
+```
+
+It drives the **real** runner against its **real** backend with a trivial probe agent — no AI, no
+mocks — launching / listing / cancelling and asserting: `launch` returns a running session; ids are
+distinct per launch (received, not invented); params pass through verbatim; `list` shows them;
+`cancel` removes them. **Exit 0 iff all core checks pass.** Expanded features (`get`/`update`, and the
+`enforce-*` set a runner advertises via an optional `supports` list) are *reported, not required*.
+
+This is the one deterministic test the design admits — the substrate seam is mechanical, unlike agent
+behavior, which only real runs prove (§12). It is a conformance *harness*, not a unit test of
+framework internals. Proven: **ExecRunner** (reference, deterministic) and **TermfleetRunner** (live
+provider) both pass core 6/6.

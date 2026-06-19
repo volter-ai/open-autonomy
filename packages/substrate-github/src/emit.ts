@@ -237,8 +237,9 @@ function onLinesForSteps(wf: IRWorkflow): string[] {
 
 // Steps run deterministic logic + gh; baseline contents:read (no commit, no model) + caps. Distinct
 // from a launch job (which commits → contents:write + id-token).
-function stepsPermissions(caps: string[]): string {
+function stepsPermissions(caps: string[], usesModel = false): string {
   const p: Record<string, string> = { contents: 'read' };
+  if (usesModel) p['id-token'] = 'write'; // OIDC mint fallback (no stored admin secret needed)
   const grant = (k: string, lvl: string) => { if (p[k] !== 'write') p[k] = lvl; }; // write wins over read
   for (const c of caps) {
     if (c === 'issue:read') grant('issues', 'read');
@@ -286,10 +287,12 @@ function str(box: Record<string, unknown> | undefined, key: string, fallback: st
 }
 
 // Render one step to github YAML lines (indented for a job `steps:` list). The verb dispatch IS the ABI.
-function stepLines(step: IRStep): string[] {
+// extraEnv (e.g. the minted MODEL_PROXY_TOKEN) is rendered as a step-level env block.
+function stepLines(step: IRStep, extraEnv: string[] = []): string[] {
   const w = (step.with ?? {}) as Record<string, unknown>;
   const head = [`      - name: ${step.name}`];
   if (step.applyOnly) head.push(`        if: inputs.apply == 'true' || github.event_name == 'schedule'`);
+  if (extraEnv.length) head.push(`        env:`, ...extraEnv.map((l) => `          ${l}`));
   const block = (body: string[]): string[] => [...head, `        run: |`, ...body.map((l) => `          ${l}`)];
   switch (step.uses) {
     case 'gather': {
@@ -320,21 +323,66 @@ function stepLines(step: IRStep): string[] {
   }
 }
 
+// The model envelope (mirrors the proven launch path): a bounded per-run proxy token minted before the
+// model step and revoked after it. The admin secret is scoped to mint+revoke ONLY — the model run step
+// gets just the minted token (research/run stays "powerless", per the original strategist's design).
+function mintStepLines(cfg: Record<string, unknown>, title: string): string[] {
+  const models = String(cfg.models ?? '');
+  const opt = (flag: string, v: unknown) => (v === undefined || v === '' ? [] : [`${flag} "${v}"`]);
+  const mintCmd = [
+    `bun scripts/model-proxy-mint.ts --issue .agent-run/model-issue.json`,
+    `--models "${models}"`,
+    ...opt('--max-usd-cents', cfg.maxUsdCents),
+    ...opt('--max-requests', cfg.maxRequests),
+    ...opt('--purpose', cfg.purpose),
+  ].join(' ');
+  return [
+    `      - name: Mint model token`,
+    `        id: mint`,
+    `        env:`,
+    `          MODEL_PROXY_ADMIN_TOKEN: \${{ secrets.MODEL_PROXY_ADMIN_TOKEN }}`,
+    `        run: |`,
+    `          set -euo pipefail`,
+    `          mkdir -p .agent-run`,
+    `          printf '{"number":0,"title":${JSON.stringify(title)},"body":""}\\n' > .agent-run/model-issue.json`,
+    `          ${mintCmd}`,
+  ];
+}
+function revokeStepLines(): string[] {
+  return [
+    `      - name: Revoke model token`,
+    `        if: always() && steps.mint.outputs.run_id != ''`,
+    `        env:`,
+    `          MODEL_PROXY_ADMIN_TOKEN: \${{ secrets.MODEL_PROXY_ADMIN_TOKEN }}`,
+    `        run: bun scripts/model-proxy-revoke.ts --run-id "\${{ steps.mint.outputs.run_id }}" || true`,
+  ];
+}
+
 function stepsWorkflowYml(wf: IRWorkflow, ir: AutonomyIR): string {
-  if ((wf.steps ?? []).some((s) => s.needsModel)) {
-    // The model envelope for steps pipelines arrives with the strategist migration; keep it explicit
-    // rather than silently emit a model-less run.
-    throw new Error(`steps workflow ${wf.name}: needsModel not yet implemented (see docs/IR-WORKFLOWS.md)`);
-  }
+  const steps = wf.steps ?? [];
   const caps = ((wf.config as Record<string, unknown>).capabilities as string[]) ?? [];
-  // GH_TOKEN is only needed when a step shells out to `gh` (gather/apply); a pure-script pipeline
-  // (e.g. governance-report) gets no token. Extra job env (model vars, …) rides on config.env.
-  const usesGh = (wf.steps ?? []).some((s) => s.uses === 'gather' || s.uses === 'apply');
-  const jobEnv = [...(usesGh ? [`      GH_TOKEN: \${{ github.token }}`] : []), ...envLines(wf)];
+  const modelIdx = steps.map((s, i) => (s.needsModel ? i : -1)).filter((i) => i >= 0);
+  const usesModel = modelIdx.length > 0;
+  const firstModel = usesModel ? modelIdx[0] : -1;
+  const lastModel = usesModel ? modelIdx[modelIdx.length - 1] : -1;
+  // GH_TOKEN only when a step shells out to gh (gather/apply); MODEL_PROXY_URL job-wide when minting
+  // (mint/run/revoke all read it). The admin secret is NOT job-wide — it rides only on mint/revoke.
+  const usesGh = steps.some((s) => s.uses === 'gather' || s.uses === 'apply');
+  const jobEnv = [
+    ...(usesGh ? [`      GH_TOKEN: \${{ github.token }}`] : []),
+    ...(usesModel ? [`      MODEL_PROXY_URL: \${{ vars.MODEL_PROXY_URL }}`] : []),
+    ...envLines(wf),
+  ];
+  const renderedSteps: string[] = [];
+  steps.forEach((s, i) => {
+    if (i === firstModel) renderedSteps.push(...mintStepLines((s.with as Record<string, unknown>)?.model as Record<string, unknown> ?? {}, wf.name));
+    renderedSteps.push(...stepLines(s, s.needsModel ? [`MODEL_PROXY_TOKEN: \${{ steps.mint.outputs.token }}`] : []));
+    if (i === lastModel) renderedSteps.push(...revokeStepLines());
+  });
   return [
     `name: ${wf.name}`,
     ...onLinesForSteps(wf),
-    `permissions: ${stepsPermissions(caps)}`,
+    `permissions: ${stepsPermissions(caps, usesModel)}`,
     ...concurrencyLines(wf),
     ...NODE24_ENV,
     `jobs:`,
@@ -346,7 +394,7 @@ function stepsWorkflowYml(wf: IRWorkflow, ir: AutonomyIR): string {
     `      - uses: actions/checkout@v4`,
     `      - uses: oven-sh/setup-bun@v2`,
     `      - run: bun install --frozen-lockfile || bun install`,
-    ...(wf.steps ?? []).flatMap(stepLines),
+    ...renderedSteps,
     ...artifactLines(wf),
     ``,
   ].join('\n');

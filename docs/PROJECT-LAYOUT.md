@@ -85,5 +85,9 @@ github and local are the **same recipe**; only `provision` differs. "Adopt into 
   skills, runtime, standards, rubrics, version); repo-owned + seed-only files (package.json, README,
   roadmap, autonomy.yml, CONSTITUTION, dev docs) legitimately differ and are excluded. This caught a
   fork-escalation security fix that was live in OA's workflow but missing from the profile.
+- **Done:** `substrate-local` is now a *generic* local substrate (no `ztrack.profile.v1`, no
+  `ztrack-*` skill names, no `wip` work-states) — ztrack is a profile's tooling, carried opaquely, never
+  the substrate. `AUTONOMY-IR.md` was genericized to match (substrate = local/github; tooling = a
+  profile's choice). Any profile compiles to any substrate.
 - **Remaining:** the `examples/*` are deliberately-older upgrade fixtures (their runtime + upgrade
-  workflow lag the canonical); the deep ztrack-strip of `AUTONOMY-IR.md`'s body.
+  workflow lag the canonical).

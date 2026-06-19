@@ -10,8 +10,8 @@ eligible dispatch, or after you have verified that no eligible dispatch exists.
 
 ## Procedure
 
-1. **Read work.** `work list --json id,state,labels` — the work-store CLI (`ztrack` locally,
-   `gh` on github). You never read a store directly.
+1. **Read work.** `work list --json id,state,labels` — the work-store CLI your profile's tooling
+   provides (e.g. `ztrack` or `gh`), independent of substrate. You never read a store directly.
 2. **Check capacity.** `autonomy list` — count running `develop` and `review` sessions.
 3. **Dispatch exactly one**, in this order:
    - If an issue is `In Review` and no `review` session is running: claim it

@@ -12,7 +12,7 @@ import { join } from 'node:path';
 import { parseIr } from '@open-autonomy/core';
 import { compileGithub } from '@open-autonomy/substrate-github';
 
-const P = 'profiles/repo-maintenance';
+const P = 'profiles/self-driving';
 const REPO_OWNED = new Set([
   'package.json', 'bun.lock', 'README.md', 'CHANGELOG.md', '.gitignore', 'AGENTS.md',
   '.open-autonomy/autonomy.yml', '.open-autonomy/roadmap.yml', '.open-autonomy/strategist-sources.json',

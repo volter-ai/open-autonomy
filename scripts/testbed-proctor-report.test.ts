@@ -55,7 +55,9 @@ describe('testbed proctor report', () => {
 });
 
 describe('bootstrap steps', () => {
-  test('declares the four ordered bootstrap steps', () => {
-    expect(bootstrapSteps().map((s) => s.id)).toEqual(['provision', 'secret-check', 'seed', 'preflight']);
+  test('declares the ordered bootstrap steps (scaffold-from-profile then seed)', () => {
+    expect(bootstrapSteps().map((s) => s.id)).toEqual([
+      'scaffold', 'overlay', 'provision', 'secret-check', 'seed', 'preflight',
+    ]);
   });
 });

@@ -27,7 +27,7 @@ published, retried, merged, or escalated.
 ## Repositories
 
 - `open-autonomy`: canonical OSS implementation and first dogfooding target.
-- `profiles/repo-maintenance`: the self-driving recipe; `compile(…, github)` is the starter installation.
+- `profiles/self-driving`: the self-driving recipe; `compile(…, github)` is the starter installation.
 - `examples/docs-only`: minimal cookbook repo.
 - `examples/testbed`: cookbook repo shape used to prove live autonomy behavior.
 - `open-autonomy-testbed`: live external repo used to prove behavior on GitHub.

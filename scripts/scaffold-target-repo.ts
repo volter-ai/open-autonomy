@@ -24,9 +24,9 @@ function parseArgs(argv: string[]): Options {
 }
 
 // Scaffolding IS compiling the open-autonomy profile onto the github substrate — there is no
-// hand-maintained template. The installation = compile(profiles/repo-maintenance, github), which
+// hand-maintained template. The installation = compile(profiles/self-driving, github), which
 // injects the substrate runtime and copies the profile's skills/docs/manifest/workflows verbatim.
-const PROFILE = 'profiles/repo-maintenance';
+const PROFILE = 'profiles/self-driving';
 
 async function main(): Promise<void> {
   const { target, force } = parseArgs(process.argv.slice(2));

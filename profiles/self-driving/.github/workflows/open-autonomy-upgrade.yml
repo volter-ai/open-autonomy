@@ -36,15 +36,23 @@ jobs:
         id: template
         run: |
           set -euo pipefail
-          mkdir -p .agent-run
-          if [[ -d templates/self-driving-repo ]]; then
-            echo "path=templates/self-driving-repo" >> "$GITHUB_OUTPUT"
-            exit 0
+          out="$PWD/.agent-run/open-autonomy-template"
+          mkdir -p "$(dirname "$out")"
+          # The canonical installation is COMPILED from the open-autonomy profile — there is no
+          # hand-maintained template. Compile in the local checkout if this is open-autonomy itself,
+          # otherwise clone it and compile there.
+          if [[ -f profiles/self-driving/ir.yml ]]; then
+            src="$PWD"
+          else
+            git clone --depth 1 --branch "$OPEN_AUTONOMY_TEMPLATE_REF" \
+              "https://github.com/${OPEN_AUTONOMY_TEMPLATE_REPO}.git" \
+              "$PWD/.agent-run/open-autonomy-src"
+            src="$PWD/.agent-run/open-autonomy-src"
           fi
-          git clone --depth 1 --branch "$OPEN_AUTONOMY_TEMPLATE_REF" \
-            "https://github.com/${OPEN_AUTONOMY_TEMPLATE_REPO}.git" \
-            .agent-run/open-autonomy-template
-          echo "path=.agent-run/open-autonomy-template/templates/self-driving-repo" >> "$GITHUB_OUTPUT"
+          ( cd "$src" \
+            && (bun install --frozen-lockfile || bun install) \
+            && bun bin/autonomy-compile.ts profiles/self-driving github "$out" )
+          echo "path=.agent-run/open-autonomy-template" >> "$GITHUB_OUTPUT"
 
       - name: Build upgrade plan
         run: |

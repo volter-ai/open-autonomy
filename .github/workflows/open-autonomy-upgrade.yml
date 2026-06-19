@@ -41,7 +41,7 @@ jobs:
           # The canonical installation is COMPILED from the open-autonomy profile — there is no
           # hand-maintained template. Compile in the local checkout if this is open-autonomy itself,
           # otherwise clone it and compile there.
-          if [[ -f profiles/repo-maintenance/ir.yml ]]; then
+          if [[ -f profiles/self-driving/ir.yml ]]; then
             src="$PWD"
           else
             git clone --depth 1 --branch "$OPEN_AUTONOMY_TEMPLATE_REF" \
@@ -51,7 +51,7 @@ jobs:
           fi
           ( cd "$src" \
             && (bun install --frozen-lockfile || bun install) \
-            && bun bin/autonomy-compile.ts profiles/repo-maintenance github "$out" )
+            && bun bin/autonomy-compile.ts profiles/self-driving github "$out" )
           echo "path=.agent-run/open-autonomy-template" >> "$GITHUB_OUTPUT"
 
       - name: Build upgrade plan

@@ -62,7 +62,7 @@ loop with a scheduler loop + a termfleet runner instead of GitHub Actions.
 **Recipes & demos:**
 
 - `profiles/` — profiles (recipes) that compile to any substrate: `hello` (minimal) and
-  `repo-maintenance` (open-autonomy's own self-driving setup; the single source of every github installation).
+  `self-driving` (open-autonomy's own self-driving setup; the single source of every github installation).
 - `examples/` — demo target repos the loop drives (`docs-only`, `library`, `small-app`, `testbed`).
 
 Docs: [`ARCHITECTURE.md`](./docs/ARCHITECTURE.md) (the github app's design + trust boundaries),
@@ -82,7 +82,7 @@ To adopt into your own GitHub repo, scaffold an installation by compiling the pr
 [`docs/PUBLIC_AGENT_PRODUCTION_ROLLOUT.md`](./docs/PUBLIC_AGENT_PRODUCTION_ROLLOUT.md):
 
 ```bash
-bun bin/autonomy-compile.ts profiles/repo-maintenance github ../my-repo
+bun bin/autonomy-compile.ts profiles/self-driving github ../my-repo
 # or: bun scripts/scaffold-target-repo.ts --target ../my-repo
 ```
 

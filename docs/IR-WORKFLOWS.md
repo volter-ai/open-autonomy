@@ -68,14 +68,22 @@ computer.
 
 ## Build sequence (`raw → 0`)
 
-1. **Harden the envelope** in `compileGithub.workflowYml` — hoist the universal bits OA hand-wrote
-   (artifact upload, the model mint/revoke wrapper, sandbox-relax, uniform control plane) so every
-   generated workflow gets them. (Already seeded — `workflowYml` emits the core envelope today.)
-2. **Define the step/ABI model** in the IR (`steps[]` + the client interface) + implement the github
-   client (wrapping `gh`/git/proxy) and the local client (work-store + termfleet).
+1. **Harden the envelope** in `compileGithub.workflowYml` — hoist the universal bits OA hand-wrote so
+   every generated workflow gets them. **Done so far:** `upload-artifact` (always) and the Node-24
+   JS-actions opt-in (`FORCE_JAVASCRIPT_ACTIONS_TO_NODE24`) are now compiler-injected uniformly.
+   **Remaining:** the model mint/revoke wrapper for `steps` (arrives with the strategist migration),
+   uniform sandbox-relax, and uniform control plane.
+2. **Define the step/ABI model** in the IR (`steps[]` + the verb/`with` client interface) + implement
+   the github client. **Done:** `IRStep {name, uses, with, applyOnly, needsModel}` in `core`; the
+   github client renders `gather` (`gh issue list`), `run` (`bun <script>`), and `apply` (apply a
+   work-mutation plan via `gh`) in `substrate-github/src/emit.ts`. The local client (work-store +
+   termfleet) is the remaining half, needed when a `steps` profile targets local.
 3. **Regenerate one workflow** (planner — deterministic, simplest) from the IR; verify behaviorally
-   equivalent to the hand-authored one.
-4. **Migrate `self-driving` off `raw`**, one workflow at a time (planner → strategist → review →
+   equivalent to the hand-authored one. **Done:** `profiles/self-driving` carries planner as a
+   `gather → run → apply` pipeline (no `raw`); `compile` generates it and OA's own root planner *is*
+   the generated workflow (`check:dogfood` + the production-readiness tests pass). Behavioral deltas
+   are envelope normalizations only (job name, `.agent-run` artifact scope, default label color).
+4. **Migrate `self-driving` off `raw`**, one workflow at a time (planner ✅ → strategist → review →
    strategy-review → pm → public-agent). Relocate `model-proxy-admin` into the **github substrate**
    (it's substrate infra, not profile `raw`).
 5. End state: `self-driving` has **zero `raw`**, compiles to github *and* local, and the same program

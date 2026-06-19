@@ -5,7 +5,7 @@ import { readFileSync, readdirSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { cronOf } from '@open-autonomy/core';
-import type { AutonomyIR, CompileOutput, IRWorkflow } from '@open-autonomy/core';
+import type { AutonomyIR, CompileOutput, IRStep, IRWorkflow } from '@open-autonomy/core';
 import type { OAManifest } from './ingest-manifest';
 
 // The operator control plane (the github surface of the Runner contract). Single source of truth is
@@ -167,6 +167,11 @@ function launchConcurrencyLines(wf: IRWorkflow): string[] {
   ];
 }
 
+// Universal envelope: opt every workflow into the Node 24 JS-actions runtime. GitHub deprecated the
+// node20 action runtime; OA hand-wrote this top-level env per workflow — the compiler applies it
+// uniformly (top-level env applies to all jobs). A production-readiness contract, not just DRY.
+const NODE24_ENV = ['env:', '  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"'];
+
 // Universal envelope: upload the agent's evidence dir (.agent-run) as a run artifact, always. Part of
 // every workflow OA hand-wrote (but inconsistently); the compiler applies it uniformly.
 function artifactLines(wf: IRWorkflow): string[] {
@@ -180,12 +185,152 @@ function artifactLines(wf: IRWorkflow): string[] {
   ];
 }
 
+// --- The step/ABI client (github implementation) ---
+// A `steps` workflow is a deterministic program pipeline; the github client renders each ABI verb with
+// gh/git. The IR names the verb + its data; this is the only substrate-specific surface (per
+// docs/IR-WORKFLOWS.md). A local client would render the same verbs over the work-store.
+
+// `on:` for a steps pipeline: schedule (cron) + the dry-run/apply dispatch convention (only when a step
+// is applyOnly) + carried events. No issue_comment/control plane (that is the launch envelope).
+function onLinesForSteps(wf: IRWorkflow): string[] {
+  const lines = ['on:'];
+  const cron = cronOf(wf);
+  if (cron) lines.push('  schedule:', `    - cron: "${cron}"`);
+  const seen = new Set<string>(['workflow_dispatch']);
+  if ((wf.steps ?? []).some((s) => s.applyOnly)) {
+    lines.push(
+      '  workflow_dispatch:',
+      '    inputs:',
+      '      apply:',
+      '        description: Apply changes (default dry-run)',
+      '        required: false',
+      "        default: 'false'",
+      '        type: choice',
+      "        options: ['false', 'true']",
+    );
+  } else {
+    lines.push('  workflow_dispatch: {}');
+  }
+  for (const t of wf.triggers) {
+    if ('cron' in t || seen.has(t.event)) continue;
+    seen.add(t.event);
+    lines.push(`  ${t.event}: {}`);
+  }
+  return lines;
+}
+
+// Steps run deterministic logic + gh; baseline contents:read (no commit, no model) + caps. Distinct
+// from a launch job (which commits → contents:write + id-token).
+function stepsPermissions(caps: string[]): string {
+  const p: Record<string, string> = { contents: 'read' };
+  for (const c of caps) {
+    if (c.startsWith('issue:')) p.issues = 'write';
+    else if (c.startsWith('pr:') || c === 'branch:write') p['pull-requests'] = 'write';
+    else if (c === 'workflow:dispatch') p.actions = 'write';
+  }
+  return `{ ${Object.entries(p).map(([k, v]) => `${k}: ${v}`).join(', ')} }`;
+}
+
+// The github applyWork renderer — apply a work-mutation plan ({actions:[{action,issue_number,title,
+// body,labels}]}) with gh: ensure every label used exists (best-effort), then create/update each item
+// and attach its labels one at a time (a single bad label must never block the issue). This is the
+// github client's rendering of the `apply` verb; a local client would write the work-store instead.
+const APPLY_PLAN_BODY = (plan: string): string[] => [
+  `set -euo pipefail`,
+  `PLAN=${plan}`,
+  `jq -r '.actions[].labels[]?' "$PLAN" | sort -u | while IFS= read -r label; do`,
+  `  [ -n "$label" ] && gh label create "$label" --color CFD3D7 2>/dev/null || true`,
+  `done`,
+  `jq -c '.actions[] | select(.action == "create" or .action == "update")' "$PLAN" | while IFS= read -r action; do`,
+  `  kind="$(jq -r '.action' <<< "$action")"`,
+  `  number="$(jq -r '.issue_number // empty' <<< "$action")"`,
+  `  title="$(jq -r '.title' <<< "$action")"`,
+  `  body="$(jq -r '.body' <<< "$action")"`,
+  `  labels="$(jq -r '.labels | join(",")' <<< "$action")"`,
+  `  if [ "$kind" = "create" ]; then`,
+  `    url="$(gh issue create --title "$title" --body "$body")"`,
+  `    number="$(printf '%s\\n' "$url" | grep -oE '[0-9]+$' || true)"`,
+  `  else`,
+  `    gh issue edit "$number" --title "$title" --body "$body" || true`,
+  `  fi`,
+  `  if [ -n "$number" ]; then`,
+  `    printf '%s\\n' "$labels" | tr ',' '\\n' | while IFS= read -r lbl; do`,
+  `      [ -n "$lbl" ] && gh issue edit "$number" --add-label "$lbl" || true`,
+  `    done`,
+  `  fi`,
+  `done`,
+];
+
+function str(box: Record<string, unknown> | undefined, key: string, fallback: string): string {
+  const v = box?.[key];
+  return typeof v === 'string' ? v : fallback;
+}
+
+// Render one step to github YAML lines (indented for a job `steps:` list). The verb dispatch IS the ABI.
+function stepLines(step: IRStep): string[] {
+  const w = (step.with ?? {}) as Record<string, unknown>;
+  const head = [`      - name: ${step.name}`];
+  if (step.applyOnly) head.push(`        if: inputs.apply == 'true' || github.event_name == 'schedule'`);
+  const block = (body: string[]): string[] => [...head, `        run: |`, ...body.map((l) => `          ${l}`)];
+  switch (step.uses) {
+    case 'gather': {
+      const out = str(w, 'out', '.agent-run/gather.json');
+      const dir = out.includes('/') ? out.slice(0, out.lastIndexOf('/')) : '.';
+      const fields = str(w, 'fields', 'number,title,body,labels,url,state');
+      return block([
+        `mkdir -p ${dir}`,
+        `gh issue list --state ${str(w, 'state', 'open')} --search ${JSON.stringify(str(w, 'query', ''))} --limit ${typeof w.limit === 'number' ? w.limit : 200} --json ${fields} > ${out}`,
+      ]);
+    }
+    case 'run': {
+      const args = Array.isArray(w.args) ? (w.args as string[]) : [];
+      return [...head, `        run: bun ${str(w, 'script', '')}${args.length ? ' ' + args.join(' ') : ''}`];
+    }
+    case 'apply':
+      return block(APPLY_PLAN_BODY(str(w, 'plan', '.agent-run/plan.json')));
+    default:
+      throw new Error(`unknown step verb "${step.uses}" in step "${step.name}"`);
+  }
+}
+
+function stepsWorkflowYml(wf: IRWorkflow, ir: AutonomyIR): string {
+  if ((wf.steps ?? []).some((s) => s.needsModel)) {
+    // The model envelope for steps pipelines arrives with the strategist migration; keep it explicit
+    // rather than silently emit a model-less run.
+    throw new Error(`steps workflow ${wf.name}: needsModel not yet implemented (see docs/IR-WORKFLOWS.md)`);
+  }
+  const caps = ((wf.config as Record<string, unknown>).capabilities as string[]) ?? [];
+  return [
+    `name: ${wf.name}`,
+    ...onLinesForSteps(wf),
+    `permissions: ${stepsPermissions(caps)}`,
+    ...concurrencyLines(wf),
+    ...NODE24_ENV,
+    `jobs:`,
+    `  ${wf.name}:`,
+    `    runs-on: ubuntu-latest`,
+    ...timeoutLines(wf),
+    `    env:`,
+    `      GH_TOKEN: \${{ github.token }}`,
+    ...envLines(wf),
+    `    steps:`,
+    `      - uses: actions/checkout@v4`,
+    `      - uses: oven-sh/setup-bun@v2`,
+    `      - run: bun install --frozen-lockfile || bun install`,
+    ...(wf.steps ?? []).flatMap(stepLines),
+    ...artifactLines(wf),
+    ``,
+  ].join('\n');
+}
+
 function workflowYml(wf: IRWorkflow, ir: AutonomyIR): string {
+  if (wf.steps) return stepsWorkflowYml(wf, ir);
   if (wf.run) {
     return [
       `name: ${wf.name}`,
       ...onLines(wf, 'run'),
       ...concurrencyLines(wf),
+      ...NODE24_ENV,
       `jobs:`,
       `  ${wf.name}:`,
       `    runs-on: ubuntu-latest`,
@@ -205,6 +350,7 @@ function workflowYml(wf: IRWorkflow, ir: AutonomyIR): string {
     ...onLines(wf, 'launch'),
     `permissions: ${capsToPermissions((ir.agents[wf.launch as string]?.config.capabilities as string[]) ?? [])}`,
     ...launchConcurrencyLines(wf),
+    ...NODE24_ENV,
     `jobs:`,
     // Mandatory operator control plane: the github surface of the Runner contract. An `/agent <verb>`
     // issue comment runs the control handler (cancel/pause/resume/status/retry → gh / labels).

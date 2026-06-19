@@ -3,8 +3,10 @@
 > **Status:** the system is domain-free (it knows only agents, running agents, and
 > triggers). Proven by running the real app with real AI on a real project — no unit
 > tests. See §12.
-> **Home:** open-autonomy is the host format; ztrack is one *profile* you plug in,
-> not a dependency (§7).
+> **Home:** open-autonomy is the host format. A *substrate* is local vs github (where it runs); a
+> profile's *tooling* (what its agents call, e.g. ztrack or gh) is swappable and never named by the
+> core (§7). ztrack is one such tooling, used by a downstream profile in a separate repo — not a
+> dependency.
 
 ## Vocabulary
 
@@ -33,15 +35,14 @@ compile(profile, substrate) → installation
 
 ## 1. Thesis
 
-The ztrack profile (`profile.json`, `ztrack.profile.v1`) and the open-autonomy
-manifest (`autonomy.yml`, `open-autonomy.autonomy.v1`) are not two systems that
-resemble each other — they are **one control-plane design serialized against two
-execution substrates**. The tell: both ship a `humanRequiredPaths` /
-`humanRequiredTopics` pair with near-identical contents.
+A local self-driving setup and a GitHub Actions one are not two systems that resemble each other —
+they are **one control-plane design serialized against two execution substrates**. (The observation
+that started this: a hand-rolled local profile and the open-autonomy github manifest had independently
+grown a `humanRequiredPaths` / `humanRequiredTopics` pair with near-identical contents.)
 
-This doc extracts the shared machine into one intermediate representation (IR)
-that can **ingest** either format and **compile** to any target — a local
-self-driving setup, a GitHub Actions setup, or both in the same repo.
+This doc extracts the shared machine into one intermediate representation (IR) that **compiles** a
+single profile to any substrate — a local-loop setup, a GitHub Actions setup, or both in the same
+repo — and can **ingest** an existing setup back into it.
 
 ## 2. Design principle: interpret the minimum, carry the rest
 
@@ -76,7 +77,7 @@ human-required paths — is either **prose in a skill prompt** or a value in a
 | Direction / roadmap | **whatever an agent reads** | A file an agent chooses to read. The system never sees it. |
 | Capabilities | **`config` box** | `pr:open` means something on github, nothing locally. Passthrough. |
 | Domain (issues, "ready"/"done", what "pm" means) | **agents + scripts** | Lives entirely in prompts/skills/scripts. The system knows none of it. |
-| ztrack itself | **optional bundle** | One bundle providing an evidence gate + whatever tools its agents call. Swappable. |
+| a tool the agents use (e.g. ztrack) | **a profile's tooling** | An evidence gate + whatever tools the agents call. Swappable, opaque, carried by the profile — never part of the core or a substrate. |
 
 What survives is **four nouns over two substrate primitives, across three adapter
 axes.**
@@ -120,7 +121,7 @@ a box-source.
 The system knows only **agents** and **running agents**. `launch` starts one;
 `get`/`list` observe; `update`/`cancel` transition. `launch` carries arbitrary
 **opaque params** through to the agent — the system never interprets them (a
-bundle/runner may give one meaning, e.g. `issue`). There is no notion of work,
+the tooling/runner may give one meaning, e.g. `issue`). There is no notion of work,
 issues, or domain states anywhere in this contract.
 
 ```ts
@@ -170,7 +171,7 @@ tokens.
 |---|---|---|
 | **substrate driver** | local-loop / github-actions | trigger transport, runner glue, cron→loop/Actions, termfleet/proxy |
 | **harness adapter** | claude / codex | skill install path & filename, skill format |
-| **tooling / bundle** | ztrack / gh | whatever tools the agents call, the gate command behind `run` |
+| **tooling** | ztrack / gh | whatever tools the agents call, the gate command behind `run` |
 
 `launch: pm` resolves to a prompt via the **harness** adapter (which also picks
 `.claude/skills` vs `.codex/skills`). `run: scripts/gate.sh` becomes `ztrack check`
@@ -238,23 +239,28 @@ policy:
 - **No leaked tokens.** Destinations (`.claude` vs `.codex`), CLIs (`ztrack` vs
   `gh`), and cron rendering all live in adapters, never in the interpreted fields.
 
-## 7. ztrack as the reference bundle
+## 7. The tooling axis (gate + agent tools)
 
-Making ztrack optional means the IR guarantees a **gate workflow, not gate rigor.**
-ztrack's "close on evidence, not prose" is the *rigorous* gate; another setup may
-pick a weaker `run:` command. Universality buys tool-agnosticism at the cost of
+**Tooling** is the one thing a profile picks that the core never names: the tools its agents call,
+and the gate command behind a `run:` workflow. The IR guarantees a **gate workflow, not gate rigor** —
+it reserves the slot; the profile fills it. Universality buys tool-agnosticism at the cost of
 opinionatedness — a deliberate trade.
 
-ztrack ships as the recommended bundle providing two things via the **tooling** axis,
-neither of which the IR knows about:
+Tooling is two things, neither of which the IR knows about:
 
-- **Agent tooling** — whatever its agents call to do their work; entirely behind the
-  bundle. The system never sees it (it only launches agents and passes opaque params).
-- **Evidence gate** — `ztrack check`, behind a `run:` in a gate workflow.
-  `action.yml` already runs exactly this inside GitHub Actions, so the gate is the
-  *same command* on both substrates.
+- **Agent tooling** — whatever the agents call to do their work; entirely the profile's concern. The
+  system never sees it (it only launches agents and passes opaque params, e.g. via `AUTONOMY_FORWARD`).
+- **Evidence gate** — a command behind a `run:` in a gate workflow. Because it's just a `run:` script,
+  it's the *same command* on both substrates.
 
-Swap ztrack out (e.g. `gh` + `npm test`) and the IR is unchanged.
+Two real examples, neither privileged:
+
+- **`gh` + `npm test`** — a lightweight gate; the agents use the GitHub CLI + the repo's own tests.
+- **ztrack** — a *rigorous* evidence gate ("close on evidence, not prose"), used by a downstream
+  profile (the `ztrack-simple-sdlc` profile, in a separate repo). `ztrack check` sits behind a `run:`.
+
+Swap the tooling and the IR is unchanged — and **the substrate is unchanged too**. ztrack is not
+"the local substrate" and `gh` is not "the github substrate"; either tooling runs on either substrate.
 
 ## 8. Worked compile: one IR → both targets
 
@@ -267,52 +273,56 @@ Swap ztrack out (e.g. `gh` + `npm test`) and the IR is unchanged.
 | `agents.*.config.capabilities` | ignored | adapter → workflow `permissions:` + tokens in `autonomy.yml` |
 | `agents.*.maxConcurrent` / `policy.maxConcurrent` | runner counts termfleet sessions (`list`) and holds at the limit | runner counts `gh run list` / open PRs and holds |
 | `workflows.launch: pm` | `schedule.json` entry → `run.mjs` loop → `run-agent.mjs` → `autonomy-runner.mjs` (the vendored runner) → termfleet `new` | `pm.yml` `on: schedule` → `workflow_dispatch` of the session job |
-| `workflows.run: scripts/gate.sh` | loop tick; `run` binds to `ztrack check` | `ztrack.yml` required status check (`volter-ai/ztrack@v0`) |
+| `workflows.run: scripts/gate.sh` | loop tick runs the script (its command is the profile's tooling, e.g. `npm test` or `ztrack check`) | a required-status-check workflow runs the same script |
 | `cron: "*/15 * * * *"` | converted to the loop interval | emitted verbatim as `on: schedule` |
 | `resources/*` | copied (mirrored) | copied (mirrored) |
 
 ```
-# compile --target local                       # compile --target github
-.volter/tracker-config.json                     .open-autonomy/autonomy.yml      (emitted manifest)
-profiles/x/profile.json        (emitted)        .github/workflows/pm.yml         (cron)
-profiles/x/scheduler/schedule.json              .github/workflows/public-agent.yml
-profiles/x/scheduler/scripts/run.mjs  (loop)    .github/workflows/ztrack.yml      (gate)
-profiles/x/scripts/run-agent.mjs (adapter)      services/agent-model-proxy/…      (runner launch)
-profiles/x/scripts/autonomy-runner.mjs (runner) .codex/skills/open-autonomy-pm/SKILL.md
-profiles/x/scripts/prompts/<harness>/*.txt      docs/standards/…
+# bun …/autonomy-compile.ts profiles/x local    # bun …/autonomy-compile.ts profiles/x github
+profiles/x/scheduler/schedule.json  (loop cfg)   .open-autonomy/autonomy.yml      (emitted manifest)
+profiles/x/scheduler/scripts/run.mjs  (loop)     .github/workflows/pm.yml         (cron)
+profiles/x/scheduler/scripts/pm-tick.mjs         .github/workflows/<gate>.yml     (run: gate)
+profiles/x/scripts/run-agent.mjs (adapter)       scripts/…                        (injected runtime)
+profiles/x/scripts/autonomy-runner.mjs (runner)  .codex/skills/open-autonomy-pm/SKILL.md
+profiles/x/scripts/prompts/<harness>/*.txt       docs/standards/…
 .claude/skills/x-pm/SKILL.md
 .agents/skills/x-pm/SKILL.md
 profiles/x/standards/…
 ```
 
 Same `ir.yml`, same skills, same `maxConcurrent`, same gate command. What differs is
-only the three generated categories: **trigger transport** (loop vs cron), **runner
-glue** (termfleet vs proxy+dispatch), **emitted manifest** (`profile.json` vs
-`autonomy.yml`).
+only the substrate-specific categories: **trigger transport** (loop vs `on:`), **runner
+glue** (termfleet vs proxy+dispatch), and on github an **emitted manifest** + the
+**injected runtime** (`scripts/*`). The local installation has no `profile.json` — the
+loop reads `schedule.json`; any tool config a profile's tooling needs (e.g. ztrack's) is
+a carried resource, not something the substrate emits.
 
 **The runner backend is the substrate primitive, emitted verbatim.** Local compile
 writes the domain-free runner (`autonomy-runner.mjs`) from its single source, plus a
 thin `run-agent.mjs` adapter and per-harness skill prompts (`$skill` for codex,
 `/skill` for claude). The adapter reads `AUTONOMY_AGENT` and forwards env names listed
 in `AUTONOMY_FORWARD` (comma-separated) to the runner as opaque `--key value` params;
-the runner exports them verbatim into the launched agent. A bundle gives those params
-meaning — ztrack declares `ZTRACK_ISSUE` and ships a thin domain-specialized adapter
-of the same shape, so its existing skills and scheduler stay untouched while every
-launch still flows through the identical vendored runner.
+the runner exports them verbatim into the launched agent. A profile's tooling gives those
+params meaning — e.g. a ztrack-using profile declares `ZTRACK_ISSUE` via `AUTONOMY_FORWARD`,
+so its skills get their context while every launch still flows through the identical
+vendored runner.
 
 ### Both in one repo
 
 `targets: [local, github]` runs both drivers over one source. They write to disjoint
-paths (`profiles/` + `.volter/` + `.claude` vs `.github/workflows/` + `.open-autonomy/`
-+ `.codex`), so they coexist; the skill *content*, `maxConcurrent`, and gate command
-are single-sourced. Edit `autonomy/` once, regenerate both.
+paths (`profiles/` + `.claude` + `.agents` vs `.github/workflows/` + `.open-autonomy/`
++ `.codex` + `scripts/`), so they coexist; the skill *content*, `maxConcurrent`, and gate
+command are single-sourced. Edit the profile once, regenerate both.
 
 ## 9. Round-trip check
 
 Lossless for the shared core; the substrate-specific extras survive by riding in the
-`config` boxes (the IR is the superset, each emitter projects down).
+`config` boxes (the IR is the superset, each emitter projects down). The `profile.json` column shows
+how a downstream **ztrack-format** adapter maps to the IR — that adapter lives in the ztrack repo (the
+local substrate here is generic and emits no `profile.json`); it is shown to demonstrate the IR is the
+superset of both serializations.
 
-| IR field | from `profile.json` | from `autonomy.yml` | note |
+| IR field | from `profile.json` (ztrack, downstream) | from `autonomy.yml` | note |
 |---|---|---|---|
 | `agents[].skill` | `skills[role].source` | `skills[role]` | clean |
 | `agents[].config.capabilities` | absent → empty box | `agents[role].capabilities` → box | overflow rides the box; emitter defaults missing caps least-privilege |
@@ -330,7 +340,7 @@ import { z } from 'zod';
 const Box = z.record(z.string(), z.unknown());   // opaque; consumers read what they understand
 
 const Agent = z.object({
-  skill: z.string(),                                       // folder, relative to bundle root
+  skill: z.string(),                                       // folder, relative to profile root
   maxConcurrent: z.number().int().positive().default(1),
   config: Box.default({}),
 });
@@ -366,7 +376,7 @@ export const AutonomyIR = z.object({
 ## 11. Non-goals / open questions
 
 - **Not** merging the two repos. The IR + Runner contract live here; ztrack stays a
-  separate package shipping a bundle.
+  separate package shipping its own tooling + adapter.
 - **Where does the IR live in a repo?** Proposal: `.open-autonomy/ir.yml` as the
   source of truth, with `profile.json` / `autonomy.yml` becoming *emitted artifacts*.
 - **Resource placement** is a driver convention (mirror); with categories removed,
@@ -402,8 +412,9 @@ confidence is running the actual app, with real AI, on a real project. The frame
   real claude sessions (`[] → new → list → kill → []`).
 - **Opaque params pass through:** `launch develop --issue T1 --priority high` reached the agent as
   env, recorded on the session — the system never interpreted them.
-- **Local compile reproduces ztrack's installed file set** (the path set asserted by
-  `demos/autonomous-profile-setup.sh`).
+- **Local compile produces a complete generic local installation** — `schedule.json` + the `run.mjs`
+  loop + the vendored `autonomy-runner.mjs` + a `run-agent` adapter + per-harness prompts + skills,
+  with no tool baked in (`hello` compiles and materializes to both local and github).
 - **ztrack cut over to the runner, proven with real AI.** The ztrack `simple-sdlc` profile now
   launches every agent through the vendored `autonomy-runner.mjs` (this `compileLocal` emits it
   byte-identical to the runner proved here). On a real ztrack repo with real `codex` (gpt-5.5), a
@@ -431,15 +442,14 @@ confidence is running the actual app, with real AI, on a real project. The frame
   stubbed `gh`). It is deliberately **absent on local** — there the runner CLI (`autonomy cancel|update|
   get|list`) already IS the operator's control surface, so the same contract needs no workflow. The
   one concern still left in `raw` is policy gating (attempts/triage-approve), the same lift when wanted.
-- **Seamless both-way round-trip for both systems.** `ztrack → IR → ztrack` is shape-stable; the
-- **Seamless both-way round-trip for both systems.** `ztrack → IR → ztrack` is shape-stable; the
-  full open-autonomy checkout decompiles and recompiles losslessly — its `autonomy.yml` round-trips
-  content-identical and **all 11 hand-authored `.github/workflows/*.yml` recompile byte-identical**
-  (carried as `raw` workflows, with `on:` parsed into triggers for awareness). This is the symmetric
-  design: the IR interprets the declarative manifest and carries the executable artifacts verbatim
-  (ztrack copies `run:` scripts; github carries `raw` workflow bodies). Bespoke workflows the IR
-  doesn't model survive untouched; lifting a concern out of `raw` into interpreted config (capabilities,
-  triggers, timeout, …) is then opt-in, one concern at a time.
+- **Lossless github round-trip.** The full open-autonomy checkout decompiles and recompiles
+  losslessly — its `autonomy.yml` round-trips content-identical and **all 11 hand-authored
+  `.github/workflows/*.yml` recompile byte-identical** (carried as `raw` workflows, with `on:` parsed
+  into triggers for awareness). This is the symmetric design: the IR interprets the declarative manifest
+  and carries the executable artifacts verbatim. Bespoke workflows the IR doesn't model survive
+  untouched; lifting a concern out of `raw` into interpreted config (capabilities, triggers, timeout, …)
+  is then opt-in, one concern at a time. (The ztrack-profile↔IR round-trip moved downstream with the
+  ztrack-format adapter; the local substrate here is generic.)
 - **Triggers round-trip (events no longer drop).** Ingesting the real `autonomy.yml`, pm's full
   trigger set `[{cron}, {event: workflow_dispatch}, {event: issue_comment}]` survives the IR and
   re-emits to a manifest **identical** to the original; the compiled `pm-tick.yml` renders all three
@@ -459,7 +469,7 @@ A *substrate* is two implementable things over a shared environment:
 - a **runner** — runs agents (their session lifecycle), and
 - a **workflow substrate** — fires triggers (runs a workflow on time or event),
 
-both over a **Box** (§4.2): a POSIX fs + shell + git + a model endpoint in env + the copied bundle
+both over a **Box** (§4.2): a POSIX fs + shell + git + a model endpoint in env + the copied installation
 files on PATH. To add a substrate you implement a **core** contract (required — the IR targets only
 this, so any core-conformant substrate runs any IR) and, optionally, an **expanded** set
 (capabilities your substrate can enforce; honored where present, ignored where not). Litmus for
@@ -485,7 +495,7 @@ With `launch`+`list`+`cancel` you have a controllable fleet; `get` is derivable 
 |---|---|---|
 | `get(id)` | one session by id | filter `list` |
 | `update(id,{status})` | transition a session (pause/resume) | no pause |
-| enforce `maxConcurrent` | refuse `launch` past the per-agent / global cap (count `list`) | the bundle enforces WIP agent-side (ztrack's PM skill does this today) |
+| enforce `maxConcurrent` | refuse `launch` past the per-agent / global cap (count `list`) | the tooling enforces WIP agent-side (a ztrack profile's PM skill does this today) |
 | enforce `budget` | a metered/revocable spend ceiling on the agent's model calls | unbounded (full-trust box) |
 | enforce `timeout` | kill a session after N minutes | runs to completion |
 | scope `permissions` | restrict the agent's blast radius (token / sandbox) | full box access |
@@ -513,7 +523,7 @@ PM-on-cron is the universal dispatcher, so cron alone yields a working system.
 | field | tier | meaning · consumer |
 |---|---|---|
 | `agents{}` | core | the agents a runner can launch |
-| `agents.*.skill` | core | skill folder (bundle-root-relative); the harness installs/locates it |
+| `agents.*.skill` | core | skill folder (profile-root-relative); the harness installs/locates it |
 | `agents.*.maxConcurrent` | expanded | per-agent cap; runner enforces if supported |
 | `agents.*.config` | optional box | per-agent expanded keys (below) |
 | `workflows[].name` | core | workflow id / filename stem |
@@ -543,9 +553,9 @@ core. Unknown keys are preserved across a round-trip but inert.
 
 **launch params (opaque)**
 
-Arbitrary `--key value` pairs on `launch`. The system NEVER interprets them; a bundle assigns
+Arbitrary `--key value` pairs on `launch`. The system NEVER interprets them; the tooling assigns
 meaning (ztrack maps `ZTRACK_ISSUE`). A core runner MUST pass them into the agent's environment
-verbatim — that pass-through is the entire mechanism by which a bundle hands an agent its context.
+verbatim — that pass-through is the entire mechanism by which the tooling hands an agent its context.
 
 **operator control verbs → runner ops** (13.2 expanded)
 

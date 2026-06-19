@@ -80,7 +80,10 @@ github and local are the **same recipe**; only `provision` differs. "Adopt into 
   compiles the profile to get the canonical installation to diff against (verified behavior-preserving:
   identical upgrade plan except the upgrade workflow itself). `check:compile` guards that the profile
   compiles to a complete installation.
-- **Remaining:** OA's own root installation (`.github/workflows`, `.codex/skills`, `.open-autonomy`) is
-  still hand-maintained alongside the profile rather than regenerated from it (a dogfood sync-check
-  would close that); the `examples/*` are deliberately-older upgrade fixtures (their runtime + upgrade
+- **Done:** OA's own root installation is now sourced from the profile too — `check:dogfood` asserts
+  `compile(profiles/repo-maintenance, github)` == OA's root for every **managed** file (workflows,
+  skills, runtime, standards, rubrics, version); repo-owned + seed-only files (package.json, README,
+  roadmap, autonomy.yml, CONSTITUTION, dev docs) legitimately differ and are excluded. This caught a
+  fork-escalation security fix that was live in OA's workflow but missing from the profile.
+- **Remaining:** the `examples/*` are deliberately-older upgrade fixtures (their runtime + upgrade
   workflow lag the canonical); the deep ztrack-strip of `AUTONOMY-IR.md`'s body.

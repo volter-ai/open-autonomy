@@ -18,6 +18,9 @@ bun bin/autonomy-compile.ts profiles/repo-maintenance github <dir>   # produce a
 
 To upgrade an installed repo, the upgrade workflow compiles the profile and diffs it against the repo.
 
-Known gap: OA's own root installation (`.github/workflows`, `.codex/skills`, `.open-autonomy`) is still
-hand-maintained alongside the profile rather than regenerated from it; a dogfood sync-check (compile ==
-root) would close that. `MANAGED_PREFIXES` in `scripts/open-autonomy-upgrade.ts` also omits `docs/`.
+`check:dogfood` enforces that OA's own root installation == `compile(profiles/repo-maintenance, github)`
+for every managed file — so editing the profile (not OA's root) is the way to change OA's own
+workflows/skills/runtime. Repo-owned + seed-only files (package.json, README, roadmap, autonomy.yml,
+CONSTITUTION, dev docs) are excluded (see REPO_OWNED in `bin/check-dogfood.ts`).
+
+Known gap: `MANAGED_PREFIXES` in `scripts/open-autonomy-upgrade.ts` omits `docs/`.

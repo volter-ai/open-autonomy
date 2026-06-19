@@ -89,5 +89,9 @@ github and local are the **same recipe**; only `provision` differs. "Adopt into 
   `ztrack-*` skill names, no `wip` work-states) — ztrack is a profile's tooling, carried opaquely, never
   the substrate. `AUTONOMY-IR.md` was genericized to match (substrate = local/github; tooling = a
   profile's choice). Any profile compiles to any substrate.
-- **Remaining:** the `examples/*` are deliberately-older upgrade fixtures (their runtime + upgrade
-  workflow lag the canonical).
+- **Done:** the scenario testbed is profile-derived too — `bootstrap-testbed` scaffolds the
+  installation by compiling `profiles/self-driving` and overlays only a 12-file seed (constitution,
+  roadmap, scenarios, `provision.json`, the issue seeder). `examples/testbed` was stripped from a
+  64-file vendored installation (with badly-drifted runtime) down to that seed, so it can't drift.
+- **Remaining:** the small `examples/{small-app,library,docs-only}` are still vendored upgrade
+  fixtures (deliberately older, to exercise the upgrade tool).

@@ -48,7 +48,7 @@ const SEED_ONLY_PATHS = [
 function usage(): never {
   throw new Error(`Usage:
   bun scripts/open-autonomy-upgrade.ts --template <compiled-installation> --target . [--apply] --out upgrade-plan.json
-  (produce the template with: bun bin/autonomy-compile.ts profiles/repo-maintenance github <dir>)`);
+  (produce the template with: bun bin/autonomy-compile.ts profiles/self-driving github <dir>)`);
 }
 
 function parseArgs(argv: string[]): Options {

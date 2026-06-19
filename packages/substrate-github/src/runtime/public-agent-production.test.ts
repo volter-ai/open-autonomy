@@ -86,7 +86,7 @@ describe('public agent production readiness', () => {
     expect(text).toContain('Resolve upgrade template');
     expect(text).toContain('OPEN_AUTONOMY_TEMPLATE_REPO');
     // the canonical installation is COMPILED from the profile (no hand-maintained template dir)
-    expect(text).toContain('autonomy-compile.ts profiles/repo-maintenance github');
+    expect(text).toContain('autonomy-compile.ts profiles/self-driving github');
     expect(text).toContain('.agent-run/open-autonomy-template');
     expect(text).toContain('open-autonomy-upgrade.ts');
     expect(text).toContain('gh pr create');

@@ -6,7 +6,7 @@ import { join, resolve } from 'node:path';
 
 // Hands-free setup for a self-driving testbed: a repo whose only human-seeded artifact is the
 // constitution. The testbed is a script that USES the machinery — it scaffolds an installation
-// (scaffold-target-repo, which compiles profiles/repo-maintenance onto the github substrate) and
+// (scaffold-target-repo, which compiles profiles/self-driving onto the github substrate) and
 // overlays a thin product seed (examples/self-driving-testbed: constitution, empty roadmap, research
 // sources, provision manifest), then provisions. No scenario issues are seeded; the strategist
 // generates the first roadmap. The only manual step is setting MODEL_PROXY_ADMIN_TOKEN.
@@ -18,7 +18,7 @@ export interface BootstrapStep {
 
 export function selfDrivingBootstrapSteps(): BootstrapStep[] {
   return [
-    { id: 'scaffold', describe: 'compile profiles/repo-maintenance (generic machinery) into a build dir' },
+    { id: 'scaffold', describe: 'compile profiles/self-driving (generic machinery) into a build dir' },
     { id: 'overlay', describe: 'overlay the thin product seed (constitution, empty roadmap, sources, manifest)' },
     { id: 'provision', describe: 'create repo and reconcile content, variables, labels, branch protection' },
     { id: 'strategist', describe: 'dispatch the strategist to generate the first roadmap' },

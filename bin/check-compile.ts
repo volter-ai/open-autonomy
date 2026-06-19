@@ -10,7 +10,7 @@ import { join } from 'node:path';
 import { parseIr } from '@open-autonomy/core';
 import { compileGithub } from '@open-autonomy/substrate-github';
 
-const P = 'profiles/repo-maintenance';
+const P = 'profiles/self-driving';
 const MIRROR = 'packages/substrate-github/src/runtime';
 
 const ir = parseIr(readFileSync(join(P, 'ir.yml'), 'utf8'));

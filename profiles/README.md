@@ -28,8 +28,8 @@ bun bin/autonomy-compile.ts profiles/hello github /tmp/hello-gh
 - **`hello/`** — the minimal runnable profile: one `greeter` agent on a cron trigger. Compiles to
   both `local` (a scheduler-loop installation) and `github` (manifest + workflow + control plane).
   Start here to see the whole path.
-- **`repo-maintenance/`** — open-autonomy's own self-maintenance recipe (pm / developer / reviewer /
-  planner / upgrade / strategist / strategy-reviewer). `compile(repo-maintenance, github)` produces a
+- **`self-driving/`** — open-autonomy's own self-maintenance recipe (pm / developer / reviewer /
+  planner / upgrade / strategist / strategy-reviewer). `compile(self-driving, github)` produces a
   complete self-driving installation; it is the **single source** of that installation (there is no
   hand-maintained template — `scaffold` and the upgrade workflow both compile this profile). The
   github runtime (`scripts/*`) is **not** in the profile — the substrate owns and injects it, the same

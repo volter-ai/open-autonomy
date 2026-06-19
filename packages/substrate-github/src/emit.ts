@@ -167,6 +167,19 @@ function launchConcurrencyLines(wf: IRWorkflow): string[] {
   ];
 }
 
+// Universal envelope: upload the agent's evidence dir (.agent-run) as a run artifact, always. Part of
+// every workflow OA hand-wrote (but inconsistently); the compiler applies it uniformly.
+function artifactLines(wf: IRWorkflow): string[] {
+  return [
+    `      - uses: actions/upload-artifact@v4`,
+    `        if: always()`,
+    `        with:`,
+    `          name: ${wf.name}-\${{ github.run_id }}`,
+    `          path: .agent-run`,
+    `          if-no-files-found: warn`,
+  ];
+}
+
 function workflowYml(wf: IRWorkflow, ir: AutonomyIR): string {
   if (wf.run) {
     return [
@@ -181,6 +194,7 @@ function workflowYml(wf: IRWorkflow, ir: AutonomyIR): string {
       `    steps:`,
       `      - uses: actions/checkout@v4`,
       `      - run: node ${wf.run}`,
+      ...artifactLines(wf),
       ``,
     ].join('\n');
   }
@@ -249,6 +263,7 @@ function workflowYml(wf: IRWorkflow, ir: AutonomyIR): string {
     `          git push origin "$RID"`,
     `      - if: always()`,
     `        run: bun scripts/model-proxy-revoke.ts --run-id "$RID" || true`,
+    ...artifactLines(wf),
     ``,
   ].join('\n');
 }

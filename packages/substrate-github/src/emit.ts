@@ -90,6 +90,22 @@ const DISPATCH_INPUTS = [
   '      issue_number: { description: "issue to act on (used by /agent retry)", required: false, type: string }',
 ];
 
+// Render a carried (non-cron) event trigger as github `on:` YAML. Its config (e.g. pull_request paths)
+// is carried verbatim — the IR doesn't model event semantics, so the substrate renders them as-is.
+function eventLines(event: string, config?: Record<string, unknown>): string[] {
+  if (!config || Object.keys(config).length === 0) return [`  ${event}: {}`];
+  // Block-style render of the common github trigger filters (paths/branches/types: scalar | string[]).
+  const lines = [`  ${event}:`];
+  for (const [k, v] of Object.entries(config)) {
+    if (Array.isArray(v)) {
+      lines.push(`    ${k}:`, ...v.map((item) => `      - ${JSON.stringify(item)}`));
+    } else {
+      lines.push(`    ${k}: ${JSON.stringify(v)}`);
+    }
+  }
+  return lines;
+}
+
 function onLines(wf: IRWorkflow, kind: 'run' | 'launch'): string[] {
   const lines = ['on:'];
   const cron = cronOf(wf);
@@ -107,7 +123,7 @@ function onLines(wf: IRWorkflow, kind: 'run' | 'launch'): string[] {
   for (const t of wf.triggers) {
     if ('cron' in t || seen.has(t.event)) continue;
     seen.add(t.event);
-    lines.push(`  ${t.event}: {}`);
+    lines.push(...eventLines(t.event, t.config));
   }
   return lines;
 }
@@ -214,7 +230,7 @@ function onLinesForSteps(wf: IRWorkflow): string[] {
   for (const t of wf.triggers) {
     if ('cron' in t || seen.has(t.event)) continue;
     seen.add(t.event);
-    lines.push(`  ${t.event}: {}`);
+    lines.push(...eventLines(t.event, t.config));
   }
   return lines;
 }
@@ -223,8 +239,11 @@ function onLinesForSteps(wf: IRWorkflow): string[] {
 // from a launch job (which commits → contents:write + id-token).
 function stepsPermissions(caps: string[]): string {
   const p: Record<string, string> = { contents: 'read' };
+  const grant = (k: string, lvl: string) => { if (p[k] !== 'write') p[k] = lvl; }; // write wins over read
   for (const c of caps) {
-    if (c.startsWith('issue:')) p.issues = 'write';
+    if (c === 'issue:read') grant('issues', 'read');
+    else if (c.startsWith('issue:')) p.issues = 'write';
+    else if (c === 'pr:read') grant('pull-requests', 'read');
     else if (c.startsWith('pr:') || c === 'branch:write') p['pull-requests'] = 'write';
     else if (c === 'workflow:dispatch') p.actions = 'write';
   }
@@ -276,10 +295,16 @@ function stepLines(step: IRStep): string[] {
     case 'gather': {
       const out = str(w, 'out', '.agent-run/gather.json');
       const dir = out.includes('/') ? out.slice(0, out.lastIndexOf('/')) : '.';
+      const kind = str(w, 'kind', 'issues'); // what to list: issues (default) | labels | prs
+      const limit = typeof w.limit === 'number' ? w.limit : 200;
+      if (kind === 'labels') {
+        return block([`mkdir -p ${dir}`, `gh label list --limit ${limit} --json ${str(w, 'fields', 'name')} > ${out}`]);
+      }
+      const noun = kind === 'prs' ? 'pr' : 'issue';
       const fields = str(w, 'fields', 'number,title,body,labels,url,state');
       return block([
         `mkdir -p ${dir}`,
-        `gh issue list --state ${str(w, 'state', 'open')} --search ${JSON.stringify(str(w, 'query', ''))} --limit ${typeof w.limit === 'number' ? w.limit : 200} --json ${fields} > ${out}`,
+        `gh ${noun} list --state ${str(w, 'state', 'open')} --search ${JSON.stringify(str(w, 'query', ''))} --limit ${limit} --json ${fields} > ${out}`,
       ]);
     }
     case 'run': {

@@ -284,7 +284,9 @@ function stepLines(step: IRStep): string[] {
     }
     case 'run': {
       const args = Array.isArray(w.args) ? (w.args as string[]) : [];
-      return [...head, `        run: bun ${str(w, 'script', '')}${args.length ? ' ' + args.join(' ') : ''}`];
+      const cmd = `bun ${str(w, 'script', '')}${args.length ? ' ' + args.join(' ') : ''}`;
+      const mk = str(w, 'mkdir', ''); // ensure an output dir exists (scripts writeFileSync into it)
+      return mk ? block([`mkdir -p ${mk}`, cmd]) : [...head, `        run: ${cmd}`];
     }
     case 'apply':
       return block(APPLY_PLAN_BODY(str(w, 'plan', '.agent-run/plan.json')));
@@ -300,6 +302,10 @@ function stepsWorkflowYml(wf: IRWorkflow, ir: AutonomyIR): string {
     throw new Error(`steps workflow ${wf.name}: needsModel not yet implemented (see docs/IR-WORKFLOWS.md)`);
   }
   const caps = ((wf.config as Record<string, unknown>).capabilities as string[]) ?? [];
+  // GH_TOKEN is only needed when a step shells out to `gh` (gather/apply); a pure-script pipeline
+  // (e.g. governance-report) gets no token. Extra job env (model vars, …) rides on config.env.
+  const usesGh = (wf.steps ?? []).some((s) => s.uses === 'gather' || s.uses === 'apply');
+  const jobEnv = [...(usesGh ? [`      GH_TOKEN: \${{ github.token }}`] : []), ...envLines(wf)];
   return [
     `name: ${wf.name}`,
     ...onLinesForSteps(wf),
@@ -310,9 +316,7 @@ function stepsWorkflowYml(wf: IRWorkflow, ir: AutonomyIR): string {
     `  ${wf.name}:`,
     `    runs-on: ubuntu-latest`,
     ...timeoutLines(wf),
-    `    env:`,
-    `      GH_TOKEN: \${{ github.token }}`,
-    ...envLines(wf),
+    ...(jobEnv.length ? ['    env:', ...jobEnv] : []),
     `    steps:`,
     `      - uses: actions/checkout@v4`,
     `      - uses: oven-sh/setup-bun@v2`,

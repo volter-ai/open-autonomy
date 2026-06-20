@@ -6,6 +6,7 @@
 // verdict but NOT the guard. Self-contained; a faithful port of public-agent-strategy-review.yml.
 import { $ } from 'bun';
 import { mkdirSync, readFileSync } from 'node:fs';
+import { mintModelToken, revokeModelToken } from './model-token.js';
 
 const env = (k: string, d = '') => process.env[k] || d;
 const EVENT = env('GITHUB_EVENT_NAME', 'workflow_dispatch');
@@ -72,13 +73,11 @@ let summary = `Ratified by maintainer ${ACTOR} (human-in-the-loop).`;
 let decisionActor = 'human-operator';
 if (mode === 'review') {
   await Bun.write(`${D}/issue.json`, JSON.stringify({ number: Number(pr), title: 'Strategy review', body: '', user: { login: ACTOR } }));
-  const mint = await $`bun scripts/model-proxy-mint.ts --issue ${D}/issue.json --models ${model} --max-usd-cents ${env('PUBLIC_AGENT_STRATEGY_REVIEW_MAX_USD_CENTS', '50')} --max-requests 2 --purpose review`.nothrow().text();
-  const runId = mint.match(/^run_id=(.*)$/m)?.[1] ?? '';
-  const token = mint.match(/^token=(.*)$/m)?.[1] ?? '';
+  const { runId, token } = await mintModelToken({ issue: `${D}/issue.json`, models: model, maxUsdCents: Number(env('PUBLIC_AGENT_STRATEGY_REVIEW_MAX_USD_CENTS', '50')), maxRequests: 2, purpose: 'review' });
   await $`bun scripts/public-agent-strategy-review.ts --diff ${D}/roadmap.diff --proposal ${D}/proposal.txt --rubric .open-autonomy/strategy-rubric.yml --constitution docs/CONSTITUTION.md --provider ${env('PUBLIC_AGENT_STRATEGY_REVIEW_PROVIDER', 'openai')} --model ${model} --out ${D}/verdict.json`
     .env({ ...process.env, MODEL_PROXY_TOKEN: token })
     .nothrow();
-  if (runId) await $`bun scripts/model-proxy-revoke.ts --run-id ${runId}`.nothrow();
+  await revokeModelToken(runId);
   const v = json<{ verdict: string; human_required: boolean | string; summary: string }>(`${D}/verdict.json`, { verdict: 'failed', human_required: true, summary: 'Reviewer did not produce a verdict.' });
   verdict = v.verdict;
   humanRequired = String(v.human_required);

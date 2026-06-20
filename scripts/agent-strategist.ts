@@ -7,6 +7,7 @@
 import { $ } from 'bun';
 import { mkdirSync, existsSync, readFileSync } from 'node:fs';
 import { launch } from './runner.js';
+import { mintModelToken, revokeModelToken } from './model-token.js';
 
 const env = (k: string, d = '') => process.env[k] || d;
 // Schedule and manual dispatch both apply (you run the strategist to propose); set the AGENT_APPLY
@@ -57,9 +58,7 @@ await Bun.write(
   '.agent-run/strategist/issue.json',
   JSON.stringify({ number: 0, title: 'Strategist run', body: '', user: { login: env('GITHUB_ACTOR', 'open-autonomy') } }),
 );
-const mint = await $`bun scripts/model-proxy-mint.ts --issue .agent-run/strategist/issue.json --models ${model} --max-usd-cents ${env('PUBLIC_AGENT_STRATEGIST_MAX_USD_CENTS', '100')} --max-requests 2 --purpose pm`.text();
-const runId = mint.match(/^run_id=(.*)$/m)?.[1] ?? '';
-const token = mint.match(/^token=(.*)$/m)?.[1] ?? '';
+const { runId, token } = await mintModelToken({ issue: '.agent-run/strategist/issue.json', models: model, maxUsdCents: Number(env('PUBLIC_AGENT_STRATEGIST_MAX_USD_CENTS', '100')), maxRequests: 2, purpose: 'pm' });
 
 // 4. Synthesize the roadmap proposal (writes roadmap.yml + archive in place).
 if (!existsSync('.open-autonomy/strategist-archive.json')) await Bun.write('.open-autonomy/strategist-archive.json', '');
@@ -70,7 +69,7 @@ try {
   });
 } finally {
   // 5. Revoke the run regardless of synthesis outcome.
-  if (runId) await $`bun scripts/model-proxy-revoke.ts --run-id ${runId}`.nothrow();
+  await revokeModelToken(runId);
 }
 
 if (!apply) {

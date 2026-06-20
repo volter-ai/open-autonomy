@@ -6,6 +6,7 @@
 import { $ } from 'bun';
 import { mkdirSync, readFileSync, existsSync } from 'node:fs';
 import { launch, list } from './runner.js';
+import { mintModelToken, revokeModelToken } from './model-token.js';
 
 const env = (k: string, d = '') => process.env[k] || d;
 const ACTOR = env('GITHUB_ACTOR', 'open-autonomy-pm');
@@ -113,15 +114,12 @@ for (const number of numbers) {
     }),
   );
 
-  // Mint a per-issue model token.
-  const mintRes = await $`bun scripts/model-proxy-mint.ts --issue ${issuePath} --models ${MODEL} --max-usd-cents ${MAX_USD_CENTS} --max-requests 2 --purpose pm`
-    .nothrow()
-    .quiet();
-  const mintOut = mintRes.stdout.toString() + mintRes.stderr.toString();
+  // Mint a per-issue model token (via the substrate's model-token seam).
+  const minted = await mintModelToken({ issue: issuePath, models: MODEL, maxUsdCents: Number(MAX_USD_CENTS), maxRequests: 2, purpose: 'pm' });
 
-  if (mintRes.exitCode !== 0) {
+  if (!minted.ok) {
     // Lifetime budget exhausted is terminal: auto-pause the repo until a top-up + maintainer resume.
-    if (mintOut.includes('repo_lifetime_budget_exhausted')) {
+    if (minted.budgetExhausted) {
       await $`gh label create agent-repo-paused --color b60205 --description "Repo-level autonomy pause"`.nothrow().quiet();
       if ((await $`gh issue list --state open --label agent-repo-paused --limit 1 --json number --jq 'length'`.text()).trim() === '0') {
         await $`gh issue create --title "Repo paused: lifetime model budget exhausted" --label agent-repo-paused --body ${'This repository has spent its lifetime model budget and is paused. Top up its budget (sponsorship) via the model proxy, then remove the `agent-repo-paused` label / close this issue to resume.'}`.nothrow();
@@ -144,8 +142,7 @@ for (const number of numbers) {
     continue;
   }
 
-  const runId = mintOut.match(/^run_id=(.*)$/m)?.[1] ?? '';
-  const token = mintOut.match(/^token=(.*)$/m)?.[1] ?? '';
+  const { runId, token } = minted;
 
   await $`bun scripts/public-agent-pm.ts --issue ${issuePath} --provider ${PROVIDER} --model ${MODEL} --out ${pmPath}`.env({
     ...process.env,
@@ -153,7 +150,7 @@ for (const number of numbers) {
   });
   const pm = JSON.parse(readFileSync(pmPath, 'utf8')) as { action: string; risk?: string; reason?: string };
   await decision(['--stage', 'pm_triage', '--issue', number, '--actor', ACTOR, '--decision', pm.action, '--risk', pm.risk ?? '', '--reason', pm.reason ?? '', '--run-id', runId, '--subject-json', `{"type":"issue","number":${number}}`, '--evidence', `issue:${number},pm:${pmPath}`, '--next-action', pm.action, '--out-dir', decisionDir]);
-  if (runId) await $`bun scripts/model-proxy-revoke.ts --run-id ${runId}`.nothrow();
+  await revokeModelToken(runId);
 
   await $`bun scripts/public-agent-dispatcher.ts --issue ${issuePath} --pm ${pmPath} --out ${dispatchPath}`;
   const d = JSON.parse(readFileSync(dispatchPath, 'utf8')) as {

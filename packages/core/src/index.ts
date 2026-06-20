@@ -6,3 +6,4 @@ export * from './cli';
 export * from './conformance';
 export * from './materialize';
 export * from './ir-yaml';
+export * from './upgrade';

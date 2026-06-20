@@ -5,19 +5,15 @@
 // not the profile (which would then ship vulnerable installations) fails the build.
 //
 // Repo-OWNED + seed-only files (package.json, README, roadmap, autonomy.yml, CONSTITUTION, the dev
-// docs) are owned per-repo and legitimately differ — they mirror open-autonomy-upgrade.ts's
-// SEED_ONLY_PATHS / non-managed set and are excluded here.
+// docs) are owned per-repo and legitimately differ — this is the SAME install-owned set the upgrade
+// uses (seed-if-missing, never overwrite), declared once in core, and excluded here.
 import { readFileSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
-import { parseIr } from '@open-autonomy/core';
+import { parseIr, INSTALL_OWNED_PATHS } from '@open-autonomy/core';
 import { compileGithub } from '@open-autonomy/substrate-github';
 
 const P = 'profiles/self-driving';
-const REPO_OWNED = new Set([
-  'package.json', 'bun.lock', 'README.md', 'CHANGELOG.md', '.gitignore', 'AGENTS.md',
-  '.open-autonomy/autonomy.yml', '.open-autonomy/roadmap.yml', '.open-autonomy/strategist-sources.json',
-  'docs/CONSTITUTION.md', 'docs/PROJECT.md', 'docs/ROADMAP.md', 'docs/ARCHITECTURE.md',
-]);
+const REPO_OWNED = new Set(INSTALL_OWNED_PATHS);
 
 const ir = parseIr(readFileSync(join(P, 'ir.yml'), 'utf8'));
 const out = compileGithub(ir);

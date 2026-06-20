@@ -438,6 +438,15 @@ function agentYml(name: string, agent: IRAgent): string {
   return isScript(agent.behavior) ? deterministicYml(name, agent) : wrapperYml(name, agent);
 }
 
+// The shared, substrate-neutral runtime scripts (portable agent implementations + gates + the
+// transparent model call). Both substrates inject these; only the per-substrate execution layer and the
+// github-only scripts (proxy/mint/wrapper) differ. Exposed so another substrate can build its install
+// from the shared layer without depending on the github compiler. (The runtime's eventual neutral home is
+// the coordinated relocation noted in the package readme; until then it is vendored here.)
+export function runtimeFiles(): Record<string, string> {
+  return { ...RUNTIME };
+}
+
 export function compileGithub(ir: AutonomyIR): CompileOutput {
   const generated: Record<string, string> = {};
   // The manifest is generated unless the profile carries a hand-authored autonomy.yml verbatim.

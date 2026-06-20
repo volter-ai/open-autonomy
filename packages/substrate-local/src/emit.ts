@@ -1,19 +1,32 @@
-// Emit autonomy.ir.v1 → a LOCAL-loop installation. The install MIRRORS the github layout (the same
-// injected agent runtime + manifest + resources at the repo root), so the agents — which talk to gh for
-// tasks/artifact on every substrate — run unchanged. Only the EXECUTION layer differs: instead of
-// github workflows + the gh runner, local ships a loop driver (run.mjs on an interval) + the local
-// runner (launch via termfleet). The runner is the one true substrate seam.
-//
-// The shared agent runtime + manifest currently live in @open-autonomy/substrate-github; we reuse its
-// compile output and strip the github-specific execution layer. (A neutral home for the shared runtime
-// is a future cleanup — the agent code itself is substrate-agnostic.)
+// Emit autonomy.ir.v1 → a LOCAL-loop installation. This compiler is INDEPENDENT of the github compiler:
+// it builds the install from the shared layer (the substrate-neutral runtime scripts + the manifest +
+// resource copies) and adds the LOCAL execution layer (a loop driver on an interval + the local runner
+// via termfleet + ambient model env). It never emits github's execution layer — no workflows, no proxy,
+// no mint, no wrapper — so a local install and a github install share the portable behavior and ZERO
+// execution-layer code. The model endpoint is the box's: on local that means ambient env (the operator's
+// OPENAI_API_KEY / OPENAI_BASE_URL, or a local proxy they run) — no injection, no mint.
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { cronOf } from '@open-autonomy/core';
 import type { AutonomyIR, CompileOutput } from '@open-autonomy/core';
 import { SUPPORTED_RUNNERS, type RunnerName } from '@open-autonomy/core';
-import { compileGithub } from '@open-autonomy/substrate-github';
+import { emitAutonomy, runtimeFiles } from '@open-autonomy/substrate-github';
+
+// github-only runtime scripts — the proxy/mint clients, the privilege-separated wrapper machinery, and
+// the box-setup provisioner. A trusted local box never mints or wraps, so these are excluded from the
+// local install (keeping it free of github execution-layer code).
+const GITHUB_ONLY = new Set([
+  'scripts/provision-model-endpoint.ts',
+  'scripts/model-proxy-mint.ts',
+  'scripts/model-proxy-exchange.ts',
+  'scripts/model-proxy-revoke.ts',
+  'scripts/github-agent-publish.ts',
+  'scripts/github-agent-publish.test.ts',
+  'scripts/github-agent-session.ts',
+  'scripts/github-agent-session.test.ts',
+  'scripts/codex-agent-run.ts',
+]);
 
 // A script behavior runs directly; a prose skill is launched through the runner (same rule as github).
 const isScript = (behavior: string): boolean => /\.(ts|mjs|js)$/.test(behavior);
@@ -87,16 +100,19 @@ export function compileLocal(ir: AutonomyIR, opts: { name?: string; runner?: Run
     throw new Error(`unsupported runner "${runner}"; supported: ${SUPPORTED_RUNNERS.join(', ')}`);
   }
 
-  // Reuse github's compile (the shared agent runtime + manifest + resource copies), then strip its
-  // EXECUTION layer (workflows + the control plane) and bolt on the local one.
-  const gh = compileGithub(ir);
   const generated: Record<string, string> = {};
-  for (const [path, content] of Object.entries(gh.generated)) {
-    if (path.startsWith('.github/')) continue; // github workflows + agent-control.mjs are github-only
-    generated[path] = content;
+
+  // Shared layer: the manifest, generated the same way for every substrate (unless carried verbatim).
+  if (!ir.resources.includes('.open-autonomy/autonomy.yml')) {
+    generated['.open-autonomy/autonomy.yml'] = Bun.YAML.stringify(emitAutonomy(ir) as Record<string, unknown>);
+  }
+  // Shared layer: the substrate-neutral runtime scripts, minus the github-only ones.
+  for (const [path, content] of Object.entries(runtimeFiles())) {
+    if (!GITHUB_ONLY.has(path)) generated[path] = content;
   }
 
-  // The local runner OVERRIDES the github runner.ts injected from the runtime — launches go to termfleet.
+  // Local execution layer: the runner OVERRIDES the github runner.ts from the runtime — launches go to
+  // termfleet, not `gh workflow run`.
   generated['scripts/runner.ts'] = RUNNER_FRONTEND;
   generated['scripts/run-agent.mjs'] = RUN_AGENT_DRIVER;
   generated['scripts/autonomy-runner.mjs'] = RUNNER_BACKEND;
@@ -120,8 +136,16 @@ export function compileLocal(ir: AutonomyIR, opts: { name?: string; runner?: Run
   )}\n`;
   Object.assign(generated, promptFiles(ir, name));
 
-  // Copies: reuse github's (skills + resources at the repo root) so the agents' cwd-relative gh + script
-  // paths resolve unchanged. Drop the github-only workflow resources.
-  const copies = gh.copies.filter((c) => !c.to.startsWith('.github/'));
+  // Copies: skill behaviors + the profile's resources at the repo root, so the agents' cwd-relative gh +
+  // script paths resolve unchanged. Drop any github-only resources (e.g. repo CI under .github/).
+  const copies: Array<{ from: string; to: string }> = [];
+  for (const agent of Object.values(ir.agents)) {
+    if (!isScript(agent.behavior)) {
+      copies.push({ from: `skills/${agent.behavior}/SKILL.md`, to: `.codex/skills/${agent.behavior}/SKILL.md` });
+    }
+  }
+  for (const r of ir.resources) {
+    if (!r.startsWith('.github/')) copies.push({ from: r, to: r });
+  }
   return { generated, copies };
 }

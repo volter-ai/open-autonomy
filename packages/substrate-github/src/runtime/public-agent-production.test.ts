@@ -1,7 +1,14 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, test } from 'bun:test';
 
+// Production wiring after the agent-model migration: a model-interpreted agent (developer) compiles to
+// the privilege-separated wrapper; a deterministic agent compiles to a one-step job that runs a
+// self-contained scripts/agent-<role>.ts orchestrator. So the wiring these tests guard now lives in the
+// entry scripts (and the wrapper), not in hand-written workflow shell — assert it at its new home, plus
+// that each workflow actually invokes its orchestrator.
 const workflow = (name: string) => readFileSync(new URL(`../.github/workflows/${name}`, import.meta.url), 'utf8');
+const script = (name: string) => readFileSync(new URL(`../scripts/${name}`, import.meta.url), 'utf8');
+const control = () => readFileSync(new URL('../.github/agent-control.mjs', import.meta.url), 'utf8');
 
 describe('public agent production readiness', () => {
   test('workflows opt into Node 24 JavaScript actions', () => {
@@ -20,24 +27,33 @@ describe('public agent production readiness', () => {
     }
   });
 
-  test('operator controls are wired before model minting', () => {
+  test('operator controls run as a separate job, before any model work', () => {
     const text = workflow('public-agent.yml');
-    expect(text).toContain("startsWith(github.event.comment.body, '/agent pause')");
-    expect(text).toContain("startsWith(github.event.comment.body, '/agent status')");
-    expect(text).toContain('Handle operator control');
-    expect(text.indexOf('Handle operator control')).toBeLessThan(text.indexOf('Mint triage model token'));
-    expect(text).toContain('Agent retry did not find a failed infrastructure run');
+    // A `/agent ` comment routes to the control job (the vendored control plane), not the model path.
+    expect(text).toContain('node .github/agent-control.mjs');
+    expect(text).toContain("startsWith(github.event.comment.body, '/agent ')");
+    // The model token is minted only in setup, which is gated OFF for a control comment.
+    expect(text).toContain('model-proxy-mint.ts');
+    expect(text.indexOf('agent-control.mjs')).toBeLessThan(text.indexOf('model-proxy-mint.ts'));
+    for (const verb of ['cancel', 'pause', 'resume', 'status', 'retry']) expect(control()).toContain(verb);
   });
 
-  test('PM and direct develop respect pause/backpressure controls', () => {
-    expect(workflow('public-agent-pm.yml')).toContain('-label:agent-paused');
-    expect(workflow('public-agent-pm.yml')).toContain('-label:agent-repo-paused');
-    expect(workflow('public-agent-pm.yml')).toContain('-label:agent-maintainer-hold');
-    expect(workflow('public-agent-pm.yml')).toContain('-label:needs-info');
-    expect(workflow('public-agent-pm.yml')).toContain('public agent repo pause is enabled; PM sweep skipped');
-    expect(workflow('public-agent.yml')).toContain('repo-level agent pause is enabled');
-    expect(workflow('public-agent.yml')).toContain('agent-repo-paused');
-    expect(workflow('public-agent.yml')).toContain('steps.repo_pause.outputs.paused');
+  test('the agent job is credential-less; the publisher validates the bundle out-of-band', () => {
+    const text = workflow('public-agent.yml');
+    expect(text).toContain('persist-credentials: false');
+    expect(text).toContain('permissions: { contents: read, issues: read, pull-requests: read, id-token: write }');
+    expect(text).toContain('github-agent-publish.ts');
+    expect(text).toContain('--expected-run-id');
+  });
+
+  test('PM sweep respects pause/backpressure controls', () => {
+    const pm = script('agent-pm.ts');
+    expect(pm).toContain('-label:agent-paused');
+    expect(pm).toContain('-label:agent-repo-paused');
+    expect(pm).toContain('-label:agent-maintainer-hold');
+    expect(pm).toContain('-label:needs-info');
+    expect(pm).toContain('public agent repo pause is enabled; PM sweep skipped');
+    expect(workflow('public-agent-pm.yml')).toContain('bun scripts/agent-pm.ts');
   });
 
   test('model proxy admin exposes status and revoke operations', () => {
@@ -46,30 +62,23 @@ describe('public agent production readiness', () => {
     expect(text).toContain('/admin/runs/${RUN_ID}/revoke');
   });
 
-  test('publisher rejections are surfaced before the job fails', () => {
-    const text = workflow('public-agent.yml');
-    expect(text).toContain('Agent run blocked: publisher rejected the generated bundle.');
-    expect(text).toContain('--decision "rejected"');
-    expect(text).toContain('agent-publisher-decisions-${{ needs.agent-runner.outputs.run_id }}');
-    expect(text.indexOf('Comment on publisher rejection')).toBeLessThan(text.indexOf('Stop after publisher rejection'));
-    expect(text.indexOf('Stop after publisher rejection')).toBeLessThan(text.indexOf('Create or update pull request'));
-  });
-
   test('direct review uses shared control files and loop budgets', () => {
-    const text = workflow('public-agent-review.yml');
-    expect(text).toContain('public-agent-control-files.ts');
-    expect(text).toContain('public-agent-loop-budget.ts');
-    expect(text).toContain('--kind ci');
-    expect(text).toContain('--kind review');
-    expect(text).toContain('--control-files .agent-run/control-files.json');
+    const rv = script('agent-reviewer.ts');
+    expect(rv).toContain('public-agent-control-files.ts');
+    expect(rv).toContain('public-agent-loop-budget.ts');
+    expect(rv).toContain('--kind ci');
+    expect(rv).toContain('--kind review');
+    expect(rv).toContain('--control-files .agent-run/control-files.json');
+    expect(workflow('public-agent-review.yml')).toContain('bun scripts/agent-reviewer.ts');
   });
 
   test('planner workflow applies roadmap issue plans', () => {
-    const text = workflow('open-autonomy-planner.yml');
-    expect(text).toContain('public-agent-planner.ts');
-    expect(text).toContain('origin:roadmap-planner');
-    expect(text).toContain('gh issue create');
-    expect(text).toContain('gh issue edit');
+    const pl = script('agent-planner.ts');
+    expect(pl).toContain('public-agent-planner.ts');
+    expect(pl).toContain('origin:roadmap-planner');
+    expect(pl).toContain('gh issue create');
+    expect(pl).toContain('gh issue edit');
+    expect(workflow('open-autonomy-planner.yml')).toContain('bun scripts/agent-planner.ts');
   });
 
   test('fleet preflight and governance workflows are wired', () => {
@@ -82,14 +91,14 @@ describe('public agent production readiness', () => {
   });
 
   test('upgrade workflow opens template upgrade PRs', () => {
-    const text = workflow('open-autonomy-upgrade.yml');
-    expect(text).toContain('Resolve upgrade template');
-    expect(text).toContain('OPEN_AUTONOMY_TEMPLATE_REPO');
+    const up = script('agent-upgrade.ts');
+    expect(up).toContain('OPEN_AUTONOMY_TEMPLATE_REPO');
     // the canonical installation is COMPILED from the profile (no hand-maintained template dir)
-    expect(text).toContain('autonomy-compile.ts profiles/self-driving github');
-    expect(text).toContain('.agent-run/open-autonomy-template');
-    expect(text).toContain('open-autonomy-upgrade.ts');
-    expect(text).toContain('gh pr create');
-    expect(text).toContain('pull-requests: write');
+    expect(up).toContain('autonomy-compile.ts profiles/self-driving github');
+    expect(up).toContain('.agent-run/open-autonomy-template');
+    expect(up).toContain('open-autonomy-upgrade.ts');
+    expect(up).toContain('gh pr create');
+    expect(workflow('open-autonomy-upgrade.yml')).toContain('pull-requests: write');
+    expect(workflow('open-autonomy-upgrade.yml')).toContain('bun scripts/agent-upgrade.ts');
   });
 });

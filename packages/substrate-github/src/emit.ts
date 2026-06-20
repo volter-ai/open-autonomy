@@ -89,6 +89,7 @@ function eventLines(event: string, config?: Record<string, unknown>): string[] {
 const TRIGGER_SOURCE_GH: Record<string, string> = {
   'subject.ref': "${{ github.event.issue.number || github.event.inputs.issue_number || github.event.pull_request.number }}",
   'subject.actor': "${{ github.event.sender.login || github.actor }}",
+  'subject.actorRole': '${{ github.event.comment.author_association }}',
   'subject.text': "${{ github.event.comment.body || github.event.issue.body }}",
   'trigger.kind': "${{ github.event.action || github.event_name }}",
 };
@@ -115,7 +116,13 @@ function onLines(agent: IRAgent, kind: 'run' | 'launch'): string[] {
     lines.push('  issue_comment:', '    types: [created]');
     seen.add('workflow_dispatch').add('issue_comment');
   } else {
-    lines.push('  workflow_dispatch: {}');
+    // A deterministic agent that targets a work item exposes the standard `issue_number` dispatch
+    // input (the github resolution of subject.ref reads it); otherwise plain manual dispatch.
+    if (subjectRefParam(agent)) {
+      lines.push('  workflow_dispatch:', '    inputs:', ...DISPATCH_INPUTS.slice(1));
+    } else {
+      lines.push('  workflow_dispatch: {}');
+    }
     seen.add('workflow_dispatch');
   }
   for (const t of agent.triggers) {
@@ -183,13 +190,58 @@ function artifactLines(name: string): string[] {
   ];
 }
 
+// A deterministic agent's job permissions, realized from its capabilities (docs/CAPABILITIES.md). A
+// deterministic job is TRUSTED (its own repo code, not model-interpreted), so the baseline is
+// contents:write — it may push/merge — and capabilities widen it. The strict least-privilege boundary
+// lives in the wrapper's untrusted agent job, not here.
+function deterministicPerms(caps: string[], extra?: unknown): string {
+  const p: Record<string, string> = {
+    contents: 'write',
+    'id-token': 'write',
+    'pull-requests': 'read',
+    checks: 'read',
+  };
+  for (const c of caps) {
+    if (c === 'artifact:author') p['pull-requests'] = 'write';
+    else if (c === 'tasks:author' || c === 'tasks:converse') {
+      p.issues = 'write';
+      p['pull-requests'] = 'write';
+    } else if (c === 'agent:launch' || c === 'agent:update' || c === 'agent:cancel') p.actions = 'write';
+    else if (c === 'agent:list' && !p.actions) p.actions = 'read';
+  }
+  // A github-specific permission the capability vocabulary does not name (e.g. statuses:write for
+  // posting a commit status) is carried via `config.permissions` and merged here, last-write-wins.
+  if (extra && typeof extra === 'object') for (const [k, v] of Object.entries(extra as Record<string, unknown>)) p[k] = String(v);
+  return `{ ${Object.entries(p).map(([k, v]) => `${k}: ${v}`).join(', ')} }`;
+}
+
+// The model-proxy credentials a deterministic agent's job needs to mint/revoke model tokens, gated on
+// `config.model` (a github-substrate config key — the box always has a model endpoint, but only agents
+// that call the model need its admin credentials in the job env).
+function modelEnvLines(agent: IRAgent): string[] {
+  if (!cfg(agent).model) return [];
+  return [
+    `      MODEL_PROXY_URL: \${{ vars.MODEL_PROXY_URL }}`,
+    `      MODEL_PROXY_ADMIN_TOKEN: \${{ secrets.MODEL_PROXY_ADMIN_TOKEN }}`,
+    `      MODEL_PROXY_OIDC_AUDIENCE: \${{ vars.MODEL_PROXY_OIDC_AUDIENCE || 'volter-agent-model-proxy' }}`,
+  ];
+}
+
+// Checkout persists the workflow token by default; an agent that never `git push`es (it acts purely
+// through gh/the API) sets `config.persistCredentials: false` for a tighter checkout.
+function checkoutLines(agent: IRAgent): string[] {
+  return cfg(agent).persistCredentials === false
+    ? ['      - uses: actions/checkout@v4', '        with: { persist-credentials: false }']
+    : ['      - uses: actions/checkout@v4'];
+}
+
 // A deterministic agent (script behavior): trusted, runs the script directly. The script is
 // self-contained — it reads/writes via tooling (gh), using the trigger params in its env.
 function deterministicYml(name: string, agent: IRAgent): string {
   return [
     `name: ${name}`,
     ...onLines(agent, 'run'),
-    `permissions: ${capsToPermissions(agent.capabilities ?? [])}`,
+    `permissions: ${deterministicPerms(agent.capabilities ?? [], cfg(agent).permissions)}`,
     ...concurrencyLines(agent),
     `env:`,
     `  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"`,
@@ -199,11 +251,11 @@ function deterministicYml(name: string, agent: IRAgent): string {
     ...timeoutLines(agent),
     `    env:`,
     `      GH_TOKEN: \${{ github.token }}`,
-    `      MODEL_PROXY_URL: \${{ vars.MODEL_PROXY_URL }}`,
+    ...modelEnvLines(agent),
     ...triggerParamsEnv(agent),
     ...envLines(agent),
     `    steps:`,
-    `      - uses: actions/checkout@v4`,
+    ...checkoutLines(agent),
     `      - uses: oven-sh/setup-bun@v2`,
     `      - run: bun install --frozen-lockfile || bun install`,
     `      - run: bun ${agent.behavior}`,
@@ -367,9 +419,12 @@ export function compileGithub(ir: AutonomyIR): CompileOutput {
   if (!ir.resources.includes('.open-autonomy/autonomy.yml')) {
     generated['.open-autonomy/autonomy.yml'] = Bun.YAML.stringify(emitAutonomy(ir) as Record<string, unknown>);
   }
-  // Every agent generates its workflow.
+  // Every agent generates its workflow. The output filename defaults to the agent name; an agent may
+  // pin `config.workflowFile` (a github-substrate key) so the file keeps a name other systems already
+  // reference — the model-proxy OIDC allowlist, cross-agent `gh workflow run`, branch protection.
   for (const [name, agent] of Object.entries(ir.agents)) {
-    generated[`.github/workflows/${name}.yml`] = agentYml(name, agent);
+    const file = typeof cfg(agent).workflowFile === 'string' ? (cfg(agent).workflowFile as string) : `${name}.yml`;
+    generated[`.github/workflows/${file}`] = agentYml(name, agent);
   }
   // Model-interpreted agents carry the operator control plane, so emit its handler.
   if (Object.values(ir.agents).some((a) => !isScript(a.behavior))) {

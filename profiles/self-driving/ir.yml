@@ -1,1 +1,195 @@
-{schema: autonomy.ir.v1,targets: [github],agents: {pm: {skill: open-autonomy-pm,maxConcurrent: 1,config: {capabilities: [tasks:converse,tasks:author,agent:launch]}},developer: {skill: open-autonomy-developer,maxConcurrent: 1,config: {capabilities: [artifact:author,tasks:converse]}},reviewer: {skill: open-autonomy-reviewer,maxConcurrent: 1,config: {capabilities: [tasks:converse,agent:launch]}},planner: {skill: open-autonomy-planner,maxConcurrent: 1,config: {capabilities: [tasks:converse,tasks:author]}},upgrade: {skill: open-autonomy-upgrade,maxConcurrent: 1,config: {capabilities: [artifact:author]}},strategist: {skill: open-autonomy-strategist,maxConcurrent: 1,config: {capabilities: [artifact:author]}},strategy_reviewer: {skill: open-autonomy-strategy-reviewer,maxConcurrent: 1,config: {capabilities: [tasks:converse,agent:launch]}}},workflows: [],resources: [.github/ISSUE_TEMPLATE/bug_report.yml,.github/ISSUE_TEMPLATE/public_agent_session.yml,.github/workflows/ci.yml,.github/workflows/model-proxy-admin.yml,.github/workflows/open-autonomy-governance-report.yml,.github/workflows/open-autonomy-planner.yml,.github/workflows/open-autonomy-preflight.yml,.github/workflows/open-autonomy-strategist.yml,.github/workflows/open-autonomy-upgrade.yml,.github/workflows/public-agent-pm.yml,.github/workflows/public-agent-review.yml,.github/workflows/public-agent-strategy-review.yml,.github/workflows/public-agent.yml,.gitignore,.open-autonomy/autonomy.yml,.open-autonomy/review-rubric.yml,.open-autonomy/roadmap.yml,.open-autonomy/strategist-sources.json,.open-autonomy/strategy-rubric.yml,.open-autonomy/version.json,AGENTS.md,CHANGELOG.md,README.md,VERSION,bun.lock,docs/ARCHITECTURE.md,docs/CONSTITUTION.md,docs/PROJECT.md,docs/ROADMAP.md,docs/standards/code.md,docs/standards/docs.md,docs/standards/security.md,docs/standards/tests.md,package.json],policy: {maxConcurrent: 5,box: {autonomy: {max_open_agent_prs: 5,max_develop_attempts: 2,max_ci_retries: 2,max_review_retries: 2,stale_needs_info_minutes: 10080,require_visible_pm_status: true,require_decision_records: true,require_acceptance_evidence: true},risk: {human_required_paths: [.github/workflows/**,.open-autonomy/autonomy.yml,docs/CONSTITUTION.md,.codex/skills/**,services/**/wrangler.toml],human_required_topics: [auth,secrets,billing,deployment,destructive data migration,dependency trust]},merge: {require_ci: true,require_low_risk_review: true,require_current_head_sha: true,maintainer_block_labels: [do-not-merge,human-required,agent-blocked]},planner: {enabled: true,issue_origin_label_prefix: "origin:",phase_label_prefix: "roadmap:",priority_labels: {high: priority:high,medium: priority:medium,low: priority:low}}}}}
+# Open Autonomy, expressed in its own IR — the profile that compiles to OA's live installation.
+# One unit: an agent = behavior + capabilities + triggers(+params) + config. See docs/AUTONOMY-IR.md.
+# The behavior decides execution: a prose skill folder → the privilege-separated codex wrapper
+# (untrusted → mediated); a `scripts/*.ts` orchestrator → a deterministic job (trusted → direct).
+# `config` is opaque misc the github substrate interprets (workflowFile pins the output filename so the
+# model-proxy OIDC allowlist + cross-agent dispatch + branch protection keep working; model adds the
+# proxy credentials; persistCredentials/permissions/env/timeout/concurrency shape the job).
+schema: autonomy.ir.v1
+targets: [github]
+
+agents:
+  # The only model-interpreted agent: codex writes code in a credential-less sandbox; a trusted
+  # publisher validates the bundle and opens the PR. Triggered by the agent-session label or a comment.
+  developer:
+    behavior: open-autonomy-developer
+    capabilities: [artifact:author, tasks:converse]
+    triggers:
+      - event: issues
+        config: { types: [labeled] }
+        params: { ISSUE_REF: subject.ref }
+    config:
+      workflowFile: public-agent.yml
+      timeout: 90
+
+  # Deterministic PM: sweeps open issues, asks the model for a triage decision, routes the next action.
+  pm:
+    behavior: scripts/agent-pm.ts
+    capabilities: [tasks:converse, tasks:author, agent:launch]
+    triggers:
+      - cron: "*/30 * * * *"
+    config:
+      workflowFile: public-agent-pm.yml
+      model: true
+      persistCredentials: false
+      timeout: 30
+      concurrency: public-agent-pm
+      env:
+        PM_COMMENT_TOKEN: ${{ secrets.PUBLIC_AGENT_TRIGGER_TOKEN || github.token }}
+        PUBLIC_AGENT_PM_LIMIT: ${{ vars.PUBLIC_AGENT_PM_LIMIT || '10' }}
+        PUBLIC_AGENT_PM_MODEL: ${{ vars.PUBLIC_AGENT_PM_MODEL || vars.PUBLIC_AGENT_TRIAGE_MODEL || 'gpt-4o-mini' }}
+        PUBLIC_AGENT_PM_PROVIDER: ${{ vars.PUBLIC_AGENT_PM_PROVIDER || vars.PUBLIC_AGENT_TRIAGE_PROVIDER || 'openai' }}
+        PUBLIC_AGENT_REPO_PAUSED: ${{ vars.PUBLIC_AGENT_REPO_PAUSED || 'false' }}
+        PUBLIC_AGENT_PM_MAX_USD_CENTS: ${{ vars.PUBLIC_AGENT_PM_MAX_USD_CENTS || '25' }}
+
+  # Deterministic reviewer: confirms an autonomous branch, waits on CI, runs the model reviewer, applies
+  # the merge gate. The PR number arrives as the declared TARGET_REF param, not implicit event magic.
+  reviewer:
+    behavior: scripts/agent-reviewer.ts
+    capabilities: [tasks:converse, agent:launch]
+    triggers:
+      - event: issue_comment
+        config: { types: [created] }
+        params:
+          TARGET_REF: subject.ref
+          SUBJECT_TEXT: subject.text
+          ACTOR_ROLE: subject.actorRole
+      - event: pull_request_target
+        config: { types: [opened, synchronize, reopened, ready_for_review] }
+    config:
+      workflowFile: public-agent-review.yml
+      model: true
+      persistCredentials: false
+      timeout: 20
+      concurrency: public-agent-review-${{ github.event.issue.number || github.event.pull_request.number || inputs.issue_number }}
+      env:
+        PUBLIC_AGENT_MAX_CI_RETRIES: ${{ vars.PUBLIC_AGENT_MAX_CI_RETRIES || '2' }}
+        PUBLIC_AGENT_MAX_REVIEW_RETRIES: ${{ vars.PUBLIC_AGENT_MAX_REVIEW_RETRIES || '2' }}
+        PUBLIC_AGENT_REVIEW_MODEL: ${{ vars.PUBLIC_AGENT_REVIEW_MODEL || vars.PUBLIC_AGENT_TRIAGE_MODEL || 'gpt-4o-mini' }}
+        PUBLIC_AGENT_REVIEW_PROVIDER: ${{ vars.PUBLIC_AGENT_REVIEW_PROVIDER || 'openai' }}
+        PUBLIC_AGENT_REVIEW_MAX_USD_CENTS: ${{ vars.PUBLIC_AGENT_REVIEW_MAX_USD_CENTS || '50' }}
+
+  # Deterministic planner: reconciles roadmap.yml against the planner-owned roadmap issues.
+  planner:
+    behavior: scripts/agent-planner.ts
+    capabilities: [tasks:converse, tasks:author]
+    triggers:
+      - cron: "17 6 * * *"
+    config:
+      workflowFile: open-autonomy-planner.yml
+      timeout: 15
+
+  # Deterministic upgrade: compiles the canonical profile, diffs this installation, opens an upgrade PR.
+  upgrade:
+    behavior: scripts/agent-upgrade.ts
+    capabilities: [artifact:author]
+    triggers:
+      - event: workflow_dispatch
+    config:
+      workflowFile: open-autonomy-upgrade.yml
+      timeout: 15
+      env:
+        OPEN_AUTONOMY_TEMPLATE_REPO: ${{ vars.OPEN_AUTONOMY_TEMPLATE_REPO || 'volter-ai/open-autonomy' }}
+        OPEN_AUTONOMY_TEMPLATE_REF: ${{ vars.OPEN_AUTONOMY_TEMPLATE_REF || 'main' }}
+
+  # Deterministic strategist: gathers research signals, synthesizes a roadmap proposal PR, hands off to
+  # strategy review. Proposes; never merges.
+  strategist:
+    behavior: scripts/agent-strategist.ts
+    capabilities: [artifact:author, agent:launch]
+    triggers:
+      - cron: "23 7 * * 1"
+    config:
+      workflowFile: open-autonomy-strategist.yml
+      model: true
+      timeout: 25
+      env:
+        PUBLIC_AGENT_STRATEGIST_MODEL: ${{ vars.PUBLIC_AGENT_STRATEGIST_MODEL || vars.PUBLIC_AGENT_PM_MODEL || 'gpt-4o-mini' }}
+        PUBLIC_AGENT_STRATEGIST_PROVIDER: ${{ vars.PUBLIC_AGENT_STRATEGIST_PROVIDER || 'openai' }}
+        PUBLIC_AGENT_STRATEGIST_MAX_USD_CENTS: ${{ vars.PUBLIC_AGENT_STRATEGIST_MAX_USD_CENTS || '100' }}
+        PUBLIC_AGENT_STRATEGIST_MAX_ITEMS: ${{ vars.PUBLIC_AGENT_STRATEGIST_MAX_ITEMS || '3' }}
+
+  # Deterministic strategy reviewer: ratifies a strategist proposal against the merit rubric behind a
+  # governance guard; a maintainer "/agent ratify" is human-in-the-loop approval. Needs statuses:write
+  # to report the "ci" status on a GITHUB_TOKEN-authored proposal branch.
+  strategy_reviewer:
+    behavior: scripts/agent-strategy-reviewer.ts
+    capabilities: [tasks:converse, agent:launch]
+    triggers:
+      - event: issue_comment
+        config: { types: [created] }
+        params:
+          TARGET_REF: subject.ref
+          SUBJECT_TEXT: subject.text
+          ACTOR_ROLE: subject.actorRole
+    config:
+      workflowFile: public-agent-strategy-review.yml
+      model: true
+      timeout: 20
+      permissions: { statuses: write }
+      env:
+        PUBLIC_AGENT_STRATEGY_REVIEW_MODEL: ${{ vars.PUBLIC_AGENT_STRATEGY_REVIEW_MODEL || vars.PUBLIC_AGENT_REVIEW_MODEL || vars.PUBLIC_AGENT_PM_MODEL || 'gpt-4o-mini' }}
+        PUBLIC_AGENT_STRATEGY_REVIEW_PROVIDER: ${{ vars.PUBLIC_AGENT_STRATEGY_REVIEW_PROVIDER || 'openai' }}
+        PUBLIC_AGENT_STRATEGY_REVIEW_MAX_USD_CENTS: ${{ vars.PUBLIC_AGENT_STRATEGY_REVIEW_MAX_USD_CENTS || '50' }}
+
+policy:
+  maxConcurrent: 5
+  box:
+    autonomy:
+      max_open_agent_prs: 5
+      max_develop_attempts: 2
+      max_ci_retries: 2
+      max_review_retries: 2
+      stale_needs_info_minutes: 10080
+      require_visible_pm_status: true
+      require_decision_records: true
+      require_acceptance_evidence: true
+    risk:
+      human_required_paths:
+        - .github/workflows/**
+        - .open-autonomy/autonomy.yml
+        - docs/CONSTITUTION.md
+        - .codex/skills/**
+        - services/**/wrangler.toml
+      human_required_topics: [auth, secrets, billing, deployment, destructive data migration, dependency trust]
+    merge:
+      require_ci: true
+      require_low_risk_review: true
+      require_current_head_sha: true
+      maintainer_block_labels: [do-not-merge, human-required, agent-blocked]
+    planner:
+      enabled: true
+      issue_origin_label_prefix: "origin:"
+      phase_label_prefix: "roadmap:"
+      priority_labels: { high: priority:high, medium: priority:medium, low: priority:low }
+
+# Repo-owned + substrate-infra files carried verbatim (NOT agents): repo CI, the model-proxy admin
+# control plane, the governance report and preflight jobs, issue templates, control docs, rubrics.
+resources:
+  - .github/ISSUE_TEMPLATE/bug_report.yml
+  - .github/ISSUE_TEMPLATE/public_agent_session.yml
+  - .github/workflows/ci.yml
+  - .github/workflows/model-proxy-admin.yml
+  - .github/workflows/open-autonomy-governance-report.yml
+  - .github/workflows/open-autonomy-preflight.yml
+  - .gitignore
+  - .open-autonomy/autonomy.yml
+  - .open-autonomy/review-rubric.yml
+  - .open-autonomy/roadmap.yml
+  - .open-autonomy/strategist-sources.json
+  - .open-autonomy/strategy-rubric.yml
+  - .open-autonomy/version.json
+  - AGENTS.md
+  - CHANGELOG.md
+  - README.md
+  - VERSION
+  - bun.lock
+  - docs/ARCHITECTURE.md
+  - docs/CONSTITUTION.md
+  - docs/PROJECT.md
+  - docs/ROADMAP.md
+  - docs/standards/code.md
+  - docs/standards/docs.md
+  - docs/standards/security.md
+  - docs/standards/tests.md
+  - package.json

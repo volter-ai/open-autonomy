@@ -8,7 +8,7 @@ agents:
     skill: greeter
     maxConcurrent: 1
     config:
-      capabilities: [issue:comment]
+      capabilities: [tasks:converse]
 workflows:
   - name: greeter-tick
     triggers:

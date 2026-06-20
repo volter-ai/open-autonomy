@@ -112,16 +112,18 @@ function onLines(wf: IRWorkflow, kind: 'run' | 'launch'): string[] {
   return lines;
 }
 
-// Map an agent's declared capabilities (carried in config.box) to a GitHub job `permissions:` block.
-// This is the github adapter interpreting carried config at COMPILE time — the same config a local
-// runner would read at runtime; the box carries it, each substrate reads it when it suits. A launch
-// job also commits the agent's work, so contents:write is baseline.
+// Realize an agent's universal capabilities (docs/CAPABILITIES.md) as a GitHub job `permissions:` block.
+// The capabilities name only universal nouns (artifact/tasks/agent); github is what maps them to its
+// permission model — another substrate maps them differently or ignores them. A launch job also commits
+// the agent's work, so contents:write is baseline.
 function capsToPermissions(caps: string[]): string {
   const p: Record<string, string> = { contents: 'write', 'id-token': 'write' };
+  const grant = (k: string, lvl: string) => { if (p[k] !== 'write') p[k] = lvl; }; // write wins over read
   for (const c of caps) {
-    if (c.startsWith('issue:')) p.issues = 'write';
-    else if (c.startsWith('pr:') || c === 'branch:write') p['pull-requests'] = 'write';
-    else if (c === 'workflow:dispatch') p.actions = 'write';
+    if (c === 'artifact:author') p['pull-requests'] = 'write';
+    else if (c === 'tasks:author' || c === 'tasks:converse') p.issues = 'write';
+    else if (c === 'agent:launch' || c === 'agent:update' || c === 'agent:cancel') p.actions = 'write';
+    else if (c === 'agent:list') grant('actions', 'read');
   }
   return `{ ${Object.entries(p).map(([k, v]) => `${k}: ${v}`).join(', ')} }`;
 }

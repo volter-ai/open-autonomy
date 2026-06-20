@@ -230,12 +230,12 @@ function workflowYml(wf: IRWorkflow, ir: AutonomyIR): string {
     `          GH_TOKEN: \${{ github.token }}`,
     `        run: |`,
     `          mkdir -p .agent-run`,
-    `          if [ "\${{ github.event_name }}" = "workflow_dispatch" ]; then`,
-    `            printf '{"number":0,"title":"ir-agent","body":%s}\\n' "$(jq -Rs . <<< "\${{ github.event.inputs.task }}")" > .agent-run/issue.json`,
+    `          if [ -n "\${{ github.event.inputs.issue_number }}" ]; then`,
+    `            gh issue view "\${{ github.event.inputs.issue_number }}" --json number,title,body,author,labels,comments --jq '{number,title,body,user:{login:.author.login},labels,comments}' > .agent-run/issue.json`,
     `          elif jq -e .issue "$GITHUB_EVENT_PATH" >/dev/null 2>&1; then`,
     `            jq '.issue' "$GITHUB_EVENT_PATH" > .agent-run/issue.json`,
     `          else`,
-    `            printf '{"number":0,"title":"scheduled","body":""}\\n' > .agent-run/issue.json`,
+    `            echo "no issue to act on — trigger via an issue event or pass issue_number"; exit 1`,
     `          fi`,
   ];
   return [

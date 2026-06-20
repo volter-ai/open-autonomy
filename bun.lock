@@ -26,6 +26,7 @@
       "version": "0.0.0",
       "dependencies": {
         "@open-autonomy/core": "workspace:*",
+        "@open-autonomy/substrate-github": "workspace:*",
       },
     },
   },

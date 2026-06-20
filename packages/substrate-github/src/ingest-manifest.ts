@@ -1,31 +1,7 @@
 // Ingest an open-autonomy manifest (autonomy.yml) → autonomy.ir.v1 agents.
-import type { AutonomyIR, Box, Trigger } from '@open-autonomy/core';
+import type { AutonomyIR, Box, OAManifest, Trigger } from '@open-autonomy/core';
 
-export interface OAManifest {
-  schema?: string;
-  documents?: Record<string, unknown>;
-  skills?: Record<string, string>;
-  agents?: Record<
-    string,
-    {
-      skill?: string;
-      workflowFile?: string;
-      params?: Record<string, string>;
-      // `schedule` is the cron; any other key is an event trigger carried verbatim.
-      triggers?: { schedule?: string; [event: string]: unknown };
-      capabilities?: string[];
-      timeout?: number;
-      concurrency?: string;
-      env?: Record<string, string>;
-    }
-  >;
-  policy?: {
-    autonomy?: Record<string, unknown>;
-    risk?: Record<string, unknown>;
-    merge?: Record<string, unknown>;
-    planner?: Record<string, unknown>;
-  };
-}
+export type { OAManifest };
 
 export function ingestAutonomy(m: OAManifest): AutonomyIR {
   const agents: AutonomyIR['agents'] = {};

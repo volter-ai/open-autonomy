@@ -3,7 +3,7 @@
   "private": true,
   "type": "module",
   "packageManager": "bun@1.3.10",
-  "workspaces": ["packages/*"],
+  "workspaces": ["packages/*", "scripts"],
   "scripts": {
     "check:autonomy": "bunx tsc -p tsconfig.json",
     "check:core": "bun test packages/core/src/*.test.ts",

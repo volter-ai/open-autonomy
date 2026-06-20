@@ -8,10 +8,13 @@
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { cronOf } from '@open-autonomy/core';
+import { cronOf, emitAutonomy, isScript } from '@open-autonomy/core';
 import type { AutonomyIR, CompileOutput } from '@open-autonomy/core';
 import { SUPPORTED_RUNNERS, type RunnerName } from '@open-autonomy/core';
-import { emitAutonomy, runtimeFiles } from '@open-autonomy/substrate-github';
+// Only the shared portable runtime is borrowed from the github substrate (its neutral relocation is the
+// remaining de-vendor work); the manifest serialization + IR helpers now come from core, so local's emit
+// no longer depends on github's emit.
+import { runtimeFiles } from '@open-autonomy/substrate-github';
 
 // github-only runtime scripts — the proxy/mint clients, the privilege-separated wrapper machinery, and
 // the box-setup provisioner. A trusted local box never mints or wraps, so these are excluded from the
@@ -27,9 +30,6 @@ const GITHUB_ONLY = new Set([
   'scripts/github-agent-session.test.ts',
   'scripts/codex-agent-run.ts',
 ]);
-
-// A script behavior runs directly; a prose skill is launched through the runner (same rule as github).
-const isScript = (behavior: string): boolean => /\.(ts|mjs|js)$/.test(behavior);
 
 const here = dirname(fileURLToPath(import.meta.url));
 // The domain-free runner backend (TermfleetRunner + CLI) and the agent-facing runner seam — emitted

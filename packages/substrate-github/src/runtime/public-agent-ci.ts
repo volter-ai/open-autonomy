@@ -103,6 +103,10 @@ function normalizeConclusion(conclusion: string | undefined, bucket: string): st
 function isStale(completedAt: string, staleAfterMinutes: number, now: Date): boolean {
   const completed = new Date(completedAt);
   if (!Number.isFinite(completed.getTime())) return false;
+  // A commit STATUS (vs a check run) has no completion time — gh reports the zero date
+  // ("0001-01-01T00:00:00Z", a large negative epoch). Treat "no real completion time" as not stale
+  // rather than ~2000 years old (which would wedge the gate at "stale → wait" forever).
+  if (completed.getTime() <= 0) return false;
   return now.getTime() - completed.getTime() > staleAfterMinutes * 60_000;
 }
 

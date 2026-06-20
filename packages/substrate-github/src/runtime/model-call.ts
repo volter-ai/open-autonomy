@@ -30,10 +30,9 @@ async function anthropic(model: string, prompt: string, maxTokens: number): Prom
   if (!base || !key) throw new Error('ANTHROPIC_BASE_URL and ANTHROPIC_API_KEY are required');
   const res = await fetch(`${base.replace(/\/$/, '')}/v1/messages`, {
     method: 'POST',
-    // Native Anthropic auth is `x-api-key`; we also send `Authorization: Bearer` so the same call works
-    // against a bounded proxy that authenticates by bearer token (the github box endpoint today). A real
-    // Anthropic endpoint uses x-api-key and ignores the extra header.
-    headers: { 'x-api-key': key, authorization: `Bearer ${key}`, 'anthropic-version': '2023-06-01', 'content-type': 'application/json' },
+    // Stock Anthropic auth — `x-api-key`. The box endpoint (a real provider, or the universal proxy) is
+    // wire-compatible, so this is exactly what an Anthropic SDK pointed at OPENAI_BASE_URL would send.
+    headers: { 'x-api-key': key, 'anthropic-version': '2023-06-01', 'content-type': 'application/json' },
     body: JSON.stringify({ model, max_tokens: maxTokens, messages: [{ role: 'user', content: prompt }] }),
   });
   if (!res.ok) throw new Error(`Anthropic model call failed: ${res.status}`);

@@ -151,6 +151,50 @@ describe('agent model proxy', () => {
     expect(status.recent_events[0].provider).toBe('anthropic');
   });
 
+  test('is universal: a stock SDK hits native /v1/messages with x-api-key', async () => {
+    const env = testEnv();
+    const minted = await mint(env, ['claude-sonnet-4-6'], 25, 5);
+
+    globalThis.fetch = (async (input: RequestInfo | URL) => {
+      expect(String(input)).toBe('https://api.anthropic.com/v1/messages');
+      return new Response(JSON.stringify({ id: 'msg_1', usage: { input_tokens: 1000, output_tokens: 1000 } }), {
+        headers: { 'content-type': 'application/json' },
+      });
+    }) as typeof fetch;
+
+    const proxied = await worker.fetch(new Request('https://proxy.test/v1/messages', {
+      method: 'POST',
+      headers: { 'x-api-key': minted.token, 'content-type': 'application/json' },
+      body: JSON.stringify({ model: 'claude-sonnet-4-6', max_tokens: 1000, messages: [] }),
+    }), env, ctx);
+
+    expect(proxied.status).toBe(200);
+    const status = await requestJson(env, `/v1/runs/${minted.run.run_id}`, {
+      headers: { authorization: `Bearer ${minted.token}` },
+    });
+    expect(status.request_count).toBe(1);
+  });
+
+  test('is universal: a stock SDK hits native /v1/chat/completions with Bearer', async () => {
+    const env = testEnv();
+    const minted = await mint(env, ['gpt-4o-mini'], 25, 5);
+
+    globalThis.fetch = (async (input: RequestInfo | URL) => {
+      expect(String(input)).toBe('https://api.openai.com/v1/chat/completions');
+      return new Response(JSON.stringify({ id: 'cmpl_1', usage: { prompt_tokens: 1000, completion_tokens: 1000 } }), {
+        headers: { 'content-type': 'application/json' },
+      });
+    }) as typeof fetch;
+
+    const proxied = await worker.fetch(new Request('https://proxy.test/v1/chat/completions', {
+      method: 'POST',
+      headers: { authorization: `Bearer ${minted.token}`, 'content-type': 'application/json' },
+      body: JSON.stringify({ model: 'gpt-4o-mini', max_tokens: 1000, messages: [] }),
+    }), env, ctx);
+
+    expect(proxied.status).toBe(200);
+  });
+
   test('rejects requests after request limit is reached', async () => {
     const env = testEnv();
     const minted = await mint(env, ['gpt-5-mini'], 100, 1);

@@ -9,7 +9,7 @@ import { LOGO_SVG, renderExplore, renderProject, renderRedeemResult } from './pl
 import { RunBudget, RunBudgetClient } from './run-budget.js';
 import { renderRunwaySvg } from './runway-svg.js';
 import { handleSponsorsWebhook } from './sponsors-webhook.js';
-import { extractBearer, signRunToken, verifyRunToken } from './token.js';
+import { extractBearer, extractModelToken, signRunToken, verifyRunToken } from './token.js';
 import type { Env, MintRunRequest, RunClaims } from './types.js';
 
 export { LimitLedger, RunBudget };
@@ -228,6 +228,14 @@ async function route(req: Request, env: Env, ctx: ExecutionContext): Promise<Res
   const claims = await authedClaims(req, env);
   if (!claims) return error('auth_failed', 401);
 
+  // Universal (native) routes: a stock provider SDK pointed at this host Just Works — Anthropic at
+  // `/v1/messages`, OpenAI at `/v1/chat/completions` and `/v1/responses`. No prefix, no dialect.
+  if (path === '/v1/messages') return handleAnthropic(req, env, claims, ctx);
+  if (path === '/v1/chat/completions') return handleOpenAI(req, env, claims, ctx, '/v1/chat/completions');
+  if (path === '/v1/responses') return handleOpenAI(req, env, claims, ctx, '/v1/responses');
+
+  // Legacy prefixed routes, kept only for the deploy→agent-swap cutover; removed once agents use the
+  // native base URLs everywhere.
   if (path === '/anthropic/v1/messages') return handleAnthropic(req, env, claims, ctx);
   if (path === '/openai/v1/chat/completions') return handleOpenAI(req, env, claims, ctx, '/v1/chat/completions');
   if (path === '/openai/v1/responses') return handleOpenAI(req, env, claims, ctx, '/v1/responses');
@@ -345,7 +353,7 @@ function validateMint(body: MintRunRequest): Response | null {
 }
 
 async function authedClaims(req: Request, env: Env): Promise<RunClaims | null> {
-  const tokenClaims = await verifyRunToken(env, extractBearer(req));
+  const tokenClaims = await verifyRunToken(env, extractModelToken(req));
   if (!tokenClaims) return null;
   const status = await new RunBudgetClient(env.RUNS, tokenClaims.run_id).status() as { revoked?: boolean; claims?: RunClaims | null };
   if (status.revoked || !status.claims) return null;

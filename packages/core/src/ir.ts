@@ -11,17 +11,28 @@ export type Box = Record<string, unknown>;
 // fired where the substrate supports them.
 export type Trigger =
   | { cron: string; params?: Record<string, string> }
-  | { event: string; config?: Box; params?: Record<string, string> };
+  | { event: string; config?: Box; params?: Record<string, string> }
+  // `task` fires when a task enters a portable lifecycle state (docs/TASK-LIFECYCLE.md) — the portable
+  // handoff form. The substrate maps the state to its own events; `event` stays as the native escape hatch.
+  | { task: string; params?: Record<string, string> };
 
-// The one unit of the IR. There is no `workflow`/`launch`/`run`/`raw` — an agent carries its own
-// triggers, and how it executes (deterministic vs model-interpreted) + how its output is trusted are
-// the substrate's realization, not IR fields.
+// An actor's kind: `agent` (machine) or `human` (person). The role is intrinsic and declared; how the
+// role is *realized* (script / model / person / simulator-in-test) is the substrate's choice.
+export type ActorKind = 'agent' | 'human';
+
+// The one unit of the IR — an actor (kind: agent|human). There is no `workflow`/`launch`/`run`/`raw`; an
+// actor carries its own triggers, and how it is realized + how its output is trusted are the substrate's
+// realization, not IR fields. (The map key is still `agents` while the rename to `actors` is mid-migration.)
 export interface IRAgent {
   behavior: string; // what it does — instructions/spec folder, relative to the profile root
   capabilities: string[]; // its authority (docs/CAPABILITIES.md); pure authority, no trust
   triggers: Trigger[]; // when it fires + the params it forwards (≥1; only cron is interpreted)
   config: Box; // opaque misc the substrate interprets: timeout, concurrency, env, maxConcurrent, model bounds, …
+  kind?: ActorKind; // the role; default `agent`. `human` → realized by routing to a person (or a simulator in test).
 }
+
+/** Forward-compat alias: the unit is an actor (kinds agent|human). */
+export type IRActor = IRAgent;
 
 /** The first cron trigger across an agent's triggers, if any — the only trigger the IR interprets. */
 export function cronOf(a: IRAgent): string | undefined {
@@ -62,8 +73,13 @@ export function validateIR(ir: AutonomyIR): string[] {
     if (!a.behavior) errors.push(`agent ${name}: missing behavior`);
     if (!Array.isArray(a.capabilities)) errors.push(`agent ${name}: capabilities must be an array`);
     if (!a.triggers || a.triggers.length === 0) errors.push(`agent ${name}: needs at least one trigger`);
+    if (a.kind !== undefined && a.kind !== 'agent' && a.kind !== 'human')
+      errors.push(`agent ${name}: kind must be 'agent' or 'human'`);
     for (const t of a.triggers ?? []) {
-      if (!('cron' in t) && !('event' in t)) errors.push(`agent ${name}: trigger must be a cron or an event`);
+      if (!('cron' in t) && !('event' in t) && !('task' in t))
+        errors.push(`agent ${name}: trigger must be a cron, an event, or a task`);
+      else if ('task' in t && (typeof t.task !== 'string' || t.task.length === 0))
+        errors.push(`agent ${name}: task trigger needs a lifecycle state`);
     }
   }
   return errors;
@@ -77,7 +93,9 @@ export function irShape(ir: AutonomyIR) {
     triggers: Object.entries(ir.agents)
       .map(([name, a]) => ({
         agent: name,
-        triggers: (a.triggers ?? []).map((t) => ('cron' in t ? `cron:${t.cron}` : `event:${t.event}`)).sort(),
+        triggers: (a.triggers ?? [])
+          .map((t) => ('cron' in t ? `cron:${t.cron}` : 'task' in t ? `task:${t.task}` : `event:${t.event}`))
+          .sort(),
       }))
       .sort((x, y) => x.agent.localeCompare(y.agent)),
     resourceCount: ir.resources.length,

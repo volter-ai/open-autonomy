@@ -46,7 +46,10 @@ export function emitAutonomy(ir: AutonomyIR): OAManifest {
     const triggers: { schedule?: string; [event: string]: unknown } = {};
     for (const t of agent.triggers ?? []) {
       if ('cron' in t) triggers.schedule = t.cron;
-      else triggers[t.event] = t.config ?? true;
+      else {
+        const e = 'task' in t ? taskAsEvent(t.task) : { event: t.event, config: t.config };
+        triggers[e.event] = e.config ?? true;
+      }
     }
     // The agent's declared trigger params (param name -> documented source), unioned across triggers.
     // The runner needs these to resolve a launch's params into the agent's env (github does it in the
@@ -86,6 +89,15 @@ const DISPATCH_INPUTS = [
 
 // Render a carried (non-cron) event trigger as github `on:` YAML; its config (issues `types`, …) is
 // carried verbatim block-style (scalar | string[]).
+// github's (partial) realization of the portable `task:` trigger (docs/TASK-LIFECYCLE.md): `in-review` is
+// a pull-request event; label-states ride `issues`/`labeled` (the runtime reads which label maps to the
+// state). Another substrate maps the same states to its own machinery.
+function taskAsEvent(state: string): { event: string; config?: Record<string, unknown> } {
+  if (state === 'in-review')
+    return { event: 'pull_request_target', config: { types: ['opened', 'reopened', 'ready_for_review'] } };
+  return { event: 'issues', config: { types: ['labeled'] } };
+}
+
 function eventLines(event: string, config?: Record<string, unknown>): string[] {
   if (!config || Object.keys(config).length === 0) return [`  ${event}: {}`];
   const lines = [`  ${event}:`];
@@ -138,9 +150,11 @@ function onLines(agent: IRAgent, kind: 'run' | 'launch'): string[] {
     seen.add('workflow_dispatch');
   }
   for (const t of agent.triggers) {
-    if ('cron' in t || seen.has(t.event)) continue;
-    seen.add(t.event);
-    lines.push(...eventLines(t.event, t.config));
+    if ('cron' in t) continue;
+    const e = 'task' in t ? taskAsEvent(t.task) : { event: t.event, config: t.config };
+    if (seen.has(e.event)) continue;
+    seen.add(e.event);
+    lines.push(...eventLines(e.event, e.config));
   }
   return lines;
 }

@@ -3,6 +3,10 @@
 > **Status:** finalized model; the codebase is being aligned to it. The terms `workflow`,
 > `launch`, `run`, `raw`, `steps`, `box.model`, `skill|script`, `commit|propose` are **retired** — see
 > "What this replaces" at the end. If the code still shows them, the code is mid-migration, not the spec.
+>
+> **Actor model (current):** the one unit is the **actor** (`kind: agent | human`), and triggers gain a
+> portable `{ task: <state> }` form (`docs/TASK-LIFECYCLE.md`). These supersede the agent-only framing
+> where they differ; the code (`ir.ts`, the profile, the github substrate) is mid-migration to them.
 
 ## The shape of the whole thing
 
@@ -26,23 +30,34 @@ The core (the standard) **only validates spec-validity and wires** — it never 
 capability *does*, where a trigger param is *sourced*, or what a config key *means*. The substrate is the
 only thing that knows codex, `gh`, PRs, termfleet.
 
-## The one unit: an agent
+## The one unit: an actor (agent or human)
 
-There is no `workflow`, no `launch`/`run`/`raw`. There is one concept — an **agent** — with exactly four
-slots:
+There is no `workflow`, no `launch`/`run`/`raw`. There is one concept — an **actor** — with exactly four
+slots. An actor has a **kind**: `agent` (a machine participant) or `human` (a person). The four slots are
+identical for both; `kind` (the **role**) is **intrinsic and declared in the profile**, while
+*realization* (how the role is filled — a script, a model, a real person, or a **simulator** in test) is
+the substrate's/environment's choice. `kind: agent` is the default, so existing profiles are
+unchanged. The slots:
 
 ```yaml
 schema: autonomy.ir.v1
 targets: [github, local]
 
-agents:
-  developer:
+actors:
+  developer:                           # kind: agent (the default)
     behavior: skills/developer        # what it does — instructions/spec; the box runs it however
     capabilities: [artifact:author, tasks:converse]   # its authority (the standard's capability catalog)
-    triggers:                          # when it fires + the params it forwards (subject.ref, …)
-      - { event: issues, config: { types: [labeled] }, params: { ISSUE: subject.ref } }
-      - { event: issue_comment }
+    triggers:                          # when it fires; three forms — cron | event | task (lifecycle)
+      - { task: ready, params: { ISSUE: subject.ref } }   # portable: fire when a task enters `ready`
+      - { event: issue_comment }                          # substrate-native escape hatch
     config: { timeout: 30 }            # opaque misc the substrate interprets (catalog below)
+
+  maintainer:                          # kind: human — a person; intrinsic, not a substrate choice
+    kind: human
+    behavior: humans/maintainer-review # the task spec the person is handed (situation / decision / result)
+    capabilities: [tasks:converse, artifact:author]
+    triggers: [{ task: human-required }]   # fire when a task needs a maintainer
+    config: { decision: approve, candidates: maintainers, sla: 1d }   # worklist + escalation knobs
 
   planner:
     behavior: skills/planner
@@ -56,14 +71,17 @@ resources: [docs/standards/code.md]    # verbatim files; the standard never inte
 
 | slot | what it is | who reads it |
 |---|---|---|
-| **behavior** | what the agent does — its instructions/spec | the substrate runs it (deterministic impl, or interpreted by a model — its choice) |
-| **capabilities** | the agent's authority — from the capability catalog (`docs/CAPABILITIES.md`) | the substrate realizes each as permissions/mediation |
-| **triggers** | when it fires + the **params** it forwards (the param-source catalog, `docs/TRIGGER-PARAMS.md`) | the substrate's trigger executor; only `cron` is portable, events are carried |
+| **behavior** | what the actor does — its instructions/spec (a `kind: human` actor's is the task spec a person is handed) | the substrate *realizes* it: `kind: agent` → deterministic or model-interpreted; `kind: human` → a real person (prod) or a simulator (test); realization is the substrate's/environment's choice |
+| **capabilities** | the actor's authority — from the capability catalog (`docs/CAPABILITIES.md`) | the substrate realizes each as permissions/mediation |
+| **triggers** | when it fires + the **params** it forwards. Three forms: `cron`, substrate-native `event`, and the portable `task: <state>` (the task-lifecycle catalog, `docs/TASK-LIFECYCLE.md`) | the substrate's trigger executor; `cron` and `task` are portable, `event` is carried |
 | **config** | opaque misc knobs (catalog below) | each substrate reads the keys it understands, ignores the rest |
 
-`policy` (global governance) and `resources` (verbatim files) sit at the top level. That is the entire IR.
+An actor also carries a **kind** (`agent` | `human`, default `agent`) — a discriminator, not a fifth slot:
+the four slots are identical for both kinds. `kind` (the role) is the profile's; *realization* (how the
+role is filled — script/model/person/simulator) is the substrate's (see Kind/realization below). `policy`
+(global governance) and `resources` (verbatim files) sit at the top level. That is the entire IR.
 
-## The three catalogs (the standard's concrete vocabulary)
+## The four catalogs (the standard's concrete vocabulary)
 
 A profile depends **only** on these named vocabularies, never on a substrate's raw shapes. New entries
 are added to a catalog first, then implemented by substrates — purely additive, never a restructure.
@@ -92,15 +110,28 @@ are added to a catalog first, then implemented by substrates — purely additive
    last four are github-specific today; another substrate ignores them (they are not part of the portable
    core — that is what "partial implementation" means).
 
-## Trust, review, execution — three orthogonal things, none of them an IR slot
+4. **Task lifecycle** (`docs/TASK-LIFECYCLE.md`) — the portable states a task can be in (`open` · `ready`
+   · `working` · `in-review` · `input-required` · `blocked` · `done` · `rejected`). A `task: <state>`
+   trigger fires when a task enters a state; a **handoff** (a seam, `docs/HANDOFFS.md`) is a typed edge
+   over these states — an upstream actor's work produces a transition, a downstream actor's `task:`
+   trigger consumes it. The substrate maps each state to its own events/labels.
+
+## Kind, realization, trust, review — orthogonal axes (only `kind` is in the IR)
 
 This is the distinction that took the longest to get right, so it is stated explicitly:
 
-- **Execution** (deterministic vs model-interpreted) — the **substrate's choice** of how to run the
-  agent's `behavior`. Not in the IR. The same agent may be a deterministic implementation on one
-  substrate and model-interpreted on another.
+- **Actor kind** (`agent` vs `human`) — the **role**: intrinsic, declared in the profile (the one of
+  these that *is* an IR field — the `kind` discriminator). You cannot turn a human *role* into a permanent
+  script; that would be a *different org design*. `kind` says *who* the actor is — a different axis from
+  realization (*how* the role is filled).
+- **Realization** (how the role is filled) — the **substrate's/environment's choice**, not in the IR. For
+  `kind: agent`: deterministic or model-interpreted. For `kind: human`: a **real person** in production,
+  or a **simulator** in a testbed — *same profile, different environment*. Filling the same role
+  differently per environment is what makes an org with human actors **testable** (`docs/HANDOFFS.md`).
+  (An earlier framing called `human` a "third execution mode" — wrong axis: `human` is a kind;
+  person/simulator are realizations of it.)
 - **Output trust** (does untrusted output need mediation before it touches the repo?) — the
-  **substrate's security responsibility**, *derived* from execution: if it runs `behavior` via a model,
+  **substrate's security responsibility**, *derived* from realization: if it runs `behavior` via a model,
   output is untrusted → it mediates (github: a read-only agent emits a bundle → a separate trusted
   publisher validates and applies it); if it runs a deterministic implementation, direct. The IR can't
   run codex, so it can't mediate; declaring "untrusted" would not change that the substrate must
@@ -197,7 +228,8 @@ work resolved purely from `subject.ref`, no implicit event reach-in.
 | `steps` / an "ABI" of work/change/model | nothing — that logic lives in the agent's behavior | the IR must not know issues, PRs, or models |
 | `box.model` / `skill` vs `script` | nothing — the box always has a model; execution is the substrate's | those leaked the box's execution model into the IR |
 | `commit` / `propose` on capabilities | trust = substrate security (derived); review = policy | capabilities are pure authority |
+| `agent` as the sole unit | the **actor** (kinds: `agent`, `human`) | a person is a first-class participant, not negative space |
 
-Every future change is *filling in the standard* — a new capability, param source, or config key, plus a
-substrate realization. The four-slot agent and the standard/implementation/conformance split are the
-invariant.
+Every future change is *filling in the standard* — a new capability, param source, config key, or
+task-lifecycle state, plus a substrate realization. The four-slot **actor** (genus; kinds `agent` and
+`human`) and the standard/implementation/conformance split are the invariant.

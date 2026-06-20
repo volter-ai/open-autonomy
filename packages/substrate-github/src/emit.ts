@@ -227,12 +227,17 @@ function deterministicPerms(caps: string[], extra?: unknown): string {
   return `{ ${Object.entries(p).map(([k, v]) => `${k}: ${v}`).join(', ')} }`;
 }
 
-// The model-proxy credentials a deterministic agent's job needs to mint/revoke model tokens, gated on
-// `config.model` (a github-substrate config key — the box always has a model endpoint, but only agents
-// that call the model need its admin credentials in the job env).
+// The github box's model endpoint, gated on `config.model` (a github-substrate config key — the box
+// always has a model endpoint; only agents that call the model need it wired). github is the
+// untrusted-keyless case, so its box endpoint is the REMOTE proxy: agents make stock SDK calls against
+// `OPENAI_BASE_URL`/`ANTHROPIC_BASE_URL` (transparent — no proxy dialect), handing the SDK a bounded key
+// minted with the admin credentials below. A trusted substrate (local) compiles in its OWN endpoint and
+// never sees any of this.
 function modelEnvLines(agent: IRAgent): string[] {
   if (!cfg(agent).model) return [];
   return [
+    `      OPENAI_BASE_URL: \${{ vars.MODEL_PROXY_URL }}/openai/v1`,
+    `      ANTHROPIC_BASE_URL: \${{ vars.MODEL_PROXY_URL }}/anthropic`,
     `      MODEL_PROXY_URL: \${{ vars.MODEL_PROXY_URL }}`,
     `      MODEL_PROXY_ADMIN_TOKEN: \${{ secrets.MODEL_PROXY_ADMIN_TOKEN }}`,
     `      MODEL_PROXY_OIDC_AUDIENCE: \${{ vars.MODEL_PROXY_OIDC_AUDIENCE || 'volter-agent-model-proxy' }}`,

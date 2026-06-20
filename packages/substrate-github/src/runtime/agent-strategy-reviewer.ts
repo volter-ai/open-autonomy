@@ -75,7 +75,7 @@ if (mode === 'review') {
   await Bun.write(`${D}/issue.json`, JSON.stringify({ number: Number(pr), title: 'Strategy review', body: '', user: { login: ACTOR } }));
   const { runId, token } = await mintModelToken({ issue: `${D}/issue.json`, models: model, maxUsdCents: Number(env('PUBLIC_AGENT_STRATEGY_REVIEW_MAX_USD_CENTS', '50')), maxRequests: 2, purpose: 'review' });
   await $`bun scripts/public-agent-strategy-review.ts --diff ${D}/roadmap.diff --proposal ${D}/proposal.txt --rubric .open-autonomy/strategy-rubric.yml --constitution docs/CONSTITUTION.md --provider ${env('PUBLIC_AGENT_STRATEGY_REVIEW_PROVIDER', 'openai')} --model ${model} --out ${D}/verdict.json`
-    .env({ ...process.env, MODEL_PROXY_TOKEN: token })
+    .env({ ...process.env, OPENAI_API_KEY: token, ANTHROPIC_API_KEY: token })
     .nothrow();
   await revokeModelToken(runId);
   const v = json<{ verdict: string; human_required: boolean | string; summary: string }>(`${D}/verdict.json`, { verdict: 'failed', human_required: true, summary: 'Reviewer did not produce a verdict.' });

@@ -113,7 +113,8 @@ let reviewed = false;
 try {
   await $`bun scripts/public-agent-review.ts --diff .agent-run/diff.patch --ci .agent-run/ci.json --control-files .agent-run/control-files.json --provider ${env('PUBLIC_AGENT_REVIEW_PROVIDER', 'openai')} --model ${env('PUBLIC_AGENT_REVIEW_MODEL', 'gpt-4o-mini')} --out .agent-run/review.json`.env({
     ...process.env,
-    MODEL_PROXY_TOKEN: token,
+    OPENAI_API_KEY: token,
+    ANTHROPIC_API_KEY: token,
   });
   reviewed = true;
 } catch {

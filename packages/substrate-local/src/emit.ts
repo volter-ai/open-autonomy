@@ -28,9 +28,13 @@ export function agentScriptPath(
   agent: IRAgent,
   name: string,
 ): { dest: string; source?: string; generated: boolean } {
-  const dest = `profiles/${name}/scheduler/scripts/${role}-tick.mjs`;
-  if (isScript(agent.behavior)) return { dest, source: agent.behavior, generated: false };
-  return { dest, generated: true };
+  // A script-behavior agent's tick keeps the source extension (a .ts tick must stay .ts so the
+  // bun runtime strips its types); a skill agent gets a generated .mjs launcher.
+  if (isScript(agent.behavior)) {
+    const ext = agent.behavior.slice(agent.behavior.lastIndexOf('.'));
+    return { dest: `profiles/${name}/scheduler/scripts/${role}-tick${ext}`, source: agent.behavior, generated: false };
+  }
+  return { dest: `profiles/${name}/scheduler/scripts/${role}-tick.mjs`, generated: true };
 }
 
 // Inverse of secondsToCron for the simple every-N-minutes cron form the local loop produces.
@@ -63,6 +67,13 @@ do {
 // into the profile so the generated runner and the dev-time runner never drift.
 const RUNNER_BACKEND = readFileSync(
   join(dirname(fileURLToPath(import.meta.url)), 'backend.mjs'),
+  'utf8',
+);
+
+// The agent-facing Runner seam (launch/list), emitted next to the agent ticks so an agent's
+// `import './runner.js'` resolves to the LOCAL runner. Single source: runner-frontend.ts beside us.
+const RUNNER_FRONTEND = readFileSync(
+  join(dirname(fileURLToPath(import.meta.url)), 'runner-frontend.ts'),
   'utf8',
 );
 
@@ -127,17 +138,22 @@ export function compileLocal(
   // The local loop can only honor cron triggers; event-only agents are skipped here (still launchable,
   // just not auto-fired locally). This is the local substrate's partial implementation of the standard.
   const localAgents = Object.entries(ir.agents).filter(([, a]) => cronOf(a));
-  const scriptPaths = localAgents.map(([role, a]) => agentScriptPath(role, a, name).dest);
   const intervalSeconds = localAgents[0] ? cronToSeconds(cronOf(localAgents[0][1]) as string) : 900;
   const schedule: LocalSchedule = {
     intervalSeconds,
     env: {},
-    scripts: scriptPaths.map((p) => `node ${p}`),
+    // A script-behavior agent (a bun/.ts orchestrator) runs via bun so its types are stripped and its
+    // runner import resolves; a generated skill launcher runs via node.
+    scripts: localAgents.map(
+      ([role, a]) => `${isScript(a.behavior) ? 'bun' : 'node'} ${agentScriptPath(role, a, name).dest}`,
+    ),
   };
 
   const generated: Record<string, string> = {
     [`${base}/scheduler/schedule.json`]: JSON.stringify(schedule, null, 2),
     [`${base}/scheduler/scripts/run.mjs`]: loopDriver(base),
+    // The agent-facing Runner seam, next to the ticks so `import './runner.js'` resolves to the local one.
+    [`${base}/scheduler/scripts/runner.ts`]: RUNNER_FRONTEND,
     [`${base}/scripts/run-agent.mjs`]: RUN_AGENT_DRIVER,
     // The substrate primitive: the domain-free runner backend, emitted verbatim from its single source.
     [`${base}/scripts/autonomy-runner.mjs`]: RUNNER_BACKEND,

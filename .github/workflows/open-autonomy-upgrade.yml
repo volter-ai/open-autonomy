@@ -12,6 +12,7 @@ jobs:
       GH_TOKEN: ${{ github.token }}
       OPEN_AUTONOMY_TEMPLATE_REPO: ${{ vars.OPEN_AUTONOMY_TEMPLATE_REPO || 'volter-ai/open-autonomy' }}
       OPEN_AUTONOMY_TEMPLATE_REF: ${{ vars.OPEN_AUTONOMY_TEMPLATE_REF || 'main' }}
+      OPEN_AUTONOMY_UPGRADE_TOKEN: ${{ secrets.OPEN_AUTONOMY_UPGRADE_TOKEN || secrets.PUBLIC_AGENT_TRIGGER_TOKEN || github.token }}
     steps:
       - uses: actions/checkout@v4
       - uses: oven-sh/setup-bun@v2

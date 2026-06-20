@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { describe, expect, test } from 'bun:test';
 
 // Production wiring after the agent-model migration: a model-interpreted agent (developer) compiles to
@@ -18,7 +18,6 @@ describe('public agent production readiness', () => {
       'public-agent-pm.yml',
       'public-agent-review.yml',
       'open-autonomy-planner.yml',
-      'open-autonomy-upgrade.yml',
       'open-autonomy-preflight.yml',
       'open-autonomy-governance-report.yml',
       'model-proxy-admin.yml',
@@ -90,15 +89,17 @@ describe('public agent production readiness', () => {
     expect(report).toContain('open-autonomy-governance-report.ts');
   });
 
-  test('upgrade workflow opens template upgrade PRs', () => {
-    const up = script('agent-upgrade.ts');
+  test('upgrade is a maintainer-run local command, not an autonomous workflow', () => {
+    const up = script('open-autonomy-upgrade-cli.ts');
     expect(up).toContain('OPEN_AUTONOMY_TEMPLATE_REPO');
     // the canonical installation is COMPILED from the profile (no hand-maintained template dir)
     expect(up).toContain('autonomy-compile.ts profiles/self-driving github');
-    expect(up).toContain('.agent-run/open-autonomy-template');
     expect(up).toContain('open-autonomy-upgrade.ts');
-    expect(up).toContain('gh pr create');
-    expect(workflow('open-autonomy-upgrade.yml')).toContain('pull-requests: write');
-    expect(workflow('open-autonomy-upgrade.yml')).toContain('bun scripts/agent-upgrade.ts');
+    // it applies to the working tree and stops — the human commits & pushes (so workflow changes,
+    // a human_required path the CI token cannot push, go in with the maintainer's own credentials)
+    expect(up).not.toContain('gh pr create');
+    expect(up).not.toContain('git push');
+    // and there is no generated upgrade workflow
+    expect(existsSync(new URL('../.github/workflows/open-autonomy-upgrade.yml', import.meta.url))).toBe(false);
   });
 });

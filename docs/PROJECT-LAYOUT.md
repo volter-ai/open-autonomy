@@ -79,10 +79,12 @@ github and local are the **same recipe**; only `provision` differs. "Adopt into 
   `check:runtime-sync`). `profiles/self-driving` is OA's setup as a profile.
 - **Done:** `templates/` is **deleted**. The installation is now produced solely by
   `compile(profiles/self-driving, github)`. Its consumers were migrated: `scaffold-target-repo`
-  compiles the profile; the upgrade workflow (`open-autonomy-upgrade.yml`) clones open-autonomy and
-  compiles the profile to get the canonical installation to diff against (verified behavior-preserving:
-  identical upgrade plan except the upgrade workflow itself). `check:compile` guards that the profile
-  compiles to a complete installation.
+  compiles the profile; the upgrade is a maintainer-run local command
+  (`scripts/open-autonomy-upgrade-cli.ts`, vendored into every installation) that clones open-autonomy,
+  compiles the profile to get the canonical installation, and applies the diff to the working tree —
+  the maintainer reviews, commits, and pushes (so workflow changes, a human_required path the CI token
+  cannot push, go in with their own credentials). `check:compile` guards that the profile compiles to a
+  complete installation.
 - **Done:** OA's own root installation is now sourced from the profile too — `check:dogfood` asserts
   `compile(profiles/self-driving, github)` == OA's root for every **managed** file (workflows,
   skills, runtime, standards, rubrics, version); repo-owned + seed-only files (package.json, README,

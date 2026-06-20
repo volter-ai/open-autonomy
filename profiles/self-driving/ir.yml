@@ -79,21 +79,9 @@ agents:
       workflowFile: open-autonomy-planner.yml
       timeout: 15
 
-  # Deterministic upgrade: compiles the canonical profile, diffs this installation, opens an upgrade PR.
-  upgrade:
-    behavior: scripts/agent-upgrade.ts
-    capabilities: [artifact:author]
-    triggers:
-      - event: workflow_dispatch
-    config:
-      workflowFile: open-autonomy-upgrade.yml
-      timeout: 15
-      env:
-        OPEN_AUTONOMY_TEMPLATE_REPO: ${{ vars.OPEN_AUTONOMY_TEMPLATE_REPO || 'volter-ai/open-autonomy' }}
-        OPEN_AUTONOMY_TEMPLATE_REF: ${{ vars.OPEN_AUTONOMY_TEMPLATE_REF || 'main' }}
-        # A token with `workflow` scope so the upgrade can push workflow changes (the default
-        # GITHUB_TOKEN cannot); falls back to the workflow token, which GitHub rejects for workflow edits.
-        OPEN_AUTONOMY_UPGRADE_TOKEN: ${{ secrets.OPEN_AUTONOMY_UPGRADE_TOKEN || secrets.PUBLIC_AGENT_TRIGGER_TOKEN || github.token }}
+  # NOTE: upgrading an installation is NOT an autonomous agent — it can touch .github/workflows (a
+  # human_required path the CI token cannot push). It ships as a maintainer-run local command,
+  # scripts/open-autonomy-upgrade-cli.ts (vendored into every installation). See docs.
 
   # Deterministic strategist: gathers research signals, synthesizes a roadmap proposal PR, hands off to
   # strategy review. Proposes; never merges.

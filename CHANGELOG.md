@@ -3,17 +3,20 @@
 ## Unreleased
 
 - Collapsed the IR to **one unit, the agent** (`behavior + capabilities + triggers(+params) + config`)
-  and migrated open-autonomy's own profile onto it: the 7 agent workflows + control plane are now
-  *generated* from `profiles/self-driving/ir.yml`; the 6 deterministic agents are self-contained
+  and migrated open-autonomy's own profile onto it: the 6 agent workflows + control plane are now
+  *generated* from `profiles/self-driving/ir.yml`; the 5 deterministic agents are self-contained
   `scripts/agent-*.ts` orchestrators, the developer is the privilege-separated codex wrapper. Added the
   `subject.actorRole` trigger source and the `model`/`workflowFile`/`persistCredentials`/`permissions`
   config keys (all documented in the standard).
+- Upgrading an installation is now a **maintainer-run local command**
+  (`scripts/open-autonomy-upgrade-cli.ts`), not an autonomous workflow: it compiles the canonical
+  template, applies the diff to your working tree, and stops — you review, commit, and push. An upgrade
+  can touch `.github/workflows/**` (a `human_required` path the CI `GITHUB_TOKEN` cannot push at all),
+  so a human with their own credentials is the right actor; this needs no PAT.
 - Fixed (surfaced by live-running the migrated pipeline): the `ci` status check was unsatisfiable
   (the `ci.yml` job was named `public-agent`); the merge-gate CI evaluator read a passed check as
   "pending" (misread `gh pr checks` state); PM's develop dispatch passed a `command` input the wrapper
-  no longer accepts; the upgrade agent couldn't push workflow changes without a `workflow`-scoped token
-  (`OPEN_AUTONOMY_UPGRADE_TOKEN`). Together the first two had made the autonomous reviewer unable to ever
-  auto-merge.
+  no longer accepts. The first two had made the autonomous reviewer unable to ever auto-merge.
 - Restructured into a monorepo: the substrate-agnostic engine lives in `packages/`
   (`@open-autonomy/core`, `substrate-local`, `substrate-github`); the IR/Runner contract/
   conformance battery moved out of flat `scripts/`.

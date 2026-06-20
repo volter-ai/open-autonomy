@@ -91,6 +91,9 @@ agents:
       env:
         OPEN_AUTONOMY_TEMPLATE_REPO: ${{ vars.OPEN_AUTONOMY_TEMPLATE_REPO || 'volter-ai/open-autonomy' }}
         OPEN_AUTONOMY_TEMPLATE_REF: ${{ vars.OPEN_AUTONOMY_TEMPLATE_REF || 'main' }}
+        # A token with `workflow` scope so the upgrade can push workflow changes (the default
+        # GITHUB_TOKEN cannot); falls back to the workflow token, which GitHub rejects for workflow edits.
+        OPEN_AUTONOMY_UPGRADE_TOKEN: ${{ secrets.OPEN_AUTONOMY_UPGRADE_TOKEN || secrets.PUBLIC_AGENT_TRIGGER_TOKEN || github.token }}
 
   # Deterministic strategist: gathers research signals, synthesizes a roadmap proposal PR, hands off to
   # strategy review. Proposes; never merges.

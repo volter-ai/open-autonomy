@@ -39,6 +39,14 @@ await $`git checkout -b ${branch}`;
 await $`bun scripts/open-autonomy-upgrade.ts --template ${out} --target . --apply --out .agent-run/upgrade/plan-applied.json`;
 await $`git add AGENTS.md VERSION .open-autonomy .github/workflows scripts docs`;
 await $`git commit -m "chore: upgrade open-autonomy template"`;
+// An upgrade can touch .github/workflows, which the default GITHUB_TOKEN is forbidden from pushing
+// ("without `workflows` permission"). Use OPEN_AUTONOMY_UPGRADE_TOKEN (a PAT/app token with `workflow`
+// scope) for the push when configured; otherwise fall back and let GitHub reject workflow changes.
+const pushToken = process.env.OPEN_AUTONOMY_UPGRADE_TOKEN || process.env.GH_TOKEN || '';
+const repo = process.env.GITHUB_REPOSITORY ?? '';
+if (pushToken && repo) {
+  await $`git remote set-url origin https://x-access-token:${pushToken}@github.com/${repo}.git`.quiet();
+}
 await $`git push --set-upstream origin ${branch}`;
 await Bun.write('.agent-run/upgrade/body.md', (plan.migration_notes ?? []).join('\n'));
 const base = process.env.GITHUB_REF_NAME || 'main';

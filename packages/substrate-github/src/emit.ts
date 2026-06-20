@@ -227,20 +227,24 @@ function deterministicPerms(caps: string[], extra?: unknown): string {
   return `{ ${Object.entries(p).map(([k, v]) => `${k}: ${v}`).join(', ')} }`;
 }
 
-// The github box's model endpoint, gated on `config.model` (a github-substrate config key — the box
-// always has a model endpoint; only agents that call the model need it wired). github is the
-// untrusted-keyless case, so its box endpoint is the REMOTE proxy: agents make stock SDK calls against
-// `OPENAI_BASE_URL`/`ANTHROPIC_BASE_URL` (transparent — no proxy dialect), handing the SDK a bounded key
-// minted with the admin credentials below. A trusted substrate (local) compiles in its OWN endpoint and
-// never sees any of this.
-function modelEnvLines(agent: IRAgent): string[] {
+// The github box's model-endpoint provisioning, gated on `config.model` (a github-substrate config key —
+// the box always has a model endpoint; only agents that call the model need it provisioned). github is
+// the untrusted-keyless case, so the box endpoint is the remote proxy reached through a bounded mint. The
+// admin credential lives ONLY in this setup step; it mints a run token and writes the stock SDK env vars
+// to $GITHUB_ENV, so the agent step that follows makes transparent SDK calls with no admin token and no
+// minting of its own. A trusted substrate (local) provisions the box its own way (usually ambient keys).
+function modelSetupStep(agent: IRAgent): string[] {
   if (!cfg(agent).model) return [];
   return [
-    `      OPENAI_BASE_URL: \${{ vars.MODEL_PROXY_URL }}/v1`,
-    `      ANTHROPIC_BASE_URL: \${{ vars.MODEL_PROXY_URL }}`,
-    `      MODEL_PROXY_URL: \${{ vars.MODEL_PROXY_URL }}`,
-    `      MODEL_PROXY_ADMIN_TOKEN: \${{ secrets.MODEL_PROXY_ADMIN_TOKEN }}`,
-    `      MODEL_PROXY_OIDC_AUDIENCE: \${{ vars.MODEL_PROXY_OIDC_AUDIENCE || 'volter-agent-model-proxy' }}`,
+    `      - name: Provision model endpoint`,
+    `        env:`,
+    `          MODEL_PROXY_URL: \${{ vars.MODEL_PROXY_URL }}`,
+    `          MODEL_PROXY_ADMIN_TOKEN: \${{ secrets.MODEL_PROXY_ADMIN_TOKEN }}`,
+    `          MODEL_PROXY_OIDC_AUDIENCE: \${{ vars.MODEL_PROXY_OIDC_AUDIENCE || 'volter-agent-model-proxy' }}`,
+    `          MODEL_ALLOWLIST: \${{ vars.PUBLIC_AGENT_MODELS || 'gpt-4o-mini' }}`,
+    `          PUBLIC_AGENT_RUN_MAX_USD_CENTS: \${{ vars.PUBLIC_AGENT_RUN_MAX_USD_CENTS || '500' }}`,
+    `          PUBLIC_AGENT_RUN_MAX_REQUESTS: \${{ vars.PUBLIC_AGENT_RUN_MAX_REQUESTS || '60' }}`,
+    `        run: bun scripts/provision-model-endpoint.ts`,
   ];
 }
 
@@ -268,13 +272,13 @@ function deterministicYml(name: string, agent: IRAgent): string {
     ...timeoutLines(agent),
     `    env:`,
     `      GH_TOKEN: \${{ github.token }}`,
-    ...modelEnvLines(agent),
     ...triggerParamsEnv(agent),
     ...envLines(agent),
     `    steps:`,
     ...checkoutLines(agent),
     `      - uses: oven-sh/setup-bun@v2`,
     `      - run: bun install --frozen-lockfile || bun install`,
+    ...modelSetupStep(agent),
     `      - run: bun ${agent.behavior}`,
     ...artifactLines(name),
     ``,

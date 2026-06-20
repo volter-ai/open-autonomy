@@ -4,9 +4,8 @@
 // action (develop/review) or posts a visible PM comment. Self-contained; a faithful port of the former
 // public-agent-pm.yml shell. The PM proposes and routes; it never writes code.
 import { $ } from 'bun';
-import { mkdirSync, readFileSync, existsSync } from 'node:fs';
+import { mkdirSync, readFileSync } from 'node:fs';
 import { launch, list } from './runner.js';
-import { mintModelToken, revokeModelToken } from './model-token.js';
 
 const env = (k: string, d = '') => process.env[k] || d;
 const ACTOR = env('GITHUB_ACTOR', 'open-autonomy-pm');
@@ -14,7 +13,6 @@ const PM_COMMENT_TOKEN = env('PM_COMMENT_TOKEN', env('GH_TOKEN'));
 const LIMIT = env('PUBLIC_AGENT_PM_LIMIT', '10');
 const MODEL = env('PUBLIC_AGENT_PM_MODEL', 'gpt-4o-mini');
 const PROVIDER = env('PUBLIC_AGENT_PM_PROVIDER', 'openai');
-const MAX_USD_CENTS = env('PUBLIC_AGENT_PM_MAX_USD_CENTS', '25');
 
 mkdirSync('.agent-run/pm', { recursive: true });
 
@@ -114,44 +112,12 @@ for (const number of numbers) {
     }),
   );
 
-  // Mint a per-issue model token (via the substrate's model-token seam).
-  const minted = await mintModelToken({ issue: issuePath, models: MODEL, maxUsdCents: Number(MAX_USD_CENTS), maxRequests: 2, purpose: 'pm' });
-
-  if (!minted.ok) {
-    // Lifetime budget exhausted is terminal: auto-pause the repo until a top-up + maintainer resume.
-    if (minted.budgetExhausted) {
-      await $`gh label create agent-repo-paused --color b60205 --description "Repo-level autonomy pause"`.nothrow().quiet();
-      if ((await $`gh issue list --state open --label agent-repo-paused --limit 1 --json number --jq 'length'`.text()).trim() === '0') {
-        await $`gh issue create --title "Repo paused: lifetime model budget exhausted" --label agent-repo-paused --body ${'This repository has spent its lifetime model budget and is paused. Top up its budget (sponsorship) via the model proxy, then remove the `agent-repo-paused` label / close this issue to resume.'}`.nothrow();
-      }
-      console.log('lifetime budget exhausted; repo auto-paused');
-      process.exit(0);
-    }
-    console.log(`::warning::skip issue #${number}: PM token mint failed`);
-    const unavailable = 'PM model budget is temporarily unavailable; the PM agent will retry on a later sweep.';
-    await decision(['--stage', 'pm_triage', '--issue', number, '--actor', ACTOR, '--decision', 'mint_failed', '--reason', 'PM token mint failed', '--subject-json', `{"type":"issue","number":${number}}`, '--evidence', `issue:${number}`, '--next-action', 'skip', '--out-dir', decisionDir]);
-    await $`bun scripts/public-agent-dispatcher.ts --issue ${issuePath} --pm-unavailable-reason ${unavailable} --out ${dispatchPath}`.nothrow();
-    const d = JSON.parse((existsSync(dispatchPath) && readFileSync(dispatchPath, 'utf8')) || '{}');
-    await decision(['--stage', 'dispatch', '--issue', number, '--actor', ACTOR, '--decision', d.action ?? 'skip', '--reason', d.reason ?? '', '--subject-json', `{"type":"issue","number":${number}}`, '--evidence', `decision:pm_triage,dispatch:${dispatchPath}`, '--next-action', d.action ?? 'skip', '--out-dir', decisionDir]);
-    if (d.action === 'comment' && d.comment) {
-      const c = await $`gh issue comment ${String(d.target_number || number)} --body ${d.comment}`.env({ ...process.env, GH_TOKEN: PM_COMMENT_TOKEN }).nothrow();
-      if (c.exitCode !== 0) console.log(`::warning::skip issue #${number}: failed to write visible PM-unavailable comment`);
-    } else {
-      console.log(`skip issue #${number}: ${d.reason ?? ''}`);
-    }
-    continue;
-  }
-
-  const { runId, token } = minted;
-
-  await $`bun scripts/public-agent-pm.ts --issue ${issuePath} --provider ${PROVIDER} --model ${MODEL} --out ${pmPath}`.env({
-    ...process.env,
-    OPENAI_API_KEY: token,
-    ANTHROPIC_API_KEY: token,
-  });
+  // The model endpoint (OPENAI_API_KEY/OPENAI_BASE_URL) is provisioned into the box by the runner's setup
+  // step — the PM just makes the transparent call, it never mints. A budget-exhausted run is paused at
+  // provisioning (before this script runs), so there is no per-issue mint failure to handle here.
+  await $`bun scripts/public-agent-pm.ts --issue ${issuePath} --provider ${PROVIDER} --model ${MODEL} --out ${pmPath}`;
   const pm = JSON.parse(readFileSync(pmPath, 'utf8')) as { action: string; risk?: string; reason?: string };
-  await decision(['--stage', 'pm_triage', '--issue', number, '--actor', ACTOR, '--decision', pm.action, '--risk', pm.risk ?? '', '--reason', pm.reason ?? '', '--run-id', runId, '--subject-json', `{"type":"issue","number":${number}}`, '--evidence', `issue:${number},pm:${pmPath}`, '--next-action', pm.action, '--out-dir', decisionDir]);
-  await revokeModelToken(runId);
+  await decision(['--stage', 'pm_triage', '--issue', number, '--actor', ACTOR, '--decision', pm.action, '--risk', pm.risk ?? '', '--reason', pm.reason ?? '', '--subject-json', `{"type":"issue","number":${number}}`, '--evidence', `issue:${number},pm:${pmPath}`, '--next-action', pm.action, '--out-dir', decisionDir]);
 
   await $`bun scripts/public-agent-dispatcher.ts --issue ${issuePath} --pm ${pmPath} --out ${dispatchPath}`;
   const d = JSON.parse(readFileSync(dispatchPath, 'utf8')) as {
@@ -163,7 +129,7 @@ for (const number of numbers) {
     reason: string;
   };
 
-  const dispatchArgs = ['--stage', 'dispatch', '--issue', number, '--actor', ACTOR, '--decision', d.action, '--reason', d.reason, '--run-id', runId, '--evidence', `decision:pm_triage,dispatch:${dispatchPath}`, '--next-action', d.command || d.action, '--out-dir', decisionDir];
+  const dispatchArgs = ['--stage', 'dispatch', '--issue', number, '--actor', ACTOR, '--decision', d.action, '--reason', d.reason, '--evidence', `decision:pm_triage,dispatch:${dispatchPath}`, '--next-action', d.command || d.action, '--out-dir', decisionDir];
   if (d.target === 'pull_request' && d.target_number) {
     dispatchArgs.push('--pr', String(d.target_number), '--subject-json', `{"type":"pr","number":${d.target_number}}`);
   } else {

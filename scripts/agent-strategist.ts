@@ -7,7 +7,6 @@
 import { $ } from 'bun';
 import { mkdirSync, existsSync, readFileSync } from 'node:fs';
 import { launch } from './runner.js';
-import { mintModelToken, revokeModelToken } from './model-token.js';
 
 const env = (k: string, d = '') => process.env[k] || d;
 // Schedule and manual dispatch both apply (you run the strategist to propose); set the AGENT_APPLY
@@ -53,25 +52,10 @@ console.log(`gathered ${signals.length} signals`);
 const prior = await $`gh pr list --state all --label origin:strategist --limit 50 --json title,body --jq '[.[] | .title + " " + (.body // "")] | join("\n")'`.nothrow().text();
 await Bun.write('.agent-run/strategist/prior.txt', prior);
 
-// 3. Mint a bounded model token.
-await Bun.write(
-  '.agent-run/strategist/issue.json',
-  JSON.stringify({ number: 0, title: 'Strategist run', body: '', user: { login: env('GITHUB_ACTOR', 'open-autonomy') } }),
-);
-const { runId, token } = await mintModelToken({ issue: '.agent-run/strategist/issue.json', models: model, maxUsdCents: Number(env('PUBLIC_AGENT_STRATEGIST_MAX_USD_CENTS', '100')), maxRequests: 2, purpose: 'pm' });
-
-// 4. Synthesize the roadmap proposal (writes roadmap.yml + archive in place).
+// 3. Synthesize the roadmap proposal (writes roadmap.yml + archive in place). The box's model endpoint is
+// provisioned by the runner's setup step; the strategist just makes the transparent call.
 if (!existsSync('.open-autonomy/strategist-archive.json')) await Bun.write('.open-autonomy/strategist-archive.json', '');
-try {
-  await $`bun scripts/public-agent-strategist.ts --roadmap .open-autonomy/roadmap.yml --constitution docs/CONSTITUTION.md --signals .agent-run/strategist/signals.json --prior-proposals .agent-run/strategist/prior.txt --archive .open-autonomy/strategist-archive.json --provider ${provider} --model ${model} --max-items ${env('PUBLIC_AGENT_STRATEGIST_MAX_ITEMS', '3')} --out .agent-run/strategist/proposal.json --roadmap-out .open-autonomy/roadmap.yml --archive-out .open-autonomy/strategist-archive.json`.env({
-    ...process.env,
-    OPENAI_API_KEY: token,
-    ANTHROPIC_API_KEY: token,
-  });
-} finally {
-  // 5. Revoke the run regardless of synthesis outcome.
-  await revokeModelToken(runId);
-}
+await $`bun scripts/public-agent-strategist.ts --roadmap .open-autonomy/roadmap.yml --constitution docs/CONSTITUTION.md --signals .agent-run/strategist/signals.json --prior-proposals .agent-run/strategist/prior.txt --archive .open-autonomy/strategist-archive.json --provider ${provider} --model ${model} --max-items ${env('PUBLIC_AGENT_STRATEGIST_MAX_ITEMS', '3')} --out .agent-run/strategist/proposal.json --roadmap-out .open-autonomy/roadmap.yml --archive-out .open-autonomy/strategist-archive.json`;
 
 if (!apply) {
   console.log('strategist: dry run (manual dispatch); proposal written, no PR opened');

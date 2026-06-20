@@ -13,7 +13,14 @@ export interface IRAgent {
 // every other trigger is CARRIED verbatim — the substrate's workflow implementation decides how it
 // actually fires (e.g. github renders `{event: 'issue_comment'}` as `on: issue_comment`). A trigger
 // the local loop can't honor (an event) is simply not scheduled there; the agent stays launchable.
-export type Trigger = { cron: string } | { event: string; config?: Box };
+// A trigger fires a workflow and forwards `params` to the launched agent (the Runner contract's
+// opaque LaunchParams). `params` maps an opaque param NAME (the profile's choice; the core never
+// interprets it) to a documented SOURCE the substrate must resolve from its firing context
+// (see docs/TRIGGER-PARAMS.md — e.g. `subject.ref`, `subject.actor`, `trigger.kind`). github reads
+// the source from the event/inputs; local from its queue. The agent's tooling interprets the values.
+export type Trigger =
+  | { cron: string; params?: Record<string, string> }
+  | { event: string; config?: Box; params?: Record<string, string> };
 
 export interface IRWorkflow {
   name: string;

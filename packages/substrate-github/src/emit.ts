@@ -103,6 +103,30 @@ function eventLines(event: string, config?: Record<string, unknown>): string[] {
   return lines;
 }
 
+// The documented trigger-param SOURCE contract (docs/TRIGGER-PARAMS.md) → github resolution. The core
+// only wires the opaque param name; the substrate resolves each documented source from its firing
+// context. A local substrate resolves the same sources from its queue.
+const TRIGGER_SOURCE_GH: Record<string, string> = {
+  'subject.ref': "${{ github.event.issue.number || github.event.inputs.issue_number || github.event.pull_request.number }}",
+  'subject.actor': "${{ github.event.sender.login || github.actor }}",
+  'subject.text': "${{ github.event.comment.body || github.event.issue.body }}",
+  'trigger.kind': "${{ github.event.action || github.event_name }}",
+};
+type WithParams = { params?: Record<string, string> };
+// A launch workflow's declared trigger params (unioned across its triggers) → job env lines. name = the
+// profile's opaque param; value = the github resolution of its documented source.
+function triggerParamsEnv(wf: IRWorkflow): string[] {
+  const params: Record<string, string> = {};
+  for (const t of wf.triggers) for (const [n, s] of Object.entries((t as WithParams).params ?? {})) params[n] = s;
+  return Object.entries(params).map(([n, s]) => `      ${n}: ${TRIGGER_SOURCE_GH[s] ?? "''"}`);
+}
+// The param the workflow forwards from `subject.ref` (the work item that fired it), if any — the github
+// runtime fetches that item by ref via tooling, instead of reaching into $GITHUB_EVENT_PATH.
+function subjectRefParam(wf: IRWorkflow): string | undefined {
+  for (const t of wf.triggers) for (const [n, s] of Object.entries((t as WithParams).params ?? {})) if (s === 'subject.ref') return n;
+  return undefined;
+}
+
 function onLines(wf: IRWorkflow, kind: 'run' | 'launch'): string[] {
   const lines = ['on:'];
   const cron = cronOf(wf);
@@ -224,19 +248,18 @@ function workflowYml(wf: IRWorkflow, ir: AutonomyIR): string {
   const skillPath = `.codex/skills/${ir.agents[agent]?.skill}/SKILL.md`;
   const RID = `ir-${agent}-\${{ github.run_id }}`;
   const BUNDLE = `agent-bundle-\${{ github.run_id }}`;
+  // The work item comes from the trigger's declared `subject.ref` param (resolved into job env by the
+  // substrate), not from implicit $GITHUB_EVENT_PATH. Tooling (gh) fetches the item from that ref.
+  const refParam = subjectRefParam(wf);
   const buildIssue = [
     `      - name: Build issue payload`,
     `        env:`,
     `          GH_TOKEN: \${{ github.token }}`,
     `        run: |`,
     `          mkdir -p .agent-run`,
-    `          if [ -n "\${{ github.event.inputs.issue_number }}" ]; then`,
-    `            gh issue view "\${{ github.event.inputs.issue_number }}" --json number,title,body,author,labels,comments --jq '{number,title,body,user:{login:.author.login},labels,comments}' > .agent-run/issue.json`,
-    `          elif jq -e .issue "$GITHUB_EVENT_PATH" >/dev/null 2>&1; then`,
-    `            jq '.issue' "$GITHUB_EVENT_PATH" > .agent-run/issue.json`,
-    `          else`,
-    `            echo "no issue to act on — trigger via an issue event or pass issue_number"; exit 1`,
-    `          fi`,
+    `          ref="${refParam ? '${' + refParam + '}' : ''}"`,
+    `          if [ -z "$ref" ]; then echo "no subject.ref forwarded by the trigger"; exit 1; fi`,
+    `          gh issue view "$ref" --json number,title,body,author,labels,comments --jq '{number,title,body,user:{login:.author.login},labels,comments}' > .agent-run/issue.json`,
   ];
   return [
     `name: ${wf.name}`,
@@ -266,6 +289,7 @@ function workflowYml(wf: IRWorkflow, ir: AutonomyIR): string {
     `      GH_TOKEN: \${{ github.token }}`,
     `      MODEL_PROXY_URL: \${{ vars.MODEL_PROXY_URL }}`,
     `      MODEL_PROXY_OIDC_AUDIENCE: \${{ vars.MODEL_PROXY_OIDC_AUDIENCE || 'volter-agent-model-proxy' }}`,
+    ...triggerParamsEnv(wf),
     `    steps:`,
     `      - uses: actions/checkout@v4`,
     `      - uses: oven-sh/setup-bun@v2`,
@@ -285,6 +309,7 @@ function workflowYml(wf: IRWorkflow, ir: AutonomyIR): string {
     `      PUBLIC_AGENT_MODEL: \${{ vars.PUBLIC_AGENT_MODEL || 'gpt-4o-mini' }}`,
     `      PUBLIC_AGENT_CITED_VERSION: \${{ vars.PUBLIC_AGENT_CODEX_VERSION }}`,
     `      GH_TOKEN: \${{ github.token }}`,
+    ...triggerParamsEnv(wf),
     ...envLines(wf),
     `    steps:`,
     `      - uses: actions/checkout@v4`,

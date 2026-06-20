@@ -1,20 +1,16 @@
 # A minimal runnable profile (the canonical `autonomy.ir.v1` format). Compile it onto a substrate:
 #   bun bin/autonomy-compile.ts profiles/hello local        # dry run: list the local installation
 #   bun bin/autonomy-compile.ts profiles/hello github /tmp/hello-gh   # materialize a github installation
+# One unit: an agent = behavior + capabilities + triggers(+params) + config. See docs/AUTONOMY-IR.md.
 schema: autonomy.ir.v1
 targets: [local, github]
 agents:
   greeter:
-    skill: greeter
-    maxConcurrent: 1
-    config:
-      capabilities: [tasks:converse]
-workflows:
-  - name: greeter-tick
+    behavior: greeter            # a prose skill → the substrate runs it via a model
+    capabilities: [tasks:converse]
     triggers:
-      - { cron: "*/30 * * * *" }
-    launch: greeter
+      - { cron: "*/30 * * * *" } # autonomous (no subject.ref) — fires on a schedule
     config: {}
-resources: []
 policy:
   box: {}
+resources: []

@@ -20,7 +20,6 @@ export const INSTALL_OWNED_PATHS = [
   'CHANGELOG.md',
   '.gitignore',
   'AGENTS.md',
-  '.open-autonomy/autonomy.yml',
   '.open-autonomy/roadmap.yml',
   '.open-autonomy/strategist-sources.json',
   'docs/CONSTITUTION.md',

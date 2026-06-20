@@ -3,7 +3,6 @@
 // the behavior artifact — a prose skill runs via a model (the privilege-separated wrapper, untrusted →
 // mediated); a script runs deterministically (a job, trusted → direct). See docs/AUTONOMY-IR.md.
 import { readFileSync, readdirSync } from 'node:fs';
-import { createRequire } from 'node:module';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { cfg, cronOf, emitAutonomy, isScript } from '@open-autonomy/core';
@@ -16,19 +15,12 @@ const AGENT_CONTROL = readFileSync(
   'utf8',
 );
 
-// The agent runtime — the scripts every installation runs — read straight from the @open-autonomy/agents
-// package (no vendored mirror, no sync). Dev-only tooling (scaffold/bootstrap/proof/provision/testbed) is
-// the maintainer's, not shipped into installs.
-const AGENTS_DIR = dirname(createRequire(import.meta.url).resolve('@open-autonomy/agents/package.json'));
-const DEV_ONLY = new Set([
-  'bootstrap-self-driving-testbed.ts', 'bootstrap-testbed.ts', 'fund-bootstrap.ts',
-  'open-autonomy-proof-audit.ts', 'open-autonomy-proof-audit.test.ts',
-  'provision-target-repo.ts', 'provision-target-repo.test.ts',
-  'scaffold-target-repo.ts', 'testbed-proctor-report.ts', 'testbed-proctor-report.test.ts',
-]);
+// The github substrate's runtime backend — the scripts every github installation runs. Domain-free,
+// injected (vendored under ./runtime, mirrored to scripts/); a profile never carries it.
+const RUNTIME_DIR = join(dirname(fileURLToPath(import.meta.url)), 'runtime');
 const RUNTIME: Record<string, string> = {};
-for (const f of readdirSync(AGENTS_DIR)) {
-  if (f.endsWith('.ts') && !DEV_ONLY.has(f)) RUNTIME[`scripts/${f}`] = readFileSync(join(AGENTS_DIR, f), 'utf8');
+for (const f of readdirSync(RUNTIME_DIR)) {
+  if (f.endsWith('.ts')) RUNTIME[`scripts/${f}`] = readFileSync(join(RUNTIME_DIR, f), 'utf8');
 }
 
 const CONTROL_VERBS = ['cancel', 'pause', 'resume', 'status', 'retry'];

@@ -1,105 +1,25 @@
-name: Open Autonomy Planner
-
+name: planner
 on:
   schedule:
-    - cron: '17 6 * * *'
-  workflow_dispatch:
-    inputs:
-      apply:
-        description: Create/update roadmap issues
-        required: false
-        default: 'false'
-        type: choice
-        options:
-          - 'false'
-          - 'true'
-
-permissions:
-  contents: read
-
+    - cron: "17 6 * * *"
+  workflow_dispatch: {}
+permissions: { contents: write, id-token: write, pull-requests: write, checks: read, issues: write }
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
-
 jobs:
-  plan:
+  planner:
     runs-on: ubuntu-latest
     timeout-minutes: 15
-    permissions:
-      contents: read
-      issues: write
+    env:
+      GH_TOKEN: ${{ github.token }}
     steps:
       - uses: actions/checkout@v4
-
       - uses: oven-sh/setup-bun@v2
-
-      - name: Install dependencies
-        run: bun install --frozen-lockfile || bun install
-
-      - name: Read existing roadmap issues
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          mkdir -p .agent-run/planner
-          gh issue list \
-            --state open \
-            --search "is:issue is:open label:origin:roadmap-planner" \
-            --limit 200 \
-            --json number,title,body,labels,url,state \
-            > .agent-run/planner/issues.json
-
-      - name: Plan roadmap issues
-        run: |
-          bun scripts/public-agent-planner.ts \
-            --roadmap .open-autonomy/roadmap.yml \
-            --issues .agent-run/planner/issues.json \
-            --out .agent-run/planner/plan.json
-
-      - name: Apply roadmap issue plan
-        if: inputs.apply == 'true' || github.event_name == 'schedule'
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          set -euo pipefail
-          gh label create origin:roadmap-planner --description "Issue created or managed by the Open Autonomy planner" --color 0E8A16 2>/dev/null || true
-          for label in priority:high priority:medium priority:low; do
-            gh label create "$label" --description "Roadmap priority" --color FBCA04 2>/dev/null || true
-          done
-          jq -r '.actions[].labels[]' .agent-run/planner/plan.json | sort -u | while IFS= read -r label; do
-            case "$label" in
-              roadmap:*) color="1D76DB" ;;
-              proof:*) color="5319E7" ;;
-              origin:*) color="0E8A16" ;;
-              priority:high) color="B60205" ;;
-              priority:medium) color="FBCA04" ;;
-              priority:low) color="C2E0C6" ;;
-              *) color="CFD3D7" ;;
-            esac
-            gh label create "$label" --description "Open Autonomy planner label" --color "$color" 2>/dev/null || true
-          done
-          jq -c '.actions[] | select(.action == "create" or .action == "update")' .agent-run/planner/plan.json | while IFS= read -r action; do
-            kind="$(jq -r '.action' <<< "$action")"
-            number="$(jq -r '.issue_number // empty' <<< "$action")"
-            title="$(jq -r '.title' <<< "$action")"
-            body="$(jq -r '.body' <<< "$action")"
-            labels="$(jq -r '.labels | join(",")' <<< "$action")"
-            # Apply labels best-effort and one at a time: a single bad label (e.g. one a strategist
-            # generated that exceeds GitHub's 50-char limit) must never block creating the issue.
-            if [[ "$kind" == "create" ]]; then
-              url="$(gh issue create --title "$title" --body "$body")"
-              number="$(printf '%s\n' "$url" | grep -oE '[0-9]+$' || true)"
-            else
-              gh issue edit "$number" --title "$title" --body "$body" || true
-            fi
-            if [[ -n "$number" ]]; then
-              printf '%s\n' "$labels" | tr ',' '\n' | while IFS= read -r lbl; do
-                [[ -n "$lbl" ]] && gh issue edit "$number" --add-label "$lbl" || true
-              done
-            fi
-          done
-
+      - run: bun install --frozen-lockfile || bun install
+      - run: bun scripts/agent-planner.ts
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: open-autonomy-planner-${{ github.run_id }}
-          path: .agent-run/planner
+          name: planner-${{ github.run_id }}
+          path: .agent-run
           if-no-files-found: warn

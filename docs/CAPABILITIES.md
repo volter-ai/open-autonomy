@@ -37,11 +37,14 @@ authority over *other* agents.
 
 ## What is NOT a capability
 
-- **Trust posture** — derived, not declared. An untrusted model (`launch`) authoring changes is realized
-  with the substrate's trust split (github: a read-only runner emits a bundle → a separate trusted
-  publisher validates and applies it); a trusted script (`run`) authoring changes writes directly. So
-  `launch`-vs-`run` × `artifact:author` determines the trust machinery — there is no `proposes:bundle`
-  knob (that was github leaking into the IR).
+- **Trust / output mediation** — not a capability at all. Whether an agent's output is untrusted (and
+  must be mediated before it touches the repo) is the **substrate's security responsibility, derived from
+  how it runs the agent**: model-interpreted behavior → untrusted → the substrate mediates (github: a
+  read-only agent emits a bundle → a separate trusted publisher validates and applies it); a deterministic
+  implementation → direct. The IR can't run codex, so it can't mediate; declaring "untrusted" wouldn't
+  change that the substrate must implement it. So trust is neither a capability nor an IR field. (If a
+  profile ever needs to override it, that's a `config` key, not a capability — `commit`/`propose` were a
+  wrong turn that conflated authority with trust.)
 - **Review / merge enforcement** — policy, not capability. A reviewer *records* a verdict via
   `tasks:converse`; the merge gate (`require_low_risk_review`, decision records) *enforces* it. There is
   no `artifact:review` capability.
@@ -65,13 +68,13 @@ Every current github-noun capability re-maps with nothing left over:
 `pr:open/update`, `branch:write` → `artifact:author`; `pr:comment` → `tasks:converse`;
 `pr:review` → `tasks:converse` (+ policy); `workflow:dispatch` → `agent:launch`.
 
-## How github realizes a `launch` agent — the wrapper
+## How github realizes a model-interpreted agent — the wrapper
 
-A `launch` agent compiles to **trusted wrapper jobs around the one untrusted agent job**. The wrapper is
-universal (identical for every such agent, running injected-runtime scripts); only the agent job's
-**skill** varies. The trust boundary is correct *by construction* — the agent never leaves its own
-read-only job, so wrapping only adds trusted jobs around it. Which wrapper jobs appear is selected by
-capabilities:
+When github runs an agent's behavior **via a model** (untrusted output), it compiles to **trusted wrapper
+jobs around the one untrusted agent job**. The wrapper is universal (identical for every such agent,
+running injected-runtime scripts); only the agent's **behavior** varies. The trust boundary is correct
+*by construction* — the agent never leaves its own read-only job, so wrapping only adds trusted jobs
+around it. Which wrapper jobs appear is selected by capabilities:
 
 ```
 control     (parallel)  operator verbs            always (agent:* lifecycle exposed to the operator)
@@ -83,8 +86,9 @@ post-ci     (post)      run CI on the new change    only when `artifact:author`
 post-review (post)      direct review               only when `artifact:author`
 ```
 
-The trust split is keyed off `launch` × `artifact:author`: an untrusted model that authors changes gets
-the read-only-agent → trusted-publisher split; a `run` script that authors changes writes directly.
+The trust split is keyed off **model-interpreted execution × `artifact:author`**: an untrusted model that
+authors changes gets the read-only-agent → trusted-publisher split; a deterministic implementation that
+authors changes writes directly. Execution mode is the substrate's choice; the split follows from it.
 
 **Security wiring the realizer must preserve (load-bearing, not cosmetic):**
 - agent job: `persist-credentials: false`; permissions `contents/issues/pull-requests: read` + `id-token: write` only; no `GH_TOKEN`/admin token in its env.

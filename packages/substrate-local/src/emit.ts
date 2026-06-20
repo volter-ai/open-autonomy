@@ -7,8 +7,12 @@ import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { cronOf } from '@open-autonomy/core';
-import type { AutonomyIR, CompileOutput, IRWorkflow } from '@open-autonomy/core';
+import type { AutonomyIR, CompileOutput, IRAgent } from '@open-autonomy/core';
 import { SUPPORTED_RUNNERS, type RunnerName } from '@open-autonomy/core';
+
+// The substrate decides execution from the behavior artifact (same rule as github): a script runs
+// directly; a prose skill gets a generated launcher that drives the agent through the runner.
+const isScript = (behavior: string): boolean => /\.(ts|mjs|js)$/.test(behavior);
 
 // The schedule the loop reads: an interval + the commands to run each tick. Generic, not tied to any tool.
 export interface LocalSchedule {
@@ -17,14 +21,15 @@ export interface LocalSchedule {
   scripts: string[];
 }
 
-// Every workflow's script lives at scheduler/scripts/<name>.mjs (the dest the schedule references).
-// A `run:` workflow copies its existing script there; a `launch:` workflow gets a generated launcher.
-export function workflowScriptPath(
-  w: IRWorkflow,
+// Each agent's tick script lives at scheduler/scripts/<role>-tick.mjs (the dest the schedule
+// references). A script-behavior agent copies its script there; a skill agent gets a generated launcher.
+export function agentScriptPath(
+  role: string,
+  agent: IRAgent,
   name: string,
 ): { dest: string; source?: string; generated: boolean } {
-  const dest = `profiles/${name}/scheduler/scripts/${w.name}.mjs`;
-  if (w.run) return { dest, source: w.run, generated: false };
+  const dest = `profiles/${name}/scheduler/scripts/${role}-tick.mjs`;
+  if (isScript(agent.behavior)) return { dest, source: agent.behavior, generated: false };
   return { dest, generated: true };
 }
 
@@ -119,11 +124,11 @@ export function compileLocal(
   }
   const base = `profiles/${name}`;
 
-  // The local loop can only honor cron triggers; event-only and raw (substrate-specific) workflows
-  // are skipped here (their agent stays launchable, just not auto-fired locally).
-  const localWorkflows = ir.workflows.filter((w) => !w.raw && cronOf(w));
-  const scriptPaths = localWorkflows.map((w) => workflowScriptPath(w, name).dest);
-  const intervalSeconds = localWorkflows[0] ? cronToSeconds(cronOf(localWorkflows[0]) as string) : 900;
+  // The local loop can only honor cron triggers; event-only agents are skipped here (still launchable,
+  // just not auto-fired locally). This is the local substrate's partial implementation of the standard.
+  const localAgents = Object.entries(ir.agents).filter(([, a]) => cronOf(a));
+  const scriptPaths = localAgents.map(([role, a]) => agentScriptPath(role, a, name).dest);
+  const intervalSeconds = localAgents[0] ? cronToSeconds(cronOf(localAgents[0][1]) as string) : 900;
   const schedule: LocalSchedule = {
     intervalSeconds,
     env: {},
@@ -140,17 +145,18 @@ export function compileLocal(
   };
   const copies: Array<{ from: string; to: string }> = [];
 
-  // workflows: run → copy the script to its dest; launch → generate a launcher at its dest.
-  for (const wf of localWorkflows) {
-    const { dest, source, generated: isGen } = workflowScriptPath(wf, name);
-    if (isGen) generated[dest] = launcherScript(wf.launch as string, base);
+  // agents: script behavior → copy the script to its dest; skill behavior → generate a launcher.
+  for (const [role, agent] of localAgents) {
+    const { dest, source, generated: isGen } = agentScriptPath(role, agent, name);
+    if (isGen) generated[dest] = launcherScript(role, base);
     else copies.push({ from: source as string, to: dest });
   }
 
-  // skills: source folder in the profile + the two harness installs (named `${profile}-${role}`)
+  // skills: only skill-behavior agents have a skill folder + the two harness installs (`${profile}-${role}`).
   for (const [role, agent] of Object.entries(ir.agents)) {
-    const src = `skills/${agent.skill}/SKILL.md`;
-    copies.push({ from: src, to: `${base}/skills/${agent.skill}/SKILL.md` });
+    if (isScript(agent.behavior)) continue;
+    const src = `skills/${agent.behavior}/SKILL.md`;
+    copies.push({ from: src, to: `${base}/skills/${agent.behavior}/SKILL.md` });
     copies.push({ from: src, to: `.claude/skills/${name}-${role}/SKILL.md` });
     copies.push({ from: src, to: `.agents/skills/${name}-${role}/SKILL.md` });
   }

@@ -77,9 +77,14 @@ export function evaluateCi(checks: CheckRun[], policy: CiPolicy = DEFAULT_CI_POL
   return { decision: policy.failed_required_check, reason: `${firstProblem.name} failed`, required };
 }
 
+// `gh pr checks --json state` reports a rollup that, for a finished check, is the CONCLUSION
+// (SUCCESS/FAILURE/SKIPPED/…) rather than the Checks-API status (COMPLETED). So only the known
+// in-flight states mean "not yet completed"; every other non-empty state is terminal. (The Checks-API
+// IN_PROGRESS/QUEUED forms are handled by the same set.)
+const PENDING_STATES = new Set(['PENDING', 'IN_PROGRESS', 'QUEUED', 'EXPECTED', 'WAITING', 'REQUESTED']);
 function normalizeState(state: string | undefined, bucket: string): string {
   const normalized = (state ?? '').toUpperCase();
-  if (normalized) return normalized;
+  if (normalized) return PENDING_STATES.has(normalized) ? normalized : 'COMPLETED';
   if (bucket === 'pending') return 'IN_PROGRESS';
   if (bucket === 'pass' || bucket === 'fail' || bucket === 'cancel' || bucket === 'skipping') return 'COMPLETED';
   return '';

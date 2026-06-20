@@ -234,12 +234,6 @@ async function route(req: Request, env: Env, ctx: ExecutionContext): Promise<Res
   if (path === '/v1/chat/completions') return handleOpenAI(req, env, claims, ctx, '/v1/chat/completions');
   if (path === '/v1/responses') return handleOpenAI(req, env, claims, ctx, '/v1/responses');
 
-  // Legacy prefixed routes, kept only for the deploy→agent-swap cutover; removed once agents use the
-  // native base URLs everywhere.
-  if (path === '/anthropic/v1/messages') return handleAnthropic(req, env, claims, ctx);
-  if (path === '/openai/v1/chat/completions') return handleOpenAI(req, env, claims, ctx, '/v1/chat/completions');
-  if (path === '/openai/v1/responses') return handleOpenAI(req, env, claims, ctx, '/v1/responses');
-
   return error('not_found', 404);
 }
 

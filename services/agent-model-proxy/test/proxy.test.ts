@@ -133,7 +133,7 @@ describe('agent model proxy', () => {
       }), { headers: { 'content-type': 'application/json' } });
     }) as typeof fetch;
 
-    const proxied = await worker.fetch(new Request('https://proxy.test/anthropic/v1/messages', {
+    const proxied = await worker.fetch(new Request('https://proxy.test/v1/messages', {
       method: 'POST',
       headers: {
         authorization: `Bearer ${minted.token}`,
@@ -335,7 +335,7 @@ describe('agent model proxy', () => {
       return new Response('{}');
     }) as typeof fetch;
 
-    const res = await worker.fetch(new Request('https://proxy.test/anthropic/v1/messages', {
+    const res = await worker.fetch(new Request('https://proxy.test/v1/messages', {
       method: 'POST',
       headers: {
         authorization: `Bearer ${minted.token}`,
@@ -571,7 +571,7 @@ describe('account funding (mint / grant / spend)', () => {
       id: 'msg_1', usage: { input_tokens: 1000, output_tokens: 1000 },
     }), { headers: { 'content-type': 'application/json' } })) as typeof fetch;
 
-    const proxied = await worker.fetch(new Request('https://proxy.test/anthropic/v1/messages', {
+    const proxied = await worker.fetch(new Request('https://proxy.test/v1/messages', {
       method: 'POST',
       headers: { authorization: `Bearer ${minted.token}`, 'content-type': 'application/json' },
       body: JSON.stringify({ model: 'claude-sonnet-4-6', max_tokens: 1000, messages: [] }),
@@ -588,7 +588,7 @@ describe('account funding (mint / grant / spend)', () => {
     await mintAcct(env, 'volter/twin', { amount_usd_cents: 1 }); // balance 1¢ — passes the mint gate, fails the request reservation
     const minted = await mint(env, ['claude-sonnet-4-6'], 500, 5);
 
-    const res = await worker.fetch(new Request('https://proxy.test/anthropic/v1/messages', {
+    const res = await worker.fetch(new Request('https://proxy.test/v1/messages', {
       method: 'POST',
       headers: { authorization: `Bearer ${minted.token}`, 'content-type': 'application/json' },
       body: JSON.stringify({ model: 'claude-sonnet-4-6', max_tokens: 4096, messages: [] }),
@@ -895,7 +895,7 @@ async function mint(
 }
 
 async function openaiChat(env: Env, token: string): Promise<Response> {
-  return await worker.fetch(new Request('https://proxy.test/openai/v1/chat/completions', {
+  return await worker.fetch(new Request('https://proxy.test/v1/chat/completions', {
     method: 'POST',
     headers: {
       authorization: `Bearer ${token}`,

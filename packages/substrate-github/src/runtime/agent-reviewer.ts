@@ -6,6 +6,7 @@
 // arrives via the declared TARGET_REF trigger param, not implicit event magic.
 import { $ } from 'bun';
 import { mkdirSync, readFileSync, existsSync } from 'node:fs';
+import { mintModelToken, revokeModelToken } from './model-token.js';
 
 const env = (k: string, d = '') => process.env[k] || d;
 const EVENT = env('GITHUB_EVENT_NAME', 'workflow_dispatch');
@@ -106,9 +107,7 @@ if (ci.decision !== 'pass') {
 }
 
 // CI passing: mint a reviewer token, run the model review, then the merge gate.
-const mint = await $`bun scripts/model-proxy-mint.ts --issue .agent-run/issue.json --models ${env('PUBLIC_AGENT_REVIEW_MODEL', 'gpt-4o-mini')} --max-usd-cents ${env('PUBLIC_AGENT_REVIEW_MAX_USD_CENTS', '50')} --max-requests 2 --purpose review`.nothrow().text();
-const runId = mint.match(/^run_id=(.*)$/m)?.[1] ?? '';
-const token = mint.match(/^token=(.*)$/m)?.[1] ?? '';
+const { runId, token } = await mintModelToken({ issue: '.agent-run/issue.json', models: env('PUBLIC_AGENT_REVIEW_MODEL', 'gpt-4o-mini'), maxUsdCents: Number(env('PUBLIC_AGENT_REVIEW_MAX_USD_CENTS', '50')), maxRequests: 2, purpose: 'review' });
 
 let reviewed = false;
 try {
@@ -120,7 +119,7 @@ try {
 } catch {
   reviewed = false; // continue-on-error: a failed review still records a verdict below
 } finally {
-  if (runId) await $`bun scripts/model-proxy-revoke.ts --run-id ${runId}`.nothrow();
+  await revokeModelToken(runId);
 }
 
 const currentHead = (await $`gh pr view ${pr} --json headRefOid --jq .headRefOid`.text()).trim();

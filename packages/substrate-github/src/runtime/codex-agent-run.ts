@@ -38,7 +38,10 @@ function tomlString(value: string): string {
 
 function writeCodexConfig(codexHome: string, model: string, proxyUrl: string): void {
   mkdirSync(codexHome, { recursive: true });
-  const baseUrl = new URL('/openai/v1', proxyUrl).toString().replace(/\/$/, '');
+  // Native proxy base URL — codex's OpenAI-compatible provider hits `${base}/responses` (wire_api), which
+  // the universal proxy serves at `/v1/responses`. No `/openai` prefix; same transparent endpoint the
+  // deterministic agents use.
+  const baseUrl = new URL('/v1', proxyUrl).toString().replace(/\/$/, '');
   writeFileSync(join(codexHome, 'config.toml'), [
     `model = ${tomlString(model)}`,
     'model_provider = "volter_model_proxy"',

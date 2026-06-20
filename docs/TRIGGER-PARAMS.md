@@ -31,6 +31,7 @@ that is the substrate reading the *documented* source, not implicit event magic.
 |---|---|---|---|
 | `subject.ref` | id of the work item that fired the trigger | `event.issue.number` / `event.inputs.issue_number` / `event.pull_request.number` | work-store item id |
 | `subject.actor` | who initiated it | `event.sender.login` / `github.actor` | requester |
+| `subject.actorRole` | the actor's authority over the project (for gating privileged commands); empty if N/A | `event.comment.author_association` (OWNER/MEMBER/COLLABORATOR/…) | requester's role |
 | `subject.text` | the text that fired it (comment/body); empty if N/A | `event.comment.body` / `event.issue.body` | queued message |
 | `trigger.kind` | why it fired | `event.action` / `event_name` | queue event kind |
 

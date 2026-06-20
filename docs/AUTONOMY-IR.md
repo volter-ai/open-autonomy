@@ -83,8 +83,14 @@ are added to a catalog first, then implemented by substrates — purely additive
    | `env` | extra env for the box | merged job `env` | exported to the agent |
    | `model.max_usd_cents` / `model.max_requests` | bounded model spend | mint bounds | local key budget |
    | `maxConcurrent` | per-agent cap | (realized via concurrency) | runner counts sessions |
+   | `model` | the agent calls the box's model (provision its credentials) | inject `MODEL_PROXY_*` into the job | (always available) |
+   | `workflowFile` | pin the realized unit's filename | output `.github/workflows/<file>` (keeps proxy allowlist / cross-dispatch / branch protection stable) | ignored |
+   | `persistCredentials` | keep the checkout's push token | `actions/checkout` `persist-credentials` | ignored |
+   | `permissions` | extra substrate-native authority the capability vocabulary doesn't name | merged into the job `permissions:` (e.g. `statuses: write`) | ignored |
 
-   A substrate reads the keys it knows and ignores the rest; unknown keys round-trip but are inert.
+   A substrate reads the keys it knows and ignores the rest; unknown keys round-trip but are inert. The
+   last four are github-specific today; another substrate ignores them (they are not part of the portable
+   core — that is what "partial implementation" means).
 
 ## Trust, review, execution — three orthogonal things, none of them an IR slot
 

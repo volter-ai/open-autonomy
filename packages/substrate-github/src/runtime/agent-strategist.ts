@@ -8,7 +8,9 @@ import { $ } from 'bun';
 import { mkdirSync, existsSync, readFileSync } from 'node:fs';
 
 const env = (k: string, d = '') => process.env[k] || d;
-const apply = process.env.GITHUB_EVENT_NAME === 'schedule' || process.env.AGENT_APPLY === 'true';
+// Schedule and manual dispatch both apply (you run the strategist to propose); set the AGENT_APPLY
+// repo var to "false" for a dry run that writes the proposal artifact without opening a PR.
+const apply = process.env.AGENT_APPLY !== 'false';
 const model = env('PUBLIC_AGENT_STRATEGIST_MODEL', env('PUBLIC_AGENT_PM_MODEL', 'gpt-4o-mini'));
 const provider = env('PUBLIC_AGENT_STRATEGIST_PROVIDER', 'openai');
 mkdirSync('.agent-run/strategist', { recursive: true });

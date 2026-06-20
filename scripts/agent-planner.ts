@@ -7,7 +7,9 @@
 import { $ } from 'bun';
 import { mkdirSync, readFileSync } from 'node:fs';
 
-const apply = process.env.GITHUB_EVENT_NAME === 'schedule' || process.env.AGENT_APPLY === 'true';
+// Schedule and manual dispatch both apply (you run the planner to reconcile); set the AGENT_APPLY
+// repo var to "false" for a dry run that writes the plan artifact without touching issues.
+const apply = process.env.AGENT_APPLY !== 'false';
 mkdirSync('.agent-run/planner', { recursive: true });
 
 // Read the existing planner-owned roadmap issues.

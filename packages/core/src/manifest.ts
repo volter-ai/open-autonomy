@@ -40,6 +40,9 @@ export function emitAutonomy(ir: AutonomyIR): OAManifest {
     const triggers: { schedule?: string; [event: string]: unknown } = {};
     for (const t of agent.triggers ?? []) {
       if ('cron' in t) triggers.schedule = t.cron;
+      // A portable `task:` lifecycle-state trigger is stored neutrally; each substrate maps the state to
+      // its own machinery (github renders the `on:` via taskAsEvent — the manifest stays substrate-free).
+      else if ('task' in t) triggers[`task:${t.task}`] = true;
       else triggers[t.event] = t.config ?? true;
     }
     // The agent's declared trigger params (param name -> documented source), unioned across triggers.

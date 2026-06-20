@@ -110,8 +110,8 @@ async function main(): Promise<void> {
   }
 
   process.stdout.write('\n[6/6] preflight\n');
-  run('gh', ['workflow', 'run', 'open-autonomy-preflight.yml', '-R', options.repo]);
-  process.stdout.write(`Preflight dispatched. Check: gh run list -R ${options.repo} --workflow open-autonomy-preflight.yml\n`);
+  run('gh', ['workflow', 'run', 'Open Autonomy Preflight', '-R', options.repo]);
+  process.stdout.write(`Preflight dispatched. Check: gh run list -R ${options.repo} --workflow "Open Autonomy Preflight"\n`);
   process.stdout.write('\nBootstrap complete.\n');
 }
 

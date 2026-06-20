@@ -9,6 +9,7 @@ export interface OAManifest {
     string,
     {
       skill?: string;
+      workflowFile?: string;
       // `schedule` is the cron; any other key is an event trigger carried verbatim.
       triggers?: { schedule?: string; [event: string]: unknown };
       capabilities?: string[];

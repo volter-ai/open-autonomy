@@ -5,10 +5,10 @@
 // public-agent-pm.yml shell. The PM proposes and routes; it never writes code.
 import { $ } from 'bun';
 import { mkdirSync, readFileSync, existsSync } from 'node:fs';
+import { launch, list } from './runner.js';
 
 const env = (k: string, d = '') => process.env[k] || d;
 const ACTOR = env('GITHUB_ACTOR', 'open-autonomy-pm');
-const REF = env('GITHUB_REF_NAME', 'main');
 const PM_COMMENT_TOKEN = env('PM_COMMENT_TOKEN', env('GH_TOKEN'));
 const LIMIT = env('PUBLIC_AGENT_PM_LIMIT', '10');
 const MODEL = env('PUBLIC_AGENT_PM_MODEL', 'gpt-4o-mini');
@@ -72,10 +72,8 @@ for (const number of numbers) {
   }
   let runs: unknown[] = [];
   try {
-    const runsRaw = JSON.parse(
-      (await $`gh run list --workflow public-agent.yml --limit 50 --json databaseId,status,conclusion,displayTitle,event,createdAt,updatedAt,url`.nothrow().text()) || '[]',
-    ) as Array<{ displayTitle?: string }>;
-    runs = runsRaw.filter((r) => (r.displayTitle ?? '').includes(`#${number}`));
+    // The developer agent's recent runs (agent:list), filtered to this issue — substrate-neutral.
+    runs = (await list('developer', 50)).filter((r) => (r.title ?? '').includes(`#${number}`));
   } catch {
     runs = [];
   }
@@ -199,10 +197,10 @@ for (const number of numbers) {
     spam: () => $`gh issue edit ${number} --add-label spam --add-label agent-blocked`.nothrow(),
   }[pm.action];
   if (lbl) await lbl();
-  // Route the next action.
+  // Route the next action through the runner (agent:launch) — substrate-neutral intent, not raw gh.
   if (d.command === '/agent develop') {
-    await $`gh workflow run public-agent.yml --ref ${REF} -f issue_number=${number}`.nothrow();
+    await launch('developer', { issue_number: number });
   } else if (d.command === '/agent review') {
-    await $`gh workflow run public-agent-review.yml --ref ${REF} -f issue_number=${String(d.target_number)}`.nothrow();
+    await launch('reviewer', { issue_number: String(d.target_number) });
   }
 }

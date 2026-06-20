@@ -6,6 +6,7 @@
 // does not merge. A faithful port of the former open-autonomy-strategist.yml.
 import { $ } from 'bun';
 import { mkdirSync, existsSync, readFileSync } from 'node:fs';
+import { launch } from './runner.js';
 
 const env = (k: string, d = '') => process.env[k] || d;
 // Schedule and manual dispatch both apply (you run the strategist to propose); set the AGENT_APPLY
@@ -109,9 +110,8 @@ const prUrl = (
   await $`gh pr create --base main --head ${branch} --title ${`Strategist: roadmap proposal (${proposal.summary.slice(0, 60)})`} --body-file .agent-run/strategist/body.md --label origin:strategist`.nothrow().text()
 ).trim();
 const prNumber = prUrl.match(/(\d+)$/)?.[1];
-// Hand off to the independent strategy reviewer. workflow_dispatch is dispatchable with the ambient
-// token (unlike PR events, which GITHUB_TOKEN-created PRs do not trigger).
+// Hand off to the independent strategy reviewer through the runner (agent:launch) — the author states
+// intent ("review this proposal"); how the substrate starts the reviewer is the runner's concern.
 if (prNumber) {
-  const dispatched = await $`gh workflow run public-agent-strategy-review.yml -f issue_number=${prNumber}`.nothrow();
-  if (dispatched.exitCode !== 0) console.log(`could not dispatch strategy review; trigger /agent strategy-review on PR #${prNumber}`);
+  await launch('strategy_reviewer', { issue_number: prNumber });
 }

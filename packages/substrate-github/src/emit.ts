@@ -5,7 +5,7 @@ import { readFileSync, readdirSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { cronOf } from '@open-autonomy/core';
-import type { AutonomyIR, CompileOutput, IRStep, IRWorkflow } from '@open-autonomy/core';
+import type { AutonomyIR, CompileOutput, IRWorkflow } from '@open-autonomy/core';
 import type { OAManifest } from './ingest-manifest';
 
 // The operator control plane (the github surface of the Runner contract). Single source of truth is
@@ -90,22 +90,6 @@ const DISPATCH_INPUTS = [
   '      issue_number: { description: "issue to act on (used by /agent retry)", required: false, type: string }',
 ];
 
-// Render a carried (non-cron) event trigger as github `on:` YAML. Its config (e.g. pull_request paths)
-// is carried verbatim — the IR doesn't model event semantics, so the substrate renders them as-is.
-function eventLines(event: string, config?: Record<string, unknown>): string[] {
-  if (!config || Object.keys(config).length === 0) return [`  ${event}: {}`];
-  // Block-style render of the common github trigger filters (paths/branches/types: scalar | string[]).
-  const lines = [`  ${event}:`];
-  for (const [k, v] of Object.entries(config)) {
-    if (Array.isArray(v)) {
-      lines.push(`    ${k}:`, ...v.map((item) => `      - ${JSON.stringify(item)}`));
-    } else {
-      lines.push(`    ${k}: ${JSON.stringify(v)}`);
-    }
-  }
-  return lines;
-}
-
 function onLines(wf: IRWorkflow, kind: 'run' | 'launch'): string[] {
   const lines = ['on:'];
   const cron = cronOf(wf);
@@ -123,7 +107,7 @@ function onLines(wf: IRWorkflow, kind: 'run' | 'launch'): string[] {
   for (const t of wf.triggers) {
     if ('cron' in t || seen.has(t.event)) continue;
     seen.add(t.event);
-    lines.push(...eventLines(t.event, t.config));
+    lines.push(`  ${t.event}: {}`);
   }
   return lines;
 }
@@ -183,11 +167,6 @@ function launchConcurrencyLines(wf: IRWorkflow): string[] {
   ];
 }
 
-// Universal envelope: opt every workflow into the Node 24 JS-actions runtime. GitHub deprecated the
-// node20 action runtime; OA hand-wrote this top-level env per workflow — the compiler applies it
-// uniformly (top-level env applies to all jobs). A production-readiness contract, not just DRY.
-const NODE24_ENV = ['env:', '  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"'];
-
 // Universal envelope: upload the agent's evidence dir (.agent-run) as a run artifact, always. Part of
 // every workflow OA hand-wrote (but inconsistently); the compiler applies it uniformly.
 function artifactLines(wf: IRWorkflow): string[] {
@@ -201,213 +180,12 @@ function artifactLines(wf: IRWorkflow): string[] {
   ];
 }
 
-// --- The step/ABI client (github implementation) ---
-// A `steps` workflow is a deterministic program pipeline; the github client renders each ABI verb with
-// gh/git. The IR names the verb + its data; this is the only substrate-specific surface (per
-// docs/IR-WORKFLOWS.md). A local client would render the same verbs over the work-store.
-
-// `on:` for a steps pipeline: schedule (cron) + the dry-run/apply dispatch convention (only when a step
-// is applyOnly) + carried events. No issue_comment/control plane (that is the launch envelope).
-function onLinesForSteps(wf: IRWorkflow): string[] {
-  const lines = ['on:'];
-  const cron = cronOf(wf);
-  if (cron) lines.push('  schedule:', `    - cron: "${cron}"`);
-  const seen = new Set<string>(['workflow_dispatch']);
-  if ((wf.steps ?? []).some((s) => s.applyOnly)) {
-    lines.push(
-      '  workflow_dispatch:',
-      '    inputs:',
-      '      apply:',
-      '        description: Apply changes (default dry-run)',
-      '        required: false',
-      "        default: 'false'",
-      '        type: choice',
-      "        options: ['false', 'true']",
-    );
-  } else {
-    lines.push('  workflow_dispatch: {}');
-  }
-  for (const t of wf.triggers) {
-    if ('cron' in t || seen.has(t.event)) continue;
-    seen.add(t.event);
-    lines.push(...eventLines(t.event, t.config));
-  }
-  return lines;
-}
-
-// Steps run deterministic logic + gh; baseline contents:read (no commit, no model) + caps. Distinct
-// from a launch job (which commits → contents:write + id-token).
-function stepsPermissions(caps: string[], usesModel = false): string {
-  const p: Record<string, string> = { contents: 'read' };
-  if (usesModel) p['id-token'] = 'write'; // OIDC mint fallback (no stored admin secret needed)
-  const grant = (k: string, lvl: string) => { if (p[k] !== 'write') p[k] = lvl; }; // write wins over read
-  for (const c of caps) {
-    if (c === 'issue:read') grant('issues', 'read');
-    else if (c.startsWith('issue:')) p.issues = 'write';
-    else if (c === 'pr:read') grant('pull-requests', 'read');
-    else if (c.startsWith('pr:') || c === 'branch:write') p['pull-requests'] = 'write';
-    else if (c === 'workflow:dispatch') p.actions = 'write';
-  }
-  return `{ ${Object.entries(p).map(([k, v]) => `${k}: ${v}`).join(', ')} }`;
-}
-
-// The github applyWork renderer — apply a work-mutation plan ({actions:[{action,issue_number,title,
-// body,labels}]}) with gh: ensure every label used exists (best-effort), then create/update each item
-// and attach its labels one at a time (a single bad label must never block the issue). This is the
-// github client's rendering of the `apply` verb; a local client would write the work-store instead.
-const APPLY_PLAN_BODY = (plan: string): string[] => [
-  `set -euo pipefail`,
-  `PLAN=${plan}`,
-  `jq -r '.actions[].labels[]?' "$PLAN" | sort -u | while IFS= read -r label; do`,
-  `  [ -n "$label" ] && gh label create "$label" --color CFD3D7 2>/dev/null || true`,
-  `done`,
-  `jq -c '.actions[] | select(.action == "create" or .action == "update")' "$PLAN" | while IFS= read -r action; do`,
-  `  kind="$(jq -r '.action' <<< "$action")"`,
-  `  number="$(jq -r '.issue_number // empty' <<< "$action")"`,
-  `  title="$(jq -r '.title' <<< "$action")"`,
-  `  body="$(jq -r '.body' <<< "$action")"`,
-  `  labels="$(jq -r '.labels | join(",")' <<< "$action")"`,
-  `  if [ "$kind" = "create" ]; then`,
-  `    url="$(gh issue create --title "$title" --body "$body")"`,
-  `    number="$(printf '%s\\n' "$url" | grep -oE '[0-9]+$' || true)"`,
-  `  else`,
-  `    gh issue edit "$number" --title "$title" --body "$body" || true`,
-  `  fi`,
-  `  if [ -n "$number" ]; then`,
-  `    printf '%s\\n' "$labels" | tr ',' '\\n' | while IFS= read -r lbl; do`,
-  `      [ -n "$lbl" ] && gh issue edit "$number" --add-label "$lbl" || true`,
-  `    done`,
-  `  fi`,
-  `done`,
-];
-
-function str(box: Record<string, unknown> | undefined, key: string, fallback: string): string {
-  const v = box?.[key];
-  return typeof v === 'string' ? v : fallback;
-}
-
-// Render one step to github YAML lines (indented for a job `steps:` list). The verb dispatch IS the ABI.
-// extraEnv (e.g. the minted MODEL_PROXY_TOKEN) is rendered as a step-level env block.
-function stepLines(step: IRStep, extraEnv: string[] = []): string[] {
-  const w = (step.with ?? {}) as Record<string, unknown>;
-  const head = [`      - name: ${step.name}`];
-  if (step.applyOnly) head.push(`        if: inputs.apply == 'true' || github.event_name == 'schedule'`);
-  if (extraEnv.length) head.push(`        env:`, ...extraEnv.map((l) => `          ${l}`));
-  const block = (body: string[]): string[] => [...head, `        run: |`, ...body.map((l) => `          ${l}`)];
-  switch (step.uses) {
-    case 'gather': {
-      const out = str(w, 'out', '.agent-run/gather.json');
-      const dir = out.includes('/') ? out.slice(0, out.lastIndexOf('/')) : '.';
-      const kind = str(w, 'kind', 'issues'); // what to list: issues (default) | labels | prs
-      const limit = typeof w.limit === 'number' ? w.limit : 200;
-      if (kind === 'labels') {
-        return block([`mkdir -p ${dir}`, `gh label list --limit ${limit} --json ${str(w, 'fields', 'name')} > ${out}`]);
-      }
-      const noun = kind === 'prs' ? 'pr' : 'issue';
-      const fields = str(w, 'fields', 'number,title,body,labels,url,state');
-      return block([
-        `mkdir -p ${dir}`,
-        `gh ${noun} list --state ${str(w, 'state', 'open')} --search ${JSON.stringify(str(w, 'query', ''))} --limit ${limit} --json ${fields} > ${out}`,
-      ]);
-    }
-    case 'run': {
-      const args = Array.isArray(w.args) ? (w.args as string[]) : [];
-      const cmd = `bun ${str(w, 'script', '')}${args.length ? ' ' + args.join(' ') : ''}`;
-      const mk = str(w, 'mkdir', ''); // ensure an output dir exists (scripts writeFileSync into it)
-      return mk ? block([`mkdir -p ${mk}`, cmd]) : [...head, `        run: ${cmd}`];
-    }
-    case 'apply':
-      return block(APPLY_PLAN_BODY(str(w, 'plan', '.agent-run/plan.json')));
-    default:
-      throw new Error(`unknown step verb "${step.uses}" in step "${step.name}"`);
-  }
-}
-
-// The model envelope (mirrors the proven launch path): a bounded per-run proxy token minted before the
-// model step and revoked after it. The admin secret is scoped to mint+revoke ONLY — the model run step
-// gets just the minted token (research/run stays "powerless", per the original strategist's design).
-function mintStepLines(cfg: Record<string, unknown>, title: string): string[] {
-  const models = String(cfg.models ?? '');
-  const opt = (flag: string, v: unknown) => (v === undefined || v === '' ? [] : [`${flag} "${v}"`]);
-  const mintCmd = [
-    `bun scripts/model-proxy-mint.ts --issue .agent-run/model-issue.json`,
-    `--models "${models}"`,
-    ...opt('--max-usd-cents', cfg.maxUsdCents),
-    ...opt('--max-requests', cfg.maxRequests),
-    ...opt('--purpose', cfg.purpose),
-  ].join(' ');
-  return [
-    `      - name: Mint model token`,
-    `        id: mint`,
-    `        env:`,
-    `          MODEL_PROXY_ADMIN_TOKEN: \${{ secrets.MODEL_PROXY_ADMIN_TOKEN }}`,
-    `        run: |`,
-    `          set -euo pipefail`,
-    `          mkdir -p .agent-run`,
-    `          printf '{"number":0,"title":${JSON.stringify(title)},"body":""}\\n' > .agent-run/model-issue.json`,
-    `          ${mintCmd}`,
-  ];
-}
-function revokeStepLines(): string[] {
-  return [
-    `      - name: Revoke model token`,
-    `        if: always() && steps.mint.outputs.run_id != ''`,
-    `        env:`,
-    `          MODEL_PROXY_ADMIN_TOKEN: \${{ secrets.MODEL_PROXY_ADMIN_TOKEN }}`,
-    `        run: bun scripts/model-proxy-revoke.ts --run-id "\${{ steps.mint.outputs.run_id }}" || true`,
-  ];
-}
-
-function stepsWorkflowYml(wf: IRWorkflow, ir: AutonomyIR): string {
-  const steps = wf.steps ?? [];
-  const caps = ((wf.config as Record<string, unknown>).capabilities as string[]) ?? [];
-  const modelIdx = steps.map((s, i) => (s.needsModel ? i : -1)).filter((i) => i >= 0);
-  const usesModel = modelIdx.length > 0;
-  const firstModel = usesModel ? modelIdx[0] : -1;
-  const lastModel = usesModel ? modelIdx[modelIdx.length - 1] : -1;
-  // GH_TOKEN only when a step shells out to gh (gather/apply); MODEL_PROXY_URL job-wide when minting
-  // (mint/run/revoke all read it). The admin secret is NOT job-wide — it rides only on mint/revoke.
-  const usesGh = steps.some((s) => s.uses === 'gather' || s.uses === 'apply');
-  const jobEnv = [
-    ...(usesGh ? [`      GH_TOKEN: \${{ github.token }}`] : []),
-    ...(usesModel ? [`      MODEL_PROXY_URL: \${{ vars.MODEL_PROXY_URL }}`] : []),
-    ...envLines(wf),
-  ];
-  const renderedSteps: string[] = [];
-  steps.forEach((s, i) => {
-    if (i === firstModel) renderedSteps.push(...mintStepLines((s.with as Record<string, unknown>)?.model as Record<string, unknown> ?? {}, wf.name));
-    renderedSteps.push(...stepLines(s, s.needsModel ? [`MODEL_PROXY_TOKEN: \${{ steps.mint.outputs.token }}`] : []));
-    if (i === lastModel) renderedSteps.push(...revokeStepLines());
-  });
-  return [
-    `name: ${wf.name}`,
-    ...onLinesForSteps(wf),
-    `permissions: ${stepsPermissions(caps, usesModel)}`,
-    ...concurrencyLines(wf),
-    ...NODE24_ENV,
-    `jobs:`,
-    `  ${wf.name}:`,
-    `    runs-on: ubuntu-latest`,
-    ...timeoutLines(wf),
-    ...(jobEnv.length ? ['    env:', ...jobEnv] : []),
-    `    steps:`,
-    `      - uses: actions/checkout@v4`,
-    `      - uses: oven-sh/setup-bun@v2`,
-    `      - run: bun install --frozen-lockfile || bun install`,
-    ...renderedSteps,
-    ...artifactLines(wf),
-    ``,
-  ].join('\n');
-}
-
 function workflowYml(wf: IRWorkflow, ir: AutonomyIR): string {
-  if (wf.steps) return stepsWorkflowYml(wf, ir);
   if (wf.run) {
     return [
       `name: ${wf.name}`,
       ...onLines(wf, 'run'),
       ...concurrencyLines(wf),
-      ...NODE24_ENV,
       `jobs:`,
       `  ${wf.name}:`,
       `    runs-on: ubuntu-latest`,
@@ -427,7 +205,6 @@ function workflowYml(wf: IRWorkflow, ir: AutonomyIR): string {
     ...onLines(wf, 'launch'),
     `permissions: ${capsToPermissions((ir.agents[wf.launch as string]?.config.capabilities as string[]) ?? [])}`,
     ...launchConcurrencyLines(wf),
-    ...NODE24_ENV,
     `jobs:`,
     // Mandatory operator control plane: the github surface of the Runner contract. An `/agent <verb>`
     // issue comment runs the control handler (cancel/pause/resume/status/retry → gh / labels).

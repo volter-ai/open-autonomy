@@ -19,6 +19,8 @@ const DEV_ONLY = new Set([
   'open-autonomy-proof-audit.ts', 'open-autonomy-proof-audit.test.ts',
   'provision-target-repo.ts', 'provision-target-repo.test.ts',
   'scaffold-target-repo.ts', 'testbed-proctor-report.ts', 'testbed-proctor-report.test.ts',
+  // Bench (dev/analysis): fitness measurement over recorded decisions — not shipped into installs.
+  'autonomy-ratio.ts', 'autonomy-ratio.test.ts',
 ]);
 const set = readdirSync(SRC).filter((f) => f.endsWith('.ts') && !DEV_ONLY.has(f)).sort();
 

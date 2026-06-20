@@ -5,9 +5,8 @@
 import { readFileSync, readdirSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { cronOf } from '@open-autonomy/core';
+import { cfg, cronOf, emitAutonomy, isScript } from '@open-autonomy/core';
 import type { AutonomyIR, CompileOutput, IRAgent } from '@open-autonomy/core';
-import type { OAManifest } from './ingest-manifest';
 
 // The operator control plane (the github surface of the Runner contract). Single source of truth is
 // a sibling file we emit verbatim into the compiled repo as .github/agent-control.mjs.
@@ -28,52 +27,6 @@ const CONTROL_VERBS = ['cancel', 'pause', 'resume', 'status', 'retry'];
 const IS_CONTROL = "github.event_name == 'issue_comment' && startsWith(github.event.comment.body, '/agent ')";
 const NOT_CONTROL = "github.event_name != 'issue_comment' || !startsWith(github.event.comment.body, '/agent ')";
 
-// The substrate decides how to run an agent's behavior. A script artifact → deterministic (trusted,
-// direct); anything else (a prose skill folder) → model-interpreted (untrusted, mediated wrapper).
-function isScript(behavior: string): boolean {
-  return /\.(ts|mjs|js)$/.test(behavior);
-}
-function cfg(agent: IRAgent): Record<string, unknown> {
-  return agent.config as Record<string, unknown>;
-}
-
-export function emitAutonomy(ir: AutonomyIR): OAManifest {
-  const skills: Record<string, string> = {};
-  const agents: NonNullable<OAManifest['agents']> = {};
-  for (const [role, agent] of Object.entries(ir.agents)) {
-    if (!isScript(agent.behavior)) skills[role] = `.codex/skills/${agent.behavior}`;
-    const c = cfg(agent);
-    const triggers: { schedule?: string; [event: string]: unknown } = {};
-    for (const t of agent.triggers ?? []) {
-      if ('cron' in t) triggers.schedule = t.cron;
-      else triggers[t.event] = t.config ?? true;
-    }
-    // The agent's declared trigger params (param name -> documented source), unioned across triggers.
-    // The runner needs these to resolve a launch's params into the agent's env (github does it in the
-    // workflow; the local runner does it before spawning a script agent).
-    const params: Record<string, string> = {};
-    for (const t of agent.triggers ?? []) {
-      for (const [n, s] of Object.entries((t as { params?: Record<string, string> }).params ?? {})) params[n] = s;
-    }
-    agents[role] = {
-      skill: agent.behavior,
-      // The launchable unit the github runner targets for agent:launch (workflow_dispatch).
-      workflowFile: typeof c.workflowFile === 'string' ? (c.workflowFile as string) : `${role}.yml`,
-      ...(Object.keys(params).length ? { params } : {}),
-      ...(Object.keys(triggers).length ? { triggers } : {}),
-      ...(typeof c.timeout === 'number' ? { timeout: c.timeout } : {}),
-      ...(typeof c.concurrency === 'string' ? { concurrency: c.concurrency } : {}),
-      ...(c.env && typeof c.env === 'object' ? { env: c.env as Record<string, string> } : {}),
-      ...(agent.capabilities?.length ? { capabilities: agent.capabilities } : {}),
-    };
-  }
-  const box = ir.policy.box as Record<string, unknown>;
-  const policy: NonNullable<OAManifest['policy']> = {};
-  for (const k of ['autonomy', 'risk', 'merge', 'planner'] as const) {
-    if (box[k]) policy[k] = box[k] as Record<string, unknown>;
-  }
-  return { schema: 'open-autonomy.autonomy.v1', documents: { resources: ir.resources }, skills, agents, policy };
-}
 
 // --- `on:` + trigger params ---
 

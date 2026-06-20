@@ -29,6 +29,18 @@ export function cronOf(a: IRAgent): string | undefined {
   return undefined;
 }
 
+/** An agent's opaque config bag (each substrate interprets the keys it knows). */
+export function cfg(agent: IRAgent): Box {
+  return (agent.config ?? {}) as Box;
+}
+
+/** Execution heuristic shared by substrates: a `scripts/*.{ts,mjs,js}` behavior is a deterministic
+ *  implementation; anything else (a prose skill folder) is model-interpreted. Not an IR field — it's the
+ *  substrate's realization choice — but the same rule everywhere, so it lives with the standard. */
+export function isScript(behavior: string): boolean {
+  return /\.(ts|mjs|js)$/.test(behavior);
+}
+
 export interface IRPolicy {
   maxConcurrent?: number; // global fleet cap
   box: Box; // opaque governance (merge/risk/…); substrate + agents read what they understand

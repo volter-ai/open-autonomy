@@ -1,5 +1,6 @@
 #!/usr/bin/env bun
 import { appendFileSync, existsSync, readFileSync, writeFileSync } from 'node:fs';
+import { modelComplete } from './model-call.js';
 
 // The strategy reviewer ratifies a strategist's roadmap proposal against the constitution's north
 // star and merit criteria (the human-owned rubric). It is a separate agent from the strategist:
@@ -104,9 +105,6 @@ function readMaybe(path: string | undefined): string {
 
 async function main(): Promise<void> {
   const options = parseArgs(process.argv.slice(2));
-  const proxyUrl = process.env.MODEL_PROXY_URL;
-  const token = process.env.MODEL_PROXY_TOKEN;
-  if (!proxyUrl || !token) throw new Error('MODEL_PROXY_URL and MODEL_PROXY_TOKEN are required');
   const prompt = renderStrategyReviewPrompt(
     readFileSync(options.diff, 'utf8'),
     readMaybe(options.proposal),
@@ -115,9 +113,7 @@ async function main(): Promise<void> {
   );
   let verdict: StrategyVerdict;
   try {
-    verdict = options.provider === 'anthropic'
-      ? await callAnthropic(proxyUrl, token, options.model, prompt)
-      : await callOpenAI(proxyUrl, token, options.model, prompt);
+    verdict = parseStrategyVerdict(await modelComplete(options.provider, options.model, prompt, 1200));
   } catch (error) {
     verdict = modelFailureVerdict(error);
   }
@@ -131,30 +127,6 @@ async function main(): Promise<void> {
   }
   process.stdout.write(`strategy-review=${verdict.verdict}\n`);
   if (verdict.verdict !== 'pass' || verdict.human_required) process.exit(78);
-}
-
-async function callOpenAI(proxyUrl: string, token: string, model: string, prompt: string): Promise<StrategyVerdict> {
-  const res = await fetch(new URL('/openai/v1/chat/completions', proxyUrl), {
-    method: 'POST',
-    headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
-    body: JSON.stringify({ model, max_tokens: 1200, messages: [{ role: 'user', content: prompt }] }),
-  });
-  const text = await res.text();
-  if (!res.ok) throw new Error(`strategy review model call failed: ${res.status}: ${sanitizeMessage(text)}`);
-  const body = JSON.parse(text) as { choices?: Array<{ message?: { content?: string } }> };
-  return parseStrategyVerdict(body.choices?.[0]?.message?.content ?? '');
-}
-
-async function callAnthropic(proxyUrl: string, token: string, model: string, prompt: string): Promise<StrategyVerdict> {
-  const res = await fetch(new URL('/anthropic/v1/messages', proxyUrl), {
-    method: 'POST',
-    headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json', 'anthropic-version': '2023-06-01' },
-    body: JSON.stringify({ model, max_tokens: 1200, messages: [{ role: 'user', content: prompt }] }),
-  });
-  const text = await res.text();
-  if (!res.ok) throw new Error(`strategy review model call failed: ${res.status}: ${sanitizeMessage(text)}`);
-  const body = JSON.parse(text) as { content?: Array<{ text?: string }> };
-  return parseStrategyVerdict(body.content?.map((part) => part.text ?? '').join('\n') ?? '');
 }
 
 function sanitizeMessage(value: string): string {

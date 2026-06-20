@@ -1,6 +1,7 @@
 #!/usr/bin/env bun
 import { appendFileSync, readFileSync, writeFileSync } from 'node:fs';
 import { readControlFileContext, renderControlFilePrompt } from './public-agent-control-files.js';
+import { modelComplete } from './model-call.js';
 
 export interface ReviewerVerdict {
   verdict: 'pass' | 'fail';
@@ -84,9 +85,6 @@ export function modelFailureVerdict(error: unknown): ReviewerVerdict {
 
 async function main(): Promise<void> {
   const options = parseArgs(process.argv.slice(2));
-  const proxyUrl = process.env.MODEL_PROXY_URL;
-  const token = process.env.MODEL_PROXY_TOKEN;
-  if (!proxyUrl || !token) throw new Error('MODEL_PROXY_URL and MODEL_PROXY_TOKEN are required');
   const prompt = renderReviewPrompt(
     readFileSync(options.diff, 'utf8'),
     options.ci ? readFileSync(options.ci, 'utf8') : '',
@@ -94,9 +92,7 @@ async function main(): Promise<void> {
   );
   let verdict: ReviewerVerdict;
   try {
-    verdict = options.provider === 'anthropic'
-      ? await callAnthropic(proxyUrl, token, options.model, prompt)
-      : await callOpenAI(proxyUrl, token, options.model, prompt);
+    verdict = parseReviewerVerdict(await modelComplete(options.provider, options.model, prompt, 1200));
   } catch (error) {
     verdict = modelFailureVerdict(error);
   }
@@ -111,34 +107,6 @@ async function main(): Promise<void> {
   }
   process.stdout.write(`review=${verdict.verdict}:${verdict.risk}\n`);
   if (verdict.verdict !== 'pass' || verdict.human_required) process.exit(78);
-}
-
-async function callAnthropic(proxyUrl: string, token: string, model: string, prompt: string): Promise<ReviewerVerdict> {
-  const res = await fetch(new URL('/anthropic/v1/messages', proxyUrl), {
-    method: 'POST',
-    headers: {
-      authorization: `Bearer ${token}`,
-      'content-type': 'application/json',
-      'anthropic-version': '2023-06-01',
-    },
-    body: JSON.stringify({ model, max_tokens: 1200, messages: [{ role: 'user', content: prompt }] }),
-  });
-  const text = await res.text();
-  if (!res.ok) throw new Error(`review model call failed: ${res.status}: ${sanitizeMessage(text)}`);
-  const body = JSON.parse(text) as { content?: Array<{ text?: string }> };
-  return parseReviewerVerdict(body.content?.map((part) => part.text ?? '').join('\n') ?? '');
-}
-
-async function callOpenAI(proxyUrl: string, token: string, model: string, prompt: string): Promise<ReviewerVerdict> {
-  const res = await fetch(new URL('/openai/v1/chat/completions', proxyUrl), {
-    method: 'POST',
-    headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
-    body: JSON.stringify({ model, max_tokens: 1200, messages: [{ role: 'user', content: prompt }] }),
-  });
-  const text = await res.text();
-  if (!res.ok) throw new Error(`review model call failed: ${res.status}: ${sanitizeMessage(text)}`);
-  const body = JSON.parse(text) as { choices?: Array<{ message?: { content?: string } }> };
-  return parseReviewerVerdict(body.choices?.[0]?.message?.content ?? '');
 }
 
 function sanitizeMessage(value: string): string {

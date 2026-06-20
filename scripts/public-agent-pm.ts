@@ -1,5 +1,6 @@
 #!/usr/bin/env bun
 import { readFileSync, writeFileSync } from 'node:fs';
+import { modelComplete } from './model-call.js';
 
 export type PmAction =
   | 'develop'
@@ -102,47 +103,16 @@ export function renderPmPrompt(issueJson: string): string {
 
 async function main(): Promise<void> {
   const options = parseArgs(process.argv.slice(2));
-  const proxyUrl = process.env.MODEL_PROXY_URL;
-  const token = process.env.MODEL_PROXY_TOKEN;
-  if (!proxyUrl || !token) throw new Error('MODEL_PROXY_URL and MODEL_PROXY_TOKEN are required');
   const prompt = renderPmPrompt(readFileSync(options.issue, 'utf8'));
   const decision = await (async () => {
     try {
-      return options.provider === 'anthropic'
-        ? await callAnthropic(proxyUrl, token, options.model, prompt)
-        : await callOpenAI(proxyUrl, token, options.model, prompt);
+      return parsePmDecision(await modelComplete(options.provider, options.model, prompt, 800));
     } catch (error) {
       return pmFailureDecision(error);
     }
   })();
   writeFileSync(options.out, `${JSON.stringify(decision, null, 2)}\n`);
   process.stdout.write(`pm=${decision.action}:${decision.risk}\n`);
-}
-
-async function callAnthropic(proxyUrl: string, token: string, model: string, prompt: string): Promise<PmDecision> {
-  const res = await fetch(new URL('/anthropic/v1/messages', proxyUrl), {
-    method: 'POST',
-    headers: {
-      authorization: `Bearer ${token}`,
-      'content-type': 'application/json',
-      'anthropic-version': '2023-06-01',
-    },
-    body: JSON.stringify({ model, max_tokens: 800, messages: [{ role: 'user', content: prompt }] }),
-  });
-  const body = await res.json() as { content?: Array<{ text?: string }> };
-  if (!res.ok) throw new Error(`PM model call failed: ${res.status}`);
-  return parsePmDecision(body.content?.map((part) => part.text ?? '').join('\n') ?? '');
-}
-
-async function callOpenAI(proxyUrl: string, token: string, model: string, prompt: string): Promise<PmDecision> {
-  const res = await fetch(new URL('/openai/v1/chat/completions', proxyUrl), {
-    method: 'POST',
-    headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
-    body: JSON.stringify({ model, max_tokens: 800, messages: [{ role: 'user', content: prompt }] }),
-  });
-  const body = await res.json() as { choices?: Array<{ message?: { content?: string } }> };
-  if (!res.ok) throw new Error(`PM model call failed: ${res.status}`);
-  return parsePmDecision(body.choices?.[0]?.message?.content ?? '');
 }
 
 function redact(text: string): string {

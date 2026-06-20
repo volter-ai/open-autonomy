@@ -65,7 +65,8 @@ if (!existsSync('.open-autonomy/strategist-archive.json')) await Bun.write('.ope
 try {
   await $`bun scripts/public-agent-strategist.ts --roadmap .open-autonomy/roadmap.yml --constitution docs/CONSTITUTION.md --signals .agent-run/strategist/signals.json --prior-proposals .agent-run/strategist/prior.txt --archive .open-autonomy/strategist-archive.json --provider ${provider} --model ${model} --max-items ${env('PUBLIC_AGENT_STRATEGIST_MAX_ITEMS', '3')} --out .agent-run/strategist/proposal.json --roadmap-out .open-autonomy/roadmap.yml --archive-out .open-autonomy/strategist-archive.json`.env({
     ...process.env,
-    MODEL_PROXY_TOKEN: token,
+    OPENAI_API_KEY: token,
+    ANTHROPIC_API_KEY: token,
   });
 } finally {
   // 5. Revoke the run regardless of synthesis outcome.

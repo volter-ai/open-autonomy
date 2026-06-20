@@ -146,7 +146,8 @@ for (const number of numbers) {
 
   await $`bun scripts/public-agent-pm.ts --issue ${issuePath} --provider ${PROVIDER} --model ${MODEL} --out ${pmPath}`.env({
     ...process.env,
-    MODEL_PROXY_TOKEN: token,
+    OPENAI_API_KEY: token,
+    ANTHROPIC_API_KEY: token,
   });
   const pm = JSON.parse(readFileSync(pmPath, 'utf8')) as { action: string; risk?: string; reason?: string };
   await decision(['--stage', 'pm_triage', '--issue', number, '--actor', ACTOR, '--decision', pm.action, '--risk', pm.risk ?? '', '--reason', pm.reason ?? '', '--run-id', runId, '--subject-json', `{"type":"issue","number":${number}}`, '--evidence', `issue:${number},pm:${pmPath}`, '--next-action', pm.action, '--out-dir', decisionDir]);

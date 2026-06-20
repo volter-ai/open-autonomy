@@ -1,6 +1,7 @@
 #!/usr/bin/env bun
 import { appendFileSync, existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { parseRoadmapItems } from './public-agent-planner.js';
+import { modelComplete } from './model-call.js';
 
 // The strategist proposes roadmap work toward the constitution's north star, discovered from
 // research signals (customer demand, competitor gaps, analogous fields). It optimizes for recall:
@@ -224,38 +225,6 @@ export function renderStrategistPrompt(roadmap: string, constitution: string, pr
   ].join('\n');
 }
 
-function sanitizeMessage(value: string): string {
-  return value
-    .replace(/Bearer\s+[A-Za-z0-9._~+/=-]+/gi, 'Bearer [redacted]')
-    .replace(/sk-[A-Za-z0-9_-]{20,}/g, '[redacted]')
-    .replace(/ghp_[A-Za-z0-9]{30,}/g, '[redacted]')
-    .slice(0, 500);
-}
-
-async function callOpenAI(proxyUrl: string, token: string, model: string, prompt: string): Promise<StrategistProposal> {
-  const res = await fetch(new URL('/openai/v1/chat/completions', proxyUrl), {
-    method: 'POST',
-    headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
-    body: JSON.stringify({ model, max_tokens: 2000, messages: [{ role: 'user', content: prompt }] }),
-  });
-  const text = await res.text();
-  if (!res.ok) throw new Error(`strategist model call failed: ${res.status}: ${sanitizeMessage(text)}`);
-  const body = JSON.parse(text) as { choices?: Array<{ message?: { content?: string } }> };
-  return parseStrategistProposal(body.choices?.[0]?.message?.content ?? '');
-}
-
-async function callAnthropic(proxyUrl: string, token: string, model: string, prompt: string): Promise<StrategistProposal> {
-  const res = await fetch(new URL('/anthropic/v1/messages', proxyUrl), {
-    method: 'POST',
-    headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json', 'anthropic-version': '2023-06-01' },
-    body: JSON.stringify({ model, max_tokens: 2000, messages: [{ role: 'user', content: prompt }] }),
-  });
-  const text = await res.text();
-  if (!res.ok) throw new Error(`strategist model call failed: ${res.status}: ${sanitizeMessage(text)}`);
-  const body = JSON.parse(text) as { content?: Array<{ text?: string }> };
-  return parseStrategistProposal(body.content?.map((part) => part.text ?? '').join('\n') ?? '');
-}
-
 function readSignals(path: string | undefined): ResearchSignal[] {
   if (!path || !existsSync(path)) return [];
   const parsed = JSON.parse(readFileSync(path, 'utf8')) as { signals?: ResearchSignal[] } | ResearchSignal[];
@@ -265,9 +234,6 @@ function readSignals(path: string | undefined): ResearchSignal[] {
 
 async function main(): Promise<void> {
   const options = parseArgs(process.argv.slice(2));
-  const proxyUrl = process.env.MODEL_PROXY_URL;
-  const token = process.env.MODEL_PROXY_TOKEN;
-  if (!proxyUrl || !token) throw new Error('MODEL_PROXY_URL and MODEL_PROXY_TOKEN are required');
 
   const roadmapText = readFileSync(options.roadmap, 'utf8');
   const constitution = readFileSync(options.constitution, 'utf8');
@@ -277,9 +243,7 @@ async function main(): Promise<void> {
   const signals = readSignals(options.signals);
 
   const prompt = renderStrategistPrompt(roadmapText, constitution, priorProposals, signalsText, options.maxItems);
-  const proposal = options.provider === 'anthropic'
-    ? await callAnthropic(proxyUrl, token, options.model, prompt)
-    : await callOpenAI(proxyUrl, token, options.model, prompt);
+  const proposal = parseStrategistProposal(await modelComplete(options.provider, options.model, prompt, 2000));
 
   const seen = seenRoadmapIds(roadmapText, priorProposals, archiveText);
   const items = dedupeProposedItems(proposal.items, seen, options.maxItems);

@@ -1,9 +1,8 @@
 # Trigger params — the cross-substrate contract
 
-A trigger fires a workflow and **forwards params to the launched agent** — the producing end of the
-Runner contract's `launch(agent, params)` (opaque `LaunchParams`). This is how an agent learns *what to
-act on* — explicitly, from declared config, **never** by reaching into a substrate's implicit event
-context.
+A trigger fires an agent and **forwards params to it** — the producing end of the Runner contract's
+`launch(agent, params)` (opaque `LaunchParams`). This is how an agent learns *what to act on* —
+explicitly, from declared config, **never** by reaching into a substrate's implicit event context.
 
 ## The shape
 
@@ -41,7 +40,7 @@ depend only on this vocabulary, never on a substrate's raw event shape.
 
 ## How github realizes it (reference)
 
-`compileGithub` unions a launch workflow's declared trigger params, resolves each source via the table
-above into the `setup` and agent job env (keyed by the opaque param name), and the agent fetches its
-work item from the `subject.ref` param via `gh` — replacing the old implicit `$GITHUB_EVENT_PATH`
-reach-in. The run id is deterministic per run, so no params are threaded between jobs.
+`compileGithub` unions an agent's declared trigger params, resolves each source via the table above into
+the `setup` and agent job env (keyed by the opaque param name), and the agent fetches its work item from
+the `subject.ref` param via `gh` — replacing the old implicit `$GITHUB_EVENT_PATH` reach-in. The run id
+is deterministic per run, so no params are threaded between jobs.

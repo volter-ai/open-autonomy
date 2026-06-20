@@ -9,21 +9,24 @@ not the product — it is one substrate among peers; local is another. Same prof
 
 | term | definition |
 |---|---|
-| **IR** (`autonomy.ir.v1`) | the substrate-agnostic representation a profile is written in (agents · workflows · resources · policy). |
-| **agents** / **skill** | the atomic agent content — a `skill` is one agent's instructions + the standards/scripts it uses. No collective noun. |
-| **profile** | a substrate-agnostic **recipe**: a composition of agents + workflows + policy + resources. Lives in `profiles/`. |
-| **substrate** | an execution platform = a **trigger executor** + a **runner**, over a **box**. `github` and `local` are peers. |
-| **trigger executor** | fires a workflow when its triggers say so (cron core, events expanded); decides *when*. |
+| **IR** (`autonomy.ir.v1`) | the **standard** a profile is written in: `agents` + `policy` + `resources`. An **agent** = `behavior · capabilities · triggers(+params) · config`. There is no `workflow`/`launch`/`run`/`raw` — see `docs/AUTONOMY-IR.md`. |
+| **agent** | the one unit: behavior (what it does) + capabilities (authority) + triggers (when + params) + config (opaque misc). |
+| **behavior** | what an agent does — instructions/spec; the substrate runs it (deterministic, or model-interpreted — its choice). |
+| **profile** | a substrate-agnostic **recipe**: a composition of agents + policy + resources. Lives in `profiles/`. |
+| **substrate** | a **partial implementation** of the IR standard = a **trigger executor** + a **runner**, over a **box**. `github` and `local` are peers; each realizes the subset it supports. |
+| **trigger executor** | fires an agent when its triggers say so + forwards the declared params (cron core, events expanded); decides *when*. |
 | **runner** | runs agents + manages their lifecycle (`launch`/`list`/`cancel`…); does the *running*. |
-| **box** | the env an agent runs in (POSIX fs + shell + git + a model endpoint + the installed files); the runner provisions it. |
+| **box** | the env an agent runs in (POSIX fs + shell + git + a model endpoint + the installed files); the runner provisions it. The model endpoint is always present. |
 | **installation** | `compile(profile, substrate)` → the configs + installed skills + resources + generated files laid into a repo. Substrate-specific. |
-| **tooling** | external tools an agent calls + the gate behind a `run:` (`gh`/`npm`, or `ztrack`) — a swappable adapter axis, not the IR. |
+| **conformance** | the support matrix: which standard features (capabilities / param sources / config keys / Runner ops) each substrate implements. Partial support is first-class. |
+| **tooling** | external tools an agent calls (`gh`/`npm`, or `ztrack`) — what the agent uses inside its box, never named by the IR. |
 
 The whole grammar:
 
 ```
-compile(profile, substrate) → installation        ;  installation runs on its substrate
-a profile's agents call tooling
+IR (the standard)  →  compile(profile, substrate)  →  installation        ;  runs on its substrate
+a substrate is a partial implementation of the standard ; conformance reports what it supports
+an agent's behavior calls tooling inside its box
 ```
 
 Per-substrate internal terms are **scoped to their substrate**, not global: github's `publisher

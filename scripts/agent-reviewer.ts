@@ -45,15 +45,16 @@ await Bun.write(
 );
 await Bun.write('.agent-run/merge-blockers.json', await $`gh issue view ${pr} --json labels,comments`.text());
 await Bun.write('.agent-run/pr-comments.json', await $`gh issue view ${pr} --json comments --jq '.comments'`.text());
-if (EVENT === 'issue_comment' || EVENT === 'workflow_dispatch') {
-  await Bun.write(
-    '.agent-run/pr.json',
-    await $`gh pr view ${pr} --json number,headRefName,headRepositoryOwner,headRepository,isCrossRepository,baseRefName`.text(),
-  );
-  await $`bun scripts/public-agent-target.ts --event ${env('GITHUB_EVENT_PATH')} --pr .agent-run/pr.json --out .agent-run/target.json`.nothrow();
-} else {
-  await $`bun scripts/public-agent-target.ts --event ${env('GITHUB_EVENT_PATH')} --out .agent-run/target.json`.nothrow();
-}
+// Build the review target from the declared TARGET_REF + the PR metadata (gh) — NOT from the github
+// event file ($GITHUB_EVENT_PATH), which is a github-runner artifact absent on other substrates. The
+// cross-repo/branch facts come from `gh pr view`; we synthesize the minimal event payload target.ts
+// needs (the PR number) so the same code path works on every substrate.
+await Bun.write(
+  '.agent-run/pr.json',
+  await $`gh pr view ${pr} --json number,headRefName,headRepositoryOwner,headRepository,isCrossRepository,baseRefName`.text(),
+);
+await Bun.write('.agent-run/event.json', JSON.stringify({ pull_request: { number: Number(pr) } }));
+await $`bun scripts/public-agent-target.ts --event .agent-run/event.json --pr .agent-run/pr.json --out .agent-run/target.json`.nothrow();
 const headSha = (await $`gh pr view ${pr} --json headRefOid --jq .headRefOid`.text()).trim();
 const target: Record<string, unknown> = { ...json<Record<string, unknown>>('.agent-run/target.json', {}), head_sha: headSha };
 await Bun.write('.agent-run/target.json', JSON.stringify(target, null, 2));

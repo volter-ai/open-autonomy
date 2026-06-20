@@ -37,8 +37,21 @@ describe('compileGithub — task: trigger realization', () => {
     expect(wfs.some((c) => c.includes('pull_request_target'))).toBe(true);
   });
 
-  // HONEST GAP (verified 2026-06-20): `kind: human` is validated by core but NOT realized distinctly by
-  // the github substrate — it currently compiles byte-identically to a model-interpreted agent. The human
-  // realization (worklist + escalation + durable pause + simulator hook) is unbuilt; the loop is unproven.
-  test.todo('kind: human realizes a worklist + escalation + durable pause, distinct from a model agent', () => {});
+  // kind: human is now realized DISTINCTLY from a model agent — a person gets no model wrapper.
+  test('a human actor compiles distinctly from a model agent with the same behavior', () => {
+    const a = JSON.stringify(compileGithub(irWith([{ task: 'human-required' }])).generated);
+    const h = JSON.stringify(compileGithub(irWith([{ task: 'human-required' }], 'human')).generated);
+    expect(h).not.toBe(a);
+  });
+
+  test('a human actor gets NO model machinery (no proxy, no mint, no codex)', () => {
+    const wf = workflows(compileGithub(irWith([{ task: 'human-required' }], 'human'))).join('\n');
+    expect(wf).not.toContain('MODEL_PROXY');
+    expect(wf).not.toContain('model-proxy-mint');
+    expect(wf.toLowerCase()).not.toContain('codex');
+    expect(wf).toContain('issues:'); // still routed by its task trigger
+  });
+
+  // Still genuinely unbuilt (next tier — needs a recorded real run, then a derived/calibrated simulator):
+  test.todo('kind: human realizes a worklist + escalation + durable pause + redeem, with a calibrated simulator', () => {});
 });

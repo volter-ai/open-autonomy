@@ -47,12 +47,11 @@ const DISPATCH_INPUTS = [
 
 // Render a carried (non-cron) event trigger as github `on:` YAML; its config (issues `types`, …) is
 // carried verbatim block-style (scalar | string[]).
-// github's (partial) realization of the portable `task:` trigger (docs/TASK-LIFECYCLE.md): `in-review` is
-// a pull-request event; label-states ride `issues`/`labeled` (the runtime reads which label maps to the
-// state). Another substrate maps the same states to its own machinery.
-function taskAsEvent(state: string): { event: string; config?: Record<string, unknown> } {
-  if (state === 'in-review')
-    return { event: 'pull_request_target', config: { types: ['opened', 'reopened', 'ready_for_review'] } };
+// github's realization of the portable `task:` trigger (docs/TASK-LIFECYCLE.md): a lifecycle state is a
+// label of that name, so every `task: <state>` fires on the `issues` `labeled` event and the runtime reads
+// which label = which state. Uniform by default — no per-state special-casing frozen into the compiler. A
+// richer per-state mapping, if a substrate ever wants one, is declared data + conformance, not a branch.
+function taskAsEvent(_state: string): { event: string; config?: Record<string, unknown> } {
   return { event: 'issues', config: { types: ['labeled'] } };
 }
 
@@ -406,6 +405,14 @@ function wrapperYml(name: string, agent: IRAgent): string {
   ].join('\n');
 }
 
+// Is this actor a person? A kind:human actor is DECLARED (visible in the manifest), not realized as a
+// github job: the durable "await a person" block is the existing work-store mechanism (the human-required
+// label + the merge gate), and HOW a person is notified/assigned/escalated is a design choice the search
+// varies via config — not a template frozen in the compiler. So github generates no workflow for a human.
+function isHuman(agent: IRAgent): boolean {
+  return agent.kind === 'human';
+}
+
 function agentYml(name: string, agent: IRAgent): string {
   return isScript(agent.behavior) ? deterministicYml(name, agent) : wrapperYml(name, agent);
 }
@@ -429,11 +436,12 @@ export function compileGithub(ir: AutonomyIR): CompileOutput {
   // pin `config.workflowFile` (a github-substrate key) so the file keeps a name other systems already
   // reference — the model-proxy OIDC allowlist, cross-agent `gh workflow run`, branch protection.
   for (const [name, agent] of Object.entries(ir.agents)) {
+    if (isHuman(agent)) continue; // a human actor is declared in the manifest, not realized as a github job
     const file = typeof cfg(agent).workflowFile === 'string' ? (cfg(agent).workflowFile as string) : `${name}.yml`;
     generated[`.github/workflows/${file}`] = agentYml(name, agent);
   }
   // Model-interpreted agents carry the operator control plane, so emit its handler.
-  if (Object.values(ir.agents).some((a) => !isScript(a.behavior))) {
+  if (Object.values(ir.agents).some((a) => !isScript(a.behavior) && !isHuman(a))) {
     generated['.github/agent-control.mjs'] = AGENT_CONTROL;
   }
   // The substrate injects its runtime backend.
@@ -441,7 +449,7 @@ export function compileGithub(ir: AutonomyIR): CompileOutput {
 
   const copies: Array<{ from: string; to: string }> = [];
   for (const agent of Object.values(ir.agents)) {
-    if (!isScript(agent.behavior)) {
+    if (!isScript(agent.behavior) && !isHuman(agent)) {
       copies.push({ from: `skills/${agent.behavior}/SKILL.md`, to: `.codex/skills/${agent.behavior}/SKILL.md` });
     }
   }

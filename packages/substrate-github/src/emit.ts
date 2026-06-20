@@ -90,6 +90,19 @@ const DISPATCH_INPUTS = [
   '      issue_number: { description: "issue to act on (used by /agent retry)", required: false, type: string }',
 ];
 
+// Render a carried (non-cron) event trigger as github `on:` YAML. Its config (e.g. issues `types`,
+// pull_request `paths`) is carried verbatim — the IR doesn't model event semantics; the substrate
+// renders them block-style (scalar | string[]).
+function eventLines(event: string, config?: Record<string, unknown>): string[] {
+  if (!config || Object.keys(config).length === 0) return [`  ${event}: {}`];
+  const lines = [`  ${event}:`];
+  for (const [k, v] of Object.entries(config)) {
+    if (Array.isArray(v)) lines.push(`    ${k}:`, ...v.map((item) => `      - ${JSON.stringify(item)}`));
+    else lines.push(`    ${k}: ${JSON.stringify(v)}`);
+  }
+  return lines;
+}
+
 function onLines(wf: IRWorkflow, kind: 'run' | 'launch'): string[] {
   const lines = ['on:'];
   const cron = cronOf(wf);
@@ -107,7 +120,7 @@ function onLines(wf: IRWorkflow, kind: 'run' | 'launch'): string[] {
   for (const t of wf.triggers) {
     if ('cron' in t || seen.has(t.event)) continue;
     seen.add(t.event);
-    lines.push(`  ${t.event}: {}`);
+    lines.push(...eventLines(t.event, t.config));
   }
   return lines;
 }
@@ -158,7 +171,7 @@ function launchConcurrencyLines(wf: IRWorkflow): string[] {
     return ['concurrency:', `  group: ${JSON.stringify(override)}`, '  cancel-in-progress: false'];
   }
   const exempt = CONTROL_VERBS.map(
-    (v) => `startsWith(github.event.comment.body || inputs.command || '', '/agent ${v}')`,
+    (v) => `startsWith(github.event.comment.body || '', '/agent ${v}')`,
   ).join(' || ');
   return [
     'concurrency:',
@@ -307,7 +320,9 @@ function workflowYml(wf: IRWorkflow, ir: AutonomyIR): string {
     `      - uses: oven-sh/setup-bun@v2`,
     `      - run: bun install --frozen-lockfile || bun install`,
     `      - uses: actions/download-artifact@v4`,
-    `        with: { name: ${BUNDLE}, path: .agent-run/bundle }`,
+    `        with:`,
+    `          name: ${BUNDLE}`,
+    `          path: .agent-run/bundle`,
     `      - name: Validate and apply the agent bundle`,
     `        run: bun scripts/github-agent-publish.ts --bundle .agent-run/bundle --apply --expected-run-id "${RID}" --expected-repo "\${{ github.repository }}"`,
     // revoke (trusted): tear down the bounded run whatever happened (but not on a control comment).

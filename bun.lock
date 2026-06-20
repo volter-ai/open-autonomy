@@ -18,6 +18,7 @@
       "name": "@open-autonomy/substrate-github",
       "version": "0.0.0",
       "dependencies": {
+        "@open-autonomy/agents": "workspace:*",
         "@open-autonomy/core": "workspace:*",
       },
     },

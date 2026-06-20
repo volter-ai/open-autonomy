@@ -164,7 +164,6 @@ resources:
   - .github/workflows/open-autonomy-governance-report.yml
   - .github/workflows/open-autonomy-preflight.yml
   - .gitignore
-  - .open-autonomy/autonomy.yml
   - .open-autonomy/review-rubric.yml
   - .open-autonomy/roadmap.yml
   - .open-autonomy/strategist-sources.json

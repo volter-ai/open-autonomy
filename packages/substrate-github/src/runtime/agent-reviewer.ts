@@ -12,7 +12,8 @@ const EVENT = env('GITHUB_EVENT_NAME', 'workflow_dispatch');
 const TEXT = env('SUBJECT_TEXT');
 const ROLE = env('ACTOR_ROLE');
 const PR = env('TARGET_REF');
-const REPO = env('GITHUB_REPOSITORY');
+// Substrate-neutral: github sets GITHUB_REPOSITORY; off-github we derive it from gh (universal).
+const REPO = env('GITHUB_REPOSITORY') || (await $`gh repo view --json nameWithOwner --jq .nameWithOwner`.nothrow().text()).trim();
 const json = <T>(p: string, d: T): T => {
   try {
     return JSON.parse(readFileSync(p, 'utf8')) as T;

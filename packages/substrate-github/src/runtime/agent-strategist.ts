@@ -70,7 +70,7 @@ if ((await $`git diff --quiet -- .open-autonomy/roadmap.yml`.nothrow()).exitCode
 await $`gh label create origin:strategist --description "Roadmap proposal authored by the Open Autonomy strategist" --color 5319E7`.nothrow().quiet();
 await $`git config user.name "open-autonomy-strategist"`;
 await $`git config user.email "open-autonomy-strategist@users.noreply.github.com"`;
-const branch = `strategist/roadmap-${env('GITHUB_RUN_ID')}`;
+const branch = `strategist/roadmap-${env('GITHUB_RUN_ID') || String(Date.now())}`;
 await $`git checkout -B ${branch}`;
 await $`git add .open-autonomy/roadmap.yml .open-autonomy/strategist-archive.json`;
 await $`git commit -m "strategist: propose roadmap items from research"`;

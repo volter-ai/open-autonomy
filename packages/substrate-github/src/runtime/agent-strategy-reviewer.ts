@@ -13,7 +13,8 @@ const TEXT = env('SUBJECT_TEXT');
 const ROLE = env('ACTOR_ROLE');
 const PR = env('TARGET_REF');
 const ACTOR = env('GITHUB_ACTOR', 'open-autonomy-strategy-reviewer');
-const REPO = env('GITHUB_REPOSITORY');
+// Substrate-neutral: github sets GITHUB_REPOSITORY; off-github we derive it from gh (universal).
+const REPO = env('GITHUB_REPOSITORY') || (await $`gh repo view --json nameWithOwner --jq .nameWithOwner`.nothrow().text()).trim();
 const model = env('PUBLIC_AGENT_STRATEGY_REVIEW_MODEL', env('PUBLIC_AGENT_REVIEW_MODEL', env('PUBLIC_AGENT_PM_MODEL', 'gpt-4o-mini')));
 const json = <T>(p: string, d: T): T => {
   try {

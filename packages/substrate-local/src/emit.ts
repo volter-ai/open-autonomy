@@ -23,8 +23,6 @@ const here = dirname(fileURLToPath(import.meta.url));
 // verbatim from their single sources beside this compiler so generated and dev-time never drift.
 const RUNNER_BACKEND = readFileSync(join(here, 'backend.mjs'), 'utf8');
 const RUNNER_FRONTEND = readFileSync(join(here, 'runner-frontend.ts'), 'utf8');
-// The agent-facing model-token seam, realized without the model proxy (a direct env token, no mint).
-const MODEL_TOKEN_FRONTEND = readFileSync(join(here, 'model-token-frontend.ts'), 'utf8');
 
 // Inverse of secondsToCron for the simple every-N-minutes cron form the local loop honors.
 export function cronToSeconds(cron: string): number {
@@ -100,8 +98,6 @@ export function compileLocal(ir: AutonomyIR, opts: { name?: string; runner?: Run
 
   // The local runner OVERRIDES the github runner.ts injected from the runtime — launches go to termfleet.
   generated['scripts/runner.ts'] = RUNNER_FRONTEND;
-  // The local model-token seam OVERRIDES github's proxy mint — a direct env token, no proxy/OIDC.
-  generated['scripts/model-token.ts'] = MODEL_TOKEN_FRONTEND;
   generated['scripts/run-agent.mjs'] = RUN_AGENT_DRIVER;
   generated['scripts/autonomy-runner.mjs'] = RUNNER_BACKEND;
 

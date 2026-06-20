@@ -6,7 +6,6 @@
 // arrives via the declared TARGET_REF trigger param, not implicit event magic.
 import { $ } from 'bun';
 import { mkdirSync, readFileSync, existsSync } from 'node:fs';
-import { mintModelToken, revokeModelToken } from './model-token.js';
 
 const env = (k: string, d = '') => process.env[k] || d;
 const EVENT = env('GITHUB_EVENT_NAME', 'workflow_dispatch');
@@ -106,21 +105,14 @@ if (ci.decision !== 'pass') {
   process.exit(0);
 }
 
-// CI passing: mint a reviewer token, run the model review, then the merge gate.
-const { runId, token } = await mintModelToken({ issue: '.agent-run/issue.json', models: env('PUBLIC_AGENT_REVIEW_MODEL', 'gpt-4o-mini'), maxUsdCents: Number(env('PUBLIC_AGENT_REVIEW_MAX_USD_CENTS', '50')), maxRequests: 2, purpose: 'review' });
-
+// CI passing: run the model review (the box's model endpoint is provisioned by the runner's setup step),
+// then the merge gate.
 let reviewed = false;
 try {
-  await $`bun scripts/public-agent-review.ts --diff .agent-run/diff.patch --ci .agent-run/ci.json --control-files .agent-run/control-files.json --provider ${env('PUBLIC_AGENT_REVIEW_PROVIDER', 'openai')} --model ${env('PUBLIC_AGENT_REVIEW_MODEL', 'gpt-4o-mini')} --out .agent-run/review.json`.env({
-    ...process.env,
-    OPENAI_API_KEY: token,
-    ANTHROPIC_API_KEY: token,
-  });
+  await $`bun scripts/public-agent-review.ts --diff .agent-run/diff.patch --ci .agent-run/ci.json --control-files .agent-run/control-files.json --provider ${env('PUBLIC_AGENT_REVIEW_PROVIDER', 'openai')} --model ${env('PUBLIC_AGENT_REVIEW_MODEL', 'gpt-4o-mini')} --out .agent-run/review.json`;
   reviewed = true;
 } catch {
   reviewed = false; // continue-on-error: a failed review still records a verdict below
-} finally {
-  await revokeModelToken(runId);
 }
 
 const currentHead = (await $`gh pr view ${pr} --json headRefOid --jq .headRefOid`.text()).trim();

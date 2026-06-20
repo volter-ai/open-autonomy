@@ -27,31 +27,27 @@ function workflows(out: { generated: Record<string, string> }): string[] {
 }
 
 describe('compileGithub — task: trigger realization', () => {
-  test('`task: human-required` compiles to an issues/labeled workflow trigger', () => {
-    const wfs = workflows(compileGithub(irWith([{ task: 'human-required' }], 'human')));
-    expect(wfs.some((c) => c.includes('issues:') && c.includes('labeled'))).toBe(true);
+  // A lifecycle state is realized uniformly as a label of its name — no per-state special-casing.
+  test('a `task:` trigger maps to the issues/labeled event, whatever the state', () => {
+    for (const state of ['ready', 'in-review', 'human-required', 'done']) {
+      const wfs = workflows(compileGithub(irWith([{ task: state }]))); // non-human → a workflow is emitted
+      expect(wfs.some((c) => c.includes('issues:') && c.includes('labeled'))).toBe(true);
+    }
+  });
+});
+
+describe('compileGithub — kind: human is declared, not job-realized', () => {
+  // A person needs no runner job: the durable "await a human" block is the existing label + merge gate,
+  // and how a person is notified/assigned/escalated is config the search varies, not a frozen template.
+  test('a human actor generates NO github workflow', () => {
+    expect(workflows(compileGithub(irWith([{ task: 'human-required' }], 'human'))).length).toBe(0);
   });
 
-  test('`task: in-review` compiles to a pull_request_target workflow trigger', () => {
-    const wfs = workflows(compileGithub(irWith([{ task: 'in-review' }])));
-    expect(wfs.some((c) => c.includes('pull_request_target'))).toBe(true);
+  test('but the human actor IS declared in the manifest (visible labor)', () => {
+    const out = compileGithub(irWith([{ task: 'human-required' }], 'human'));
+    expect(out.generated['.open-autonomy/autonomy.yml']).toContain('maintainer');
   });
 
-  // kind: human is now realized DISTINCTLY from a model agent — a person gets no model wrapper.
-  test('a human actor compiles distinctly from a model agent with the same behavior', () => {
-    const a = JSON.stringify(compileGithub(irWith([{ task: 'human-required' }])).generated);
-    const h = JSON.stringify(compileGithub(irWith([{ task: 'human-required' }], 'human')).generated);
-    expect(h).not.toBe(a);
-  });
-
-  test('a human actor gets NO model machinery (no proxy, no mint, no codex)', () => {
-    const wf = workflows(compileGithub(irWith([{ task: 'human-required' }], 'human'))).join('\n');
-    expect(wf).not.toContain('MODEL_PROXY');
-    expect(wf).not.toContain('model-proxy-mint');
-    expect(wf.toLowerCase()).not.toContain('codex');
-    expect(wf).toContain('issues:'); // still routed by its task trigger
-  });
-
-  // Still genuinely unbuilt (next tier — needs a recorded real run, then a derived/calibrated simulator):
-  test.todo('kind: human realizes a worklist + escalation + durable pause + redeem, with a calibrated simulator', () => {});
+  // Still genuinely unbuilt (the behavioral tier — needs a recorded real run, then a calibrated simulator):
+  test.todo('the human seam blocks, escalates on SLA, and resumes on a recorded/redeemed decision', () => {});
 });

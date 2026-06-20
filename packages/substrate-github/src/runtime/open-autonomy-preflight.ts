@@ -38,7 +38,7 @@ const REQUIRED_FILES = [
   '.github/workflows/public-agent-review.yml',
   '.github/workflows/public-agent-pm.yml',
   '.github/workflows/open-autonomy-planner.yml',
-  '.github/workflows/open-autonomy-upgrade.yml',
+  'scripts/open-autonomy-upgrade-cli.ts',
   'scripts/public-agent-control-files.ts',
   'scripts/public-agent-planner.ts',
   'scripts/public-agent-decision-index.ts',

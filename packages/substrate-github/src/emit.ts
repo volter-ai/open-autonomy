@@ -236,8 +236,8 @@ function deterministicPerms(caps: string[], extra?: unknown): string {
 function modelEnvLines(agent: IRAgent): string[] {
   if (!cfg(agent).model) return [];
   return [
-    `      OPENAI_BASE_URL: \${{ vars.MODEL_PROXY_URL }}/openai/v1`,
-    `      ANTHROPIC_BASE_URL: \${{ vars.MODEL_PROXY_URL }}/anthropic`,
+    `      OPENAI_BASE_URL: \${{ vars.MODEL_PROXY_URL }}/v1`,
+    `      ANTHROPIC_BASE_URL: \${{ vars.MODEL_PROXY_URL }}`,
     `      MODEL_PROXY_URL: \${{ vars.MODEL_PROXY_URL }}`,
     `      MODEL_PROXY_ADMIN_TOKEN: \${{ secrets.MODEL_PROXY_ADMIN_TOKEN }}`,
     `      MODEL_PROXY_OIDC_AUDIENCE: \${{ vars.MODEL_PROXY_OIDC_AUDIENCE || 'volter-agent-model-proxy' }}`,

@@ -50,6 +50,8 @@ export function emitAutonomy(ir: AutonomyIR): OAManifest {
     }
     agents[role] = {
       skill: agent.behavior,
+      // The launchable unit the github runner targets for agent:launch (workflow_dispatch).
+      workflowFile: typeof c.workflowFile === 'string' ? (c.workflowFile as string) : `${role}.yml`,
       ...(Object.keys(triggers).length ? { triggers } : {}),
       ...(typeof c.timeout === 'number' ? { timeout: c.timeout } : {}),
       ...(typeof c.concurrency === 'string' ? { concurrency: c.concurrency } : {}),

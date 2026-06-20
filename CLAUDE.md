@@ -23,4 +23,6 @@ for every managed file — so editing the profile (not OA's root) is the way to 
 workflows/skills/runtime. Repo-owned + seed-only files (package.json, README, roadmap, autonomy.yml,
 CONSTITUTION, dev docs) are excluded (see REPO_OWNED in `bin/check-dogfood.ts`).
 
-Known gap: `MANAGED_PREFIXES` in `scripts/open-autonomy-upgrade.ts` omits `docs/`.
+Upgrade is a re-compile: `packages/core/src/upgrade.ts` regenerates the derived set from a fresh
+`compile`, seeds `INSTALL_OWNED_PATHS` only if missing, and prunes derived orphans. Run it locally via
+`scripts/open-autonomy-upgrade-cli.ts` (→ `bin/autonomy-upgrade.ts`); it is not an autonomous agent.

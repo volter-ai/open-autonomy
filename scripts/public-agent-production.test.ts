@@ -92,9 +92,9 @@ describe('public agent production readiness', () => {
   test('upgrade is a maintainer-run local command, not an autonomous workflow', () => {
     const up = script('open-autonomy-upgrade-cli.ts');
     expect(up).toContain('OPEN_AUTONOMY_TEMPLATE_REPO');
-    // the canonical installation is COMPILED from the profile (no hand-maintained template dir)
-    expect(up).toContain('autonomy-compile.ts profiles/self-driving github');
-    expect(up).toContain('open-autonomy-upgrade.ts');
+    // the upgrade is a re-compile: clone the engine, run bin/autonomy-upgrade.ts against this install
+    expect(up).toContain('bin/autonomy-upgrade.ts');
+    expect(up).toContain('--target');
     // it applies to the working tree and stops — the human commits & pushes (so workflow changes,
     // a human_required path the CI token cannot push, go in with the maintainer's own credentials)
     expect(up).not.toContain('gh pr create');

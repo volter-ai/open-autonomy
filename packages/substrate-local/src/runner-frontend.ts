@@ -19,9 +19,8 @@ export interface RunInfo {
   title: string;
 }
 
-// run-agent.mjs / autonomy-runner.mjs live one level up, in <base>/scripts/ (this file is in
-// <base>/scheduler/scripts/).
-const scriptsDir = join(dirname(fileURLToPath(import.meta.url)), '..', '..', 'scripts');
+// run-agent.mjs / autonomy-runner.mjs are co-located with this file in scripts/.
+const scriptsDir = dirname(fileURLToPath(import.meta.url));
 
 /** Launch an agent with forwarded params (agent:launch) — a local termfleet session, not a gh dispatch. */
 export async function launch(agent: string, params: LaunchParams = {}): Promise<void> {

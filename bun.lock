@@ -29,8 +29,22 @@
         "@open-autonomy/substrate-github": "workspace:*",
       },
     },
+    "scripts": {
+      "name": "@open-autonomy/agents",
+      "version": "0.0.0",
+      "bin": {
+        "oa-agent-pm": "./agent-pm.ts",
+        "oa-agent-reviewer": "./agent-reviewer.ts",
+        "oa-agent-planner": "./agent-planner.ts",
+        "oa-agent-strategist": "./agent-strategist.ts",
+        "oa-agent-strategy-reviewer": "./agent-strategy-reviewer.ts",
+        "oa-provision-model-endpoint": "./provision-model-endpoint.ts",
+      },
+    },
   },
   "packages": {
+    "@open-autonomy/agents": ["@open-autonomy/agents@workspace:scripts"],
+
     "@open-autonomy/core": ["@open-autonomy/core@workspace:packages/core"],
 
     "@open-autonomy/substrate-github": ["@open-autonomy/substrate-github@workspace:packages/substrate-github"],

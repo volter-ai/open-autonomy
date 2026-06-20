@@ -32,10 +32,10 @@ const GITHUB_ONLY = new Set([
 ]);
 
 const here = dirname(fileURLToPath(import.meta.url));
-// The domain-free runner backend (TermfleetRunner + CLI) and the agent-facing runner seam — emitted
-// verbatim from their single sources beside this compiler so generated and dev-time never drift.
+// The domain-free runner backend (TermfleetRunner + CLI), emitted verbatim from its single source. The
+// agent-facing runner seam ships in @open-autonomy/agents (one env-dispatched runner.ts); local just sets
+// OA_RUNNER=local so it takes the termfleet path — no separate frontend to keep in sync.
 const RUNNER_BACKEND = readFileSync(join(here, 'backend.mjs'), 'utf8');
-const RUNNER_FRONTEND = readFileSync(join(here, 'runner-frontend.ts'), 'utf8');
 
 // Inverse of secondsToCron for the simple every-N-minutes cron form the local loop honors.
 export function cronToSeconds(cron: string): number {
@@ -111,9 +111,8 @@ export function compileLocal(ir: AutonomyIR, opts: { name?: string; runner?: Run
     if (!GITHUB_ONLY.has(path)) generated[path] = content;
   }
 
-  // Local execution layer: the runner OVERRIDES the github runner.ts from the runtime — launches go to
-  // termfleet, not `gh workflow run`.
-  generated['scripts/runner.ts'] = RUNNER_FRONTEND;
+  // Local execution layer: the shared env-dispatched runner.ts (from the runtime) takes the termfleet path
+  // because the scheduler sets OA_RUNNER=local; local just provides the adapters it shells out to.
   generated['scripts/run-agent.mjs'] = RUN_AGENT_DRIVER;
   generated['scripts/autonomy-runner.mjs'] = RUNNER_BACKEND;
 
@@ -125,7 +124,7 @@ export function compileLocal(ir: AutonomyIR, opts: { name?: string; runner?: Run
   generated['scheduler/schedule.json'] = `${JSON.stringify(
     {
       intervalSeconds,
-      env: {},
+      env: { OA_RUNNER: 'local' },
       // A script agent runs its behavior via bun; a prose-skill agent is launched through the runner.
       scripts: cronAgents.map(([role, a]) =>
         isScript(a.behavior) ? `bun ${a.behavior}` : `AUTONOMY_AGENT=${role} node scripts/run-agent.mjs`,

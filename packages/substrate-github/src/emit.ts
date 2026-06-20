@@ -380,6 +380,7 @@ function wrapperYml(name: string, agent: IRAgent): string {
     `    permissions: ${capsToPermissions(caps)}`,
     `    env:`,
     `      GH_TOKEN: \${{ github.token }}`,
+    ...triggerParamsEnv(agent),
     `    steps:`,
     `      - uses: actions/checkout@v4`,
     `      - uses: oven-sh/setup-bun@v2`,
@@ -393,7 +394,10 @@ function wrapperYml(name: string, agent: IRAgent): string {
     `      - name: Open the agent's pull request`,
     `        run: |`,
     `          set -euo pipefail`,
-    `          branch="agent/${RID}"`,
+    // The branch is the canonical per-work-item branch the reviewer/merge-gate recognize
+    // (agent/issue-<ref>); a develop retry replaces it. An autonomous agent (no subject.ref) has no
+    // work item, so it falls back to a per-run branch.
+    refParam ? `          branch="agent/issue-\${${refParam}}"` : `          branch="agent/${RID}"`,
     `          git config user.name volter-agent`,
     `          git config user.email volter-agent@users.noreply.github.com`,
     `          git config core.filemode false`,
@@ -401,7 +405,7 @@ function wrapperYml(name: string, agent: IRAgent): string {
     `          git add -A`,
     `          if git diff --cached --quiet; then echo "agent produced no changes"; exit 0; fi`,
     `          git commit -m "agent: ${RID}"`,
-    `          git push --force-with-lease origin "$branch"`,
+    `          git push --force origin "$branch"`,
     `          body="$(find .agent-run/bundle -name pr.md | head -1)"`,
     `          if [ -n "$body" ]; then gh pr create --base "\${{ github.event.repository.default_branch }}" --head "$branch" --title "Agent run ${RID}" --body-file "$body"; else gh pr create --base "\${{ github.event.repository.default_branch }}" --head "$branch" --title "Agent run ${RID}" --body "Automated agent run ${RID}"; fi`,
     `  revoke:`,

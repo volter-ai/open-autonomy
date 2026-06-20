@@ -201,7 +201,7 @@ for (const number of numbers) {
   if (lbl) await lbl();
   // Route the next action.
   if (d.command === '/agent develop') {
-    await $`gh workflow run public-agent.yml --ref ${REF} -f issue_number=${number} -f command=${'/agent develop'}`.nothrow();
+    await $`gh workflow run public-agent.yml --ref ${REF} -f issue_number=${number}`.nothrow();
   } else if (d.command === '/agent review') {
     await $`gh workflow run public-agent-review.yml --ref ${REF} -f issue_number=${String(d.target_number)}`.nothrow();
   }

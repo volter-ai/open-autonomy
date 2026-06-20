@@ -2,8 +2,7 @@ name: developer
 on:
   workflow_dispatch:
     inputs:
-      task: { description: "task for the agent", required: false, default: "Create a file IR-AGENT-PROOF.md at the repo root containing exactly one line: built by a real codex agent in the compiled autonomy IR github workflow" }
-      issue_number: { description: "issue to act on (used by /agent retry)", required: false, type: string }
+      issue_number: { description: "issue/PR number to act on", required: false, type: string }
   issue_comment:
     types: [created]
   issues:

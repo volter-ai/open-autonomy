@@ -67,9 +67,11 @@ export function emitAutonomy(ir: AutonomyIR): OAManifest {
 
 // --- `on:` + trigger params ---
 
+// The one manual-dispatch input every agent that targets a work item exposes: which work item. The
+// wrapper develops on any dispatch (operator control is a comment, handled by the control job), so
+// there is no `command` input; the issue payload is built from this number via the subject.ref param.
 const DISPATCH_INPUTS = [
-  '      task: { description: "task for the agent", required: false, default: "Create a file IR-AGENT-PROOF.md at the repo root containing exactly one line: built by a real codex agent in the compiled autonomy IR github workflow" }',
-  '      issue_number: { description: "issue to act on (used by /agent retry)", required: false, type: string }',
+  '      issue_number: { description: "issue/PR number to act on", required: false, type: string }',
 ];
 
 // Render a carried (non-cron) event trigger as github `on:` YAML; its config (issues `types`, …) is
@@ -119,7 +121,7 @@ function onLines(agent: IRAgent, kind: 'run' | 'launch'): string[] {
     // A deterministic agent that targets a work item exposes the standard `issue_number` dispatch
     // input (the github resolution of subject.ref reads it); otherwise plain manual dispatch.
     if (subjectRefParam(agent)) {
-      lines.push('  workflow_dispatch:', '    inputs:', ...DISPATCH_INPUTS.slice(1));
+      lines.push('  workflow_dispatch:', '    inputs:', ...DISPATCH_INPUTS);
     } else {
       lines.push('  workflow_dispatch: {}');
     }

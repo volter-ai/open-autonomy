@@ -48,10 +48,18 @@ export function emitAutonomy(ir: AutonomyIR): OAManifest {
       if ('cron' in t) triggers.schedule = t.cron;
       else triggers[t.event] = t.config ?? true;
     }
+    // The agent's declared trigger params (param name -> documented source), unioned across triggers.
+    // The runner needs these to resolve a launch's params into the agent's env (github does it in the
+    // workflow; the local runner does it before spawning a script agent).
+    const params: Record<string, string> = {};
+    for (const t of agent.triggers ?? []) {
+      for (const [n, s] of Object.entries((t as { params?: Record<string, string> }).params ?? {})) params[n] = s;
+    }
     agents[role] = {
       skill: agent.behavior,
       // The launchable unit the github runner targets for agent:launch (workflow_dispatch).
       workflowFile: typeof c.workflowFile === 'string' ? (c.workflowFile as string) : `${role}.yml`,
+      ...(Object.keys(params).length ? { params } : {}),
       ...(Object.keys(triggers).length ? { triggers } : {}),
       ...(typeof c.timeout === 'number' ? { timeout: c.timeout } : {}),
       ...(typeof c.concurrency === 'string' ? { concurrency: c.concurrency } : {}),

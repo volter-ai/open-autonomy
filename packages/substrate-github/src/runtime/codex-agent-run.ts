@@ -7,6 +7,7 @@ type Options = {
   issue?: string;
   context?: string;
   model: string;
+  skill?: string; // path to the agent's SKILL.md — its role/instructions (the per-agent variable)
 };
 
 const root = resolve(import.meta.dir, '..');
@@ -27,6 +28,7 @@ function parseArgs(argv: string[]): Options {
     issue: argValue(argv, '--issue') ?? process.env.OSS_AGENT_ISSUE_PATH,
     context: argValue(argv, '--context') ?? process.env.OSS_AGENT_CONTEXT_PATH,
     model: argValue(argv, '--model') ?? process.env.PUBLIC_AGENT_MODEL ?? 'gpt-4o-mini',
+    skill: argValue(argv, '--skill') ?? process.env.OSS_AGENT_SKILL_PATH,
   };
 }
 
@@ -65,15 +67,19 @@ function redactSensitive(text: string): string {
     .replace(/OPENAI_API_KEY\s*=\s*sk-[A-Za-z0-9_-]{20,}/g, 'OPENAI_API_KEY=[redacted-secret-like-token]');
 }
 
-function buildPrompt(issuePath: string, taskDir: string, contextPath?: string): string {
+function buildPrompt(issuePath: string, taskDir: string, contextPath?: string, skillPath?: string): string {
   const issue = readIssue(issuePath);
   const context = contextPath && existsSync(contextPath)
     ? readFileSync(contextPath, 'utf8')
     : '';
+  // The agent's role/instructions come from its skill (the per-agent variable); everything else in
+  // this prompt is the universal job contract (act on the issue, write the bundle artifacts).
+  const skill = skillPath && existsSync(skillPath) ? readFileSync(skillPath, 'utf8') : '';
   return [
-    'You are running as the public Volter self-building agent in a bounded GitHub Actions job.',
-    '',
-    'Implement the GitHub issue in this repository. Make a small but real code or documentation change that directly addresses the issue. Do not make unrelated refactors.',
+    ...(skill
+      ? ['Your role and instructions (your skill):', '', skill, '']
+      : ['You are an autonomous agent running in a bounded GitHub Actions job.', '']),
+    'Act on the GitHub issue below according to your role. Make a small but real, focused change that addresses it; do not make unrelated refactors.',
     '',
     `Issue #${issue.number ?? 'unknown'}: ${issue.title ?? '(untitled)'}`,
     '',
@@ -189,7 +195,7 @@ async function main(): Promise<void> {
   const finalPath = join(artifactsDir, 'codex-final.md');
   const contextPath = options.context ? resolve(options.context) : undefined;
   writeContextSummary(artifactsDir, contextPath);
-  const prompt = buildPrompt(issuePath, taskDir, contextPath);
+  const prompt = buildPrompt(issuePath, taskDir, contextPath, options.skill ? resolve(options.skill) : undefined);
   const result = spawnSync('codex', [
     'exec',
     '--cd', root,

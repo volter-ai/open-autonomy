@@ -1,5 +1,5 @@
 ---
-name: ztrack-simple-sdlc-draft
+name: draft
 description: Draft verifiable ztrack simple-sdlc issues from requests; use when converting unshaped work into Ready issues with sources and acceptance criteria.
 ---
 

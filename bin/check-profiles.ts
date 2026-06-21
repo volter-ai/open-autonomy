@@ -56,6 +56,22 @@ for (const name of profiles) {
       errs.push(`${name} -> ${target}: compile failed — ${(e as Error).message}`);
     }
   }
+
+  // Skill identity invariant: a skill's SKILL.md frontmatter `name` MUST equal its folder (the agent's
+  // behavior). The local launch prompt triggers the skill by that name (`$name` for codex, `/name` for
+  // Claude Code) and the skill is installed under .{codex,claude}/skills/<behavior>/ — so a frontmatter
+  // name that differs from the folder makes the trigger unresolvable.
+  const skillsDir = join(dir, 'skills');
+  if (existsSync(skillsDir)) {
+    for (const behavior of readdirSync(skillsDir)) {
+      const skillFile = join(skillsDir, behavior, 'SKILL.md');
+      if (!existsSync(skillFile)) continue;
+      const fm = readFileSync(skillFile, 'utf8').match(/^name:\s*(.+?)\s*$/m)?.[1];
+      if (fm !== behavior) {
+        errs.push(`${name}: skill "${behavior}" frontmatter name "${fm ?? '(missing)'}" must equal its folder "${behavior}" (the launch trigger resolves by name)`);
+      }
+    }
+  }
 }
 
 if (errs.length) {

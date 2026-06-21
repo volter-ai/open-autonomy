@@ -1,16 +1,23 @@
 import { limitsFromEnv } from './config.js';
 import { error, methodNotAllowed, parseJson, readCappedBody } from './errors.js';
-import { actualCents, estimateInputTokensFromBody, priceFor, worstCaseCents, type TokenUsage } from './pricing.js';
+import { estimateInputTokensFromBody, openrouterReservePrice, priceTable, settleCents, worstCaseCents, type ModelPrice, type TokenUsage } from './pricing.js';
 import { reserveBudget } from './spend.js';
-import type { Env, RunClaims, UsageEvent } from './types.js';
+import type { Env, Provider, RunClaims, UsageEvent } from './types.js';
 
 const ANTHROPIC_URL = 'https://api.anthropic.com/v1/messages';
+const OPENROUTER_URL = 'https://openrouter.ai/api/v1/messages';
 const DEFAULT_VERSION = '2023-06-01';
 const MAX_OUTPUT_TOKENS = 4096;
 
+// Providers that speak the Anthropic Messages wire and therefore share this handler. Each maps to its
+// upstream endpoint, the auth header it expects, and the env key holding its first-party credential.
+const ANTHROPIC_WIRE: Record<'anthropic' | 'openrouter', { url: string; authHeader: string; envKey: 'ANTHROPIC_API_KEY' | 'OPENROUTER_API_KEY' }> = {
+  anthropic: { url: ANTHROPIC_URL, authHeader: 'x-api-key', envKey: 'ANTHROPIC_API_KEY' },
+  openrouter: { url: OPENROUTER_URL, authHeader: 'authorization', envKey: 'OPENROUTER_API_KEY' },
+};
+
 export async function handleAnthropic(req: Request, env: Env, claims: RunClaims, ctx: ExecutionContext): Promise<Response> {
   if (req.method !== 'POST') return methodNotAllowed();
-  if (!env.ANTHROPIC_API_KEY) return error('provider_not_configured', 503);
 
   const bodyText = await readCappedBody(req, Number(env.MAX_BODY_BYTES ?? 1024 * 1024));
   if (bodyText === null) return error('body_too_large', 413);
@@ -19,8 +26,28 @@ export async function handleAnthropic(req: Request, env: Env, claims: RunClaims,
 
   const model = typeof body.model === 'string' ? body.model : '';
   if (!claims.models.includes(model)) return error('model_not_allowed', 403);
-  const price = priceFor(env.MODEL_PRICES_JSON, model, 'anthropic');
-  if (!price) return error('model_price_not_configured', 403);
+
+  // Pick the Anthropic-wire provider. An explicit price-table entry wins; otherwise an OpenRouter-style
+  // "vendor/slug" id (e.g. deepseek/deepseek-v4-flash) routes to OpenRouter and a bare id is first-party
+  // Anthropic. OpenRouter reports the real cost, so it needs NO table entry — that is the whole point.
+  const priced = priceTable(env.MODEL_PRICES_JSON)[model];
+  if (priced && priced.provider === 'openai') return error('model_price_not_configured', 403);
+  const provider: 'anthropic' | 'openrouter' = priced?.provider === 'openrouter' ? 'openrouter'
+    : priced?.provider === 'anthropic' ? 'anthropic'
+    : model.includes('/') ? 'openrouter'
+    : 'anthropic';
+
+  // Reservation basis (held BEFORE the call): the explicit price if we have one, else a conservative
+  // OpenRouter ceiling. A first-party Anthropic model with no price can't be metered (no cost report).
+  let price: ModelPrice | null = priced ?? null;
+  if (!price) {
+    if (provider === 'openrouter') price = openrouterReservePrice(Number(env.OPENROUTER_RESERVE_USD_PER_MTOK ?? 30));
+    else return error('model_price_not_configured', 403);
+  }
+
+  const route = ANTHROPIC_WIRE[provider];
+  const apiKey = env[route.envKey];
+  if (!apiKey) return error('provider_not_configured', 503);
 
   const requestedMax = typeof body.max_tokens === 'number' ? body.max_tokens : MAX_OUTPUT_TOKENS;
   body.max_tokens = Math.max(1, Math.min(requestedMax, MAX_OUTPUT_TOKENS));
@@ -31,11 +58,11 @@ export async function handleAnthropic(req: Request, env: Env, claims: RunClaims,
 
   let upstream: Response;
   try {
-    upstream = await fetch(ANTHROPIC_URL, {
+    upstream = await fetch(route.url, {
       method: 'POST',
       headers: {
         'content-type': 'application/json',
-        'x-api-key': env.ANTHROPIC_API_KEY,
+        [route.authHeader]: route.authHeader === 'authorization' ? `Bearer ${apiKey}` : apiKey,
         'anthropic-version': req.headers.get('anthropic-version') ?? DEFAULT_VERSION,
         ...(req.headers.get('anthropic-beta') ? { 'anthropic-beta': req.headers.get('anthropic-beta')! } : {}),
       },
@@ -56,8 +83,8 @@ export async function handleAnthropic(req: Request, env: Env, claims: RunClaims,
   if (!contentType.includes('text/event-stream')) {
     const text = await upstream.text();
     const usage = parseUsageFromJson(text);
-    const actual = actualCents(price, usage ?? {}, reserved);
-    await reservation.consume(actual, usageEvent(claims, reservation.requestId, 'anthropic', model, '/anthropic/v1/messages', reserved, actual, usage ?? {}, 'ok'));
+    const actual = settleCents(price, usage ?? {}, reserved);
+    await reservation.consume(actual, usageEvent(claims, reservation.requestId, provider, model, `/${provider}/v1/messages`, reserved, actual, usage ?? {}, 'ok'));
     headers.set('x-agent-proxy-remaining-usd-cents', String(reservation.remainingRunUsdCents));
     headers.set('x-agent-proxy-remaining-global-usd-cents', String(reservation.remainingGlobalUsdCents));
     return new Response(text, { status: upstream.status, headers });
@@ -66,10 +93,10 @@ export async function handleAnthropic(req: Request, env: Env, claims: RunClaims,
   const [clientStream, meterStream] = upstream.body!.tee();
   ctx.waitUntil(parseUsageFromSse(meterStream)
     .then((usage) => {
-      const actual = actualCents(price, usage, reserved);
-      return reservation.consume(actual, usageEvent(claims, reservation.requestId, 'anthropic', model, '/anthropic/v1/messages', reserved, actual, usage, 'ok'));
+      const actual = settleCents(price, usage, reserved);
+      return reservation.consume(actual, usageEvent(claims, reservation.requestId, provider, model, `/${provider}/v1/messages`, reserved, actual, usage, 'ok'));
     })
-    .catch(() => reservation.consume(reserved, usageEvent(claims, reservation.requestId, 'anthropic', model, '/anthropic/v1/messages', reserved, reserved, {}, 'metering_error'))));
+    .catch(() => reservation.consume(reserved, usageEvent(claims, reservation.requestId, provider, model, `/${provider}/v1/messages`, reserved, reserved, {}, 'metering_error'))));
   headers.set('x-agent-proxy-remaining-usd-cents', String(reservation.remainingRunUsdCents));
   headers.set('x-agent-proxy-remaining-global-usd-cents', String(reservation.remainingGlobalUsdCents));
   return new Response(clientStream, { status: upstream.status, headers });
@@ -131,13 +158,15 @@ function usageFromRecord(record: Record<string, unknown>): TokenUsage {
     output_tokens: typeof record.output_tokens === 'number' ? record.output_tokens : undefined,
     cache_creation_input_tokens: typeof record.cache_creation_input_tokens === 'number' ? record.cache_creation_input_tokens : undefined,
     cache_read_input_tokens: typeof record.cache_read_input_tokens === 'number' ? record.cache_read_input_tokens : undefined,
+    // OpenRouter reports the real USD cost of the call here; when present it is the authoritative charge.
+    cost_usd: typeof record.cost === 'number' ? record.cost : undefined,
   };
 }
 
 function usageEvent(
   _claims: RunClaims,
   requestId: string,
-  provider: 'anthropic',
+  provider: Provider,
   model: string,
   route: string,
   reserved: number,

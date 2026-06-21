@@ -1,5 +1,5 @@
 ---
-name: ztrack-simple-sdlc-pm
+name: pm
 description: Dispatch PM work for a ztrack simple-sdlc repository; use when running scheduled PM ticks, choosing draft/develop/review work, enforcing WIP, or routing agent outcomes.
 ---
 

@@ -118,7 +118,7 @@ if (ci.decision !== 'pass') {
 // then the merge gate.
 let reviewed = false;
 try {
-  await $`bun scripts/public-agent-review.ts --diff .agent-run/diff.patch --ci .agent-run/ci.json --control-files .agent-run/control-files.json --provider ${env('PUBLIC_AGENT_REVIEW_PROVIDER', 'openai')} --model ${env('PUBLIC_AGENT_REVIEW_MODEL', 'gpt-4o-mini')} --out .agent-run/review.json`;
+  await $`bun scripts/public-agent-review.ts --diff .agent-run/diff.patch --ci .agent-run/ci.json --control-files .agent-run/control-files.json --provider ${env('PUBLIC_AGENT_REVIEW_PROVIDER', 'anthropic')} --model ${env('PUBLIC_AGENT_REVIEW_MODEL', 'deepseek/deepseek-v4-flash')} --out .agent-run/review.json`;
   reviewed = true;
 } catch {
   reviewed = false; // continue-on-error: a failed review still records a verdict below

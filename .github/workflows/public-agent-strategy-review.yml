@@ -18,8 +18,8 @@ jobs:
       TARGET_REF: ${{ github.event.issue.number || github.event.inputs.issue_number || github.event.pull_request.number }}
       SUBJECT_TEXT: ${{ github.event.comment.body || github.event.issue.body }}
       ACTOR_ROLE: ${{ github.event.comment.author_association }}
-      PUBLIC_AGENT_STRATEGY_REVIEW_MODEL: ${{ vars.PUBLIC_AGENT_STRATEGY_REVIEW_MODEL || vars.PUBLIC_AGENT_REVIEW_MODEL || vars.PUBLIC_AGENT_PM_MODEL || 'gpt-4o-mini' }}
-      PUBLIC_AGENT_STRATEGY_REVIEW_PROVIDER: ${{ vars.PUBLIC_AGENT_STRATEGY_REVIEW_PROVIDER || 'openai' }}
+      PUBLIC_AGENT_STRATEGY_REVIEW_MODEL: ${{ vars.PUBLIC_AGENT_STRATEGY_REVIEW_MODEL || vars.PUBLIC_AGENT_REVIEW_MODEL || vars.PUBLIC_AGENT_PM_MODEL || 'deepseek/deepseek-v4-flash' }}
+      PUBLIC_AGENT_STRATEGY_REVIEW_PROVIDER: ${{ vars.PUBLIC_AGENT_STRATEGY_REVIEW_PROVIDER || 'anthropic' }}
       PUBLIC_AGENT_STRATEGY_REVIEW_MAX_USD_CENTS: ${{ vars.PUBLIC_AGENT_STRATEGY_REVIEW_MAX_USD_CENTS || '50' }}
     steps:
       - uses: actions/checkout@v4
@@ -30,7 +30,7 @@ jobs:
           MODEL_PROXY_URL: ${{ vars.MODEL_PROXY_URL }}
           MODEL_PROXY_ADMIN_TOKEN: ${{ secrets.MODEL_PROXY_ADMIN_TOKEN }}
           MODEL_PROXY_OIDC_AUDIENCE: ${{ vars.MODEL_PROXY_OIDC_AUDIENCE || 'volter-agent-model-proxy' }}
-          MODEL_ALLOWLIST: ${{ vars.PUBLIC_AGENT_MODELS || 'gpt-4o-mini' }}
+          MODEL_ALLOWLIST: ${{ vars.PUBLIC_AGENT_MODELS || 'deepseek/deepseek-v4-flash' }}
           PUBLIC_AGENT_RUN_MAX_USD_CENTS: ${{ vars.PUBLIC_AGENT_RUN_MAX_USD_CENTS || '500' }}
           PUBLIC_AGENT_RUN_MAX_REQUESTS: ${{ vars.PUBLIC_AGENT_RUN_MAX_REQUESTS || '60' }}
         run: bun scripts/provision-model-endpoint.ts

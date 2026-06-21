@@ -17,8 +17,8 @@ jobs:
       GH_TOKEN: ${{ github.token }}
       PM_COMMENT_TOKEN: ${{ secrets.PUBLIC_AGENT_TRIGGER_TOKEN || github.token }}
       PUBLIC_AGENT_PM_LIMIT: ${{ vars.PUBLIC_AGENT_PM_LIMIT || '10' }}
-      PUBLIC_AGENT_PM_MODEL: ${{ vars.PUBLIC_AGENT_PM_MODEL || vars.PUBLIC_AGENT_TRIAGE_MODEL || 'gpt-4o-mini' }}
-      PUBLIC_AGENT_PM_PROVIDER: ${{ vars.PUBLIC_AGENT_PM_PROVIDER || vars.PUBLIC_AGENT_TRIAGE_PROVIDER || 'openai' }}
+      PUBLIC_AGENT_PM_MODEL: ${{ vars.PUBLIC_AGENT_PM_MODEL || vars.PUBLIC_AGENT_TRIAGE_MODEL || 'deepseek/deepseek-v4-flash' }}
+      PUBLIC_AGENT_PM_PROVIDER: ${{ vars.PUBLIC_AGENT_PM_PROVIDER || vars.PUBLIC_AGENT_TRIAGE_PROVIDER || 'anthropic' }}
       PUBLIC_AGENT_REPO_PAUSED: ${{ vars.PUBLIC_AGENT_REPO_PAUSED || 'false' }}
       PUBLIC_AGENT_PM_MAX_USD_CENTS: ${{ vars.PUBLIC_AGENT_PM_MAX_USD_CENTS || '25' }}
     steps:
@@ -31,7 +31,7 @@ jobs:
           MODEL_PROXY_URL: ${{ vars.MODEL_PROXY_URL }}
           MODEL_PROXY_ADMIN_TOKEN: ${{ secrets.MODEL_PROXY_ADMIN_TOKEN }}
           MODEL_PROXY_OIDC_AUDIENCE: ${{ vars.MODEL_PROXY_OIDC_AUDIENCE || 'volter-agent-model-proxy' }}
-          MODEL_ALLOWLIST: ${{ vars.PUBLIC_AGENT_MODELS || 'gpt-4o-mini' }}
+          MODEL_ALLOWLIST: ${{ vars.PUBLIC_AGENT_MODELS || 'deepseek/deepseek-v4-flash' }}
           PUBLIC_AGENT_RUN_MAX_USD_CENTS: ${{ vars.PUBLIC_AGENT_RUN_MAX_USD_CENTS || '500' }}
           PUBLIC_AGENT_RUN_MAX_REQUESTS: ${{ vars.PUBLIC_AGENT_RUN_MAX_REQUESTS || '60' }}
         run: bun scripts/provision-model-endpoint.ts

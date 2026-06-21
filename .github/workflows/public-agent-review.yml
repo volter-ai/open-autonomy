@@ -29,8 +29,8 @@ jobs:
       ACTOR_ROLE: ${{ github.event.comment.author_association }}
       PUBLIC_AGENT_MAX_CI_RETRIES: ${{ vars.PUBLIC_AGENT_MAX_CI_RETRIES || '2' }}
       PUBLIC_AGENT_MAX_REVIEW_RETRIES: ${{ vars.PUBLIC_AGENT_MAX_REVIEW_RETRIES || '2' }}
-      PUBLIC_AGENT_REVIEW_MODEL: ${{ vars.PUBLIC_AGENT_REVIEW_MODEL || vars.PUBLIC_AGENT_TRIAGE_MODEL || 'gpt-4o-mini' }}
-      PUBLIC_AGENT_REVIEW_PROVIDER: ${{ vars.PUBLIC_AGENT_REVIEW_PROVIDER || 'openai' }}
+      PUBLIC_AGENT_REVIEW_MODEL: ${{ vars.PUBLIC_AGENT_REVIEW_MODEL || vars.PUBLIC_AGENT_TRIAGE_MODEL || 'deepseek/deepseek-v4-flash' }}
+      PUBLIC_AGENT_REVIEW_PROVIDER: ${{ vars.PUBLIC_AGENT_REVIEW_PROVIDER || 'anthropic' }}
       PUBLIC_AGENT_REVIEW_MAX_USD_CENTS: ${{ vars.PUBLIC_AGENT_REVIEW_MAX_USD_CENTS || '50' }}
     steps:
       - uses: actions/checkout@v4
@@ -42,7 +42,7 @@ jobs:
           MODEL_PROXY_URL: ${{ vars.MODEL_PROXY_URL }}
           MODEL_PROXY_ADMIN_TOKEN: ${{ secrets.MODEL_PROXY_ADMIN_TOKEN }}
           MODEL_PROXY_OIDC_AUDIENCE: ${{ vars.MODEL_PROXY_OIDC_AUDIENCE || 'volter-agent-model-proxy' }}
-          MODEL_ALLOWLIST: ${{ vars.PUBLIC_AGENT_MODELS || 'gpt-4o-mini' }}
+          MODEL_ALLOWLIST: ${{ vars.PUBLIC_AGENT_MODELS || 'deepseek/deepseek-v4-flash' }}
           PUBLIC_AGENT_RUN_MAX_USD_CENTS: ${{ vars.PUBLIC_AGENT_RUN_MAX_USD_CENTS || '500' }}
           PUBLIC_AGENT_RUN_MAX_REQUESTS: ${{ vars.PUBLIC_AGENT_RUN_MAX_REQUESTS || '60' }}
         run: bun scripts/provision-model-endpoint.ts

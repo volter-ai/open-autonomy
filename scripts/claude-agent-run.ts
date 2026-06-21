@@ -14,7 +14,7 @@ const root = resolve(import.meta.dir, '..');
 
 function usage(): never {
   throw new Error(`Usage:
-  MODEL_PROXY_URL=... MODEL_PROXY_TOKEN=... OSS_AGENT_TASK_DIR=... bun scripts/codex-agent-run.ts [--issue issue.json] [--context context.json] [--model gpt-4o-mini]`);
+  MODEL_PROXY_URL=... MODEL_PROXY_TOKEN=... OSS_AGENT_TASK_DIR=... bun scripts/claude-agent-run.ts [--issue issue.json] [--context context.json] [--model deepseek/deepseek-v4-flash]`);
 }
 
 function argValue(argv: string[], name: string): string | undefined {
@@ -27,32 +27,9 @@ function parseArgs(argv: string[]): Options {
   return {
     issue: argValue(argv, '--issue') ?? process.env.OSS_AGENT_ISSUE_PATH,
     context: argValue(argv, '--context') ?? process.env.OSS_AGENT_CONTEXT_PATH,
-    model: argValue(argv, '--model') ?? process.env.PUBLIC_AGENT_MODEL ?? 'gpt-4o-mini',
+    model: argValue(argv, '--model') ?? process.env.PUBLIC_AGENT_MODEL ?? 'deepseek/deepseek-v4-flash',
     skill: argValue(argv, '--skill') ?? process.env.OSS_AGENT_SKILL_PATH,
   };
-}
-
-function tomlString(value: string): string {
-  return JSON.stringify(value);
-}
-
-function writeCodexConfig(codexHome: string, model: string, proxyUrl: string): void {
-  mkdirSync(codexHome, { recursive: true });
-  // Native proxy base URL — codex's OpenAI-compatible provider hits `${base}/responses` (wire_api), which
-  // the universal proxy serves at `/v1/responses`. No `/openai` prefix; same transparent endpoint the
-  // deterministic agents use.
-  const baseUrl = new URL('/v1', proxyUrl).toString().replace(/\/$/, '');
-  writeFileSync(join(codexHome, 'config.toml'), [
-    `model = ${tomlString(model)}`,
-    'model_provider = "volter_model_proxy"',
-    '',
-    '[model_providers.volter_model_proxy]',
-    'name = "Volter bounded model proxy"',
-    `base_url = ${tomlString(baseUrl)}`,
-    'wire_api = "responses"',
-    'env_key = "MODEL_PROXY_TOKEN"',
-    '',
-  ].join('\n'));
 }
 
 function readIssue(issuePath: string): { number?: number; title?: string; body?: string } {
@@ -66,6 +43,7 @@ function redactSensitive(text: string): string {
     .replace(/xox(?:b|p|a|r)-[A-Za-z0-9-]{20,}/g, '[redacted-secret-like-token]')
     .replace(/ghp_[A-Za-z0-9]{30,}/g, '[redacted-secret-like-token]')
     .replace(/github_pat_[A-Za-z0-9_]{30,}/g, '[redacted-secret-like-token]')
+    .replace(/sk-or-v1-[A-Za-z0-9]{20,}/g, '[redacted-secret-like-token]')
     .replace(/anthropic_[A-Za-z0-9_-]{20,}/g, '[redacted-secret-like-token]')
     .replace(/OPENAI_API_KEY\s*=\s*sk-[A-Za-z0-9_-]{20,}/g, 'OPENAI_API_KEY=[redacted-secret-like-token]');
 }
@@ -147,7 +125,7 @@ function ensureArtifacts(taskDir: string, issuePath: string, exitCode: number, f
     writeFileSync(join(artifactsDir, 'blocked.md'), [
       '# Agent Blocked',
       '',
-      `Codex exited with code ${exitCode}.`,
+      `Claude Code exited with code ${exitCode}.`,
       '',
       finalMessage.trim(),
       '',
@@ -159,7 +137,7 @@ function ensureArtifacts(taskDir: string, issuePath: string, exitCode: number, f
       `# PR for ${issue.title ?? `issue ${issue.number ?? 'unknown'}`}`,
       '',
       '## Summary',
-      finalMessage.trim() || '- Codex completed the requested run.',
+      finalMessage.trim() || '- Claude Code completed the requested run.',
       '',
       '## Changed files',
       ...(files.length ? files.map((file) => `- \`${file}\``) : ['- No repository file changes detected.']),
@@ -190,35 +168,45 @@ async function main(): Promise<void> {
 
   const issuePath = resolve(options.issue);
   const artifactsDir = join(taskDir, 'artifacts');
-  const codexHome = join(taskDir, 'codex-home');
   mkdirSync(artifactsDir, { recursive: true });
   spawnSync('git', ['config', 'core.filemode', 'false'], { cwd: root });
-  writeCodexConfig(codexHome, options.model, proxyUrl);
 
-  const finalPath = join(artifactsDir, 'codex-final.md');
+  const finalPath = join(artifactsDir, 'claude-final.txt');
   const contextPath = options.context ? resolve(options.context) : undefined;
   writeContextSummary(artifactsDir, contextPath);
   const prompt = buildPrompt(issuePath, taskDir, contextPath, options.skill ? resolve(options.skill) : undefined);
-  const result = spawnSync('codex', [
-    'exec',
-    '--cd', root,
-    '--sandbox', 'workspace-write',
-    '-c', 'approval_policy="never"',
-    '--output-last-message', finalPath,
+
+  // Claude Code talks the Anthropic Messages wire; point it at the bounded proxy (whose native
+  // /v1/messages route serves it) and authenticate with the minted run token — no provider key in the
+  // sandbox. Every model slot maps to the one allowed model so background/subagent calls stay in budget.
+  const result = spawnSync('claude', [
+    '--print',
+    '--model', options.model,
+    '--permission-mode', 'bypassPermissions',
+    '--output-format', 'text',
     prompt,
   ], {
     cwd: root,
     encoding: 'utf8',
+    maxBuffer: 64 * 1024 * 1024,
     env: {
       ...process.env,
-      CODEX_HOME: codexHome,
-      MODEL_PROXY_TOKEN: proxyToken,
+      ANTHROPIC_BASE_URL: proxyUrl,
+      ANTHROPIC_AUTH_TOKEN: proxyToken,
+      ANTHROPIC_MODEL: options.model,
+      ANTHROPIC_DEFAULT_HAIKU_MODEL: options.model,
+      ANTHROPIC_SMALL_FAST_MODEL: options.model,
+      CLAUDE_CODE_DISABLE_NONSTREAMING_FALLBACK: '1',
+      DISABLE_TELEMETRY: '1',
+      DISABLE_ERROR_REPORTING: '1',
+      CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: '1',
     },
   });
+  if (typeof result.stdout === 'string') writeFileSync(finalPath, result.stdout);
 
-  let finalMessage = redactSensitive(existsSync(finalPath) ? readFileSync(finalPath, 'utf8') : result.stdout);
+  let finalMessage = redactSensitive(existsSync(finalPath) ? readFileSync(finalPath, 'utf8') : (result.stdout ?? ''));
   writeFileSync(join(artifactsDir, 'transcript.md'), [
-    '# Codex Agent Transcript',
+    '# Claude Code Agent Transcript',
     '',
     `Model: ${options.model}`,
     `Exit code: ${result.status ?? 1}`,
@@ -230,7 +218,7 @@ async function main(): Promise<void> {
     '## stderr',
     '',
     '```text',
-    redactSensitive(result.stderr.trim()),
+    redactSensitive((result.stderr ?? '').trim()),
     '```',
     '',
   ].join('\n'));

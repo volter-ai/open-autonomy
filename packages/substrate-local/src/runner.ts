@@ -3,11 +3,12 @@
 import { spawnSync } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import type { Runner, Session, SessionStatus, LaunchParams } from '@open-autonomy/core';
+import { RUNNER_DEFAULTS } from './runner-config';
 
 export class TermfleetRunner implements Runner {
-  private cli = process.env.TERMFLEET_CLI || 'termfleet';
-  private model = process.env.TERMFLEET_AGENT || 'codex'; // claude|codex — the model, not our agent
-  private url = process.env.TERMFLEET_PROVIDER_URL || 'http://127.0.0.1:7376';
+  private cli = process.env.TERMFLEET_CLI || RUNNER_DEFAULTS.cli;
+  private model = process.env.TERMFLEET_AGENT || RUNNER_DEFAULTS.harness; // claude|codex — the model, not our agent
+  private url = process.env.TERMFLEET_PROVIDER_URL || RUNNER_DEFAULTS.providerUrl;
 
   launch(agent: string, params: LaunchParams = {}): Session {
     // Re-export orchestration context so the agent's own nested `autonomy launch ...` reaches this

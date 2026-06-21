@@ -1,15 +1,21 @@
-export type Provider = 'anthropic' | 'openai';
+// `openrouter` reaches non-first-party models (e.g. DeepSeek) over OpenRouter's Anthropic-compatible
+// wire, so it shares the `/v1/messages` handler with `anthropic` — only the upstream URL + auth differ.
+export type Provider = 'anthropic' | 'openai' | 'openrouter';
 
 export interface Env {
   AGENT_PROXY_ADMIN_TOKEN: string;
   AGENT_PROXY_HMAC_SECRET: string;
   ANTHROPIC_API_KEY?: string;
   OPENAI_API_KEY?: string;
+  OPENROUTER_API_KEY?: string;
   DEFAULT_MAX_USD_CENTS?: string;
   DEFAULT_MAX_REQUESTS?: string;
   DEFAULT_EXPIRES_SECONDS?: string;
   MAX_BODY_BYTES?: string;
   MODEL_PRICES_JSON?: string;
+  // Worst-case USD/Mtok used only to RESERVE budget for an OpenRouter model with no price-table entry;
+  // the charge is trued down to OpenRouter's reported cost. Conservative default covers frontier models.
+  OPENROUTER_RESERVE_USD_PER_MTOK?: string;
   MAX_RUN_USD_CENTS?: string;
   MAX_RUN_REQUESTS?: string;
   MAX_ACTIVE_RUNS_GLOBAL?: string;

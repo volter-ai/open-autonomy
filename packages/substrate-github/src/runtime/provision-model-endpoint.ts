@@ -16,7 +16,7 @@ if (!githubEnv) throw new Error('GITHUB_ENV is required');
 
 // One bounded token for the whole run. The cap covers the run's sweep (kept equivalent to the prior
 // per-issue ceiling × the sweep limit), so the spend wall is preserved while the agent never mints.
-const models = env('MODEL_ALLOWLIST', 'gpt-4o-mini');
+const models = env('MODEL_ALLOWLIST', 'deepseek/deepseek-v4-flash');
 const maxUsdCents = env('PUBLIC_AGENT_RUN_MAX_USD_CENTS', '500');
 const maxRequests = env('PUBLIC_AGENT_RUN_MAX_REQUESTS', '60');
 

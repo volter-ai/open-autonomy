@@ -73,7 +73,7 @@ github and local are the **same recipe**; only `provision` differs. "Adopt into 
 
 - **Done & proven:** the `packages/` engine (core + both substrate adapters) — typechecks strict,
   conformance core 6/6, round-trips stable, OA workflows byte-identical, legacy sweep clean.
-- **Done & proven:** the github runtime (`public-agent-*`, `model-proxy-*`, `codex-agent-run`, …) now
+- **Done & proven:** the github runtime (`public-agent-*`, `model-proxy-*`, `claude-agent-run`, …) now
   lives in `substrate-github/src/runtime/` and is **injected** by `compileGithub` (the substrate owns
   its runtime, as `substrate-local` owns its runner; the vendored mirror is tied to `scripts/` by
   `check:runtime-sync`). `profiles/self-driving` is OA's setup as a profile.

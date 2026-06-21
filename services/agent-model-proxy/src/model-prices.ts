@@ -48,4 +48,7 @@ export const MODEL_PRICES: Record<string, ModelPrice> = {
     cache_write_multiplier: 1.25,
     cache_read_multiplier: 0.1,
   },
+  // No OpenRouter entries needed: any "vendor/slug" model (e.g. deepseek/deepseek-v4-flash) routes to
+  // OpenRouter, which reports the real cost we settle against. Add an entry only to tighten its
+  // up-front budget reservation below the generic OPENROUTER_RESERVE_USD_PER_MTOK ceiling.
 };

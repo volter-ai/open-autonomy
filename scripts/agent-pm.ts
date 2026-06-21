@@ -11,8 +11,8 @@ const env = (k: string, d = '') => process.env[k] || d;
 const ACTOR = env('GITHUB_ACTOR', 'open-autonomy-pm');
 const PM_COMMENT_TOKEN = env('PM_COMMENT_TOKEN', env('GH_TOKEN'));
 const LIMIT = env('PUBLIC_AGENT_PM_LIMIT', '20');
-const MODEL = env('PUBLIC_AGENT_PM_MODEL', 'gpt-4o-mini');
-const PROVIDER = env('PUBLIC_AGENT_PM_PROVIDER', 'openai');
+const MODEL = env('PUBLIC_AGENT_PM_MODEL', 'deepseek/deepseek-v4-flash');
+const PROVIDER = env('PUBLIC_AGENT_PM_PROVIDER', 'anthropic');
 
 mkdirSync('.agent-run/pm', { recursive: true });
 

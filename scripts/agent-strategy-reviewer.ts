@@ -15,7 +15,7 @@ const PR = env('TARGET_REF');
 const ACTOR = env('GITHUB_ACTOR', 'open-autonomy-strategy-reviewer');
 // Substrate-neutral: github sets GITHUB_REPOSITORY; off-github we derive it from gh (universal).
 const REPO = env('GITHUB_REPOSITORY') || (await $`gh repo view --json nameWithOwner --jq .nameWithOwner`.nothrow().text()).trim();
-const model = env('PUBLIC_AGENT_STRATEGY_REVIEW_MODEL', env('PUBLIC_AGENT_REVIEW_MODEL', env('PUBLIC_AGENT_PM_MODEL', 'gpt-4o-mini')));
+const model = env('PUBLIC_AGENT_STRATEGY_REVIEW_MODEL', env('PUBLIC_AGENT_REVIEW_MODEL', env('PUBLIC_AGENT_PM_MODEL', 'deepseek/deepseek-v4-flash')));
 const json = <T>(p: string, d: T): T => {
   try {
     return JSON.parse(readFileSync(p, 'utf8')) as T;
@@ -74,7 +74,7 @@ let decisionActor = 'human-operator';
 if (mode === 'review') {
   // The box's model endpoint is provisioned by the runner's setup step; the reviewer just makes the call.
   await Bun.write(`${D}/issue.json`, JSON.stringify({ number: Number(pr), title: 'Strategy review', body: '', user: { login: ACTOR } }));
-  await $`bun scripts/public-agent-strategy-review.ts --diff ${D}/roadmap.diff --proposal ${D}/proposal.txt --rubric .open-autonomy/strategy-rubric.yml --constitution docs/CONSTITUTION.md --provider ${env('PUBLIC_AGENT_STRATEGY_REVIEW_PROVIDER', 'openai')} --model ${model} --out ${D}/verdict.json`
+  await $`bun scripts/public-agent-strategy-review.ts --diff ${D}/roadmap.diff --proposal ${D}/proposal.txt --rubric .open-autonomy/strategy-rubric.yml --constitution docs/CONSTITUTION.md --provider ${env('PUBLIC_AGENT_STRATEGY_REVIEW_PROVIDER', 'anthropic')} --model ${model} --out ${D}/verdict.json`
     .nothrow();
   const v = json<{ verdict: string; human_required: boolean | string; summary: string }>(`${D}/verdict.json`, { verdict: 'failed', human_required: true, summary: 'Reviewer did not produce a verdict.' });
   verdict = v.verdict;

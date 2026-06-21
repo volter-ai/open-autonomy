@@ -1,5 +1,5 @@
 ---
-name: ztrack-simple-sdlc-review
+name: review
 description: Review one ztrack simple-sdlc issue; use when PM assigns an In Review issue that is green under ztrack check.
 ---
 

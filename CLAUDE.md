@@ -8,7 +8,7 @@ template — the installation is `compile(profiles/self-driving, github)`:
 - **Skills / control docs / workflows / manifest** (`.codex/skills/`, `.open-autonomy/*`,
   `.github/workflows/`, `AGENTS.md`, `docs/*`): edit the files under `profiles/self-driving/`
   (workflows are real `.yml` files there). `check:compile` verifies the profile compiles.
-- **Runtime** (`scripts/*` — `public-agent-*`, `model-proxy-*`, `codex-agent-run`, …): the substrate
+- **Runtime** (`scripts/*` — `public-agent-*`, `model-proxy-*`, `claude-agent-run`, …): the substrate
   OWNS it. Edit it in `scripts/` (where it's tested), then `bun bin/sync-runtime.ts` to refresh the
   vendored mirror; `check:runtime-sync` enforces they match. `compileGithub` injects it.
 

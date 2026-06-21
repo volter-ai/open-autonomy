@@ -8,6 +8,10 @@
 schema: autonomy.ir.v1
 targets: [github]
 
+# Model defaults: every agent runs deepseek/deepseek-v4-flash. The deterministic agents' `*_PROVIDER`
+# selects the WIRE, not the upstream — `anthropic` = the Anthropic Messages endpoint, which the bounded
+# proxy routes to OpenRouter (and on to DeepSeek) by the "vendor/slug" model id. The developer agent runs
+# the same model through Claude Code (see the github substrate's developer job). No gpt-4o-mini anywhere.
 agents:
   # The only model-interpreted agent: codex writes code in a credential-less sandbox; a trusted
   # publisher validates the bundle and opens the PR. Triggered by the agent-session label or a comment.
@@ -37,8 +41,8 @@ agents:
       env:
         PM_COMMENT_TOKEN: ${{ secrets.PUBLIC_AGENT_TRIGGER_TOKEN || github.token }}
         PUBLIC_AGENT_PM_LIMIT: ${{ vars.PUBLIC_AGENT_PM_LIMIT || '10' }}
-        PUBLIC_AGENT_PM_MODEL: ${{ vars.PUBLIC_AGENT_PM_MODEL || vars.PUBLIC_AGENT_TRIAGE_MODEL || 'gpt-4o-mini' }}
-        PUBLIC_AGENT_PM_PROVIDER: ${{ vars.PUBLIC_AGENT_PM_PROVIDER || vars.PUBLIC_AGENT_TRIAGE_PROVIDER || 'openai' }}
+        PUBLIC_AGENT_PM_MODEL: ${{ vars.PUBLIC_AGENT_PM_MODEL || vars.PUBLIC_AGENT_TRIAGE_MODEL || 'deepseek/deepseek-v4-flash' }}
+        PUBLIC_AGENT_PM_PROVIDER: ${{ vars.PUBLIC_AGENT_PM_PROVIDER || vars.PUBLIC_AGENT_TRIAGE_PROVIDER || 'anthropic' }}
         PUBLIC_AGENT_REPO_PAUSED: ${{ vars.PUBLIC_AGENT_REPO_PAUSED || 'false' }}
         PUBLIC_AGENT_PM_MAX_USD_CENTS: ${{ vars.PUBLIC_AGENT_PM_MAX_USD_CENTS || '25' }}
 
@@ -65,8 +69,8 @@ agents:
       env:
         PUBLIC_AGENT_MAX_CI_RETRIES: ${{ vars.PUBLIC_AGENT_MAX_CI_RETRIES || '2' }}
         PUBLIC_AGENT_MAX_REVIEW_RETRIES: ${{ vars.PUBLIC_AGENT_MAX_REVIEW_RETRIES || '2' }}
-        PUBLIC_AGENT_REVIEW_MODEL: ${{ vars.PUBLIC_AGENT_REVIEW_MODEL || vars.PUBLIC_AGENT_TRIAGE_MODEL || 'gpt-4o-mini' }}
-        PUBLIC_AGENT_REVIEW_PROVIDER: ${{ vars.PUBLIC_AGENT_REVIEW_PROVIDER || 'openai' }}
+        PUBLIC_AGENT_REVIEW_MODEL: ${{ vars.PUBLIC_AGENT_REVIEW_MODEL || vars.PUBLIC_AGENT_TRIAGE_MODEL || 'deepseek/deepseek-v4-flash' }}
+        PUBLIC_AGENT_REVIEW_PROVIDER: ${{ vars.PUBLIC_AGENT_REVIEW_PROVIDER || 'anthropic' }}
         PUBLIC_AGENT_REVIEW_MAX_USD_CENTS: ${{ vars.PUBLIC_AGENT_REVIEW_MAX_USD_CENTS || '50' }}
 
   # Deterministic planner: reconciles roadmap.yml against the planner-owned roadmap issues.
@@ -95,8 +99,8 @@ agents:
       model: true
       timeout: 25
       env:
-        PUBLIC_AGENT_STRATEGIST_MODEL: ${{ vars.PUBLIC_AGENT_STRATEGIST_MODEL || vars.PUBLIC_AGENT_PM_MODEL || 'gpt-4o-mini' }}
-        PUBLIC_AGENT_STRATEGIST_PROVIDER: ${{ vars.PUBLIC_AGENT_STRATEGIST_PROVIDER || 'openai' }}
+        PUBLIC_AGENT_STRATEGIST_MODEL: ${{ vars.PUBLIC_AGENT_STRATEGIST_MODEL || vars.PUBLIC_AGENT_PM_MODEL || 'deepseek/deepseek-v4-flash' }}
+        PUBLIC_AGENT_STRATEGIST_PROVIDER: ${{ vars.PUBLIC_AGENT_STRATEGIST_PROVIDER || 'anthropic' }}
         PUBLIC_AGENT_STRATEGIST_MAX_USD_CENTS: ${{ vars.PUBLIC_AGENT_STRATEGIST_MAX_USD_CENTS || '100' }}
         PUBLIC_AGENT_STRATEGIST_MAX_ITEMS: ${{ vars.PUBLIC_AGENT_STRATEGIST_MAX_ITEMS || '3' }}
 
@@ -119,8 +123,8 @@ agents:
       timeout: 20
       permissions: { statuses: write }
       env:
-        PUBLIC_AGENT_STRATEGY_REVIEW_MODEL: ${{ vars.PUBLIC_AGENT_STRATEGY_REVIEW_MODEL || vars.PUBLIC_AGENT_REVIEW_MODEL || vars.PUBLIC_AGENT_PM_MODEL || 'gpt-4o-mini' }}
-        PUBLIC_AGENT_STRATEGY_REVIEW_PROVIDER: ${{ vars.PUBLIC_AGENT_STRATEGY_REVIEW_PROVIDER || 'openai' }}
+        PUBLIC_AGENT_STRATEGY_REVIEW_MODEL: ${{ vars.PUBLIC_AGENT_STRATEGY_REVIEW_MODEL || vars.PUBLIC_AGENT_REVIEW_MODEL || vars.PUBLIC_AGENT_PM_MODEL || 'deepseek/deepseek-v4-flash' }}
+        PUBLIC_AGENT_STRATEGY_REVIEW_PROVIDER: ${{ vars.PUBLIC_AGENT_STRATEGY_REVIEW_PROVIDER || 'anthropic' }}
         PUBLIC_AGENT_STRATEGY_REVIEW_MAX_USD_CENTS: ${{ vars.PUBLIC_AGENT_STRATEGY_REVIEW_MAX_USD_CENTS || '50' }}
 
 policy:
@@ -141,6 +145,7 @@ policy:
         - .open-autonomy/autonomy.yml
         - docs/CONSTITUTION.md
         - .codex/skills/**
+        - .claude/skills/**
         - services/**/wrangler.toml
       human_required_topics: [auth, secrets, billing, deployment, destructive data migration, dependency trust]
     merge:

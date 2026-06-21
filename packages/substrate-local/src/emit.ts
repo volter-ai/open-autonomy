@@ -15,6 +15,7 @@ import { SUPPORTED_RUNNERS, type RunnerName } from '@open-autonomy/core';
 // remaining de-vendor work); the manifest serialization + IR helpers now come from core, so local's emit
 // no longer depends on github's emit.
 import { runtimeFiles } from '@open-autonomy/substrate-github';
+import { runnerDefaultsModule } from './runner-config';
 
 // github-only runtime scripts — the proxy/mint clients, the privilege-separated wrapper machinery, and
 // the box-setup provisioner. A trusted local box never mints or wraps, so these are excluded from the
@@ -28,7 +29,7 @@ const GITHUB_ONLY = new Set([
   'scripts/github-agent-publish.test.ts',
   'scripts/github-agent-session.ts',
   'scripts/github-agent-session.test.ts',
-  'scripts/codex-agent-run.ts',
+  'scripts/claude-agent-run.ts',
 ]);
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -67,34 +68,36 @@ const RUN_AGENT_DRIVER = `#!/usr/bin/env node
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
+import { RUNNER_DEFAULTS } from './runner-defaults.mjs';
 const agent = process.env.AUTONOMY_AGENT;
 if (!agent) throw new Error('AUTONOMY_AGENT required');
 const here = dirname(fileURLToPath(import.meta.url));
 const runner = join(here, 'autonomy-runner.mjs');
-const harness = process.env.TERMFLEET_AGENT || 'codex';
+const harness = process.env.TERMFLEET_AGENT || RUNNER_DEFAULTS.harness;
 const env = { ...process.env, AUTONOMY_PROMPT_DIR: process.env.AUTONOMY_PROMPT_DIR || join(here, 'prompts', harness) };
 const forward = (process.env.AUTONOMY_FORWARD || '').split(',').map((s) => s.trim()).filter(Boolean);
 const params = forward.flatMap((k) => (process.env[k] ? ['--' + k, process.env[k]] : []));
-const timeout = Number(process.env.TERMFLEET_LAUNCH_TIMEOUT_MS || 45000);
+const timeout = Number(process.env.TERMFLEET_LAUNCH_TIMEOUT_MS || RUNNER_DEFAULTS.launchTimeoutMs);
 const r = spawnSync('node', [runner, 'launch', agent, ...params], { stdio: 'inherit', timeout, env });
 process.exit(r.error?.code === 'ETIMEDOUT' ? 0 : (r.status ?? 1));
 `;
 
-// Per-agent launch prompts, split by harness (codex triggers a skill with `$name`, claude with
-// `/name`); the install name is `${profile}-${role}`. They live in scripts/prompts/ where run-agent
-// points the backend.
-function promptFiles(ir: AutonomyIR, name: string): Record<string, string> {
+// Per-agent launch prompts for SKILL agents, split by harness: codex invokes the skill with `$name`,
+// Claude Code with `/name` — where the name is the skill's OWN id (its behavior = the SKILL.md folder +
+// frontmatter `name` it is installed under in .codex/skills/ and .claude/skills/), so the trigger
+// actually resolves. Keyed by role: the schedule launches `AUTONOMY_AGENT=<role>`, which selects
+// prompts/<harness>/<role>.txt. Script agents run via bun and need no launch prompt.
+function promptFiles(ir: AutonomyIR): Record<string, string> {
   const out: Record<string, string> = {};
-  for (const role of Object.keys(ir.agents)) {
-    const skill = `${name}-${role}`;
-    out[`scripts/prompts/codex/${role}.txt`] = `$${skill}\n`;
-    out[`scripts/prompts/claude/${role}.txt`] = `/${skill}\n`;
+  for (const [role, agent] of Object.entries(ir.agents)) {
+    if (isScript(agent.behavior)) continue;
+    out[`scripts/prompts/codex/${role}.txt`] = `$${agent.behavior}\n`;
+    out[`scripts/prompts/claude/${role}.txt`] = `/${agent.behavior}\n`;
   }
   return out;
 }
 
-export function compileLocal(ir: AutonomyIR, opts: { name?: string; runner?: RunnerName } = {}): CompileOutput {
-  const name = opts.name ?? 'app';
+export function compileLocal(ir: AutonomyIR, opts: { runner?: RunnerName } = {}): CompileOutput {
   const runner = opts.runner ?? 'termfleet';
   if (!SUPPORTED_RUNNERS.includes(runner)) {
     throw new Error(`unsupported runner "${runner}"; supported: ${SUPPORTED_RUNNERS.join(', ')}`);
@@ -116,6 +119,9 @@ export function compileLocal(ir: AutonomyIR, opts: { name?: string; runner?: Run
   generated['scripts/runner.ts'] = RUNNER_FRONTEND;
   generated['scripts/run-agent.mjs'] = RUN_AGENT_DRIVER;
   generated['scripts/autonomy-runner.mjs'] = RUNNER_BACKEND;
+  // The single source of the runner's defaults (harness, cli, provider url, timeout). The vendored .mjs
+  // runtime imports this instead of re-hardcoding literals; TERMFLEET_* env vars override at runtime.
+  generated['scripts/runner-defaults.mjs'] = runnerDefaultsModule();
 
   // The local driver: a loop that fires each cron agent on an interval (github used `on: schedule`).
   // Each runs its own behavior via bun, exactly as its github job runs `bun <behavior>`.
@@ -134,14 +140,18 @@ export function compileLocal(ir: AutonomyIR, opts: { name?: string; runner?: Run
     null,
     2,
   )}\n`;
-  Object.assign(generated, promptFiles(ir, name));
+  Object.assign(generated, promptFiles(ir));
 
   // Copies: skill behaviors + the profile's resources at the repo root, so the agents' cwd-relative gh +
   // script paths resolve unchanged. Drop any github-only resources (e.g. repo CI under .github/).
   const copies: Array<{ from: string; to: string }> = [];
   for (const agent of Object.values(ir.agents)) {
     if (!isScript(agent.behavior)) {
+      // The local install ships launch prompts for BOTH harnesses (codex `$name`, claude `/name`) and the
+      // harness is a runtime choice (TERMFLEET_AGENT). Each discovers skills from its OWN directory —
+      // codex from `.codex/skills/`, Claude Code from `.claude/skills/` — so install the skill in both.
       copies.push({ from: `skills/${agent.behavior}/SKILL.md`, to: `.codex/skills/${agent.behavior}/SKILL.md` });
+      copies.push({ from: `skills/${agent.behavior}/SKILL.md`, to: `.claude/skills/${agent.behavior}/SKILL.md` });
     }
   }
   for (const r of ir.resources) {

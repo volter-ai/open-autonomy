@@ -251,6 +251,7 @@ export const IMMUTABLE_AGENT_PATHS = [
   '.open-autonomy/autonomy.yml',
   '.open-autonomy/strategy-rubric.yml',
   '.codex/skills/**',
+  '.claude/skills/**',
 ];
 
 // Returns the first changed path that is a governance file (immutable to agents), or undefined.

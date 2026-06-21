@@ -117,7 +117,7 @@ bun scripts/github-agent-session.ts \
   --repo "$GITHUB_REPOSITORY" \
   --actor "$GITHUB_ACTOR" \
   -- \
-  bash -lc "${PUBLIC_AGENT_COMMAND:-bun scripts/codex-agent-run.ts}"
+  bash -lc "${PUBLIC_AGENT_COMMAND:-bun scripts/claude-agent-run.ts}"
 ```
 
 `github-agent-session.ts` creates an isolated task directory, copies the issue
@@ -125,13 +125,15 @@ payload, sets `OSS_AGENT_TASK_DIR` and `OSS_AGENT_ISSUE_PATH`, runs the command,
 captures patch/session/artifacts, writes a develop decision, scans for
 real-looking secrets, and emits a publisher bundle.
 
-`codex-agent-run.ts` writes a temporary Codex config that points at the model
-proxy:
+`claude-agent-run.ts` runs Claude Code headless, pointed at the model proxy over
+the Anthropic Messages wire (the proxy routes the `deepseek/…` model id to
+OpenRouter by slug). It sets the stock SDK env, with no provider key in the
+sandbox:
 
-```toml
-base_url = "$MODEL_PROXY_URL/openai/v1"
-wire_api = "responses"
-env_key = "MODEL_PROXY_TOKEN"
+```sh
+ANTHROPIC_BASE_URL="$MODEL_PROXY_URL"      # native /v1/messages
+ANTHROPIC_AUTH_TOKEN="$MODEL_PROXY_TOKEN"  # the minted, bounded run token
+ANTHROPIC_MODEL="deepseek/deepseek-v4-flash"
 ```
 
 ## Bundle Contract

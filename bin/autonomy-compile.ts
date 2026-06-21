@@ -14,9 +14,8 @@ if (!profileDir || (substrate !== 'local' && substrate !== 'github')) {
   process.exit(2);
 }
 
-const name = profileDir.split('/').filter(Boolean).pop() ?? 'app';
 const ir = parseIr(readFileSync(join(profileDir, 'ir.yml'), 'utf8'));
-const out = substrate === 'local' ? compileLocal(ir, { name }) : compileGithub(ir);
+const out = substrate === 'local' ? compileLocal(ir) : compileGithub(ir);
 
 if (outDir) {
   const written = materialize(out, outDir, (from) => readFileSync(join(profileDir, from), 'utf8'));

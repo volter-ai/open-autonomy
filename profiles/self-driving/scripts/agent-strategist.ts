@@ -12,8 +12,8 @@ const env = (k: string, d = '') => process.env[k] || d;
 // Schedule and manual dispatch both apply (you run the strategist to propose); set the AGENT_APPLY
 // repo var to "false" for a dry run that writes the proposal artifact without opening a PR.
 const apply = process.env.AGENT_APPLY !== 'false';
-const model = env('PUBLIC_AGENT_STRATEGIST_MODEL', env('PUBLIC_AGENT_PM_MODEL', 'gpt-4o-mini'));
-const provider = env('PUBLIC_AGENT_STRATEGIST_PROVIDER', 'openai');
+const model = env('PUBLIC_AGENT_STRATEGIST_MODEL', env('PUBLIC_AGENT_PM_MODEL', 'deepseek/deepseek-v4-flash'));
+const provider = env('PUBLIC_AGENT_STRATEGIST_PROVIDER', 'anthropic');
 mkdirSync('.agent-run/strategist', { recursive: true });
 
 // 1. Gather research signals from the configured sources.

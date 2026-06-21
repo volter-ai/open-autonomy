@@ -206,7 +206,7 @@ function modelSetupStep(agent: IRAgent): string[] {
     `          MODEL_PROXY_URL: \${{ vars.MODEL_PROXY_URL }}`,
     `          MODEL_PROXY_ADMIN_TOKEN: \${{ secrets.MODEL_PROXY_ADMIN_TOKEN }}`,
     `          MODEL_PROXY_OIDC_AUDIENCE: \${{ vars.MODEL_PROXY_OIDC_AUDIENCE || 'volter-agent-model-proxy' }}`,
-    `          MODEL_ALLOWLIST: \${{ vars.PUBLIC_AGENT_MODELS || 'gpt-4o-mini' }}`,
+    `          MODEL_ALLOWLIST: \${{ vars.PUBLIC_AGENT_MODELS || 'deepseek/deepseek-v4-flash' }}`,
     `          PUBLIC_AGENT_RUN_MAX_USD_CENTS: \${{ vars.PUBLIC_AGENT_RUN_MAX_USD_CENTS || '500' }}`,
     `          PUBLIC_AGENT_RUN_MAX_REQUESTS: \${{ vars.PUBLIC_AGENT_RUN_MAX_REQUESTS || '60' }}`,
     `        run: bun scripts/provision-model-endpoint.ts`,
@@ -312,7 +312,7 @@ function wrapperYml(name: string, agent: IRAgent): string {
     `      - run: bun install --frozen-lockfile || bun install`,
     ...buildIssue,
     `      - name: Mint bounded model token`,
-    `        run: bun scripts/model-proxy-mint.ts --run-id "${RID}" --models "\${{ vars.PUBLIC_AGENT_MODEL || 'gpt-4o-mini' }}" --max-usd-cents "\${{ vars.PUBLIC_AGENT_MAX_USD_CENTS || '200' }}" --max-requests "\${{ vars.PUBLIC_AGENT_MAX_REQUESTS || '60' }}" --issue .agent-run/issue.json`,
+    `        run: bun scripts/model-proxy-mint.ts --run-id "${RID}" --models "\${{ vars.PUBLIC_AGENT_MODEL || 'deepseek/deepseek-v4-flash' }}" --max-usd-cents "\${{ vars.PUBLIC_AGENT_MAX_USD_CENTS || '200' }}" --max-requests "\${{ vars.PUBLIC_AGENT_MAX_REQUESTS || '60' }}" --issue .agent-run/issue.json`,
     `  ${name}:`,
     `    needs: setup`,
     `    runs-on: ubuntu-latest`,
@@ -321,8 +321,8 @@ function wrapperYml(name: string, agent: IRAgent): string {
     `    env:`,
     `      MODEL_PROXY_URL: \${{ vars.MODEL_PROXY_URL }}`,
     `      MODEL_PROXY_OIDC_AUDIENCE: \${{ vars.MODEL_PROXY_OIDC_AUDIENCE || 'volter-agent-model-proxy' }}`,
-    `      PUBLIC_AGENT_MODEL: \${{ vars.PUBLIC_AGENT_MODEL || 'gpt-4o-mini' }}`,
-    `      PUBLIC_AGENT_CITED_VERSION: \${{ vars.PUBLIC_AGENT_CODEX_VERSION }}`,
+    `      PUBLIC_AGENT_MODEL: \${{ vars.PUBLIC_AGENT_MODEL || 'deepseek/deepseek-v4-flash' }}`,
+    `      PUBLIC_AGENT_CITED_VERSION: \${{ vars.PUBLIC_AGENT_CLAUDE_CODE_VERSION }}`,
     `      GH_TOKEN: \${{ github.token }}`,
     ...triggerParamsEnv(agent),
     ...envLines(agent),
@@ -331,18 +331,14 @@ function wrapperYml(name: string, agent: IRAgent): string {
     `        with: { persist-credentials: false }`,
     `      - uses: oven-sh/setup-bun@v2`,
     `      - run: bun install --frozen-lockfile || bun install`,
-    `      - name: relax apparmor for the codex sandbox`,
-    `        run: |`,
-    `          cur=$(sysctl -n kernel.apparmor_restrict_unprivileged_userns 2>/dev/null || true)`,
-    `          if [ -n "$cur" ] && [ "$cur" != "0" ]; then sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0; fi`,
-    `      - name: install codex CLI`,
-    `        run: npm install -g "@openai/codex@\${PUBLIC_AGENT_CITED_VERSION:-latest}" && codex --version`,
+    `      - name: install Claude Code CLI`,
+    `        run: npm install -g "@anthropic-ai/claude-code@\${PUBLIC_AGENT_CITED_VERSION:-latest}" && claude --version`,
     ...buildIssue,
     `      - name: Exchange OIDC for the bounded token`,
     `        run: bun scripts/model-proxy-exchange.ts --run-id "${RID}" --audience "$MODEL_PROXY_OIDC_AUDIENCE"`,
-    `      - name: Run agent (codex + skill) and bundle the result`,
+    `      - name: Run agent (Claude Code + skill) and bundle the result`,
     `        run: |`,
-    `          bun scripts/github-agent-session.ts --issue .agent-run/issue.json --run-id "${RID}" --out .agent-run/out --repo "\${{ github.repository }}" --actor "\${{ github.actor }}" -- bash -lc "bun scripts/codex-agent-run.ts --skill ${skillPath}; rc=\\$?; bun scripts/agent-visual-verify.ts || true; exit \\$rc"`,
+    `          bun scripts/github-agent-session.ts --issue .agent-run/issue.json --run-id "${RID}" --out .agent-run/out --repo "\${{ github.repository }}" --actor "\${{ github.actor }}" -- bash -lc "bun scripts/claude-agent-run.ts --skill ${skillPath}; rc=\\$?; bun scripts/agent-visual-verify.ts || true; exit \\$rc"`,
     `      - uses: actions/upload-artifact@v4`,
     `        with:`,
     `          name: ${BUNDLE}`,
@@ -449,7 +445,11 @@ export function compileGithub(ir: AutonomyIR): CompileOutput {
   const copies: Array<{ from: string; to: string }> = [];
   for (const agent of Object.values(ir.agents)) {
     if (!isScript(agent.behavior) && !isHuman(agent)) {
+      // Install the skill where each harness discovers it: codex from `.codex/skills/`, Claude Code from
+      // `.claude/skills/`. The developer job runs Claude Code, which can then resolve the skill natively
+      // (in addition to the wrapper inlining it). Both copies are immutable to agents (see bundle guard).
       copies.push({ from: `skills/${agent.behavior}/SKILL.md`, to: `.codex/skills/${agent.behavior}/SKILL.md` });
+      copies.push({ from: `skills/${agent.behavior}/SKILL.md`, to: `.claude/skills/${agent.behavior}/SKILL.md` });
     }
   }
   for (const r of ir.resources) copies.push({ from: r, to: r });

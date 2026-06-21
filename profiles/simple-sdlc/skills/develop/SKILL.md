@@ -1,5 +1,5 @@
 ---
-name: ztrack-simple-sdlc-develop
+name: develop
 description: Implement one ztrack simple-sdlc issue and produce real evidence; use when assigned a Ready or rework issue by PM.
 ---
 

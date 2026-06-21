@@ -13,13 +13,14 @@
 // interprets them (a profile gives them meaning, e.g. a ztrack-using profile declares ZTRACK_ISSUE).
 import { spawnSync } from 'node:child_process';
 import { existsSync } from 'node:fs';
+import { RUNNER_DEFAULTS } from './runner-defaults.mjs';
 
 // Real local backend: drives termfleet. The window name IS the agent; the system never encodes
-// anything else into it.
+// anything else into it. Defaults come from the substrate-owned RUNNER_DEFAULTS; TERMFLEET_* override.
 export class TermfleetRunner {
-  cli = process.env.TERMFLEET_CLI || 'termfleet';
-  model = process.env.TERMFLEET_AGENT || 'codex'; // claude|codex — the model, not our agent
-  url = process.env.TERMFLEET_PROVIDER_URL || 'http://127.0.0.1:7376';
+  cli = process.env.TERMFLEET_CLI || RUNNER_DEFAULTS.cli;
+  model = process.env.TERMFLEET_AGENT || RUNNER_DEFAULTS.harness; // claude|codex — the model, not our agent
+  url = process.env.TERMFLEET_PROVIDER_URL || RUNNER_DEFAULTS.providerUrl;
 
   launch(agent, params = {}) {
     // Re-export orchestration context so the agent's own nested `autonomy launch ...` reaches this

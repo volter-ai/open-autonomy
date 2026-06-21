@@ -73,7 +73,7 @@ The command must write one terminal artifact in `artifacts/`:
 2. Confirm `ci` passes.
 3. Open or reuse a low-risk issue.
 4. Comment `/agent develop`, or trigger `Public Agent PM`.
-5. Verify the run uses `scripts/codex-agent-run.ts`, exchanges GitHub OIDC for a
+5. Verify the run uses `scripts/claude-agent-run.ts`, exchanges GitHub OIDC for a
    bounded model token, and emits a publisher bundle.
 6. Verify publisher output, reviewer verdict, and merge-gate behavior.
 7. If active-run limits block PM or agent dispatch, use the manual `Model Proxy Admin`

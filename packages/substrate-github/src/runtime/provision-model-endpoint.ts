@@ -48,6 +48,10 @@ if (res.exitCode !== 0) {
     process.exit(1);
   }
   console.error('model token mint failed; the agent run cannot reach the model endpoint');
+  // Surface the proxy's actual error (e.g. "model proxy mint failed: 403 model_not_allowed",
+  // account_balance_exhausted, *_active_run_limit_reached). Swallowing it turned every mint failure
+  // into an undebuggable "PM model decision unavailable" — a health event must name its cause.
+  if (out.trim()) console.error(out.trim());
   process.exit(1);
 }
 

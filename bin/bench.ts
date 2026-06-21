@@ -87,22 +87,28 @@ if (process.argv.includes('--live')) {
     }
   }
 
-  // Funding is a one-time OPERATOR action, not per cell: fund the owner account ONCE and every disposable
-  // repo under it draws from it via OIDC (the ledger's parent fallback) — no admin token in this loop. The
-  // optional per-repo grant below is a convenience for a standalone cell; it needs an admin token.
+  // Bootstrap-fund the disposable cell with a bounded grant (the operator's treasury action; the agents
+  // only spend it via OIDC). Retried past the admin-token's propagation lag (a freshly-rotated worker
+  // secret isn't live for a few seconds). Teardown refunds the unused remainder.
   const adminToken = process.env.MODEL_PROXY_ADMIN_TOKEN;
   const proxyBase = process.env.MODEL_PROXY_URL || 'https://volter-agent-model-proxy.aaron-0ed.workers.dev';
   if (adminToken) {
     const funder = arg('--funder', 'volter-ai/open-autonomy');
     const cents = Number(arg('--fund-usd-cents', '500'));
-    const res = await fetch(`${proxyBase}/admin/accounts/${encodeURIComponent(funder)}/grant`, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json', 'x-admin-token': adminToken },
-      body: JSON.stringify({ to: repo, amount_usd_cents: cents, key: `bench:${repo}` }),
-    });
-    console.log(`funded ${repo}: ${res.ok ? `$${(cents / 100).toFixed(2)} from ${funder}` : `FAILED ${res.status}`}`);
+    let funded = false;
+    for (let i = 0; i < 8 && !funded; i++) {
+      const res = await fetch(`${proxyBase}/admin/accounts/${encodeURIComponent(funder)}/grant`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', 'x-admin-token': adminToken },
+        body: JSON.stringify({ to: repo, amount_usd_cents: cents, key: `bench:${repo}` }),
+      });
+      funded = res.ok;
+      if (!funded) await new Promise((r) => setTimeout(r, 5000)); // wait out secret propagation
+    }
+    console.log(funded ? `funded ${repo}: $${(cents / 100).toFixed(2)} from ${funder}` : `FAILED to fund ${repo} after retries`);
+    if (!funded) process.exit(1);
   } else {
-    console.log(`no per-repo grant (no admin token) — relies on the owner account (${repo.split('/')[0]}) being funded once`);
+    console.log(`no per-repo grant (set MODEL_PROXY_ADMIN_TOKEN to bootstrap-fund the cell)`);
   }
 
   console.log(`\nlive cell up: https://github.com/${repo}`);

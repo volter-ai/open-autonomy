@@ -15,6 +15,7 @@ export interface Env {
   MAX_ACTIVE_RUNS_GLOBAL?: string;
   MAX_ACTIVE_RUNS_PER_REPO?: string;
   MAX_ACTIVE_RUNS_PER_ACTOR?: string;
+  MAX_ACTIVE_RUNS_SYSTEM?: string;
   MAX_RUNS_PER_REPO_PER_DAY?: string;
   MAX_RUNS_PER_ACTOR_PER_DAY?: string;
   MAX_RUNS_PER_ISSUE_PER_DAY?: string;

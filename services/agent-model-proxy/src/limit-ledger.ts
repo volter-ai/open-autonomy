@@ -14,9 +14,19 @@ const MAX_FLOWS = 200;
 const FEED_LIMIT = 24;
 const MAX_GRANTS_PER_FROM_PER_DAY = 50;
 
+// User/event-triggered purposes — the externally-triggerable, abusable surface that the active-run
+// and daily-count caps exist to throttle. Anything NOT in this set (e.g. `pm`, and future cron
+// purposes like planner/strategist) is a trusted, self-scheduled SYSTEM agent that runs in a reserved
+// lane instead (see register()). A run with no purpose defaults to `agent`, i.e. the strict user rail.
+const USER_PURPOSES = new Set(['agent', 'review', 'triage']);
+
 interface LedgerState {
   day_key: string;
   active_global: number;
+  // Reserved cron/system lane: trusted, self-paced agents (pm, planner, strategist) are bounded HERE,
+  // separately from the user/event caps, so an (abusable) user-triggered leak can never starve the
+  // heartbeat — and a runaway system agent still can't fork-bomb past max_active_runs_system.
+  active_system: number;
   active_by_repo: Record<string, number>;
   active_by_actor: Record<string, number>;
   runs_by_repo_day: Record<string, number>;
@@ -31,7 +41,7 @@ interface LedgerState {
   // longer spend, so it must not keep holding an active-run slot — reapExpiredRuns() frees it. This
   // is the safety net for the leak case: a workflow that dies before its release step would otherwise
   // pin the actor/repo/global active counters forever (see actor_active_run_limit_reached).
-  runs: Record<string, { repo: string; issue: number; actor: string; active: boolean; expires_at_ms?: number }>;
+  runs: Record<string, { repo: string; issue: number; actor: string; active: boolean; system?: boolean; expires_at_ms?: number }>;
   // The funding tree. Every project (repo slug) and named root (e.g. "volter") is an account.
   // balance = granted_in - granted_out - consumed. mint adds money at a node (the only way credits
   // enter the system); grant transfers between nodes (conserves total); spend consumes (leaves).
@@ -129,6 +139,9 @@ export interface LimitConfig {
   max_active_runs_global: number;
   max_active_runs_per_repo: number;
   max_active_runs_per_actor: number;
+  // The reserved cron/system lane size (pm/planner/strategist). Bounds runaway cron without ever
+  // letting user-triggered runs consume it.
+  max_active_runs_system: number;
   max_runs_per_repo_per_day: number;
   max_runs_per_actor_per_day: number;
   max_runs_per_issue_per_day: number;
@@ -353,12 +366,21 @@ export class LimitLedger implements DurableObject {
     const repoActive = this.state.active_by_repo[claims.repo] ?? 0;
     const actorActive = this.state.active_by_actor[claims.actor] ?? 0;
 
-    if (this.state.active_global >= config.max_active_runs_global) return { ok: false, error: 'global_active_run_limit_reached' };
-    if (repoActive >= config.max_active_runs_per_repo) return { ok: false, error: 'repo_active_run_limit_reached' };
-    if (actorActive >= config.max_active_runs_per_actor) return { ok: false, error: 'actor_active_run_limit_reached' };
-    if (repoRuns >= config.max_runs_per_repo_per_day) return { ok: false, error: 'repo_daily_run_limit_reached' };
-    if (actorRuns >= config.max_runs_per_actor_per_day) return { ok: false, error: 'actor_daily_run_limit_reached' };
-    if (issueRuns >= config.max_runs_per_issue_per_day) return { ok: false, error: 'issue_daily_run_limit_reached' };
+    // Cron/system agents (pm, planner, strategist) are trusted and self-paced — their SCHEDULE is their
+    // rate limit. They register in a reserved lane, bounded only by max_active_runs_system, so they can
+    // never be starved by (abusable) user-triggered runs and a runaway cron still can't fork-bomb. The
+    // active-run + daily-count caps are the ABUSE rail for the externally-triggerable surface only.
+    const isSystem = !USER_PURPOSES.has(claims.purpose ?? 'agent');
+    if (isSystem) {
+      if ((this.state.active_system ?? 0) >= config.max_active_runs_system) return { ok: false, error: 'system_active_run_limit_reached' };
+    } else {
+      if (this.state.active_global >= config.max_active_runs_global) return { ok: false, error: 'global_active_run_limit_reached' };
+      if (repoActive >= config.max_active_runs_per_repo) return { ok: false, error: 'repo_active_run_limit_reached' };
+      if (actorActive >= config.max_active_runs_per_actor) return { ok: false, error: 'actor_active_run_limit_reached' };
+      if (repoRuns >= config.max_runs_per_repo_per_day) return { ok: false, error: 'repo_daily_run_limit_reached' };
+      if (actorRuns >= config.max_runs_per_actor_per_day) return { ok: false, error: 'actor_daily_run_limit_reached' };
+      if (issueRuns >= config.max_runs_per_issue_per_day) return { ok: false, error: 'issue_daily_run_limit_reached' };
+    }
     // Abuse hard-stop: a banned repo can't spend through the proxy regardless of balance.
     if (this.acct(claims.repo)?.moderation === 'banned') {
       return { ok: false, error: 'account_banned', account: claims.repo };
@@ -371,9 +393,14 @@ export class LimitLedger implements DurableObject {
     // public page, and (once GitHub-synced) the explore listing all work without any registration step.
     this.ensureAcct(claims.repo);
 
-    this.state.active_global += 1;
-    this.state.active_by_repo[claims.repo] = repoActive + 1;
-    this.state.active_by_actor[claims.actor] = actorActive + 1;
+    if (isSystem) {
+      this.state.active_system = (this.state.active_system ?? 0) + 1;
+    } else {
+      this.state.active_global += 1;
+      this.state.active_by_repo[claims.repo] = repoActive + 1;
+      this.state.active_by_actor[claims.actor] = actorActive + 1;
+    }
+    // Daily counters track every run for observability; gating on them is user-only (above).
     this.state.runs_by_repo_day[claims.repo] = repoRuns + 1;
     this.state.runs_by_actor_day[claims.actor] = actorRuns + 1;
     this.state.runs_by_issue_day[issueKey] = issueRuns + 1;
@@ -382,6 +409,7 @@ export class LimitLedger implements DurableObject {
       issue: claims.issue,
       actor: claims.actor,
       active: true,
+      system: isSystem,
       expires_at_ms: Date.parse(claims.expires_at) || undefined,
     };
     await this.save();
@@ -392,9 +420,7 @@ export class LimitLedger implements DurableObject {
     const run = this.state.runs[runId];
     if (!run || !run.active) return { ok: true };
     run.active = false;
-    this.state.active_global = Math.max(0, this.state.active_global - 1);
-    this.state.active_by_repo[run.repo] = Math.max(0, (this.state.active_by_repo[run.repo] ?? 0) - 1);
-    this.state.active_by_actor[run.actor] = Math.max(0, (this.state.active_by_actor[run.actor] ?? 0) - 1);
+    this.releaseActive(run);
     await this.save();
     return { ok: true };
   }
@@ -614,6 +640,7 @@ export class LimitLedger implements DurableObject {
     return {
       day_key: this.state.day_key,
       active_global: this.state.active_global,
+      active_system: this.state.active_system ?? 0,
       active_by_repo: this.state.active_by_repo,
       active_by_actor: this.state.active_by_actor,
       runs_by_repo_day: this.state.runs_by_repo_day,
@@ -642,6 +669,7 @@ export class LimitLedger implements DurableObject {
   }
 
   private normalizeState(): void {
+    this.state.active_system ??= 0;
     this.state.runs_by_repo_day ??= {};
     this.state.runs_by_actor_day ??= {};
     this.state.runs_by_issue_day ??= {};
@@ -677,10 +705,20 @@ export class LimitLedger implements DurableObject {
       if (typeof run.expires_at_ms !== 'number') continue;
       if (run.expires_at_ms > now) continue;
       run.active = false;
-      this.state.active_global = Math.max(0, this.state.active_global - 1);
-      this.state.active_by_repo[run.repo] = Math.max(0, (this.state.active_by_repo[run.repo] ?? 0) - 1);
-      this.state.active_by_actor[run.actor] = Math.max(0, (this.state.active_by_actor[run.actor] ?? 0) - 1);
+      this.releaseActive(run);
     }
+  }
+
+  // Free the active-run slot a run holds, in the correct lane (system vs user). Single source of truth
+  // for complete() and reapExpiredRuns() so the two can never drift.
+  private releaseActive(run: { repo: string; actor: string; system?: boolean }): void {
+    if (run.system) {
+      this.state.active_system = Math.max(0, (this.state.active_system ?? 0) - 1);
+      return;
+    }
+    this.state.active_global = Math.max(0, this.state.active_global - 1);
+    this.state.active_by_repo[run.repo] = Math.max(0, (this.state.active_by_repo[run.repo] ?? 0) - 1);
+    this.state.active_by_actor[run.actor] = Math.max(0, (this.state.active_by_actor[run.actor] ?? 0) - 1);
   }
 
   // Admin bulk recovery: free active slots for every run whose token has expired, then return what
@@ -694,6 +732,7 @@ export class LimitLedger implements DurableObject {
       ok: true,
       reaped: before - this.state.active_global,
       active_global: this.state.active_global,
+      active_system: this.state.active_system ?? 0,
       active_by_actor: this.state.active_by_actor,
       active_by_repo: this.state.active_by_repo,
       still_active: Object.entries(this.state.runs)
@@ -834,6 +873,7 @@ function emptyState(): LedgerState {
   return {
     day_key: dayKey(),
     active_global: 0,
+    active_system: 0,
     active_by_repo: {},
     active_by_actor: {},
     runs_by_repo_day: {},

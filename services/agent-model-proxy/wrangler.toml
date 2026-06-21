@@ -13,6 +13,10 @@ MAX_RUN_REQUESTS = "200"
 MAX_ACTIVE_RUNS_GLOBAL = "24"
 MAX_ACTIVE_RUNS_PER_REPO = "12"
 MAX_ACTIVE_RUNS_PER_ACTOR = "12"
+# Reserved lane for trusted, self-scheduled cron/system agents (pm/planner/strategist). Separate from
+# the user/event caps above so a user-triggered leak can never starve the heartbeat — and bounded so a
+# runaway cron can't fork-bomb.
+MAX_ACTIVE_RUNS_SYSTEM = "4"
 MAX_RUNS_PER_REPO_PER_DAY = "5000"
 MAX_RUNS_PER_ACTOR_PER_DAY = "5000"
 MAX_RUNS_PER_ISSUE_PER_DAY = "200"

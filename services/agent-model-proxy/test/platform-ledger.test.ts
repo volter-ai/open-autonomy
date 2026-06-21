@@ -11,6 +11,7 @@ const CONFIG: LimitConfig = {
   max_active_runs_global: 10,
   max_active_runs_per_repo: 10,
   max_active_runs_per_actor: 10,
+  max_active_runs_system: 4,
   max_runs_per_repo_per_day: 100,
   max_runs_per_actor_per_day: 100,
   max_runs_per_issue_per_day: 100,
@@ -53,6 +54,37 @@ describe('platform: flows + activity feed', () => {
     expect(consume?.amount_usd_cents).toBe(250);
     expect(consume?.issue).toBe(7);
     expect(consume?.actor).toBe('octocat');
+  });
+});
+
+describe('reserved cron/system lane', () => {
+  const sys = (id: string) => ({ ...claims({ run_id: id }), purpose: 'pm' as const });
+
+  test('a cron/system (pm) run registers even when the user lane is saturated', async () => {
+    const l = ledger();
+    const cfg = { ...CONFIG, max_active_runs_global: 5, max_active_runs_per_repo: 5, max_active_runs_per_actor: 1 };
+    // Saturate the user/event lane (the abuse surface).
+    expect(((await l.register(claims({ run_id: 'u1' }), cfg)) as { ok: boolean }).ok).toBe(true);
+    expect(((await l.register(claims({ run_id: 'u2' }), cfg)) as { error?: string }).error).toBe('actor_active_run_limit_reached');
+    // The heartbeat still gets a slot — its reserved lane is untouched by user runs.
+    expect(((await l.register(sys('pm1'), cfg)) as { ok: boolean }).ok).toBe(true);
+  });
+
+  test('the system lane is itself bounded so a runaway cron cannot fork-bomb', async () => {
+    const l = ledger();
+    const cfg = { ...CONFIG, max_active_runs_system: 2 };
+    expect(((await l.register(sys('s1'), cfg)) as { ok: boolean }).ok).toBe(true);
+    expect(((await l.register(sys('s2'), cfg)) as { ok: boolean }).ok).toBe(true);
+    expect(((await l.register(sys('s3'), cfg)) as { error?: string }).error).toBe('system_active_run_limit_reached');
+  });
+
+  test('completing a system run frees the system lane, not the user lane', async () => {
+    const l = ledger();
+    const cfg = { ...CONFIG, max_active_runs_system: 1 };
+    await l.register(sys('pm1'), cfg);
+    expect(((await l.register(sys('pm2'), cfg)) as { error?: string }).error).toBe('system_active_run_limit_reached');
+    await l.complete('pm1');
+    expect(((await l.register(sys('pm2'), cfg)) as { ok: boolean }).ok).toBe(true);
   });
 });
 

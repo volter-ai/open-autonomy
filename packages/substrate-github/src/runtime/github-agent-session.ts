@@ -217,7 +217,10 @@ async function main(): Promise<void> {
     completedAt,
     issue,
     taskDir,
-    status: exitCode === 0 && artifact ? 'pr-ready' : 'blocked',
+    // blocked.md is authoritative for escalation: an agent that writes it (an escalate-early
+    // hand-off) is `blocked` even when it exits 0 — otherwise a clean escalation is mislabeled
+    // `pr-ready` and surfaces as a PR instead of a hand-off.
+    status: existsSync(join(taskDir, 'artifacts', 'blocked.md')) ? 'blocked' : exitCode === 0 && artifact ? 'pr-ready' : 'blocked',
     exitCode,
   });
 

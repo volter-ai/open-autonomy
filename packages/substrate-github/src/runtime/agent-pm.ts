@@ -29,7 +29,7 @@ if (env('PUBLIC_AGENT_REPO_PAUSED') === 'true' || pausedCount !== '0') {
 // skips as "prior status, no new input") and newly-filed issues sorted to the back fell off the cap —
 // so freshly-filed work was never triaged, never labeled, never developed (the silent-intake bug).
 const numbers = (
-  await $`gh issue list --state open --search "is:issue is:open -label:agent-paused -label:agent-repo-paused -label:agent-blocked -label:human-required -label:agent-maintainer-hold -label:needs-info -label:security sort:created-desc" --limit ${LIMIT} --json number --jq '.[].number'`.text()
+  await $`gh issue list --state open --search "is:issue is:open -label:agent-paused -label:agent-repo-paused -label:agent-blocked -label:human-required -label:agent-maintainer-hold -label:needs-info -label:security -label:not-simple sort:created-desc" --limit ${LIMIT} --json number --jq '.[].number'`.text()
 )
   .split('\n')
   .map((s) => s.trim())
@@ -44,6 +44,7 @@ const labels: Array<[string, string, string]> = [
   ['agent-blocked', 'Blocks autonomous public-agent development', 'B60205'],
   ['agent-paused', 'Autonomous public-agent work is paused', 'FBCA04'],
   ['agent-maintainer-hold', 'Maintainer hold; autonomous development should not start', '5319E7'],
+  ['not-simple', 'Not simple enough for the cloud lane; routed to a supervised local dev', 'D2691E'],
 ];
 for (const [n, d, c] of labels) await $`gh label create ${n} --description ${d} --color ${c}`.nothrow().quiet();
 

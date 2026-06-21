@@ -213,7 +213,7 @@ function isBotAuthor(author: string): boolean {
 }
 
 function blockingLabelName(labels: Array<{ name?: string }> | undefined): string | undefined {
-  const blocking = new Set(['agent-paused', 'agent-blocked', 'human-required', 'security', 'agent-maintainer-hold']);
+  const blocking = new Set(['agent-paused', 'agent-blocked', 'human-required', 'security', 'agent-maintainer-hold', 'not-simple']);
   return labels?.map((label) => (label.name ?? '').toLowerCase()).find((name) => blocking.has(name));
 }
 

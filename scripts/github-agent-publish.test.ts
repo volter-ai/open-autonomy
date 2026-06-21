@@ -113,7 +113,7 @@ describe('github-agent-publish', () => {
     expect(result.stderr).toContain('real-looking secret');
   });
 
-  test('rejects blocked bundles before applying patches', () => {
+  test('escalates blocked bundles (not-simple) without applying patches', () => {
     const repo = initRepo();
     writeFileSync(join(repo, 'README.md'), 'blocked change\n');
     const patch = spawnSync('git', ['diff', '--binary'], { cwd: repo, encoding: 'utf8' }).stdout;
@@ -121,9 +121,12 @@ describe('github-agent-publish', () => {
     const bundle = makeBundle(patch, { status: 'blocked' });
 
     const result = runPublish(['--bundle', bundle, '--repo', repo, '--apply']);
-    expect(result.status).toBe(1);
-    expect(result.stderr).toContain('status is not pr-ready');
+    // A blocked bundle is an escalation, not a failure: it must NEVER apply its patch (no PR), it
+    // takes the escalation path (retag `not-simple`) rather than the old "reject" path. The gh
+    // retag itself can't succeed against this fixture repo, but the patch-not-applied invariant and
+    // the absence of the old rejection are the contract.
     expect(readFileSync(join(repo, 'README.md'), 'utf8')).toBe('hello\n');
+    expect(result.stderr).not.toContain('status is not pr-ready');
   });
 
   test('rejects bundle metadata mismatches', () => {

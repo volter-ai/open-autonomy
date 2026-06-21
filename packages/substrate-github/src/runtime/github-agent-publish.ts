@@ -1,4 +1,5 @@
 #!/usr/bin/env bun
+import { spawnSync } from 'node:child_process';
 import { existsSync, lstatSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import {
@@ -69,7 +70,32 @@ async function main(): Promise<void> {
   const manifest = validateManifest(readJson(join(bundleDir, 'manifest.json')));
   assertBundlePathsSafe(bundleDir, manifest);
   assertExpectedManifest(manifest, options);
-  if (manifest.status !== 'pr-ready') throw new Error(`agent bundle status is not pr-ready: ${manifest.status}`);
+  if (manifest.status !== 'pr-ready') {
+    // An escalation (`blocked`) is a clean hand-off, not a failure: tag the issue `not-simple` —
+    // routing it out of the cloud PM's jurisdiction toward a supervised local dev — and post the
+    // structured hand-off. Do NOT apply the patch: a clean tree makes the publisher's open-PR step
+    // no-op, so no PR is created for an escalated task.
+    if (manifest.status === 'blocked') {
+      escalateNotSimple(bundleDir, manifest);
+      const summary = {
+        ok: true,
+        run_id: manifest.run_id,
+        repo: manifest.repo,
+        issue: manifest.issue,
+        status: manifest.status,
+        escalated: true,
+        patch_empty: true,
+        applied: false,
+        decisions: manifest.decisions ?? [],
+        evidence: manifest.evidence,
+      };
+      mkdirSync(dirname(resolve(root, options.out)), { recursive: true });
+      writeJson(resolve(root, options.out), summary);
+      process.stdout.write(`publish-summary=${resolve(root, options.out)} escalated=not-simple\n`);
+      return;
+    }
+    throw new Error(`agent bundle status is not pr-ready: ${manifest.status}`);
+  }
   assertBundleArtifactsSafe(bundleDir, manifest);
   assertEvidenceManifestSafe(bundleDir, manifest);
   assertBundleDecisionsSafe(bundleDir, manifest);
@@ -127,6 +153,33 @@ function assertExpectedManifest(manifest: AgentBundleManifest, options: Options)
   if (options.expectedActor && manifest.actor !== options.expectedActor) {
     throw new Error(`manifest.actor mismatch: ${manifest.actor}`);
   }
+}
+
+// On an escalation bundle, route the issue to the supervised local lane: ensure the `not-simple`
+// label, apply it (so the cloud PM's sweep skips it), and post the agent's structured hand-off.
+function escalateNotSimple(bundleDir: string, manifest: AgentBundleManifest): void {
+  const issue = String(manifest.issue);
+  const repo = manifest.repo;
+  const blockedPath = join(bundleDir, 'artifacts', 'blocked.md');
+  if (existsSync(blockedPath)) assertNoRealLookingSecrets([blockedPath]);
+  const handoff = existsSync(blockedPath)
+    ? readFileSync(blockedPath, 'utf8').trim()
+    : 'The agent escalated without a hand-off note.';
+  const body = [
+    '## Escalated to a supervised local dev (`not-simple`)',
+    '',
+    'The cloud (escalate-early) developer could not complete this autonomously and handed it off.',
+    '',
+    handoff,
+  ].join('\n');
+  runGh(['label', 'create', 'not-simple', '--repo', repo, '--description', 'Not simple enough for the cloud lane; routed to a supervised local dev', '--color', 'D2691E'], true);
+  runGh(['issue', 'edit', issue, '--repo', repo, '--add-label', 'not-simple']);
+  runGh(['issue', 'comment', issue, '--repo', repo, '--body', body]);
+}
+
+function runGh(args: string[], allowFail = false): void {
+  const result = spawnSync('gh', args, { stdio: 'inherit' });
+  if (!allowFail && result.status !== 0) throw new Error(`gh ${args[0]} ${args[1]} failed (exit ${result.status ?? 'null'})`);
 }
 
 function promoteBundle(bundleDir: string, targetDir: string, summary: unknown): void {

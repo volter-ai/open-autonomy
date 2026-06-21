@@ -115,6 +115,22 @@ describe('agent model proxy', () => {
     expect(body.error?.code).toBe('account_unfunded');
   });
 
+  test('an unfunded repo can mint when its OWNER (parent) account is funded', async () => {
+    const env = testEnv({ ENFORCE_ACCOUNT_BALANCE: 'true' });
+    // Fund the owner ONCE; the repo itself stays unfunded. The GitHub action reads/draws this budget via
+    // OIDC — it never allocates one. (Disposable bench cells under an org rely on exactly this.)
+    const fundedOwner = await requestJson(env, '/admin/accounts/volter/mint', {
+      method: 'POST', headers: { 'x-admin-token': 'admin' }, body: { amount_usd_cents: 5000 },
+    });
+    expect(fundedOwner.ok).toBe(true);
+    const minted = await request(env, '/admin/runs/mint', {
+      method: 'POST',
+      headers: { 'x-admin-token': 'admin' },
+      body: { repo: 'volter/twin', issue: 1, actor: 'octocat', models: ['gpt-5-mini'], max_usd_cents: 100, max_requests: 3 },
+    });
+    expect(minted.status).toBe(200);
+  });
+
   test('a mint into the account lets an unfunded repo mint runs again', async () => {
     const env = testEnv({ ENFORCE_ACCOUNT_BALANCE: 'true' });
     const refused = await request(env, '/admin/runs/mint', {
@@ -188,6 +204,47 @@ describe('agent model proxy', () => {
       headers: { authorization: `Bearer ${minted.token}` },
     });
     expect(status.request_count).toBe(1);
+  });
+
+  test('routes an openrouter-priced model over /v1/messages to OpenRouter with a Bearer key', async () => {
+    const env = testEnv();
+    const minted = await mint(env, ['deepseek/deepseek-v4-flash'], 25, 5);
+
+    let sawAuth: string | null = null;
+    globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+      expect(String(input)).toBe('https://openrouter.ai/api/v1/messages');
+      sawAuth = new Headers(init?.headers).get('authorization');
+      return new Response(JSON.stringify({ id: 'msg_or', usage: { input_tokens: 1000, output_tokens: 1000 } }), {
+        headers: { 'content-type': 'application/json' },
+      });
+    }) as typeof fetch;
+
+    const proxied = await worker.fetch(new Request('https://proxy.test/v1/messages', {
+      method: 'POST',
+      headers: { authorization: `Bearer ${minted.token}`, 'content-type': 'application/json' },
+      body: JSON.stringify({ model: 'deepseek/deepseek-v4-flash', max_tokens: 1000, messages: [] }),
+    }), env, ctx);
+
+    expect(proxied.status).toBe(200);
+    expect(sawAuth).toBe('Bearer openrouter-key');
+    const status = await requestJson(env, `/v1/runs/${minted.run.run_id}`, {
+      headers: { authorization: `Bearer ${minted.token}` },
+    });
+    expect(status.request_count).toBe(1);
+    expect(status.recent_events[0].provider).toBe('openrouter');
+  });
+
+  test('a /v1/messages call for an openrouter model with no OPENROUTER_API_KEY is provider_not_configured', async () => {
+    const env = testEnv({ OPENROUTER_API_KEY: undefined });
+    const minted = await mint(env, ['deepseek/deepseek-v4-flash'], 25, 5);
+
+    const proxied = await worker.fetch(new Request('https://proxy.test/v1/messages', {
+      method: 'POST',
+      headers: { authorization: `Bearer ${minted.token}`, 'content-type': 'application/json' },
+      body: JSON.stringify({ model: 'deepseek/deepseek-v4-flash', max_tokens: 100, messages: [] }),
+    }), env, ctx);
+
+    expect(proxied.status).toBe(503);
   });
 
   test('is universal: a stock SDK hits native /v1/chat/completions with Bearer', async () => {
@@ -977,6 +1034,7 @@ function testEnv(overrides: Partial<Env> = {}): Env {
     DEFAULT_SPONSOR_ACCOUNT: 'volter/twin',
     ANTHROPIC_API_KEY: 'anthropic-key',
     OPENAI_API_KEY: 'openai-key',
+    OPENROUTER_API_KEY: 'openrouter-key',
     DEFAULT_MAX_USD_CENTS: '500',
     DEFAULT_MAX_REQUESTS: '200',
     DEFAULT_EXPIRES_SECONDS: '7200',

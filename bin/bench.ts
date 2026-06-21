@@ -76,11 +76,20 @@ if (process.argv.includes('--live')) {
   run('bun', ['scripts/provision-target-repo.ts', '--repo', repo, '--source', build, '--private', '--force-content']);
 
   console.log(`seeding the goal as the org's intake issue …`);
-  run('gh', ['issue', 'create', '-R', repo, '--title', meta.summary, '--body', goal]);
+  // A freshly-created repo isn't immediately addressable for issues — retry briefly past the race.
+  for (let i = 0; ; i++) {
+    try {
+      run('gh', ['issue', 'create', '-R', repo, '--title', meta.summary, '--body', goal]);
+      break;
+    } catch (e) {
+      if (i >= 4) throw e;
+      Bun.sleepSync(2000);
+    }
+  }
 
-  // Fund the disposable repo's proxy account so its agents can mint (ENFORCE_ACCOUNT_BALANCE). A grant
-  // from a funded source; bounded — bench spend is capped per run and by this balance. Skipped (with a
-  // warning) if no admin token is present, since the run would then fail at mint with account_balance_exhausted.
+  // Funding is a one-time OPERATOR action, not per cell: fund the owner account ONCE and every disposable
+  // repo under it draws from it via OIDC (the ledger's parent fallback) — no admin token in this loop. The
+  // optional per-repo grant below is a convenience for a standalone cell; it needs an admin token.
   const adminToken = process.env.MODEL_PROXY_ADMIN_TOKEN;
   const proxyBase = process.env.MODEL_PROXY_URL || 'https://volter-agent-model-proxy.aaron-0ed.workers.dev';
   if (adminToken) {
@@ -93,7 +102,7 @@ if (process.argv.includes('--live')) {
     });
     console.log(`funded ${repo}: ${res.ok ? `$${(cents / 100).toFixed(2)} from ${funder}` : `FAILED ${res.status}`}`);
   } else {
-    console.log('MODEL_PROXY_ADMIN_TOKEN unset — repo NOT funded; agents will fail at mint until it has a balance');
+    console.log(`no per-repo grant (no admin token) — relies on the owner account (${repo.split('/')[0]}) being funded once`);
   }
 
   console.log(`\nlive cell up: https://github.com/${repo}`);

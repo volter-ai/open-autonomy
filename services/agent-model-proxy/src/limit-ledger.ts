@@ -385,9 +385,14 @@ export class LimitLedger implements DurableObject {
     if (this.acct(claims.repo)?.moderation === 'banned') {
       return { ok: false, error: 'account_banned', account: claims.repo };
     }
-    // Funding gate: don't start a run for a project whose account is empty.
+    // Funding gate: don't start a run for a project whose account is empty — unless its OWNER (parent)
+    // account is funded, in which case the repo spends against the parent (see reserve()). Funding the
+    // owner ONCE lets all its repos run; the repo itself needs no allocation.
     if (config.enforce_account_balance && this.balanceOf(claims.repo) <= 0) {
-      return { ok: false, error: 'account_unfunded', account: claims.repo, balance_usd_cents: this.balanceOf(claims.repo) };
+      const parent = claims.repo.includes('/') ? claims.repo.split('/')[0] : undefined;
+      if (!parent || this.balanceOf(parent) <= 0) {
+        return { ok: false, error: 'account_unfunded', account: claims.repo, balance_usd_cents: this.balanceOf(claims.repo) };
+      }
     }
     // Permissionless discovery: materialize the account on first sight so the funding gate, the
     // public page, and (once GitHub-synced) the explore listing all work without any registration step.
@@ -434,19 +439,28 @@ export class LimitLedger implements DurableObject {
     if (!Number.isFinite(amount) || amount < 0) return { ok: false, error: 'invalid_amount' };
 
     const run = runId ? this.state.runs[runId] : undefined;
-    const account = run?.repo;
+    const repo = run?.repo;
 
-    // Abuse hard-stop: a banned account can't spend, even mid-run.
-    if (account && this.acct(account)?.moderation === 'banned') {
-      return { ok: false, error: 'account_banned', account };
+    // Abuse hard-stop: a banned repo can't spend, even mid-run.
+    if (repo && this.acct(repo)?.moderation === 'banned') {
+      return { ok: false, error: 'account_banned', account: repo };
     }
 
-    // Per-account balance gate (the funding hard-stop). Cumulative spend + in-flight reservations on
-    // this account may not exceed its balance.
-    if (config.enforce_account_balance && account) {
-      const available = this.balanceOf(account) - this.reservedFor(account);
-      if (amount > available) {
-        return { ok: false, error: 'account_balance_exhausted', account, balance_usd_cents: this.balanceOf(account) };
+    // Resolve which account the spend is CHARGED to. A repo spends from its own balance first; if that is
+    // insufficient, it falls back to its OWNER (parent) account. This lets an org/root be funded ONCE and
+    // all of its repos (e.g. disposable bench cells) spend against it via OIDC — no per-repo allocation.
+    // Allocation (mint/grant) stays an admin-only treasury action; this is purely the spend side: the
+    // GitHub action reads/draws a budget, it never allocates one.
+    let account = repo;
+    if (config.enforce_account_balance && repo) {
+      if (amount > this.balanceOf(repo) - this.reservedFor(repo)) {
+        const parent = repo.includes('/') ? repo.split('/')[0] : undefined;
+        const parentOk =
+          !!parent && this.acct(parent)?.moderation !== 'banned' && amount <= this.balanceOf(parent) - this.reservedFor(parent);
+        if (!parentOk) {
+          return { ok: false, error: 'account_balance_exhausted', account: repo, balance_usd_cents: this.balanceOf(repo) };
+        }
+        account = parent;
       }
     }
 

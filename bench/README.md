@@ -72,9 +72,12 @@ three things must be true for that org — set once:
 2. **Org Actions policy allows write.** GitHub orgs default workflow tokens to read-only and block
    Actions from creating PRs; the publisher needs both. Set once:
    `gh api -X PUT orgs/<org>/actions/permissions/workflow -f default_workflow_permissions=write -F can_approve_pull_request_reviews=true`.
-3. **A funded source account** in the proxy (e.g. `volter-ai/open-autonomy`). `bench --live` grants each
-   disposable repo a bounded balance from it (`ENFORCE_ACCOUNT_BALANCE` is on), so set
-   `MODEL_PROXY_ADMIN_TOKEN` + `MODEL_PROXY_URL` in the environment when running `--live`.
+3. **Fund the owner account ONCE.** `ENFORCE_ACCOUNT_BALANCE` is on, so a repo needs a balance to mint.
+   Grant the owner account a budget once (admin/treasury action) — e.g. `volter-test-fixtures` — and every
+   disposable repo under it spends against it via the ledger's parent fallback. The GitHub action only
+   reads/draws that budget (OIDC); it never allocates. So **no admin token is needed in the run loop** —
+   `bench --live` provisions and seeds, the agents mint via OIDC, and spend lands on the owner account.
+   (A per-repo `--fund-usd-cents` grant is available as a convenience but needs an admin token.)
 
 Then each cell is one command (`bench --live …`), runs on cron, and is scored with `bench --score`.
 

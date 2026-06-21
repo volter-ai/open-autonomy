@@ -123,6 +123,28 @@ function missingRequired(schema: Record<string, unknown>, value: unknown): strin
   return required.filter((k) => obj[k] === undefined);
 }
 
+// Smaller models often write the final result as ```json text instead of calling the submit tool. Salvage
+// a schema-valid JSON object from a message so a correct answer isn't lost to "didn't call the tool".
+function salvageSubmission(text: string, schema: Record<string, unknown>): Record<string, unknown> | null {
+  if (!text) return null;
+  const candidates: string[] = [];
+  const fence = text.match(/```(?:json)?\s*([\s\S]*?)```/i);
+  if (fence) candidates.push(fence[1]);
+  const brace = text.match(/\{[\s\S]*\}/);
+  if (brace) candidates.push(brace[0]);
+  for (const c of candidates) {
+    try {
+      const obj = JSON.parse(c.trim());
+      if (obj && typeof obj === 'object' && !Array.isArray(obj) && missingRequired(schema, obj).length === 0) {
+        return obj as Record<string, unknown>;
+      }
+    } catch {
+      /* not json */
+    }
+  }
+  return null;
+}
+
 /**
  * Run an agent to a validated artifact. The loop appends a `submit` tool (its params ARE the artifact
  * schema); when the model calls it with valid args, that is the deliberate, bounded result — the same shape
@@ -157,8 +179,16 @@ export async function runAgent<T = unknown>(opts: {
     const entry: TranscriptEntry = { iteration, thought: content, calls: [] };
 
     if (!toolCalls.length) {
-      // The model answered without acting — nudge it to use a tool or submit, rather than hang.
-      messages.push({ role: 'user', content: `Call a tool, or call \`${FINISH}\` with your final result.` });
+      // The model answered without acting. If it wrote a schema-valid result as text, accept it; otherwise
+      // steer it to CALL submit (don't lose a correct answer to a missed tool call).
+      const salvaged = salvageSubmission(content, opts.schema);
+      if (salvaged) {
+        entry.calls.push({ name: FINISH, args: salvaged, result: 'accepted (salvaged from message text)' });
+        opts.onTrace?.(entry);
+        transcript.push(entry);
+        return { artifact: salvaged as T, transcript };
+      }
+      messages.push({ role: 'user', content: `Do not write the result as text. Call the \`${FINISH}\` tool with your final result, or use another tool to investigate further.` });
       opts.onTrace?.(entry);
       transcript.push(entry);
       continue;

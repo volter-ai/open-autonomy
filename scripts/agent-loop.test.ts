@@ -48,6 +48,14 @@ describe('agent loop', () => {
     expect((artifact as { reason: string }).reason).toBe('ok');
   });
 
+  test('salvages a schema-valid result written as ```json text instead of a submit call', async () => {
+    // Smaller models often print the answer rather than calling the tool — don't lose a correct answer.
+    const turn: ModelTurn = () =>
+      Promise.resolve({ content: '```json\n{"decision":"develop","reason":"clear"}\n```', toolCalls: [] });
+    const { artifact } = await runAgent<{ decision: string }>({ system: 's', goal: 'g', tools: [], schema, turn, maxIterations: 3 });
+    expect(artifact.decision).toBe('develop');
+  });
+
   test('throws if the agent never submits within the iteration budget', async () => {
     const turn: ModelTurn = () => Promise.resolve({ content: 'thinking', toolCalls: [] });
     await expect(runAgent({ system: 's', goal: 'g', tools: [], schema, turn, maxIterations: 3 })).rejects.toThrow(/did not submit/);

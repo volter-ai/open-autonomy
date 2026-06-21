@@ -129,7 +129,7 @@ async function main(): Promise<void> {
         tools: [readFileTool('.'), listFilesTool('.')],
         schema: PM_SCHEMA,
         model: options.model,
-        maxIterations: 6, // bounded: PM sweeps many issues per tick
+        maxIterations: 8, // bounded: PM sweeps many issues per tick
       });
       return parsePmDecision(JSON.stringify(artifact));
     } catch (error) {

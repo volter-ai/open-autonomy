@@ -39,6 +39,17 @@ describe('HumanTask — the documented, assignable unit', () => {
     expect(blocks(review)).toBe(true);
   });
 
+  test('a human task carries human-readable instructions AND a checkable response channel (no magic word)', () => {
+    const review: HumanTask = {
+      ask: 'Review the risky change. Approve the PR if acceptable, or Request changes — your PR review is the decision.',
+      assignTo: 'maintainers',
+      completion: { via: 'review', ac: 'an APPROVED review by an authorized maintainer on the reviewed SHA', check: 'deterministic' },
+    };
+    expect(review.ask).toContain('Approve'); // the person is told what to do, in words
+    expect(review.completion?.via).toBe('review'); // they respond via a native act, not a typed magic word
+    expect(jobMode(review)).toBe('verified');
+  });
+
   test('a notify-only human task is fire-and-forget — not counted, never blocks', () => {
     const fyi: HumanTask = { ask: 'FYI: the weekly report is ready.', start: { notify: 'passive' } };
     expect(jobMode(fyi)).toBe('notification');

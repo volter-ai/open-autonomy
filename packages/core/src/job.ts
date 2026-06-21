@@ -19,11 +19,17 @@ export interface JobStart {
   notify?: NotifyMode;
 }
 
+// The structured act an actor RESPONDS with — what constitutes the result, so it is checkable. Prefer a
+// native act (a PR review) over a typed magic word; `command`/`label` are fallbacks where no native act
+// exists. The human-readable `ask` tells the person which one in words; this is the machine-checkable side.
+export type ResponseVia = 'review' | 'artifact' | 'label' | 'command';
+
 // How "done" is verified: the acceptance criteria, checked deterministically and/or by an AI judge. Only
 // the *effect* is verifiable; diligence is covered by accountability (an attributable decision), not the check.
 export interface JobCompletion {
   ac: string; // the acceptance criteria — what "done" means, documented so it can be checked
-  check: 'deterministic' | 'judge' | 'both'; // how the AC is verified
+  via?: ResponseVia; // the structured act the actor responds with (the checkable result channel)
+  check: 'deterministic' | 'judge' | 'both'; // how the result is verified against the AC
 }
 
 export interface Job {
@@ -36,7 +42,7 @@ export interface Job {
 // assignable (`assignTo`); realized via the job hooks (start = notify, completion = AC/check). With a
 // completion it is a verified task; without one it is a notification.
 export interface HumanTask extends Job {
-  ask: string; // what the person must do — the documented steps, recorded in the IR so we know
+  ask: string; // human-readable INSTRUCTIONS: what to do AND how to respond (the completion's `via`), recorded in the IR so we know
   assignTo?: string; // the person / role / worklist this unit is assigned to
 }
 

@@ -115,22 +115,6 @@ describe('agent model proxy', () => {
     expect(body.error?.code).toBe('account_unfunded');
   });
 
-  test('an unfunded repo can mint when its OWNER (parent) account is funded', async () => {
-    const env = testEnv({ ENFORCE_ACCOUNT_BALANCE: 'true' });
-    // Fund the owner ONCE; the repo itself stays unfunded. The GitHub action reads/draws this budget via
-    // OIDC — it never allocates one. (Disposable bench cells under an org rely on exactly this.)
-    const fundedOwner = await requestJson(env, '/admin/accounts/volter/mint', {
-      method: 'POST', headers: { 'x-admin-token': 'admin' }, body: { amount_usd_cents: 5000 },
-    });
-    expect(fundedOwner.ok).toBe(true);
-    const minted = await request(env, '/admin/runs/mint', {
-      method: 'POST',
-      headers: { 'x-admin-token': 'admin' },
-      body: { repo: 'volter/twin', issue: 1, actor: 'octocat', models: ['gpt-5-mini'], max_usd_cents: 100, max_requests: 3 },
-    });
-    expect(minted.status).toBe(200);
-  });
-
   test('a mint into the account lets an unfunded repo mint runs again', async () => {
     const env = testEnv({ ENFORCE_ACCOUNT_BALANCE: 'true' });
     const refused = await request(env, '/admin/runs/mint', {
@@ -206,15 +190,17 @@ describe('agent model proxy', () => {
     expect(status.request_count).toBe(1);
   });
 
-  test('routes an openrouter-priced model over /v1/messages to OpenRouter with a Bearer key', async () => {
+  test('routes a vendor/slug model over /v1/messages to OpenRouter (no table entry) and settles on reported cost', async () => {
     const env = testEnv();
+    // deepseek/deepseek-v4-flash is NOT in the price table — it routes by the "vendor/slug" convention.
     const minted = await mint(env, ['deepseek/deepseek-v4-flash'], 25, 5);
 
     let sawAuth: string | null = null;
     globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
       expect(String(input)).toBe('https://openrouter.ai/api/v1/messages');
       sawAuth = new Headers(init?.headers).get('authorization');
-      return new Response(JSON.stringify({ id: 'msg_or', usage: { input_tokens: 1000, output_tokens: 1000 } }), {
+      // OpenRouter reports the real USD cost; $0.07 -> 7 cents, not metered from a hardcoded table.
+      return new Response(JSON.stringify({ id: 'msg_or', usage: { input_tokens: 1000, output_tokens: 1000, cost: 0.07 } }), {
         headers: { 'content-type': 'application/json' },
       });
     }) as typeof fetch;
@@ -232,6 +218,7 @@ describe('agent model proxy', () => {
     });
     expect(status.request_count).toBe(1);
     expect(status.recent_events[0].provider).toBe('openrouter');
+    expect(status.consumed_usd_cents).toBe(7); // ceil($0.07 * 100), straight from the reported cost
   });
 
   test('a /v1/messages call for an openrouter model with no OPENROUTER_API_KEY is provider_not_configured', async () => {

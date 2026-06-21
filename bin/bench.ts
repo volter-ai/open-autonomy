@@ -111,6 +111,41 @@ if (process.argv.includes('--live')) {
   process.exit(0);
 }
 
+// ---- TEARDOWN: refund the unused balance to the funder, then delete the disposable repo ----
+// A cell's funding is a transaction: bootstrap grants the repo a bounded budget; teardown refunds whatever
+// it didn't spend (a reverse grant) so the funder only ever loses the actual model spend. Disposable cells
+// must close their funding, or the funder bleeds out one locked grant at a time.
+if (process.argv.includes('--teardown')) {
+  const repo = arg('--repo');
+  if (!repo) throw new Error('usage: --teardown --repo <owner/name> [--funder <acct>] [--keep-repo]');
+  const adminToken = process.env.MODEL_PROXY_ADMIN_TOKEN;
+  const proxyBase = process.env.MODEL_PROXY_URL || 'https://volter-agent-model-proxy.aaron-0ed.workers.dev';
+  if (adminToken) {
+    const funder = arg('--funder', 'volter-ai/open-autonomy');
+    const acct = (await (await fetch(`${proxyBase}/v1/accounts/${encodeURIComponent(repo)}`)).json()) as { balance_usd_cents?: number };
+    const remaining = acct.balance_usd_cents ?? 0;
+    if (remaining > 0) {
+      const res = await fetch(`${proxyBase}/admin/accounts/${encodeURIComponent(repo)}/grant`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', 'x-admin-token': adminToken },
+        body: JSON.stringify({ to: funder, amount_usd_cents: remaining, key: `bench:refund:${repo}` }),
+      });
+      console.log(`refunded ${repo} -> ${funder}: ${res.ok ? `$${(remaining / 100).toFixed(2)} (unused)` : `FAILED ${res.status}`}`);
+    } else {
+      console.log(`nothing to refund (${repo} balance is $0)`);
+    }
+  } else {
+    console.log('no admin token — skipping refund; set MODEL_PROXY_ADMIN_TOKEN to reclaim the unused balance');
+  }
+  if (process.argv.includes('--keep-repo')) {
+    console.log(`kept repo ${repo} (--keep-repo)`);
+  } else {
+    run('gh', ['repo', 'delete', repo, '--yes']);
+    console.log(`deleted ${repo}`);
+  }
+  process.exit(0);
+}
+
 // ---- SCORE: clone the run's result and judge it against the workload rubric ----
 if (process.argv.includes('--score')) {
   const repo = arg('--repo');

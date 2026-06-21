@@ -72,14 +72,26 @@ three things must be true for that org — set once:
 2. **Org Actions policy allows write.** GitHub orgs default workflow tokens to read-only and block
    Actions from creating PRs; the publisher needs both. Set once:
    `gh api -X PUT orgs/<org>/actions/permissions/workflow -f default_workflow_permissions=write -F can_approve_pull_request_reviews=true`.
-3. **Fund the owner account ONCE.** `ENFORCE_ACCOUNT_BALANCE` is on, so a repo needs a balance to mint.
-   Grant the owner account a budget once (admin/treasury action) — e.g. `volter-test-fixtures` — and every
-   disposable repo under it spends against it via the ledger's parent fallback. The GitHub action only
-   reads/draws that budget (OIDC); it never allocates. So **no admin token is needed in the run loop** —
-   `bench --live` provisions and seeds, the agents mint via OIDC, and spend lands on the owner account.
-   (A per-repo `--fund-usd-cents` grant is available as a convenience but needs an admin token.)
+3. **A funded pool account.** `ENFORCE_ACCOUNT_BALANCE` is on, so each repo needs its own balance to mint.
+   Fund a pool (a treasury action, admin token) — e.g. grant the `volter-test-fixtures` account a budget —
+   from which cells are funded.
 
-Then each cell is one command (`bench --live …`), runs on cron, and is scored with `bench --score`.
+## Funding is a transaction (fund → spend → refund)
+
+Each cell is **explicitly funded at bootstrap** with a *bounded* grant, so a runaway in one repo can only
+drain its own budget — never the pool or a sibling. Funding is a ledger transaction; the unused remainder
+is **refunded** (the reverse transaction) at teardown, so the pool only ever loses the actual model spend.
+The agent (the GitHub action) only *reads/spends* its budget via OIDC — allocation is the operator's job,
+done by `bench --live`/`--teardown`, never in the agent's CI.
+
+```
+MODEL_PROXY_ADMIN_TOKEN=… bun bin/bench.ts --live    --workload todo-cli --profile self-driving \
+    --funder volter-test-fixtures --fund-usd-cents 500       # grant the cell a bounded $5 from the pool
+# … the agents run autonomously on cron, spending only the cell's own budget …
+bun bin/bench.ts --score --repo <owner/name> --workload todo-cli
+MODEL_PROXY_ADMIN_TOKEN=… bun bin/bench.ts --teardown --repo <owner/name> --funder volter-test-fixtures
+                                                            # refund the unused balance + delete the repo
+```
 
 ## Discipline
 

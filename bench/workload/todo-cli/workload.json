@@ -1,0 +1,39 @@
+{
+  "name": "todo-cli",
+  "kind": "feature",
+  "summary": "Greenfield: build a usable, persistent command-line todo application from a one-line brief.",
+  "timeBudgetMinutes": 120,
+  "appliesTo": ["self-driving", "simple-sdlc"],
+  "rubric": [
+    {
+      "id": "core",
+      "weight": 3,
+      "criterion": "The core workflow works end-to-end",
+      "guidance": "From a fresh checkout a reviewer can add, list, complete, and delete tasks and see correct results each time. Partial or stubbed commands score low."
+    },
+    {
+      "id": "persistence",
+      "weight": 2,
+      "criterion": "State persists across invocations and is robust",
+      "guidance": "Tasks survive process exit (a file or db). Normal use does not corrupt state; reading an empty/new store does not crash."
+    },
+    {
+      "id": "tests",
+      "weight": 2,
+      "criterion": "Tests meaningfully cover behavior and pass",
+      "guidance": "Tests drive real command behavior (not trivial asserts) and would catch a regression in add/list/complete/delete. They are green."
+    },
+    {
+      "id": "ux",
+      "weight": 1,
+      "criterion": "Usable and robust UX",
+      "guidance": "Clear --help, sensible errors on bad input or unknown ids, no stack traces leaking to the user."
+    },
+    {
+      "id": "quality",
+      "weight": 1,
+      "criterion": "Code quality and scope discipline",
+      "guidance": "Readable, cohesive code; no gold-plating or unrelated churn; the change history (commits/PRs) tells a coherent story tied to the goal."
+    }
+  ]
+}

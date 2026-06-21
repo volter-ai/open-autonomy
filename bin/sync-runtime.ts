@@ -24,8 +24,8 @@ const DEV_ONLY = new Set([
   'open-autonomy-proof-audit.ts', 'open-autonomy-proof-audit.test.ts',
   'provision-target-repo.ts', 'provision-target-repo.test.ts',
   'scaffold-target-repo.ts', 'testbed-proctor-report.ts', 'testbed-proctor-report.test.ts',
-  // Bench (dev/analysis): fitness measurement + the human simulator — not shipped into installs.
-  'autonomy-ratio.ts', 'autonomy-ratio.test.ts', 'human-sim.ts', 'human-sim.test.ts',
+  // Bench (dev/analysis): fitness measurement, the human simulator, the AI rubric judge — not shipped.
+  'autonomy-ratio.ts', 'autonomy-ratio.test.ts', 'human-sim.ts', 'human-sim.test.ts', 'bench-judge.ts',
 ]);
 const PROFILE_OWNED = new Set([
   // self-driving's agent behaviors + their deterministic logic — carried by profiles/self-driving.

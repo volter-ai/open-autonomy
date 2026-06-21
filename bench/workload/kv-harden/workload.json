@@ -1,0 +1,39 @@
+{
+  "name": "kv-harden",
+  "kind": "refactor",
+  "summary": "Existing rough code: a naive in-memory key-value store with no validation, no tests, and a latent eviction bug — make it production-ready without changing its public shape.",
+  "timeBudgetMinutes": 90,
+  "appliesTo": ["self-driving", "simple-sdlc"],
+  "rubric": [
+    {
+      "id": "correctness",
+      "weight": 3,
+      "criterion": "Latent bugs are found and fixed; behavior is correct",
+      "guidance": "The capacity/eviction behavior is correct (LRU as documented), edge cases (missing keys, capacity 0, overwrite) behave sensibly. A reviewer can point to the bug that was fixed."
+    },
+    {
+      "id": "tests",
+      "weight": 2,
+      "criterion": "Real tests now cover the store and pass",
+      "guidance": "Tests cover get/set/eviction/edge cases and would catch the original bug. They are green."
+    },
+    {
+      "id": "robustness",
+      "weight": 2,
+      "criterion": "Inputs are validated; failures are graceful",
+      "guidance": "Invalid keys/capacities are rejected or handled clearly rather than corrupting state or throwing opaque errors."
+    },
+    {
+      "id": "compat",
+      "weight": 1,
+      "criterion": "Public API shape is preserved",
+      "guidance": "Existing call sites would still work — the refactor hardens internals without gratuitously breaking the documented surface."
+    },
+    {
+      "id": "quality",
+      "weight": 1,
+      "criterion": "Readability, docs, and scope discipline",
+      "guidance": "Clearer code + a short doc of the contract; no unrelated churn or gold-plating."
+    }
+  ]
+}

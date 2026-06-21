@@ -1,0 +1,8 @@
+{
+  "name": "kv-harden",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "check": "bun test"
+  }
+}

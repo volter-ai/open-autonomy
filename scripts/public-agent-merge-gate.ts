@@ -15,9 +15,19 @@ export interface MergeGateContext {
   blockers?: MergeBlockerContext;
 }
 
+// A native github PR review (the Approve / Request-changes button) — a structured, word-free maintainer
+// action with attribution (who + when + which SHA). This is how a human resolution is signalled.
+export interface PrReview {
+  state?: string; // 'APPROVED' | 'CHANGES_REQUESTED' | 'COMMENTED' | ...
+  author?: { login?: string };
+  submittedAt?: string;
+  commitId?: string; // the SHA the review was submitted on (for SHA-binding)
+}
+
 export interface MergeBlockerContext {
   labels?: Array<{ name?: string }>;
   comments?: Array<{ body?: string; createdAt?: string; author?: { login?: string } }>;
+  reviews?: PrReview[];
 }
 
 interface Options {
@@ -105,18 +115,29 @@ export function findMergeBlocker(context: MergeBlockerContext | undefined): stri
   return undefined;
 }
 
-// The human RESOLUTION of a hold: the latest non-bot comment whose signal is an explicit unblock ("ok to
-// merge", "merge approved", …), with attribution (who + when). The system records the HANDOFF
-// (human_required); this is the human's RESPONSE — the other half of the human seam, attributable to a
-// real person. Record it as actor `human:<login>` so Bench (scripts/autonomy-ratio) counts it as a human
-// step. Pure observation — decideMerge's behavior is unchanged.
-export function humanResolution(context: MergeBlockerContext | undefined): { login: string; at: string } | undefined {
-  const latest = context?.comments
-    ?.filter((c) => c.createdAt && !isBotAuthor(c.author?.login ?? ''))
-    .map((c) => ({ login: c.author?.login ?? '', at: c.createdAt as string, signal: mergeCommentSignal(c.body) }))
-    .filter((c) => c.signal)
-    .sort((a, b) => Date.parse(b.at) - Date.parse(a.at))[0];
-  return latest && latest.signal === 'unblock' && latest.login ? { login: latest.login, at: latest.at } : undefined;
+// The human RESOLUTION of a hold, read from a NATIVE github PR review (the Approve / Request-changes
+// button) — a structured, word-free maintainer action, NOT parsed prose. Attribution comes for free: who
+// (login), when (submittedAt), and which SHA (commitId, for SHA-binding). The system records the HANDOFF
+// (human_required); this is the human's RESPONSE — the other half of the human seam. Record it as actor
+// `human:<login>` so Bench (scripts/autonomy-ratio) counts it. Pure observation — decideMerge unchanged.
+export interface HumanResolution {
+  login: string;
+  at: string;
+  decision: 'approve' | 'reject';
+  sha?: string;
+}
+
+export function humanResolution(context: MergeBlockerContext | undefined): HumanResolution | undefined {
+  const latest = context?.reviews
+    ?.filter((r) => r.submittedAt && !isBotAuthor(r.author?.login ?? '') && (r.state === 'APPROVED' || r.state === 'CHANGES_REQUESTED'))
+    .sort((a, b) => Date.parse(b.submittedAt ?? '') - Date.parse(a.submittedAt ?? ''))[0];
+  if (!latest || !latest.author?.login) return undefined;
+  return {
+    login: latest.author.login,
+    at: latest.submittedAt as string,
+    decision: latest.state === 'APPROVED' ? 'approve' : 'reject',
+    sha: latest.commitId,
+  };
 }
 
 function mergeCommentSignal(body: string | undefined): 'block' | 'unblock' | undefined {

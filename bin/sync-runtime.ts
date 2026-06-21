@@ -1,15 +1,20 @@
 #!/usr/bin/env bun
-// The github substrate VENDORS a copy of the runtime under packages/substrate-github/src/runtime/
-// so compileGithub can inject it into installations. The canonical source is scripts/ — that is
-// where the runtime is developed and where check:public-agent runs its tests. This keeps the
-// vendored mirror in lockstep with scripts/, closing the drift vector the vendored copy creates.
+// The github substrate VENDORS a copy of the GENERIC runtime under packages/substrate-github/src/runtime/
+// so compileGithub can inject it into EVERY installation. The mirror holds only substrate machinery —
+// the codex wrapper, the session/publish bundler, the model proxy + transparent model-call seam, and the
+// runner. The canonical source is scripts/ (where it is developed + tested) and the mirror tracks it.
 //
 //   bun bin/sync-runtime.ts            re-sync the mirror (scripts/ -> packages/.../runtime/)
 //   bun bin/sync-runtime.ts --check    verify they match (CI); nonzero exit on drift
 //
-// The runtime set = every scripts/*.ts EXCEPT open-autonomy's own dev tooling (scaffold/provision/
-// bootstrap/fund/proof-audit/testbed-proctor), which is NOT shipped into installations.
-import { readFileSync, writeFileSync, readdirSync } from 'node:fs';
+// EXCLUDED from the mirror (so they do NOT leak into every profile's install):
+//   - DEV_ONLY: open-autonomy's own dev/analysis tooling (scaffold/bootstrap/proof/testbed/bench) —
+//     never shipped into any installation.
+//   - PROFILE_OWNED: the self-driving PROFILE's own agents (pm/reviewer/planner/strategist + their
+//     deterministic libraries). These are profile content, not substrate runtime — they live in
+//     profiles/self-driving/scripts/ and ship only via that profile's `resources`. Vendoring them here
+//     is exactly the leak that put OA's PM/reviewer into an unrelated profile's install.
+import { readFileSync, writeFileSync, readdirSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 
 const SRC = 'scripts';
@@ -22,7 +27,22 @@ const DEV_ONLY = new Set([
   // Bench (dev/analysis): fitness measurement + the human simulator — not shipped into installs.
   'autonomy-ratio.ts', 'autonomy-ratio.test.ts', 'human-sim.ts', 'human-sim.test.ts',
 ]);
-const set = readdirSync(SRC).filter((f) => f.endsWith('.ts') && !DEV_ONLY.has(f)).sort();
+const PROFILE_OWNED = new Set([
+  // self-driving's agent behaviors + their deterministic logic — carried by profiles/self-driving.
+  'agent-planner.ts', 'agent-pm.ts', 'agent-reviewer.ts', 'agent-strategist.ts', 'agent-strategy-reviewer.ts',
+  'open-autonomy-config.ts', 'open-autonomy-governance-report.ts', 'open-autonomy-preflight.ts',
+  'open-autonomy-upgrade-cli.ts',
+  'public-agent-ci.ts', 'public-agent-command.ts', 'public-agent-context.ts', 'public-agent-control-files.ts',
+  'public-agent-control.ts', 'public-agent-decision-index.ts', 'public-agent-dispatcher.ts',
+  'public-agent-loop-budget.ts', 'public-agent-merge-gate.ts', 'public-agent-planner.ts', 'public-agent-pm.ts',
+  'public-agent-policy.ts', 'public-agent-review.ts', 'public-agent-strategist.ts',
+  'public-agent-strategy-ratify.ts', 'public-agent-strategy-review.ts', 'public-agent-target.ts',
+  'public-agent-triage.ts',
+]);
+// Unit tests are dev artifacts, NOT install content — they never run in an installation and would carry
+// dangling deps if vendored. They stay in scripts/ (run by check:public-agent) and ship to no profile.
+const excluded = (f: string) => DEV_ONLY.has(f) || PROFILE_OWNED.has(f) || f.endsWith('.test.ts');
+const set = readdirSync(SRC).filter((f) => f.endsWith('.ts') && !excluded(f)).sort();
 
 const check = process.argv.includes('--check');
 const drift: string[] = [];
@@ -33,6 +53,9 @@ for (const f of set) {
   try { dst = readFileSync(join(DEST, f), 'utf8'); } catch { /* missing */ }
   if (dst !== src) drift.push(f);
 }
+// Write mode prunes stale mirror files (e.g. a script newly moved into a profile) so the mirror never
+// keeps shipping something that is no longer generic runtime.
+if (!check) for (const f of readdirSync(DEST)) if (f.endsWith('.ts') && !set.includes(f)) rmSync(join(DEST, f));
 for (const f of readdirSync(DEST)) if (f.endsWith('.ts') && !set.includes(f)) drift.push(`extra-in-mirror: ${f}`);
 
 if (!check) { console.log(`synced ${set.length} runtime files: ${SRC}/ -> ${DEST}/`); }

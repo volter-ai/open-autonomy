@@ -183,3 +183,34 @@ resources:
   - docs/standards/security.md
   - docs/standards/tests.md
   - package.json
+  # self-driving's OWN agents + their deterministic libraries. These are PROFILE content, not substrate
+  # runtime — they live in profiles/self-driving/scripts/ and ship only with this profile (the github
+  # mirror carries only the generic runtime). The `behavior: scripts/agent-*.ts` entries above resolve to
+  # the first five; the rest are their import closure. A different profile (e.g. simple-sdlc) ships none.
+  - scripts/agent-pm.ts
+  - scripts/agent-reviewer.ts
+  - scripts/agent-planner.ts
+  - scripts/agent-strategist.ts
+  - scripts/agent-strategy-reviewer.ts
+  - scripts/public-agent-pm.ts
+  - scripts/public-agent-dispatcher.ts
+  - scripts/public-agent-review.ts
+  - scripts/public-agent-merge-gate.ts
+  - scripts/public-agent-ci.ts
+  - scripts/public-agent-target.ts
+  - scripts/public-agent-triage.ts
+  - scripts/public-agent-planner.ts
+  - scripts/public-agent-strategist.ts
+  - scripts/public-agent-strategy-ratify.ts
+  - scripts/public-agent-strategy-review.ts
+  - scripts/public-agent-context.ts
+  - scripts/public-agent-control.ts
+  - scripts/public-agent-control-files.ts
+  - scripts/public-agent-command.ts
+  - scripts/public-agent-policy.ts
+  - scripts/public-agent-loop-budget.ts
+  - scripts/public-agent-decision-index.ts
+  - scripts/open-autonomy-config.ts
+  - scripts/open-autonomy-preflight.ts
+  - scripts/open-autonomy-governance-report.ts
+  - scripts/open-autonomy-upgrade-cli.ts

@@ -1,6 +1,22 @@
 #!/usr/bin/env bun
 import { readFileSync, writeFileSync } from 'node:fs';
-import { modelComplete } from './model-call.js';
+import { decide } from './agent-loop.js';
+import { readFileTool, listFilesTool } from './agent-tools.js';
+
+// The PM decision, as the agent loop's submit schema. Read-only tools: PM has no artifact:author, so its
+// agent investigates but never executes; the deterministic harness still does the privileged dispatch.
+const PM_SCHEMA = {
+  type: 'object',
+  properties: {
+    action: { type: 'string', enum: ['develop', 'review', 'needs_info', 'duplicate', 'spam', 'human_required', 'wont_fix', 'ignore'] },
+    risk: { type: 'string', enum: ['low', 'medium', 'high'] },
+    human_required: { type: 'boolean' },
+    reason: { type: 'string' },
+    question: { type: 'string' },
+    duplicate_of: { type: 'number' },
+  },
+  required: ['action', 'risk', 'human_required', 'reason'],
+};
 
 export type PmAction =
   | 'develop'
@@ -106,7 +122,16 @@ async function main(): Promise<void> {
   const prompt = renderPmPrompt(readFileSync(options.issue, 'utf8'));
   const decision = await (async () => {
     try {
-      return parsePmDecision(await modelComplete(options.provider, options.model, prompt, 800));
+      const artifact = await decide<PmDecision>({
+        system:
+          'You are the PM agent for a self-building OSS repository. Triage the issue: investigate with your read tools (read the referenced code/files for context), then submit a decision. Choose develop/review only for clear, scoped, low-risk work; needs_info when underspecified; human_required for workflow/secret/auth/security-sensitive matters or anything you cannot confidently route.',
+        goal: prompt,
+        tools: [readFileTool('.'), listFilesTool('.')],
+        schema: PM_SCHEMA,
+        model: options.model,
+        maxIterations: 6, // bounded: PM sweeps many issues per tick
+      });
+      return parsePmDecision(JSON.stringify(artifact));
     } catch (error) {
       return pmFailureDecision(error);
     }

@@ -1,7 +1,33 @@
 #!/usr/bin/env bun
 import { appendFileSync, existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { parseRoadmapItems } from './public-agent-planner.js';
-import { modelComplete } from './model-call.js';
+import { decide } from './agent-loop.js';
+import { readFileTool, listFilesTool } from './agent-tools.js';
+
+// The strategist's proposal as the agent loop's submit schema (loose; parseStrategistProposal coerces +
+// defaults). Read-only tools: it investigates the repo/roadmap but never executes.
+const STRATEGIST_SCHEMA = {
+  type: 'object',
+  properties: {
+    summary: { type: 'string' },
+    items: {
+      type: 'array',
+      items: {
+        type: 'object',
+        properties: {
+          title: { type: 'string' },
+          acceptance: { type: 'array', items: { type: 'string' } },
+          priority: { type: 'string' },
+          rationale: { type: 'string' },
+          sources: { type: 'array', items: { type: 'string' } },
+          direction: { type: 'string' },
+        },
+        required: ['title', 'acceptance'],
+      },
+    },
+  },
+  required: ['summary', 'items'],
+};
 
 // The strategist proposes roadmap work toward the constitution's north star, discovered from
 // research signals (customer demand, competitor gaps, analogous fields). It optimizes for recall:
@@ -243,7 +269,17 @@ async function main(): Promise<void> {
   const signals = readSignals(options.signals);
 
   const prompt = renderStrategistPrompt(roadmapText, constitution, priorProposals, signalsText, options.maxItems);
-  const proposal = parseStrategistProposal(await modelComplete(options.provider, options.model, prompt, 2000));
+  const artifact = await decide({
+    system:
+      'You are the strategist agent for a self-building OSS repository. Propose roadmap work toward the constitution north star, discovered from real signals. Investigate with your read tools, then submit a proposal (summary + items with title + acceptance criteria).',
+    goal: prompt,
+    tools: [readFileTool('.'), listFilesTool('.')],
+    schema: STRATEGIST_SCHEMA,
+    model: options.model,
+    maxIterations: 12,
+    maxTokens: 2000,
+  });
+  const proposal = parseStrategistProposal(JSON.stringify(artifact));
 
   const seen = seenRoadmapIds(roadmapText, priorProposals, archiveText);
   const items = dedupeProposedItems(proposal.items, seen, options.maxItems);

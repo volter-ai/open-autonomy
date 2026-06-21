@@ -1,6 +1,19 @@
 #!/usr/bin/env bun
 import { appendFileSync, existsSync, readFileSync, writeFileSync } from 'node:fs';
-import { modelComplete } from './model-call.js';
+import { decide } from './agent-loop.js';
+import { readFileTool, listFilesTool } from './agent-tools.js';
+
+// The strategy verdict as the agent loop's submit schema. Read-only tools (a trusted job).
+const STRATEGY_VERDICT_SCHEMA = {
+  type: 'object',
+  properties: {
+    verdict: { type: 'string', enum: ['pass', 'fail'] },
+    human_required: { type: 'boolean' },
+    summary: { type: 'string' },
+    findings: { type: 'array', items: { type: 'string' } },
+  },
+  required: ['verdict', 'human_required', 'summary', 'findings'],
+};
 
 // The strategy reviewer ratifies a strategist's roadmap proposal against the constitution's north
 // star and merit criteria (the human-owned rubric). It is a separate agent from the strategist:
@@ -113,10 +126,20 @@ async function main(): Promise<void> {
   );
   let verdict: StrategyVerdict;
   try {
-    verdict = parseStrategyVerdict(await modelComplete(options.provider, options.model, prompt, 1200));
+    const artifact = await decide<StrategyVerdict>({
+      system:
+        'You are the strategy reviewer for a self-building OSS repository. Ratify the strategist proposal against the constitution north star and merit rubric. Investigate with your read tools, then submit a strict verdict. Mark human_required for anything you cannot confidently ratify.',
+      goal: prompt,
+      tools: [readFileTool('.'), listFilesTool('.')],
+      schema: STRATEGY_VERDICT_SCHEMA,
+      model: options.model,
+      maxIterations: 10,
+    });
+    verdict = parseStrategyVerdict(JSON.stringify(artifact));
   } catch (error) {
     verdict = modelFailureVerdict(error);
   }
+
   writeFileSync(options.out, `${JSON.stringify(verdict, null, 2)}\n`);
   if (process.env.GITHUB_OUTPUT) {
     appendFileSync(process.env.GITHUB_OUTPUT, [

@@ -87,6 +87,32 @@ export function proxyTurn(model: string, maxTokens = 1024): ModelTurn {
   };
 }
 
+/** The decision primitive: run an agent to a schema-validated artifact over the box endpoint, tracing each
+ *  turn to stderr (followable). This is what every deterministic harness calls instead of a single-shot
+ *  completion — the model reasons with its (read-only, by default) tools and submits a structured result. */
+export async function decide<T = unknown>(opts: {
+  system: string;
+  goal: string;
+  schema: Record<string, unknown>;
+  tools?: Tool[];
+  model?: string;
+  maxIterations?: number;
+  maxTokens?: number;
+}): Promise<T> {
+  const model = opts.model || process.env.PUBLIC_AGENT_MODEL || 'gpt-4o-mini';
+  const { artifact } = await runAgent<T>({
+    system: opts.system,
+    goal: opts.goal,
+    tools: opts.tools ?? [],
+    schema: opts.schema,
+    turn: proxyTurn(model, opts.maxTokens ?? 1200),
+    maxIterations: opts.maxIterations ?? 8,
+    onTrace: (e) =>
+      console.error(`  [turn ${e.iteration}] ${e.calls.map((c) => c.name).join(', ') || e.thought.slice(0, 70)}`),
+  });
+  return artifact;
+}
+
 const FINISH = 'submit';
 
 /** Minimal structural check: every required top-level key is present. The model-native tool schema does the

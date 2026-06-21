@@ -1,7 +1,22 @@
 #!/usr/bin/env bun
 import { appendFileSync, readFileSync, writeFileSync } from 'node:fs';
 import { readControlFileContext, renderControlFilePrompt } from './public-agent-control-files.js';
-import { modelComplete } from './model-call.js';
+import { decide } from './agent-loop.js';
+import { readFileTool, listFilesTool } from './agent-tools.js';
+
+// The reviewer's verdict, as the agent loop's submit schema. Read-only tools only: review runs in a
+// trusted job, so its agent reads (the diff + changed files for full context) but does not execute.
+const REVIEW_SCHEMA = {
+  type: 'object',
+  properties: {
+    verdict: { type: 'string', enum: ['pass', 'fail'] },
+    risk: { type: 'string', enum: ['low', 'medium', 'high'] },
+    human_required: { type: 'boolean' },
+    summary: { type: 'string' },
+    findings: { type: 'array', items: { type: 'string' } },
+  },
+  required: ['verdict', 'risk', 'human_required', 'summary', 'findings'],
+};
 
 export interface ReviewerVerdict {
   verdict: 'pass' | 'fail';
@@ -92,7 +107,16 @@ async function main(): Promise<void> {
   );
   let verdict: ReviewerVerdict;
   try {
-    verdict = parseReviewerVerdict(await modelComplete(options.provider, options.model, prompt, 1200));
+    const artifact = await decide<ReviewerVerdict>({
+      system:
+        'You are the reviewer agent for a self-building OSS repository. Investigate the change with your tools — read the changed files for full context — apply the constitution, policy, standards, and rubric, then submit a strict verdict. Mark human_required for workflow changes, secret exposure, auth/security-sensitive behavior, unclear broad rewrites, or anything you cannot confidently review.',
+      goal: prompt,
+      tools: [readFileTool('.'), listFilesTool('.')],
+      schema: REVIEW_SCHEMA,
+      model: options.model,
+      maxIterations: 12,
+    });
+    verdict = parseReviewerVerdict(JSON.stringify(artifact));
   } catch (error) {
     verdict = modelFailureVerdict(error);
   }

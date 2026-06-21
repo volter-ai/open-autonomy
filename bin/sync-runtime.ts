@@ -37,7 +37,6 @@ const PROFILE_OWNED = new Set([
   'public-agent-loop-budget.ts', 'public-agent-merge-gate.ts', 'public-agent-planner.ts', 'public-agent-pm.ts',
   'public-agent-policy.ts', 'public-agent-review.ts', 'public-agent-strategist.ts',
   'public-agent-strategy-ratify.ts', 'public-agent-strategy-review.ts', 'public-agent-target.ts',
-  'public-agent-triage.ts',
 ]);
 // Unit tests are dev artifacts, NOT install content — they never run in an installation and would carry
 // dangling deps if vendored. They stay in scripts/ (run by check:public-agent) and ship to no profile.

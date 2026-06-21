@@ -203,7 +203,6 @@ resources:
   - scripts/public-agent-merge-gate.ts
   - scripts/public-agent-ci.ts
   - scripts/public-agent-target.ts
-  - scripts/public-agent-triage.ts
   - scripts/public-agent-planner.ts
   - scripts/public-agent-strategist.ts
   - scripts/public-agent-strategy-ratify.ts

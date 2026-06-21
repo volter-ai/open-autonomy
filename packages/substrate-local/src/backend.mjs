@@ -20,7 +20,13 @@ import { RUNNER_DEFAULTS } from './runner-defaults.mjs';
 export class TermfleetRunner {
   cli = process.env.TERMFLEET_CLI || RUNNER_DEFAULTS.cli;
   model = process.env.TERMFLEET_AGENT || RUNNER_DEFAULTS.harness; // claude|codex — the model, not our agent
-  url = process.env.TERMFLEET_PROVIDER_URL || RUNNER_DEFAULTS.providerUrl;
+  // No hardcoded provider URL: with TERMFLEET_PROVIDER_URL unset we pass NO --url
+  // and let termfleet resolve a provider itself (env -> `termfleet use` context ->
+  // live local auto-discovery). The old baked-in default is the crutch that drifted.
+  url = process.env.TERMFLEET_PROVIDER_URL;
+  get urlArg() {
+    return this.url ? `--url ${JSON.stringify(this.url)}` : '';
+  }
 
   launch(agent, params = {}) {
     // Re-export orchestration context so the agent's own nested `autonomy launch ...` reaches this
@@ -44,7 +50,7 @@ export class TermfleetRunner {
     // RETURNS (terminalId) — the runner RECEIVES it and never invents one, so repeat launches of the
     // same agent get distinct ids instead of colliding.
     const r = spawnSync(
-      `${this.cli} ${this.model} new -y --url ${JSON.stringify(this.url)} --name ${JSON.stringify(agent)} --cwd ${JSON.stringify(process.cwd())} ${promptArg} --setup-command ${JSON.stringify(setup)}`,
+      `${this.cli} ${this.model} new -y ${this.urlArg} --name ${JSON.stringify(agent)} --cwd ${JSON.stringify(process.cwd())} ${promptArg} --setup-command ${JSON.stringify(setup)}`,
       { shell: true, encoding: 'utf8' },
     );
     let created = {};
@@ -68,7 +74,7 @@ export class TermfleetRunner {
     return this.list().find((s) => s.id === id);
   }
   list() {
-    const r = spawnSync(`${this.cli} ${this.model} list --url ${JSON.stringify(this.url)}`, {
+    const r = spawnSync(`${this.cli} ${this.model} list ${this.urlArg}`, {
       shell: true,
       encoding: 'utf8',
     });
@@ -81,7 +87,7 @@ export class TermfleetRunner {
   }
   cancel(id) {
     // id is the terminalId; resolve it to termfleet's numeric window id, then kill that one window.
-    const r = spawnSync(`${this.cli} ${this.model} list --url ${JSON.stringify(this.url)}`, { shell: true, encoding: 'utf8' });
+    const r = spawnSync(`${this.cli} ${this.model} list ${this.urlArg}`, { shell: true, encoding: 'utf8' });
     let windowId;
     try {
       windowId = JSON.parse(r.stdout).find((w) => w.terminalId === id)?.id;
@@ -89,7 +95,7 @@ export class TermfleetRunner {
       /* ignore */
     }
     if (windowId === undefined) return false;
-    return !spawnSync(`${this.cli} ${this.model} kill --url ${JSON.stringify(this.url)} --id ${windowId}`, {
+    return !spawnSync(`${this.cli} ${this.model} kill ${this.urlArg} --id ${windowId}`, {
       shell: true,
       stdio: 'inherit',
     }).status;

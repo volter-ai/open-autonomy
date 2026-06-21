@@ -1,10 +1,14 @@
 import { limitsFromEnv } from './config.js';
 import { error, methodNotAllowed, parseJson, readCappedBody } from './errors.js';
-import { actualCents, estimateInputTokensFromBody, priceFor, worstCaseCents, type TokenUsage } from './pricing.js';
+import { estimateInputTokensFromBody, openrouterReservePrice, priceTable, settleCents, worstCaseCents, type ModelPrice, type TokenUsage } from './pricing.js';
 import { reserveBudget } from './spend.js';
-import type { Env, RunClaims, UsageEvent } from './types.js';
+import type { Env, Provider, RunClaims, UsageEvent } from './types.js';
 
 const OPENAI_BASE = 'https://api.openai.com';
+// OpenRouter also speaks the OpenAI chat/completions wire, so openrouter-provider models route here too
+// (the agent loop's proxyTurn uses this wire). Same vendor/slug convention + reported-cost settle as the
+// Anthropic handler.
+const OPENROUTER_BASE = 'https://openrouter.ai/api';
 const MAX_OUTPUT_TOKENS = 4096;
 
 export async function handleOpenAI(
@@ -15,7 +19,6 @@ export async function handleOpenAI(
   route: '/v1/chat/completions' | '/v1/responses',
 ): Promise<Response> {
   if (req.method !== 'POST') return methodNotAllowed();
-  if (!env.OPENAI_API_KEY) return error('provider_not_configured', 503);
 
   const bodyText = await readCappedBody(req, Number(env.MAX_BODY_BYTES ?? 1024 * 1024));
   if (bodyText === null) return error('body_too_large', 413);
@@ -24,8 +27,23 @@ export async function handleOpenAI(
 
   const model = typeof body.model === 'string' ? body.model : '';
   if (!claims.models.includes(model)) return error('model_not_allowed', 403);
-  const price = priceFor(env.MODEL_PRICES_JSON, model, 'openai');
-  if (!price) return error('model_price_not_configured', 403);
+
+  // Pick the provider for this OpenAI-wire request: an explicit table entry wins; otherwise an
+  // OpenRouter-style "vendor/slug" id routes to OpenRouter (no table entry needed — it reports real
+  // cost) and a bare id is first-party OpenAI. Anthropic-priced models don't belong on this wire.
+  const priced = priceTable(env.MODEL_PRICES_JSON)[model];
+  if (priced && priced.provider === 'anthropic') return error('model_price_not_configured', 403);
+  const provider: 'openai' | 'openrouter' = priced?.provider === 'openrouter' ? 'openrouter'
+    : priced?.provider === 'openai' ? 'openai'
+    : model.includes('/') ? 'openrouter'
+    : 'openai';
+  let price: ModelPrice | null = priced ?? null;
+  if (!price) {
+    if (provider === 'openrouter') price = openrouterReservePrice(Number(env.OPENROUTER_RESERVE_USD_PER_MTOK ?? 30));
+    else return error('model_price_not_configured', 403);
+  }
+  const apiKey = provider === 'openrouter' ? env.OPENROUTER_API_KEY : env.OPENAI_API_KEY;
+  if (!apiKey) return error('provider_not_configured', 503);
 
   const outputTokens = clampOpenAiOutputTokens(body, route);
   if (route === '/v1/chat/completions' && body.stream === true) {
@@ -40,10 +58,10 @@ export async function handleOpenAI(
 
   let upstream: Response;
   try {
-    upstream = await fetch(`${OPENAI_BASE}${route}`, {
+    upstream = await fetch(`${provider === 'openrouter' ? OPENROUTER_BASE : OPENAI_BASE}${route}`, {
       method: 'POST',
       headers: {
-        authorization: `Bearer ${env.OPENAI_API_KEY}`,
+        authorization: `Bearer ${apiKey}`,
         'content-type': 'application/json',
       },
       body: JSON.stringify(body),
@@ -66,17 +84,17 @@ export async function handleOpenAI(
     const [clientStream, meterStream] = upstream.body!.tee();
     ctx.waitUntil(parseUsageFromSse(meterStream)
       .then((usage) => {
-        const actual = actualCents(price, usage, reserved);
-        return reservation.consume(actual, usageEvent(reservation.requestId, model, route, reserved, actual, usage, 'ok'));
+        const actual = settleCents(price, usage, reserved);
+        return reservation.consume(actual, usageEvent(provider, reservation.requestId, model, route, reserved, actual, usage, 'ok'));
       })
-      .catch(() => reservation.consume(reserved, usageEvent(reservation.requestId, model, route, reserved, reserved, {}, 'metering_error'))));
+      .catch(() => reservation.consume(reserved, usageEvent(provider, reservation.requestId, model, route, reserved, reserved, {}, 'metering_error'))));
     return new Response(clientStream, { status: upstream.status, headers });
   }
 
   const text = await upstream.text();
   const usage = parseUsage(text);
-  const actual = actualCents(price, usage ?? {}, reserved);
-  await reservation.consume(actual, usageEvent(reservation.requestId, model, route, reserved, actual, usage ?? {}, 'ok'));
+  const actual = settleCents(price, usage ?? {}, reserved);
+  await reservation.consume(actual, usageEvent(provider, reservation.requestId, model, route, reserved, actual, usage ?? {}, 'ok'));
   return new Response(text, { status: upstream.status, headers });
 }
 
@@ -119,6 +137,8 @@ export function parseUsage(text: string): TokenUsage | null {
   return {
     input_tokens: typeof input === 'number' ? input : undefined,
     output_tokens: typeof output === 'number' ? output : undefined,
+    // OpenRouter reports the real USD cost here on the chat/completions wire too; authoritative when set.
+    cost_usd: typeof usage.cost === 'number' ? usage.cost : undefined,
   };
 }
 
@@ -157,10 +177,12 @@ function usageFromOpenAiObject(parsed: Record<string, any> | null): TokenUsage |
   return {
     input_tokens: typeof input === 'number' ? input : undefined,
     output_tokens: typeof output === 'number' ? output : undefined,
+    cost_usd: typeof raw.cost === 'number' ? raw.cost : undefined,
   };
 }
 
 function usageEvent(
+  provider: Provider,
   requestId: string,
   model: string,
   route: string,
@@ -171,9 +193,9 @@ function usageEvent(
 ): UsageEvent {
   return {
     request_id: requestId,
-    provider: 'openai',
+    provider,
     model,
-    route: `/openai${route}`,
+    route: `/${provider}${route}`,
     reserved_usd_cents: reserved,
     actual_usd_cents: actual,
     input_tokens: usage.input_tokens,

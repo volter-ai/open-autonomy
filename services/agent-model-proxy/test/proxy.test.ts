@@ -254,6 +254,36 @@ describe('agent model proxy', () => {
     expect(proxied.status).toBe(200);
   });
 
+  test('routes a vendor/slug model on /v1/chat/completions to OpenRouter (no table entry) and settles on reported cost', async () => {
+    const env = testEnv();
+    // deepseek/deepseek-v4-flash is NOT in the price table — the agent loop's proxyTurn hits this wire.
+    const minted = await mint(env, ['deepseek/deepseek-v4-flash'], 25, 5);
+
+    let sawAuth: string | null = null;
+    globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+      expect(String(input)).toBe('https://openrouter.ai/api/v1/chat/completions');
+      sawAuth = new Headers(init?.headers).get('authorization');
+      return new Response(JSON.stringify({ id: 'cmpl_or', usage: { prompt_tokens: 1000, completion_tokens: 1000, cost: 0.09 } }), {
+        headers: { 'content-type': 'application/json' },
+      });
+    }) as typeof fetch;
+
+    const proxied = await worker.fetch(new Request('https://proxy.test/v1/chat/completions', {
+      method: 'POST',
+      headers: { authorization: `Bearer ${minted.token}`, 'content-type': 'application/json' },
+      body: JSON.stringify({ model: 'deepseek/deepseek-v4-flash', max_tokens: 1000, messages: [] }),
+    }), env, ctx);
+
+    expect(proxied.status).toBe(200);
+    expect(sawAuth).toBe('Bearer openrouter-key');
+    const status = await requestJson(env, `/v1/runs/${minted.run.run_id}`, {
+      headers: { authorization: `Bearer ${minted.token}` },
+    });
+    expect(status.request_count).toBe(1);
+    expect(status.recent_events[0].provider).toBe('openrouter');
+    expect(status.consumed_usd_cents).toBe(9); // ceil($0.09 * 100), straight from the reported cost
+  });
+
   test('rejects requests after request limit is reached', async () => {
     const env = testEnv();
     const minted = await mint(env, ['gpt-5-mini'], 100, 1);

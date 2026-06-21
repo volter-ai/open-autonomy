@@ -94,12 +94,15 @@ bunx wrangler secret put OPENAI_API_KEY
 bunx wrangler secret put OPENROUTER_API_KEY   # reaches non-first-party models (e.g. DeepSeek)
 ```
 
-The `openrouter` provider serves models over OpenRouter's Anthropic-compatible
-`/api/v1/messages`, so it shares the proxy's native `/v1/messages` route. Any
-`vendor/slug` model id (e.g. `deepseek/deepseek-v4-flash`) routes there with **no
-price-table entry** — OpenRouter reports the real cost and the proxy settles
-against it, reserving `OPENROUTER_RESERVE_USD_PER_MTOK` (default 30) up front and
-truing it down. Add a table entry only to tighten that reservation.
+The `openrouter` provider reaches models over OpenRouter, which speaks **both**
+wires — so it shares the proxy's native routes on each side: the Anthropic
+`/v1/messages` (→ OpenRouter `/api/v1/messages`) and the OpenAI
+`/v1/chat/completions` (→ OpenRouter `/api/v1/chat/completions`). Any `vendor/slug`
+model id (e.g. `deepseek/deepseek-v4-flash`) routes to OpenRouter on whichever wire
+the caller used, with **no price-table entry** — OpenRouter reports the real cost
+and the proxy settles against it, reserving `OPENROUTER_RESERVE_USD_PER_MTOK`
+(default 30) up front and truing it down. Add a table entry only to tighten that
+reservation.
 
 `MODEL_PRICES_JSON` should be set for production so model pricing can be
 updated without code changes. Shape:

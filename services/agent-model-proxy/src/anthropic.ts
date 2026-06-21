@@ -1,6 +1,7 @@
 import { limitsFromEnv } from './config.js';
 import { error, methodNotAllowed, parseJson, readCappedBody } from './errors.js';
 import { actualCents, estimateInputTokensFromBody, priceFor, worstCaseCents, type TokenUsage } from './pricing.js';
+import { buildRequestCacheKey, readCachedResponse, responseFromCachedResponse, toCachedResponse, writeCachedResponse } from './request-cache.js';
 import { reserveBudget } from './spend.js';
 import type { Env, RunClaims, UsageEvent } from './types.js';
 
@@ -24,6 +25,18 @@ export async function handleAnthropic(req: Request, env: Env, claims: RunClaims,
 
   const requestedMax = typeof body.max_tokens === 'number' ? body.max_tokens : MAX_OUTPUT_TOKENS;
   body.max_tokens = Math.max(1, Math.min(requestedMax, MAX_OUTPUT_TOKENS));
+  const cacheKey = await buildRequestCacheKey({
+    provider: 'anthropic',
+    route: '/v1/messages',
+    runId: claims.run_id,
+    body,
+    headers: {
+      'anthropic-version': req.headers.get('anthropic-version') ?? DEFAULT_VERSION,
+      'anthropic-beta': req.headers.get('anthropic-beta') ?? undefined,
+    },
+  });
+  const cached = await readCachedResponse(cacheKey);
+  if (cached) return responseFromCachedResponse(cached);
 
   const reserved = worstCaseCents(price, body.max_tokens as number, estimateInputTokensFromBody(bodyText));
   const reservation = await reserveBudget(env, claims.run_id, reserved, limitsFromEnv(env));
@@ -60,10 +73,12 @@ export async function handleAnthropic(req: Request, env: Env, claims: RunClaims,
     await reservation.consume(actual, usageEvent(claims, reservation.requestId, 'anthropic', model, '/anthropic/v1/messages', reserved, actual, usage ?? {}, 'ok'));
     headers.set('x-agent-proxy-remaining-usd-cents', String(reservation.remainingRunUsdCents));
     headers.set('x-agent-proxy-remaining-global-usd-cents', String(reservation.remainingGlobalUsdCents));
+    await writeCachedResponse(cacheKey, toCachedResponse(new Response(text, { status: upstream.status, headers }), text));
     return new Response(text, { status: upstream.status, headers });
   }
 
-  const [clientStream, meterStream] = upstream.body!.tee();
+  const [clientAndCacheStream, meterStream] = upstream.body!.tee();
+  const [clientStream, cacheStream] = clientAndCacheStream.tee();
   ctx.waitUntil(parseUsageFromSse(meterStream)
     .then((usage) => {
       const actual = actualCents(price, usage, reserved);
@@ -72,6 +87,9 @@ export async function handleAnthropic(req: Request, env: Env, claims: RunClaims,
     .catch(() => reservation.consume(reserved, usageEvent(claims, reservation.requestId, 'anthropic', model, '/anthropic/v1/messages', reserved, reserved, {}, 'metering_error'))));
   headers.set('x-agent-proxy-remaining-usd-cents', String(reservation.remainingRunUsdCents));
   headers.set('x-agent-proxy-remaining-global-usd-cents', String(reservation.remainingGlobalUsdCents));
+  ctx.waitUntil(cacheStreamToText(cacheStream)
+    .then((text) => writeCachedResponse(cacheKey, toCachedResponse(new Response(text, { status: upstream.status, headers }), text)))
+    .catch(() => undefined));
   return new Response(clientStream, { status: upstream.status, headers });
 }
 
@@ -157,4 +175,8 @@ function usageEvent(
     outcome,
     created_at: new Date().toISOString(),
   };
+}
+
+async function cacheStreamToText(stream: ReadableStream<Uint8Array>): Promise<string> {
+  return await new Response(stream).text();
 }

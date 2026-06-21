@@ -1,6 +1,7 @@
 import { limitsFromEnv } from './config.js';
 import { error, methodNotAllowed, parseJson, readCappedBody } from './errors.js';
 import { actualCents, estimateInputTokensFromBody, priceFor, worstCaseCents, type TokenUsage } from './pricing.js';
+import { buildRequestCacheKey, readCachedResponse, responseFromCachedResponse, toCachedResponse, writeCachedResponse } from './request-cache.js';
 import { reserveBudget } from './spend.js';
 import type { Env, RunClaims, UsageEvent } from './types.js';
 
@@ -34,6 +35,15 @@ export async function handleOpenAI(
       include_usage: true,
     };
   }
+  const cacheKey = await buildRequestCacheKey({
+    provider: 'openai',
+    route,
+    runId: claims.run_id,
+    body,
+  });
+  const cached = await readCachedResponse(cacheKey);
+  if (cached) return responseFromCachedResponse(cached);
+
   const reserved = worstCaseCents(price, outputTokens, estimateInputTokensFromBody(bodyText));
   const reservation = await reserveBudget(env, claims.run_id, reserved, limitsFromEnv(env));
   if (reservation instanceof Response) return reservation;
@@ -63,13 +73,17 @@ export async function handleOpenAI(
   headers.set('x-agent-proxy-remaining-global-usd-cents', String(reservation.remainingGlobalUsdCents));
   const contentType = upstream.headers.get('content-type') ?? '';
   if (contentType.includes('text/event-stream')) {
-    const [clientStream, meterStream] = upstream.body!.tee();
+    const [clientAndCacheStream, meterStream] = upstream.body!.tee();
+    const [clientStream, cacheStream] = clientAndCacheStream.tee();
     ctx.waitUntil(parseUsageFromSse(meterStream)
       .then((usage) => {
         const actual = actualCents(price, usage, reserved);
         return reservation.consume(actual, usageEvent(reservation.requestId, model, route, reserved, actual, usage, 'ok'));
       })
       .catch(() => reservation.consume(reserved, usageEvent(reservation.requestId, model, route, reserved, reserved, {}, 'metering_error'))));
+    ctx.waitUntil(cacheStreamToText(cacheStream)
+      .then((text) => writeCachedResponse(cacheKey, toCachedResponse(new Response(text, { status: upstream.status, headers }), text)))
+      .catch(() => undefined));
     return new Response(clientStream, { status: upstream.status, headers });
   }
 
@@ -77,6 +91,7 @@ export async function handleOpenAI(
   const usage = parseUsage(text);
   const actual = actualCents(price, usage ?? {}, reserved);
   await reservation.consume(actual, usageEvent(reservation.requestId, model, route, reserved, actual, usage ?? {}, 'ok'));
+  await writeCachedResponse(cacheKey, toCachedResponse(new Response(text, { status: upstream.status, headers }), text));
   return new Response(text, { status: upstream.status, headers });
 }
 
@@ -181,4 +196,8 @@ function usageEvent(
     outcome,
     created_at: new Date().toISOString(),
   };
+}
+
+async function cacheStreamToText(stream: ReadableStream<Uint8Array>): Promise<string> {
+  return await new Response(stream).text();
 }

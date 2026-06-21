@@ -195,6 +195,51 @@ describe('agent model proxy', () => {
     expect(proxied.status).toBe(200);
   });
 
+  test('caches identical OpenAI requests briefly without re-billing, but misses when inputs change', async () => {
+    const env = testEnv();
+    const minted = await mint(env, ['gpt-5-mini'], 25, 5);
+    let upstreamCalls = 0;
+
+    globalThis.fetch = (async () => {
+      upstreamCalls += 1;
+      return new Response(JSON.stringify({
+        id: `chatcmpl_${upstreamCalls}`,
+        usage: { prompt_tokens: 2, completion_tokens: 3 },
+      }), { headers: { 'content-type': 'application/json' } });
+    }) as typeof fetch;
+
+    const makeRequest = (content: string) => new Request('https://proxy.test/v1/chat/completions', {
+      method: 'POST',
+      headers: { authorization: `Bearer ${minted.token}`, 'content-type': 'application/json' },
+      body: JSON.stringify({
+        model: 'gpt-5-mini',
+        max_tokens: 10,
+        messages: [{ role: 'user', content }],
+      }),
+    });
+
+    const first = await worker.fetch(makeRequest('hello'), env, ctx);
+    expect(first.status).toBe(200);
+
+    const second = await worker.fetch(makeRequest('hello'), env, ctx);
+    expect(second.status).toBe(200);
+    expect(upstreamCalls).toBe(1);
+
+    const afterCache = await requestJson(env, `/v1/runs/${minted.run.run_id}`, {
+      headers: { authorization: `Bearer ${minted.token}` },
+    });
+    expect(afterCache.request_count).toBe(1);
+
+    const third = await worker.fetch(makeRequest('hello again'), env, ctx);
+    expect(third.status).toBe(200);
+    expect(upstreamCalls).toBe(2);
+
+    const afterMiss = await requestJson(env, `/v1/runs/${minted.run.run_id}`, {
+      headers: { authorization: `Bearer ${minted.token}` },
+    });
+    expect(afterMiss.request_count).toBe(2);
+  });
+
   test('rejects requests after request limit is reached', async () => {
     const env = testEnv();
     const minted = await mint(env, ['gpt-5-mini'], 100, 1);
@@ -203,9 +248,17 @@ describe('agent model proxy', () => {
       usage: { prompt_tokens: 1, completion_tokens: 1 },
     }), { headers: { 'content-type': 'application/json' } })) as typeof fetch;
 
-    const first = await openaiChat(env, minted.token);
+    const first = await worker.fetch(new Request('https://proxy.test/v1/chat/completions', {
+      method: 'POST',
+      headers: { authorization: `Bearer ${minted.token}`, 'content-type': 'application/json' },
+      body: JSON.stringify({ model: 'gpt-5-mini', max_tokens: 10, messages: [{ role: 'user', content: 'hello' }] }),
+    }), env, ctx);
     expect(first.status).toBe(200);
-    const second = await openaiChat(env, minted.token);
+    const second = await worker.fetch(new Request('https://proxy.test/v1/chat/completions', {
+      method: 'POST',
+      headers: { authorization: `Bearer ${minted.token}`, 'content-type': 'application/json' },
+      body: JSON.stringify({ model: 'gpt-5-mini', max_tokens: 10, messages: [{ role: 'user', content: 'different' }] }),
+    }), env, ctx);
     expect(second.status).toBe(402);
     expect(await second.json()).toEqual({ error: { code: 'request_limit_reached' } });
   });

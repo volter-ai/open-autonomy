@@ -50,3 +50,31 @@ the shared vocabulary that makes the producing and consuming ends name the same 
 
 New states are added here first, then realized by each substrate. Profiles depend only on this vocabulary,
 never on a substrate's labels or event names.
+
+## Done is verified, not presumed
+
+A task — agent or human — reaches `done` only when its **acceptance criteria (AC)** are *verified*, by a
+**deterministic check and/or an AI-judge check** (the reviewer agent is OA's existing AI-judge for agent
+work). There is **no `presumed-done` transition**: an elapsed timer or a sent notification never makes a
+task `done`. A triggered task with no verified result is `pending` (or `blocked`/`failed`/escalated),
+never `done` — otherwise a task with no result is silently counted complete.
+
+This applies to humans too: a human is an untrusted, opaque actor (like a model agent), so the *claim*
+"I did it" is validated by a check on the **effect**, not taken on faith. The check verifies the effect;
+it cannot verify diligence (a human can rubber-stamp, an agent can be right by luck) — that residue is
+covered by **accountability** (an attributable, on-record decision), not verification.
+
+A human touchpoint is therefore exactly one of two things:
+
+- **Verified task** — has an AC + check (deterministic and/or judge). Reliable outcome → it *can block*
+  the flow (resume on verified done) → it *counts* as human work → it *reduces autonomy* (the org waited
+  on a person). The resolution must be an **explicit, authorized act** (e.g. an `/agent approve` command
+  gated by `subject.actorRole`, or a native review) — a closed loop, not a value inferred from prose.
+- **Notification** — no AC (`presumed-done`). No reliable outcome ⇒ it is **fire-and-forget**: it *must*
+  be non-blocking, must *not* be counted as completed work, and does *not* reduce autonomy. This is a
+  legitimate, declared mode — "as good as a notification" — you just may not pretend it is more.
+
+The **ask type** decides which is required: `inform` → notification (no AC); `do` / `decide` / `approve`
+→ outcome required → AC + check mandatory. The forbidden middle is a task that gates or counts on a human
+but has no AC — that fabricates completion. (`scripts/autonomy-ratio.ts` enforces the measurement side:
+an unanswered handoff is `humanPending`, and a flow is `complete` only when no handoff is left unresolved.)

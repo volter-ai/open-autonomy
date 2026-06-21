@@ -16,29 +16,45 @@ import { type AgentDecision, validateDecision } from './public-agent-decision.js
 export interface FlowMetrics {
   steps: number;
   agentSteps: number;
-  humanSteps: number;
-  autonomyRatio: number; // agentSteps / (agentSteps + humanSteps); 1 when there are no steps
+  humanSteps: number; // recorded steps that touched a person (a handoff or a resolution)
+  humanHandoffs: number; // times a human was REQUIRED (escalation / human_required)
+  humanResolved: number; // verified human work delivered (the `human:<login>` resolution)
+  humanPending: number; // handoffs with no matching resolution — NOT done (no presumed-done)
+  complete: boolean; // humanPending === 0: every human dependency was verifiably resolved
+  autonomyRatio: number; // agentSteps / steps — fraction of recorded steps that were agent-only; 1 if no steps
   cycleTimeMs: number; // last created_at − first created_at
 }
 
-// A recorded step TOUCHES a person if it is a resolution by a real person (the `human:<login>` actor
-// convention) or a handoff to one (an `escalation`, or a `human_required` decision).
+// Classify a recorded step: a RESOLUTION by a real person (the `human:<login>` convention — verified human
+// work), a HANDOFF to one (escalation / human_required — a human was required), or an agent step.
+export function classifyStep(d: AgentDecision): 'resolution' | 'handoff' | 'agent' {
+  if (/^human[:-]/i.test(d.actor)) return 'resolution';
+  if (d.stage === 'escalation' || /human[_-]?required/i.test(d.decision)) return 'handoff';
+  return 'agent';
+}
+
 export function isHumanStep(d: AgentDecision): boolean {
-  return /^human[:-]/i.test(d.actor) || d.stage === 'escalation' || /human[_-]?required/i.test(d.decision);
+  return classifyStep(d) !== 'agent';
 }
 
 export function measureFlow(decisions: AgentDecision[]): FlowMetrics {
   const steps = decisions.length;
-  const humanSteps = decisions.filter(isHumanStep).length;
+  const kinds = decisions.map(classifyStep);
+  const humanHandoffs = kinds.filter((k) => k === 'handoff').length;
+  const humanResolved = kinds.filter((k) => k === 'resolution').length;
+  const humanSteps = humanHandoffs + humanResolved;
   const agentSteps = steps - humanSteps;
-  const denom = agentSteps + humanSteps;
-  const autonomyRatio = denom === 0 ? 1 : agentSteps / denom;
+  // No presumed-done: a handoff is "done" only once a resolution answers it. Unanswered handoffs are
+  // PENDING — the flow is not complete, and the work is not counted as a verified human result.
+  const humanPending = Math.max(0, humanHandoffs - humanResolved);
+  const complete = humanPending === 0;
+  const autonomyRatio = steps === 0 ? 1 : agentSteps / steps;
   const times = decisions
     .map((d) => Date.parse(d.created_at))
     .filter((n) => !Number.isNaN(n))
     .sort((a, b) => a - b);
   const cycleTimeMs = times.length >= 2 ? times[times.length - 1] - times[0] : 0;
-  return { steps, agentSteps, humanSteps, autonomyRatio, cycleTimeMs };
+  return { steps, agentSteps, humanSteps, humanHandoffs, humanResolved, humanPending, complete, autonomyRatio, cycleTimeMs };
 }
 
 function loadDir(dir: string): AgentDecision[] {

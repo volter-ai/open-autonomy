@@ -21,16 +21,32 @@ describe('measureFlow — the autonomy ratio', () => {
     expect(m.cycleTimeMs).toBe(180_000);
   });
 
-  test('a flow with a human handoff scores below 1', () => {
+  test('an UNRESOLVED handoff is pending, not done (no presumed-done)', () => {
     const flow = [
       dec('pm_triage', 'agent-pm', 'develop', 0),
       dec('review', 'agent-reviewer', 'risky', 60_000),
-      dec('escalation', 'bot', 'human_required', 120_000),
+      dec('escalation', 'bot', 'human_required', 120_000), // handed off, never answered
     ];
     const m = measureFlow(flow);
     expect(m.agentSteps).toBe(2);
-    expect(m.humanSteps).toBe(1);
+    expect(m.humanHandoffs).toBe(1);
+    expect(m.humanResolved).toBe(0);
+    expect(m.humanPending).toBe(1);
+    expect(m.complete).toBe(false); // the flow is NOT done — a human was required but never resolved it
     expect(m.autonomyRatio).toBeCloseTo(2 / 3, 5);
+  });
+
+  test('a handoff answered by a verified resolution is complete', () => {
+    const flow = [
+      dec('review', 'agent-reviewer', 'risky', 0),
+      dec('escalation', 'bot', 'human_required', 60_000),
+      dec('merge_gate', 'human:alice', 'approved', 120_000), // the human resolved it
+    ];
+    const m = measureFlow(flow);
+    expect(m.humanHandoffs).toBe(1);
+    expect(m.humanResolved).toBe(1);
+    expect(m.humanPending).toBe(0);
+    expect(m.complete).toBe(true);
   });
 
   test('isHumanStep flags escalation, human actors, and human_required', () => {
@@ -40,8 +56,11 @@ describe('measureFlow — the autonomy ratio', () => {
     expect(isHumanStep(dec('develop', 'agent-developer', 'pr-ready', 0))).toBe(false);
   });
 
-  test('an empty flow is ratio 1 with zero cycle time (no steps)', () => {
-    expect(measureFlow([])).toEqual({ steps: 0, agentSteps: 0, humanSteps: 0, autonomyRatio: 1, cycleTimeMs: 0 });
+  test('an empty flow is ratio 1, complete, with zero cycle time (no steps)', () => {
+    expect(measureFlow([])).toEqual({
+      steps: 0, agentSteps: 0, humanSteps: 0, humanHandoffs: 0, humanResolved: 0,
+      humanPending: 0, complete: true, autonomyRatio: 1, cycleTimeMs: 0,
+    });
   });
 
   test('the human seam end-to-end: observe a resolution → record human:<login> → the ratio counts it', () => {

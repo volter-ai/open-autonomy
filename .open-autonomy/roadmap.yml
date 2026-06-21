@@ -130,3 +130,33 @@ items:
       - Scan customer demand, competitor gaps, and analogous fields for candidate work, optimizing for recall.
       - Propose roadmap items as a human-ratified pull request, never merging its own proposal.
       - Treat the north star, merit criteria, and proof gates as read-only; recommend amendments in prose only.
+  - id: actor-model-human-handoffs
+    phase: 15
+    priority: high
+    status: proposed
+    title: Actor Model And Explicit Human Handoffs
+    proof_gate: human-approve-merges-live
+    acceptance:
+      - The IR models actors (kind agent or human) and task-triggered handoffs through the work store.
+      - A required review is satisfiable by the AI reviewer OR a native human Approve on the current head SHA.
+      - Proven by a live testbed run where a native human Approve merges a bot-authored PR; run IDs recorded in the ledger.
+  - id: bench-autonomy-ratio
+    phase: 16
+    priority: medium
+    status: proposed
+    title: Bench Autonomy Ratio From Live Runs
+    proof_gate: autonomy-ratio-from-live-run
+    acceptance:
+      - Compute autonomy ratio, human handoffs, and cycle time from a real run's decision records, not invented inputs.
+      - The human simulator is labeled a test double and is never used as proof of a live capability.
+      - Proven against decision records emitted by a live testbed run; run IDs recorded in the ledger.
+  - id: develop-oa-through-oa
+    phase: 17
+    priority: high
+    status: proposed
+    title: Develop OA Through OA (close the manual loophole)
+    proof_gate: oa-feature-shipped-by-pipeline
+    acceptance:
+      - A canonical-repo feature is authored by the develop agent on an issue, reviewed, and merged by the gate (not hand-written in a chat).
+      - Manual driving of canonical is scoped to the bootstrap substrate only, and even bootstrap work cites live-run evidence.
+      - Significant changes trace to a roadmap item and a satisfied proof gate; proven by the pipeline shipping at least one OA feature end to end.

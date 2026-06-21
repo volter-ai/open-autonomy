@@ -10,7 +10,7 @@ import { launch, list } from './runner.js';
 const env = (k: string, d = '') => process.env[k] || d;
 const ACTOR = env('GITHUB_ACTOR', 'open-autonomy-pm');
 const PM_COMMENT_TOKEN = env('PM_COMMENT_TOKEN', env('GH_TOKEN'));
-const LIMIT = env('PUBLIC_AGENT_PM_LIMIT', '10');
+const LIMIT = env('PUBLIC_AGENT_PM_LIMIT', '20');
 const MODEL = env('PUBLIC_AGENT_PM_MODEL', 'gpt-4o-mini');
 const PROVIDER = env('PUBLIC_AGENT_PM_PROVIDER', 'openai');
 
@@ -24,8 +24,12 @@ if (env('PUBLIC_AGENT_REPO_PAUSED') === 'true' || pausedCount !== '0') {
   process.exit(0);
 }
 
+// Intake order is newest-created first: a cap (LIMIT) must never starve NEW work. With the old
+// `sort:updated-asc`, the sweep spent its whole budget re-examining the OLDEST issues (which it then
+// skips as "prior status, no new input") and newly-filed issues sorted to the back fell off the cap —
+// so freshly-filed work was never triaged, never labeled, never developed (the silent-intake bug).
 const numbers = (
-  await $`gh issue list --state open --search "is:issue is:open -label:agent-paused -label:agent-repo-paused -label:agent-blocked -label:human-required -label:agent-maintainer-hold -label:needs-info -label:security sort:updated-asc" --limit ${LIMIT} --json number --jq '.[].number'`.text()
+  await $`gh issue list --state open --search "is:issue is:open -label:agent-paused -label:agent-repo-paused -label:agent-blocked -label:human-required -label:agent-maintainer-hold -label:needs-info -label:security sort:created-desc" --limit ${LIMIT} --json number --jq '.[].number'`.text()
 )
   .split('\n')
   .map((s) => s.trim())

@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import { isHumanStep, measureFlow } from './autonomy-ratio.js';
+import { humanResolution } from './public-agent-merge-gate.js';
 import { type DecisionStage, makeDecision } from './public-agent-decision.js';
 
 function dec(stage: DecisionStage, actor: string, decision: string, atMs: number) {
@@ -41,5 +42,33 @@ describe('measureFlow — the autonomy ratio', () => {
 
   test('an empty flow is ratio 1 with zero cycle time (no steps)', () => {
     expect(measureFlow([])).toEqual({ steps: 0, agentSteps: 0, humanSteps: 0, autonomyRatio: 1, cycleTimeMs: 0 });
+  });
+
+  test('the human seam end-to-end: observe a resolution → record human:<login> → the ratio counts it', () => {
+    // A maintainer holds, then unblocks — the merge gate observes the resolution with attribution.
+    const res = humanResolution({
+      comments: [
+        { body: 'hold, needs maintainer', createdAt: '2026-06-20T10:00:00Z', author: { login: 'alice' } },
+        { body: 'ok to merge', createdAt: '2026-06-20T11:00:00Z', author: { login: 'alice' } },
+      ],
+    });
+    expect(res).toEqual({ login: 'alice', at: '2026-06-20T11:00:00Z' });
+
+    // Recorded with the human:<login> convention, the resolution counts as a human step.
+    const resolution = makeDecision(
+      { stage: 'merge_gate', issue: 1, actor: `human:${res!.login}`, decision: 'approved', evidence: [] },
+      new Date(Date.parse(res!.at)),
+    );
+    expect(isHumanStep(resolution)).toBe(true);
+
+    const flow = [
+      makeDecision({ stage: 'pm_triage', issue: 1, actor: 'agent-pm', decision: 'develop', evidence: [] }, new Date(0)),
+      makeDecision({ stage: 'review', issue: 1, actor: 'agent-reviewer', decision: 'risky', evidence: [] }, new Date(60_000)),
+      resolution,
+    ];
+    const m = measureFlow(flow);
+    expect(m.humanSteps).toBe(1); // the human:alice resolution — human *work*, not just a handoff
+    expect(m.agentSteps).toBe(2);
+    expect(m.autonomyRatio).toBeCloseTo(2 / 3, 5);
   });
 });

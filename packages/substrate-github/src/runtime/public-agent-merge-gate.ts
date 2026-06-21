@@ -105,6 +105,20 @@ export function findMergeBlocker(context: MergeBlockerContext | undefined): stri
   return undefined;
 }
 
+// The human RESOLUTION of a hold: the latest non-bot comment whose signal is an explicit unblock ("ok to
+// merge", "merge approved", …), with attribution (who + when). The system records the HANDOFF
+// (human_required); this is the human's RESPONSE — the other half of the human seam, attributable to a
+// real person. Record it as actor `human:<login>` so Bench (scripts/autonomy-ratio) counts it as a human
+// step. Pure observation — decideMerge's behavior is unchanged.
+export function humanResolution(context: MergeBlockerContext | undefined): { login: string; at: string } | undefined {
+  const latest = context?.comments
+    ?.filter((c) => c.createdAt && !isBotAuthor(c.author?.login ?? ''))
+    .map((c) => ({ login: c.author?.login ?? '', at: c.createdAt as string, signal: mergeCommentSignal(c.body) }))
+    .filter((c) => c.signal)
+    .sort((a, b) => Date.parse(b.at) - Date.parse(a.at))[0];
+  return latest && latest.signal === 'unblock' && latest.login ? { login: latest.login, at: latest.at } : undefined;
+}
+
 function mergeCommentSignal(body: string | undefined): 'block' | 'unblock' | undefined {
   const text = body?.trim() ?? '';
   if (/\b(ok to merge|okay to merge|merge approved|clear hold|hold cleared|unblock merge|resume merge)\b/i.test(text)) return 'unblock';

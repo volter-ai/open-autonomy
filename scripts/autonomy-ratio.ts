@@ -4,10 +4,11 @@
 // run it over a directory of recorded decisions from a real run. Dev/analysis tooling (not shipped into
 // installs) — see DEV_ONLY in bin/sync-runtime.ts.
 //
-// HONEST SCOPE: today the only recorded human touchpoint is a HANDOFF (an `escalation` to a person, or a
-// `human_required` decision) — a human's *resolution* is not yet recorded. So this counts human handoffs,
-// not human work done, and the ratio is an UPPER bound on autonomy until the human seam records
-// resolutions (the next Bench increment). Stated so the number is not over-claimed.
+// SCOPE: a "human step" is any recorded step that TOUCHES a person — a handoff (`escalation` /
+// `human_required`) or a RESOLUTION (a real person acting, recorded with the `human:<login>` actor
+// convention; extract it from a PR's merge signals via public-agent-merge-gate.humanResolution). The
+// remaining gap is the live wiring that WRITES the resolution decision into the session during a run —
+// until that lands, real flows record handoffs but not resolutions, so state the source when reporting.
 import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { type AgentDecision, validateDecision } from './public-agent-decision.js';
@@ -20,9 +21,10 @@ export interface FlowMetrics {
   cycleTimeMs: number; // last created_at − first created_at
 }
 
-// A recorded step is a HUMAN touchpoint if it hands off to / is performed by a person.
+// A recorded step TOUCHES a person if it is a resolution by a real person (the `human:<login>` actor
+// convention) or a handoff to one (an `escalation`, or a `human_required` decision).
 export function isHumanStep(d: AgentDecision): boolean {
-  return d.stage === 'escalation' || /^human/i.test(d.actor) || /human[_-]?required/i.test(d.decision);
+  return /^human[:-]/i.test(d.actor) || d.stage === 'escalation' || /human[_-]?required/i.test(d.decision);
 }
 
 export function measureFlow(decisions: AgentDecision[]): FlowMetrics {

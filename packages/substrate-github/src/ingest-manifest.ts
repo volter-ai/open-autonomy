@@ -29,10 +29,8 @@ export function ingestAutonomy(m: OAManifest): AutonomyIR {
   const autonomy = m.policy?.autonomy as Record<string, unknown> | undefined;
   const maxConcurrent =
     typeof autonomy?.max_open_agent_prs === 'number' ? (autonomy.max_open_agent_prs as number) : undefined;
-  const policyBox: Box = {};
-  for (const k of ['autonomy', 'risk', 'merge', 'planner'] as const) {
-    if (m.policy?.[k]) policyBox[k] = m.policy[k];
-  }
+  // Carry the policy box verbatim (opaque governance); see emitAutonomy. An unknown knob round-trips.
+  const policyBox: Box = { ...(m.policy ?? {}) };
 
   return {
     schema: 'autonomy.ir.v1',

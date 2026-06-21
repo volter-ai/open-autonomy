@@ -34,6 +34,13 @@ bun bin/autonomy-compile.ts profiles/hello github /tmp/hello-gh
   hand-maintained template — `scaffold` and the upgrade workflow both compile this profile). The
   github runtime (`scripts/*`) is **not** in the profile — the substrate owns and injects it, the same
   way `substrate-local` injects its runner backend (`check:runtime-sync` + `check:compile` guard it).
+- **`simple-sdlc/`** — a four-agent software-delivery loop (pm / draft / develop / review) ported from
+  the ztrack `simple-sdlc` profile. The PM is the only dispatcher (a cron tick that enforces WIP); the
+  three workers are **lifecycle consumers** — they fire when a task enters a portable state (`draft` on
+  `open`, `develop` on `ready`, `review` on `in-review`, see `docs/TASK-LIFECYCLE.md`), with the work
+  item delivered as `$ZTRACK_ISSUE` via each trigger's `subject.ref` param. Its agents use `ztrack` for
+  tooling. Compiles to both `local` and `github`.
 
-A profile's agents pick their own **tooling** (`ztrack`, or `gh` + `npm`); the core and substrates
-never name a tool.
+Every profile in this directory is smoke-checked by `check:profiles` (parses + compiles to each
+declared target). A profile's agents pick their own **tooling** (`ztrack`, or `gh` + `npm`); the core
+and substrates never name a tool.

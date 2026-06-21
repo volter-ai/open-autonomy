@@ -1,0 +1,74 @@
+# simple-sdlc — a four-agent software-delivery loop (PM, draft, develop, review), expressed in the
+# autonomy IR. Ported from the ztrack `simple-sdlc` profile: a scheduled PM that enforces WIP and routes
+# work, a drafter that shapes raw requests into verifiable Ready issues, a developer that implements one
+# Ready issue with evidence, and a reviewer that gates an In-Review change against ztrack's checks.
+#
+# Every agent is a prose skill (model-interpreted): the substrate runs each via the privilege-separated
+# wrapper. The three workers are lifecycle consumers — they fire when a task ENTERS a portable state
+# (docs/TASK-LIFECYCLE.md), and the PM (the only dispatcher) produces those transitions on its tick. The
+# work item reaches each worker as $ZTRACK_ISSUE via the trigger's `subject.ref` param. One unit: an
+# agent = behavior + capabilities + triggers(+params) + config. See docs/AUTONOMY-IR.md.
+schema: autonomy.ir.v1
+targets: [local, github]
+
+agents:
+  # The only dispatcher. Sweeps the board on a tick, enforces WIP (≤1 in-progress, ≤1 in-review), shapes
+  # the next eligible transition (drafts/dispatches develop or review), and routes worker outcomes.
+  pm:
+    behavior: pm
+    capabilities: [tasks:converse, agent:launch]
+    triggers:
+      - cron: "*/15 * * * *"
+    config: {}
+
+  # Turns an untriaged request into a verifiable Ready issue (source-grounded summary, 1-3 ACs, evidence
+  # scaffold). Consumes a task in the `open` state.
+  draft:
+    behavior: draft
+    capabilities: [tasks:author, tasks:converse]
+    triggers:
+      - task: open
+        params: { ZTRACK_ISSUE: subject.ref }
+    config: {}
+
+  # Implements exactly one Ready issue and produces real evidence for each AC; stops on a human-required
+  # path/topic. Consumes a task in the `ready` state.
+  develop:
+    behavior: develop
+    capabilities: [artifact:author, tasks:converse]
+    triggers:
+      - task: ready
+        params: { ZTRACK_ISSUE: subject.ref }
+    config: {}
+
+  # Verifies one In-Review change: ztrack must be green, every passed AC backed by cited evidence, no
+  # unapproved human-required path/topic — then moves it to Done or back for rework. Consumes `in-review`.
+  review:
+    behavior: review
+    capabilities: [tasks:converse]
+    triggers:
+      - task: in-review
+        params: { ZTRACK_ISSUE: subject.ref }
+    config: {}
+
+policy:
+  maxConcurrent: 2   # the WIP ceiling: at most one in-progress + one in-review at a time
+  box:
+    wip:
+      maxInProgress: 1
+      maxInReview: 1
+    risk:
+      human_required_paths:
+        - .github/workflows/**
+        - .agents/skills/**
+        - .claude/skills/**
+        - profiles/**/skills/**
+        - profiles/**/scheduler/**
+        - .volter/tracker/validation/**
+      human_required_topics: [auth, secrets, billing, deployment, destructive data migration, dependency trust]
+
+# The shared standards every skill reads (carried verbatim into the installation).
+resources:
+  - standards/workflow.md
+  - standards/issue-and-evidence.md
+  - standards/risk-and-review.md

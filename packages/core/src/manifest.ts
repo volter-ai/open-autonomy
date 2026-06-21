@@ -22,12 +22,9 @@ export interface OAManifest {
       env?: Record<string, string>;
     }
   >;
-  policy?: {
-    autonomy?: Record<string, unknown>;
-    risk?: Record<string, unknown>;
-    merge?: Record<string, unknown>;
-    planner?: Record<string, unknown>;
-  };
+  // The policy box is opaque governance, carried verbatim — each substrate reads the keys it knows
+  // (autonomy/risk/merge/planner for github) and a profile's own knob (e.g. wip) survives untouched.
+  policy?: Record<string, unknown>;
 }
 
 /** Serialize an IR to the open-autonomy manifest. */
@@ -63,10 +60,7 @@ export function emitAutonomy(ir: AutonomyIR): OAManifest {
       ...(agent.capabilities?.length ? { capabilities: agent.capabilities } : {}),
     };
   }
-  const box = ir.policy.box as Record<string, unknown>;
-  const policy: NonNullable<OAManifest['policy']> = {};
-  for (const k of ['autonomy', 'risk', 'merge', 'planner'] as const) {
-    if (box[k]) policy[k] = box[k] as Record<string, unknown>;
-  }
+  // Carry the policy box verbatim — it is opaque governance, not a fixed schema (see OAManifest.policy).
+  const policy = (ir.policy.box ?? {}) as OAManifest['policy'];
   return { schema: 'open-autonomy.autonomy.v1', documents: { resources: ir.resources }, skills, agents, policy };
 }

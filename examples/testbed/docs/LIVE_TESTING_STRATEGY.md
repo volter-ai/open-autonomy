@@ -52,6 +52,29 @@ record it as a gap, never paper over it.
   assesses progress qualitatively and quantitatively, and records evidence. The
   proctor never does the autonomy's job.
 
+### Simulating the human (deterministic / bench runs only)
+
+The proctor above is a **real** human-in-the-loop — that is what a no-fakery proof requires (Section 1):
+when the system routes a task to a person, a real maintainer (or an AI proctor acting as one) makes the
+actual decision. **Do not use the simulator below in a no-fakery proof run** — a simulated decision is not
+a real maintainer decision, and counting it as one would be fakery.
+
+For a *different* purpose — **reproducible, unattended** runs (regression tests, and Bench scoring of an
+org design) — a human task can instead be fulfilled by a **deterministic human simulator**
+(`scripts/human-sim.ts`). It is a **test double**: it exercises the human-seam *mechanism* (a `HumanTask`
+is created → notified → resolved → measured) with no person, reproducibly and without contamination. It is
+explicitly **not** a model of real human behavior — a behavior-calibrated simulator is *derived from a
+recorded real run* (real-run-first), never hand-authored.
+
+- `approve` / `reject` → a verified resolution (recorded as `human:<sim>`), so the flow completes and the
+  autonomy ratio (`scripts/autonomy-ratio.ts`) counts it as resolved human work.
+- `abandon` → a non-responsive human: no resolution, so the handoff stays **pending** and the flow is
+  **not** `complete` — exercising the no-presumed-done / escalation path.
+
+The two modes must not be conflated: **real proctor = proof; simulator = reproducible test/bench.** Any
+Bench number produced with the simulator carries the "simulated, not calibrated" caveat until a real run
+calibrates it.
+
 ## 3. Pillar 1 — Hands-free setup of a new testbed repo
 
 A fresh testbed must reach "ready, seeded, and self-driving" from one command,

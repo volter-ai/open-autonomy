@@ -279,13 +279,18 @@ async function mintRunOidc(req: Request, env: Env): Promise<Response> {
 }
 
 export function isTrustedRepoWorkflow(env: Env, repo: string, workflowRef: string): boolean {
-  const trustedRepos = new Set(
-    (env.GITHUB_OIDC_ALLOWED_WORKFLOW ?? '')
-      .split(',')
-      .map((value) => value.trim().split('/.github/')[0])
-      .filter(Boolean),
-  );
-  if (!trustedRepos.has(repo)) return false;
+  // Each GITHUB_OIDC_ALLOWED_WORKFLOW entry names a trusted scope (the part before /.github/): either an
+  // exact repo (owner/name) or an OWNER WILDCARD (owner/*) that trusts any repo under that owner. The
+  // wildcard exists for disposable fleets (e.g. the bench/fixtures org), where repos are created and torn
+  // down constantly and can't each be enumerated here. Spend is still bounded by the per-run caps and the
+  // account balance. Either way the minting workflow must live under the repo's own .github/workflows/.
+  const scopes = (env.GITHUB_OIDC_ALLOWED_WORKFLOW ?? '')
+    .split(',')
+    .map((value) => value.trim().split('/.github/')[0])
+    .filter(Boolean);
+  const owner = repo.split('/')[0];
+  const trusted = scopes.some((scope) => scope === repo || (scope.endsWith('/*') && scope.slice(0, -2) === owner));
+  if (!trusted) return false;
   return workflowRef.startsWith(`${repo}/.github/workflows/`);
 }
 
@@ -378,13 +383,13 @@ async function exchangeRunToken(req: Request, env: Env, runId: string): Promise<
 
   const workflowRef = oidc.job_workflow_ref ?? oidc.workflow_ref ?? '';
   if (claims.github_workflow_ref && workflowRef !== claims.github_workflow_ref) return error('forbidden_workflow', 403);
-  const allowedWorkflows = (env.GITHUB_OIDC_ALLOWED_WORKFLOW ?? `${claims.repo}/.github/workflows/public-agent.yml@`)
-    .split(',')
-    .map((value) => value.trim())
-    .filter(Boolean);
-  if (!allowedWorkflows.some((allowedWorkflow) => workflowRef.startsWith(allowedWorkflow))) {
-    return error('forbidden_workflow', 403);
-  }
+  // Same trust rule as mint (exact repo or owner wildcard) when an allowlist is configured. With none set,
+  // fall back to the run's own repo — safe here because the run was already minted (the grant happened at
+  // mint, where trust is strict and undefaulted); exchange only re-validates that same run's workflow.
+  const workflowTrusted = env.GITHUB_OIDC_ALLOWED_WORKFLOW
+    ? isTrustedRepoWorkflow(env, claims.repo, workflowRef)
+    : workflowRef.startsWith(`${claims.repo}/.github/workflows/public-agent.yml@`);
+  if (!workflowTrusted) return error('forbidden_workflow', 403);
 
   return json({ ok: true, run: claims, token: await signRunToken(env, claims) });
 }

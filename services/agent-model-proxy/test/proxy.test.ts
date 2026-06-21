@@ -42,6 +42,21 @@ describe('oidc mint trust (repo granularity)', () => {
   test('rejects a workflow ref whose repo prefix does not match the claimed repo', () => {
     expect(isTrustedRepoWorkflow(env, 'volter-ai/open-autonomy', 'other/repo/.github/workflows/x.yml@y')).toBe(false);
   });
+
+  describe('owner wildcard (disposable fleets)', () => {
+    const wild = { GITHUB_OIDC_ALLOWED_WORKFLOW: 'volter-test-fixtures/*' } as unknown as Env;
+    test('trusts any repo under a wildcarded owner', () => {
+      expect(isTrustedRepoWorkflow(wild, 'volter-test-fixtures/bench-xyz',
+        'volter-test-fixtures/bench-xyz/.github/workflows/public-agent-pm.yml@refs/heads/main')).toBe(true);
+    });
+    test('still requires the workflow to live under the repo itself', () => {
+      expect(isTrustedRepoWorkflow(wild, 'volter-test-fixtures/bench-xyz',
+        'other/repo/.github/workflows/public-agent-pm.yml@refs/heads/main')).toBe(false);
+    });
+    test('does not trust a different owner', () => {
+      expect(isTrustedRepoWorkflow(wild, 'evil/repo', 'evil/repo/.github/workflows/x.yml@y')).toBe(false);
+    });
+  });
 });
 
 describe('agent model proxy', () => {

@@ -78,6 +78,24 @@ if (process.argv.includes('--live')) {
   console.log(`seeding the goal as the org's intake issue …`);
   run('gh', ['issue', 'create', '-R', repo, '--title', meta.summary, '--body', goal]);
 
+  // Fund the disposable repo's proxy account so its agents can mint (ENFORCE_ACCOUNT_BALANCE). A grant
+  // from a funded source; bounded — bench spend is capped per run and by this balance. Skipped (with a
+  // warning) if no admin token is present, since the run would then fail at mint with account_balance_exhausted.
+  const adminToken = process.env.MODEL_PROXY_ADMIN_TOKEN;
+  const proxyBase = process.env.MODEL_PROXY_URL || 'https://volter-agent-model-proxy.aaron-0ed.workers.dev';
+  if (adminToken) {
+    const funder = arg('--funder', 'volter-ai/open-autonomy');
+    const cents = Number(arg('--fund-usd-cents', '500'));
+    const res = await fetch(`${proxyBase}/admin/accounts/${encodeURIComponent(funder)}/grant`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-admin-token': adminToken },
+      body: JSON.stringify({ to: repo, amount_usd_cents: cents, key: `bench:${repo}` }),
+    });
+    console.log(`funded ${repo}: ${res.ok ? `$${(cents / 100).toFixed(2)} from ${funder}` : `FAILED ${res.status}`}`);
+  } else {
+    console.log('MODEL_PROXY_ADMIN_TOKEN unset — repo NOT funded; agents will fail at mint until it has a balance');
+  }
+
   console.log(`\nlive cell up: https://github.com/${repo}`);
   console.log(`the agents now run autonomously on cron. when the run has settled, score it:`);
   console.log(`  bun bin/bench.ts --score --repo ${repo} --workload ${wl}`);

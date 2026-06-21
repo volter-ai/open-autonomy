@@ -1,38 +1,109 @@
 #!/usr/bin/env bun
 // Bench — the workload-suite runner. An experiment is a CELL: profile × substrate × workload
 // (docs/VISION.md). The workload suite is a diverse, human-owned battery of small repos + task-sets
-// (docs / bug / feature / refactor / security / flaky), the subject under test being the org DESIGN, not
-// the model.
+// (docs / bug / feature / refactor / security / flaky), the subject under test being the org DESIGN.
 //
-//   bun bin/bench.ts            STATIC: every cell, assert the install COEXISTS with the workload repo
-//   bun bin/bench.ts --live     LIVE (not yet wired): provision, run autonomously, score by autonomy ratio
+//   bun bin/bench.ts                                   PREFLIGHT: every cell installs without clobbering
+//   bun bin/bench.ts --live --workload W --profile P   provision a disposable repo + seed the goal
+//   bun bin/bench.ts --score --repo O/N --workload W   clone the run's result + judge it (AI rubric)
 //
-// STATIC mode overlays compile(profile, substrate) onto each workload and checks install SAFETY across the
-// whole matrix: the install may seed an install-owned file (package.json/README/…) when the project lacks
-// it, but must NEVER overwrite the project's own source, and must never leak another profile's agents.
-// (Pure per-profile compile coherence + import-closure is check:profiles; this adds the project axis.)
-import { readFileSync, readdirSync, existsSync, statSync } from 'node:fs';
-import { join, relative } from 'node:path';
+// PREFLIGHT is static: overlay compile(profile, substrate) onto each workload and assert the install
+// COEXISTS — it may seed an install-owned file (package.json/README/…) when missing, but never overwrites
+// the project's own source, and never leaks another profile's agents. LIVE provisions a disposable github
+// repo (volter-test-fixtures) from the workload seed, installs the profile, and seeds the goal as the org's
+// intake; the agents then run autonomously on cron (never hand-cranked). SCORE reads the result with the AI
+// rubric judge. (Pure per-profile compile coherence + import-closure is check:profiles.)
+import { readFileSync, readdirSync, existsSync, statSync, cpSync, mkdtempSync, mkdirSync } from 'node:fs';
+import { join, relative, dirname } from 'node:path';
+import { tmpdir } from 'node:os';
+import { execFileSync } from 'node:child_process';
 import { parseIr, isInstallOwned } from '@open-autonomy/core';
 import { compileGithub } from '@open-autonomy/substrate-github';
 import { compileLocal } from '@open-autonomy/substrate-local';
 
 const WL = 'bench/workload';
 const PROFILES = 'profiles';
+const ORG = 'volter-test-fixtures';
+const arg = (n: string, d = '') => {
+  const i = process.argv.indexOf(n);
+  return i >= 0 ? process.argv[i + 1] : d;
+};
+const run = (cmd: string, args: string[]) => execFileSync(cmd, args, { stdio: 'inherit' });
 
-if (process.argv.includes('--live')) {
-  console.error('live mode is not wired yet — it provisions a disposable repo per cell from the workload');
-  console.error('seed, runs the profile autonomously for its time budget (never hand-cranked), then scores');
-  console.error('the outcome with scripts/bench-judge.ts (AI rubric) × scripts/autonomy-ratio.ts (autonomy).');
-  console.error('See bench/README.md.');
-  process.exit(2);
+function compileTo(profile: string, substrate: string) {
+  const ir = parseIr(readFileSync(join(PROFILES, profile, 'ir.yml'), 'utf8'));
+  if (!ir.targets.includes(substrate as never)) throw new Error(`profile ${profile} does not target ${substrate}`);
+  return substrate === 'github' ? compileGithub(ir) : compileLocal(ir);
 }
 
-// The project's own files (relative paths), excluding the workload manifest and any local install detritus.
-function repoFiles(dir: string, base = dir): string[] {
+// ---- LIVE: provision a disposable repo from (workload, profile) and seed the goal ----
+if (process.argv.includes('--live')) {
+  const wl = arg('--workload');
+  const profile = arg('--profile');
+  const substrate = arg('--substrate', 'github');
+  if (!wl || !profile) throw new Error('usage: --live --workload <name> --profile <name> [--substrate github]');
+  if (substrate !== 'github') throw new Error('live runs target github (disposable repos in ' + ORG + ')');
+  const wdir = join(WL, wl);
+  const meta = JSON.parse(readFileSync(join(wdir, 'workload.json'), 'utf8')) as { summary: string };
+  const goal = readFileSync(join(wdir, 'goal.md'), 'utf8');
+
+  const id = Date.now().toString(36);
+  const repo = `${ORG}/bench-${wl}-${profile}-${id}`;
+  const build = mkdtempSync(join(tmpdir(), 'bench-build-'));
+  console.log(`building install: compile(${profile}, ${substrate}) -> ${build}`);
+  run('bun', ['bin/autonomy-compile.ts', join(PROFILES, profile), substrate, build]);
+  const seed = join(wdir, 'seed');
+  if (existsSync(seed)) {
+    // Overlay the project onto the installed machinery, but let the install win for install-owned files
+    // (package.json/README/…) so the runtime's deps survive — the same seed-if-missing rule the upgrade
+    // uses, applied to the project axis. The project's own source (src/…) is added.
+    let added = 0;
+    let kept = 0;
+    for (const rel of repoFiles(seed, seed)) {
+      if (isInstallOwned(rel) && existsSync(join(build, rel))) {
+        kept++;
+        continue;
+      }
+      mkdirSync(join(build, dirname(rel)), { recursive: true });
+      cpSync(join(seed, rel), join(build, rel));
+      added++;
+    }
+    console.log(`overlaid workload seed: ${added} project files added, ${kept} install-owned kept`);
+  }
+  cpSync('bench/provision.template.json', join(build, 'provision.json'));
+
+  console.log(`provisioning ${repo} …`);
+  run('bun', ['scripts/provision-target-repo.ts', '--repo', repo, '--source', build, '--private', '--force-content']);
+
+  console.log(`seeding the goal as the org's intake issue …`);
+  run('gh', ['issue', 'create', '-R', repo, '--title', meta.summary, '--body', goal]);
+
+  console.log(`\nlive cell up: https://github.com/${repo}`);
+  console.log(`the agents now run autonomously on cron. when the run has settled, score it:`);
+  console.log(`  bun bin/bench.ts --score --repo ${repo} --workload ${wl}`);
+  process.exit(0);
+}
+
+// ---- SCORE: clone the run's result and judge it against the workload rubric ----
+if (process.argv.includes('--score')) {
+  const repo = arg('--repo');
+  const wl = arg('--workload');
+  if (!repo || !wl) throw new Error('usage: --score --repo <owner/name> --workload <name>');
+  const dir = mkdtempSync(join(tmpdir(), 'bench-result-'));
+  console.log(`cloning ${repo} -> ${dir}`);
+  run('gh', ['repo', 'clone', repo, dir, '--', '--depth', '1']);
+  const judgeArgs = ['scripts/bench-judge.ts', '--workload', join(WL, wl), '--result', dir];
+  const out = arg('--out');
+  if (out) judgeArgs.push('--out', out);
+  run('bun', judgeArgs);
+  process.exit(0);
+}
+
+// ---- PREFLIGHT (default): cross-matrix install coexistence ----
+function repoFiles(dir: string, base: string): string[] {
   const out: string[] = [];
   for (const e of readdirSync(dir)) {
-    if (e === 'node_modules' || e === '.git' || e === 'workload.json') continue;
+    if (e === 'node_modules' || e === '.git') continue;
     const full = join(dir, e);
     if (statSync(full).isDirectory()) out.push(...repoFiles(full, base));
     else out.push(relative(base, full));
@@ -48,7 +119,6 @@ let cells = 0;
 for (const w of workloads) {
   const wdir = join(WL, w);
   const meta = JSON.parse(readFileSync(join(wdir, 'workload.json'), 'utf8')) as { kind?: string };
-  // The "project" is the seed repo the org starts from — install paths are compared against it.
   const seedDir = join(wdir, 'seed');
   const own = new Set(existsSync(seedDir) ? repoFiles(seedDir, seedDir) : []);
   for (const p of profiles) {
@@ -56,14 +126,8 @@ for (const w of workloads) {
     for (const sub of ir.targets) {
       cells++;
       try {
-        const out = sub === 'github' ? compileGithub(ir) : sub === 'local' ? compileLocal(ir) : null;
-        if (!out) {
-          errs.push(`${w} × ${p}/${sub}: unknown substrate`);
-          continue;
-        }
+        const out = compileTo(p, sub);
         const produced = [...Object.keys(out.generated), ...out.copies.map((c) => c.to)];
-        // A produced path that the project already owns is a CLOBBER unless it is install-owned (then the
-        // overlay seeds-if-missing and keeps the project's copy).
         const clobbers = produced.filter((path) => own.has(path) && !isInstallOwned(path));
         const seeded = produced.filter((path) => own.has(path) && isInstallOwned(path));
         if (clobbers.length)
@@ -79,7 +143,7 @@ for (const w of workloads) {
 }
 
 if (errs.length) {
-  console.error(`\nbench STATIC FAILED — ${errs.length}/${cells} cells:\n  ${errs.join('\n  ')}`);
+  console.error(`\nbench PREFLIGHT FAILED — ${errs.length}/${cells} cells:\n  ${errs.join('\n  ')}`);
   process.exit(1);
 }
-console.log(`\nbench STATIC OK: ${cells} cells (${profiles.length} profiles × ${workloads.length} workloads) install cleanly`);
+console.log(`\nbench PREFLIGHT OK: ${cells} cells (${profiles.length} profiles × ${workloads.length} workloads) install cleanly`);

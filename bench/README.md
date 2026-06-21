@@ -61,6 +61,23 @@ bun scripts/autonomy-ratio.ts <run-repo>/.agent-run/.../decisions
 The judge uses the transparent model seam (`scripts/model-call.ts`): point `OPENAI_BASE_URL`/`OPENAI_API_KEY`
 or `ANTHROPIC_BASE_URL`/`ANTHROPIC_API_KEY` at the box endpoint (a real provider, or the universal proxy).
 
+## Live bench: one-time setup
+
+Disposable bench repos live in a sandbox org (`volter-test-fixtures`). For their agents to actually run,
+three things must be true for that org — set once:
+
+1. **Proxy trusts the org.** The model proxy mints per run via OIDC and gates on
+   `GITHUB_OIDC_ALLOWED_WORKFLOW`. Add an owner wildcard (`volter-test-fixtures/*`) so disposable repos
+   mint without per-repo edits, then redeploy the worker.
+2. **Org Actions policy allows write.** GitHub orgs default workflow tokens to read-only and block
+   Actions from creating PRs; the publisher needs both. Set once:
+   `gh api -X PUT orgs/<org>/actions/permissions/workflow -f default_workflow_permissions=write -F can_approve_pull_request_reviews=true`.
+3. **A funded source account** in the proxy (e.g. `volter-ai/open-autonomy`). `bench --live` grants each
+   disposable repo a bounded balance from it (`ENFORCE_ACCOUNT_BALANCE` is on), so set
+   `MODEL_PROXY_ADMIN_TOKEN` + `MODEL_PROXY_URL` in the environment when running `--live`.
+
+Then each cell is one command (`bench --live …`), runs on cron, and is scored with `bench --score`.
+
 ## Discipline
 
 One run is a noisy sample (model nondeterminism + workload variance) — repeat and treat the score as a

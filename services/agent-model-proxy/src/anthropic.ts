@@ -1,5 +1,6 @@
 import { limitsFromEnv } from './config.js';
 import { error, methodNotAllowed, parseJson, readCappedBody } from './errors.js';
+import { awaitPendingModelResponse, beginPendingModelResponse, buildModelCacheKey, cachedResponseToResponse, readCachedModelResponse, resolvePendingModelResponse, storeCachedModelResponse } from './model-cache.js';
 import { actualCents, estimateInputTokensFromBody, priceFor, worstCaseCents, type TokenUsage } from './pricing.js';
 import { reserveBudget } from './spend.js';
 import type { Env, RunClaims, UsageEvent } from './types.js';
@@ -24,10 +25,33 @@ export async function handleAnthropic(req: Request, env: Env, claims: RunClaims,
 
   const requestedMax = typeof body.max_tokens === 'number' ? body.max_tokens : MAX_OUTPUT_TOKENS;
   body.max_tokens = Math.max(1, Math.min(requestedMax, MAX_OUTPUT_TOKENS));
+  const cacheKey = await buildModelCacheKey({
+    provider: 'anthropic',
+    route: '/v1/messages',
+    runId: claims.run_id,
+    body,
+    headers: {
+      'anthropic-version': req.headers.get('anthropic-version') ?? DEFAULT_VERSION,
+      'anthropic-beta': req.headers.get('anthropic-beta') ?? undefined,
+    },
+  });
+
+  const cached = readCachedModelResponse(cacheKey);
+  if (cached) return cached;
+
+  const pending = awaitPendingModelResponse(cacheKey);
+  if (pending) {
+    const resolved = await pending;
+    if (resolved) return cachedResponseToResponse(resolved);
+  }
+  beginPendingModelResponse(cacheKey);
 
   const reserved = worstCaseCents(price, body.max_tokens as number, estimateInputTokensFromBody(bodyText));
   const reservation = await reserveBudget(env, claims.run_id, reserved, limitsFromEnv(env));
-  if (reservation instanceof Response) return reservation;
+  if (reservation instanceof Response) {
+    resolvePendingModelResponse(cacheKey, null);
+    return reservation;
+  }
 
   let upstream: Response;
   try {
@@ -43,11 +67,13 @@ export async function handleAnthropic(req: Request, env: Env, claims: RunClaims,
     });
   } catch {
     await reservation.release();
+    resolvePendingModelResponse(cacheKey, null);
     return error('upstream_unavailable', 502);
   }
 
   if (!upstream.ok) {
     await reservation.release();
+    resolvePendingModelResponse(cacheKey, null);
     return sanitizeUpstream(upstream);
   }
 
@@ -60,16 +86,23 @@ export async function handleAnthropic(req: Request, env: Env, claims: RunClaims,
     await reservation.consume(actual, usageEvent(claims, reservation.requestId, 'anthropic', model, '/anthropic/v1/messages', reserved, actual, usage ?? {}, 'ok'));
     headers.set('x-agent-proxy-remaining-usd-cents', String(reservation.remainingRunUsdCents));
     headers.set('x-agent-proxy-remaining-global-usd-cents', String(reservation.remainingGlobalUsdCents));
+    storeCachedModelResponse(cacheKey, { status: upstream.status, headers, body: text });
     return new Response(text, { status: upstream.status, headers });
   }
 
-  const [clientStream, meterStream] = upstream.body!.tee();
+  const [clientStream, cacheAndMeterStream] = upstream.body!.tee();
+  const [meterStream, cacheStream] = cacheAndMeterStream.tee();
   ctx.waitUntil(parseUsageFromSse(meterStream)
     .then((usage) => {
       const actual = actualCents(price, usage, reserved);
       return reservation.consume(actual, usageEvent(claims, reservation.requestId, 'anthropic', model, '/anthropic/v1/messages', reserved, actual, usage, 'ok'));
     })
     .catch(() => reservation.consume(reserved, usageEvent(claims, reservation.requestId, 'anthropic', model, '/anthropic/v1/messages', reserved, reserved, {}, 'metering_error'))));
+  ctx.waitUntil(new Response(cacheStream).text()
+    .then((text) => {
+      storeCachedModelResponse(cacheKey, { status: upstream.status, headers, body: text });
+    })
+    .catch(() => resolvePendingModelResponse(cacheKey, null)));
   headers.set('x-agent-proxy-remaining-usd-cents', String(reservation.remainingRunUsdCents));
   headers.set('x-agent-proxy-remaining-global-usd-cents', String(reservation.remainingGlobalUsdCents));
   return new Response(clientStream, { status: upstream.status, headers });

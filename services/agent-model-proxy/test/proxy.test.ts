@@ -195,6 +195,75 @@ describe('agent model proxy', () => {
     expect(proxied.status).toBe(200);
   });
 
+  test('caches identical Anthropic requests within the short window', async () => {
+    const env = testEnv();
+    const minted = await mint(env, ['claude-sonnet-4-6'], 25, 5);
+    let upstreamCalls = 0;
+
+    globalThis.fetch = (async () => {
+      upstreamCalls += 1;
+      return new Response(JSON.stringify({
+        id: `msg_${upstreamCalls}`,
+        usage: { input_tokens: 1000, output_tokens: 1000 },
+      }), { headers: { 'content-type': 'application/json' } });
+    }) as typeof fetch;
+
+    const init = {
+      method: 'POST',
+      headers: {
+        authorization: `Bearer ${minted.token}`,
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({ model: 'claude-sonnet-4-6', max_tokens: 1000, messages: [] }),
+    };
+
+    const first = await worker.fetch(new Request('https://proxy.test/v1/messages', init), env, ctx);
+    const second = await worker.fetch(new Request('https://proxy.test/v1/messages', init), env, ctx);
+
+    expect(first.status).toBe(200);
+    expect(second.status).toBe(200);
+    expect(upstreamCalls).toBe(1);
+
+    const status = await requestJson(env, `/v1/runs/${minted.run.run_id}`, {
+      headers: { authorization: `Bearer ${minted.token}` },
+    });
+    expect(status.request_count).toBe(1);
+  });
+
+  test('changes in the request body bypass the cache', async () => {
+    const env = testEnv();
+    const minted = await mint(env, ['gpt-5-mini'], 25, 5);
+    let upstreamCalls = 0;
+
+    globalThis.fetch = (async () => {
+      upstreamCalls += 1;
+      return new Response(JSON.stringify({
+        id: `cmpl_${upstreamCalls}`,
+        usage: { prompt_tokens: 1000, completion_tokens: 1000 },
+      }), { headers: { 'content-type': 'application/json' } });
+    }) as typeof fetch;
+
+    const first = await openaiChatWithBody(env, minted.token, {
+      model: 'gpt-5-mini',
+      max_tokens: 10,
+      messages: [{ role: 'user', content: 'one' }],
+    });
+    const second = await openaiChatWithBody(env, minted.token, {
+      model: 'gpt-5-mini',
+      max_tokens: 10,
+      messages: [{ role: 'user', content: 'two' }],
+    });
+
+    expect(first.status).toBe(200);
+    expect(second.status).toBe(200);
+    expect(upstreamCalls).toBe(2);
+
+    const status = await requestJson(env, `/v1/runs/${minted.run.run_id}`, {
+      headers: { authorization: `Bearer ${minted.token}` },
+    });
+    expect(status.request_count).toBe(2);
+  });
+
   test('rejects requests after request limit is reached', async () => {
     const env = testEnv();
     const minted = await mint(env, ['gpt-5-mini'], 100, 1);
@@ -203,9 +272,17 @@ describe('agent model proxy', () => {
       usage: { prompt_tokens: 1, completion_tokens: 1 },
     }), { headers: { 'content-type': 'application/json' } })) as typeof fetch;
 
-    const first = await openaiChat(env, minted.token);
+    const first = await openaiChatWithBody(env, minted.token, {
+      model: 'gpt-5-mini',
+      max_tokens: 10,
+      messages: [],
+    });
     expect(first.status).toBe(200);
-    const second = await openaiChat(env, minted.token);
+    const second = await openaiChatWithBody(env, minted.token, {
+      model: 'gpt-5-mini',
+      max_tokens: 10,
+      messages: [{ role: 'user', content: 'different' }],
+    });
     expect(second.status).toBe(402);
     expect(await second.json()).toEqual({ error: { code: 'request_limit_reached' } });
   });
@@ -929,13 +1006,17 @@ async function mint(
 }
 
 async function openaiChat(env: Env, token: string): Promise<Response> {
+  return await openaiChatWithBody(env, token, { model: 'gpt-5-mini', max_tokens: 10, messages: [] });
+}
+
+async function openaiChatWithBody(env: Env, token: string, body: Record<string, unknown>): Promise<Response> {
   return await worker.fetch(new Request('https://proxy.test/v1/chat/completions', {
     method: 'POST',
     headers: {
       authorization: `Bearer ${token}`,
       'content-type': 'application/json',
     },
-    body: JSON.stringify({ model: 'gpt-5-mini', max_tokens: 10, messages: [] }),
+    body: JSON.stringify(body),
   }), env, ctx);
 }
 

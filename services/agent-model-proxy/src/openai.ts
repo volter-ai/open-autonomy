@@ -1,5 +1,6 @@
 import { limitsFromEnv } from './config.js';
 import { error, methodNotAllowed, parseJson, readCappedBody } from './errors.js';
+import { awaitPendingModelResponse, beginPendingModelResponse, buildModelCacheKey, cachedResponseToResponse, readCachedModelResponse, resolvePendingModelResponse, storeCachedModelResponse } from './model-cache.js';
 import { actualCents, estimateInputTokensFromBody, priceFor, worstCaseCents, type TokenUsage } from './pricing.js';
 import { reserveBudget } from './spend.js';
 import type { Env, RunClaims, UsageEvent } from './types.js';
@@ -34,9 +35,29 @@ export async function handleOpenAI(
       include_usage: true,
     };
   }
+  const cacheKey = await buildModelCacheKey({
+    provider: 'openai',
+    route,
+    runId: claims.run_id,
+    body,
+  });
+
+  const cached = readCachedModelResponse(cacheKey);
+  if (cached) return cached;
+
+  const pending = awaitPendingModelResponse(cacheKey);
+  if (pending) {
+    const resolved = await pending;
+    if (resolved) return cachedResponseToResponse(resolved);
+  }
+  beginPendingModelResponse(cacheKey);
+
   const reserved = worstCaseCents(price, outputTokens, estimateInputTokensFromBody(bodyText));
   const reservation = await reserveBudget(env, claims.run_id, reserved, limitsFromEnv(env));
-  if (reservation instanceof Response) return reservation;
+  if (reservation instanceof Response) {
+    resolvePendingModelResponse(cacheKey, null);
+    return reservation;
+  }
 
   let upstream: Response;
   try {
@@ -50,11 +71,13 @@ export async function handleOpenAI(
     });
   } catch {
     await reservation.release();
+    resolvePendingModelResponse(cacheKey, null);
     return error('upstream_unavailable', 502);
   }
 
   if (!upstream.ok) {
     await reservation.release();
+    resolvePendingModelResponse(cacheKey, null);
     return sanitizeUpstream(upstream);
   }
 
@@ -63,13 +86,21 @@ export async function handleOpenAI(
   headers.set('x-agent-proxy-remaining-global-usd-cents', String(reservation.remainingGlobalUsdCents));
   const contentType = upstream.headers.get('content-type') ?? '';
   if (contentType.includes('text/event-stream')) {
-    const [clientStream, meterStream] = upstream.body!.tee();
-    ctx.waitUntil(parseUsageFromSse(meterStream)
-      .then((usage) => {
-        const actual = actualCents(price, usage, reserved);
-        return reservation.consume(actual, usageEvent(reservation.requestId, model, route, reserved, actual, usage, 'ok'));
-      })
-      .catch(() => reservation.consume(reserved, usageEvent(reservation.requestId, model, route, reserved, reserved, {}, 'metering_error'))));
+    const [clientStream, cacheAndMeterStream] = upstream.body!.tee();
+    const [meterStream, cacheStream] = cacheAndMeterStream.tee();
+    ctx.waitUntil(Promise.all([
+      parseUsageFromSse(meterStream)
+        .then((usage) => {
+          const actual = actualCents(price, usage, reserved);
+          return reservation.consume(actual, usageEvent(reservation.requestId, model, route, reserved, actual, usage, 'ok'));
+        })
+        .catch(() => reservation.consume(reserved, usageEvent(reservation.requestId, model, route, reserved, reserved, {}, 'metering_error'))),
+      new Response(cacheStream).text()
+        .then((text) => {
+          storeCachedModelResponse(cacheKey, { status: upstream.status, headers, body: text });
+        })
+        .catch(() => resolvePendingModelResponse(cacheKey, null)),
+    ]));
     return new Response(clientStream, { status: upstream.status, headers });
   }
 
@@ -77,6 +108,7 @@ export async function handleOpenAI(
   const usage = parseUsage(text);
   const actual = actualCents(price, usage ?? {}, reserved);
   await reservation.consume(actual, usageEvent(reservation.requestId, model, route, reserved, actual, usage ?? {}, 'ok'));
+  storeCachedModelResponse(cacheKey, { status: upstream.status, headers, body: text });
   return new Response(text, { status: upstream.status, headers });
 }
 

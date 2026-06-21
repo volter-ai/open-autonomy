@@ -44,7 +44,15 @@ await Bun.write(
   '.agent-run/issue.json',
   await $`gh issue view ${pr} --json number,title,body,author --jq '{number,title,body,user:{login:.author.login}}'`.text(),
 );
-await Bun.write('.agent-run/merge-blockers.json', await $`gh issue view ${pr} --json labels,comments`.text());
+// Native PR reviews (the Approve / Request-changes button) feed the merge gate's human-resolution path.
+// Best-effort: if the API call fails, the gate degrades to the AI-only path (reviews: []), never breaks.
+const blockers = JSON.parse(await $`gh issue view ${pr} --json labels,comments`.text()) as Record<string, unknown>;
+const reviewRepo = (await $`gh repo view --json nameWithOwner --jq .nameWithOwner`.nothrow().text()).trim();
+const reviewsJson = reviewRepo
+  ? await $`gh api repos/${reviewRepo}/pulls/${pr}/reviews --jq '[.[] | {state, author:{login:.user.login}, submittedAt:.submitted_at, commitId:.commit_id}]'`.nothrow().text()
+  : '';
+try { blockers.reviews = JSON.parse(reviewsJson); } catch { blockers.reviews = []; }
+await Bun.write('.agent-run/merge-blockers.json', JSON.stringify(blockers));
 await Bun.write('.agent-run/pr-comments.json', await $`gh issue view ${pr} --json comments --jq '.comments'`.text());
 // Build the review target from the declared TARGET_REF + the PR metadata (gh) — NOT from the github
 // event file ($GITHUB_EVENT_PATH), which is a github-runner artifact absent on other substrates. The

@@ -86,22 +86,40 @@ export function decideMerge(target: AgentTarget, ci: CiDecision, review: Reviewe
   if (ci.decision !== 'pass') {
     return { decision: ci.decision, reason: `CI gate did not pass: ${ci.reason}` };
   }
+  // Review is required — by the AI reviewer OR a human. A native human review on the CURRENT head SHA is
+  // the human's judgment: Approve merges (it overrides the AI's risk/needs-human verdict — CI and hard
+  // blocks above already gated it); Request-changes blocks. SHA-binding ensures they judged THIS version.
+  const human = humanResolution(context.blockers);
+  const onCurrentSha = !!human && human.sha === reviewedHeadSha;
+  if (human && onCurrentSha && human.decision === 'reject') {
+    return { decision: 'human_required', reason: `human requested changes (native review by ${human.login})` };
+  }
+  if (human && onCurrentSha && human.decision === 'approve') {
+    return { decision: 'merge', reason: `human approved via native review (${human.login}) on ${reviewedHeadSha}; required CI passed` };
+  }
+  // No human approval: fall back to the AI reviewer's verdict.
   if (review.verdict !== 'pass') {
     if (review.failure_kind === 'model_error') {
       return { decision: 'blocked', reason: `review did not complete: ${review.summary}` };
     }
     return { decision: 'develop_retry', reason: `review failed: ${review.summary}` };
   }
-  if (review.human_required || review.risk !== 'low') {
-    return { decision: 'human_required', reason: `review requires human attention: ${review.risk} risk` };
+  if (review.human_required || review.risk !== 'low' || hasLabel(context.blockers, 'human-required')) {
+    return { decision: 'human_required', reason: `review requires a human; awaiting a native review (${review.risk} risk)` };
   }
   return { decision: 'merge', reason: 'review passed with low risk and required CI passed' };
+}
+
+function hasLabel(context: MergeBlockerContext | undefined, name: string): boolean {
+  return !!context?.labels?.some((label) => (label.name ?? '').toLowerCase() === name);
 }
 
 export function findMergeBlocker(context: MergeBlockerContext | undefined): string | undefined {
   const blockingLabel = context?.labels
     ?.map((label) => (label.name ?? '').toLowerCase())
-    .find((name) => ['agent-blocked', 'human-required', 'security', 'do-not-merge', 'no-automerge', 'hold', 'agent-develop-only', 'agent-review-only'].includes(name));
+    // `human-required` is NOT a hard block — it is the "needs a human review" marker, satisfied by a
+    // native human Approve (see decideMerge). The rest are hard maintainer blocks.
+    .find((name) => ['agent-blocked', 'security', 'do-not-merge', 'no-automerge', 'hold', 'agent-develop-only', 'agent-review-only'].includes(name));
   if (blockingLabel) return `maintainer blocking label present: ${blockingLabel}`;
 
   const latestSignal = context?.comments

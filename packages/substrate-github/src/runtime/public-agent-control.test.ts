@@ -569,6 +569,55 @@ describe('public agent CI, review, and merge gates', () => {
     }).decision).toBe('merge');
   });
 
+  test('merges on a native human Approve even when the AI flagged it risky', () => {
+    const target = { kind: 'pull_request' as const, issue: 7, pull_request: 7, branch: 'agent/issue-7', head_sha: 'abc123', can_develop: true };
+    const ci = { decision: 'pass' as const, reason: 'ok', required: [{ name: 'ci', status: 'pass' as const, conclusion: 'SUCCESS' }] };
+    const risky = { verdict: 'pass' as const, risk: 'high' as const, human_required: true, summary: 'risky', findings: [] };
+    const d = decideMerge(target, ci, risky, {
+      blockers: { reviews: [{ state: 'APPROVED', author: { login: 'alice' }, submittedAt: '2026-06-20T11:00:00Z', commitId: 'abc123' }] },
+    });
+    expect(d.decision).toBe('merge');
+    expect(d.reason).toContain('human approved');
+  });
+
+  test('blocks on a native human Request-changes', () => {
+    const target = { kind: 'pull_request' as const, issue: 7, pull_request: 7, branch: 'agent/issue-7', head_sha: 'abc123', can_develop: true };
+    const ci = { decision: 'pass' as const, reason: 'ok', required: [{ name: 'ci', status: 'pass' as const, conclusion: 'SUCCESS' }] };
+    const passReview = { verdict: 'pass' as const, risk: 'low' as const, human_required: false, summary: 'ok', findings: [] };
+    const d = decideMerge(target, ci, passReview, {
+      blockers: { reviews: [{ state: 'CHANGES_REQUESTED', author: { login: 'alice' }, submittedAt: '2026-06-20T11:00:00Z', commitId: 'abc123' }] },
+    });
+    expect(d.decision).toBe('human_required');
+    expect(d.reason).toContain('requested changes');
+  });
+
+  test('a stale human approval (wrong SHA) does not merge a risky change', () => {
+    const target = { kind: 'pull_request' as const, issue: 7, pull_request: 7, branch: 'agent/issue-7', head_sha: 'abc123', can_develop: true };
+    const ci = { decision: 'pass' as const, reason: 'ok', required: [{ name: 'ci', status: 'pass' as const, conclusion: 'SUCCESS' }] };
+    const risky = { verdict: 'pass' as const, risk: 'high' as const, human_required: true, summary: 'risky', findings: [] };
+    const d = decideMerge(target, ci, risky, {
+      blockers: { reviews: [{ state: 'APPROVED', author: { login: 'alice' }, submittedAt: '2026-06-20T11:00:00Z', commitId: 'OLD_sha' }] },
+    });
+    expect(d.decision).toBe('human_required');
+  });
+
+  test('CI failure is not overridden by a human Approve', () => {
+    const target = { kind: 'pull_request' as const, issue: 7, pull_request: 7, branch: 'agent/issue-7', head_sha: 'abc123', can_develop: true };
+    const ciFail = { decision: 'human_required' as const, reason: 'required check missing', required: [] };
+    const passReview = { verdict: 'pass' as const, risk: 'low' as const, human_required: false, summary: 'ok', findings: [] };
+    const d = decideMerge(target, ciFail, passReview, {
+      blockers: { reviews: [{ state: 'APPROVED', author: { login: 'alice' }, submittedAt: '2026-06-20T11:00:00Z', commitId: 'abc123' }] },
+    });
+    expect(d.decision).not.toBe('merge');
+  });
+
+  test('a risky change with no human review still requires a human', () => {
+    const target = { kind: 'pull_request' as const, issue: 7, pull_request: 7, branch: 'agent/issue-7', head_sha: 'abc123', can_develop: true };
+    const ci = { decision: 'pass' as const, reason: 'ok', required: [{ name: 'ci', status: 'pass' as const, conclusion: 'SUCCESS' }] };
+    const risky = { verdict: 'pass' as const, risk: 'high' as const, human_required: true, summary: 'risky', findings: [] };
+    expect(decideMerge(target, ci, risky, {}).decision).toBe('human_required');
+  });
+
   test('allows the first bounded autopilot retry', () => {
     const decision = decideLoopBudget({
       kind: 'ci',

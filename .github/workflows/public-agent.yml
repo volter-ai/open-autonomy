@@ -94,7 +94,7 @@ jobs:
   publisher:
     needs: [setup, developer]
     runs-on: ubuntu-latest
-    permissions: { contents: write, id-token: write, pull-requests: write, issues: write }
+    permissions: { contents: write, id-token: write, actions: write, pull-requests: write, issues: write }
     env:
       GH_TOKEN: ${{ github.token }}
       ISSUE_REF: ${{ github.event.issue.number || github.event.inputs.issue_number || github.event.pull_request.number }}
@@ -122,6 +122,9 @@ jobs:
           git push --force origin "$branch"
           body="$(find .agent-run/bundle -name pr.md | head -1)"
           if [ -n "$body" ]; then gh pr create --base "${{ github.event.repository.default_branch }}" --head "$branch" --title "Agent run ir-developer-${{ github.run_id }}" --body-file "$body"; else gh pr create --base "${{ github.event.repository.default_branch }}" --head "$branch" --title "Agent run ir-developer-${{ github.run_id }}" --body "Automated agent run ir-developer-${{ github.run_id }}"; fi
+          head_sha="$(git rev-parse HEAD)"
+          pr_number="$(gh pr view "$branch" --json number --jq .number 2>/dev/null || echo "")"
+          gh workflow run ci.yml --ref "$branch" -f sha="$head_sha" -f pr="$pr_number" || echo "ci dispatch failed (non-fatal)"
   revoke:
     needs: [setup, developer, publisher]
     if: always() && needs.setup.result == 'success'

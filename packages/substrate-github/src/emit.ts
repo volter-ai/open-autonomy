@@ -111,7 +111,9 @@ function onLines(agent: IRAgent, kind: 'run' | 'launch'): string[] {
 // Realize an agent's capabilities (docs/CAPABILITIES.md) as a GitHub job `permissions:` block. Pure
 // authority → github's permission model; another substrate maps it differently or ignores it.
 function capsToPermissions(caps: string[]): string {
-  const p: Record<string, string> = { contents: 'write', 'id-token': 'write' };
+  // actions:write so the publisher can dispatch CI (workflow_dispatch) on the bot-opened PR head —
+  // bot PRs don't trigger pull_request CI (GITHUB_TOKEN anti-recursion), but workflow_dispatch is exempt.
+  const p: Record<string, string> = { contents: 'write', 'id-token': 'write', actions: 'write' };
   const grant = (k: string, lvl: string) => { if (p[k] !== 'write') p[k] = lvl; };
   for (const c of caps) {
     if (c === 'artifact:author') p['pull-requests'] = 'write';
@@ -380,6 +382,11 @@ function wrapperYml(name: string, agent: IRAgent): string {
     `          git push --force origin "$branch"`,
     `          body="$(find .agent-run/bundle -name pr.md | head -1)"`,
     `          if [ -n "$body" ]; then gh pr create --base "\${{ github.event.repository.default_branch }}" --head "$branch" --title "Agent run ${RID}" --body-file "$body"; else gh pr create --base "\${{ github.event.repository.default_branch }}" --head "$branch" --title "Agent run ${RID}" --body "Automated agent run ${RID}"; fi`,
+    // Bot-opened PRs don't trigger pull_request CI (GITHUB_TOKEN anti-recursion → action_required), but
+    // workflow_dispatch is exempt: dispatch CI on the PR head so it posts the required 'ci' commit status.
+    `          head_sha="$(git rev-parse HEAD)"`,
+    `          pr_number="$(gh pr view "$branch" --json number --jq .number 2>/dev/null || echo "")"`,
+    `          gh workflow run ci.yml --ref "$branch" -f sha="$head_sha" -f pr="$pr_number" || echo "ci dispatch failed (non-fatal)"`,
     `  revoke:`,
     `    needs: [setup, ${name}, publisher]`,
     `    if: always() && needs.setup.result == 'success'`,

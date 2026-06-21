@@ -3,6 +3,20 @@ on:
   push:
     branches: [main]
   pull_request:
+  workflow_dispatch:
+    inputs:
+      sha:
+        description: "commit SHA to test + post a 'ci' status on"
+        required: false
+        type: string
+      pr:
+        description: "PR number (context)"
+        required: false
+        type: string
+
+permissions:
+  contents: read
+  statuses: write
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
@@ -12,8 +26,21 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.sha || github.sha }}
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: 1.3.10
       - run: bun install --frozen-lockfile || bun install
-      - run: bun run check
+      - id: check
+        run: bun run check
+      - name: Post ci commit status
+        if: ${{ always() && github.event_name == 'workflow_dispatch' && github.event.inputs.sha }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          state=success; [ "${{ steps.check.outcome }}" = "success" ] || state=failure
+          gh api repos/${{ github.repository }}/statuses/${{ github.event.inputs.sha }} \
+            -f state="$state" -f context="ci" \
+            -f target_url="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" \
+            -f description="CI $state"

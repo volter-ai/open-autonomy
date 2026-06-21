@@ -20,13 +20,19 @@ const models = env('MODEL_ALLOWLIST', 'gpt-4o-mini');
 const maxUsdCents = env('PUBLIC_AGENT_RUN_MAX_USD_CENTS', '500');
 const maxRequests = env('PUBLIC_AGENT_RUN_MAX_REQUESTS', '60');
 
+// Route the mint into the proxy's reserved cron/system lane vs the user/event lane (see the proxy's
+// limit-ledger register()). A SCHEDULED run is a trusted, self-paced cron agent (pm/strategist) and
+// must never be starved by — or counted against — the user-triggered abuse caps; anything else (issue/
+// PR/comment/dispatch) is the user/event surface. GITHUB_EVENT_NAME is the substrate's trigger signal.
+const purpose = env('GITHUB_EVENT_NAME') === 'schedule' ? 'pm' : 'review';
+
 mkdirSync('.agent-run', { recursive: true });
 await Bun.write(
   '.agent-run/run-issue.json',
   JSON.stringify({ number: 0, title: 'agent run', body: '', user: { login: env('GITHUB_ACTOR', 'open-autonomy') } }),
 );
 
-const res = await $`bun scripts/model-proxy-mint.ts --issue .agent-run/run-issue.json --models ${models} --max-usd-cents ${maxUsdCents} --max-requests ${maxRequests}`
+const res = await $`bun scripts/model-proxy-mint.ts --issue .agent-run/run-issue.json --models ${models} --max-usd-cents ${maxUsdCents} --max-requests ${maxRequests} --purpose ${purpose}`
   .nothrow()
   .quiet();
 const out = res.stdout.toString() + res.stderr.toString();

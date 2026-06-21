@@ -264,6 +264,39 @@ describe('agent model proxy', () => {
     expect(await blocked.json()).toEqual({ error: { code: 'actor_active_run_limit_reached' } });
   });
 
+  test('reaps an expired (leaked) active run so the actor is not blocked forever', async () => {
+    const env = testEnv({ MAX_ACTIVE_RUNS_PER_ACTOR: '1' });
+    // A run whose token expires immediately, never released (the leak case: workflow died first).
+    await mint(env, ['gpt-5-mini'], 100, 3, { runId: 'run_leaked', expiresInSeconds: 1 });
+    await new Promise((resolve) => setTimeout(resolve, 1100));
+
+    // register() reaps the expired leaked run first, so the next mint must succeed despite cap=1.
+    const minted = await mint(env, ['gpt-5-mini'], 100, 3, { runId: 'run_fresh', issue: 2 });
+    expect(minted.ok).toBe(true);
+  });
+
+  test('admin reap frees expired active slots and reports the residual', async () => {
+    const env = testEnv({ MAX_ACTIVE_RUNS_PER_ACTOR: '10' });
+    await mint(env, ['gpt-5-mini'], 100, 3, { runId: 'run_exp', expiresInSeconds: 1 });
+    await mint(env, ['gpt-5-mini'], 100, 3, { runId: 'run_live', issue: 2, expiresInSeconds: 7200 });
+    await new Promise((resolve) => setTimeout(resolve, 1100));
+
+    const reaped = await requestJson(env, '/admin/limits/reap', {
+      method: 'POST',
+      headers: { 'x-admin-token': 'admin' },
+    });
+    expect(reaped.ok).toBe(true);
+    expect(reaped.reaped).toBe(1);
+    expect(reaped.active_global).toBe(1);
+    expect(reaped.still_active.map((r: any) => r.run_id)).toEqual(['run_live']);
+  });
+
+  test('reap rejects without the admin token', async () => {
+    const env = testEnv();
+    const res = await request(env, '/admin/limits/reap', { method: 'POST' });
+    expect(res.status).toBe(401);
+  });
+
   test('enforces repo daily run limits across actors', async () => {
     const env = testEnv({
       MAX_ACTIVE_RUNS_PER_ACTOR: '10',
@@ -877,7 +910,7 @@ async function mint(
   models: string[],
   maxUsdCents: number,
   maxRequests: number,
-  overrides: { runId?: string; repo?: string; issue?: number; actor?: string } = {},
+  overrides: { runId?: string; repo?: string; issue?: number; actor?: string; expiresInSeconds?: number } = {},
 ) {
   return await requestJson(env, '/admin/runs/mint', {
     method: 'POST',
@@ -890,6 +923,7 @@ async function mint(
       models,
       max_usd_cents: maxUsdCents,
       max_requests: maxRequests,
+      expires_in_seconds: overrides.expiresInSeconds,
     },
   });
 }

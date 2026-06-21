@@ -13,6 +13,7 @@ on:
           - status
           - run-status
           - revoke
+          - reap
       run_id:
         description: Required for run-status and revoke
         required: false
@@ -47,6 +48,11 @@ jobs:
               curl -fsS \
                 -H "x-admin-token: ${MODEL_PROXY_ADMIN_TOKEN}" \
                 "${MODEL_PROXY_URL}/admin/limits/status" | jq .
+              ;;
+            reap)
+              curl -fsS -X POST \
+                -H "x-admin-token: ${MODEL_PROXY_ADMIN_TOKEN}" \
+                "${MODEL_PROXY_URL}/admin/limits/reap" | jq .
               ;;
             run-status)
               if [[ -z "$RUN_ID" ]]; then

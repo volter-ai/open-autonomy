@@ -87,6 +87,14 @@ async function route(req: Request, env: Env, ctx: ExecutionContext): Promise<Res
     if (req.method !== 'GET') return methodNotAllowed();
     return json(await new LimitLedgerClient(env.LIMITS).status());
   }
+  // Bulk recovery: free the active-run slots of every run whose token has already expired (leaked
+  // runs from workflows that died before their release step) and report what remains active. The
+  // ledger also reaps lazily on each register, so this is the operator escape hatch, not the only path.
+  if (path === '/admin/limits/reap') {
+    if (!isAdmin(req, env)) return error('auth_failed', 401);
+    if (req.method !== 'POST') return methodNotAllowed();
+    return json(await new LimitLedgerClient(env.LIMITS).reap());
+  }
   // GitHub Sponsors webhook: maintains the sponsor account's active-sponsor list (no token; HMAC-verified).
   if (path === '/webhooks/github-sponsors') return handleSponsorsWebhook(req, env, sponsorAccount(env));
 

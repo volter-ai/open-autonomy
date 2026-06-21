@@ -27,7 +27,11 @@ interface LedgerState {
   consumed_usd_cents: number;
   reserved_usd_cents: number;
   reservations: Record<string, { amount: number; expires_at_ms: number; account?: string; issue?: number; actor?: string }>;
-  runs: Record<string, { repo: string; issue: number; actor: string; active: boolean }>;
+  // `expires_at_ms` is the run token's own expiry. An active run whose token has expired can no
+  // longer spend, so it must not keep holding an active-run slot — reapExpiredRuns() frees it. This
+  // is the safety net for the leak case: a workflow that dies before its release step would otherwise
+  // pin the actor/repo/global active counters forever (see actor_active_run_limit_reached).
+  runs: Record<string, { repo: string; issue: number; actor: string; active: boolean; expires_at_ms?: number }>;
   // The funding tree. Every project (repo slug) and named root (e.g. "volter") is an account.
   // balance = granted_in - granted_out - consumed. mint adds money at a node (the only way credits
   // enter the system); grant transfers between nodes (conserves total); spend consumes (leaves).
@@ -172,6 +176,7 @@ export class LimitLedger implements DurableObject {
     if (op === 'project') return json(this.projectView(String(body.account)));
     if (op === 'grant_surplus') return json(await this.grantSurplus(String(body.from), String(body.to), Number(body.amount_usd_cents)));
     if (op === 'status') return json(this.snapshot());
+    if (op === 'reap') return json(await this.reapAdmin());
     return json({ ok: false, error: 'unknown_op' }, { status: 400 });
   }
 
@@ -338,6 +343,7 @@ export class LimitLedger implements DurableObject {
 
   private async register(claims: RunClaims, config: LimitConfig): Promise<Record<string, unknown>> {
     this.rolloverIfNeeded();
+    this.reapExpiredRuns();
     if (this.state.runs[claims.run_id]) return { ok: false, error: 'run_already_registered' };
 
     const issueKey = issueKeyFor(claims);
@@ -371,7 +377,13 @@ export class LimitLedger implements DurableObject {
     this.state.runs_by_repo_day[claims.repo] = repoRuns + 1;
     this.state.runs_by_actor_day[claims.actor] = actorRuns + 1;
     this.state.runs_by_issue_day[issueKey] = issueRuns + 1;
-    this.state.runs[claims.run_id] = { repo: claims.repo, issue: claims.issue, actor: claims.actor, active: true };
+    this.state.runs[claims.run_id] = {
+      repo: claims.repo,
+      issue: claims.issue,
+      actor: claims.actor,
+      active: true,
+      expires_at_ms: Date.parse(claims.expires_at) || undefined,
+    };
     await this.save();
     return { ok: true };
   }
@@ -650,6 +662,45 @@ export class LimitLedger implements DurableObject {
       }
     }
   }
+
+  // Free the active-run slot of any run whose token has already expired. A run token is useless once
+  // expired (run-budget and token verification both reject it), so an expired run that is still
+  // marked active can only be a leak — a workflow that crashed/cancelled before its release step.
+  // Without this the leaked run pins active_global / active_by_repo / active_by_actor forever, which
+  // is exactly how the actor cap was reached and every mint started returning 429
+  // actor_active_run_limit_reached. Idempotent; mutates state but does not save (callers save).
+  private reapExpiredRuns(): void {
+    const now = Date.now();
+    for (const run of Object.values(this.state.runs)) {
+      if (!run.active) continue;
+      // No recorded expiry => pre-TTL run record; leave it for an explicit complete/revoke.
+      if (typeof run.expires_at_ms !== 'number') continue;
+      if (run.expires_at_ms > now) continue;
+      run.active = false;
+      this.state.active_global = Math.max(0, this.state.active_global - 1);
+      this.state.active_by_repo[run.repo] = Math.max(0, (this.state.active_by_repo[run.repo] ?? 0) - 1);
+      this.state.active_by_actor[run.actor] = Math.max(0, (this.state.active_by_actor[run.actor] ?? 0) - 1);
+    }
+  }
+
+  // Admin bulk recovery: free active slots for every run whose token has expired, then return what
+  // remains active. Surfaces the leak set without enumerating-and-revoking one run at a time, and is
+  // the operator escape hatch when active counters drift from reality.
+  private async reapAdmin(): Promise<Record<string, unknown>> {
+    const before = this.state.active_global;
+    this.reapExpiredRuns();
+    await this.save();
+    return {
+      ok: true,
+      reaped: before - this.state.active_global,
+      active_global: this.state.active_global,
+      active_by_actor: this.state.active_by_actor,
+      active_by_repo: this.state.active_by_repo,
+      still_active: Object.entries(this.state.runs)
+        .filter(([, r]) => r.active)
+        .map(([run_id, r]) => ({ run_id, repo: r.repo, actor: r.actor, expires_at_ms: r.expires_at_ms ?? null })),
+    };
+  }
 }
 
 function emptyAccount(): Account {
@@ -924,6 +975,10 @@ export class LimitLedgerClient {
 
   status() {
     return this.rpc<unknown>('status');
+  }
+
+  reap() {
+    return this.rpc<{ ok: true; reaped: number; active_global: number }>('reap');
   }
 }
 

@@ -145,14 +145,21 @@ export function compileLocal(ir: AutonomyIR, opts: { runner?: RunnerName } = {})
   // Copies: skill behaviors + the profile's resources at the repo root, so the agents' cwd-relative gh +
   // script paths resolve unchanged. Drop any github-only resources (e.g. repo CI under .github/).
   const copies: Array<{ from: string; to: string }> = [];
-  for (const agent of Object.values(ir.agents)) {
-    if (!isScript(agent.behavior)) {
-      // The local install ships launch prompts for BOTH harnesses (codex `$name`, claude `/name`) and the
-      // harness is a runtime choice (TERMFLEET_AGENT). Each discovers skills from its OWN directory —
-      // codex from `.codex/skills/`, Claude Code from `.claude/skills/` — so install the skill in both.
-      copies.push({ from: `skills/${agent.behavior}/SKILL.md`, to: `.codex/skills/${agent.behavior}/SKILL.md` });
-      copies.push({ from: `skills/${agent.behavior}/SKILL.md`, to: `.claude/skills/${agent.behavior}/SKILL.md` });
-    }
+  for (const [role, agent] of Object.entries(ir.agents)) {
+    if (isScript(agent.behavior)) continue;
+    const skill = `skills/${agent.behavior}/SKILL.md`;
+    // Canonical skill doc, installed where each harness keeps skills (immutable to agents). Kept for
+    // reference / model-invoked discovery; it is NOT the launch mechanism (see below).
+    copies.push({ from: skill, to: `.codex/skills/${agent.behavior}/SKILL.md` });
+    copies.push({ from: skill, to: `.claude/skills/${agent.behavior}/SKILL.md` });
+    // Launch prompt = the skill text INLINED. This is the only mechanism proven to work headlessly (the
+    // github harness inlines the same SKILL.md text). A `/name` token is a *slash command* (resolved from
+    // .claude/commands/, which we don't ship) and `.claude/skills/` skills are model-invoked, not
+    // slash-invoked — so neither `/name` nor codex's `$name` resolves at launch. Feeding the role
+    // instructions directly to the CLI (via termfleet --prompt-file) makes the agent assume its role with
+    // no discovery dependency, and is harness-agnostic (same prompt drives claude or codex).
+    copies.push({ from: skill, to: `scripts/prompts/codex/${role}.txt` });
+    copies.push({ from: skill, to: `scripts/prompts/claude/${role}.txt` });
   }
   for (const r of ir.resources) {
     if (!r.startsWith('.github/')) copies.push({ from: r, to: r });

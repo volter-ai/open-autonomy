@@ -55,33 +55,48 @@ describe('upgrade = recompile (regenerate derived, keep owned inputs, prune orph
     expect(readFileSync(join(target, '.open-autonomy/roadmap.yml'), 'utf8')).toBe('MY roadmap\n');
   });
 
-  test('prunes orphaned derived files (opt-in), but never runtime state outside derived dirs', () => {
+  // The prior install's manifest is the provenance: prune may only delete paths it lists.
+  const priorManifest = (files: string[]) =>
+    JSON.stringify({ schema: 'open-autonomy.generated.v1', files }, null, 2);
+
+  test('prunes manifest-listed orphans (opt-in), but never files outside the manifest', () => {
     const { profile, target } = dirs();
-    write(target, 'scripts/agent-upgrade.ts', 'retired orchestrator\n'); // orphan in a derived dir
-    write(target, '.github/workflows/open-autonomy-upgrade.yml', 'retired workflow\n'); // orphan
-    write(target, '.open-autonomy/strategist-archive.json', '{"runtime":true}\n'); // runtime state — keep
-    const out: CompileOutput = {
-      generated: { 'scripts/agent-pm.ts': 'pm\n' },
-      copies: [],
-    };
+    // The PRIOR install generated these (recorded in its manifest):
+    write(target, '.open-autonomy/generated.json', priorManifest(['scripts/agent-pm.ts', 'scripts/agent-upgrade.ts', '.github/workflows/open-autonomy-upgrade.yml']));
+    write(target, 'scripts/agent-upgrade.ts', 'retired orchestrator\n'); // OA-generated, now orphaned
+    write(target, '.github/workflows/open-autonomy-upgrade.yml', 'retired workflow\n'); // ditto
+    write(target, 'scripts/my-dev-tool.ts', 'hand-authored — NOT in the manifest\n'); // must survive
+    const out: CompileOutput = { generated: { 'scripts/agent-pm.ts': 'pm\n' }, copies: [] };
     const plan = planUpgrade(out, profile, target, { prune: true });
     expect(plan.changes).toContainEqual({ path: 'scripts/agent-upgrade.ts', action: 'delete' });
     expect(plan.changes).toContainEqual({ path: '.github/workflows/open-autonomy-upgrade.yml', action: 'delete' });
-    expect(plan.changes.find((c) => c.path === '.open-autonomy/strategist-archive.json')).toBeUndefined();
+    expect(plan.changes.find((c) => c.path === 'scripts/my-dev-tool.ts')).toBeUndefined();
     applyUpgrade(plan, out, profile, target);
     expect(existsSync(join(target, 'scripts/agent-upgrade.ts'))).toBe(false);
-    expect(existsSync(join(target, '.github/workflows/open-autonomy-upgrade.yml'))).toBe(false);
-    expect(existsSync(join(target, '.open-autonomy/strategist-archive.json'))).toBe(true);
+    expect(existsSync(join(target, 'scripts/my-dev-tool.ts'))).toBe(true); // never in the manifest → untouchable
   });
 
-  test('does NOT prune by default — hand-authored files in derived dirs survive', () => {
+  test('with no manifest, prune deletes NOTHING (legacy install / non-installation dir)', () => {
     const { profile, target } = dirs();
-    write(target, 'scripts/my-dev-tool.ts', 'hand-authored, not from the compile\n');
+    write(target, 'scripts/my-dev-tool.ts', 'hand-authored, no manifest present\n');
+    write(target, 'scripts/another.ts', 'also hand-authored\n');
+    const out: CompileOutput = { generated: { 'scripts/agent-pm.ts': 'pm\n' }, copies: [] };
+    const plan = planUpgrade(out, profile, target, { prune: true }); // prune ON, but no manifest
+    expect(plan.changes.find((c) => c.action === 'delete')).toBeUndefined();
+    applyUpgrade(plan, out, profile, target);
+    expect(existsSync(join(target, 'scripts/my-dev-tool.ts'))).toBe(true);
+    expect(existsSync(join(target, 'scripts/another.ts'))).toBe(true);
+  });
+
+  test('does NOT prune by default, even with a manifest present', () => {
+    const { profile, target } = dirs();
+    write(target, '.open-autonomy/generated.json', priorManifest(['scripts/agent-upgrade.ts']));
+    write(target, 'scripts/agent-upgrade.ts', 'orphan, but prune not requested\n');
     const out: CompileOutput = { generated: { 'scripts/agent-pm.ts': 'pm\n' }, copies: [] };
     const plan = planUpgrade(out, profile, target); // no { prune: true }
     expect(plan.changes.find((c) => c.action === 'delete')).toBeUndefined();
     applyUpgrade(plan, out, profile, target);
-    expect(existsSync(join(target, 'scripts/my-dev-tool.ts'))).toBe(true); // not deleted
+    expect(existsSync(join(target, 'scripts/agent-upgrade.ts'))).toBe(true);
   });
 
   test('no changes when the install already matches the compile', () => {

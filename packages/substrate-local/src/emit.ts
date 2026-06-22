@@ -9,7 +9,7 @@ import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { stringify as stringifyYaml } from 'yaml';
-import { cronOf, emitAutonomy, isScript } from '@open-autonomy/core';
+import { cronOf, emitAutonomy, isScript, withGeneratedManifest } from '@open-autonomy/core';
 import type { AutonomyIR, CompileOutput } from '@open-autonomy/core';
 import { SUPPORTED_RUNNERS, type RunnerName } from '@open-autonomy/core';
 // Only the shared portable runtime is borrowed from the github substrate (its neutral relocation is the
@@ -160,5 +160,5 @@ export function compileLocal(ir: AutonomyIR, opts: { runner?: RunnerName } = {})
   for (const r of ir.resources) {
     if (!r.startsWith('.github/')) copies.push({ from: r, to: r });
   }
-  return { generated, copies };
+  return withGeneratedManifest({ generated, copies });
 }

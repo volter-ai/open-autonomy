@@ -6,7 +6,7 @@ import { readFileSync, readdirSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { stringify as stringifyYaml } from 'yaml';
-import { cfg, cronOf, emitAutonomy, isScript } from '@open-autonomy/core';
+import { cfg, cronOf, emitAutonomy, isScript, withGeneratedManifest } from '@open-autonomy/core';
 import type { AutonomyIR, CompileOutput, IRAgent } from '@open-autonomy/core';
 
 // The operator control plane (the github surface of the Runner contract). Single source of truth is
@@ -458,5 +458,5 @@ export function compileGithub(ir: AutonomyIR): CompileOutput {
     }
   }
   for (const r of ir.resources) copies.push({ from: r, to: r });
-  return { generated, copies };
+  return withGeneratedManifest({ generated, copies });
 }

@@ -5,9 +5,10 @@
 // file the new compile no longer produces simply isn't reproduced — it's an orphan, removed. The
 // authority on "what is derived" is the compile itself (`CompileOutput.generated` + `.copies`), not a
 // prefix heuristic.
-import { existsSync, mkdirSync, readFileSync, readdirSync, statSync, unlinkSync, writeFileSync } from 'node:fs';
-import { dirname, join, relative } from 'node:path';
+import { existsSync, mkdirSync, readFileSync, unlinkSync, writeFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
 import type { CompileOutput } from './ir';
+import { readGeneratedManifest } from './file-manifest';
 
 // Files the INSTALL owns. `compile` produces them (from the profile's seed), but each installation
 // customizes them — its roadmap, its north-star constitution, its repo shell — so on upgrade they are
@@ -32,12 +33,6 @@ export function isInstallOwned(path: string): boolean {
   return installOwned.has(path);
 }
 
-// Directories that are 100% derived output (the generated workflows, the injected runtime, generated
-// skill copies). A file under one of these that the compile no longer produces is a stale orphan and is
-// removed. Deliberately NOT `.open-autonomy/` (mixes seed + runtime state like strategist-archive.json)
-// and NOT the repo root (install-owned shell).
-const PRUNE_DIRS = ['.github/workflows/', 'scripts/', '.codex/skills/'];
-
 export type UpgradeAction = 'add' | 'update' | 'delete';
 export interface UpgradeChange {
   path: string;
@@ -61,13 +56,13 @@ function desiredContents(out: CompileOutput, profileDir: string): Map<string, Bu
  *  install-owned inputs only if missing, and — ONLY when `opts.prune` is set — prune derived orphans
  *  (within PRUNE_DIRS).
  *
- *  Prune is OPT-IN and off by default on purpose. The prune deletes any file in PRUNE_DIRS (which
- *  includes `scripts/`) that the current compile does not produce — which is correct for a clean
- *  installation, but CATASTROPHIC against a source/dev checkout where those dirs also hold hand-authored
- *  files the compile legitimately never emits (it would delete all of them). Deletion is therefore
- *  never planned unless the caller explicitly asks for it; the CLI gates it behind `--prune` AND
- *  `--apply`. (A future, fully-safe prune would track a manifest of OA-generated paths and only delete
- *  files OA itself created — see ROADMAP.) */
+ *  Prune deletes ONLY files THIS install's manifest (`.open-autonomy/generated.json`) records as
+ *  open-autonomy-generated and that the new compile no longer produces. Ownership is recorded, not
+ *  guessed: a hand-authored file (in `scripts/` or anywhere) is never in the manifest, so it can never
+ *  be pruned — no matter its folder name. If there is no manifest (a legacy install, or a directory that
+ *  isn't an installation at all), prune finds nothing and deletes nothing. Prune is also OPT-IN
+ *  (`opts.prune`); the CLI requires `--prune` AND `--apply` — belt and suspenders on top of the
+ *  manifest scoping. (This is the Terraform/Helm model: manage and destroy only what you provably own.) */
 export function planUpgrade(
   out: CompileOutput,
   profileDir: string,
@@ -86,8 +81,10 @@ export function planUpgrade(
     else if (!readFileSync(tp).equals(content)) changes.push({ path, action: 'update' });
   }
   if (opts.prune) {
-    for (const installed of installedFilesUnder(targetDir, PRUNE_DIRS)) {
-      if (!desired.has(installed) && !isInstallOwned(installed)) changes.push({ path: installed, action: 'delete' });
+    // Orphans = paths the PRIOR install recorded as generated, that this compile no longer produces.
+    // Scoped to the manifest, so only open-autonomy's own files can ever be deleted.
+    for (const owned of readGeneratedManifest(targetDir)) {
+      if (!desired.has(owned) && existsSync(join(targetDir, owned))) changes.push({ path: owned, action: 'delete' });
     }
   }
   changes.sort((a, b) => a.path.localeCompare(b.path));
@@ -113,26 +110,4 @@ export function applyUpgrade(plan: UpgradePlan, out: CompileOutput, profileDir: 
 function renderNotes(changes: UpgradeChange[]): string[] {
   if (changes.length === 0) return ['Already up to date with the open-autonomy template.'];
   return [`${changes.length} change(s):`, ...changes.map((c) => `- ${c.action}: ${c.path}`)];
-}
-
-function installedFilesUnder(root: string, dirs: string[]): string[] {
-  const out: string[] = [];
-  for (const dir of dirs) {
-    const base = join(root, dir);
-    if (!existsSync(base) || !statSync(base).isDirectory()) continue;
-    for (const abs of walk(base)) out.push(relative(root, abs));
-  }
-  return out;
-}
-
-function walk(root: string): string[] {
-  const out: string[] = [];
-  for (const name of readdirSync(root)) {
-    if (name === '.git' || name === 'node_modules' || name === '.agent-run') continue;
-    const path = join(root, name);
-    const stat = statSync(path);
-    if (stat.isDirectory()) out.push(...walk(path));
-    else if (stat.isFile()) out.push(path);
-  }
-  return out;
 }

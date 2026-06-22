@@ -7,5 +7,6 @@ export * from './runner';
 export * from './cli';
 export * from './conformance';
 export * from './materialize';
+export * from './file-manifest';
 export * from './ir-yaml';
 export * from './upgrade';

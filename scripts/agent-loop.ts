@@ -8,6 +8,11 @@
 // The loop names neither a provider nor `gh`. The same loop runs on github and local; only the injected
 // tools differ. That is the seam that lets a substrate become a capability-enclosing agent wrapper.
 
+import { spawnSync } from 'node:child_process';
+import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+
 /** A capability tool the agent may call. `run` is the substrate's implementation; the loop is blind to it. */
 export interface Tool {
   name: string;
@@ -87,30 +92,74 @@ export function proxyTurn(model: string, maxTokens = 1024): ModelTurn {
   };
 }
 
-/** The decision primitive: run an agent to a schema-validated artifact over the box endpoint, tracing each
- *  turn to stderr (followable). This is what every deterministic harness calls instead of a single-shot
- *  completion — the model reasons with its (read-only, by default) tools and submits a structured result. */
+/** The decision primitive: run a REAL agent (Claude Code) to a schema-validated artifact. The agent
+ *  investigates with its read-only tools and WRITES its decision to a file — a tool call lands even for
+ *  reasoning models whose final assistant TEXT comes back empty (e.g. DeepSeek over the Messages wire), so
+ *  the result survives where a "print the JSON" turn would be lost. We then parse that file and validate it
+ *  against the schema. The box endpoint (ANTHROPIC_BASE_URL + key) is provisioned by the substrate; every
+ *  model slot is pinned to the one allowed model, and the run is read-only except for the decision file. */
 export async function decide<T = unknown>(opts: {
   system: string;
   goal: string;
   schema: Record<string, unknown>;
-  tools?: Tool[];
+  tools?: Tool[]; // accepted for compatibility; Claude Code brings its own read tools
   model?: string;
-  maxIterations?: number;
-  maxTokens?: number;
+  maxIterations?: number; // accepted for compatibility (the real agent self-bounds)
+  maxTokens?: number; // accepted for compatibility
 }): Promise<T> {
-  const model = opts.model || process.env.PUBLIC_AGENT_MODEL || 'gpt-4o-mini';
-  const { artifact } = await runAgent<T>({
-    system: opts.system,
-    goal: opts.goal,
-    tools: opts.tools ?? [],
-    schema: opts.schema,
-    turn: proxyTurn(model, opts.maxTokens ?? 1200),
-    maxIterations: opts.maxIterations ?? 8,
-    onTrace: (e) =>
-      console.error(`  [turn ${e.iteration}] ${e.calls.map((c) => c.name).join(', ') || e.thought.slice(0, 70)}`),
-  });
-  return artifact;
+  const model = opts.model || process.env.PUBLIC_AGENT_MODEL || 'deepseek/deepseek-v4-flash';
+  const dir = mkdtempSync(join(tmpdir(), 'oa-decide-'));
+  const outFile = join(dir, 'decision.json');
+  const prompt = [
+    opts.system,
+    '',
+    opts.goal,
+    '',
+    'Investigate using your read-only tools, then record your decision.',
+    `WRITE your final answer as a single JSON object to: ${outFile}`,
+    'It MUST satisfy this JSON Schema (every required field present, allowed enum values only):',
+    JSON.stringify(opts.schema),
+    `The ONLY file you may write is ${outFile}. Do not modify the repository.`,
+  ].join('\n');
+  const env = {
+    ...process.env,
+    ANTHROPIC_MODEL: model,
+    ANTHROPIC_DEFAULT_HAIKU_MODEL: model,
+    ANTHROPIC_SMALL_FAST_MODEL: model,
+    CLAUDE_CODE_DISABLE_NONSTREAMING_FALLBACK: '1',
+    DISABLE_TELEMETRY: '1',
+    DISABLE_ERROR_REPORTING: '1',
+    CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: '1',
+  };
+  try {
+    for (let attempt = 1; attempt <= 2; attempt++) {
+      const res = spawnSync(
+        'claude',
+        ['-p', '--model', model, '--allowedTools', 'Read', 'Glob', 'Grep', 'Write', '--permission-mode', 'default'],
+        { input: prompt, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024, env },
+      );
+      console.error(`  [decide] claude attempt ${attempt} (exit ${res.status ?? 1})`);
+      // Prefer the written file; fall back to salvaging JSON from stdout if the agent printed it instead.
+      const artifact = readDecisionFile(outFile, opts.schema) ?? salvageSubmission(res.stdout || '', opts.schema);
+      if (artifact) return artifact as T;
+    }
+    throw new Error(`decide: agent produced no schema-valid decision (model=${model})`);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+}
+
+/** Read the agent's written decision file and accept it only if it is a schema-valid object. */
+function readDecisionFile(file: string, schema: Record<string, unknown>): Record<string, unknown> | null {
+  try {
+    const obj = JSON.parse(readFileSync(file, 'utf8'));
+    if (obj && typeof obj === 'object' && !Array.isArray(obj) && missingRequired(schema, obj).length === 0) {
+      return obj as Record<string, unknown>;
+    }
+  } catch {
+    /* missing or invalid */
+  }
+  return null;
 }
 
 const FINISH = 'submit';

@@ -46,6 +46,8 @@ jobs:
           PUBLIC_AGENT_RUN_MAX_USD_CENTS: ${{ vars.PUBLIC_AGENT_RUN_MAX_USD_CENTS || '500' }}
           PUBLIC_AGENT_RUN_MAX_REQUESTS: ${{ vars.PUBLIC_AGENT_RUN_MAX_REQUESTS || '60' }}
         run: bun scripts/provision-model-endpoint.ts
+      - name: install Claude Code CLI
+        run: npm install -g "@anthropic-ai/claude-code@${{ vars.PUBLIC_AGENT_CLAUDE_CODE_VERSION || 'latest' }}" && claude --version
       - run: bun scripts/agent-reviewer.ts
       - uses: actions/upload-artifact@v4
         if: always()

@@ -1,8 +1,8 @@
 import { describe, expect, test } from 'bun:test';
 import { missingRequired, salvageSubmission } from './agent-loop.js';
 
-// decide() runs a real agent (Claude Code) end-to-end, so it isn't unit-tested here; these cover the pure
-// validation helpers that gate what the agent is allowed to return — the trust backstop on the artifact.
+// runClaudeAgent runs a real agent (Claude Code) end-to-end, so it isn't unit-tested here; these cover the
+// pure validation helpers that gate what the agent is allowed to return — the trust backstop on the result.
 const schema = {
   type: 'object',
   properties: { decision: { type: 'string' }, reason: { type: 'string' } },

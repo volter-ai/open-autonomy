@@ -210,8 +210,8 @@ function modelSetupStep(agent: IRAgent): string[] {
     `          PUBLIC_AGENT_RUN_MAX_USD_CENTS: \${{ vars.PUBLIC_AGENT_RUN_MAX_USD_CENTS || '500' }}`,
     `          PUBLIC_AGENT_RUN_MAX_REQUESTS: \${{ vars.PUBLIC_AGENT_RUN_MAX_REQUESTS || '60' }}`,
     `        run: bun scripts/provision-model-endpoint.ts`,
-    // Decisions run a real agent: decide() spawns Claude Code (investigate read-only, write a
-    // schema-validated artifact). So a model-using deterministic agent needs the CLI on its box.
+    // Decisions run a real agent: runClaudeAgent spawns Claude Code (investigate, write a schema-validated
+    // result). So a model-using deterministic agent needs the CLI on its box.
     `      - name: install Claude Code CLI`,
     `        run: npm install -g "@anthropic-ai/claude-code@\${{ vars.PUBLIC_AGENT_CLAUDE_CODE_VERSION || 'latest' }}" && claude --version`,
   ];

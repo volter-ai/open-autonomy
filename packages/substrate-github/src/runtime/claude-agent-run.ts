@@ -233,7 +233,9 @@ async function main(): Promise<void> {
   ].join('\n'));
 
   let exitCode = result.exitCode;
-  if (exitCode === 0 && changedFiles().length === 0 && !existsSync(join(artifactsDir, 'blocked.md'))) {
+  // A raw run's deliverable is a code change; no changes ⇒ blocked. But a result-schema agent's deliverable
+  // IS the typed result (e.g. a reviewer's verdict) — it legitimately changes no files, so don't block it.
+  if (!schema && exitCode === 0 && changedFiles().length === 0 && !existsSync(join(artifactsDir, 'blocked.md'))) {
     exitCode = 1;
     finalMessage = [
       finalMessage.trim(),

@@ -288,6 +288,13 @@ function wrapperYml(name: string, agent: IRAgent): string {
   // A declared result schema flows into the run: the agent must emit a value validating against it, which
   // becomes the bundle's result.json (the typed seam a thin interpreter acts on). Absent ⇒ raw run.
   const resultFlag = agent.result ? ` --result-schema ${resultSchemaPath(name)}` : '';
+  // Two substrate-config hooks generalize the developer's implicit shape (prepare-issue → skill →
+  // publish-bundle-as-PR). `prepare` is a privileged-READ script that gathers the skill's input before it
+  // runs (replacing the default issue-payload build); `interpreter` is the privileged-WRITE script the
+  // publisher job runs to act on the typed result (replacing the default bundle→PR publish). Both are
+  // deterministic scripts — the trusted side of the boundary — so their authority is the job's capabilities.
+  const prepare = typeof cfg(agent).prepare === 'string' ? (cfg(agent).prepare as string) : undefined;
+  const interpreter = typeof cfg(agent).interpreter === 'string' ? (cfg(agent).interpreter as string) : undefined;
   const RID = `ir-${name}-\${{ github.run_id }}`;
   const BUNDLE = `agent-bundle-\${{ github.run_id }}`;
   // The work item comes from the trigger's declared `subject.ref` param (resolved into job env), fetched
@@ -310,6 +317,62 @@ function wrapperYml(name: string, agent: IRAgent): string {
         `        run: |`,
         `          mkdir -p .agent-run`,
         `          printf '{"number":0,"title":${JSON.stringify(name)},"body":""}\\n' > .agent-run/issue.json`,
+      ];
+  // The agent job gathers the skill's input: a custom `prepare` (read-only) or the default issue payload.
+  const prepareSteps = prepare
+    ? [`      - name: Prepare agent input (privileged read)`, `        run: bun ${prepare}`]
+    : buildIssue;
+  // The publisher job acts on the agent's output. A custom `interpreter` reads the typed result from the
+  // bundle and does whatever the agent's purpose requires (e.g. the merge gate + merge); the default
+  // publishes the bundle as a PR. Either way the bundle is downloaded first; capability = the job's perms.
+  const publisherSteps = interpreter
+    ? [
+        `      - uses: actions/download-artifact@v4`,
+        `        with:`,
+        `          name: ${BUNDLE}`,
+        `          path: .agent-run/bundle`,
+        `      - name: Interpret the agent result (privileged action on the typed result)`,
+        `        run: bun ${interpreter} --bundle .agent-run/bundle --expected-run-id "${RID}" --expected-repo "\${{ github.repository }}"`,
+      ]
+    : [
+        `      - uses: actions/download-artifact@v4`,
+        `        with:`,
+        `          name: ${BUNDLE}`,
+        `          path: .agent-run/bundle`,
+        `      - name: Validate and apply the agent bundle`,
+        // --promote-dir + --promote-decisions-only persists ONLY the run's decision records into the repo
+        // tree at agent-sessions/<run-id>/decisions/, so the records the agent already wrote ride into the
+        // PR's patch and survive the squash-merge onto the default branch. Without this, decisions live only
+        // in the uploaded CI artifact and `bench --score` (which clones the default branch) sees none —
+        // the autonomy grader's vacuous steps:0 / ratio:1; the governance audit trail (require_decision_records)
+        // is also lost. Decisions-only keeps the user's branch from accreting artifacts/transcripts each run.
+        // The path matches the **/decisions/*.json convention autonomy-ratio.ts + public-agent-decision-index walk.
+        `        run: bun scripts/github-agent-publish.ts --bundle .agent-run/bundle --apply --promote-dir "agent-sessions/${RID}" --promote-decisions-only --expected-run-id "${RID}" --expected-repo "\${{ github.repository }}"`,
+        `      - name: Open the agent's pull request`,
+        `        run: |`,
+        `          set -euo pipefail`,
+        // The branch is the canonical per-work-item branch the reviewer/merge-gate recognize
+        // (agent/issue-<ref>); a develop retry replaces it. An autonomous agent (no subject.ref) has no
+        // work item, so it falls back to a per-run branch.
+        refParam ? `          branch="agent/issue-\${${refParam}}"` : `          branch="agent/${RID}"`,
+        `          git config user.name volter-agent`,
+        `          git config user.email volter-agent@users.noreply.github.com`,
+        `          git config core.filemode false`,
+        `          git checkout -b "$branch"`,
+        // agent-sessions/ is gitignored (it is also a live-session scratch dir); force-add only this run's
+        // promoted session so its decision records are committed, then stage the agent's code changes.
+        `          git add -f "agent-sessions/${RID}"`,
+        `          git add -A`,
+        `          if git diff --cached --quiet; then echo "agent produced no changes"; exit 0; fi`,
+        `          git commit -m "agent: ${RID}"`,
+        `          git push --force origin "$branch"`,
+        `          body="$(find .agent-run/bundle -name pr.md | head -1)"`,
+        `          if [ -n "$body" ]; then gh pr create --base "\${{ github.event.repository.default_branch }}" --head "$branch" --title "Agent run ${RID}" --body-file "$body"; else gh pr create --base "\${{ github.event.repository.default_branch }}" --head "$branch" --title "Agent run ${RID}" --body "Automated agent run ${RID}"; fi`,
+        // Bot-opened PRs don't trigger pull_request CI (GITHUB_TOKEN anti-recursion → action_required), but
+        // workflow_dispatch is exempt: dispatch CI on the PR head so it posts the required 'ci' commit status.
+        `          head_sha="$(git rev-parse HEAD)"`,
+        `          pr_number="$(gh pr view "$branch" --json number --jq .number 2>/dev/null || echo "")"`,
+        `          gh workflow run ci.yml --ref "$branch" -f sha="$head_sha" -f pr="$pr_number" || echo "ci dispatch failed (non-fatal)"`,
       ];
   return [
     `name: ${name}`,
@@ -365,7 +428,7 @@ function wrapperYml(name: string, agent: IRAgent): string {
     `      - run: bun install --frozen-lockfile || bun install`,
     `      - name: install Claude Code CLI`,
     `        run: npm install -g "@anthropic-ai/claude-code@\${PUBLIC_AGENT_CITED_VERSION:-latest}" && claude --version`,
-    ...buildIssue,
+    ...prepareSteps,
     `      - name: Exchange OIDC for the bounded token`,
     `        run: bun scripts/model-proxy-exchange.ts --run-id "${RID}" --audience "$MODEL_PROXY_OIDC_AUDIENCE"`,
     `      - name: Run agent (Claude Code + skill) and bundle the result`,
@@ -383,48 +446,12 @@ function wrapperYml(name: string, agent: IRAgent): string {
     `    env:`,
     `      GH_TOKEN: \${{ github.token }}`,
     ...triggerParamsEnv(agent),
+    ...envLines(agent),
     `    steps:`,
     `      - uses: actions/checkout@v4`,
     `      - uses: oven-sh/setup-bun@v2`,
     `      - run: bun install --frozen-lockfile || bun install`,
-    `      - uses: actions/download-artifact@v4`,
-    `        with:`,
-    `          name: ${BUNDLE}`,
-    `          path: .agent-run/bundle`,
-    `      - name: Validate and apply the agent bundle`,
-    // --promote-dir + --promote-decisions-only persists ONLY the run's decision records into the repo
-    // tree at agent-sessions/<run-id>/decisions/, so the records the agent already wrote ride into the
-    // PR's patch and survive the squash-merge onto the default branch. Without this, decisions live only
-    // in the uploaded CI artifact and `bench --score` (which clones the default branch) sees none —
-    // the autonomy grader's vacuous steps:0 / ratio:1; the governance audit trail (require_decision_records)
-    // is also lost. Decisions-only keeps the user's branch from accreting artifacts/transcripts each run.
-    // The path matches the **/decisions/*.json convention autonomy-ratio.ts + public-agent-decision-index walk.
-    `        run: bun scripts/github-agent-publish.ts --bundle .agent-run/bundle --apply --promote-dir "agent-sessions/${RID}" --promote-decisions-only --expected-run-id "${RID}" --expected-repo "\${{ github.repository }}"`,
-    `      - name: Open the agent's pull request`,
-    `        run: |`,
-    `          set -euo pipefail`,
-    // The branch is the canonical per-work-item branch the reviewer/merge-gate recognize
-    // (agent/issue-<ref>); a develop retry replaces it. An autonomous agent (no subject.ref) has no
-    // work item, so it falls back to a per-run branch.
-    refParam ? `          branch="agent/issue-\${${refParam}}"` : `          branch="agent/${RID}"`,
-    `          git config user.name volter-agent`,
-    `          git config user.email volter-agent@users.noreply.github.com`,
-    `          git config core.filemode false`,
-    `          git checkout -b "$branch"`,
-    // agent-sessions/ is gitignored (it is also a live-session scratch dir); force-add only this run's
-    // promoted session so its decision records are committed, then stage the agent's code changes.
-    `          git add -f "agent-sessions/${RID}"`,
-    `          git add -A`,
-    `          if git diff --cached --quiet; then echo "agent produced no changes"; exit 0; fi`,
-    `          git commit -m "agent: ${RID}"`,
-    `          git push --force origin "$branch"`,
-    `          body="$(find .agent-run/bundle -name pr.md | head -1)"`,
-    `          if [ -n "$body" ]; then gh pr create --base "\${{ github.event.repository.default_branch }}" --head "$branch" --title "Agent run ${RID}" --body-file "$body"; else gh pr create --base "\${{ github.event.repository.default_branch }}" --head "$branch" --title "Agent run ${RID}" --body "Automated agent run ${RID}"; fi`,
-    // Bot-opened PRs don't trigger pull_request CI (GITHUB_TOKEN anti-recursion → action_required), but
-    // workflow_dispatch is exempt: dispatch CI on the PR head so it posts the required 'ci' commit status.
-    `          head_sha="$(git rev-parse HEAD)"`,
-    `          pr_number="$(gh pr view "$branch" --json number --jq .number 2>/dev/null || echo "")"`,
-    `          gh workflow run ci.yml --ref "$branch" -f sha="$head_sha" -f pr="$pr_number" || echo "ci dispatch failed (non-fatal)"`,
+    ...publisherSteps,
     `  revoke:`,
     `    needs: [setup, ${name}, publisher]`,
     `    if: always() && needs.setup.result == 'success'`,

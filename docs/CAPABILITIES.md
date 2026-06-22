@@ -1,9 +1,15 @@
 # Capabilities — the agent authority model
 
-A profile **declares** what each agent is allowed to do as substrate-agnostic capabilities. A substrate
-**realizes** each one through its own machinery (github: the permissioning/control wrapper) — or ignores
-it. Capabilities never name a substrate's resources (no `issue`, `pr`, `branch`, `workflow`); they name
-only the universal things an agent acts on.
+A profile **declares** what each agent may do as substrate-agnostic capabilities. A capability is **not**
+an instruction handed to a mediator — it **is a grant on the agent's own credential**. The substrate mints
+the agent a credential scoped to exactly its capabilities, and the agent does its own reads and its own
+writes **in-process**. Capabilities never name a substrate's resources (no `issue`, `pr`, `branch`,
+`workflow`); they name only the universal things an agent acts on.
+
+There are exactly **two guards**, and nothing else:
+
+- **capabilities** — *what* the agent may do (its scoped credential).
+- **budget** — *how much* it may spend (the bounded model token).
 
 ## The three nouns
 
@@ -19,81 +25,103 @@ An autonomy agent acts on exactly three things:
 
 | capability | meaning | github realization |
 |---|---|---|
-| `artifact:author` | make changes to the artifact | contents + pull-requests: write (+ trust split, below) |
-| `tasks:author` | create / update / label / set state of work | issues: write |
-| `tasks:converse` | post comments / verdicts on work and changes | issues + pull-requests: write (comment scope) |
-| `agent:launch` | start another agent | actions: write (dispatch) |
-| `agent:list` | observe running agents | actions: read |
-| `agent:update` | pause / resume / retry another agent | the operator control plane (labels, …) |
-| `agent:cancel` | stop another agent | actions: write + control plane |
+| `artifact:author` | propose a change (write a feature branch, open a PR) | `contents: write` + `pull-requests: write` |
+| `artifact:merge` | **land** a reviewed change onto the default branch | **never granted to an agent** — see the merge boundary |
+| `tasks:author` | create / update / label / set state of work | `issues: write` |
+| `tasks:converse` | post comments / verdicts on work and changes | `issues: write` (comment scope) |
+| `agent:launch` | start another agent | `actions: write` (dispatch) |
+| `agent:list` | observe running agents | `actions: read` |
+| `agent:update` | pause / resume / retry another agent | control plane |
+| `agent:cancel` | stop another agent | `actions: write` + control plane |
 
-`observe` (read the artifact and tasks) is baseline — every agent has it; it is not a declared capability.
+`observe` (read the artifact and tasks) is **baseline** — every agent has it; it is not a declared
+capability. Reads are bounded by the agent's sandbox + budget, never by a permission.
 
 The `agent:*` axis is exactly the **Runner contract** (`core/runner.ts`: launch / list / update / cancel
-over sessions) — the system's substrate-agnostic definition of the agent lifecycle. The operator always
-holds the full Runner contract over a running agent, so the **control plane is part of the universal
-envelope** on every launchable agent, not gated behind a capability; `agent:*` on an agent is *its*
-authority over *other* agents.
+over sessions) — the substrate-agnostic definition of the agent lifecycle.
 
-## What is NOT a capability
+**Scope (optional).** A capability may carry a resource scope: `artifact:author@roadmap` = "propose changes
+to roadmap files only" (the strategist's governance constraint, expressed as a scoped capability, not a
+deterministic guard script). The constitution's `human_required_paths` / `topics` are the global
+complement — the region **no** capability may ever reach.
 
-- **Trust / output mediation** — not a capability at all. Whether an agent's output is untrusted (and
-  must be mediated before it touches the repo) is the **substrate's security responsibility, derived from
-  how it runs the agent**: model-interpreted behavior → untrusted → the substrate mediates (github: a
-  read-only agent emits a bundle → a separate trusted publisher validates and applies it); a deterministic
-  implementation → direct. The IR can't run codex, so it can't mediate; declaring "untrusted" wouldn't
-  change that the substrate must implement it. So trust is neither a capability nor an IR field. (If a
-  profile ever needs to override it, that's a `config` key, not a capability — `commit`/`propose` were a
-  wrong turn that conflated authority with trust.)
-- **Review / merge enforcement** — policy, not capability. A reviewer *records* a verdict via
-  `tasks:converse`; the merge gate (`require_low_risk_review`, decision records) *enforces* it. There is
-  no `artifact:review` capability.
-- **Model access** — provided by the box (the substrate gives the agent a model endpoint, bounded as it
-  sees fit); the IR does not declare it.
+## The trust model: agents are credentialed; only merge is gated
 
-## The seven OA agents, declared in this model
+The agent runs with a credential **scoped to its capabilities** and acts directly. There is no
+credential-less job, no bundle, no trusted publisher mediating its output. The one threat that justifies a
+boundary is **prompt injection** via untrusted input (issue bodies, fetched pages, fork diffs) — and that
+justifies a boundary only for the **irreversible, default-branch-affecting** power:
+
+> **The single hard boundary: an agent can never merge.** `artifact:merge` is never grantable to an agent.
+
+Everything an agent *can* do is recoverable, because the substrate is configured so a hijacked agent cannot
+reach `main`, workflows, or secrets:
+
+- **branch protection** on the default branch blocks direct push (a feature-branch PR is the only way in);
+- the github **`workflows` permission** is never granted, so `.github/workflows` can't be edited even with `contents: write`;
+- **required checks + required review** gate every merge;
+- the install holds **no secrets** (the model token is OIDC-minted and bounded — that is the budget guard).
+
+So a fully-hijacked `artifact:author` + `tasks:converse` agent can, at worst, push junk to a feature branch
+or post a bad comment — both reverted in seconds, neither touching `main`. (This is a deliberate, small
+relaxation of the old "agent holds nothing" model; the cost is recoverable feature-branch/comment noise,
+the gain is that agents are real agents instead of envelopes passed to a mediator.)
+
+### The merge boundary
+
+Merge is the only action that lands on the default branch irreversibly, so it is **never performed by an
+agent**. It is performed by exactly one of:
+
+1. a **human** (a maintainer merges, or approves so branch-protection auto-merge fires), or
+2. **one thin trusted system gate** — not an agent — that merges when a reviewer's verdict says pass AND
+   branch protection is satisfied (required CI green, head stable, not blocked).
+
+A reviewer agent therefore **judges** (`tasks:converse` to post its verdict) but cannot merge; its verdict
+is an input to the gate. That gate is the single surviving piece of trusted "effect" machinery in the whole
+system — there is no per-agent mediator.
+
+## The agent lifecycle (what replaced prepare / interpret)
+
+```
+provide            →     skill                    →     effect
+(substrate hands the     (judges; emits result =        (the agent's own scoped
+ trigger's subject in)    intent in capability terms)    actions — direct, in-process)
+```
+
+- **provide** — the substrate materializes the trigger's *subject* (a PR's diff+checks, an issue, …) into
+  the sandbox. Generic; the only variable is which subject, declared by the trigger.
+- **skill** — does the work and emits its typed `result`.
+- **effect** — the agent invokes its own capabilities directly. The **only** exception is `artifact:merge`,
+  which routes to the merge gate above.
+
+There are no `prepare` / `interpret` scripts and no `config` hooks: "input gathering" is `provide`; "acting
+on the result" is the agent using its own capabilities.
+
+## github realization — the mapping is the whole story
+
+The github substrate computes the agent job's `permissions:` block straight from its capabilities (the table
+above). That is the entire realization: a normally-credentialed job, scoped. No wrapper of trusted jobs
+around a credential-less core — the agent IS the job. The lone trusted extra is the system merge gate.
+
+`config.permissions` does not exist; gh permission blocks are *computed*, never written in the IR.
+
+## The OA agents, declared in this model
 
 | agent | capabilities |
 |---|---|
 | pm | `tasks:author`, `tasks:converse`, `agent:launch` |
 | developer | `artifact:author`, `tasks:converse` |
-| reviewer | `tasks:converse`, `agent:launch` |
-| strategy_reviewer | `tasks:converse`, `agent:launch` |
+| reviewer | `tasks:converse` (judges; the merge gate lands it — the reviewer never merges) |
+| strategy_reviewer | `tasks:converse` (judges a roadmap proposal; the gate lands it) |
 | planner | `tasks:author`, `tasks:converse` |
-| upgrade | `artifact:author` |
-| strategist | `artifact:author` |
+| strategist | `artifact:author@roadmap`, `agent:launch` |
 
-Every current github-noun capability re-maps with nothing left over:
-`issue:comment` → `tasks:converse`; `issue:label/create/update` → `tasks:author`;
-`pr:open/update`, `branch:write` → `artifact:author`; `pr:comment` → `tasks:converse`;
-`pr:review` → `tasks:converse` (+ policy); `workflow:dispatch` → `agent:launch`.
+No agent holds `artifact:merge`.
 
-## How github realizes a model-interpreted agent — the wrapper
+## What is NOT a capability
 
-When github runs an agent's behavior **via a model** (untrusted output), it compiles to **trusted wrapper
-jobs around the one untrusted agent job**. The wrapper is universal (identical for every such agent,
-running injected-runtime scripts); only the agent's **behavior** varies. The trust boundary is correct
-*by construction* — the agent never leaves its own read-only job, so wrapping only adds trusted jobs
-around it. Which wrapper jobs appear is selected by capabilities:
-
-```
-control     (parallel)  operator verbs            always (agent:* lifecycle exposed to the operator)
-setup       (pre)       decide + mint a token      always for a model agent
-agent       (UNTRUSTED) codex + skill → bundle     always — persist-credentials:false, read-only perms,
-                                                    OIDC→bounded token, emits .agent-run/out/bundle
-publisher   (post)      validate + apply bundle    only when `artifact:author`
-post-ci     (post)      run CI on the new change    only when `artifact:author`
-post-review (post)      direct review               only when `artifact:author`
-```
-
-The trust split is keyed off **model-interpreted execution × `artifact:author`**: an untrusted model that
-authors changes gets the read-only-agent → trusted-publisher split; a deterministic implementation that
-authors changes writes directly. Execution mode is the substrate's choice; the split follows from it.
-
-**Security wiring the realizer must preserve (load-bearing, not cosmetic):**
-- agent job: `persist-credentials: false`; permissions `contents/issues/pull-requests: read` + `id-token: write` only; no `GH_TOKEN`/admin token in its env.
-- the bundle is the *only* channel from agent → publisher (an artifact), never a shared filesystem.
-- publisher binds the bundle to the run: `github-agent-publish --apply --expected-run-id <mint> --expected-repo <repo> --allowed-paths <policy>` — so a bundle can't be smuggled across runs/paths.
-- model access is mint→exchange(OIDC)→bounded token→revoke; the admin secret rides only on mint/revoke.
-
-Each wrapper job runs an **injected-runtime** script (`public-agent-decision.ts`, `github-agent-publish.ts`, `public-agent-ci.ts`, `public-agent-review.ts`, `model-proxy-*`); the substrate owns the wrapper, the profile owns only the skill. This is the realizer build for `launch` agents — provable once on any `artifact:author` agent (the wrapper is identical), with a live run (real codex → bundle → publish) as the final gate before it replaces the carried `public-agent.yml`.
+- **Observation** — baseline; reads are bounded by the sandbox + budget, not a permission.
+- **Model access / budget** — the bounded model token (the budget guard), provisioned by the substrate; the
+  IR declares the `budget`, not the credential.
+- **Trust mediation** — no longer a concept. The old "untrusted agent → bundle → trusted publisher" design
+  is replaced by scoped credentials + the merge boundary. The only trusted actor is the merge gate.

@@ -125,7 +125,7 @@ jobs:
     needs: [setup, developer, publisher]
     if: always() && needs.setup.result == 'success'
     runs-on: ubuntu-latest
-    permissions: { id-token: write }
+    permissions: { contents: read, id-token: write }
     env:
       MODEL_PROXY_URL: ${{ vars.MODEL_PROXY_URL }}
       MODEL_PROXY_OIDC_AUDIENCE: ${{ vars.MODEL_PROXY_OIDC_AUDIENCE || 'volter-agent-model-proxy' }}

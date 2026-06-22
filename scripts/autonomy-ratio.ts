@@ -57,10 +57,24 @@ export function measureFlow(decisions: AgentDecision[]): FlowMetrics {
   return { steps, agentSteps, humanSteps, humanHandoffs, humanResolved, humanPending, complete, autonomyRatio, cycleTimeMs };
 }
 
+function walk(dir: string): string[] {
+  const out: string[] = [];
+  for (const e of readdirSync(dir, { withFileTypes: true })) {
+    if (e.name === 'node_modules' || e.name === '.git') continue;
+    const full = join(dir, e.name);
+    if (e.isDirectory()) out.push(...walk(full));
+    else out.push(full);
+  }
+  return out;
+}
+
+// Decision records live at **/decisions/<name>.json (under agent-sessions/) in an install — the same
+// convention public-agent-decision-index walks. Callers pass a cloned RESULT REPO root, so walk the tree
+// for them rather than flat-reading the given dir (which would try to validate package.json etc.).
 function loadDir(dir: string): AgentDecision[] {
-  return readdirSync(dir)
-    .filter((f) => f.endsWith('.json'))
-    .map((f) => validateDecision(JSON.parse(readFileSync(join(dir, f), 'utf8'))));
+  return walk(dir)
+    .filter((p) => /\/decisions\/[^/]+\.json$/.test(p))
+    .map((p) => validateDecision(JSON.parse(readFileSync(p, 'utf8'))));
 }
 
 if (import.meta.main) {

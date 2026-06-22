@@ -65,6 +65,10 @@ agents:
       model: true
       persistCredentials: false
       timeout: 20
+      # statuses:read so the CI gate can SEE the `ci` commit status. Bot-opened PRs don't fire
+      # pull_request CI (anti-recursion), so CI is dispatched via workflow_dispatch and reports a commit
+      # STATUS (not a PR check-run) — invisible with only checks:read, which falsely blocks the gate.
+      permissions: { statuses: read }
       concurrency: public-agent-review-${{ github.event.issue.number || github.event.pull_request.number || inputs.issue_number }}
       env:
         PUBLIC_AGENT_MAX_CI_RETRIES: ${{ vars.PUBLIC_AGENT_MAX_CI_RETRIES || '2' }}

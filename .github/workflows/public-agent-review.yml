@@ -12,7 +12,7 @@ on:
       - "synchronize"
       - "reopened"
       - "ready_for_review"
-permissions: { contents: write, id-token: write, pull-requests: write, checks: read, issues: write, actions: write }
+permissions: { contents: write, id-token: write, pull-requests: write, checks: read, issues: write, actions: write, statuses: read }
 concurrency:
   group: "public-agent-review-${{ github.event.issue.number || github.event.pull_request.number || inputs.issue_number }}"
   cancel-in-progress: false

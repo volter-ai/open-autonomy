@@ -392,7 +392,9 @@ function wrapperYml(name: string, agent: IRAgent): string {
     `    needs: [setup, ${name}, publisher]`,
     `    if: always() && needs.setup.result == 'success'`,
     `    runs-on: ubuntu-latest`,
-    `    permissions: { id-token: write }`,
+    // contents:read so checkout can fetch a PRIVATE repo (without it the checkout 404s "repository not
+    // found" and the cleanup job false-fails, even though the agent work already published).
+    `    permissions: { contents: read, id-token: write }`,
     `    env:`,
     `      MODEL_PROXY_URL: \${{ vars.MODEL_PROXY_URL }}`,
     `      MODEL_PROXY_OIDC_AUDIENCE: \${{ vars.MODEL_PROXY_OIDC_AUDIENCE || 'volter-agent-model-proxy' }}`,

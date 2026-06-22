@@ -1,5 +1,5 @@
 {
-  "$comment": "Provisioning manifest for a disposable bench repo (scripts/provision-target-repo.ts). Per-run model access is OIDC-minted (id-token: write -> the proxy validates issuer+audience, no allowlist), so NO admin secret is required — required_secrets is empty. Variables mirror the live testbed's known-good budgets.",
+  "$comment": "Provisioning manifest for a disposable bench repo (scripts/provision-target-repo.ts). Per-run model access is OIDC-minted (id-token: write -> the proxy validates issuer+audience, no allowlist), so NO admin secret is required — required_secrets is empty. Variables set ONLY budgets/limits; model + provider selection is intentionally absent so the compiled profile's deepseek/anthropic default is the single source (a stale gpt-4o-mini/openai override here previously broke every PM/review run).",
   "description": "open-autonomy bench cell (disposable)",
   "private": true,
   "required_secrets": [],
@@ -11,20 +11,12 @@
     { "name": "PUBLIC_AGENT_MAX_OPEN_AGENT_PRS", "value": "20" },
     { "name": "PUBLIC_AGENT_MAX_REQUESTS", "value": "200" },
     { "name": "PUBLIC_AGENT_MAX_USD_CENTS", "value": "500" },
-    { "name": "PUBLIC_AGENT_MODEL", "value": "deepseek/deepseek-v4-flash" },
-    { "name": "PUBLIC_AGENT_MODELS", "value": "gpt-4o-mini,deepseek/deepseek-v4-flash" },
     { "name": "PUBLIC_AGENT_PM_LIMIT", "value": "8" },
     { "name": "PUBLIC_AGENT_PM_MAX_USD_CENTS", "value": "25" },
-    { "name": "PUBLIC_AGENT_PM_MODEL", "value": "gpt-4o-mini" },
-    { "name": "PUBLIC_AGENT_PM_PROVIDER", "value": "openai" },
     { "name": "PUBLIC_AGENT_REPO_PAUSED", "value": "false" },
     { "name": "PUBLIC_AGENT_REVIEW_MAX_USD_CENTS", "value": "50" },
-    { "name": "PUBLIC_AGENT_REVIEW_MODEL", "value": "gpt-4o-mini" },
-    { "name": "PUBLIC_AGENT_REVIEW_PROVIDER", "value": "openai" },
     { "name": "PUBLIC_AGENT_STALE_NEEDS_INFO_MINUTES", "value": "10080" },
-    { "name": "PUBLIC_AGENT_TRIAGE_MAX_USD_CENTS", "value": "25" },
-    { "name": "PUBLIC_AGENT_TRIAGE_MODEL", "value": "gpt-4o-mini" },
-    { "name": "PUBLIC_AGENT_TRIAGE_PROVIDER", "value": "openai" }
+    { "name": "PUBLIC_AGENT_TRIAGE_MAX_USD_CENTS", "value": "25" }
   ],
   "labels": [
     { "name": "agent-paused", "color": "fbca04", "description": "Issue-level autonomy is paused" },

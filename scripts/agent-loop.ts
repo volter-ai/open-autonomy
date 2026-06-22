@@ -49,17 +49,17 @@ export function runClaudeAgent(opts: {
   return { exitCode: res.status ?? 1, stdout: res.stdout || '', stderr: res.stderr || '' };
 }
 
-/** A decision: run the agent read-only, expecting a result FILE of a given schema. Just runClaudeAgent +
- *  default (Read/Glob/Grep + the single decision file); pass `allowRun` to also let it run tests/checks
- *  (Bash) before deciding. `cwd` is where it investigates (defaults to the process cwd). Every model slot is
- *  pinned to the one allowed model, so a multi-step run never escapes the minted token's allowlist. */
+/** A decision: run the agent, expecting a result FILE of a given schema. The agent has full capability —
+ *  read, run, write whatever it needs to reach a judgment; nothing it does to the repo is kept (a decision
+ *  run is never merged), we only read back its result file and validate it against the schema. `cwd` is
+ *  where it works (defaults to the process cwd). The model is pinned across slots to the minted token's one
+ *  allowed model. So a decision is just: run the agent + an expected result-file shape. */
 export async function decide<T = unknown>(opts: {
   system: string;
   goal: string;
   schema: Record<string, unknown>;
   model?: string;
   cwd?: string;
-  allowRun?: boolean;
 }): Promise<T> {
   const model = opts.model || process.env.PUBLIC_AGENT_MODEL || 'deepseek/deepseek-v4-flash';
   const dir = mkdtempSync(join(tmpdir(), 'oa-decide-'));
@@ -69,16 +69,14 @@ export async function decide<T = unknown>(opts: {
     '',
     opts.goal,
     '',
-    `Investigate using your tools${opts.allowRun ? ' (you may run tests/checks)' : ' (read-only)'}, then record your decision.`,
+    'Investigate however you need (read files, run tests/checks), then record your decision.',
     `WRITE your final answer as a single JSON object to: ${outFile}`,
     'It MUST satisfy this JSON Schema (every required field present, allowed enum values only):',
     JSON.stringify(opts.schema),
-    `The ONLY file you may write is ${outFile}. Do not modify the repository.`,
   ].join('\n');
-  const allowedTools = ['Read', 'Glob', 'Grep', 'Write', ...(opts.allowRun ? ['Bash'] : [])];
   try {
     for (let attempt = 1; attempt <= 2; attempt++) {
-      const res = runClaudeAgent({ prompt, allowedTools, cwd: opts.cwd, model });
+      const res = runClaudeAgent({ prompt, cwd: opts.cwd, model });
       console.error(`  [decide] claude attempt ${attempt} (exit ${res.exitCode})`);
       // Prefer the written file; fall back to salvaging JSON from stdout if the agent printed it instead.
       const artifact = readDecisionFile(outFile, opts.schema) ?? salvageSubmission(res.stdout, opts.schema);

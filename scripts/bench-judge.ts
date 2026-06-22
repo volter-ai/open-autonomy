@@ -79,8 +79,7 @@ const artifact = await decide<{ criteria: CriterionScore[]; summary: string }>({
   goal: `# Goal\n${goal.trim()}\n\n# Rubric (score each id 0–5)\n${rubricText}`,
   schema,
   model,
-  cwd: resultDir, // the judge investigates the run-repo
-  allowRun: true, // it runs the result's tests/checks before scoring
+  cwd: resultDir, // the judge works in the run-repo (reads the diff, runs its tests) before scoring
 });
 
 const byId = new Map(artifact.criteria.map((c) => [c.id, c]));

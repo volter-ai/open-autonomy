@@ -383,7 +383,14 @@ function wrapperYml(name: string, agent: IRAgent): string {
     `          name: ${BUNDLE}`,
     `          path: .agent-run/bundle`,
     `      - name: Validate and apply the agent bundle`,
-    `        run: bun scripts/github-agent-publish.ts --bundle .agent-run/bundle --apply --expected-run-id "${RID}" --expected-repo "\${{ github.repository }}"`,
+    // --promote-dir + --promote-decisions-only persists ONLY the run's decision records into the repo
+    // tree at agent-sessions/<run-id>/decisions/, so the records the agent already wrote ride into the
+    // PR's patch and survive the squash-merge onto the default branch. Without this, decisions live only
+    // in the uploaded CI artifact and `bench --score` (which clones the default branch) sees none —
+    // the autonomy grader's vacuous steps:0 / ratio:1; the governance audit trail (require_decision_records)
+    // is also lost. Decisions-only keeps the user's branch from accreting artifacts/transcripts each run.
+    // The path matches the **/decisions/*.json convention autonomy-ratio.ts + public-agent-decision-index walk.
+    `        run: bun scripts/github-agent-publish.ts --bundle .agent-run/bundle --apply --promote-dir "agent-sessions/${RID}" --promote-decisions-only --expected-run-id "${RID}" --expected-repo "\${{ github.repository }}"`,
     `      - name: Open the agent's pull request`,
     `        run: |`,
     `          set -euo pipefail`,
@@ -395,6 +402,9 @@ function wrapperYml(name: string, agent: IRAgent): string {
     `          git config user.email volter-agent@users.noreply.github.com`,
     `          git config core.filemode false`,
     `          git checkout -b "$branch"`,
+    // agent-sessions/ is gitignored (it is also a live-session scratch dir); force-add only this run's
+    // promoted session so its decision records are committed, then stage the agent's code changes.
+    `          git add -f "agent-sessions/${RID}"`,
     `          git add -A`,
     `          if git diff --cached --quiet; then echo "agent produced no changes"; exit 0; fi`,
     `          git commit -m "agent: ${RID}"`,

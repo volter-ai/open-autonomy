@@ -25,6 +25,7 @@ interface Options {
   apply: boolean;
   out: string;
   promoteDir?: string;
+  promoteDecisionsOnly?: boolean;
   expectedRunId?: string;
   expectedRepo?: string;
   expectedIssue?: number;
@@ -53,6 +54,7 @@ function parseArgs(argv: string[]): Options {
     apply: argv.includes('--apply'),
     out: value('--out') ?? join(bundle, 'publish-summary.json'),
     promoteDir: value('--promote-dir'),
+    promoteDecisionsOnly: argv.includes('--promote-decisions-only'),
     expectedRunId: value('--expected-run-id'),
     expectedRepo: value('--expected-repo'),
     expectedIssue: expectedIssue === undefined ? undefined : Number(expectedIssue),
@@ -132,7 +134,7 @@ async function main(): Promise<void> {
   mkdirSync(dirname(resolve(root, options.out)), { recursive: true });
   writeJson(resolve(root, options.out), summary);
   writeFileSync(join(bundleDir, 'pr-body.md'), renderPrBody(summary));
-  if (options.promoteDir) promoteBundle(bundleDir, resolve(repo, options.promoteDir), summary);
+  if (options.promoteDir) promoteBundle(bundleDir, resolve(repo, options.promoteDir), summary, options.promoteDecisionsOnly);
   process.stdout.write(`publish-summary=${resolve(root, options.out)}\n`);
 }
 
@@ -182,17 +184,22 @@ function runGh(args: string[], allowFail = false): void {
   if (!allowFail && result.status !== 0) throw new Error(`gh ${args[0]} ${args[1]} failed (exit ${result.status ?? 'null'})`);
 }
 
-function promoteBundle(bundleDir: string, targetDir: string, summary: unknown): void {
+// decisionsOnly: persist only the decision records (the governance audit trail + what the autonomy
+// grader and decision-index walk via **/decisions/*.json) plus the publish summary. This is what every
+// installed PR commits — promoting the full session (artifacts/screenshots/transcript) would bloat the
+// user's default branch run after run. The full promote stays available for explicit audit exports.
+function promoteBundle(bundleDir: string, targetDir: string, summary: unknown, decisionsOnly = false): void {
   mkdirSync(targetDir, { recursive: true });
-  copyTree(join(bundleDir, 'artifacts'), join(targetDir, 'artifacts'));
   copyTree(join(bundleDir, 'decisions'), join(targetDir, 'decisions'));
+  writeJson(join(targetDir, 'publish-summary.json'), summary);
+  if (decisionsOnly) return;
+  copyTree(join(bundleDir, 'artifacts'), join(targetDir, 'artifacts'));
   for (const name of ['manifest.json', 'session.json', 'pr-body.md']) {
     writeFileSync(join(targetDir, name), readFileSync(join(bundleDir, name)));
   }
   for (const name of ['run-receipt.json', 'transcript.md']) {
     if (existsSync(join(bundleDir, name))) writeFileSync(join(targetDir, name), readFileSync(join(bundleDir, name)));
   }
-  writeJson(join(targetDir, 'publish-summary.json'), summary);
 }
 
 function assertBundleDecisionsSafe(bundleDir: string, manifest: AgentBundleManifest): void {

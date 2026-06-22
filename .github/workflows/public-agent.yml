@@ -103,7 +103,7 @@ jobs:
           name: agent-bundle-${{ github.run_id }}
           path: .agent-run/bundle
       - name: Validate and apply the agent bundle
-        run: bun scripts/github-agent-publish.ts --bundle .agent-run/bundle --apply --expected-run-id "ir-developer-${{ github.run_id }}" --expected-repo "${{ github.repository }}"
+        run: bun scripts/github-agent-publish.ts --bundle .agent-run/bundle --apply --promote-dir "agent-sessions/ir-developer-${{ github.run_id }}" --promote-decisions-only --expected-run-id "ir-developer-${{ github.run_id }}" --expected-repo "${{ github.repository }}"
       - name: Open the agent's pull request
         run: |
           set -euo pipefail
@@ -112,6 +112,7 @@ jobs:
           git config user.email volter-agent@users.noreply.github.com
           git config core.filemode false
           git checkout -b "$branch"
+          git add -f "agent-sessions/ir-developer-${{ github.run_id }}"
           git add -A
           if git diff --cached --quiet; then echo "agent produced no changes"; exit 0; fi
           git commit -m "agent: ir-developer-${{ github.run_id }}"

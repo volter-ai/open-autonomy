@@ -1,7 +1,6 @@
 #!/usr/bin/env bun
 import { readFileSync, writeFileSync } from 'node:fs';
 import { decide } from './agent-loop.js';
-import { readFileTool, listFilesTool } from './agent-tools.js';
 
 // The PM decision, as the agent loop's submit schema. Read-only tools: PM has no artifact:author, so its
 // agent investigates but never executes; the deterministic harness still does the privileged dispatch.
@@ -126,10 +125,8 @@ async function main(): Promise<void> {
         system:
           'You are the PM agent for a self-building OSS repository. Triage the issue: investigate with your read tools (read the referenced code/files for context), then submit a decision. Choose develop/review only for clear, scoped, low-risk work; needs_info when underspecified; human_required for workflow/secret/auth/security-sensitive matters or anything you cannot confidently route.',
         goal: prompt,
-        tools: [readFileTool('.'), listFilesTool('.')],
         schema: PM_SCHEMA,
         model: options.model,
-        maxIterations: 8, // bounded: PM sweeps many issues per tick
       });
       return parsePmDecision(JSON.stringify(artifact));
     } catch (error) {

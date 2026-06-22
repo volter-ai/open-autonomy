@@ -11,8 +11,7 @@
 // Uses the box endpoint (OPENAI_BASE_URL/OPENAI_API_KEY) via the agent loop's transport.
 import { readFileSync, existsSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { runAgent, proxyTurn } from './agent-loop.js';
-import { readFileTool, listFilesTool, runCmdTool } from './agent-tools.js';
+import { decide } from './agent-loop.js';
 
 interface Rubric {
   id: string;
@@ -39,7 +38,7 @@ const arg = (n: string, d = '') => {
 
 const workloadDir = arg('--workload');
 const resultDir = arg('--result');
-const model = arg('--model', process.env.BENCH_JUDGE_MODEL || 'gpt-4o-mini');
+const model = arg('--model', process.env.BENCH_JUDGE_MODEL || 'deepseek/deepseek-v4-flash');
 const out = arg('--out');
 if (!workloadDir || !resultDir) {
   console.error('usage: bun scripts/bench-judge.ts --workload <dir> --result <repo> [--model m] [--out f]');
@@ -68,7 +67,7 @@ const schema = {
   required: ['criteria', 'summary'],
 };
 
-const { artifact } = await runAgent<{ criteria: CriterionScore[]; summary: string }>({
+const artifact = await decide<{ criteria: CriterionScore[]; summary: string }>({
   system: [
     'You are an exacting engineering reviewer judging whether an autonomous software org ACHIEVED a goal.',
     'INVESTIGATE the result repository with your tools before scoring: list files, read the relevant code and',
@@ -78,12 +77,10 @@ const { artifact } = await runAgent<{ criteria: CriterionScore[]; summary: strin
     '3 = adequate, 5 = excellent) with a justification citing what you saw, then submit.',
   ].join(' '),
   goal: `# Goal\n${goal.trim()}\n\n# Rubric (score each id 0–5)\n${rubricText}`,
-  tools: [readFileTool(resultDir), listFilesTool(resultDir), runCmdTool(resultDir)],
   schema,
-  turn: proxyTurn(model, 1500),
-  maxIterations: 20,
-  onTrace: (e) =>
-    console.error(`  [turn ${e.iteration}] ${e.calls.map((c) => `${c.name}(${JSON.stringify(c.args).slice(0, 60)})`).join(', ') || e.thought.slice(0, 70)}`),
+  model,
+  cwd: resultDir, // the judge investigates the run-repo
+  allowRun: true, // it runs the result's tests/checks before scoring
 });
 
 const byId = new Map(artifact.criteria.map((c) => [c.id, c]));

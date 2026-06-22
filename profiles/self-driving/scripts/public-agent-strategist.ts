@@ -2,7 +2,6 @@
 import { appendFileSync, existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { parseRoadmapItems } from './public-agent-planner.js';
 import { decide } from './agent-loop.js';
-import { readFileTool, listFilesTool } from './agent-tools.js';
 
 // The strategist's proposal as the agent loop's submit schema (loose; parseStrategistProposal coerces +
 // defaults). Read-only tools: it investigates the repo/roadmap but never executes.
@@ -273,11 +272,8 @@ async function main(): Promise<void> {
     system:
       'You are the strategist agent for a self-building OSS repository. Propose roadmap work toward the constitution north star, discovered from real signals. Investigate with your read tools, then submit a proposal (summary + items with title + acceptance criteria).',
     goal: prompt,
-    tools: [readFileTool('.'), listFilesTool('.')],
     schema: STRATEGIST_SCHEMA,
     model: options.model,
-    maxIterations: 12,
-    maxTokens: 2000,
   });
   const proposal = parseStrategistProposal(JSON.stringify(artifact));
 

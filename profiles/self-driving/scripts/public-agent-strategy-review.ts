@@ -1,7 +1,6 @@
 #!/usr/bin/env bun
 import { appendFileSync, existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { decide } from './agent-loop.js';
-import { readFileTool, listFilesTool } from './agent-tools.js';
 
 // The strategy verdict as the agent loop's submit schema. Read-only tools (a trusted job).
 const STRATEGY_VERDICT_SCHEMA = {
@@ -130,10 +129,8 @@ async function main(): Promise<void> {
       system:
         'You are the strategy reviewer for a self-building OSS repository. Ratify the strategist proposal against the constitution north star and merit rubric. Investigate with your read tools, then submit a strict verdict. Mark human_required for anything you cannot confidently ratify.',
       goal: prompt,
-      tools: [readFileTool('.'), listFilesTool('.')],
       schema: STRATEGY_VERDICT_SCHEMA,
       model: options.model,
-      maxIterations: 10,
     });
     verdict = parseStrategyVerdict(JSON.stringify(artifact));
   } catch (error) {

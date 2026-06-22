@@ -276,9 +276,18 @@ function modelRevokeStep(agent: IRAgent): string[] {
 // A model-interpreted agent (skill behavior): the universal privilege-separated wrapper. The agent job
 // holds NO write creds and NO admin token (persist-credentials:false, read-only); its only output is the
 // bundle, which the trusted publisher validates and applies. Trust boundary correct by construction.
+// Where the compiler ships a skill agent's declared IR result schema, so the wrapper can hand it to the
+// run. Absent for agents with no `result` (those keep the raw-bundle run).
+function resultSchemaPath(name: string): string {
+  return `.open-autonomy/results/${name}.schema.json`;
+}
+
 function wrapperYml(name: string, agent: IRAgent): string {
   const caps = agent.capabilities ?? [];
   const skillPath = `.codex/skills/${agent.behavior}/SKILL.md`;
+  // A declared result schema flows into the run: the agent must emit a value validating against it, which
+  // becomes the bundle's result.json (the typed seam a thin interpreter acts on). Absent ⇒ raw run.
+  const resultFlag = agent.result ? ` --result-schema ${resultSchemaPath(name)}` : '';
   const RID = `ir-${name}-\${{ github.run_id }}`;
   const BUNDLE = `agent-bundle-\${{ github.run_id }}`;
   // The work item comes from the trigger's declared `subject.ref` param (resolved into job env), fetched
@@ -361,7 +370,7 @@ function wrapperYml(name: string, agent: IRAgent): string {
     `        run: bun scripts/model-proxy-exchange.ts --run-id "${RID}" --audience "$MODEL_PROXY_OIDC_AUDIENCE"`,
     `      - name: Run agent (Claude Code + skill) and bundle the result`,
     `        run: |`,
-    `          bun scripts/github-agent-session.ts --issue .agent-run/issue.json --run-id "${RID}" --out .agent-run/out --repo "\${{ github.repository }}" --actor "\${{ github.actor }}" -- bash -lc "bun scripts/claude-agent-run.ts --skill ${skillPath}; rc=\\$?; bun scripts/agent-visual-verify.ts || true; exit \\$rc"`,
+    `          bun scripts/github-agent-session.ts --issue .agent-run/issue.json --run-id "${RID}" --out .agent-run/out --repo "\${{ github.repository }}" --actor "\${{ github.actor }}" -- bash -lc "bun scripts/claude-agent-run.ts --skill ${skillPath}${resultFlag}; rc=\\$?; bun scripts/agent-visual-verify.ts || true; exit \\$rc"`,
     `      - uses: actions/upload-artifact@v4`,
     `        with:`,
     `          name: ${BUNDLE}`,
@@ -469,6 +478,10 @@ export function compileGithub(ir: AutonomyIR): CompileOutput {
     if (isHuman(agent)) continue; // a human actor is declared in the manifest, not realized as a github job
     const file = typeof cfg(agent).workflowFile === 'string' ? (cfg(agent).workflowFile as string) : `${name}.yml`;
     generated[`.github/workflows/${file}`] = agentYml(name, agent);
+    // A skill agent that declared an IR result schema ships it alongside, for the wrapper to pass to the run.
+    if (agent.result && !isScript(agent.behavior)) {
+      generated[resultSchemaPath(name)] = `${JSON.stringify(agent.result.schema, null, 2)}\n`;
+    }
   }
   // Model-interpreted agents carry the operator control plane, so emit its handler.
   if (Object.values(ir.agents).some((a) => !isScript(a.behavior) && !isHuman(a))) {

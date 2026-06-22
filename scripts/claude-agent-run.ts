@@ -9,6 +9,7 @@ type Options = {
   context?: string;
   model: string;
   skill?: string; // path to the agent's SKILL.md — its role/instructions (the per-agent variable)
+  resultSchema?: string; // path to the agent's declared IR result schema (JSON Schema); absent ⇒ raw run
 };
 
 const root = resolve(import.meta.dir, '..');
@@ -30,6 +31,7 @@ function parseArgs(argv: string[]): Options {
     context: argValue(argv, '--context') ?? process.env.OSS_AGENT_CONTEXT_PATH,
     model: argValue(argv, '--model') ?? process.env.PUBLIC_AGENT_MODEL ?? 'deepseek/deepseek-v4-flash',
     skill: argValue(argv, '--skill') ?? process.env.OSS_AGENT_SKILL_PATH,
+    resultSchema: argValue(argv, '--result-schema') ?? process.env.OSS_AGENT_RESULT_SCHEMA_PATH,
   };
 }
 
@@ -49,7 +51,7 @@ function redactSensitive(text: string): string {
     .replace(/OPENAI_API_KEY\s*=\s*sk-[A-Za-z0-9_-]{20,}/g, 'OPENAI_API_KEY=[redacted-secret-like-token]');
 }
 
-function buildPrompt(issuePath: string, taskDir: string, contextPath?: string, skillPath?: string): string {
+function buildPrompt(issuePath: string, taskDir: string, contextPath?: string, skillPath?: string, hasResultSchema = false): string {
   const issue = readIssue(issuePath);
   const context = contextPath && existsSync(contextPath)
     ? readFileSync(contextPath, 'utf8')
@@ -82,7 +84,11 @@ function buildPrompt(issuePath: string, taskDir: string, contextPath?: string, s
     '',
     'Before finishing, write these files:',
     `- ${taskDir}/artifacts/pr.md with a PR-ready summary and tests run.`,
-    `- ${taskDir}/artifacts/result.json with JSON fields: ok, issue, summary, tests.`,
+    // With a declared result schema, runClaudeAgent appends its own "emit a schema-valid JSON" instruction
+    // and that typed value becomes result.json — so don't also ask for the generic result.json shape here.
+    ...(hasResultSchema
+      ? []
+      : [`- ${taskDir}/artifacts/result.json with JSON fields: ok, issue, summary, tests.`]),
     `- ${taskDir}/artifacts/transcript.md with concise notes about what you changed and verified.`,
     '',
     'If you cannot complete the requested change, write blocked.md in the artifacts directory explaining exactly what is missing.',
@@ -175,7 +181,12 @@ async function main(): Promise<void> {
   const finalPath = join(artifactsDir, 'claude-final.txt');
   const contextPath = options.context ? resolve(options.context) : undefined;
   writeContextSummary(artifactsDir, contextPath);
-  const prompt = buildPrompt(issuePath, taskDir, contextPath, options.skill ? resolve(options.skill) : undefined);
+  // An agent that declared an IR `result` schema must emit a value validating against it; the compiler
+  // ships the schema and the wrapper passes its path. Absent ⇒ raw run (the developer keeps its bundle).
+  const schema = options.resultSchema && existsSync(resolve(options.resultSchema))
+    ? (JSON.parse(readFileSync(resolve(options.resultSchema), 'utf8')) as Record<string, unknown>)
+    : undefined;
+  const prompt = buildPrompt(issuePath, taskDir, contextPath, options.skill ? resolve(options.skill) : undefined, Boolean(schema));
 
   // Claude Code talks the Anthropic Messages wire; point it at the bounded proxy (whose native
   // /v1/messages route serves it) and authenticate with the minted run token — no provider key in the
@@ -183,7 +194,23 @@ async function main(): Promise<void> {
   // The developer is the SAME agent at full capability (it writes code): no allowedTools limit → full
   // tools, pointed at the bounded proxy with the minted run token. Decisions use the same primitive with
   // a `result` schema (see runClaudeAgent in agent.ts). Capability + endpoint are the only knobs.
-  const result = await runClaudeAgent({ prompt, cwd: root, model: options.model, baseUrl: proxyUrl, authToken: proxyToken });
+  const runOpts = { prompt, cwd: root, model: options.model, baseUrl: proxyUrl, authToken: proxyToken };
+  // With a schema, runClaudeAgent returns the validated typed artifact (the seam the interpreter acts on);
+  // persist it as the bundle's result.json. Without, the raw run; ensureArtifacts writes the generic shape.
+  let typedResult: Record<string, unknown> | undefined;
+  let result: { stdout: string; stderr: string; exitCode: number };
+  if (schema) {
+    try {
+      typedResult = await runClaudeAgent({ ...runOpts, result: { schema } });
+      writeFileSync(join(artifactsDir, 'result.json'), `${JSON.stringify(typedResult, null, 2)}\n`);
+      result = { stdout: JSON.stringify(typedResult, null, 2), stderr: '', exitCode: 0 };
+    } catch (error) {
+      // No schema-valid result ⇒ the run is blocked, not silently passed (the typed seam is the contract).
+      result = { stdout: '', stderr: error instanceof Error ? error.message : String(error), exitCode: 1 };
+    }
+  } else {
+    result = await runClaudeAgent(runOpts);
+  }
   writeFileSync(finalPath, result.stdout);
 
   let finalMessage = redactSensitive(existsSync(finalPath) ? readFileSync(finalPath, 'utf8') : (result.stdout ?? ''));

@@ -88,8 +88,10 @@ open-autonomy conformance <exec|termfleet|github>            # run the substrate
 open-autonomy upgrade --profile <dir> --target <dir> [--apply]   # re-compile an installation in place
 ```
 
-From a clone, run it via bun (`bun run autonomy <verb>` or `bun bin/open-autonomy.ts <verb>`). Once
-published it is `npx open-autonomy <verb>` / `bunx open-autonomy <verb>` — no clone required.
+open-autonomy is bun-native (it runs TypeScript directly, no build). From a clone:
+`bun run autonomy <verb>` or `bun bin/open-autonomy.ts <verb>`. Once published it is
+`bunx open-autonomy <verb>` — no clone required (requires [bun](https://bun.sh); a Node-runnable
+`npx` build is a future step, since the package ships TS rather than compiled JS).
 
 To adopt into your own repo, scaffold an installation by compiling a profile, then follow
 [`docs/PUBLIC_AGENT_PRODUCTION_ROLLOUT.md`](./docs/PUBLIC_AGENT_PRODUCTION_ROLLOUT.md):

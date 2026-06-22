@@ -34,9 +34,11 @@ const DEV_ONLY = new Set([
 ]);
 const PROFILE_OWNED = new Set([
   // self-driving's agent behaviors + their deterministic logic — carried by profiles/self-driving.
-  'agent-planner.ts', 'agent-pm.ts', 'agent-strategist.ts', 'agent-strategy-reviewer.ts',
-  // reviewer is now a skill agent: a prepare (read) + interpreter (write merge gate) pair, profile-owned.
+  'agent-planner.ts', 'agent-pm.ts', 'agent-strategist.ts',
+  // reviewer + strategy-reviewer are now skill agents: each a prepare (read) + interpreter (write) pair,
+  // profile-owned (they must NOT leak into the generic runtime mirror).
   'prepare-review.ts', 'interpret-review.ts',
+  'prepare-strategy-review.ts', 'interpret-strategy-review.ts',
   'open-autonomy-config.ts', 'open-autonomy-governance-report.ts', 'open-autonomy-preflight.ts',
   'open-autonomy-upgrade-cli.ts',
   'public-agent-ci.ts', 'public-agent-command.ts', 'public-agent-context.ts', 'public-agent-control-files.ts',

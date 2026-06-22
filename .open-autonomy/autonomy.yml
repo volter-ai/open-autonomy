@@ -31,7 +31,8 @@ documents:
     - scripts/interpret-review.ts
     - scripts/agent-planner.ts
     - scripts/agent-strategist.ts
-    - scripts/agent-strategy-reviewer.ts
+    - scripts/prepare-strategy-review.ts
+    - scripts/interpret-strategy-review.ts
     - scripts/public-agent-pm.ts
     - scripts/public-agent-dispatcher.ts
     - scripts/public-agent-review.ts
@@ -56,6 +57,7 @@ documents:
 skills:
   developer: .codex/skills/open-autonomy-developer
   reviewer: .codex/skills/reviewer
+  strategy_reviewer: .codex/skills/strategy-reviewer
 agents:
   developer:
     skill: open-autonomy-developer
@@ -145,7 +147,7 @@ agents:
       - artifact:author
       - agent:launch
   strategy_reviewer:
-    skill: scripts/agent-strategy-reviewer.ts
+    skill: strategy-reviewer
     workflowFile: public-agent-strategy-review.yml
     params:
       TARGET_REF: subject.ref
@@ -164,7 +166,7 @@ agents:
       PUBLIC_AGENT_STRATEGY_REVIEW_MAX_USD_CENTS: ${{ vars.PUBLIC_AGENT_STRATEGY_REVIEW_MAX_USD_CENTS || '50' }}
     capabilities:
       - tasks:converse
-      - agent:launch
+      - artifact:author
 policy:
   autonomy:
     max_open_agent_prs: 5

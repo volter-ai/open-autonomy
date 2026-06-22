@@ -122,12 +122,14 @@ agents:
         PUBLIC_AGENT_STRATEGIST_MAX_USD_CENTS: ${{ vars.PUBLIC_AGENT_STRATEGIST_MAX_USD_CENTS || '100' }}
         PUBLIC_AGENT_STRATEGIST_MAX_ITEMS: ${{ vars.PUBLIC_AGENT_STRATEGIST_MAX_ITEMS || '3' }}
 
-  # Deterministic strategy reviewer: ratifies a strategist proposal against the merit rubric behind a
-  # governance guard; a maintainer "/agent ratify" is human-in-the-loop approval. Needs statuses:write
-  # to report the "ci" status on a GITHUB_TOKEN-authored proposal branch.
+  # Strategy reviewer: a skill agent that JUDGES a strategist roadmap proposal against the merit rubric +
+  # constitution (emits a typed verdict), then a thin interpreter runs the deterministic governance guard
+  # and, on a clean pass, promotes + checks + merges. A maintainer "/agent ratify" overrides the verdict
+  # (human-in-the-loop) but not the guard. Needs statuses:write to report "ci" on a GITHUB_TOKEN-authored
+  # proposal branch.
   strategy_reviewer:
-    behavior: scripts/agent-strategy-reviewer.ts
-    capabilities: [tasks:converse, agent:launch]
+    behavior: strategy-reviewer
+    capabilities: [tasks:converse, artifact:author]
     triggers:
       - event: issue_comment
         config: { types: [created] }
@@ -135,9 +137,19 @@ agents:
           TARGET_REF: subject.ref
           SUBJECT_TEXT: subject.text
           ACTOR_ROLE: subject.actorRole
+    result:
+      schema:
+        type: object
+        properties:
+          verdict: { type: string, enum: [pass, fail] }
+          human_required: { type: boolean }
+          summary: { type: string }
+          findings: { type: array, items: { type: string } }
+        required: [verdict, human_required, summary, findings]
     config:
       workflowFile: public-agent-strategy-review.yml
-      model: true
+      prepare: scripts/prepare-strategy-review.ts
+      interpreter: scripts/interpret-strategy-review.ts
       timeout: 20
       permissions: { statuses: write }
       env:
@@ -214,7 +226,8 @@ resources:
   - scripts/interpret-review.ts
   - scripts/agent-planner.ts
   - scripts/agent-strategist.ts
-  - scripts/agent-strategy-reviewer.ts
+  - scripts/prepare-strategy-review.ts
+  - scripts/interpret-strategy-review.ts
   - scripts/public-agent-pm.ts
   - scripts/public-agent-dispatcher.ts
   - scripts/public-agent-review.ts

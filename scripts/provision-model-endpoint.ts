@@ -61,12 +61,18 @@ if (!token) {
   process.exit(1);
 }
 
+// Capture the run_id so the job can REVOKE this run when it finishes — a deterministic agent's run is
+// useless after its single job, and an un-revoked run holds an active-run slot for the full token TTL
+// (~2h), so a frequent cron (pm/strategist) would otherwise leak slots and saturate the active-run caps.
+const runId = out.match(/^run_id=(.*)$/m)?.[1] ?? '';
+
 const base = proxyUrl.replace(/\/$/, '');
 appendFileSync(githubEnv, [
   `OPENAI_BASE_URL=${base}/v1`,
   `ANTHROPIC_BASE_URL=${base}`,
   `OPENAI_API_KEY=${token}`,
   `ANTHROPIC_API_KEY=${token}`,
+  `AGENT_RUN_ID=${runId}`,
   '',
 ].join('\n'));
 console.log('model endpoint provisioned (bounded run token; admin credential stays in this step)');

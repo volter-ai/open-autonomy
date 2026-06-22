@@ -250,9 +250,27 @@ function deterministicYml(name: string, agent: IRAgent): string {
     `      - run: bun install --frozen-lockfile || bun install`,
     ...modelSetupStep(agent),
     `      - run: bun ${agent.behavior}`,
+    ...modelRevokeStep(agent),
     ...artifactLines(name),
     ``,
   ].join('\n');
+}
+
+// Revoke the bounded run when a model-using deterministic job finishes, freeing its active-run slot
+// immediately rather than leaking it for the full token TTL (~2h). Without this, a frequent cron agent
+// (pm every 30m, strategist, reviewer) accumulates un-revoked runs and saturates the per-actor/per-repo
+// active-run caps. `if: always()` so a failed behavior still releases the slot; best-effort (|| true);
+// OIDC-gated like the mint (the job already holds id-token: write). AGENT_RUN_ID is set by the mint step.
+function modelRevokeStep(agent: IRAgent): string[] {
+  if (!cfg(agent).model) return [];
+  return [
+    `      - name: Revoke the run token`,
+    `        if: always() && env.AGENT_RUN_ID != ''`,
+    `        env:`,
+    `          MODEL_PROXY_URL: \${{ vars.MODEL_PROXY_URL }}`,
+    `          MODEL_PROXY_OIDC_AUDIENCE: \${{ vars.MODEL_PROXY_OIDC_AUDIENCE || 'volter-agent-model-proxy' }}`,
+    `        run: bun scripts/model-proxy-revoke.ts --run-id "\${{ env.AGENT_RUN_ID }}" || true`,
+  ];
 }
 
 // A model-interpreted agent (skill behavior): the universal privilege-separated wrapper. The agent job

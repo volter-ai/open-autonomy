@@ -48,6 +48,12 @@ jobs:
       - name: install Claude Code CLI
         run: npm install -g "@anthropic-ai/claude-code@${{ vars.PUBLIC_AGENT_CLAUDE_CODE_VERSION || 'latest' }}" && claude --version
       - run: bun scripts/agent-reviewer.ts
+      - name: Revoke the run token
+        if: always() && env.AGENT_RUN_ID != ''
+        env:
+          MODEL_PROXY_URL: ${{ vars.MODEL_PROXY_URL }}
+          MODEL_PROXY_OIDC_AUDIENCE: ${{ vars.MODEL_PROXY_OIDC_AUDIENCE || 'volter-agent-model-proxy' }}
+        run: bun scripts/model-proxy-revoke.ts --run-id "${{ env.AGENT_RUN_ID }}" || true
       - uses: actions/upload-artifact@v4
         if: always()
         with:

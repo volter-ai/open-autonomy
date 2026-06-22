@@ -15,6 +15,9 @@ export interface Session {
   status: SessionStatus;
   ref?: string; // backend handle (e.g. termfleet agentSessionId)
   params?: Record<string, string>; // opaque pass-through; the system never interprets these
+  // Optional human-readable caveat the orchestrator reads on `list`/`get`. A human runner sets it so the
+  // PM knows the `status` is bookkeeping and what it must verify itself to decide `done`.
+  note?: string;
 }
 
 // Arbitrary parameters carried to a launched agent. The system passes them through verbatim — a
@@ -105,6 +108,10 @@ export class HumanRunner implements Runner {
       agent, // the human actor (a class/address); opaque to the runner
       status: 'running', // engaged + parked; never auto-completes — a human's done is verified externally
       ...(Object.keys(params).length ? { params } : {}), // the ask + completion condition ride here, opaque
+      // The PM reads this on list()/get(): `running` here is bookkeeping, not progress — the PM must verify
+      // the completion condition itself, then `update(id, {status:'done'})`. The condition is echoed so the
+      // PM knows exactly what to check without the runner understanding it.
+      note: `bookkeeping only — completion is not auto-detected here; verify this completion condition, then mark done: ${params.completion ?? '(none provided)'}`,
     };
     this.write([...this.read(), session]);
     this.engage?.(session); // black-box delivery; no-op runner skips it (pure bookkeeping)

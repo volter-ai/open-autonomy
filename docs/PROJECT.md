@@ -16,3 +16,7 @@ the proof, not the definition.
 
 See `docs/VISION.md` for the category and direction, `docs/CONSTITUTION.md` for the
 north star and merit criteria, and `docs/AUTONOMY-IR.md` for the spec.
+
+Agents — `public-agent-{pm,review,strategist,strategy-review}` and their
+`decide()` loop (see `packages/substrate-github/src/runtime/agent-loop.ts`) —
+carry out the SDLC work the declared org authorizes.

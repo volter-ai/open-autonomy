@@ -49,14 +49,17 @@ describe('public agent production readiness', () => {
     expect(text).not.toContain('agent-bundle');
   });
 
-  test('PM sweep respects pause/backpressure controls', () => {
-    const pm = script('agent-pm.ts');
-    expect(pm).toContain('-label:agent-paused');
-    expect(pm).toContain('-label:agent-repo-paused');
-    expect(pm).toContain('-label:agent-maintainer-hold');
-    expect(pm).toContain('-label:needs-info');
-    expect(pm).toContain('public agent repo pause is enabled; PM sweep skipped');
-    expect(workflow('public-agent-pm.yml')).toContain('bun scripts/agent-pm.ts');
+  test('pm is a skill agent that can launch (agent:launch → actions:write) but not change code', () => {
+    const text = workflow('public-agent-pm.yml');
+    expect(text).toContain('bun scripts/claude-agent-run.ts --skill .codex/skills/pm/SKILL.md');
+    const pmJob = text.slice(text.indexOf('  pm:'));
+    expect(pmJob).toContain('actions: write'); // agent:launch — dispatch the developer
+    expect(pmJob).toContain('issues: write'); // tasks:author/converse
+    expect(pmJob).not.toContain('contents: write'); // pm changes no code
+    // The pm skill encodes the backpressure controls.
+    const skill = readFileSync(new URL('../.codex/skills/pm/SKILL.md', import.meta.url), 'utf8');
+    expect(skill).toContain('agent-repo-paused');
+    expect(skill).toContain('max_open_agent_prs');
   });
 
   test('reviewer holds code:review (statuses:write) and cannot merge (no contents:write)', () => {
@@ -72,13 +75,15 @@ describe('public agent production readiness', () => {
     expect(text).not.toContain('github-agent-publish');
   });
 
-  test('planner workflow applies roadmap issue plans', () => {
-    const pl = script('agent-planner.ts');
-    expect(pl).toContain('public-agent-planner.ts');
-    expect(pl).toContain('origin:roadmap-planner');
-    expect(pl).toContain('gh issue create');
-    expect(pl).toContain('gh issue edit');
-    expect(workflow('open-autonomy-planner.yml')).toContain('bun scripts/agent-planner.ts');
+  test('planner is a skill agent that reconciles roadmap into tracking issues', () => {
+    const text = workflow('open-autonomy-planner.yml');
+    expect(text).toContain('bun scripts/claude-agent-run.ts --skill .codex/skills/planner/SKILL.md');
+    const plJob = text.slice(text.indexOf('  planner:'));
+    expect(plJob).toContain('issues: write'); // tasks:author
+    expect(plJob).not.toContain('contents: write'); // planner changes no code
+    const skill = readFileSync(new URL('../.codex/skills/planner/SKILL.md', import.meta.url), 'utf8');
+    expect(skill).toContain('origin:roadmap-planner');
+    expect(skill).toContain('gh issue create');
   });
 
   test('fleet preflight and governance workflows are wired', () => {

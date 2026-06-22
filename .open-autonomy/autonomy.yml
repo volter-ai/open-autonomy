@@ -26,8 +26,6 @@ documents:
     - docs/standards/security.md
     - docs/standards/tests.md
     - package.json
-    - scripts/agent-pm.ts
-    - scripts/agent-planner.ts
     - scripts/public-agent-pm.ts
     - scripts/public-agent-dispatcher.ts
     - scripts/public-agent-review.ts
@@ -51,7 +49,9 @@ documents:
     - scripts/open-autonomy-upgrade-cli.ts
 skills:
   developer: .codex/skills/developer
+  pm: .codex/skills/pm
   reviewer: .codex/skills/reviewer
+  planner: .codex/skills/planner
   strategist: .codex/skills/strategist
   strategy_reviewer: .codex/skills/strategy-reviewer
 agents:
@@ -69,21 +69,11 @@ agents:
       - code:propose
       - tasks:converse
   pm:
-    skill: scripts/agent-pm.ts
+    skill: pm
     workflowFile: public-agent-pm.yml
     triggers:
       schedule: "*/30 * * * *"
     timeout: 30
-    concurrency: public-agent-pm
-    env:
-      PM_COMMENT_TOKEN: ${{ secrets.PUBLIC_AGENT_TRIGGER_TOKEN || github.token }}
-      PUBLIC_AGENT_PM_LIMIT: ${{ vars.PUBLIC_AGENT_PM_LIMIT || '10' }}
-      PUBLIC_AGENT_PM_MODEL: ${{ vars.PUBLIC_AGENT_PM_MODEL ||
-        vars.PUBLIC_AGENT_TRIAGE_MODEL || 'deepseek/deepseek-v4-flash' }}
-      PUBLIC_AGENT_PM_PROVIDER: ${{ vars.PUBLIC_AGENT_PM_PROVIDER ||
-        vars.PUBLIC_AGENT_TRIAGE_PROVIDER || 'anthropic' }}
-      PUBLIC_AGENT_REPO_PAUSED: ${{ vars.PUBLIC_AGENT_REPO_PAUSED || 'false' }}
-      PUBLIC_AGENT_PM_MAX_USD_CENTS: ${{ vars.PUBLIC_AGENT_PM_MAX_USD_CENTS || '25' }}
     capabilities:
       - tasks:converse
       - tasks:author
@@ -110,7 +100,7 @@ agents:
       - code:review
       - tasks:converse
   planner:
-    skill: scripts/agent-planner.ts
+    skill: planner
     workflowFile: open-autonomy-planner.yml
     triggers:
       schedule: 17 6 * * *

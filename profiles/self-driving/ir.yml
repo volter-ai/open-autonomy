@@ -26,25 +26,16 @@ agents:
       workflowFile: public-agent.yml
       timeout: 90
 
-  # Deterministic PM: sweeps open issues, asks the model for a triage decision, routes the next action.
+  # PM: a skill agent that sweeps the open-issue queue, triages each issue, and launches the developer on
+  # ready work — applying capacity + backpressure. Comments + labels + launches; changes no code.
   pm:
-    behavior: scripts/agent-pm.ts
+    behavior: pm
     capabilities: [tasks:converse, tasks:author, agent:launch]
     triggers:
       - cron: "*/30 * * * *"
     config:
       workflowFile: public-agent-pm.yml
-      model: true
-      persistCredentials: false
       timeout: 30
-      concurrency: public-agent-pm
-      env:
-        PM_COMMENT_TOKEN: ${{ secrets.PUBLIC_AGENT_TRIGGER_TOKEN || github.token }}
-        PUBLIC_AGENT_PM_LIMIT: ${{ vars.PUBLIC_AGENT_PM_LIMIT || '10' }}
-        PUBLIC_AGENT_PM_MODEL: ${{ vars.PUBLIC_AGENT_PM_MODEL || vars.PUBLIC_AGENT_TRIAGE_MODEL || 'deepseek/deepseek-v4-flash' }}
-        PUBLIC_AGENT_PM_PROVIDER: ${{ vars.PUBLIC_AGENT_PM_PROVIDER || vars.PUBLIC_AGENT_TRIAGE_PROVIDER || 'anthropic' }}
-        PUBLIC_AGENT_REPO_PAUSED: ${{ vars.PUBLIC_AGENT_REPO_PAUSED || 'false' }}
-        PUBLIC_AGENT_PM_MAX_USD_CENTS: ${{ vars.PUBLIC_AGENT_PM_MAX_USD_CENTS || '25' }}
 
   # Reviewer: a skill agent that reviews an agent PR and posts its verdict as the `agent-review` status
   # (code:review = statuses:write). It holds NO contents:write, so it cannot merge; GitHub auto-merge lands
@@ -66,9 +57,10 @@ agents:
       workflowFile: public-agent-review.yml
       timeout: 20
 
-  # Deterministic planner: reconciles roadmap.yml against the planner-owned roadmap issues.
+  # Planner: a skill agent that reconciles roadmap.yml into planner-owned tracking issues (one per
+  # planned item). Creates + edits issues; changes no code.
   planner:
-    behavior: scripts/agent-planner.ts
+    behavior: planner
     capabilities: [tasks:converse, tasks:author]
     triggers:
       - cron: "17 6 * * *"
@@ -177,8 +169,6 @@ resources:
   # runtime — they live in profiles/self-driving/scripts/ and ship only with this profile (the github
   # mirror carries only the generic runtime). The `behavior: scripts/agent-*.ts` entries above resolve to
   # the first five; the rest are their import closure. A different profile (e.g. simple-sdlc) ships none.
-  - scripts/agent-pm.ts
-  - scripts/agent-planner.ts
   - scripts/public-agent-pm.ts
   - scripts/public-agent-dispatcher.ts
   - scripts/public-agent-review.ts

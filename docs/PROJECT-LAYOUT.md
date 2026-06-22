@@ -44,7 +44,8 @@ open-autonomy/                  # the substrate-agnostic autonomy system (also d
 │       └── src/runtime/        #   (coordinated follow-up) the github runtime: public-agent loop, gates, publisher bundle, proxy clients
 ├── bin/autonomy-conformance.ts # CLI wiring concrete runners across substrates
 ├── profiles/                   # example profiles (recipes): compile to ANY substrate
-├── examples/                   # generated installations into demo targets (cookbooks)
+├── examples/                   # small hermetic cookbooks / upgrade fixtures: small-app, library, docs-only
+├── bench/                      # the one live-eval harness (workloads + graders); proves behavior live
 ├── services/agent-model-proxy/ # a github-substrate service
 ├── docs/                       # AUTONOMY-IR.md (spec) + this file
 └── .open-autonomy/ .github/    # open-autonomy's own installation (dogfood)
@@ -53,21 +54,29 @@ open-autonomy/                  # the substrate-agnostic autonomy system (also d
 Dependency direction: `substrate-local` and `substrate-github` each depend on `core`; **core depends
 on nothing** and never imports a substrate.
 
-## Making a testbed
+## Proving behavior live (bench)
 
-A testbed is a disposable target you stand up to prove behavior live — the standard lifecycle plus
-two substrate-scoped steps:
+To prove behavior live you run a **bench workload** — `bench/` is the one live-eval harness. A workload
+provisions a disposable target and drives the standard lifecycle plus two substrate-scoped steps:
 
 ```
-compile(profile, substrate) → installation → provision → seed → run → proctor
+compile(profile, substrate) → installation → provision → seed → run → grade
 ```
 
 - **provision** — substrate prereqs not in the installation (github: repo + secrets/vars/labels/branch-protection from `provision.json`; local: a dir + `git init` + termfleet + codex trust).
-- **seed** — put work in (github: scenario issues; local: a seeded backlog).
-- **run** — github: Actions fires it; local: start the loop. **proctor** — score coverage.
+- **seed** — put work in (github: scenario issues; local: a seeded backlog), per the workload's `intake.mode`.
+- **run** — github: Actions fires it; local: start the loop. **grade** — score against the workload's graders (coverage / rubric / autonomy).
 
+The conformance workload stands a target up, seeds it, runs it, and coverage-grades it in one command:
+
+```
+bun bin/bench.ts --live --workload self-driving-conformance --profile self-driving   # provision → seed → run
+bun bin/bench.ts --score --repo <owner/name> --workload self-driving-conformance      # coverage grader
+```
+
+`self-driving-greenfield` is the self-start variant (empty seed, the org bootstraps its own backlog).
 github and local are the **same recipe**; only `provision` differs. "Adopt into my repo" =
-`compile(self-driving, github)`, not a hand-maintained starter.
+`open-autonomy compile profiles/self-driving github <target>`, not a hand-maintained starter.
 
 ## Status
 
@@ -78,8 +87,8 @@ github and local are the **same recipe**; only `provision` differs. "Adopt into 
   its runtime, as `substrate-local` owns its runner; the vendored mirror is tied to `scripts/` by
   `check:runtime-sync`). `profiles/self-driving` is OA's setup as a profile.
 - **Done:** `templates/` is **deleted**. The installation is now produced solely by
-  `compile(profiles/self-driving, github)`. Its consumers were migrated: `scaffold-target-repo`
-  compiles the profile; the upgrade is a maintainer-run local command
+  `compile(profiles/self-driving, github)`. Its consumers were migrated: adopting into a repo is now
+  `open-autonomy compile profiles/self-driving github <target>`; the upgrade is a maintainer-run local command
   (`scripts/open-autonomy-upgrade-cli.ts`, vendored into every installation) that clones open-autonomy,
   compiles the profile to get the canonical installation, and applies the diff to the working tree —
   the maintainer reviews, commits, and pushes (so workflow changes, a human_required path the CI token
@@ -94,9 +103,12 @@ github and local are the **same recipe**; only `provision` differs. "Adopt into 
   `ztrack-*` skill names, no `wip` work-states) — ztrack is a profile's tooling, carried opaquely, never
   the substrate. `AUTONOMY-IR.md` was genericized to match (substrate = local/github; tooling = a
   profile's choice). Any profile compiles to any substrate.
-- **Done:** the scenario testbed is profile-derived too — `bootstrap-testbed` scaffolds the
-  installation by compiling `profiles/self-driving` and overlays only a 12-file seed (constitution,
-  roadmap, scenarios, `provision.json`, the issue seeder). `examples/testbed` was stripped from a
-  64-file vendored installation (with badly-drifted runtime) down to that seed, so it can't drift.
+- **Done:** the scenario testbed is now a **bench workload**, profile-derived too — `bun bin/bench.ts
+  --live --workload self-driving-conformance --profile self-driving` compiles `profiles/self-driving` and
+  overlays only the workload's `seed/` (constitution, roadmap, scenarios, `provision.json`, the issue
+  seeder, under `bench/workload/self-driving-conformance/seed/`). The seed was stripped from a 64-file
+  vendored installation (with badly-drifted runtime) down to just that seed, so it can't drift. The
+  self-start variant is `self-driving-greenfield`. Bench is the one live-eval harness; `examples/` stays as
+  the separate hermetic CI-fixture rung.
 - **Remaining:** the small `examples/{small-app,library,docs-only}` are still vendored upgrade
   fixtures (deliberately older, to exercise the upgrade tool).

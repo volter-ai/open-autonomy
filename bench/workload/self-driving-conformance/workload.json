@@ -1,0 +1,9 @@
+{
+  "name": "self-driving-conformance",
+  "kind": "smoke",
+  "summary": "Live conformance — does every wired self-driving capability fire end-to-end on real GitHub?",
+  "timeBudgetMinutes": 240,
+  "appliesTo": ["self-driving"],
+  "graders": ["coverage"],
+  "intake": { "mode": "scenarios", "seeder": "scripts/testbed-seed-issues.ts" }
+}

@@ -4,6 +4,8 @@
   "summary": "Existing rough code: a naive in-memory key-value store with no validation, no tests, and a latent eviction bug — make it production-ready without changing its public shape.",
   "timeBudgetMinutes": 90,
   "appliesTo": ["self-driving", "simple-sdlc"],
+  "graders": ["rubric", "autonomy"],
+  "intake": { "mode": "goal" },
   "rubric": [
     {
       "id": "correctness",

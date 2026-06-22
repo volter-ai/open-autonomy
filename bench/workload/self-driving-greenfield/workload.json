@@ -1,0 +1,35 @@
+{
+  "name": "self-driving-greenfield",
+  "kind": "greenfield",
+  "summary": "From a constitution alone, does the org self-start — strategist generates a roadmap, then the loop executes it?",
+  "timeBudgetMinutes": 240,
+  "appliesTo": ["self-driving"],
+  "graders": ["rubric", "autonomy"],
+  "intake": { "mode": "none" },
+  "rubric": [
+    {
+      "id": "self-start",
+      "weight": 3,
+      "criterion": "The strategist self-starts from the constitution",
+      "guidance": "With no seeded issues, the strategist produces a coherent roadmap grounded in the constitution (not empty, not off-topic)."
+    },
+    {
+      "id": "execution",
+      "weight": 3,
+      "criterion": "The loop executes the roadmap into real work",
+      "guidance": "Roadmap items become issues that the PM routes and developers turn into reviewed, merged PRs — visible progress, not just planning."
+    },
+    {
+      "id": "coherence",
+      "weight": 2,
+      "criterion": "Work stays coherent and on-constitution",
+      "guidance": "Shipped work traces back to the constitution's intent; no drift, no gold-plating, no unrelated churn."
+    },
+    {
+      "id": "governance",
+      "weight": 2,
+      "criterion": "Governance and risk gates hold",
+      "guidance": "Risky paths are escalated/held as the policy requires; nothing dangerous merges unreviewed."
+    }
+  ]
+}

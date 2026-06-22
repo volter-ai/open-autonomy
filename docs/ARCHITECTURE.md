@@ -28,9 +28,8 @@ published, retried, merged, or escalated.
 
 - `open-autonomy`: canonical OSS implementation and first dogfooding target.
 - `profiles/self-driving`: the self-driving recipe; `compile(…, github)` is the starter installation.
-- `examples/docs-only`: minimal cookbook repo.
-- `examples/testbed`: cookbook repo shape used to prove live autonomy behavior.
-- `open-autonomy-testbed`: live external repo used to prove behavior on GitHub.
+- `examples/docs-only`, `examples/small-app`, `examples/library`: hermetic cookbook repos / upgrade fixtures (the CI-fixture rung).
+- `bench/`: the live-eval harness. Live autonomy behavior is proven by the `self-driving-conformance` workload (graded by the coverage grader) and self-start by `self-driving-greenfield`.
 
 Future target repositories should install by compiling the profile, then keep
 repo-specific direction, policy, and standards in their own committed files.
@@ -40,7 +39,7 @@ repo-specific direction, policy, and standards in their own committed files.
 Open Autonomy has a source side and a target side.
 
 - Source side: this repository contains the reusable implementation, examples,
-  model proxy, scaffold tooling, and the `profiles/` recipes (compiled into installations).
+  model proxy, the `bench/` live-eval harness, and the `profiles/` recipes (compiled into installations).
 - Target side: a repository that has installed Open Autonomy contains the
   generated workflows, scripts, repo-local skills, and `.open-autonomy/*`
   control files.
@@ -103,8 +102,8 @@ policy section of `autonomy.yml` and workflow code enforce limits.
 | `docs/OSS_AGENT_RUNBOOK.md` | Local checks, live smoke tests, operator commands | maintainers/operators |
 | `docs/PUBLIC_AGENT_PRODUCTION_ROLLOUT.md` | Enablement checklist for a target repo | maintainers |
 | `docs/ROADMAP.md` | Continuous roadmap, proof gates, and expanded product direction | planner/maintainers |
-| `examples/testbed/docs/TEST_MATRIX.md` | Live scenario catalog | testbed operators |
-| `examples/testbed/docs/TEST_RUNS.md` | Live proof ledger | testbed operators, roadmap audit |
+| `bench/README.md` | Live-eval harness: workloads, graders, running a cell | bench operators |
+| `bench/workload/self-driving-conformance/` | Live conformance scenario catalog (coverage-graded) | bench operators, roadmap audit |
 
 `docs/ROADMAP.md` is the only canonical roadmap. The roadmap should explain
 direction; issues should execute work; runbooks should explain operation;
@@ -162,7 +161,7 @@ Each autonomous path should leave visible evidence:
 - PR comments/body for reviewable human context
 
 The durable end state should be a queryable decision index. Until then, the
-session folders, decision records, issue/PR comments, and testbed ledger are the
+session folders, decision records, issue/PR comments, and bench run evidence are the
 audit trail.
 
 ## Operating Rules
@@ -173,4 +172,4 @@ audit trail.
 - Risky, unclear, blocked, or repeatedly failing work escalates to humans.
 - Publisher policy handles write safety; reviewer handles product/code quality;
   merge gate handles final merge safety.
-- Live proof in the testbed is required before claiming roadmap completion.
+- Live proof from a bench workload (e.g. `self-driving-conformance`) is required before claiming roadmap completion.

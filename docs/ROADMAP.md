@@ -927,16 +927,16 @@ Implemented:
 
 Live proof status:
 
-- Proven live in `open-autonomy-testbed` and recorded with run IDs in
-  `examples/testbed/docs/TEST_RUNS.md`: issue-level pause/status/resume (#5),
+- Proven live via the `self-driving-conformance` bench workload and recorded with run IDs:
+  issue-level pause/status/resume (#5),
   repo-level pause/resume through the label fallback (#14), PM visible
   wait/ignore/needs-info statuses, PM follow-up from `needs-info` into develop and
   merge (#11 → PR #12), risky-workflow escalation (#4), maintainer-hold block
   (#10), `/agent retry` with no failed run (#40), and the five-issue dogfood
   (#29-#33 → merged PRs #34-#38).
-- The testbed repo is provisioned reproducibly with `bun run testbed:provision`
-  (`scripts/provision-target-repo.ts` + `examples/testbed/provision.json`), not a
-  one-off manual setup.
+- The conformance repo is provisioned reproducibly by `bun bin/bench.ts --live --workload
+  self-driving-conformance --profile self-driving` (`scripts/provision-target-repo.ts` +
+  `bench/workload/self-driving-conformance/seed/provision.json`), not a one-off manual setup.
 - Remaining live demonstrations require synthetic fixtures that do not exist yet:
   `retry-ci-failure`, `retry-review-failure`, `head-changed-before-merge`, and
   `publisher-policy-rejection`. Their deterministic gate behavior is already
@@ -956,16 +956,16 @@ Proof audit:
 - Planner, preflight, governance, CI, and template/example checks are all part
   of the completion bar.
 
-Remaining live testbed proof work:
+Remaining live bench proof work:
 
-- Build testbed-only synthetic fixtures so retry/merge edge cases can be driven
+- Build conformance-only synthetic fixtures so retry/merge edge cases can be driven
   live without damaging real workflows: a required-CI-failure toggle, a reviewer
   `develop_retry` toggle, a head-changed-before-merge race harness, and a
   maintainer-triggered forbidden-workflow-edit develop bundle.
 - With those fixtures, let the scheduled autonomy drive `retry-ci-failure`,
   `retry-review-failure`, `head-changed-before-merge`, and
-  `publisher-policy-rejection`, then record run IDs and final states in
-  `examples/testbed/docs/TEST_RUNS.md`.
+  `publisher-policy-rejection` in the `self-driving-conformance` workload, then record
+  run IDs and final states.
 - Capture one clean scheduled `pm-open-pr-review` sweep once the reviewer-model
   path is healthy. The human-in-the-loop rule applies: set preconditions, then
   let the cron-driven PM/agents/merge gate run unattended.
@@ -1128,10 +1128,10 @@ repositories.
 
 Build:
 
-- template initialization command or script that installs workflows, scripts,
-  docs, labels, and required repo variables (`scripts/scaffold-target-repo.ts`
-  copies template files; `scripts/provision-target-repo.ts` idempotently creates
-  the GitHub repo and reconciles variables, labels, and branch protection from a
+- installation command that installs workflows, scripts, docs, labels, and
+  required repo variables (`open-autonomy compile profiles/self-driving github <target>`
+  compiles the profile into the target; `scripts/provision-target-repo.ts` idempotently
+  creates the GitHub repo and reconciles variables, labels, and branch protection from a
   committed `provision.json` manifest, reporting required secrets as manual
   follow-up)
 - versioned policy/profile file so each repo can declare allowed paths,

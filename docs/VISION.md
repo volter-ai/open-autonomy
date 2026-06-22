@@ -66,7 +66,7 @@ The mission reduces to three pieces of machinery, plus the anchor above them:
 | Piece | Role | What it is | Status |
 |---|---|---|---|
 | **Standards** | the **space** | the org-as-code system: IR, substrates, conformance | mature |
-| **Bench** | the **fitness** | competitive testbeds + the twin: which design/system is better | **underbuilt — the bottleneck** |
+| **Bench** | the **fitness** | competitive bench workloads + the twin: which design/system is better | **underbuilt — the bottleneck** |
 | **Dogfood** | the **engine** | running the best on ourselves: ground truth + the crank | live |
 | *anchor* | the **objective** | the human-owned merit criteria (not a piece — never searched) | — |
 
@@ -176,8 +176,9 @@ territory.
 The fitness function, made physical. If you cannot launch org-experiments and score them, "find the best"
 is a slogan. This is the **bottleneck leg**.
 
-**Proof vs. bench.** The existing testbed (`testbed:provision`, `TEST_RUNS.md`, the proof ledger) answers
-*"does this installation behave correctly?"* — pass/fail. The mission needs the second question: *"how
+**Proof vs. bench.** The conformance workload (`bun bin/bench.ts --live --workload self-driving-conformance`,
+coverage-graded, plus the proof ledger) answers *"does this installation behave correctly?"* — pass/fail.
+The mission needs the second question: *"how
 **well** does this org design perform versus another?"* — a comparative **score with error bars** on the
 merit criteria. Same machinery, different output; that repurposing is the work.
 
@@ -188,13 +189,13 @@ loop), against a **shared workload suite** so scores are comparable. That suite 
 lifted one altitude: the subject under test is the org design, not the model.* Diversity is mandatory, or
 you find the best org for *your* repo, not the best org.
 
-**The twin and the testbed are a division of labor, not redundant:**
+**The twin and the live bench are a division of labor, not redundant:**
 
 - **Twin = cheap, approximate fitness** → screen *many* candidates in simulation (a self-calibrating
   queueing model of the org: per-seam velocity *distributions*, yields, contention — not averages).
-- **Testbed bench = expensive, ground-truth fitness** → confirm the *few* promising ones live.
-- They feed each other: **testbed runs calibrate the twin; the calibrated twin decides which testbeds are
-  worth spending on.** That loop is what makes search *affordable*.
+- **Live bench = expensive, ground-truth fitness** → confirm the *few* promising ones live.
+- They feed each other: **live bench runs calibrate the twin; the calibrated twin decides which bench runs
+  are worth spending on.** That loop is what makes search *affordable*.
 
 From the twin: the **bottleneck** (Theory of Constraints → the *right* next automation, not the merely
 expensive one), throughput/cycle-time prediction, and a **behavioral `plan`** ("simulate adding 3
@@ -202,7 +203,7 @@ developer agents" before spending). The bottleneck migrates to the human seams a
 the bench points, on its own, at what to automate next.
 
 **Simulating humans.** Most org designs include human actors, so an experiment must substitute them with
-**human simulators** — the profile is unchanged; the testbed supplies a simulator realization for each
+**human simulators** — the profile is unchanged; the bench supplies a simulator realization for each
 `kind: human` actor (a deterministic fixture for reproducible tests; a latency/decision *distribution* for
 the twin; model-roleplay for rich scenarios), calibrated from real human-seam measurements. The seam's
 typed payload + identity-decoupled redeem handle are what make this possible (`docs/HANDOFFS.md`). Without
@@ -217,7 +218,7 @@ constructs (participants + seams) and *measured by* Bench.
 1. **Distributions, not points.** One run is a noisy sample (model nondeterminism + workload variance);
    repeat and treat statistically.
 2. **Autonomous-only.** Our rule *act as human-in-the-loop, never hand-crank the autonomy* is not just
-   hygiene — a hand-driven testbed has contaminated its own fitness reading. Set preconditions, let cron
+   hygiene — a hand-driven bench run has contaminated its own fitness reading. Set preconditions, let cron
    drive, measure what actually happens.
 3. **Automate the harness, human-own the selection.** Launch/run/score may be automated; choosing which
    design to promote on the Pareto frontier is human (the measuring-stick rule).
@@ -269,7 +270,7 @@ spine.
   yield, rework counts; the autonomy ratio; a **fleet treasury** (from per-agent caps). *Unlocks:* the
   inputs to the twin.
 - **H4 — Model the throughput** *(Bench)*. The self-calibrating **twin**; Theory-of-Constraints bottleneck
-  ranking; a **behavioral `plan`**; **competitive testbeds** (proof → score). *Unlocks:* affordable search.
+  ranking; a **behavioral `plan`**; **competitive bench workloads** (proof → score). *Unlocks:* affordable search.
 - **H5 — Optimize autonomy** *(the search closing the loop; frontier)*. The org proposes its next
   automation; the desired state becomes self-modifying — within the constitutional guardrail.
 

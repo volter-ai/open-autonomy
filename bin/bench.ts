@@ -44,7 +44,10 @@ if (process.argv.includes('--live')) {
   if (!wl || !profile) throw new Error('usage: --live --workload <name> --profile <name> [--substrate github]');
   if (substrate !== 'github') throw new Error('live runs target github (disposable repos in ' + ORG + ')');
   const wdir = join(WL, wl);
-  const meta = JSON.parse(readFileSync(join(wdir, 'workload.json'), 'utf8')) as { summary: string };
+  const meta = JSON.parse(readFileSync(join(wdir, 'workload.json'), 'utf8')) as {
+    summary: string;
+    intake?: { mode?: 'goal' | 'scenarios' | 'none'; seeder?: string };
+  };
   const goal = readFileSync(join(wdir, 'goal.md'), 'utf8');
 
   const id = Date.now().toString(36);
@@ -75,15 +78,23 @@ if (process.argv.includes('--live')) {
   console.log(`provisioning ${repo} …`);
   run('bun', ['scripts/provision-target-repo.ts', '--repo', repo, '--source', build, '--private', '--force-content']);
 
-  console.log(`seeding the goal as the org's intake issue …`);
-  // A freshly-created repo isn't immediately addressable for issues — retry briefly past the race.
-  for (let i = 0; ; i++) {
-    try {
-      run('gh', ['issue', 'create', '-R', repo, '--title', meta.summary, '--body', goal]);
-      break;
-    } catch (e) {
-      if (i >= 4) throw e;
-      Bun.sleepSync(2000);
+  // Seed the org's intake per the workload's declared mode. A freshly-created repo isn't immediately
+  // addressable — retry briefly past the race.
+  const intake = meta.intake ?? { mode: 'goal' };
+  if (intake.mode === 'none') {
+    console.log(`intake: none — no issues seeded; the org self-starts (e.g. the strategist generates the roadmap)`);
+  } else if (intake.mode === 'scenarios') {
+    const seeder = intake.seeder ?? 'scripts/testbed-seed-issues.ts';
+    console.log(`intake: scenarios — seeding via ${seeder}`);
+    for (let i = 0; ; i++) {
+      try { run('bun', [join(build, seeder), '--apply', '--all', '--repo', repo]); break; }
+      catch (e) { if (i >= 4) throw e; Bun.sleepSync(2000); }
+    }
+  } else {
+    console.log(`seeding the goal as the org's intake issue …`);
+    for (let i = 0; ; i++) {
+      try { run('gh', ['issue', 'create', '-R', repo, '--title', meta.summary, '--body', goal]); break; }
+      catch (e) { if (i >= 4) throw e; Bun.sleepSync(2000); }
     }
   }
 
@@ -160,10 +171,18 @@ if (process.argv.includes('--score')) {
   const dir = mkdtempSync(join(tmpdir(), 'bench-result-'));
   console.log(`cloning ${repo} -> ${dir}`);
   run('gh', ['repo', 'clone', repo, dir, '--', '--depth', '1']);
-  const judgeArgs = ['scripts/bench-judge.ts', '--workload', join(WL, wl), '--result', dir];
+  // Run the graders the workload declares — pluggable per workload (rubric judge / coverage / autonomy),
+  // the eval-framework idiom (one case suite, scorers chosen per case). Default to the rubric judge.
+  const meta = JSON.parse(readFileSync(join(WL, wl, 'workload.json'), 'utf8')) as { graders?: string[] };
+  const graders = meta.graders ?? ['rubric'];
   const out = arg('--out');
-  if (out) judgeArgs.push('--out', out);
-  run('bun', judgeArgs);
+  for (const g of graders) {
+    console.log(`\n— grader: ${g} —`);
+    if (g === 'rubric') run('bun', ['scripts/bench-judge.ts', '--workload', join(WL, wl), '--result', dir, ...(out ? ['--out', out] : [])]);
+    else if (g === 'coverage') run('bun', ['scripts/bench-coverage.ts', '--repo', repo]);
+    else if (g === 'autonomy') run('bun', ['scripts/autonomy-ratio.ts', dir]);
+    else throw new Error(`unknown grader "${g}" in ${wl}/workload.json (use rubric|coverage|autonomy)`);
+  }
   process.exit(0);
 }
 

@@ -1,12 +1,24 @@
 # Bench — the workload suite
 
-Bench measures **org design**, not models. An experiment is a **cell**: `profile × substrate × workload`
-(see `docs/VISION.md`). We hand an autonomous org a substantial **goal**, let it run for **real time**,
-and score the **outcome by judgment** — an AI judge against a rubric — not a unit-test oracle. That fitness
-reading has two axes:
+Bench is the **one** live-eval harness — it measures **org design**, not models. (The former standalone
+`testbed`/`scaffold`/`bootstrap-*` scripts were folded in here; `examples/` remains the separate, hermetic
+CI-fixture rung.) An experiment is a **cell**: `profile × substrate × workload` (see `docs/VISION.md`). We
+provision a real repo, hand the autonomous org its intake, let it run for **real time**, then **grade** the
+outcome.
 
-- **quality** — did it actually achieve the goal? (`scripts/bench-judge.ts`, AI judge on the rubric)
-- **autonomy** — how much was done by agents vs humans? (`scripts/autonomy-ratio.ts`, over decision records)
+### Graders — pluggable per workload
+
+Each workload declares which graders apply (`"graders": [...]`) — the eval-framework idiom (one case suite,
+scorers chosen per case; cf. OpenAI Evals / HELM / braintrust). Three exist:
+
+- **`rubric`** — quality: did it achieve the goal? An AI judge investigates the result repo and scores the
+  workload's weighted rubric (`scripts/bench-judge.ts`). Right for **open-ended** goals (feature/refactor),
+  where a fixed test oracle would over-constrain.
+- **`coverage`** — did each wired capability fire? Maps the run's live issues/PRs/runs to `[oa-test:<id>]`
+  scenarios (`scripts/bench-coverage.ts`). Right for **conformance/smoke** workloads.
+- **`autonomy`** — how much was done by agents vs humans, over the decision records (`scripts/autonomy-ratio.ts`).
+
+`bun bin/bench.ts --score` runs exactly the graders the workload declares.
 
 ## A workload
 
@@ -16,21 +28,27 @@ best org for *one* repo, not the best org.
 
 ```
 bench/workload/<name>/
-  workload.json   # metadata + the rubric (weighted criteria the judge scores)
-  goal.md         # the substantial goal, in prose — what "done" means
-  seed/           # the starting repository (empty-ish for greenfield, rough code for refactor/bug)
+  workload.json   # metadata + graders + intake mode (+ the rubric, if graded by rubric)
+  goal.md         # the substantial goal / what "done" means (or, for smoke, what the scenarios cover)
+  seed/           # the starting repository (empty-ish for greenfield, rough code for refactor/bug,
+                  #   the scenario repo + seeder for conformance) — PROJECT input only, never generated files
 ```
+
+The four current workloads span the taxonomy: `todo-cli` (feature, rubric), `kv-harden` (refactor, rubric),
+`self-driving-conformance` (smoke, coverage), `self-driving-greenfield` (greenfield self-start, rubric).
 
 `workload.json`:
 
 ```jsonc
 {
   "name": "todo-cli",
-  "kind": "feature",              // docs | bug | feature | refactor | security | flaky
+  "kind": "feature",              // docs | bug | feature | refactor | security | flaky | smoke | greenfield
   "summary": "...",
   "timeBudgetMinutes": 120,        // how long the org gets — a bench takes real time
   "appliesTo": ["self-driving", "simple-sdlc"],
-  "rubric": [
+  "graders": ["rubric", "autonomy"],     // which graders --score runs (rubric | coverage | autonomy)
+  "intake": { "mode": "goal" },          // goal (seed goal.md as one issue) | scenarios (run a seeder) | none (self-start)
+  "rubric": [                            // required when graders includes "rubric"
     { "id": "core", "weight": 3, "criterion": "...", "guidance": "what 0 vs 3 vs 5 looks like" }
   ]
 }
@@ -48,18 +66,20 @@ seed an install-owned file (`package.json`/`README`…) when missing, but never 
 source, and never leaks another profile's agents. This gates a cell before spending real time/money on a
 live run. (Pure per-profile compile coherence is `check:profiles`.)
 
-**Live (the real bench) — `bun bin/bench.ts --live` (being wired).** Per cell: provision a disposable repo
-from `seed/`, seed the goal as the org's intake, run the profile **autonomously** for its time budget —
-*set preconditions, let cron drive it, never hand-crank the autonomy* (a hand-driven run contaminates its
-own fitness reading) — then tear down and score:
+**Live (the real bench) — `bun bin/bench.ts --live`.** Per cell: compile the profile, overlay the workload
+`seed/` (install-owned files kept so the runtime survives), provision a disposable repo, seed the org's
+intake per the workload's `intake.mode` (a goal issue / a scenario seeder / nothing for self-start),
+bootstrap-fund a bounded budget, then let the org run **autonomously** for its time budget — *set
+preconditions, let cron drive it, never hand-crank the autonomy* (a hand-driven run contaminates its own
+fitness reading). When it settles, score and tear down:
 
 ```
-bun scripts/bench-judge.ts --workload bench/workload/todo-cli --result <run-repo> --out score.json
-bun scripts/autonomy-ratio.ts <run-repo>/.agent-run/.../decisions
+bun bin/bench.ts --score --repo <owner/name> --workload todo-cli   # runs the workload's declared graders
+bun bin/bench.ts --teardown --repo <owner/name> --funder volter-test-fixtures
 ```
 
-The judge uses the transparent model seam (`scripts/model-call.ts`): point `OPENAI_BASE_URL`/`OPENAI_API_KEY`
-or `ANTHROPIC_BASE_URL`/`ANTHROPIC_API_KEY` at the box endpoint (a real provider, or the universal proxy).
+The judge runs the box's model endpoint (the same agent the developer/decisions use, via `runClaudeAgent`
+over the universal proxy) — it investigates the result repo (reads the diff, runs the tests) before scoring.
 
 ## Live bench: one-time setup
 

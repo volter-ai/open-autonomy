@@ -1,10 +1,12 @@
 #!/usr/bin/env bun
 import { execFileSync } from 'node:child_process';
 
-// Quantitative + qualitative snapshot of a live testbed run for the proctor playbook
-// (docs/LIVE_TESTING_STRATEGY.md). Maps live GitHub issues/PRs/runs to the testbed coverage
-// scenarios via their `[oa-test:<id>]` title markers and reports which features are proven,
-// pending, or failed. Pure aggregation is exported for tests; the gh fetches live in main().
+// Bench COVERAGE grader — "did each declared capability fire?". One of bench's pluggable graders
+// (alongside the rubric judge and the autonomy ratio; see bench/README.md). Maps a run repo's live
+// GitHub issues/PRs/runs to the self-driving conformance scenarios via their `[oa-test:<id>]` title
+// markers and reports which are proven, pending, or failed. Used by `bench --score` for workloads that
+// declare `"graders": ["coverage"]` (bench/workload/self-driving-conformance). Pure aggregation is
+// exported for tests; the gh fetches live in main(). (Was scripts/testbed-proctor-report.ts.)
 
 export interface IssueLite {
   number: number;
@@ -122,7 +124,7 @@ export function classifyScenarios(issues: IssueLite[]): ScenarioResult[] {
 export function renderReport(repo: string, metrics: Metrics, scenarios: ScenarioResult[], at: string): string {
   const count = (s: ScenarioStatus) => scenarios.filter((x) => x.status === s).length;
   const lines: string[] = [];
-  lines.push(`# Testbed proctor report — ${repo}`);
+  lines.push(`# Bench coverage — ${repo}`);
   lines.push('');
   lines.push(`Snapshot: ${at}`);
   lines.push('');

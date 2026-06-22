@@ -111,7 +111,7 @@ interface Options {
 
 function usage(): never {
   throw new Error(`Usage:
-  bun scripts/provision-target-repo.ts --repo owner/name --source examples/testbed [--manifest path] [--private] [--force-content] [--dry-run]`);
+  bun scripts/provision-target-repo.ts --repo owner/name --source <build-dir> [--manifest path] [--private] [--force-content] [--dry-run]`);
 }
 
 function parseArgs(argv: string[]): Options {
@@ -162,8 +162,8 @@ function mainHasCommits(repo: string): boolean {
 const ALWAYS_EXCLUDE = new Set(['.git', 'node_modules', '.agent-run']);
 
 // Enumerate the files to push, relative to `source`. Works whether `source` is a directory inside
-// a git repo (committed example like examples/testbed) or a standalone build dir assembled by a
-// bootstrap (scaffold + overlay). Git enumeration respects .gitignore (excludes node_modules); the
+// a git repo (a committed workload seed like bench/workload/<name>/seed) or a standalone build dir
+// assembled by bench --live (compile + overlay). Git enumeration respects .gitignore (excludes node_modules); the
 // filesystem-walk fallback applies when the source is not a git tree.
 export function sourceFiles(source: string): string[] {
   const tracked = tryRun('git', ['-C', source, 'ls-files', '--cached', '--others', '--exclude-standard']);

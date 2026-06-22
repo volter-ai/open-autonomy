@@ -1,7 +1,9 @@
 # Live Testing Strategy
 
-This document defines how open-autonomy proves itself in a live, disposable
-testbed repository with **no fakery**. It is part of the canonical direction:
+This document defines how open-autonomy proves itself live, in a disposable
+repository, with **no fakery**. The "how" is **bench**, the one live-eval harness:
+the conformance proof is the `self-driving-conformance` workload (coverage-graded),
+and self-start is `self-driving-greenfield`. It is part of the canonical direction:
 the agents, planner, and any human or AI operator should read it before running
 or extending live tests.
 
@@ -52,33 +54,37 @@ record it as a gap, never paper over it.
   assesses progress qualitatively and quantitatively, and records evidence. The
   proctor never does the autonomy's job.
 
-## 3. Pillar 1 — Hands-free setup of a new testbed repo
+## 3. Pillar 1 — Hands-free setup of a fresh conformance repo
 
-A fresh testbed must reach "ready, seeded, and self-driving" from one command,
-with the single unavoidable manual step (a secret) reported explicitly.
+A fresh disposable repo must reach "ready, seeded, and self-driving" from one
+command, with the single unavoidable manual step (a secret) reported explicitly.
 
-`bun run testbed:bootstrap --repo <owner/name>` chains, each step idempotent:
+`bun bin/bench.ts --live --workload self-driving-conformance --profile self-driving`
+provisions, seeds, and starts the run — each step idempotent:
 
-1. `provision-target-repo.ts` — create the repo (private) and reconcile variables,
-   labels, and branch protection from `examples/testbed/provision.json`.
+1. compile `profiles/self-driving` for github and overlay the workload `seed/`, then
+   create the repo (private) and reconcile variables, labels, and branch protection
+   from `bench/workload/self-driving-conformance/seed/provision.json`
+   (`scripts/provision-target-repo.ts`).
 2. report the required secret (`MODEL_PROXY_ADMIN_TOKEN`); the proxy must already
    trust the repo's `public-agent.yml` workflow for OIDC
    (`services/agent-model-proxy/wrangler.toml`).
-3. set the testbed PM cron to a fast cadence (`*/5 * * * *`) so a 60 minute session
-   sees many sweeps. This is testbed-only; production stays at `*/30`.
-4. `testbed-seed-issues.ts --apply --all` — seed every scenario issue and fixture.
+3. set the PM cron to a fast cadence (`*/5 * * * *`) so a 60 minute session
+   sees many sweeps. This is workload-only; production stays at `*/30`.
+4. seed every scenario issue and fixture (the workload's `intake.mode: scenarios`
+   runs `seed/scripts/testbed-seed-issues.ts --apply --all`).
 5. run `Open Autonomy Preflight`; exit ready, or print exactly what is missing.
 
 The only manual action is pasting the proxy admin token once. Everything else is
 scripted and re-runnable.
 
-## 4. Pillar 2 — The testbed contains everything needed to test everything
+## 4. Pillar 2 — The conformance workload contains everything needed to test everything
 
-The seed (`examples/testbed/scripts/testbed-seed-issues.ts`) plus a small set of
-**testbed-only fixtures** must cover every feature. Fixtures are explicit,
-labelled `manual-operator-test`, and never touch real production behavior.
+The seed (`bench/workload/self-driving-conformance/seed/scripts/testbed-seed-issues.ts`)
+plus a small set of **workload-only fixtures** must cover every feature. Fixtures are
+explicit, labelled `manual-operator-test`, and never touch real production behavior.
 
-Fixtures (implemented as testbed-only mechanisms — the testbed runs its own copies
+Fixtures (implemented as workload-only mechanisms — the workload seed runs its own copies
 of the scripts/workflows, so these never touch canonical production code). Each
 creates a **real** condition keyed off a per-PR sentinel file the develop agent
 actually writes, so there is no model/CI stubbing:
@@ -127,13 +133,14 @@ actually writes, so there is no model/CI stubbing:
 | Fleet: scaffold / provision / preflight / upgrade / version recorded | `scaffold-install-check`, `fleet-*` | run preflight/upgrade | `done` |
 | Governance develop-only / risky-approval | `governance-develop-only`, `governance-risky-approval` | approve the human-required PR | `human-required` → `done` |
 
-Each row maps to a `TEST_MATRIX.md` row and a `.open-autonomy/roadmap.yml` proof
-gate; results are recorded in `examples/testbed/docs/TEST_RUNS.md` with run IDs.
+Each row maps to a `[oa-test:<id>]` scenario the coverage grader scores and a
+`.open-autonomy/roadmap.yml` proof gate; results are recorded as bench run evidence
+with run IDs (`bun bin/bench.ts --score --repo <owner/name> --workload self-driving-conformance`).
 
 ## 5. Pillar 3 — The proctor playbook
 
 The proctor runs on an interval (default **every 5 minutes**) for ~60 minutes. The
-testbed PM cron is also `*/5`, so each proctor tick lands just after a sweep.
+workload's PM cron is also `*/5`, so each proctor tick lands just after a sweep.
 
 ### Each tick: assess, then act
 
@@ -165,14 +172,15 @@ testbed PM cron is also `*/5`, so each proctor tick lands just after a sweep.
 - file the next fresh issue to start a new clean line (keep the dogfood flowing)
 - trigger maintainer-only fixtures (forbidden-edit develop, fixture markers)
 
-Then record every new outcome (issue/PR/run URL, final state) in `TEST_RUNS.md`.
+Then record every new outcome (issue/PR/run URL, final state) as bench run evidence.
 
 ### Illustrative 60-minute schedule
 
 Times are relative; adjust to the live cadence. Let the scheduled sweep do the
 work between proctor ticks.
 
-- **T+0 — Bootstrap & seed.** Run `testbed:bootstrap`; confirm preflight ready and
+- **T+0 — Bootstrap & seed.** Run `bun bin/bench.ts --live --workload
+  self-driving-conformance --profile self-driving`; confirm preflight ready and
   all scenarios seeded. Take no autonomous action.
 - **T+5 — First sweep triage.** Observe PM classify clear/needs-info/risky/duplicate.
   Human action: none yet.
@@ -219,10 +227,12 @@ work between proctor ticks.
 
 ## 6. Evidence and reporting
 
-- Per-scenario rows in `examples/testbed/docs/TEST_RUNS.md`: issue URL, PR URL, run
-  URL, final state, decision-artifact/session path, gaps.
+- Per-scenario bench run evidence: issue URL, PR URL, run URL, final state,
+  decision-artifact/session path, gaps. The coverage grader
+  (`bun bin/bench.ts --score --repo <owner/name> --workload self-driving-conformance`)
+  maps the run's live issues/PRs/runs to `[oa-test:<id>]` scenarios.
 - The proof audit (`scripts/open-autonomy-proof-audit.ts`) only accepts a
-  `TEST_RUNS.md`-backed gate when the ledger records at least one real run, so live
+  live-backed gate when the evidence records at least one real run, so live
   evidence cannot be faked by an empty template.
 - The 60-minute coverage report is the qualitative+quantitative summary the proctor
   writes at T+60.
@@ -231,16 +241,18 @@ work between proctor ticks.
 
 Built and committed:
 
-- `bun run testbed:bootstrap` (`scripts/bootstrap-testbed.ts`) — provision → secret
-  check → seed-all → preflight, idempotent.
-- `bun run testbed:provision` (`scripts/provision-target-repo.ts`) — repo, variables,
-  labels, branch protection from `examples/testbed/provision.json`.
-- `bun run testbed:proctor` (`scripts/testbed-proctor-report.ts`) — the quantitative
-  snapshot + coverage classification the proctor records each tick.
+- `bun bin/bench.ts --live --workload self-driving-conformance --profile self-driving`
+  — provision → secret check → seed-all → preflight → run, idempotent. Provisioning
+  reconciles repo, variables, labels, and branch protection from
+  `bench/workload/self-driving-conformance/seed/provision.json` via
+  `scripts/provision-target-repo.ts`.
+- `bun bin/bench.ts --score --repo <owner/name> --workload self-driving-conformance`
+  (`scripts/bench-coverage.ts`) — the coverage grader: the quantitative snapshot +
+  scenario classification the proctor records each tick.
 - The four Section-4 fixtures and the expanded seed (`operator-retry-no-failure`,
   `repo-pause`, `operator-cancel`, `governance-develop-only`,
   `governance-risky-approval`).
-- The testbed PM cron is `*/5` so a 60-minute session sees frequent sweeps.
+- The workload's PM cron is `*/5` so a 60-minute session sees frequent sweeps.
 
 Still operational, not code:
 

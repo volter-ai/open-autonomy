@@ -1,14 +1,13 @@
 import { describe, expect, test } from 'bun:test';
-import { bootstrapSteps } from './bootstrap-testbed.js';
 import {
   classifyScenarios,
   renderReport,
   scenarioIdFromTitle,
   summarizeMetrics,
   type IssueLite,
-} from './testbed-proctor-report.js';
+} from './bench-coverage.js';
 
-describe('testbed proctor report', () => {
+describe('bench coverage grader', () => {
   test('extracts the scenario id from an oa-test issue title', () => {
     expect(scenarioIdFromTitle('[oa-test:pm-needs-info] Improve the docs')).toBe('pm-needs-info');
     expect(scenarioIdFromTitle('Unrelated issue')).toBeUndefined();
@@ -48,16 +47,8 @@ describe('testbed proctor report', () => {
   test('renders a report with coverage counts', () => {
     const issues: IssueLite[] = [{ number: 10, title: '[oa-test:pm-needs-info] x', state: 'OPEN', labels: ['needs-info'] }];
     const report = renderReport('owner/name', summarizeMetrics(issues, [], []), classifyScenarios(issues), '2026-06-17T00:00:00Z');
-    expect(report).toContain('Testbed proctor report — owner/name');
+    expect(report).toContain('Bench coverage — owner/name');
     expect(report).toContain('Coverage:');
     expect(report).toContain('pm-needs-info');
-  });
-});
-
-describe('bootstrap steps', () => {
-  test('declares the ordered bootstrap steps (scaffold-from-profile then seed)', () => {
-    expect(bootstrapSteps().map((s) => s.id)).toEqual([
-      'scaffold', 'overlay', 'provision', 'secret-check', 'seed', 'preflight',
-    ]);
   });
 });

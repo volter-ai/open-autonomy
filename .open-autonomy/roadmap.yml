@@ -160,3 +160,34 @@ items:
       - A canonical-repo feature is authored by the develop agent on an issue, reviewed, and merged by the gate (not hand-written in a chat).
       - Manual driving of canonical is scoped to the bootstrap substrate only, and even bootstrap work cites live-run evidence.
       - Significant changes trace to a roadmap item and a satisfied proof gate; proven by the pipeline shipping at least one OA feature end to end.
+  - id: loop-health-monitor
+    phase: 18
+    priority: high
+    status: proposed
+    title: Loop Health Monitor: detect and surface when the autonomy loop is down
+    proof_gate: loop-health-monitor-detect-and-surface-w-proof
+    acceptance:
+      - A health indicator (e.g., last-seen timestamp, expected-cadence watermark) is visible per workflow — PM, review, developer, strategist, planner — in a committed artifact or status check.
+      - Consecutive missed runs beyond configurable threshold produce a visible signal (issue, status badge, or GitHub check) that operators can route to notification.
+      - Proven by a live testbed run where the orchestrator is paused and the health monitor surfaces the gap within one expected cadence; run IDs recorded in the ledger.
+  - id: model-proxy-resource-discipline
+    phase: 19
+    priority: high
+    status: proposed
+    title: Model-Proxy Resource Guarantee: no silent run-slot leaks
+    proof_gate: model-proxy-resource-guarantee-no-silent-proof
+    acceptance:
+      - Every model-proxy run mint has exactly one revocation path tied to run completion, not a decoupled best-effort call — leak is impossible under normal execution.
+      - Revocation failures produce a visible signal (logged as error, surfaced in run artifacts) instead of silent swallow.
+      - Proven by a testbed run that traces slot acquisition → work → release in a single control flow with no orphaned slots; run IDs recorded in the ledger.
+  - id: cost-accountability-per-gate
+    phase: 20
+    priority: medium
+    status: proposed
+    title: Cost Accountability Per Loop Gate
+    proof_gate: cost-accountability-per-loop-gate-proof
+    acceptance:
+      - Each gate (triage, agent run, review) records model cost in a committed ledger datum scoped to issue/PR — visible without external dashboards.
+      - Aggregate cost summaries (per issue, per workflow, trailing 7 days) are reconstructable from committed decision records without external billing APIs.
+      - A new-repo adopter can look up 'what a typical issue costs' from the ledger in their own installation's first week.
+      - Proven by a live testbed run where an end-to-end issue cycle emits cost-tagged decision records that sum to the actual model-proxy spend; run IDs recorded in the ledger.

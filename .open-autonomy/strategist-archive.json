@@ -1,0 +1,530 @@
+{
+  "schema": "open-autonomy.strategist-archive.v1",
+  "candidates": [
+    {
+      "id": "volter-ai-open-autonomy-67",
+      "title": "Model-proxy run-slot leak: stop leaking at the source (revoke decoupled from setup; no silent swallow)",
+      "direction": "customer-demand",
+      "source": "https://github.com/volter-ai/open-autonomy/issues/67",
+      "status": "open"
+    },
+    {
+      "id": "volter-ai-open-autonomy-66",
+      "title": "Org health monitor: detect and surface when the autonomy loop is down",
+      "direction": "customer-demand",
+      "source": "https://github.com/volter-ai/open-autonomy/issues/66",
+      "status": "open"
+    },
+    {
+      "id": "volter-ai-open-autonomy-23",
+      "title": "[roadmap:public-oss-readiness] Public OSS Readiness",
+      "direction": "customer-demand",
+      "source": "https://github.com/volter-ai/open-autonomy/issues/23",
+      "status": "open"
+    },
+    {
+      "id": "volter-ai-open-autonomy-22",
+      "title": "[roadmap:self-hosted-fleet] Self-Hosted Repository Fleet",
+      "direction": "customer-demand",
+      "source": "https://github.com/volter-ai/open-autonomy/issues/22",
+      "status": "open"
+    },
+    {
+      "id": "volter-ai-open-autonomy-15",
+      "title": "[roadmap:maintainer-governance] Maintainer Governance",
+      "direction": "customer-demand",
+      "source": "https://github.com/volter-ai/open-autonomy/issues/15",
+      "status": "open"
+    },
+    {
+      "id": "volter-ai-open-autonomy-14",
+      "title": "[roadmap:repair-loops] Agent Quality And Repair Loops",
+      "direction": "customer-demand",
+      "source": "https://github.com/volter-ai/open-autonomy/issues/14",
+      "status": "open"
+    },
+    {
+      "id": "volter-ai-open-autonomy-13",
+      "title": "[roadmap:durable-state-index] Durable State And Audit Trail",
+      "direction": "customer-demand",
+      "source": "https://github.com/volter-ai/open-autonomy/issues/13",
+      "status": "open"
+    },
+    {
+      "id": "volter-ai-open-autonomy-11",
+      "title": "[roadmap:direction-control-files] Direction, Constitution, And Planning Loop",
+      "direction": "customer-demand",
+      "source": "https://github.com/volter-ai/open-autonomy/issues/11",
+      "status": "open"
+    },
+    {
+      "id": "volter-ai-open-autonomy-10",
+      "title": "[roadmap:production-rollout] Production Rollout",
+      "direction": "customer-demand",
+      "source": "https://github.com/volter-ai/open-autonomy/issues/10",
+      "status": "open"
+    },
+    {
+      "id": "volter-ai-open-autonomy-9",
+      "title": "[roadmap:operator-observability] Observability And Operator Controls",
+      "direction": "customer-demand",
+      "source": "https://github.com/volter-ai/open-autonomy/issues/9",
+      "status": "open"
+    },
+    {
+      "id": "volter-ai-open-autonomy-8",
+      "title": "[roadmap:review-merge-parity] Review And Merge Gate Parity",
+      "direction": "customer-demand",
+      "source": "https://github.com/volter-ai/open-autonomy/issues/8",
+      "status": "open"
+    },
+    {
+      "id": "volter-ai-open-autonomy-7",
+      "title": "[roadmap:developer-context-quality] Developer Context And Patch Quality",
+      "direction": "customer-demand",
+      "source": "https://github.com/volter-ai/open-autonomy/issues/7",
+      "status": "open"
+    },
+    {
+      "id": "volter-ai-open-autonomy-6",
+      "title": "[roadmap:pm-proactive-backlog] PM Operations And Backlog Policy",
+      "direction": "customer-demand",
+      "source": "https://github.com/volter-ai/open-autonomy/issues/6",
+      "status": "open"
+    },
+    {
+      "id": "volter-ai-open-autonomy-5",
+      "title": "[roadmap:unified-loop-budget] Unified Loop Budget And Stop Conditions",
+      "direction": "customer-demand",
+      "source": "https://github.com/volter-ai/open-autonomy/issues/5",
+      "status": "open"
+    },
+    {
+      "id": "volter-ai-open-autonomy-4",
+      "title": "[roadmap:durable-decision-memory] Durable Decision Memory",
+      "direction": "customer-demand",
+      "source": "https://github.com/volter-ai/open-autonomy/issues/4",
+      "status": "open"
+    },
+    {
+      "id": "all-hands-ai-openhands-14927",
+      "title": "[Bug]: Forgejo under subpath not working",
+      "direction": "competitor-gap",
+      "source": "https://github.com/OpenHands/OpenHands/issues/14927",
+      "status": "open"
+    },
+    {
+      "id": "all-hands-ai-openhands-14920",
+      "title": "DELETE /api/v1/sandboxes/{id}: path/handler param mismatch makes `sandbox_id` a required query param (and ignores the path)",
+      "direction": "competitor-gap",
+      "source": "https://github.com/OpenHands/OpenHands/issues/14920",
+      "status": "open"
+    },
+    {
+      "id": "all-hands-ai-openhands-14912",
+      "title": "API keys carry full user privileges — add scoped (reduced-privilege) credentials",
+      "direction": "competitor-gap",
+      "source": "https://github.com/OpenHands/OpenHands/issues/14912",
+      "status": "open"
+    },
+    {
+      "id": "all-hands-ai-openhands-14908",
+      "title": "[Feature]:  Additional documentation on OpenHands security boundaries and sandbox assumptions",
+      "direction": "competitor-gap",
+      "source": "https://github.com/OpenHands/OpenHands/issues/14908",
+      "status": "open"
+    },
+    {
+      "id": "all-hands-ai-openhands-14905",
+      "title": "[Bug]: V1 Web UI connects to agent-server via dynamic host port behind reverse proxy (Traefik), causing persistent \"Network Error\" / conversation stuck",
+      "direction": "competitor-gap",
+      "source": "https://github.com/OpenHands/OpenHands/issues/14905",
+      "status": "open"
+    },
+    {
+      "id": "all-hands-ai-openhands-14903",
+      "title": "Multiple Command Injection vulnerabilities in openhands",
+      "direction": "competitor-gap",
+      "source": "https://github.com/OpenHands/OpenHands/issues/14903",
+      "status": "open"
+    },
+    {
+      "id": "all-hands-ai-openhands-14902",
+      "title": "[Bug]: Privilege Escalation and Host Takeover via Exposed Docker Socket in docker-compose.yml",
+      "direction": "competitor-gap",
+      "source": "https://github.com/OpenHands/OpenHands/issues/14902",
+      "status": "open"
+    },
+    {
+      "id": "all-hands-ai-openhands-14891",
+      "title": "Normalize log severity for expected integration webhook skips",
+      "direction": "competitor-gap",
+      "source": "https://github.com/OpenHands/OpenHands/issues/14891",
+      "status": "open"
+    },
+    {
+      "id": "all-hands-ai-openhands-14890",
+      "title": "Route startup/shutdown and Alembic INFO logs away from error status",
+      "direction": "competitor-gap",
+      "source": "https://github.com/OpenHands/OpenHands/issues/14890",
+      "status": "open"
+    },
+    {
+      "id": "all-hands-ai-openhands-14882",
+      "title": "[Feature]: Docker / Docker Compose Instructions",
+      "direction": "competitor-gap",
+      "source": "https://github.com/OpenHands/OpenHands/issues/14882",
+      "status": "open"
+    },
+    {
+      "id": "all-hands-ai-openhands-14879",
+      "title": "Bug: Images Sent in Chat Are Not Forwarded to AI Agent Context",
+      "direction": "competitor-gap",
+      "source": "https://github.com/OpenHands/OpenHands/issues/14879",
+      "status": "open"
+    },
+    {
+      "id": "all-hands-ai-openhands-14878",
+      "title": "Archive runtime workspace files before deleting remote sandboxes",
+      "direction": "competitor-gap",
+      "source": "https://github.com/OpenHands/OpenHands/issues/14878",
+      "status": "open"
+    },
+    {
+      "id": "all-hands-ai-openhands-14862",
+      "title": "[Bug]: Runtime has never finished building on Intranet",
+      "direction": "competitor-gap",
+      "source": "https://github.com/OpenHands/OpenHands/issues/14862",
+      "status": "open"
+    },
+    {
+      "id": "all-hands-ai-openhands-14859",
+      "title": "fix: log level warning → error for HTTP 4xx/5xx responses in automation service event forwarding",
+      "direction": "competitor-gap",
+      "source": "https://github.com/OpenHands/OpenHands/issues/14859",
+      "status": "open"
+    },
+    {
+      "id": "all-hands-ai-openhands-14857",
+      "title": "[Feature]: Optional reviewer-facing evidence gates for software-agent actions",
+      "direction": "competitor-gap",
+      "source": "https://github.com/OpenHands/OpenHands/issues/14857",
+      "status": "open"
+    },
+    {
+      "id": "all-hands-ai-openhands-14850",
+      "title": "Use shallow clone by default with a setting to fetch full Git history",
+      "direction": "competitor-gap",
+      "source": "https://github.com/OpenHands/OpenHands/issues/14850",
+      "status": "open"
+    },
+    {
+      "id": "all-hands-ai-openhands-14841",
+      "title": "❓ Agent Canvas transition FAQ",
+      "direction": "competitor-gap",
+      "source": "https://github.com/OpenHands/OpenHands/issues/14841",
+      "status": "open"
+    },
+    {
+      "id": "all-hands-ai-openhands-14837",
+      "title": "Skills: `disabled_skills` is ignored by the conversation skills endpoint, and Settings→Skills lists a different skill set than the agent loads",
+      "direction": "competitor-gap",
+      "source": "https://github.com/OpenHands/OpenHands/issues/14837",
+      "status": "open"
+    },
+    {
+      "id": "all-hands-ai-openhands-14831",
+      "title": "[Bug]: Cannot create preview links or open browser tabs in sandbox",
+      "direction": "competitor-gap",
+      "source": "https://github.com/OpenHands/OpenHands/issues/14831",
+      "status": "open"
+    },
+    {
+      "id": "all-hands-ai-openhands-14824",
+      "title": "Support custom sandbox images in conversation start API",
+      "direction": "competitor-gap",
+      "source": "https://github.com/OpenHands/OpenHands/issues/14824",
+      "status": "open"
+    },
+    {
+      "id": "princeton-nlp-swe-agent-1333",
+      "title": "How to correctly capture DeepSeek reasoning_content in agent trajectory?",
+      "direction": "competitor-gap",
+      "source": "https://github.com/SWE-agent/SWE-agent/issues/1333",
+      "status": "open"
+    },
+    {
+      "id": "princeton-nlp-swe-agent-1326",
+      "title": "'swe-rex' executable script not found in package 'swe-rex'",
+      "direction": "competitor-gap",
+      "source": "https://github.com/SWE-agent/SWE-agent/issues/1326",
+      "status": "open"
+    },
+    {
+      "id": "princeton-nlp-swe-agent-1319",
+      "title": "ERROR IN V-0.7 for ENIGMA",
+      "direction": "competitor-gap",
+      "source": "https://github.com/SWE-agent/SWE-agent/issues/1319",
+      "status": "open"
+    },
+    {
+      "id": "princeton-nlp-swe-agent-1310",
+      "title": "Add Trajectory Hook for Remote Environments",
+      "direction": "competitor-gap",
+      "source": "https://github.com/SWE-agent/SWE-agent/issues/1310",
+      "status": "open"
+    },
+    {
+      "id": "princeton-nlp-swe-agent-1302",
+      "title": "Local model (Ollama CodeLlama 13B) + `thought_action` keeps emitting multi-line Python; SWE-agent treats it as bash and loops with `BashIncorrectSyntaxError`",
+      "direction": "competitor-gap",
+      "source": "https://github.com/SWE-agent/SWE-agent/issues/1302",
+      "status": "open"
+    },
+    {
+      "id": "princeton-nlp-swe-agent-1296",
+      "title": "How to limit input/output tokens to avoid RateLimitError (TPM exceeded)",
+      "direction": "competitor-gap",
+      "source": "https://github.com/SWE-agent/SWE-agent/issues/1296",
+      "status": "open"
+    },
+    {
+      "id": "princeton-nlp-swe-agent-1288",
+      "title": "Claude-4-sonnet Fail to Generate ONE discussion and ONE command",
+      "direction": "competitor-gap",
+      "source": "https://github.com/SWE-agent/SWE-agent/issues/1288",
+      "status": "open"
+    },
+    {
+      "id": "princeton-nlp-swe-agent-1285",
+      "title": "Provider-agnostic Model Registry with Budget, Rate Limits, and Fallback Routing",
+      "direction": "competitor-gap",
+      "source": "https://github.com/SWE-agent/SWE-agent/issues/1285",
+      "status": "open"
+    },
+    {
+      "id": "princeton-nlp-swe-agent-1249",
+      "title": "setting up tools and running `source install.sh` seems to break agent trying to reinstall/rebuild repos from source in container",
+      "direction": "competitor-gap",
+      "source": "https://github.com/SWE-agent/SWE-agent/issues/1249",
+      "status": "open"
+    },
+    {
+      "id": "princeton-nlp-swe-agent-1247",
+      "title": "I can't run sweagent run-batch, but sweagent run works just fine",
+      "direction": "competitor-gap",
+      "source": "https://github.com/SWE-agent/SWE-agent/issues/1247",
+      "status": "open"
+    },
+    {
+      "id": "princeton-nlp-swe-agent-1240",
+      "title": "Buggy cost control with Gemini 2.5 Pro",
+      "direction": "competitor-gap",
+      "source": "https://github.com/SWE-agent/SWE-agent/issues/1240",
+      "status": "open"
+    },
+    {
+      "id": "princeton-nlp-swe-agent-1194",
+      "title": "Tool call usage in Retry strategy",
+      "direction": "competitor-gap",
+      "source": "https://github.com/SWE-agent/SWE-agent/issues/1194",
+      "status": "open"
+    },
+    {
+      "id": "princeton-nlp-swe-agent-1182",
+      "title": "Function calling command parsing: tuple of ints gets turned into string",
+      "direction": "competitor-gap",
+      "source": "https://github.com/SWE-agent/SWE-agent/issues/1182",
+      "status": "open"
+    },
+    {
+      "id": "princeton-nlp-swe-agent-1170",
+      "title": "\"pip not found\" for tools/edit_anthropic when running SweBench MultiModal",
+      "direction": "competitor-gap",
+      "source": "https://github.com/SWE-agent/SWE-agent/issues/1170",
+      "status": "open"
+    },
+    {
+      "id": "princeton-nlp-swe-agent-1145",
+      "title": "FunctionCallingFormatError on SWEAgent using deepseek-ai/DeepSeek-R1-Distill-Qwen-14B",
+      "direction": "competitor-gap",
+      "source": "https://github.com/SWE-agent/SWE-agent/issues/1145",
+      "status": "open"
+    },
+    {
+      "id": "princeton-nlp-swe-agent-1084",
+      "title": "SWE-REX failure on Modal for SWE-Gym instances",
+      "direction": "competitor-gap",
+      "source": "https://github.com/SWE-agent/SWE-agent/issues/1084",
+      "status": "open"
+    },
+    {
+      "id": "princeton-nlp-swe-agent-1074",
+      "title": "Tool call stuck for no reason during running batch",
+      "direction": "competitor-gap",
+      "source": "https://github.com/SWE-agent/SWE-agent/issues/1074",
+      "status": "open"
+    },
+    {
+      "id": "princeton-nlp-swe-agent-1051",
+      "title": "SWE-agent for coding challenge fails to write patch due to Syntax Error",
+      "direction": "competitor-gap",
+      "source": "https://github.com/SWE-agent/SWE-agent/issues/1051",
+      "status": "open"
+    },
+    {
+      "id": "princeton-nlp-swe-agent-941",
+      "title": "Function calling error when using Gemini 2.0",
+      "direction": "competitor-gap",
+      "source": "https://github.com/SWE-agent/SWE-agent/issues/941",
+      "status": "open"
+    },
+    {
+      "id": "princeton-nlp-swe-agent-894",
+      "title": "Purpose of setting `python_standalone_dir`",
+      "direction": "competitor-gap",
+      "source": "https://github.com/SWE-agent/SWE-agent/issues/894",
+      "status": "open"
+    },
+    {
+      "id": "jennyzzt-dgm-31",
+      "title": "best parent-selection mode is unreachable from CLI and selects lowest scores when called",
+      "direction": "analogous-field",
+      "source": "https://github.com/jennyzzt/dgm/issues/31",
+      "status": "open"
+    },
+    {
+      "id": "jennyzzt-dgm-25",
+      "title": "How about to connect a background agent to this github repository and collectivelly approve or decline PRs?",
+      "direction": "analogous-field",
+      "source": "https://github.com/jennyzzt/dgm/issues/25",
+      "status": "open"
+    },
+    {
+      "id": "jennyzzt-dgm-23",
+      "title": "generic programming agent extension",
+      "direction": "analogous-field",
+      "source": "https://github.com/jennyzzt/dgm/issues/23",
+      "status": "open"
+    },
+    {
+      "id": "jennyzzt-dgm-22",
+      "title": "An Architectural Approach to Controlled Generation and its Correlation with DGM Principles",
+      "direction": "analogous-field",
+      "source": "https://github.com/jennyzzt/dgm/issues/22",
+      "status": "open"
+    },
+    {
+      "id": "jennyzzt-dgm-21",
+      "title": "Question about the Polyglot experiment",
+      "direction": "analogous-field",
+      "source": "https://github.com/jennyzzt/dgm/issues/21",
+      "status": "open"
+    },
+    {
+      "id": "jennyzzt-dgm-20",
+      "title": "please add mentat bot in this repo for AI based issue resolution",
+      "direction": "analogous-field",
+      "source": "https://github.com/jennyzzt/dgm/issues/20",
+      "status": "open"
+    },
+    {
+      "id": "jennyzzt-dgm-19",
+      "title": "Alternative targets than SWE-Bench",
+      "direction": "analogous-field",
+      "source": "https://github.com/jennyzzt/dgm/issues/19",
+      "status": "open"
+    },
+    {
+      "id": "jennyzzt-dgm-18",
+      "title": "How to run the coding agent and get logs/predictions like in the initial/ folder?",
+      "direction": "analogous-field",
+      "source": "https://github.com/jennyzzt/dgm/issues/18",
+      "status": "open"
+    },
+    {
+      "id": "jennyzzt-dgm-16",
+      "title": "I have an alternative dgm that I coded myself, feel free to check it out :)",
+      "direction": "analogous-field",
+      "source": "https://github.com/jennyzzt/dgm/issues/16",
+      "status": "open"
+    },
+    {
+      "id": "jennyzzt-dgm-15",
+      "title": "Implement ideas from Google's AlphaEvolve",
+      "direction": "analogous-field",
+      "source": "https://github.com/jennyzzt/dgm/issues/15",
+      "status": "open"
+    },
+    {
+      "id": "jennyzzt-dgm-14",
+      "title": "【Question】Adapting dgm to any specific task like ML",
+      "direction": "analogous-field",
+      "source": "https://github.com/jennyzzt/dgm/issues/14",
+      "status": "open"
+    },
+    {
+      "id": "jennyzzt-dgm-11",
+      "title": "add unit tests",
+      "direction": "analogous-field",
+      "source": "https://github.com/jennyzzt/dgm/issues/11",
+      "status": "open"
+    },
+    {
+      "id": "jennyzzt-dgm-9",
+      "title": "can sandboxing feature for safety be added to this ?",
+      "direction": "analogous-field",
+      "source": "https://github.com/jennyzzt/dgm/issues/9",
+      "status": "open"
+    },
+    {
+      "id": "jennyzzt-dgm-8",
+      "title": "Runnable Code for Best-Discovered Agent",
+      "direction": "analogous-field",
+      "source": "https://github.com/jennyzzt/dgm/issues/8",
+      "status": "open"
+    },
+    {
+      "id": "jennyzzt-dgm-7",
+      "title": "polyglot fails  - utils error",
+      "direction": "analogous-field",
+      "source": "https://github.com/jennyzzt/dgm/issues/7",
+      "status": "open"
+    },
+    {
+      "id": "jennyzzt-dgm-6",
+      "title": "Test against SWE-bench-multilingual",
+      "direction": "analogous-field",
+      "source": "https://github.com/jennyzzt/dgm/issues/6",
+      "status": "open"
+    },
+    {
+      "id": "jennyzzt-dgm-5",
+      "title": "can it be applied to ai scientist code?",
+      "direction": "analogous-field",
+      "source": "https://github.com/jennyzzt/dgm/issues/5",
+      "status": "open"
+    },
+    {
+      "id": "loop-health-monitor",
+      "title": "Loop Health Monitor: detect and surface when the autonomy loop is down",
+      "direction": "customer-demand",
+      "source": "https://github.com/volter-ai/open-autonomy/issues/66",
+      "status": "proposed"
+    },
+    {
+      "id": "model-proxy-resource-discipline",
+      "title": "Model-Proxy Resource Guarantee: no silent run-slot leaks",
+      "direction": "customer-demand",
+      "source": "https://github.com/volter-ai/open-autonomy/issues/67",
+      "status": "proposed"
+    },
+    {
+      "id": "cost-accountability-per-gate",
+      "title": "Cost Accountability Per Loop Gate",
+      "direction": "competitor-gap",
+      "source": "https://github.com/SWE-agent/SWE-agent/issues/1285",
+      "status": "proposed"
+    }
+  ]
+}

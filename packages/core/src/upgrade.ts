@@ -58,8 +58,22 @@ function desiredContents(out: CompileOutput, profileDir: string): Map<string, Bu
 }
 
 /** Plan the upgrade of `targetDir` to a freshly-compiled installation: regenerate derived files, seed
- *  install-owned inputs only if missing, and prune derived orphans (within PRUNE_DIRS only). */
-export function planUpgrade(out: CompileOutput, profileDir: string, targetDir: string): UpgradePlan {
+ *  install-owned inputs only if missing, and — ONLY when `opts.prune` is set — prune derived orphans
+ *  (within PRUNE_DIRS).
+ *
+ *  Prune is OPT-IN and off by default on purpose. The prune deletes any file in PRUNE_DIRS (which
+ *  includes `scripts/`) that the current compile does not produce — which is correct for a clean
+ *  installation, but CATASTROPHIC against a source/dev checkout where those dirs also hold hand-authored
+ *  files the compile legitimately never emits (it would delete all of them). Deletion is therefore
+ *  never planned unless the caller explicitly asks for it; the CLI gates it behind `--prune` AND
+ *  `--apply`. (A future, fully-safe prune would track a manifest of OA-generated paths and only delete
+ *  files OA itself created — see ROADMAP.) */
+export function planUpgrade(
+  out: CompileOutput,
+  profileDir: string,
+  targetDir: string,
+  opts: { prune?: boolean } = {},
+): UpgradePlan {
   const desired = desiredContents(out, profileDir);
   const changes: UpgradeChange[] = [];
   for (const [path, content] of desired) {
@@ -71,8 +85,10 @@ export function planUpgrade(out: CompileOutput, profileDir: string, targetDir: s
     if (!existsSync(tp)) changes.push({ path, action: 'add' });
     else if (!readFileSync(tp).equals(content)) changes.push({ path, action: 'update' });
   }
-  for (const installed of installedFilesUnder(targetDir, PRUNE_DIRS)) {
-    if (!desired.has(installed) && !isInstallOwned(installed)) changes.push({ path: installed, action: 'delete' });
+  if (opts.prune) {
+    for (const installed of installedFilesUnder(targetDir, PRUNE_DIRS)) {
+      if (!desired.has(installed) && !isInstallOwned(installed)) changes.push({ path: installed, action: 'delete' });
+    }
   }
   changes.sort((a, b) => a.path.localeCompare(b.path));
   return { schema: 'open-autonomy.upgrade-plan.v1', changes, notes: renderNotes(changes) };

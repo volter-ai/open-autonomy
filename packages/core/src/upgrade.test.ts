@@ -55,7 +55,7 @@ describe('upgrade = recompile (regenerate derived, keep owned inputs, prune orph
     expect(readFileSync(join(target, '.open-autonomy/roadmap.yml'), 'utf8')).toBe('MY roadmap\n');
   });
 
-  test('prunes orphaned derived files, but never runtime state outside derived dirs', () => {
+  test('prunes orphaned derived files (opt-in), but never runtime state outside derived dirs', () => {
     const { profile, target } = dirs();
     write(target, 'scripts/agent-upgrade.ts', 'retired orchestrator\n'); // orphan in a derived dir
     write(target, '.github/workflows/open-autonomy-upgrade.yml', 'retired workflow\n'); // orphan
@@ -64,7 +64,7 @@ describe('upgrade = recompile (regenerate derived, keep owned inputs, prune orph
       generated: { 'scripts/agent-pm.ts': 'pm\n' },
       copies: [],
     };
-    const plan = planUpgrade(out, profile, target);
+    const plan = planUpgrade(out, profile, target, { prune: true });
     expect(plan.changes).toContainEqual({ path: 'scripts/agent-upgrade.ts', action: 'delete' });
     expect(plan.changes).toContainEqual({ path: '.github/workflows/open-autonomy-upgrade.yml', action: 'delete' });
     expect(plan.changes.find((c) => c.path === '.open-autonomy/strategist-archive.json')).toBeUndefined();
@@ -72,6 +72,16 @@ describe('upgrade = recompile (regenerate derived, keep owned inputs, prune orph
     expect(existsSync(join(target, 'scripts/agent-upgrade.ts'))).toBe(false);
     expect(existsSync(join(target, '.github/workflows/open-autonomy-upgrade.yml'))).toBe(false);
     expect(existsSync(join(target, '.open-autonomy/strategist-archive.json'))).toBe(true);
+  });
+
+  test('does NOT prune by default — hand-authored files in derived dirs survive', () => {
+    const { profile, target } = dirs();
+    write(target, 'scripts/my-dev-tool.ts', 'hand-authored, not from the compile\n');
+    const out: CompileOutput = { generated: { 'scripts/agent-pm.ts': 'pm\n' }, copies: [] };
+    const plan = planUpgrade(out, profile, target); // no { prune: true }
+    expect(plan.changes.find((c) => c.action === 'delete')).toBeUndefined();
+    applyUpgrade(plan, out, profile, target);
+    expect(existsSync(join(target, 'scripts/my-dev-tool.ts'))).toBe(true); // not deleted
   });
 
   test('no changes when the install already matches the compile', () => {

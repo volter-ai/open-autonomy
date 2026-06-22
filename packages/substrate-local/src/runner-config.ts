@@ -5,7 +5,10 @@
 export const RUNNER_DEFAULTS = {
   cli: 'termfleet',
   harness: 'claude',
-  providerUrl: 'http://127.0.0.1:7376',
+  // No providerUrl default on purpose: termfleet now resolves a provider itself
+  // (TERMFLEET_PROVIDER_URL -> `termfleet use` context -> live local auto-discovery).
+  // A baked-in port was the crutch that drifted to a dead provider; the runner
+  // passes --url only when TERMFLEET_PROVIDER_URL is explicitly set.
   launchTimeoutMs: 45000,
 } as const;
 

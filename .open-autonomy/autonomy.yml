@@ -51,12 +51,12 @@ documents:
     - scripts/open-autonomy-governance-report.ts
     - scripts/open-autonomy-upgrade-cli.ts
 skills:
-  developer: .codex/skills/open-autonomy-developer
+  developer: .codex/skills/developer
   reviewer: .codex/skills/reviewer
   strategy_reviewer: .codex/skills/strategy-reviewer
 agents:
   developer:
-    skill: open-autonomy-developer
+    skill: developer
     workflowFile: public-agent.yml
     params:
       ISSUE_REF: subject.ref

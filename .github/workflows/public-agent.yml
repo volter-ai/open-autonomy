@@ -83,7 +83,7 @@ jobs:
           OSS_AGENT_TASK_DIR: .agent-run
           OSS_AGENT_ISSUE_PATH: .agent-run/issue.json
         run: |
-          bun scripts/claude-agent-run.ts --skill .codex/skills/open-autonomy-developer/SKILL.md; rc=$?; bun scripts/agent-visual-verify.ts || true; exit $rc
+          bun scripts/claude-agent-run.ts --skill .codex/skills/developer/SKILL.md; rc=$?; bun scripts/agent-visual-verify.ts || true; exit $rc
       - name: Effect — propose the change as an auto-merging PR (if the tree changed)
         env:
           GH_TOKEN: ${{ github.token }}

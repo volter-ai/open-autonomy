@@ -41,7 +41,7 @@ describe('open autonomy planner and control files', () => {
     expect(context.sources).toContain('AGENTS.md');
     expect(context.sources).toContain('docs/CONSTITUTION.md');
     expect(context.sources).toContain('.open-autonomy/review-rubric.yml');
-    expect(context.sources).toContain('.codex/skills/open-autonomy-developer/SKILL.md');
+    expect(context.sources).toContain('.codex/skills/developer/SKILL.md');
     const prompt = renderControlFilePrompt(context);
     // Title-agnostic: the generic template constitution is titled "# Constitution", canonical's is
     // "# Open Autonomy Constitution". Assert on a stable rule clause present in both so the test

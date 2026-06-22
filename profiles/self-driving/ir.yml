@@ -16,7 +16,7 @@ agents:
   # The only model-interpreted agent: codex writes code in a credential-less sandbox; a trusted
   # publisher validates the bundle and opens the PR. Triggered by the agent-session label or a comment.
   developer:
-    behavior: open-autonomy-developer
+    behavior: developer
     capabilities: [code:propose, tasks:converse]
     triggers:
       - event: issues

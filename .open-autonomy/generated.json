@@ -1,10 +1,10 @@
 {
   "schema": "open-autonomy.generated.v1",
   "files": [
-    ".claude/skills/open-autonomy-developer/SKILL.md",
+    ".claude/skills/developer/SKILL.md",
     ".claude/skills/reviewer/SKILL.md",
     ".claude/skills/strategy-reviewer/SKILL.md",
-    ".codex/skills/open-autonomy-developer/SKILL.md",
+    ".codex/skills/developer/SKILL.md",
     ".codex/skills/reviewer/SKILL.md",
     ".codex/skills/strategy-reviewer/SKILL.md",
     ".github/ISSUE_TEMPLATE/bug_report.yml",

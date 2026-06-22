@@ -17,16 +17,20 @@ An autonomy agent acts on exactly three things:
 
 | noun | what it is | github | local (sketch) |
 |---|---|---|---|
-| **artifact** | the thing being built | the repo / contents | the working tree |
+| **code** | the codebase under version control | the repo / branches | the working tree |
 | **tasks** | units of work + their discussion | issues | a work-store |
 | **agent** | the other agents + their lifecycle | workflow runs | the loop queue |
+
+(`merge` is the tell: it's a version-control operation, so the noun is honestly **code**, not a vague
+"artifact." That's substrate-agnostic at the *git* level — github and local are both git repos — not a
+github leak.)
 
 ## The capabilities
 
 | capability | meaning | github realization |
 |---|---|---|
-| `artifact:author` | propose a change (write a feature branch, open a PR) | `contents: write` + `pull-requests: write` |
-| `artifact:merge` | **land** a reviewed change onto the default branch | **never granted to an agent** — see the merge boundary |
+| `code:propose` | propose a change (write a feature branch, open a PR) | `contents: write` + `pull-requests: write` |
+| `code:merge` | **land** a reviewed change onto the default branch | **never granted to an agent** — see the merge boundary |
 | `tasks:author` | create / update / label / set state of work | `issues: write` |
 | `tasks:converse` | post comments / verdicts on work and changes | `issues: write` (comment scope) |
 | `agent:launch` | start another agent | `actions: write` (dispatch) |
@@ -34,13 +38,13 @@ An autonomy agent acts on exactly three things:
 | `agent:update` | pause / resume / retry another agent | control plane |
 | `agent:cancel` | stop another agent | `actions: write` + control plane |
 
-`observe` (read the artifact and tasks) is **baseline** — every agent has it; it is not a declared
+`observe` (read the code and tasks) is **baseline** — every agent has it; it is not a declared
 capability. Reads are bounded by the agent's sandbox + budget, never by a permission.
 
 The `agent:*` axis is exactly the **Runner contract** (`core/runner.ts`: launch / list / update / cancel
 over sessions) — the substrate-agnostic definition of the agent lifecycle.
 
-**Scope (optional).** A capability may carry a resource scope: `artifact:author@roadmap` = "propose changes
+**Scope (optional).** A capability may carry a resource scope: `code:propose@roadmap` = "propose changes
 to roadmap files only" (the strategist's governance constraint, expressed as a scoped capability, not a
 deterministic guard script). The constitution's `human_required_paths` / `topics` are the global
 complement — the region **no** capability may ever reach.
@@ -52,7 +56,7 @@ credential-less job, no bundle, no trusted publisher mediating its output. The o
 boundary is **prompt injection** via untrusted input (issue bodies, fetched pages, fork diffs) — and that
 justifies a boundary only for the **irreversible, default-branch-affecting** power:
 
-> **The single hard boundary: an agent can never merge.** `artifact:merge` is never grantable to an agent.
+> **The single hard boundary: an agent can never merge.** `code:merge` is never grantable to an agent.
 
 Everything an agent *can* do is recoverable, because the substrate is configured so a hijacked agent cannot
 reach `main`, workflows, or secrets:
@@ -62,7 +66,7 @@ reach `main`, workflows, or secrets:
 - **required checks + required review** gate every merge;
 - the install holds **no secrets** (the model token is OIDC-minted and bounded — that is the budget guard).
 
-So a fully-hijacked `artifact:author` + `tasks:converse` agent can, at worst, push junk to a feature branch
+So a fully-hijacked `code:propose` + `tasks:converse` agent can, at worst, push junk to a feature branch
 or post a bad comment — both reverted in seconds, neither touching `main`. (This is a deliberate, small
 relaxation of the old "agent holds nothing" model; the cost is recoverable feature-branch/comment noise,
 the gain is that agents are real agents instead of envelopes passed to a mediator.)
@@ -91,7 +95,7 @@ provide            →     skill                    →     effect
 - **provide** — the substrate materializes the trigger's *subject* (a PR's diff+checks, an issue, …) into
   the sandbox. Generic; the only variable is which subject, declared by the trigger.
 - **skill** — does the work and emits its typed `result`.
-- **effect** — the agent invokes its own capabilities directly. The **only** exception is `artifact:merge`,
+- **effect** — the agent invokes its own capabilities directly. The **only** exception is `code:merge`,
   which routes to the merge gate above.
 
 There are no `prepare` / `interpret` scripts and no `config` hooks: "input gathering" is `provide`; "acting
@@ -110,13 +114,13 @@ around a credential-less core — the agent IS the job. The lone trusted extra i
 | agent | capabilities |
 |---|---|
 | pm | `tasks:author`, `tasks:converse`, `agent:launch` |
-| developer | `artifact:author`, `tasks:converse` |
+| developer | `code:propose`, `tasks:converse` |
 | reviewer | `tasks:converse` (judges; the merge gate lands it — the reviewer never merges) |
 | strategy_reviewer | `tasks:converse` (judges a roadmap proposal; the gate lands it) |
 | planner | `tasks:author`, `tasks:converse` |
-| strategist | `artifact:author@roadmap`, `agent:launch` |
+| strategist | `code:propose@roadmap`, `agent:launch` |
 
-No agent holds `artifact:merge`.
+No agent holds `code:merge`.
 
 ## What is NOT a capability
 

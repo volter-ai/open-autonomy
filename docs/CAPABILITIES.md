@@ -29,8 +29,9 @@ github leak.)
 
 | capability | meaning | github realization |
 |---|---|---|
-| `code:propose` | propose a change (write a feature branch, open a PR) | `contents: write` + `pull-requests: write` |
-| `code:merge` | **land** a reviewed change onto the default branch | **never granted to an agent** — see the merge boundary |
+| `code:propose` | propose a change (write a feature branch, open a PR, queue auto-merge) | `contents: write` + `pull-requests: write` |
+| `code:review` | **bless** a change for merge (post the verdict that gates landing) | `statuses: write` (posts the `agent-review` status) |
+| `code:merge` | **land** a reviewed change onto the default branch | **never granted to anyone** — landing is native auto-merge (see the merge boundary) |
 | `tasks:author` | create / update / label / set state of work | `issues: write` |
 | `tasks:converse` | post comments / verdicts on work and changes | `issues: write` (comment scope) |
 | `agent:launch` | start another agent | `actions: write` (dispatch) |
@@ -63,7 +64,7 @@ reach `main`, workflows, or secrets:
 
 - **branch protection** on the default branch blocks direct push (a feature-branch PR is the only way in);
 - the github **`workflows` permission** is never granted, so `.github/workflows` can't be edited even with `contents: write`;
-- **required checks + required review** gate every merge;
+- merging requires **two status checks — `ci` + `agent-review`** — and no single agent can produce both (see below);
 - the install holds **no secrets** (the model token is OIDC-minted and bounded — that is the budget guard).
 
 So a fully-hijacked `code:propose` + `tasks:converse` agent can, at worst, push junk to a feature branch
@@ -71,18 +72,26 @@ or post a bad comment — both reverted in seconds, neither touching `main`. (Th
 relaxation of the old "agent holds nothing" model; the cost is recoverable feature-branch/comment noise,
 the gain is that agents are real agents instead of envelopes passed to a mediator.)
 
-### The merge boundary
+### The merge boundary — a permission split, no app, no merge job
 
-Merge is the only action that lands on the default branch irreversibly, so it is **never performed by an
-agent**. It is performed by exactly one of:
+Landing on the default branch is gated by **two non-overlapping permission sets**, so no single agent can
+land unreviewed code — and the merge itself is **GitHub native auto-merge**, not a token or an app:
 
-1. a **human** (a maintainer merges, or approves so branch-protection auto-merge fires), or
-2. **one thin trusted system gate** — not an agent — that merges when a reviewer's verdict says pass AND
-   branch protection is satisfied (required CI green, head stable, not blocked).
+- **`code:review` = `statuses: write`** — the authority to *bless* a merge (post the `agent-review` verdict
+  status). The reviewer holds this and **not** `contents: write`, so it can certify but cannot merge.
+- **`code:propose` = `contents: write`** — the authority to push a branch / open a PR / queue auto-merge.
+  Proposers hold this and **not** `statuses: write`, so they can push but cannot self-certify a review.
 
-A reviewer agent therefore **judges** (`tasks:converse` to post its verdict) but cannot merge; its verdict
-is an input to the gate. That gate is the single surviving piece of trusted "effect" machinery in the whole
-system — there is no per-agent mediator.
+Branch protection requires `ci` + `agent-review` (0 approvals — so there's no self-approval problem and no
+app is needed). The proposer enables auto-merge when it opens the PR; **GitHub** lands it the instant both
+statuses are green. Consequences:
+
+- a hijacked **proposer** can't post `agent-review` → can never land anything the reviewer didn't bless;
+- a hijacked **reviewer** has no `contents: write` → can't merge or push at all;
+- **no agent holds `code:merge`** — it isn't a token capability; the platform performs the merge.
+
+`code:review` (bless) and the merge (perform) are deliberately separated; no agent holds both. That split —
+not a dedicated app or a trusted gate job — *is* the merge boundary.
 
 ## The agent lifecycle (what replaced prepare / interpret)
 
@@ -95,8 +104,8 @@ provide            →     skill                    →     effect
 - **provide** — the substrate materializes the trigger's *subject* (a PR's diff+checks, an issue, …) into
   the sandbox. Generic; the only variable is which subject, declared by the trigger.
 - **skill** — does the work and emits its typed `result`.
-- **effect** — the agent invokes its own capabilities directly. The **only** exception is `code:merge`,
-  which routes to the merge gate above.
+- **effect** — the agent invokes its own capabilities directly. There is no merge step to route to: the
+  reviewer posts `agent-review` (`code:review`), the proposer queued auto-merge, and GitHub lands it.
 
 There are no `prepare` / `interpret` scripts and no `config` hooks: "input gathering" is `provide`; "acting
 on the result" is the agent using its own capabilities.
@@ -105,7 +114,9 @@ on the result" is the agent using its own capabilities.
 
 The github substrate computes the agent job's `permissions:` block straight from its capabilities (the table
 above). That is the entire realization: a normally-credentialed job, scoped. No wrapper of trusted jobs
-around a credential-less core — the agent IS the job. The lone trusted extra is the system merge gate.
+around a credential-less core — the agent IS the job. There is no merge gate job and no app: landing is
+native auto-merge gated by the `ci` + `agent-review` required checks, and the permission split keeps any one
+agent from satisfying both.
 
 `config.permissions` does not exist; gh permission blocks are *computed*, never written in the IR.
 
@@ -115,8 +126,8 @@ around a credential-less core — the agent IS the job. The lone trusted extra i
 |---|---|
 | pm | `tasks:author`, `tasks:converse`, `agent:launch` |
 | developer | `code:propose`, `tasks:converse` |
-| reviewer | `tasks:converse` (judges; the merge gate lands it — the reviewer never merges) |
-| strategy_reviewer | `tasks:converse` (judges a roadmap proposal; the gate lands it) |
+| reviewer | `code:review`, `tasks:converse` (posts `agent-review`; no `contents` → cannot merge) |
+| strategy_reviewer | `code:review`, `tasks:converse` (blesses a roadmap proposal; cannot merge) |
 | planner | `tasks:author`, `tasks:converse` |
 | strategist | `code:propose@roadmap`, `agent:launch` |
 
@@ -128,4 +139,5 @@ No agent holds `code:merge`.
 - **Model access / budget** — the bounded model token (the budget guard), provisioned by the substrate; the
   IR declares the `budget`, not the credential.
 - **Trust mediation** — no longer a concept. The old "untrusted agent → bundle → trusted publisher" design
-  is replaced by scoped credentials + the merge boundary. The only trusted actor is the merge gate.
+  is replaced by scoped credentials + the merge boundary (the `code:review` / `code:propose` permission
+  split + native auto-merge). There is no trusted mediator, no merge gate job, and no app.

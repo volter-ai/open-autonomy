@@ -3,8 +3,21 @@
   "private": true,
   "type": "module",
   "packageManager": "bun@1.3.10",
+  "bin": {
+    "open-autonomy": "bin/open-autonomy.ts",
+    "oa": "bin/open-autonomy.ts"
+  },
+  "files": [
+    "bin/",
+    "packages/*/src/",
+    "packages/*/package.json",
+    "profiles/",
+    "README.md",
+    "LICENSE"
+  ],
   "workspaces": ["packages/*"],
   "scripts": {
+    "autonomy": "bun bin/open-autonomy.ts",
     "check:autonomy": "bunx tsc -p tsconfig.json",
     "check:core": "bun test packages/core/src/*.test.ts",
     "conformance": "bun bin/autonomy-conformance.ts",

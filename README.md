@@ -74,16 +74,29 @@ Docs: [`ARCHITECTURE.md`](./docs/ARCHITECTURE.md) (the github app's design + tru
 
 ```bash
 bun install
-bun run check                          # typecheck + conformance + tests (proxy + runtime + examples)
-bun bin/autonomy-conformance.ts exec   # check the Runner contract on the reference runner
+bun run check                  # typecheck + conformance + tests (proxy + runtime + examples)
+bun run autonomy conformance exec   # check the Runner contract on the reference runner
 ```
 
-To adopt into your own GitHub repo, scaffold an installation by compiling the profile, then follow
+## The `open-autonomy` CLI
+
+One command is the front door — `open-autonomy <verb>` (alias `oa`):
+
+```bash
+open-autonomy compile <profileDir> <local|github> [outDir]   # compile a profile onto a substrate
+open-autonomy conformance <exec|termfleet|github>            # run the substrate conformance battery
+open-autonomy upgrade --profile <dir> --target <dir> [--apply]   # re-compile an installation in place
+```
+
+From a clone, run it via bun (`bun run autonomy <verb>` or `bun bin/open-autonomy.ts <verb>`). Once
+published it is `npx open-autonomy <verb>` / `bunx open-autonomy <verb>` — no clone required.
+
+To adopt into your own repo, scaffold an installation by compiling a profile, then follow
 [`docs/PUBLIC_AGENT_PRODUCTION_ROLLOUT.md`](./docs/PUBLIC_AGENT_PRODUCTION_ROLLOUT.md):
 
 ```bash
-bun bin/autonomy-compile.ts profiles/self-driving github ../my-repo
-# or: bun scripts/scaffold-target-repo.ts --target ../my-repo
+open-autonomy compile profiles/self-driving github ../my-repo   # GitHub substrate
+open-autonomy compile profiles/simple-sdlc local ../my-repo     # local-loop substrate
 ```
 
 ## Operator commands

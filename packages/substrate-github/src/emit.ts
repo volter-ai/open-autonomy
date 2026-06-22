@@ -196,16 +196,16 @@ function deterministicPerms(caps: string[], extra?: unknown): string {
 // The github box's model-endpoint provisioning, gated on `config.model` (a github-substrate config key —
 // the box always has a model endpoint; only agents that call the model need it provisioned). github is
 // the untrusted-keyless case, so the box endpoint is the remote proxy reached through a bounded mint. The
-// admin credential lives ONLY in this setup step; it mints a run token and writes the stock SDK env vars
-// to $GITHUB_ENV, so the agent step that follows makes transparent SDK calls with no admin token and no
-// minting of its own. A trusted substrate (local) provisions the box its own way (usually ambient keys).
+// run token is minted via the workflow's GitHub OIDC identity (id-token: write) — NO admin secret in any
+// repo; the proxy derives repo/actor/run from the OIDC claims and gates on its trusted-repo allow-list.
+// The mint writes the stock SDK env vars to $GITHUB_ENV, so the agent step makes transparent SDK calls
+// with no token of its own. A trusted substrate (local) provisions the box its own way (ambient keys).
 function modelSetupStep(agent: IRAgent): string[] {
   if (!cfg(agent).model) return [];
   return [
     `      - name: Provision model endpoint`,
     `        env:`,
     `          MODEL_PROXY_URL: \${{ vars.MODEL_PROXY_URL }}`,
-    `          MODEL_PROXY_ADMIN_TOKEN: \${{ secrets.MODEL_PROXY_ADMIN_TOKEN }}`,
     `          MODEL_PROXY_OIDC_AUDIENCE: \${{ vars.MODEL_PROXY_OIDC_AUDIENCE || 'volter-agent-model-proxy' }}`,
     `          MODEL_ALLOWLIST: \${{ vars.PUBLIC_AGENT_MODELS || 'deepseek/deepseek-v4-flash' }}`,
     `          PUBLIC_AGENT_RUN_MAX_USD_CENTS: \${{ vars.PUBLIC_AGENT_RUN_MAX_USD_CENTS || '500' }}`,

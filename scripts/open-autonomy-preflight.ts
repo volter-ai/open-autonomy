@@ -49,9 +49,10 @@ const REQUIRED_ENV = [
   'MODEL_PROXY_URL',
 ];
 
-const REQUIRED_SECRET_NAMES = [
-  'MODEL_PROXY_ADMIN_TOKEN',
-];
+// No admin secret is required in an installation: in-cell agents mint/revoke their model runs via the
+// workflow's GitHub OIDC identity (id-token: write). The admin token is an operator/treasury credential,
+// never stored in a fleet repo.
+const REQUIRED_SECRET_NAMES: string[] = [];
 
 function usage(): never {
   throw new Error(`Usage:

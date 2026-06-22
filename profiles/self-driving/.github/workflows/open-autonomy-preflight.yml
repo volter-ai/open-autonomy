@@ -38,7 +38,6 @@ jobs:
         env:
           MODEL_PROXY_URL: ${{ vars.MODEL_PROXY_URL }}
           PUBLIC_AGENT_TRIAGE_MODEL: ${{ vars.PUBLIC_AGENT_TRIAGE_MODEL }}
-          MODEL_PROXY_ADMIN_TOKEN: ${{ secrets.MODEL_PROXY_ADMIN_TOKEN }}
         run: |
           bun scripts/open-autonomy-preflight.ts \
             --labels .agent-run/preflight/labels.json \

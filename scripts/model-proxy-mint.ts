@@ -56,7 +56,6 @@ async function main(): Promise<void> {
   const options = parseArgs(process.argv.slice(2));
   const proxyUrl = process.env.MODEL_PROXY_URL;
   if (!proxyUrl) throw new Error('MODEL_PROXY_URL is required');
-  const adminToken = process.env.MODEL_PROXY_ADMIN_TOKEN;
 
   const issue = JSON.parse(readFileSync(options.issue, 'utf8')) as { number?: number; user?: { login?: string } };
   const actor = process.env.GITHUB_ACTOR ?? issue.user?.login ?? 'unknown';
@@ -75,24 +74,16 @@ async function main(): Promise<void> {
     github_workflow_ref: process.env.GITHUB_WORKFLOW_REF,
   });
 
-  // Prefer the admin token when present (operator/canonical); otherwise mint via GitHub OIDC so a
-  // fleet repo needs no stored admin secret. The proxy derives repo/actor/run from the OIDC token.
-  let res: Response;
-  if (adminToken) {
-    res = await fetch(new URL('/admin/runs/mint', proxyUrl), {
-      method: 'POST',
-      headers: { 'content-type': 'application/json', 'x-admin-token': adminToken },
-      body: payload,
-    });
-  } else {
-    const audience = process.env.MODEL_PROXY_OIDC_AUDIENCE ?? 'volter-agent-model-proxy';
-    const oidc = await getOidcToken(audience);
-    res = await fetch(new URL('/v1/runs/mint', proxyUrl), {
-      method: 'POST',
-      headers: { 'content-type': 'application/json', authorization: `Bearer ${oidc}` },
-      body: payload,
-    });
-  }
+  // Mint the run via the workflow's GitHub OIDC identity — NO stored admin secret. The proxy derives
+  // repo/actor/run from the OIDC token and gates on its trusted-repo allow-list. (Admin run-minting is an
+  // operator/treasury op on the proxy itself, never an in-cell agent's; that's why it isn't here.)
+  const audience = process.env.MODEL_PROXY_OIDC_AUDIENCE ?? 'volter-agent-model-proxy';
+  const oidc = await getOidcToken(audience);
+  const res = await fetch(new URL('/v1/runs/mint', proxyUrl), {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', authorization: `Bearer ${oidc}` },
+    body: payload,
+  });
   const body = await res.json() as { token?: string; run?: { run_id?: string }; error?: { code?: string } };
   if (!res.ok || !body.token || !body.run?.run_id) {
     throw new Error(`model proxy mint failed: ${res.status} ${body.error?.code ?? JSON.stringify(body)}`);

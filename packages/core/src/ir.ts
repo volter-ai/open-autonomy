@@ -29,6 +29,12 @@ export interface IRAgent {
   triggers: Trigger[]; // when it fires + the params it forwards (≥1; only cron is interpreted)
   config: Box; // opaque misc the substrate interprets: timeout, concurrency, env, maxConcurrent, model bounds, …
   kind?: ActorKind; // the role; default `agent`. `human` → realized by routing to a person (or a simulator in test).
+  // Optional formal result of a skill (model) agent's run: the agent does its work freely in its sandbox,
+  // then must emit a value that validates against `result.schema` (JSON Schema). That typed result is the
+  // seam a thin interpreter acts on ("make things happen") — no script harness, no guard. Only meaningful
+  // for a skill behavior; a script behavior returns its result directly. Realized via runClaudeAgent's
+  // `result` option. Absent ⇒ the agent just runs (raw run, no formal result).
+  result?: { schema: Box };
 }
 
 /** Forward-compat alias: the unit is an actor (kinds agent|human). */
@@ -87,6 +93,12 @@ export function validateIR(ir: AutonomyIR): string[] {
     if (!a.triggers || a.triggers.length === 0) errors.push(`agent ${name}: needs at least one trigger`);
     if (a.kind !== undefined && a.kind !== 'agent' && a.kind !== 'human')
       errors.push(`agent ${name}: kind must be 'agent' or 'human'`);
+    if (a.result !== undefined) {
+      if (!a.result.schema || typeof a.result.schema !== 'object')
+        errors.push(`agent ${name}: result must be { schema: <object> }`);
+      else if (a.behavior && isScript(a.behavior))
+        errors.push(`agent ${name}: result is for skill agents only — a script behavior returns its result directly`);
+    }
     for (const t of a.triggers ?? []) {
       if (!('cron' in t) && !('event' in t) && !('task' in t))
         errors.push(`agent ${name}: trigger must be a cron, an event, or a task`);

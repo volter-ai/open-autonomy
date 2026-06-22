@@ -64,6 +64,23 @@ describe('validateIR — schema/agents', () => {
   });
 });
 
+describe('validateIR — result schema (optional, skill agents)', () => {
+  test('accepts an optional result schema on a skill agent', () => {
+    const a = agent({ result: { schema: { type: 'object', properties: { decision: { type: 'string' } } } } });
+    expect(validateIR(ir({ a }))).toEqual([]);
+  });
+
+  test('rejects a result on a script-behavior agent (a script returns its result directly)', () => {
+    const a = agent({ behavior: 'scripts/agent-pm.ts', result: { schema: { type: 'object' } } });
+    expect(validateIR(ir({ a })).some((e) => e.includes('result is for skill agents only'))).toBe(true);
+  });
+
+  test('rejects a malformed result (no schema object)', () => {
+    const a = agent({ result: {} as never });
+    expect(validateIR(ir({ a })).some((e) => e.includes('result must be { schema'))).toBe(true);
+  });
+});
+
 describe('irShape', () => {
   test('renders a task trigger as task:<state> (not event:undefined)', () => {
     const a = agent({ triggers: [{ task: 'human-required' }, { cron: '0 0 * * *' }] });

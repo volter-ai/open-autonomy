@@ -36,13 +36,16 @@ Rewrite the GitHub Actions workflows to make the agent faster.
 
 ## Setup
 
-Configure the model proxy URL, model names, budget variables, and
-`MODEL_PROXY_ADMIN_TOKEN` secret used by the workflows, then run:
+Configure the model proxy URL, model names, and budget variables, then run:
 
 ```bash
 bun install
 bun run check
 ```
+
+No repository secrets are required: in-cell agents mint per-run model tokens via
+GitHub OIDC. Funding the cell's account is an operator/treasury step
+(`MODEL_PROXY_ADMIN_TOKEN` in your local `.env`) that `bench --live` performs.
 
 For a live demo repo, use `volter-ai/open-autonomy-testbed`.
 

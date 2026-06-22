@@ -1,8 +1,8 @@
 # Bench — the workload suite
 
 Bench is the **one** live-eval harness — it measures **org design**, not models. (The former standalone
-`testbed`/`scaffold`/`bootstrap-*` scripts were folded in here; `examples/` remains the separate, hermetic
-CI-fixture rung.) An experiment is a **cell**: `profile × substrate × workload` (see `docs/VISION.md`). We
+`testbed`/`scaffold`/`bootstrap-*` scripts were folded in here.) An experiment is a **cell**:
+`profile × substrate × workload` (see `docs/VISION.md`). We
 provision a real repo, hand the autonomous org its intake, let it run for **real time**, then **grade** the
 outcome.
 

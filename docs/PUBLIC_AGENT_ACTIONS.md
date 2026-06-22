@@ -23,8 +23,8 @@ setup job
   trusted setup
   resolves target
   performs triage
-  mints the agent run record
-  has model proxy admin token
+  mints the agent run record via GitHub OIDC (id-token: write)
+  holds no model proxy admin token
   does not run Codex
 
 agent-runner job
@@ -40,8 +40,8 @@ agent-runner job
 
 complete-agent-run job
   trusted cleanup
-  revokes/completes the bounded model run
-  has model proxy admin token
+  revokes/completes the bounded model run via GitHub OIDC
+  holds no model proxy admin token
 
 publisher job
   trusted
@@ -90,16 +90,19 @@ The worker lives in `services/agent-model-proxy`.
 Important routes:
 
 - `GET /healthz`
-- `POST /admin/runs/mint`
-- `POST /admin/runs/:run_id/revoke`
-- `GET /admin/runs/:run_id`
-- `GET /admin/limits/status`
-- `POST /v1/runs/:run_id/exchange`
+- `POST /v1/runs/mint` (in-cell setup mints the run via GitHub OIDC)
+- `POST /v1/runs/:run_id/exchange` (in-cell runner exchanges OIDC for the bounded model token)
+- `POST /v1/runs/:run_id/revoke` (in-cell cleanup revokes via GitHub OIDC)
 - `POST /openai/v1/responses`
 - `POST /openai/v1/chat/completions`
 - `POST /anthropic/v1/messages`
+- operator/treasury only: `POST /admin/runs/mint`, `POST /admin/runs/:run_id/revoke`, `GET /admin/runs/:run_id`, `GET /admin/limits/status`
 
-Admin routes require `X-Admin-Token: $MODEL_PROXY_ADMIN_TOKEN`. Model routes
+The `/v1/runs/*` lifecycle routes are gated by GitHub OIDC (the proxy derives
+repo/actor/run from the OIDC token and checks its trusted-repo allow-list), not
+by any stored secret. The `/admin/*` routes require
+`X-Admin-Token: $MODEL_PROXY_ADMIN_TOKEN` and are operator/treasury-only
+(funding, limits, reaping) — never used by an in-cell workflow. Model routes
 require `Authorization: Bearer $MODEL_PROXY_TOKEN`.
 
 The agent job gets `MODEL_PROXY_TOKEN` by exchanging GitHub OIDC with

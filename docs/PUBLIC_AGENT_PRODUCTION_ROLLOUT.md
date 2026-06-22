@@ -27,7 +27,8 @@ Repository variables:
 
 Repository secrets:
 
-- `MODEL_PROXY_ADMIN_TOKEN`
+- none required for model access: in-cell agents mint and exchange bounded
+  per-run model tokens via GitHub OIDC; no admin token lives in the repo.
 - `PUBLIC_AGENT_TRIGGER_TOKEN` if PM-triggered comments must use a token with
   enough permissions to trigger follow-on workflows.
 
@@ -37,8 +38,8 @@ Model proxy deployment:
 - Set `MODEL_PRICES_JSON`.
 - Choose production limits for global active runs, per-repo active runs,
   per-actor active runs, per-run spend, per-run request count, and daily spend.
-- Verify `GET /admin/limits/status` works through the `Model Proxy Admin`
-  workflow.
+- Verify `GET /admin/limits/status` responds (operator-run, with the admin
+  token from the operator's local `.env`; there is no in-repo admin workflow).
 
 GitHub repository:
 

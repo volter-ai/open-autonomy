@@ -21,11 +21,12 @@ constitution (human, immutable)
 ## Setup (repeatable)
 
 ```
-bun scripts/bootstrap-self-driving-testbed.ts --repo <owner>/<name>
-# when prompted, set the one secret that cannot be set for you, then re-run:
-gh secret set MODEL_PROXY_ADMIN_TOKEN -R <owner>/<name>
+bun bin/bench.ts --live --workload self-driving-greenfield --profile self-driving
 ```
 
-The bootstrap scaffolds `templates/self-driving-repo`, overlays this seed (constitution, empty
+This compiles `profiles/self-driving` for github, overlays this seed (constitution, empty
 roadmap, research sources, provision manifest), provisions the repo, and dispatches the
-strategist to generate the first roadmap.
+strategist to generate the first roadmap. The cell needs no repository secrets — in-cell
+agents mint per-run model tokens via GitHub OIDC. Funding the cell's account is an
+operator/treasury step (`MODEL_PROXY_ADMIN_TOKEN` in your local `.env`) that
+`bench --live` performs.

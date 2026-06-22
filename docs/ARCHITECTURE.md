@@ -28,7 +28,6 @@ published, retried, merged, or escalated.
 
 - `open-autonomy`: canonical OSS implementation and first dogfooding target.
 - `profiles/self-driving`: the self-driving recipe; `compile(…, github)` is the starter installation.
-- `examples/docs-only`, `examples/small-app`, `examples/library`: hermetic cookbook repos / upgrade fixtures (the CI-fixture rung).
 - `bench/`: the live-eval harness. Live autonomy behavior is proven by the `self-driving-conformance` workload (graded by the coverage grader) and self-start by `self-driving-greenfield`.
 
 Future target repositories should install by compiling the profile, then keep

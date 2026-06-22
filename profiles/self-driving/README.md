@@ -7,8 +7,10 @@ Copy this directory into a GitHub repository to enable open-autonomy.
 1. Copy these files to the target repo root.
 2. Run `bun install`.
 3. Edit `AGENTS.md` and `.open-autonomy/*` for the target repository.
-4. Set the model proxy URL, model names, budget variables, and
-   `MODEL_PROXY_ADMIN_TOKEN` secret used by the workflows.
+4. Set the model proxy URL, model names, and budget variables. No repository
+   secrets are required: in-cell agents mint bounded, per-run model tokens via
+   GitHub OIDC (`id-token: write`), which the proxy authorizes by trusting this
+   repo's `public-agent.yml` workflow.
 5. Confirm `bun run check` passes.
 6. Run the planner workflow in dry mode.
 7. Smoke `/agent pause`, paused `/agent develop`, `/agent status`, and

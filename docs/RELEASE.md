@@ -10,9 +10,7 @@ Release checklist:
 3. Run planner, preflight, and governance-report workflows on `main`.
 4. Compile into a clean directory (`bun bin/open-autonomy.ts compile profiles/self-driving github <dir>`)
    and run its `bun run check`.
-5. Verify the committed release evidence in [`docs/PROOF_LEDGER.md`](./PROOF_LEDGER.md)
-   and confirm `examples/docs-only`, `examples/small-app`, and `examples/library`
-   can run their local checks.
+5. Verify the committed release evidence in [`docs/PROOF_LEDGER.md`](./PROOF_LEDGER.md).
 6. Tag the release as `vX.Y.Z`.
 7. Record migration notes for template changes in the changelog.
 

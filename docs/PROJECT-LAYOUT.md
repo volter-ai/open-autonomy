@@ -44,7 +44,6 @@ open-autonomy/                  # the substrate-agnostic autonomy system (also d
 │       └── src/runtime/        #   (coordinated follow-up) the github runtime: public-agent loop, gates, publisher bundle, proxy clients
 ├── bin/autonomy-conformance.ts # CLI wiring concrete runners across substrates
 ├── profiles/                   # example profiles (recipes): compile to ANY substrate
-├── examples/                   # small hermetic cookbooks / upgrade fixtures: small-app, library, docs-only
 ├── bench/                      # the one live-eval harness (workloads + graders); proves behavior live
 ├── services/agent-model-proxy/ # a github-substrate service
 ├── docs/                       # AUTONOMY-IR.md (spec) + this file
@@ -108,7 +107,10 @@ github and local are the **same recipe**; only `provision` differs. "Adopt into 
   overlays only the workload's `seed/` (constitution, roadmap, scenarios, `provision.json`, the issue
   seeder, under `bench/workload/self-driving-conformance/seed/`). The seed was stripped from a 64-file
   vendored installation (with badly-drifted runtime) down to just that seed, so it can't drift. The
-  self-start variant is `self-driving-greenfield`. Bench is the one live-eval harness; `examples/` stays as
-  the separate hermetic CI-fixture rung.
-- **Remaining:** the small `examples/{small-app,library,docs-only}` are still vendored upgrade
-  fixtures (deliberately older, to exercise the upgrade tool).
+  self-start variant is `self-driving-greenfield`. Bench is the one live-eval harness.
+- **Remaining:** the upgrade tool has no dedicated CI fixture. The old `examples/` rung was retired —
+  it had rotted to a pre-IR, manifest-less install the migration couldn't even process (`--prune` was a
+  no-op, so the admin console survived an upgrade), and nothing ever ran `upgrade` against it. A real
+  fixture should be built from first principles: a compiled install snapshot *with* its
+  `generated.json` manifest, plus a CI test that upgrades it and asserts the migration (OIDC, no admin
+  console).

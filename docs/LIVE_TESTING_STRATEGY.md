@@ -66,17 +66,19 @@ provisions, seeds, and starts the run — each step idempotent:
    create the repo (private) and reconcile variables, labels, and branch protection
    from `bench/workload/self-driving-conformance/seed/provision.json`
    (`scripts/provision-target-repo.ts`).
-2. report the required secret (`MODEL_PROXY_ADMIN_TOKEN`); the proxy must already
-   trust the repo's `public-agent.yml` workflow for OIDC
-   (`services/agent-model-proxy/wrangler.toml`).
+2. confirm the operator's treasury credential is present locally
+   (`MODEL_PROXY_ADMIN_TOKEN` in `.env`, used to fund the repo's account — never
+   set as a repo secret); the proxy must already trust the repo's
+   `public-agent.yml` workflow for OIDC (`services/agent-model-proxy/wrangler.toml`).
 3. set the PM cron to a fast cadence (`*/5 * * * *`) so a 60 minute session
    sees many sweeps. This is workload-only; production stays at `*/30`.
 4. seed every scenario issue and fixture (the workload's `intake.mode: scenarios`
    runs `seed/scripts/testbed-seed-issues.ts --apply --all`).
 5. run `Open Autonomy Preflight`; exit ready, or print exactly what is missing.
 
-The only manual action is pasting the proxy admin token once. Everything else is
-scripted and re-runnable.
+The only manual prerequisite is the operator's local treasury credential (the
+admin token in `.env`, used to fund the run — not a repo secret). Everything
+else is scripted and re-runnable.
 
 ## 4. Pillar 2 — The conformance workload contains everything needed to test everything
 

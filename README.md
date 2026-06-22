@@ -63,7 +63,6 @@ loop with a scheduler loop + a termfleet runner instead of GitHub Actions.
 
 - `profiles/` — profiles (recipes) that compile to any substrate: `hello` (minimal) and
   `self-driving` (open-autonomy's own self-driving setup; the single source of every github installation).
-- `examples/` — demo target repos the loop drives (`docs-only`, `library`, `small-app`, `testbed`).
 
 Docs: [`ARCHITECTURE.md`](./docs/ARCHITECTURE.md) (the github app's design + trust boundaries),
 [`AUTONOMY-IR.md`](./docs/AUTONOMY-IR.md) (the substrate-agnostic model),

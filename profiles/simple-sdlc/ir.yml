@@ -35,7 +35,7 @@ agents:
   # path/topic. Consumes a task in the `ready` state.
   develop:
     behavior: develop
-    capabilities: [artifact:author, tasks:converse]
+    capabilities: [code:propose, tasks:converse]
     triggers:
       - task: ready
         params: { ZTRACK_ISSUE: subject.ref }

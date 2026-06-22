@@ -90,6 +90,11 @@ export function validateIR(ir: AutonomyIR): string[] {
   for (const [name, a] of Object.entries(ir.agents ?? {})) {
     if (!a.behavior) errors.push(`agent ${name}: missing behavior`);
     if (!Array.isArray(a.capabilities)) errors.push(`agent ${name}: capabilities must be an array`);
+    // code:merge is gate-only: merge is the one irreversible, default-branch act, never granted to an
+    // agent (docs/CAPABILITIES.md — the merge boundary). The base (before any @scope) must not be code:merge.
+    for (const cap of a.capabilities ?? [])
+      if (typeof cap === 'string' && cap.split('@')[0] === 'code:merge')
+        errors.push(`agent ${name}: code:merge is gate-only — no agent may merge`);
     if (!a.triggers || a.triggers.length === 0) errors.push(`agent ${name}: needs at least one trigger`);
     if (a.kind !== undefined && a.kind !== 'agent' && a.kind !== 'human')
       errors.push(`agent ${name}: kind must be 'agent' or 'human'`);

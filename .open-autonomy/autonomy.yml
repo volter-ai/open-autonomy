@@ -70,7 +70,7 @@ agents:
           - labeled
     timeout: 90
     capabilities:
-      - artifact:author
+      - code:propose
       - tasks:converse
   pm:
     skill: scripts/agent-pm.ts
@@ -121,7 +121,7 @@ agents:
       PUBLIC_AGENT_REVIEW_MAX_USD_CENTS: ${{ vars.PUBLIC_AGENT_REVIEW_MAX_USD_CENTS || '50' }}
     capabilities:
       - tasks:converse
-      - artifact:author
+      - code:propose
   planner:
     skill: scripts/agent-planner.ts
     workflowFile: open-autonomy-planner.yml
@@ -144,7 +144,7 @@ agents:
       PUBLIC_AGENT_STRATEGIST_MAX_USD_CENTS: ${{ vars.PUBLIC_AGENT_STRATEGIST_MAX_USD_CENTS || '100' }}
       PUBLIC_AGENT_STRATEGIST_MAX_ITEMS: ${{ vars.PUBLIC_AGENT_STRATEGIST_MAX_ITEMS || '3' }}
     capabilities:
-      - artifact:author
+      - code:propose
       - agent:launch
   strategy_reviewer:
     skill: strategy-reviewer
@@ -166,7 +166,7 @@ agents:
       PUBLIC_AGENT_STRATEGY_REVIEW_MAX_USD_CENTS: ${{ vars.PUBLIC_AGENT_STRATEGY_REVIEW_MAX_USD_CENTS || '50' }}
     capabilities:
       - tasks:converse
-      - artifact:author
+      - code:propose
 policy:
   autonomy:
     max_open_agent_prs: 5

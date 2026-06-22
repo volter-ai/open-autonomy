@@ -2,7 +2,7 @@
 import { readFileSync, writeFileSync } from 'node:fs';
 import { runClaudeAgent } from './agent.js';
 
-// The PM decision, as the agent loop's submit schema. Read-only tools: PM has no artifact:author, so its
+// The PM decision, as the agent loop's submit schema. Read-only tools: PM has no code:propose, so its
 // agent investigates but never executes; the deterministic harness still does the privileged dispatch.
 const PM_SCHEMA = {
   type: 'object',

@@ -117,7 +117,7 @@ function capsToPermissions(caps: string[], extra?: unknown): string {
   const p: Record<string, string> = { contents: 'write', 'id-token': 'write', actions: 'write' };
   const grant = (k: string, lvl: string) => { if (p[k] !== 'write') p[k] = lvl; };
   for (const c of caps) {
-    if (c === 'artifact:author') p['pull-requests'] = 'write';
+    if (c === 'code:propose') p['pull-requests'] = 'write';
     else if (c === 'tasks:author' || c === 'tasks:converse') p.issues = 'write';
     else if (c === 'agent:launch' || c === 'agent:update' || c === 'agent:cancel') p.actions = 'write';
     else if (c === 'agent:list') grant('actions', 'read');
@@ -184,7 +184,7 @@ function deterministicPerms(caps: string[], extra?: unknown): string {
     checks: 'read',
   };
   for (const c of caps) {
-    if (c === 'artifact:author') p['pull-requests'] = 'write';
+    if (c === 'code:propose') p['pull-requests'] = 'write';
     else if (c === 'tasks:author' || c === 'tasks:converse') {
       p.issues = 'write';
       p['pull-requests'] = 'write';

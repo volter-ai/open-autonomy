@@ -17,7 +17,7 @@ agents:
   # publisher validates the bundle and opens the PR. Triggered by the agent-session label or a comment.
   developer:
     behavior: open-autonomy-developer
-    capabilities: [artifact:author, tasks:converse]
+    capabilities: [code:propose, tasks:converse]
     triggers:
       - event: issues
         config: { types: [labeled] }
@@ -52,7 +52,7 @@ agents:
   # interpreter (write) acts on its result. The PR number arrives as the declared TARGET_REF param.
   reviewer:
     behavior: reviewer
-    capabilities: [tasks:converse, artifact:author]
+    capabilities: [tasks:converse, code:propose]
     triggers:
       - event: issue_comment
         config: { types: [created] }
@@ -109,7 +109,7 @@ agents:
   # strategy review. Proposes; never merges.
   strategist:
     behavior: scripts/agent-strategist.ts
-    capabilities: [artifact:author, agent:launch]
+    capabilities: [code:propose, agent:launch]
     triggers:
       - cron: "23 7 * * 1"
     config:
@@ -129,7 +129,7 @@ agents:
   # proposal branch.
   strategy_reviewer:
     behavior: strategy-reviewer
-    capabilities: [tasks:converse, artifact:author]
+    capabilities: [tasks:converse, code:propose]
     triggers:
       - event: issue_comment
         config: { types: [created] }

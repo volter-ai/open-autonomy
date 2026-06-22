@@ -53,6 +53,23 @@ describe('validateIR — actor kind', () => {
   });
 });
 
+describe('validateIR — code:merge is gate-only (the merge boundary)', () => {
+  test('rejects code:merge on an agent', () => {
+    const a = agent({ capabilities: ['code:propose', 'code:merge'] });
+    expect(validateIR(ir({ a })).some((e) => e.includes('code:merge is gate-only'))).toBe(true);
+  });
+
+  test('rejects code:merge even when scoped', () => {
+    const a = agent({ capabilities: ['code:merge@roadmap'] });
+    expect(validateIR(ir({ a })).some((e) => e.includes('code:merge is gate-only'))).toBe(true);
+  });
+
+  test('accepts code:propose (and a scoped propose)', () => {
+    expect(validateIR(ir({ a: agent({ capabilities: ['code:propose'] }) }))).toEqual([]);
+    expect(validateIR(ir({ a: agent({ capabilities: ['code:propose@roadmap'] }) }))).toEqual([]);
+  });
+});
+
 describe('validateIR — schema/agents', () => {
   test('rejects a bad schema', () => {
     const bad = { ...ir({ a: agent() }), schema: 'nope' as never };

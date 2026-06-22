@@ -1,1 +1,207 @@
-{schema: open-autonomy.autonomy.v1,documents: {resources: [.github/ISSUE_TEMPLATE/bug_report.yml,.github/ISSUE_TEMPLATE/public_agent_session.yml,.github/workflows/ci.yml,.github/workflows/model-proxy-admin.yml,.github/workflows/open-autonomy-governance-report.yml,.github/workflows/open-autonomy-preflight.yml,.gitignore,.open-autonomy/review-rubric.yml,.open-autonomy/roadmap.yml,.open-autonomy/strategist-sources.json,.open-autonomy/strategy-rubric.yml,.open-autonomy/version.json,AGENTS.md,CHANGELOG.md,README.md,VERSION,bun.lock,docs/ARCHITECTURE.md,docs/CONSTITUTION.md,docs/PROJECT.md,docs/ROADMAP.md,docs/standards/code.md,docs/standards/docs.md,docs/standards/security.md,docs/standards/tests.md,package.json,scripts/agent-pm.ts,scripts/agent-reviewer.ts,scripts/agent-planner.ts,scripts/agent-strategist.ts,scripts/agent-strategy-reviewer.ts,scripts/public-agent-pm.ts,scripts/public-agent-dispatcher.ts,scripts/public-agent-review.ts,scripts/public-agent-merge-gate.ts,scripts/public-agent-ci.ts,scripts/public-agent-target.ts,scripts/public-agent-planner.ts,scripts/public-agent-strategist.ts,scripts/public-agent-strategy-ratify.ts,scripts/public-agent-strategy-review.ts,scripts/public-agent-context.ts,scripts/public-agent-control.ts,scripts/public-agent-control-files.ts,scripts/public-agent-command.ts,scripts/public-agent-policy.ts,scripts/public-agent-loop-budget.ts,scripts/public-agent-decision-index.ts,scripts/open-autonomy-config.ts,scripts/open-autonomy-preflight.ts,scripts/open-autonomy-governance-report.ts,scripts/open-autonomy-upgrade-cli.ts]},skills: {developer: .codex/skills/open-autonomy-developer},agents: {developer: {skill: open-autonomy-developer,workflowFile: public-agent.yml,params: {ISSUE_REF: subject.ref},triggers: {issues: {types: [labeled]}},timeout: 90,capabilities: [artifact:author,tasks:converse]},pm: {skill: scripts/agent-pm.ts,workflowFile: public-agent-pm.yml,triggers: {schedule: "*/30 * * * *"},timeout: 30,concurrency: public-agent-pm,env: {PM_COMMENT_TOKEN: "${{ secrets.PUBLIC_AGENT_TRIGGER_TOKEN || github.token }}",PUBLIC_AGENT_PM_LIMIT: "${{ vars.PUBLIC_AGENT_PM_LIMIT || '10' }}",PUBLIC_AGENT_PM_MODEL: "${{ vars.PUBLIC_AGENT_PM_MODEL || vars.PUBLIC_AGENT_TRIAGE_MODEL || 'deepseek/deepseek-v4-flash' }}",PUBLIC_AGENT_PM_PROVIDER: "${{ vars.PUBLIC_AGENT_PM_PROVIDER || vars.PUBLIC_AGENT_TRIAGE_PROVIDER || 'anthropic' }}",PUBLIC_AGENT_REPO_PAUSED: "${{ vars.PUBLIC_AGENT_REPO_PAUSED || 'false' }}",PUBLIC_AGENT_PM_MAX_USD_CENTS: "${{ vars.PUBLIC_AGENT_PM_MAX_USD_CENTS || '25' }}"},capabilities: [tasks:converse,tasks:author,agent:launch]},reviewer: {skill: scripts/agent-reviewer.ts,workflowFile: public-agent-review.yml,params: {TARGET_REF: subject.ref,SUBJECT_TEXT: subject.text,ACTOR_ROLE: subject.actorRole},triggers: {issue_comment: {types: [created]},pull_request_target: {types: [opened,synchronize,reopened,ready_for_review]}},timeout: 20,concurrency: "public-agent-review-${{ github.event.issue.number || github.event.pull_request.number || inputs.issue_number }}",env: {PUBLIC_AGENT_MAX_CI_RETRIES: "${{ vars.PUBLIC_AGENT_MAX_CI_RETRIES || '2' }}",PUBLIC_AGENT_MAX_REVIEW_RETRIES: "${{ vars.PUBLIC_AGENT_MAX_REVIEW_RETRIES || '2' }}",PUBLIC_AGENT_REVIEW_MODEL: "${{ vars.PUBLIC_AGENT_REVIEW_MODEL || vars.PUBLIC_AGENT_TRIAGE_MODEL || 'deepseek/deepseek-v4-flash' }}",PUBLIC_AGENT_REVIEW_PROVIDER: "${{ vars.PUBLIC_AGENT_REVIEW_PROVIDER || 'anthropic' }}",PUBLIC_AGENT_REVIEW_MAX_USD_CENTS: "${{ vars.PUBLIC_AGENT_REVIEW_MAX_USD_CENTS || '50' }}"},capabilities: [tasks:converse,agent:launch]},planner: {skill: scripts/agent-planner.ts,workflowFile: open-autonomy-planner.yml,triggers: {schedule: 17 6 * * *},timeout: 15,capabilities: [tasks:converse,tasks:author]},strategist: {skill: scripts/agent-strategist.ts,workflowFile: open-autonomy-strategist.yml,triggers: {schedule: 23 7 * * 1},timeout: 25,env: {PUBLIC_AGENT_STRATEGIST_MODEL: "${{ vars.PUBLIC_AGENT_STRATEGIST_MODEL || vars.PUBLIC_AGENT_PM_MODEL || 'deepseek/deepseek-v4-flash' }}",PUBLIC_AGENT_STRATEGIST_PROVIDER: "${{ vars.PUBLIC_AGENT_STRATEGIST_PROVIDER || 'anthropic' }}",PUBLIC_AGENT_STRATEGIST_MAX_USD_CENTS: "${{ vars.PUBLIC_AGENT_STRATEGIST_MAX_USD_CENTS || '100' }}",PUBLIC_AGENT_STRATEGIST_MAX_ITEMS: "${{ vars.PUBLIC_AGENT_STRATEGIST_MAX_ITEMS || '3' }}"},capabilities: [artifact:author,agent:launch]},strategy_reviewer: {skill: scripts/agent-strategy-reviewer.ts,workflowFile: public-agent-strategy-review.yml,params: {TARGET_REF: subject.ref,SUBJECT_TEXT: subject.text,ACTOR_ROLE: subject.actorRole},triggers: {issue_comment: {types: [created]}},timeout: 20,env: {PUBLIC_AGENT_STRATEGY_REVIEW_MODEL: "${{ vars.PUBLIC_AGENT_STRATEGY_REVIEW_MODEL || vars.PUBLIC_AGENT_REVIEW_MODEL || vars.PUBLIC_AGENT_PM_MODEL || 'deepseek/deepseek-v4-flash' }}",PUBLIC_AGENT_STRATEGY_REVIEW_PROVIDER: "${{ vars.PUBLIC_AGENT_STRATEGY_REVIEW_PROVIDER || 'anthropic' }}",PUBLIC_AGENT_STRATEGY_REVIEW_MAX_USD_CENTS: "${{ vars.PUBLIC_AGENT_STRATEGY_REVIEW_MAX_USD_CENTS || '50' }}"},capabilities: [tasks:converse,agent:launch]}},policy: {autonomy: {max_open_agent_prs: 5,max_develop_attempts: 2,max_ci_retries: 2,max_review_retries: 2,stale_needs_info_minutes: 10080,require_visible_pm_status: true,require_decision_records: true,require_acceptance_evidence: true},risk: {human_required_paths: [.github/workflows/**,.open-autonomy/autonomy.yml,docs/CONSTITUTION.md,.codex/skills/**,.claude/skills/**,services/**/wrangler.toml],human_required_topics: [auth,secrets,billing,deployment,destructive data migration,dependency trust]},merge: {require_ci: true,require_low_risk_review: true,require_current_head_sha: true,maintainer_block_labels: [do-not-merge,human-required,agent-blocked]},planner: {enabled: true,issue_origin_label_prefix: "origin:",phase_label_prefix: "roadmap:",priority_labels: {high: priority:high,medium: priority:medium,low: priority:low}}}}
+schema: open-autonomy.autonomy.v1
+documents:
+  resources:
+    - .github/ISSUE_TEMPLATE/bug_report.yml
+    - .github/ISSUE_TEMPLATE/public_agent_session.yml
+    - .github/workflows/ci.yml
+    - .github/workflows/model-proxy-admin.yml
+    - .github/workflows/open-autonomy-governance-report.yml
+    - .github/workflows/open-autonomy-preflight.yml
+    - .gitignore
+    - .open-autonomy/review-rubric.yml
+    - .open-autonomy/roadmap.yml
+    - .open-autonomy/strategist-sources.json
+    - .open-autonomy/strategy-rubric.yml
+    - .open-autonomy/version.json
+    - AGENTS.md
+    - CHANGELOG.md
+    - README.md
+    - VERSION
+    - bun.lock
+    - docs/ARCHITECTURE.md
+    - docs/CONSTITUTION.md
+    - docs/PROJECT.md
+    - docs/ROADMAP.md
+    - docs/standards/code.md
+    - docs/standards/docs.md
+    - docs/standards/security.md
+    - docs/standards/tests.md
+    - package.json
+    - scripts/agent-pm.ts
+    - scripts/agent-reviewer.ts
+    - scripts/agent-planner.ts
+    - scripts/agent-strategist.ts
+    - scripts/agent-strategy-reviewer.ts
+    - scripts/public-agent-pm.ts
+    - scripts/public-agent-dispatcher.ts
+    - scripts/public-agent-review.ts
+    - scripts/public-agent-merge-gate.ts
+    - scripts/public-agent-ci.ts
+    - scripts/public-agent-target.ts
+    - scripts/public-agent-planner.ts
+    - scripts/public-agent-strategist.ts
+    - scripts/public-agent-strategy-ratify.ts
+    - scripts/public-agent-strategy-review.ts
+    - scripts/public-agent-context.ts
+    - scripts/public-agent-control.ts
+    - scripts/public-agent-control-files.ts
+    - scripts/public-agent-command.ts
+    - scripts/public-agent-policy.ts
+    - scripts/public-agent-loop-budget.ts
+    - scripts/public-agent-decision-index.ts
+    - scripts/open-autonomy-config.ts
+    - scripts/open-autonomy-preflight.ts
+    - scripts/open-autonomy-governance-report.ts
+    - scripts/open-autonomy-upgrade-cli.ts
+skills:
+  developer: .codex/skills/open-autonomy-developer
+agents:
+  developer:
+    skill: open-autonomy-developer
+    workflowFile: public-agent.yml
+    params:
+      ISSUE_REF: subject.ref
+    triggers:
+      issues:
+        types:
+          - labeled
+    timeout: 90
+    capabilities:
+      - artifact:author
+      - tasks:converse
+  pm:
+    skill: scripts/agent-pm.ts
+    workflowFile: public-agent-pm.yml
+    triggers:
+      schedule: "*/30 * * * *"
+    timeout: 30
+    concurrency: public-agent-pm
+    env:
+      PM_COMMENT_TOKEN: ${{ secrets.PUBLIC_AGENT_TRIGGER_TOKEN || github.token }}
+      PUBLIC_AGENT_PM_LIMIT: ${{ vars.PUBLIC_AGENT_PM_LIMIT || '10' }}
+      PUBLIC_AGENT_PM_MODEL: ${{ vars.PUBLIC_AGENT_PM_MODEL ||
+        vars.PUBLIC_AGENT_TRIAGE_MODEL || 'deepseek/deepseek-v4-flash' }}
+      PUBLIC_AGENT_PM_PROVIDER: ${{ vars.PUBLIC_AGENT_PM_PROVIDER ||
+        vars.PUBLIC_AGENT_TRIAGE_PROVIDER || 'anthropic' }}
+      PUBLIC_AGENT_REPO_PAUSED: ${{ vars.PUBLIC_AGENT_REPO_PAUSED || 'false' }}
+      PUBLIC_AGENT_PM_MAX_USD_CENTS: ${{ vars.PUBLIC_AGENT_PM_MAX_USD_CENTS || '25' }}
+    capabilities:
+      - tasks:converse
+      - tasks:author
+      - agent:launch
+  reviewer:
+    skill: scripts/agent-reviewer.ts
+    workflowFile: public-agent-review.yml
+    params:
+      TARGET_REF: subject.ref
+      SUBJECT_TEXT: subject.text
+      ACTOR_ROLE: subject.actorRole
+    triggers:
+      issue_comment:
+        types:
+          - created
+      pull_request_target:
+        types:
+          - opened
+          - synchronize
+          - reopened
+          - ready_for_review
+    timeout: 20
+    concurrency: public-agent-review-${{ github.event.issue.number ||
+      github.event.pull_request.number || inputs.issue_number }}
+    env:
+      PUBLIC_AGENT_MAX_CI_RETRIES: ${{ vars.PUBLIC_AGENT_MAX_CI_RETRIES || '2' }}
+      PUBLIC_AGENT_MAX_REVIEW_RETRIES: ${{ vars.PUBLIC_AGENT_MAX_REVIEW_RETRIES || '2' }}
+      PUBLIC_AGENT_REVIEW_MODEL: ${{ vars.PUBLIC_AGENT_REVIEW_MODEL ||
+        vars.PUBLIC_AGENT_TRIAGE_MODEL || 'deepseek/deepseek-v4-flash' }}
+      PUBLIC_AGENT_REVIEW_PROVIDER: ${{ vars.PUBLIC_AGENT_REVIEW_PROVIDER || 'anthropic' }}
+      PUBLIC_AGENT_REVIEW_MAX_USD_CENTS: ${{ vars.PUBLIC_AGENT_REVIEW_MAX_USD_CENTS || '50' }}
+    capabilities:
+      - tasks:converse
+      - agent:launch
+  planner:
+    skill: scripts/agent-planner.ts
+    workflowFile: open-autonomy-planner.yml
+    triggers:
+      schedule: 17 6 * * *
+    timeout: 15
+    capabilities:
+      - tasks:converse
+      - tasks:author
+  strategist:
+    skill: scripts/agent-strategist.ts
+    workflowFile: open-autonomy-strategist.yml
+    triggers:
+      schedule: 23 7 * * 1
+    timeout: 25
+    env:
+      PUBLIC_AGENT_STRATEGIST_MODEL: ${{ vars.PUBLIC_AGENT_STRATEGIST_MODEL ||
+        vars.PUBLIC_AGENT_PM_MODEL || 'deepseek/deepseek-v4-flash' }}
+      PUBLIC_AGENT_STRATEGIST_PROVIDER: ${{ vars.PUBLIC_AGENT_STRATEGIST_PROVIDER || 'anthropic' }}
+      PUBLIC_AGENT_STRATEGIST_MAX_USD_CENTS: ${{ vars.PUBLIC_AGENT_STRATEGIST_MAX_USD_CENTS || '100' }}
+      PUBLIC_AGENT_STRATEGIST_MAX_ITEMS: ${{ vars.PUBLIC_AGENT_STRATEGIST_MAX_ITEMS || '3' }}
+    capabilities:
+      - artifact:author
+      - agent:launch
+  strategy_reviewer:
+    skill: scripts/agent-strategy-reviewer.ts
+    workflowFile: public-agent-strategy-review.yml
+    params:
+      TARGET_REF: subject.ref
+      SUBJECT_TEXT: subject.text
+      ACTOR_ROLE: subject.actorRole
+    triggers:
+      issue_comment:
+        types:
+          - created
+    timeout: 20
+    env:
+      PUBLIC_AGENT_STRATEGY_REVIEW_MODEL: ${{ vars.PUBLIC_AGENT_STRATEGY_REVIEW_MODEL
+        || vars.PUBLIC_AGENT_REVIEW_MODEL || vars.PUBLIC_AGENT_PM_MODEL ||
+        'deepseek/deepseek-v4-flash' }}
+      PUBLIC_AGENT_STRATEGY_REVIEW_PROVIDER: ${{ vars.PUBLIC_AGENT_STRATEGY_REVIEW_PROVIDER || 'anthropic' }}
+      PUBLIC_AGENT_STRATEGY_REVIEW_MAX_USD_CENTS: ${{ vars.PUBLIC_AGENT_STRATEGY_REVIEW_MAX_USD_CENTS || '50' }}
+    capabilities:
+      - tasks:converse
+      - agent:launch
+policy:
+  autonomy:
+    max_open_agent_prs: 5
+    max_develop_attempts: 2
+    max_ci_retries: 2
+    max_review_retries: 2
+    stale_needs_info_minutes: 10080
+    require_visible_pm_status: true
+    require_decision_records: true
+    require_acceptance_evidence: true
+  risk:
+    human_required_paths:
+      - .github/workflows/**
+      - .open-autonomy/autonomy.yml
+      - docs/CONSTITUTION.md
+      - .codex/skills/**
+      - .claude/skills/**
+      - services/**/wrangler.toml
+    human_required_topics:
+      - auth
+      - secrets
+      - billing
+      - deployment
+      - destructive data migration
+      - dependency trust
+  merge:
+    require_ci: true
+    require_low_risk_review: true
+    require_current_head_sha: true
+    maintainer_block_labels:
+      - do-not-merge
+      - human-required
+      - agent-blocked
+  planner:
+    enabled: true
+    issue_origin_label_prefix: "origin:"
+    phase_label_prefix: "roadmap:"
+    priority_labels:
+      high: priority:high
+      medium: priority:medium
+      low: priority:low

@@ -8,6 +8,7 @@
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { stringify as stringifyYaml } from 'yaml';
 import { cronOf, emitAutonomy, isScript } from '@open-autonomy/core';
 import type { AutonomyIR, CompileOutput } from '@open-autonomy/core';
 import { SUPPORTED_RUNNERS, type RunnerName } from '@open-autonomy/core';
@@ -107,7 +108,7 @@ export function compileLocal(ir: AutonomyIR, opts: { runner?: RunnerName } = {})
 
   // Shared layer: the manifest, generated the same way for every substrate (unless carried verbatim).
   if (!ir.resources.includes('.open-autonomy/autonomy.yml')) {
-    generated['.open-autonomy/autonomy.yml'] = Bun.YAML.stringify(emitAutonomy(ir) as Record<string, unknown>);
+    generated['.open-autonomy/autonomy.yml'] = stringifyYaml(emitAutonomy(ir) as Record<string, unknown>);
   }
   // Shared layer: the substrate-neutral runtime scripts, minus the github-only ones.
   for (const [path, content] of Object.entries(runtimeFiles())) {

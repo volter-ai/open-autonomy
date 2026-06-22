@@ -8,6 +8,7 @@
     ".": "./src/index.ts"
   },
   "dependencies": {
-    "@open-autonomy/core": "workspace:*"
+    "@open-autonomy/core": "workspace:*",
+    "yaml": "^2.9.0"
   }
 }

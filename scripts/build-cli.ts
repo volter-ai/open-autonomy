@@ -1,11 +1,11 @@
 #!/usr/bin/env bun
 // Build the self-contained, Node-runnable `open-autonomy` CLI published to npm.
 //
-// The library is bun-native (TS run directly, a few bun globals). For npm we bundle it for Node via
-// `bun build --target=node`, polyfilling the bun globals in the node entry (bin/open-autonomy.node.ts).
-// The emit code reads sibling DATA files relative to import.meta.url (the runtime backends + the github
-// runtime mirror); the bundle keeps import.meta.url pointing at dist/, so we copy those files next to
-// the bundle. The result runs under plain `node` (hence `npx open-autonomy`) with no bun required.
+// The library is bun-native (TS run directly) but uses the portable `yaml` lib (not Bun.YAML) on the
+// compile path, so `bun build --target=node` produces a bundle that runs under plain `node`. The emit
+// code reads sibling DATA files relative to import.meta.url (the runtime backends + the github runtime
+// mirror); the bundle keeps import.meta.url pointing at dist/, so we copy those files next to the
+// bundle. The result runs under plain `node` (hence `npx open-autonomy`) with no bun required.
 import { chmodSync, copyFileSync, cpSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 
@@ -15,7 +15,7 @@ mkdirSync(DIST, { recursive: true });
 
 const build = spawnSync(
   'bun',
-  ['build', 'bin/open-autonomy.node.ts', '--target=node', '--outfile', `${DIST}/cli.js`],
+  ['build', 'bin/open-autonomy.ts', '--target=node', '--outfile', `${DIST}/cli.js`],
   { stdio: 'inherit' },
 );
 if (build.status) process.exit(build.status ?? 1);

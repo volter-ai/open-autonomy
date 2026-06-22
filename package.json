@@ -8,7 +8,14 @@
     "url": "git+https://github.com/volter-ai/open-autonomy.git"
   },
   "homepage": "https://github.com/volter-ai/open-autonomy#readme",
-  "keywords": ["autonomy", "agents", "ai-agents", "github-actions", "scaffold", "cli"],
+  "keywords": [
+    "autonomy",
+    "agents",
+    "ai-agents",
+    "github-actions",
+    "scaffold",
+    "cli"
+  ],
   "type": "module",
   "packageManager": "bun@1.3.10",
   "bin": {
@@ -21,7 +28,9 @@
     "README.md",
     "LICENSE"
   ],
-  "workspaces": ["packages/*"],
+  "workspaces": [
+    "packages/*"
+  ],
   "scripts": {
     "autonomy": "bun bin/open-autonomy.ts",
     "build": "bun scripts/build-cli.ts",

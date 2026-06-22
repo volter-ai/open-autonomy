@@ -9,6 +9,7 @@
   },
   "dependencies": {
     "@open-autonomy/core": "workspace:*",
-    "@open-autonomy/substrate-github": "workspace:*"
+    "@open-autonomy/substrate-github": "workspace:*",
+    "yaml": "^2.9.0"
   }
 }

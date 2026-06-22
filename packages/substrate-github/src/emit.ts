@@ -5,6 +5,7 @@
 import { readFileSync, readdirSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { stringify as stringifyYaml } from 'yaml';
 import { cfg, cronOf, emitAutonomy, isScript } from '@open-autonomy/core';
 import type { AutonomyIR, CompileOutput, IRAgent } from '@open-autonomy/core';
 
@@ -429,7 +430,7 @@ export function compileGithub(ir: AutonomyIR): CompileOutput {
   const generated: Record<string, string> = {};
   // The manifest is generated unless the profile carries a hand-authored autonomy.yml verbatim.
   if (!ir.resources.includes('.open-autonomy/autonomy.yml')) {
-    generated['.open-autonomy/autonomy.yml'] = Bun.YAML.stringify(emitAutonomy(ir) as Record<string, unknown>);
+    generated['.open-autonomy/autonomy.yml'] = stringifyYaml(emitAutonomy(ir) as Record<string, unknown>);
   }
   // Every agent generates its workflow. The output filename defaults to the agent name; an agent may
   // pin `config.workflowFile` (a github-substrate key) so the file keeps a name other systems already

@@ -162,8 +162,17 @@ if (process.argv.includes('--teardown')) {
     } else {
       console.log(`nothing to refund (${repo} balance is $0)`);
     }
+    // Release any active run slots the cell still holds. Deleting the repo does NOT revoke its in-flight
+    // proxy runs — they would pin the per-actor/per-repo active-run caps for the full token TTL (~2h),
+    // which is exactly what saturates the caps after a few bench cycles. Free them here.
+    const reaped = await fetch(`${proxyBase}/admin/accounts/${encodeURIComponent(repo)}/reap-runs`, {
+      method: 'POST',
+      headers: { 'x-admin-token': adminToken },
+    });
+    const r = (await reaped.json().catch(() => ({}))) as { freed?: number };
+    console.log(reaped.ok ? `released ${r.freed ?? 0} active run slot(s) for ${repo}` : `FAILED to release run slots (${reaped.status})`);
   } else {
-    console.log('no admin token — skipping refund; set MODEL_PROXY_ADMIN_TOKEN to reclaim the unused balance');
+    console.log('no admin token — skipping refund + run-slot release; set MODEL_PROXY_ADMIN_TOKEN to reclaim them');
   }
   if (process.argv.includes('--keep-repo')) {
     console.log(`kept repo ${repo} (--keep-repo)`);

@@ -95,6 +95,14 @@ async function route(req: Request, env: Env, ctx: ExecutionContext): Promise<Res
     if (req.method !== 'POST') return methodNotAllowed();
     return json(await new LimitLedgerClient(env.LIMITS).reap());
   }
+  // Release every active run for a repo — the teardown hook for a disposable cell (its repo is being
+  // deleted, so its in-flight runs are abandoned and must not pin active-run slots for the token TTL).
+  const reapRepo = path.match(/^\/admin\/accounts\/([^/]+)\/reap-runs$/);
+  if (reapRepo) {
+    if (!isAdmin(req, env)) return error('auth_failed', 401);
+    if (req.method !== 'POST') return methodNotAllowed();
+    return json(await new LimitLedgerClient(env.LIMITS).reapRepo(decodeURIComponent(reapRepo[1])));
+  }
   // GitHub Sponsors webhook: maintains the sponsor account's active-sponsor list (no token; HMAC-verified).
   if (path === '/webhooks/github-sponsors') return handleSponsorsWebhook(req, env, sponsorAccount(env));
 

@@ -190,6 +190,7 @@ export class LimitLedger implements DurableObject {
     if (op === 'grant_surplus') return json(await this.grantSurplus(String(body.from), String(body.to), Number(body.amount_usd_cents)));
     if (op === 'status') return json(this.snapshot());
     if (op === 'reap') return json(await this.reapAdmin());
+    if (op === 'reap_repo') return json(await this.reapRepo(String(body.repo)));
     return json({ ok: false, error: 'unknown_op' }, { status: 400 });
   }
 
@@ -424,6 +425,23 @@ export class LimitLedger implements DurableObject {
     this.releaseActive(run);
     await this.save();
     return { ok: true };
+  }
+
+  // Release the active-run slots of EVERY active run for a repo. Used when a disposable cell is torn
+  // down (its repo deleted): the cell's in-flight/abandoned runs would otherwise pin the active
+  // counters for the full token TTL (~2h), saturating the per-actor/per-repo caps. Unlike
+  // reapExpiredRuns this ignores expiry — a deleted cell's runs are abandoned by definition.
+  private async reapRepo(repo: string): Promise<Record<string, unknown>> {
+    let freed = 0;
+    for (const run of Object.values(this.state.runs)) {
+      if (run.active && run.repo === repo) {
+        run.active = false;
+        this.releaseActive(run);
+        freed++;
+      }
+    }
+    if (freed) await this.save();
+    return { ok: true, repo, freed, active_global: this.state.active_global };
   }
 
   private async reserve(requestId: string, amount: number, config: LimitConfig, runId?: string): Promise<Record<string, unknown>> {
@@ -1022,6 +1040,10 @@ export class LimitLedgerClient {
 
   reap() {
     return this.rpc<{ ok: true; reaped: number; active_global: number }>('reap');
+  }
+
+  reapRepo(repo: string) {
+    return this.rpc<{ ok: true; repo: string; freed: number; active_global: number }>('reap_repo', { repo });
   }
 }
 

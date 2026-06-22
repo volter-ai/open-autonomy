@@ -10,7 +10,46 @@ import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-/** The decision primitive: a real agent investigates and submits a schema-validated artifact. Read-only by
+/** Run THE agent (Claude Code) once. The whole contract is two knobs: a CAPABILITY limit (`allowedTools`;
+ *  omit for full capability) and what the caller then does with the result. The box endpoint is the
+ *  ambient ANTHROPIC_* (provisioned by the substrate) unless `baseUrl`/`authToken` are passed; every model
+ *  slot is pinned to one model so a multi-step run can't escape the minted token's allowlist. Both the
+ *  developer harness (full capability, produces a PR) and decide() (read-only, produces a result file) are
+ *  thin callers of this — there is no other way OA runs the model. */
+export function runClaudeAgent(opts: {
+  prompt: string;
+  allowedTools?: string[];
+  cwd?: string;
+  model?: string;
+  baseUrl?: string;
+  authToken?: string;
+}): { exitCode: number; stdout: string; stderr: string } {
+  const model = opts.model || process.env.PUBLIC_AGENT_MODEL || 'deepseek/deepseek-v4-flash';
+  const perm = opts.allowedTools
+    ? ['--allowedTools', ...opts.allowedTools, '--permission-mode', 'default']
+    : ['--permission-mode', 'bypassPermissions'];
+  const res = spawnSync('claude', ['-p', '--model', model, ...perm], {
+    input: opts.prompt,
+    cwd: opts.cwd,
+    encoding: 'utf8',
+    maxBuffer: 64 * 1024 * 1024,
+    env: {
+      ...process.env,
+      ...(opts.baseUrl ? { ANTHROPIC_BASE_URL: opts.baseUrl } : {}),
+      ...(opts.authToken ? { ANTHROPIC_AUTH_TOKEN: opts.authToken } : {}),
+      ANTHROPIC_MODEL: model,
+      ANTHROPIC_DEFAULT_HAIKU_MODEL: model,
+      ANTHROPIC_SMALL_FAST_MODEL: model,
+      CLAUDE_CODE_DISABLE_NONSTREAMING_FALLBACK: '1',
+      DISABLE_TELEMETRY: '1',
+      DISABLE_ERROR_REPORTING: '1',
+      CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: '1',
+    },
+  });
+  return { exitCode: res.status ?? 1, stdout: res.stdout || '', stderr: res.stderr || '' };
+}
+
+/** A decision: run the agent read-only, expecting a result FILE of a given schema. Just runClaudeAgent +
  *  default (Read/Glob/Grep + the single decision file); pass `allowRun` to also let it run tests/checks
  *  (Bash) before deciding. `cwd` is where it investigates (defaults to the process cwd). Every model slot is
  *  pinned to the one allowed model, so a multi-step run never escapes the minted token's allowlist. */
@@ -36,27 +75,13 @@ export async function decide<T = unknown>(opts: {
     JSON.stringify(opts.schema),
     `The ONLY file you may write is ${outFile}. Do not modify the repository.`,
   ].join('\n');
-  const env = {
-    ...process.env,
-    ANTHROPIC_MODEL: model,
-    ANTHROPIC_DEFAULT_HAIKU_MODEL: model,
-    ANTHROPIC_SMALL_FAST_MODEL: model,
-    CLAUDE_CODE_DISABLE_NONSTREAMING_FALLBACK: '1',
-    DISABLE_TELEMETRY: '1',
-    DISABLE_ERROR_REPORTING: '1',
-    CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: '1',
-  };
-  const tools = ['Read', 'Glob', 'Grep', 'Write', ...(opts.allowRun ? ['Bash'] : [])];
+  const allowedTools = ['Read', 'Glob', 'Grep', 'Write', ...(opts.allowRun ? ['Bash'] : [])];
   try {
     for (let attempt = 1; attempt <= 2; attempt++) {
-      const res = spawnSync(
-        'claude',
-        ['-p', '--model', model, '--allowedTools', ...tools, '--permission-mode', 'default'],
-        { input: prompt, cwd: opts.cwd, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024, env },
-      );
-      console.error(`  [decide] claude attempt ${attempt} (exit ${res.status ?? 1})`);
+      const res = runClaudeAgent({ prompt, allowedTools, cwd: opts.cwd, model });
+      console.error(`  [decide] claude attempt ${attempt} (exit ${res.exitCode})`);
       // Prefer the written file; fall back to salvaging JSON from stdout if the agent printed it instead.
-      const artifact = readDecisionFile(outFile, opts.schema) ?? salvageSubmission(res.stdout || '', opts.schema);
+      const artifact = readDecisionFile(outFile, opts.schema) ?? salvageSubmission(res.stdout, opts.schema);
       if (artifact) return artifact as T;
     }
     throw new Error(`decide: agent produced no schema-valid decision (model=${model})`);

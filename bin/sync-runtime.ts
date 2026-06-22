@@ -26,6 +26,8 @@ const DEV_ONLY = new Set([
   'scaffold-target-repo.ts', 'testbed-proctor-report.ts', 'testbed-proctor-report.test.ts',
   // Bench (dev/analysis): fitness measurement, the human simulator, the AI rubric judge — not shipped.
   'autonomy-ratio.ts', 'autonomy-ratio.test.ts', 'human-sim.ts', 'human-sim.test.ts', 'bench-judge.ts',
+  // Packaging tooling: builds the published node CLI bundle — dev-only, never shipped into an install.
+  'build-cli.ts',
 ]);
 const PROFILE_OWNED = new Set([
   // self-driving's agent behaviors + their deterministic logic — carried by profiles/self-driving.

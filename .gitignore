@@ -12,3 +12,6 @@ services/agent-model-proxy/.dev.vars
 
 # agent run transcripts/artifacts (promote curated evidence explicitly)
 agent-sessions/
+
+# built CLI bundle (produced by prepublishOnly)
+dist/

@@ -2,6 +2,7 @@
 import { spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
+import { runClaudeAgent } from './agent-loop.js';
 
 type Options = {
   issue?: string;
@@ -179,37 +180,18 @@ async function main(): Promise<void> {
   // Claude Code talks the Anthropic Messages wire; point it at the bounded proxy (whose native
   // /v1/messages route serves it) and authenticate with the minted run token — no provider key in the
   // sandbox. Every model slot maps to the one allowed model so background/subagent calls stay in budget.
-  const result = spawnSync('claude', [
-    '--print',
-    '--model', options.model,
-    '--permission-mode', 'bypassPermissions',
-    '--output-format', 'text',
-    prompt,
-  ], {
-    cwd: root,
-    encoding: 'utf8',
-    maxBuffer: 64 * 1024 * 1024,
-    env: {
-      ...process.env,
-      ANTHROPIC_BASE_URL: proxyUrl,
-      ANTHROPIC_AUTH_TOKEN: proxyToken,
-      ANTHROPIC_MODEL: options.model,
-      ANTHROPIC_DEFAULT_HAIKU_MODEL: options.model,
-      ANTHROPIC_SMALL_FAST_MODEL: options.model,
-      CLAUDE_CODE_DISABLE_NONSTREAMING_FALLBACK: '1',
-      DISABLE_TELEMETRY: '1',
-      DISABLE_ERROR_REPORTING: '1',
-      CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: '1',
-    },
-  });
-  if (typeof result.stdout === 'string') writeFileSync(finalPath, result.stdout);
+  // The developer is the SAME agent at full capability (it writes code): no allowedTools limit → full
+  // tools, pointed at the bounded proxy with the minted run token. Decisions use the same primitive,
+  // read-only (see decide). Capability + endpoint are the only knobs.
+  const result = runClaudeAgent({ prompt, cwd: root, model: options.model, baseUrl: proxyUrl, authToken: proxyToken });
+  writeFileSync(finalPath, result.stdout);
 
   let finalMessage = redactSensitive(existsSync(finalPath) ? readFileSync(finalPath, 'utf8') : (result.stdout ?? ''));
   writeFileSync(join(artifactsDir, 'transcript.md'), [
     '# Claude Code Agent Transcript',
     '',
     `Model: ${options.model}`,
-    `Exit code: ${result.status ?? 1}`,
+    `Exit code: ${result.exitCode}`,
     '',
     '## Final Message',
     '',
@@ -218,12 +200,12 @@ async function main(): Promise<void> {
     '## stderr',
     '',
     '```text',
-    redactSensitive((result.stderr ?? '').trim()),
+    redactSensitive(result.stderr.trim()),
     '```',
     '',
   ].join('\n'));
 
-  let exitCode = result.status ?? 1;
+  let exitCode = result.exitCode;
   if (exitCode === 0 && changedFiles().length === 0 && !existsSync(join(artifactsDir, 'blocked.md'))) {
     exitCode = 1;
     finalMessage = [

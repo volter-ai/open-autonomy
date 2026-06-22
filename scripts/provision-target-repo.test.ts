@@ -9,7 +9,7 @@ import {
 
 const MANIFEST = JSON.stringify({
   private: true,
-  required_secrets: ['MODEL_PROXY_ADMIN_TOKEN'],
+  required_secrets: ['EXAMPLE_REPO_SECRET'],
   variables: [
     { name: 'MODEL_PROXY_URL', value: 'https://proxy.example' },
     { name: 'PUBLIC_AGENT_REPO_PAUSED', value: 'false' },
@@ -22,7 +22,7 @@ describe('provision-target-repo manifest', () => {
   test('parses a valid manifest and rejects malformed variables', () => {
     const manifest = parseManifest(MANIFEST);
     expect(manifest.variables).toHaveLength(2);
-    expect(manifest.required_secrets).toContain('MODEL_PROXY_ADMIN_TOKEN');
+    expect(manifest.required_secrets).toContain('EXAMPLE_REPO_SECRET');
     expect(() => parseManifest(JSON.stringify({ variables: [{ name: 'X' }], labels: [] }))).toThrow();
   });
 });
@@ -45,8 +45,8 @@ describe('provision-target-repo planning', () => {
   });
 
   test('reports only secrets that are absent', () => {
-    expect(missingSecrets(['MODEL_PROXY_ADMIN_TOKEN'], [])).toEqual(['MODEL_PROXY_ADMIN_TOKEN']);
-    expect(missingSecrets(['MODEL_PROXY_ADMIN_TOKEN'], ['MODEL_PROXY_ADMIN_TOKEN'])).toEqual([]);
+    expect(missingSecrets(['EXAMPLE_REPO_SECRET'], [])).toEqual(['EXAMPLE_REPO_SECRET']);
+    expect(missingSecrets(['EXAMPLE_REPO_SECRET'], ['EXAMPLE_REPO_SECRET'])).toEqual([]);
   });
 
   test('report surfaces manual secret follow-up and applied changes', () => {
@@ -57,12 +57,12 @@ describe('provision-target-repo planning', () => {
       variables: planVariables(parseManifest(MANIFEST).variables, {}),
       labels: planLabels(parseManifest(MANIFEST).labels, []),
       branchProtection: 'configured',
-      missingSecrets: ['MODEL_PROXY_ADMIN_TOKEN'],
+      missingSecrets: ['EXAMPLE_REPO_SECRET'],
       dryRun: false,
     });
     expect(report).toContain('repo owner/name: created');
     expect(report).toContain('create MODEL_PROXY_URL');
     expect(report).toContain('MANUAL: set these secrets');
-    expect(report).toContain('MODEL_PROXY_ADMIN_TOKEN');
+    expect(report).toContain('EXAMPLE_REPO_SECRET');
   });
 });

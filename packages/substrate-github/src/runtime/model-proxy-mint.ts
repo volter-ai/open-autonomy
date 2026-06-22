@@ -12,7 +12,7 @@ interface Options {
 
 function usage(): never {
   throw new Error(`Usage:
-  MODEL_PROXY_URL=... MODEL_PROXY_ADMIN_TOKEN=... bun scripts/model-proxy-mint.ts --issue issue.json --models model-a,model-b [--run-id run_...]`);
+  MODEL_PROXY_URL=... bun scripts/model-proxy-mint.ts --issue issue.json --models model-a,model-b [--run-id run_...]   (mints via GitHub OIDC; run inside a workflow with id-token: write)`);
 }
 
 function parseArgs(argv: string[]): Options {

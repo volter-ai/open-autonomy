@@ -1,8 +1,8 @@
 {
-  "$comment": "Declarative provisioning manifest for the live open-autonomy testbed repo. Consumed by scripts/provision-target-repo.ts. Variable values are non-secret repo variables; the model-proxy admin token is a SECRET and must be set out of band (reported as missing by the provisioner). Model/provider are intentionally NOT seeded: the compiled substrate defaults every agent to deepseek/deepseek-v4-flash, so a PUBLIC_AGENT_*_MODEL repo variable is only an optional per-repo override — the default lives in one place (the compile), not here.",
+  "$comment": "Declarative provisioning manifest for the live open-autonomy testbed repo. Consumed by scripts/provision-target-repo.ts. Variable values are non-secret repo variables. NO admin secret is required: in-cell agents mint/revoke their model runs via the workflow's GitHub OIDC identity (id-token: write). Model/provider are intentionally NOT seeded: the compiled substrate defaults every agent to deepseek/deepseek-v4-flash, so a PUBLIC_AGENT_*_MODEL repo variable is only an optional per-repo override — the default lives in one place (the compile), not here.",
   "description": "open-autonomy live testbed",
   "private": true,
-  "required_secrets": ["MODEL_PROXY_ADMIN_TOKEN"],
+  "required_secrets": [],
   "variables": [
     { "name": "MODEL_PROXY_OIDC_AUDIENCE", "value": "volter-agent-model-proxy" },
     { "name": "MODEL_PROXY_URL", "value": "https://volter-agent-model-proxy.aaron-0ed.workers.dev" },

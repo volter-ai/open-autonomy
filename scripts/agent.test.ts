@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { missingRequired, salvageSubmission } from './agent-loop.js';
+import { missingRequired, salvageSubmission } from './agent.js';
 
 // runClaudeAgent runs a real agent (Claude Code) end-to-end, so it isn't unit-tested here; these cover the
 // pure validation helpers that gate what the agent is allowed to return — the trust backstop on the result.

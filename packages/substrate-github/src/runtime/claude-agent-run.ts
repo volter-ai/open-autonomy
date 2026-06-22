@@ -2,7 +2,7 @@
 import { spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
-import { runClaudeAgent } from './agent-loop.js';
+import { runClaudeAgent } from './agent.js';
 
 type Options = {
   issue?: string;
@@ -181,8 +181,8 @@ async function main(): Promise<void> {
   // /v1/messages route serves it) and authenticate with the minted run token — no provider key in the
   // sandbox. Every model slot maps to the one allowed model so background/subagent calls stay in budget.
   // The developer is the SAME agent at full capability (it writes code): no allowedTools limit → full
-  // tools, pointed at the bounded proxy with the minted run token. Decisions use the same primitive,
-  // read-only (see decide). Capability + endpoint are the only knobs.
+  // tools, pointed at the bounded proxy with the minted run token. Decisions use the same primitive with
+  // a `result` schema (see runClaudeAgent in agent.ts). Capability + endpoint are the only knobs.
   const result = await runClaudeAgent({ prompt, cwd: root, model: options.model, baseUrl: proxyUrl, authToken: proxyToken });
   writeFileSync(finalPath, result.stdout);
 

@@ -12,7 +12,7 @@
 // Uses the box model endpoint provisioned for the run (the same agent the developer and decisions use).
 import { readFileSync, existsSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { runClaudeAgent } from './agent-loop.js';
+import { runClaudeAgent } from './agent.js';
 
 interface Rubric {
   id: string;

@@ -1,7 +1,7 @@
 #!/usr/bin/env bun
 import { appendFileSync, readFileSync, writeFileSync } from 'node:fs';
 import { readControlFileContext, renderControlFilePrompt } from './public-agent-control-files.js';
-import { runClaudeAgent } from './agent-loop.js';
+import { runClaudeAgent } from './agent.js';
 
 // The reviewer's verdict, as the agent loop's submit schema. Read-only tools only: review runs in a
 // trusted job, so its agent reads (the diff + changed files for full context) but does not execute.

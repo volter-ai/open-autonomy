@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 import { appendFileSync, existsSync, readFileSync, writeFileSync } from 'node:fs';
-import { runClaudeAgent } from './agent-loop.js';
+import { runClaudeAgent } from './agent.js';
 
 // The strategy verdict as the agent loop's submit schema. Read-only tools (a trusted job).
 const STRATEGY_VERDICT_SCHEMA = {

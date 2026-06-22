@@ -1,7 +1,7 @@
 #!/usr/bin/env bun
 import { appendFileSync, existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { parseRoadmapItems } from './public-agent-planner.js';
-import { runClaudeAgent } from './agent-loop.js';
+import { runClaudeAgent } from './agent.js';
 
 // The strategist's proposal as the agent loop's submit schema (loose; parseStrategistProposal coerces +
 // defaults). Read-only tools: it investigates the repo/roadmap but never executes.

@@ -1,17 +1,18 @@
 #!/usr/bin/env bun
 // Bench judge — scores the OUTCOME of an autonomous run against a workload's rubric, with an AI judge that
 // actually INVESTIGATES the result. A bench cell is profile × substrate × workload (docs/VISION.md): the
-// org is handed a substantial goal, runs for real time, and the result is a matter of JUDGMENT. This runs
-// the unified agent loop over the result repo with read + run tools, so the judge reads the diff, runs the
-// tests, and reproduces the behavior before scoring — not a truncated text dump. Pair with
-// scripts/autonomy-ratio.ts (how much was done by agents) for the full fitness reading: quality × autonomy.
+// org is handed a substantial goal, runs for real time, and the result is a matter of JUDGMENT. It runs
+// the agent (full capability) over the result repo so the judge reads the diff, runs the tests, and
+// reproduces the behavior before scoring — not a truncated text dump — and returns a schema'd score via
+// runClaudeAgent's result. Pair with scripts/autonomy-ratio.ts (how much was done by agents) for the full
+// fitness reading: quality × autonomy.
 //
 //   bun scripts/bench-judge.ts --workload bench/workload/todo-cli --result <run-repo> [--out score.json]
 //
-// Uses the box endpoint (OPENAI_BASE_URL/OPENAI_API_KEY) via the agent loop's transport.
+// Uses the box model endpoint provisioned for the run (the same agent the developer and decisions use).
 import { readFileSync, existsSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { decide } from './agent-loop.js';
+import { runClaudeAgent } from './agent-loop.js';
 
 interface Rubric {
   id: string;
@@ -67,7 +68,7 @@ const schema = {
   required: ['criteria', 'summary'],
 };
 
-const artifact = await decide<{ criteria: CriterionScore[]; summary: string }>({
+const artifact = await runClaudeAgent<{ criteria: CriterionScore[]; summary: string }>({
   system: [
     'You are an exacting engineering reviewer judging whether an autonomous software org ACHIEVED a goal.',
     'INVESTIGATE the result repository with your tools before scoring: list files, read the relevant code and',
@@ -77,7 +78,7 @@ const artifact = await decide<{ criteria: CriterionScore[]; summary: string }>({
     '3 = adequate, 5 = excellent) with a justification citing what you saw, then submit.',
   ].join(' '),
   goal: `# Goal\n${goal.trim()}\n\n# Rubric (score each id 0–5)\n${rubricText}`,
-  schema,
+  result: { schema },
   model,
   cwd: resultDir, // the judge works in the run-repo (reads the diff, runs its tests) before scoring
 });

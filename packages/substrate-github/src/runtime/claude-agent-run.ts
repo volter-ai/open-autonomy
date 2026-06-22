@@ -183,7 +183,7 @@ async function main(): Promise<void> {
   // The developer is the SAME agent at full capability (it writes code): no allowedTools limit → full
   // tools, pointed at the bounded proxy with the minted run token. Decisions use the same primitive,
   // read-only (see decide). Capability + endpoint are the only knobs.
-  const result = runClaudeAgent({ prompt, cwd: root, model: options.model, baseUrl: proxyUrl, authToken: proxyToken });
+  const result = await runClaudeAgent({ prompt, cwd: root, model: options.model, baseUrl: proxyUrl, authToken: proxyToken });
   writeFileSync(finalPath, result.stdout);
 
   let finalMessage = redactSensitive(existsSync(finalPath) ? readFileSync(finalPath, 'utf8') : (result.stdout ?? ''));

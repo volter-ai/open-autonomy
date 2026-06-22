@@ -1,7 +1,7 @@
 #!/usr/bin/env bun
 import { appendFileSync, existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { parseRoadmapItems } from './public-agent-planner.js';
-import { decide } from './agent-loop.js';
+import { runClaudeAgent } from './agent-loop.js';
 
 // The strategist's proposal as the agent loop's submit schema (loose; parseStrategistProposal coerces +
 // defaults). Read-only tools: it investigates the repo/roadmap but never executes.
@@ -268,11 +268,11 @@ async function main(): Promise<void> {
   const signals = readSignals(options.signals);
 
   const prompt = renderStrategistPrompt(roadmapText, constitution, priorProposals, signalsText, options.maxItems);
-  const artifact = await decide({
+  const artifact = await runClaudeAgent({
     system:
       'You are the strategist agent for a self-building OSS repository. Propose roadmap work toward the constitution north star, discovered from real signals. Investigate with your read tools, then submit a proposal (summary + items with title + acceptance criteria).',
     goal: prompt,
-    schema: STRATEGIST_SCHEMA,
+    result: { schema: STRATEGIST_SCHEMA },
     model: options.model,
   });
   const proposal = parseStrategistProposal(JSON.stringify(artifact));

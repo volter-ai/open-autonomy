@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 import { appendFileSync, existsSync, readFileSync, writeFileSync } from 'node:fs';
-import { decide } from './agent-loop.js';
+import { runClaudeAgent } from './agent-loop.js';
 
 // The strategy verdict as the agent loop's submit schema. Read-only tools (a trusted job).
 const STRATEGY_VERDICT_SCHEMA = {
@@ -125,11 +125,11 @@ async function main(): Promise<void> {
   );
   let verdict: StrategyVerdict;
   try {
-    const artifact = await decide<StrategyVerdict>({
+    const artifact = await runClaudeAgent<StrategyVerdict>({
       system:
         'You are the strategy reviewer for a self-building OSS repository. Ratify the strategist proposal against the constitution north star and merit rubric. Investigate with your read tools, then submit a strict verdict. Mark human_required for anything you cannot confidently ratify.',
       goal: prompt,
-      schema: STRATEGY_VERDICT_SCHEMA,
+      result: { schema: STRATEGY_VERDICT_SCHEMA },
       model: options.model,
     });
     verdict = parseStrategyVerdict(JSON.stringify(artifact));

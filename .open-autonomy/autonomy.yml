@@ -57,7 +57,7 @@ skills:
 agents:
   developer:
     skill: developer
-    workflowFile: public-agent.yml
+    workflowFile: developer.yml
     params:
       ISSUE_REF: subject.ref
     triggers:
@@ -70,7 +70,7 @@ agents:
       - tasks:converse
   pm:
     skill: pm
-    workflowFile: public-agent-pm.yml
+    workflowFile: pm.yml
     triggers:
       schedule: "*/30 * * * *"
     timeout: 30
@@ -80,7 +80,7 @@ agents:
       - agent:launch
   reviewer:
     skill: reviewer
-    workflowFile: public-agent-review.yml
+    workflowFile: reviewer.yml
     params:
       TARGET_REF: subject.ref
       SUBJECT_TEXT: subject.text
@@ -101,7 +101,7 @@ agents:
       - tasks:converse
   planner:
     skill: planner
-    workflowFile: open-autonomy-planner.yml
+    workflowFile: planner.yml
     triggers:
       schedule: 17 6 * * *
     timeout: 15
@@ -110,7 +110,7 @@ agents:
       - tasks:author
   strategist:
     skill: strategist
-    workflowFile: open-autonomy-strategist.yml
+    workflowFile: strategist.yml
     triggers:
       schedule: 23 7 * * 1
     timeout: 25
@@ -118,7 +118,7 @@ agents:
       - code:propose@roadmap
   strategy_reviewer:
     skill: strategy-reviewer
-    workflowFile: public-agent-strategy-review.yml
+    workflowFile: strategy_reviewer.yml
     params:
       TARGET_REF: subject.ref
       SUBJECT_TEXT: subject.text

@@ -14,15 +14,11 @@ export function ingestAutonomy(m: OAManifest): AutonomyIR {
       if (key === 'schedule' && typeof val === 'string') triggers.push({ cron: val });
       else triggers.push({ event: key, ...(val && typeof val === 'object' ? { config: val as Box } : {}) });
     }
-    const config: Box = {};
-    if (typeof a.timeout === 'number') config.timeout = a.timeout;
-    if (typeof a.concurrency === 'string') config.concurrency = a.concurrency;
-    if (a.env && typeof a.env === 'object') config.env = a.env;
     agents[name] = {
       behavior: skillRef.split('/').pop() ?? skillRef,
       capabilities: a.capabilities ?? [],
       triggers,
-      config,
+      ...(typeof a.timeout === 'number' ? { timeout: a.timeout } : {}),
     };
   }
 

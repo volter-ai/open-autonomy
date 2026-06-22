@@ -36,7 +36,7 @@ describe('strategy ratify guard', () => {
   });
 
   test('blocks a proposal that edits a workflow', () => {
-    expect(() => assertOnlyRoadmapProposal(['.github/workflows/public-agent.yml'])).toThrow('governance file');
+    expect(() => assertOnlyRoadmapProposal(['.github/workflows/developer.yml'])).toThrow('governance file');
   });
 
   test('blocks a proposal that edits unrelated code', () => {

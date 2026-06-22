@@ -6,7 +6,7 @@ import { readFileSync, readdirSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { stringify as stringifyYaml } from 'yaml';
-import { cfg, cronOf, emitAutonomy, isScript, withGeneratedManifest } from '@open-autonomy/core';
+import { cronOf, emitAutonomy, withGeneratedManifest } from '@open-autonomy/core';
 import type { AutonomyIR, CompileOutput, IRAgent } from '@open-autonomy/core';
 
 // The operator control plane (the github surface of the Runner contract). Single source of truth is
@@ -133,29 +133,14 @@ function capsToPermissions(caps: string[], extra?: unknown): string {
   return `{ ${Object.entries(p).map(([k, v]) => `${k}: ${v}`).join(', ')} }`;
 }
 
-// Structural job config the github adapter reads from the agent's config box.
-function concurrencyLines(agent: IRAgent): string[] {
-  const group = cfg(agent).concurrency;
-  return typeof group === 'string' && group
-    ? ['concurrency:', `  group: ${JSON.stringify(group)}`, '  cancel-in-progress: false']
-    : [];
-}
+// A run-time bound (minutes) — an agnostic IR field the substrate realizes as the job timeout.
 function timeoutLines(agent: IRAgent): string[] {
-  const t = cfg(agent).timeout;
-  return typeof t === 'number' ? [`    timeout-minutes: ${t}`] : [];
+  return typeof agent.timeout === 'number' ? [`    timeout-minutes: ${agent.timeout}`] : [];
 }
-function envLines(agent: IRAgent): string[] {
-  const env = cfg(agent).env;
-  if (!env || typeof env !== 'object') return [];
-  return Object.entries(env as Record<string, unknown>).map(([k, v]) => `      ${k}: ${v}`);
-}
-// Control-aware concurrency for a model-interpreted agent: control commands get a SEPARATE group so
-// they are never queued behind the run they target. cancel-in-progress false so a re-trigger doesn't kill.
-function launchConcurrencyLines(name: string, agent: IRAgent): string[] {
-  const override = cfg(agent).concurrency;
-  if (typeof override === 'string' && override) {
-    return ['concurrency:', `  group: ${JSON.stringify(override)}`, '  cancel-in-progress: false'];
-  }
+// Control-aware concurrency: control commands get a SEPARATE group so they are never queued behind the
+// run they target. cancel-in-progress false so a re-trigger doesn't kill the run. Derived from the agent
+// name + work item — no profile override (substrate-free).
+function launchConcurrencyLines(name: string, _agent: IRAgent): string[] {
   const exempt = CONTROL_VERBS.map((v) => `startsWith(github.event.comment.body || '', '/agent ${v}')`).join(' || ');
   return [
     'concurrency:',
@@ -165,123 +150,8 @@ function launchConcurrencyLines(name: string, agent: IRAgent): string[] {
     '  cancel-in-progress: false',
   ];
 }
-function artifactLines(name: string): string[] {
-  return [
-    `      - uses: actions/upload-artifact@v4`,
-    `        if: always()`,
-    `        with:`,
-    `          name: ${name}-\${{ github.run_id }}`,
-    `          path: .agent-run`,
-    `          if-no-files-found: warn`,
-  ];
-}
 
-// A deterministic agent's job permissions, realized from its capabilities (docs/CAPABILITIES.md). A
-// deterministic job is TRUSTED (its own repo code, not model-interpreted), so the baseline is
-// contents:write — it may push/merge — and capabilities widen it. The strict least-privilege boundary
-// lives in the wrapper's untrusted agent job, not here.
-function deterministicPerms(caps: string[], extra?: unknown): string {
-  const p: Record<string, string> = {
-    contents: 'write',
-    'id-token': 'write',
-    'pull-requests': 'read',
-    checks: 'read',
-  };
-  for (const rawC of caps) {
-    const c = rawC.split('@')[0]; // strip an optional @scope
-    if (c === 'code:propose') p['pull-requests'] = 'write';
-    else if (c === 'code:review') p.statuses = 'write';
-    else if (c === 'tasks:author' || c === 'tasks:converse') {
-      p.issues = 'write';
-      p['pull-requests'] = 'write';
-    } else if (c === 'agent:launch' || c === 'agent:update' || c === 'agent:cancel') p.actions = 'write';
-    else if (c === 'agent:list' && !p.actions) p.actions = 'read';
-  }
-  // A github-specific permission the capability vocabulary does not name (e.g. statuses:write for
-  // posting a commit status) is carried via `config.permissions` and merged here, last-write-wins.
-  if (extra && typeof extra === 'object') for (const [k, v] of Object.entries(extra as Record<string, unknown>)) p[k] = String(v);
-  return `{ ${Object.entries(p).map(([k, v]) => `${k}: ${v}`).join(', ')} }`;
-}
-
-// The github box's model-endpoint provisioning, gated on `config.model` (a github-substrate config key —
-// the box always has a model endpoint; only agents that call the model need it provisioned). github is
-// the untrusted-keyless case, so the box endpoint is the remote proxy reached through a bounded mint. The
-// run token is minted via the workflow's GitHub OIDC identity (id-token: write) — NO admin secret in any
-// repo; the proxy derives repo/actor/run from the OIDC claims and gates on its trusted-repo allow-list.
-// The mint writes the stock SDK env vars to $GITHUB_ENV, so the agent step makes transparent SDK calls
-// with no token of its own. A trusted substrate (local) provisions the box its own way (ambient keys).
-function modelSetupStep(agent: IRAgent): string[] {
-  if (!cfg(agent).model) return [];
-  return [
-    `      - name: Provision model endpoint`,
-    `        env:`,
-    `          MODEL_PROXY_URL: \${{ vars.MODEL_PROXY_URL }}`,
-    `          MODEL_PROXY_OIDC_AUDIENCE: \${{ vars.MODEL_PROXY_OIDC_AUDIENCE || 'volter-agent-model-proxy' }}`,
-    `          MODEL_ALLOWLIST: \${{ vars.PUBLIC_AGENT_MODELS || 'deepseek/deepseek-v4-flash' }}`,
-    `          PUBLIC_AGENT_RUN_MAX_USD_CENTS: \${{ vars.PUBLIC_AGENT_RUN_MAX_USD_CENTS || '500' }}`,
-    `          PUBLIC_AGENT_RUN_MAX_REQUESTS: \${{ vars.PUBLIC_AGENT_RUN_MAX_REQUESTS || '60' }}`,
-    `        run: bun scripts/provision-model-endpoint.ts`,
-    // Decisions run a real agent: runClaudeAgent spawns Claude Code (investigate, write a schema-validated
-    // result). So a model-using deterministic agent needs the CLI on its box.
-    `      - name: install Claude Code CLI`,
-    `        run: npm install -g "@anthropic-ai/claude-code@\${{ vars.PUBLIC_AGENT_CLAUDE_CODE_VERSION || 'latest' }}" && claude --version`,
-  ];
-}
-
-// Checkout persists the workflow token by default; an agent that never `git push`es (it acts purely
-// through gh/the API) sets `config.persistCredentials: false` for a tighter checkout.
-function checkoutLines(agent: IRAgent): string[] {
-  return cfg(agent).persistCredentials === false
-    ? ['      - uses: actions/checkout@v4', '        with: { persist-credentials: false }']
-    : ['      - uses: actions/checkout@v4'];
-}
-
-// A deterministic agent (script behavior): trusted, runs the script directly. The script is
-// self-contained — it reads/writes via tooling (gh), using the trigger params in its env.
-function deterministicYml(name: string, agent: IRAgent): string {
-  return [
-    `name: ${name}`,
-    ...onLines(agent, 'run'),
-    `permissions: ${deterministicPerms(agent.capabilities ?? [], cfg(agent).permissions)}`,
-    ...concurrencyLines(agent),
-    `env:`,
-    `  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"`,
-    `jobs:`,
-    `  ${name}:`,
-    `    runs-on: ubuntu-latest`,
-    ...timeoutLines(agent),
-    `    env:`,
-    `      GH_TOKEN: \${{ github.token }}`,
-    ...triggerParamsEnv(agent),
-    ...envLines(agent),
-    `    steps:`,
-    ...checkoutLines(agent),
-    `      - uses: oven-sh/setup-bun@v2`,
-    `      - run: bun install --frozen-lockfile || bun install`,
-    ...modelSetupStep(agent),
-    `      - run: bun ${agent.behavior}`,
-    ...modelRevokeStep(agent),
-    ...artifactLines(name),
-    ``,
-  ].join('\n');
-}
-
-// Revoke the bounded run when a model-using deterministic job finishes, freeing its active-run slot
-// immediately rather than leaking it for the full token TTL (~2h). Without this, a frequent cron agent
-// (pm every 30m, strategist, reviewer) accumulates un-revoked runs and saturates the per-actor/per-repo
-// active-run caps. `if: always()` so a failed behavior still releases the slot; best-effort (|| true);
-// OIDC-gated like the mint (the job already holds id-token: write). AGENT_RUN_ID is set by the mint step.
-function modelRevokeStep(agent: IRAgent): string[] {
-  if (!cfg(agent).model) return [];
-  return [
-    `      - name: Revoke the run token`,
-    `        if: always() && env.AGENT_RUN_ID != ''`,
-    `        env:`,
-    `          MODEL_PROXY_URL: \${{ vars.MODEL_PROXY_URL }}`,
-    `          MODEL_PROXY_OIDC_AUDIENCE: \${{ vars.MODEL_PROXY_OIDC_AUDIENCE || 'volter-agent-model-proxy' }}`,
-    `        run: bun scripts/model-proxy-revoke.ts --run-id "\${{ env.AGENT_RUN_ID }}" || true`,
-  ];
-}
+// Every agent is a skill (no script behaviors): one realization, the credentialed wrapper below.
 
 // A skill (model) agent: a single CREDENTIALED job whose token is scoped to its capabilities. It reads its
 // subject, runs the skill, and acts directly (a generic effect step turns a working-tree change into an
@@ -384,7 +254,7 @@ function wrapperYml(name: string, agent: IRAgent): string {
     `    needs: setup`,
     `    runs-on: ubuntu-latest`,
     ...timeoutLines(agent),
-    `    permissions: ${capsToPermissions(caps, cfg(agent).permissions)}`,
+    `    permissions: ${capsToPermissions(caps)}`,
     `    env:`,
     `      MODEL_PROXY_URL: \${{ vars.MODEL_PROXY_URL }}`,
     `      MODEL_PROXY_OIDC_AUDIENCE: \${{ vars.MODEL_PROXY_OIDC_AUDIENCE || 'volter-agent-model-proxy' }}`,
@@ -392,7 +262,6 @@ function wrapperYml(name: string, agent: IRAgent): string {
     `      PUBLIC_AGENT_CITED_VERSION: \${{ vars.PUBLIC_AGENT_CLAUDE_CODE_VERSION }}`,
     `      GH_TOKEN: \${{ github.token }}`,
     ...triggerParamsEnv(agent),
-    ...envLines(agent),
     `    steps:`,
     `      - uses: actions/checkout@v4`,
     `      - uses: oven-sh/setup-bun@v2`,
@@ -424,7 +293,7 @@ function isHuman(agent: IRAgent): boolean {
 }
 
 function agentYml(name: string, agent: IRAgent): string {
-  return isScript(agent.behavior) ? deterministicYml(name, agent) : wrapperYml(name, agent);
+  return wrapperYml(name, agent); // every agent is a skill
 }
 
 // The shared, substrate-neutral runtime scripts (portable agent implementations + gates + the
@@ -442,16 +311,15 @@ export function compileGithub(ir: AutonomyIR): CompileOutput {
   if (!ir.resources.includes('.open-autonomy/autonomy.yml')) {
     generated['.open-autonomy/autonomy.yml'] = stringifyYaml(emitAutonomy(ir) as Record<string, unknown>);
   }
-  // Every agent generates its workflow. The output filename defaults to the agent name; an agent may
-  // pin `config.workflowFile` (a github-substrate key) so the file keeps a name other systems already
-  // reference — the model-proxy OIDC allowlist, cross-agent `gh workflow run`, branch protection.
+  // Every agent generates its workflow, named for the agent (substrate-derived — no profile-pinned
+  // filename). The proxy's OIDC trust is repo-based (any workflow under .github/workflows/), so names are
+  // the substrate's to choose.
   for (const [name, agent] of Object.entries(ir.agents)) {
     if (isHuman(agent)) continue; // a human actor is declared in the manifest, not realized as a github job
-    const file = typeof cfg(agent).workflowFile === 'string' ? (cfg(agent).workflowFile as string) : `${name}.yml`;
-    generated[`.github/workflows/${file}`] = agentYml(name, agent);
+    generated[`.github/workflows/${name}.yml`] = agentYml(name, agent);
   }
-  // Model-interpreted agents carry the operator control plane, so emit its handler.
-  if (Object.values(ir.agents).some((a) => !isScript(a.behavior) && !isHuman(a))) {
+  // Agents carry the operator control plane, so emit its handler.
+  if (Object.values(ir.agents).some((a) => !isHuman(a))) {
     generated['.github/agent-control.mjs'] = AGENT_CONTROL;
   }
   // The substrate injects its runtime backend.
@@ -459,10 +327,9 @@ export function compileGithub(ir: AutonomyIR): CompileOutput {
 
   const copies: Array<{ from: string; to: string }> = [];
   for (const agent of Object.values(ir.agents)) {
-    if (!isScript(agent.behavior) && !isHuman(agent)) {
+    if (!isHuman(agent)) {
       // Install the skill where each harness discovers it: codex from `.codex/skills/`, Claude Code from
-      // `.claude/skills/`. The developer job runs Claude Code, which can then resolve the skill natively
-      // (in addition to the wrapper inlining it). Both copies are immutable to agents (see bundle guard).
+      // `.claude/skills/`. The agent's credentialed job runs Claude Code against the skill.
       copies.push({ from: `skills/${agent.behavior}/SKILL.md`, to: `.codex/skills/${agent.behavior}/SKILL.md` });
       copies.push({ from: `skills/${agent.behavior}/SKILL.md`, to: `.claude/skills/${agent.behavior}/SKILL.md` });
     }

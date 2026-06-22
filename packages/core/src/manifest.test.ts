@@ -6,7 +6,7 @@ const irWithBox = (box: Record<string, unknown>): AutonomyIR => ({
   schema: 'autonomy.ir.v1',
   targets: ['github'],
   agents: {
-    pm: { behavior: 'pm', capabilities: ['tasks:converse'], triggers: [{ cron: '* * * * *' }], config: {} },
+    pm: { behavior: 'pm', capabilities: ['tasks:converse'], triggers: [{ cron: '* * * * *' }] },
   },
   policy: { box },
   resources: [],

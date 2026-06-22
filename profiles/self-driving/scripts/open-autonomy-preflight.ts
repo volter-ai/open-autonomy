@@ -34,14 +34,11 @@ const REQUIRED_FILES = [
   '.open-autonomy/autonomy.yml',
   '.open-autonomy/roadmap.yml',
   '.open-autonomy/review-rubric.yml',
-  '.github/workflows/public-agent.yml',
-  '.github/workflows/public-agent-review.yml',
-  '.github/workflows/public-agent-pm.yml',
-  '.github/workflows/open-autonomy-planner.yml',
+  '.github/workflows/developer.yml',
+  '.github/workflows/reviewer.yml',
+  '.github/workflows/pm.yml',
+  '.github/workflows/planner.yml',
   'scripts/open-autonomy-upgrade-cli.ts',
-  'scripts/public-agent-control-files.ts',
-  'scripts/public-agent-planner.ts',
-  'scripts/public-agent-decision-index.ts',
   'VERSION',
 ];
 

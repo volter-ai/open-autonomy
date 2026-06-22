@@ -10,7 +10,6 @@ agents:
     capabilities: [tasks:converse]
     triggers:
       - { cron: "*/30 * * * *" } # autonomous (no subject.ref) — fires on a schedule
-    config: {}
 policy:
   box: {}
 resources: []

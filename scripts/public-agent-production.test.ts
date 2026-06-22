@@ -14,10 +14,10 @@ describe('public agent production readiness', () => {
   test('workflows opt into Node 24 JavaScript actions', () => {
     for (const name of [
       'ci.yml',
-      'public-agent.yml',
-      'public-agent-pm.yml',
-      'public-agent-review.yml',
-      'open-autonomy-planner.yml',
+      'developer.yml',
+      'pm.yml',
+      'reviewer.yml',
+      'planner.yml',
       'open-autonomy-preflight.yml',
       'open-autonomy-governance-report.yml',
     ]) {
@@ -26,7 +26,7 @@ describe('public agent production readiness', () => {
   });
 
   test('operator controls run as a separate job, before any model work', () => {
-    const text = workflow('public-agent.yml');
+    const text = workflow('developer.yml');
     // A `/agent ` comment routes to the control job (the vendored control plane), not the model path.
     expect(text).toContain('node .github/agent-control.mjs');
     expect(text).toContain("startsWith(github.event.comment.body, '/agent ')");
@@ -37,7 +37,7 @@ describe('public agent production readiness', () => {
   });
 
   test('the agent job is credentialed (scoped to its capabilities); it proposes its own auto-merging PR', () => {
-    const text = workflow('public-agent.yml');
+    const text = workflow('developer.yml');
     // developer = code:propose + tasks:converse → contents/pull-requests/actions/issues:write + id-token.
     expect(text).toContain('pull-requests: write');
     expect(text).toContain('contents: write');
@@ -50,7 +50,7 @@ describe('public agent production readiness', () => {
   });
 
   test('pm is a skill agent that can launch (agent:launch → actions:write) but not change code', () => {
-    const text = workflow('public-agent-pm.yml');
+    const text = workflow('pm.yml');
     expect(text).toContain('bun scripts/claude-agent-run.ts --skill .codex/skills/pm/SKILL.md');
     const pmJob = text.slice(text.indexOf('  pm:'));
     expect(pmJob).toContain('actions: write'); // agent:launch — dispatch the developer
@@ -65,7 +65,7 @@ describe('public agent production readiness', () => {
   test('reviewer holds code:review (statuses:write) and cannot merge (no contents:write)', () => {
     // The reviewer posts the agent-review verdict status; it has no contents:write, so it cannot merge.
     // GitHub native auto-merge lands the PR once ci + agent-review are green (the permission-split boundary).
-    const text = workflow('public-agent-review.yml');
+    const text = workflow('reviewer.yml');
     const agentJob = text.slice(text.indexOf('  reviewer:'));
     expect(agentJob).toContain('statuses: write');
     expect(agentJob).not.toContain('contents: write');
@@ -76,7 +76,7 @@ describe('public agent production readiness', () => {
   });
 
   test('planner is a skill agent that reconciles roadmap into tracking issues', () => {
-    const text = workflow('open-autonomy-planner.yml');
+    const text = workflow('planner.yml');
     expect(text).toContain('bun scripts/claude-agent-run.ts --skill .codex/skills/planner/SKILL.md');
     const plJob = text.slice(text.indexOf('  planner:'));
     expect(plJob).toContain('issues: write'); // tasks:author

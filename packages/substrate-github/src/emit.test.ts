@@ -11,7 +11,6 @@ function irWith(triggers: Trigger[], kind?: 'agent' | 'human'): AutonomyIR {
         behavior: 'humans/maintainer-review',
         capabilities: ['tasks:converse'],
         triggers,
-        config: {},
         ...(kind ? { kind } : {}),
       },
     },

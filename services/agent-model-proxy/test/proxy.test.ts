@@ -27,16 +27,16 @@ afterEach(() => {
 describe('oidc mint trust (repo granularity)', () => {
   const env = {
     GITHUB_OIDC_ALLOWED_WORKFLOW:
-      'volter-ai/open-autonomy/.github/workflows/public-agent.yml@,volter-ai/open-autonomy-self-driving-testbed/.github/workflows/public-agent.yml@',
+      'volter-ai/open-autonomy/.github/workflows/developer.yml@,volter-ai/open-autonomy-self-driving-testbed/.github/workflows/developer.yml@',
   } as unknown as Env;
 
   test('trusts any workflow in an allowlisted repo', () => {
     expect(isTrustedRepoWorkflow(env, 'volter-ai/open-autonomy-self-driving-testbed',
-      'volter-ai/open-autonomy-self-driving-testbed/.github/workflows/open-autonomy-strategist.yml@refs/heads/main')).toBe(true);
+      'volter-ai/open-autonomy-self-driving-testbed/.github/workflows/strategist.yml@refs/heads/main')).toBe(true);
   });
 
   test('rejects a repo not in the allowlist', () => {
-    expect(isTrustedRepoWorkflow(env, 'evil/repo', 'evil/repo/.github/workflows/public-agent.yml@x')).toBe(false);
+    expect(isTrustedRepoWorkflow(env, 'evil/repo', 'evil/repo/.github/workflows/developer.yml@x')).toBe(false);
   });
 
   test('rejects a workflow ref whose repo prefix does not match the claimed repo', () => {
@@ -47,11 +47,11 @@ describe('oidc mint trust (repo granularity)', () => {
     const wild = { GITHUB_OIDC_ALLOWED_WORKFLOW: 'volter-test-fixtures/*' } as unknown as Env;
     test('trusts any repo under a wildcarded owner', () => {
       expect(isTrustedRepoWorkflow(wild, 'volter-test-fixtures/bench-xyz',
-        'volter-test-fixtures/bench-xyz/.github/workflows/public-agent-pm.yml@refs/heads/main')).toBe(true);
+        'volter-test-fixtures/bench-xyz/.github/workflows/pm.yml@refs/heads/main')).toBe(true);
     });
     test('still requires the workflow to live under the repo itself', () => {
       expect(isTrustedRepoWorkflow(wild, 'volter-test-fixtures/bench-xyz',
-        'other/repo/.github/workflows/public-agent-pm.yml@refs/heads/main')).toBe(false);
+        'other/repo/.github/workflows/pm.yml@refs/heads/main')).toBe(false);
     });
     test('does not trust a different owner', () => {
       expect(isTrustedRepoWorkflow(wild, 'evil/repo', 'evil/repo/.github/workflows/x.yml@y')).toBe(false);
@@ -528,7 +528,7 @@ describe('agent model proxy', () => {
     const jwt = await oidc.sign({
       repository: 'volter/twin',
       actor: 'octocat',
-      job_workflow_ref: 'volter/twin/.github/workflows/public-agent.yml@refs/heads/main',
+      job_workflow_ref: 'volter/twin/.github/workflows/developer.yml@refs/heads/main',
     });
 
     const exchanged = await requestJson(env, `/v1/runs/${minted.run.run_id}/exchange`, {
@@ -544,7 +544,9 @@ describe('agent model proxy', () => {
     expect(status.claims.repo).toBe('volter/twin');
   });
 
-  test('rejects GitHub OIDC exchange from a different workflow', async () => {
+  test('rejects GitHub OIDC exchange whose workflow is outside the run repo', async () => {
+    // Workflow trust is repo-based (any workflow under the run repo's .github/workflows/, matching mint);
+    // a workflow ref from a DIFFERENT repo is rejected. (Same-repo per-agent workflow names are allowed.)
     const oidc = await githubOidcSigner();
     const env = testEnv({ GITHUB_OIDC_JWKS_URL: 'https://jwks.test/keys' });
     globalThis.fetch = oidc.fetch;
@@ -552,7 +554,7 @@ describe('agent model proxy', () => {
     const jwt = await oidc.sign({
       repository: 'volter/twin',
       actor: 'octocat',
-      job_workflow_ref: 'volter/twin/.github/workflows/other.yml@refs/heads/main',
+      job_workflow_ref: 'volter/evil/.github/workflows/other.yml@refs/heads/main',
     });
 
     const blocked = await request(env, `/v1/runs/${minted.run.run_id}/exchange`, {
@@ -568,14 +570,14 @@ describe('agent model proxy', () => {
     const oidc = await githubOidcSigner();
     const env = testEnv({
       GITHUB_OIDC_JWKS_URL: 'https://jwks.test/keys',
-      GITHUB_OIDC_ALLOWED_WORKFLOW: 'volter-ai/open-autonomy/.github/workflows/public-agent.yml@,volter-ai/open-autonomy-testbed/.github/workflows/public-agent.yml@',
+      GITHUB_OIDC_ALLOWED_WORKFLOW: 'volter-ai/open-autonomy/.github/workflows/developer.yml@,volter-ai/open-autonomy-testbed/.github/workflows/developer.yml@',
     });
     globalThis.fetch = oidc.fetch;
     const minted = await mint(env, ['gpt-5-mini'], 100, 3, { repo: 'volter-ai/open-autonomy' });
     const jwt = await oidc.sign({
       repository: 'volter-ai/open-autonomy',
       actor: 'octocat',
-      job_workflow_ref: 'volter-ai/open-autonomy/.github/workflows/public-agent.yml@refs/heads/main',
+      job_workflow_ref: 'volter-ai/open-autonomy/.github/workflows/developer.yml@refs/heads/main',
     });
 
     const exchanged = await requestJson(env, `/v1/runs/${minted.run.run_id}/exchange`, {
@@ -609,7 +611,7 @@ describe('agent model proxy', () => {
       actor: 'octocat',
       run_id: '456',
       run_attempt: '1',
-      job_workflow_ref: 'volter/twin/.github/workflows/public-agent.yml@refs/heads/main',
+      job_workflow_ref: 'volter/twin/.github/workflows/developer.yml@refs/heads/main',
     });
 
     const blocked = await request(env, `/v1/runs/${minted.run.run_id}/exchange`, {
@@ -968,7 +970,7 @@ describe('oidc project→project redistribution', () => {
     const jwt = await oidc.sign({
       repository: 'volter/twin',
       actor: 'octocat',
-      job_workflow_ref: 'volter/twin/.github/workflows/public-agent.yml@refs/heads/main',
+      job_workflow_ref: 'volter/twin/.github/workflows/developer.yml@refs/heads/main',
     });
     const granted = await requestJson(env, `/v1/accounts/${encodeURIComponent('volter/twin')}/grant`, {
       method: 'POST', headers: { authorization: `Bearer ${jwt}` }, body: { to: 'beta/helper', amount_usd_cents: 1000 },
@@ -984,7 +986,7 @@ describe('oidc project→project redistribution', () => {
     const jwt = await oidc.sign({
       repository: 'volter/twin',
       actor: 'octocat',
-      job_workflow_ref: 'volter/twin/.github/workflows/public-agent.yml@refs/heads/main',
+      job_workflow_ref: 'volter/twin/.github/workflows/developer.yml@refs/heads/main',
     });
     const blocked = await request(env, `/v1/accounts/${encodeURIComponent('someone/else')}/grant`, {
       method: 'POST', headers: { authorization: `Bearer ${jwt}` }, body: { to: 'beta/helper', amount_usd_cents: 1000 },

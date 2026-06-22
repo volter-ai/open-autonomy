@@ -2,7 +2,7 @@
 // every substrate emits the identical manifest and the runner reads it. So the (de)serialization is the
 // standard's, not any one substrate's emit — it lives here in core, and each substrate's emit imports it
 // rather than one substrate housing it for the others.
-import { cfg, isScript, type AutonomyIR } from './ir.js';
+import { isScript, type AutonomyIR } from './ir.js';
 
 export interface OAManifest {
   schema?: string;
@@ -33,7 +33,6 @@ export function emitAutonomy(ir: AutonomyIR): OAManifest {
   const agents: NonNullable<OAManifest['agents']> = {};
   for (const [role, agent] of Object.entries(ir.agents)) {
     if (!isScript(agent.behavior)) skills[role] = `.codex/skills/${agent.behavior}`;
-    const c = cfg(agent);
     const triggers: { schedule?: string; [event: string]: unknown } = {};
     for (const t of agent.triggers ?? []) {
       if ('cron' in t) triggers.schedule = t.cron;
@@ -50,13 +49,11 @@ export function emitAutonomy(ir: AutonomyIR): OAManifest {
     }
     agents[role] = {
       skill: agent.behavior,
-      // The launchable unit the github runner targets for agent:launch (workflow_dispatch).
-      workflowFile: typeof c.workflowFile === 'string' ? (c.workflowFile as string) : `${role}.yml`,
+      // The launchable unit the runner targets for agent:launch — named for the agent (substrate-derived).
+      workflowFile: `${role}.yml`,
       ...(Object.keys(params).length ? { params } : {}),
       ...(Object.keys(triggers).length ? { triggers } : {}),
-      ...(typeof c.timeout === 'number' ? { timeout: c.timeout } : {}),
-      ...(typeof c.concurrency === 'string' ? { concurrency: c.concurrency } : {}),
-      ...(c.env && typeof c.env === 'object' ? { env: c.env as Record<string, string> } : {}),
+      ...(typeof agent.timeout === 'number' ? { timeout: agent.timeout } : {}),
       ...(agent.capabilities?.length ? { capabilities: agent.capabilities } : {}),
     };
   }

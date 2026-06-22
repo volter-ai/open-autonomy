@@ -1,17 +1,12 @@
 # Open Autonomy, expressed in its own IR — the profile that compiles to OA's live installation.
-# One unit: an agent = behavior + capabilities + triggers(+params) + config. See docs/AUTONOMY-IR.md.
-# Every agent is a SKILL (prose) run as a single CREDENTIALED job whose token is scoped to its
-# capabilities (docs/CAPABILITIES.md); the agent acts directly. Guards = capabilities + budget. The merge
-# boundary is the code:review (statuses:write) / code:propose (contents:write) permission split + native
-# auto-merge — no agent holds both, no agent can land unreviewed code. (`config` is a shrinking
-# substrate-config bag — workflowFile + timeout — slated to become explicit fields; see docs/AUTONOMY-IR.md.)
+# One unit (substrate-free): an agent = behavior(skill) + capabilities + triggers(+params) + timeout?.
+# See docs/AUTONOMY-IR.md + docs/CAPABILITIES.md. Every agent is a SKILL (prose) run as a single
+# CREDENTIALED job whose token is scoped to its capabilities; the agent acts directly. Guards =
+# capabilities + budget. The merge boundary is the code:review (statuses:write) / code:propose
+# (contents:write) permission split + native auto-merge — no agent holds both, none can land unreviewed code.
 schema: autonomy.ir.v1
 targets: [github]
 
-# Model defaults: every agent runs deepseek/deepseek-v4-flash. The deterministic agents' `*_PROVIDER`
-# selects the WIRE, not the upstream — `anthropic` = the Anthropic Messages endpoint, which the bounded
-# proxy routes to OpenRouter (and on to DeepSeek) by the "vendor/slug" model id. The developer agent runs
-# the same model through Claude Code (see the github substrate's developer job). No gpt-4o-mini anywhere.
 agents:
   # Developer: edits code in its credentialed sandbox; the effect step proposes its change as an
   # auto-merging PR (landed only after ci + an independent agent-review). Triggered by an issue label.
@@ -22,9 +17,7 @@ agents:
       - event: issues
         config: { types: [labeled] }
         params: { ISSUE_REF: subject.ref }
-    config:
-      workflowFile: public-agent.yml
-      timeout: 90
+    timeout: 90
 
   # PM: a skill agent that sweeps the open-issue queue, triages each issue, and launches the developer on
   # ready work — applying capacity + backpressure. Comments + labels + launches; changes no code.
@@ -33,9 +26,7 @@ agents:
     capabilities: [tasks:converse, tasks:author, agent:launch]
     triggers:
       - cron: "*/30 * * * *"
-    config:
-      workflowFile: public-agent-pm.yml
-      timeout: 30
+    timeout: 30
 
   # Reviewer: a skill agent that reviews an agent PR and posts its verdict as the `agent-review` status
   # (code:review = statuses:write). It holds NO contents:write, so it cannot merge; GitHub auto-merge lands
@@ -53,9 +44,7 @@ agents:
           ACTOR_ROLE: subject.actorRole
       - event: pull_request_target
         config: { types: [opened, synchronize, reopened, ready_for_review] }
-    config:
-      workflowFile: public-agent-review.yml
-      timeout: 20
+    timeout: 20
 
   # Planner: a skill agent that reconciles roadmap.yml into planner-owned tracking issues (one per
   # planned item). Creates + edits issues; changes no code.
@@ -64,9 +53,7 @@ agents:
     capabilities: [tasks:converse, tasks:author]
     triggers:
       - cron: "17 6 * * *"
-    config:
-      workflowFile: open-autonomy-planner.yml
-      timeout: 15
+    timeout: 15
 
   # NOTE: upgrading an installation is NOT an autonomous agent — it can touch .github/workflows (a
   # human_required path the CI token cannot push). It ships as a maintainer-run local command,
@@ -80,9 +67,7 @@ agents:
     capabilities: [code:propose@roadmap]
     triggers:
       - cron: "23 7 * * 1"
-    config:
-      workflowFile: open-autonomy-strategist.yml
-      timeout: 25
+    timeout: 25
 
   # Strategy reviewer: a skill agent that reviews a strategist roadmap proposal against the constitution +
   # merit rubric and posts its verdict as the `agent-review` status (code:review). No contents:write, so it
@@ -101,9 +86,7 @@ agents:
           ACTOR_ROLE: subject.actorRole
       - event: pull_request_target
         config: { types: [opened, synchronize, reopened] }
-    config:
-      workflowFile: public-agent-strategy-review.yml
-      timeout: 20
+    timeout: 20
 
 policy:
   maxConcurrent: 5

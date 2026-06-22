@@ -19,7 +19,6 @@ agents:
     capabilities: [tasks:converse, agent:launch]
     triggers:
       - cron: "*/15 * * * *"
-    config: {}
 
   # Turns an untriaged request into a verifiable Ready issue (source-grounded summary, 1-3 ACs, evidence
   # scaffold). Consumes a task in the `open` state.
@@ -29,7 +28,6 @@ agents:
     triggers:
       - task: open
         params: { ZTRACK_ISSUE: subject.ref }
-    config: {}
 
   # Implements exactly one Ready issue and produces real evidence for each AC; stops on a human-required
   # path/topic. Consumes a task in the `ready` state.
@@ -39,7 +37,6 @@ agents:
     triggers:
       - task: ready
         params: { ZTRACK_ISSUE: subject.ref }
-    config: {}
 
   # Verifies one In-Review change: ztrack must be green, every passed AC backed by cited evidence, no
   # unapproved human-required path/topic — then moves it to Done or back for rework. Consumes `in-review`.
@@ -49,7 +46,6 @@ agents:
     triggers:
       - task: in-review
         params: { ZTRACK_ISSUE: subject.ref }
-    config: {}
 
 policy:
   maxConcurrent: 2   # the WIP ceiling: at most one in-progress + one in-review at a time

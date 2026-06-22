@@ -24,16 +24,13 @@ export type ActorKind = 'agent' | 'human';
 // actor carries its own triggers, and how it is realized + how its output is trusted are the substrate's
 // realization, not IR fields. (The map key is still `agents` while the rename to `actors` is mid-migration.)
 export interface IRAgent {
-  behavior: string; // what it does — instructions/spec folder, relative to the profile root
+  behavior: string; // what it does — a SKILL folder (prose), relative to the profile root
   capabilities: string[]; // its authority (docs/CAPABILITIES.md); pure authority, no trust
   triggers: Trigger[]; // when it fires + the params it forwards (≥1; only cron is interpreted)
-  config: Box; // opaque misc the substrate interprets: timeout, concurrency, env, maxConcurrent, model bounds, …
   kind?: ActorKind; // the role; default `agent`. `human` → realized by routing to a person (or a simulator in test).
-  // Optional formal result of a skill (model) agent's run: the agent does its work freely in its sandbox,
-  // then must emit a value that validates against `result.schema` (JSON Schema). That typed result is the
-  // seam a thin interpreter acts on ("make things happen") — no script harness, no guard. Only meaningful
-  // for a skill behavior; a script behavior returns its result directly. Realized via runClaudeAgent's
-  // `result` option. Absent ⇒ the agent just runs (raw run, no formal result).
+  timeout?: number; // a run-time bound (minutes); an agnostic resource limit the substrate realizes
+  // Optional formal result of a skill agent's run: a value that validates against `result.schema` (JSON
+  // Schema). A declarative seam for a typed result; absent ⇒ the agent just runs and acts directly.
   result?: { schema: Box };
 }
 
@@ -44,11 +41,6 @@ export type IRActor = IRAgent;
 export function cronOf(a: IRAgent): string | undefined {
   for (const t of a.triggers ?? []) if ('cron' in t) return t.cron;
   return undefined;
-}
-
-/** An agent's opaque config bag (each substrate interprets the keys it knows). */
-export function cfg(agent: IRAgent): Box {
-  return (agent.config ?? {}) as Box;
 }
 
 /** Execution heuristic shared by substrates: a `scripts/*.{ts,mjs,js}` behavior is a deterministic

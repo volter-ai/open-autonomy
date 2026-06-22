@@ -396,7 +396,7 @@ async function exchangeRunToken(req: Request, env: Env, runId: string): Promise<
   // mint, where trust is strict and undefaulted); exchange only re-validates that same run's workflow.
   const workflowTrusted = env.GITHUB_OIDC_ALLOWED_WORKFLOW
     ? isTrustedRepoWorkflow(env, claims.repo, workflowRef)
-    : workflowRef.startsWith(`${claims.repo}/.github/workflows/public-agent.yml@`);
+    : workflowRef.startsWith(`${claims.repo}/.github/workflows/`);
   if (!workflowTrusted) return error('forbidden_workflow', 403);
 
   return json({ ok: true, run: claims, token: await signRunToken(env, claims) });

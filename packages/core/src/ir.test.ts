@@ -6,7 +6,6 @@ function agent(over: Partial<IRAgent> = {}): IRAgent {
     behavior: 'skills/x',
     capabilities: ['tasks:converse'],
     triggers: [{ cron: '*/5 * * * *' }],
-    config: {},
     ...over,
   };
 }

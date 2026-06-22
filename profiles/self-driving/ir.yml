@@ -165,7 +165,6 @@ resources:
   - .github/ISSUE_TEMPLATE/bug_report.yml
   - .github/ISSUE_TEMPLATE/public_agent_session.yml
   - .github/workflows/ci.yml
-  - .github/workflows/model-proxy-admin.yml
   - .github/workflows/open-autonomy-governance-report.yml
   - .github/workflows/open-autonomy-preflight.yml
   - .gitignore

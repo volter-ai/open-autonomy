@@ -20,7 +20,6 @@ describe('public agent production readiness', () => {
       'open-autonomy-planner.yml',
       'open-autonomy-preflight.yml',
       'open-autonomy-governance-report.yml',
-      'model-proxy-admin.yml',
     ]) {
       expect(workflow(name)).toContain('FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"');
     }
@@ -53,12 +52,6 @@ describe('public agent production readiness', () => {
     expect(pm).toContain('-label:needs-info');
     expect(pm).toContain('public agent repo pause is enabled; PM sweep skipped');
     expect(workflow('public-agent-pm.yml')).toContain('bun scripts/agent-pm.ts');
-  });
-
-  test('model proxy admin exposes status and revoke operations', () => {
-    const text = workflow('model-proxy-admin.yml');
-    expect(text).toContain('/admin/limits/status');
-    expect(text).toContain('/admin/runs/${RUN_ID}/revoke');
   });
 
   test('direct review uses shared control files and loop budgets', () => {

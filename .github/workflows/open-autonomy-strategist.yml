@@ -2,44 +2,97 @@ name: strategist
 on:
   schedule:
     - cron: "23 7 * * 1"
-  workflow_dispatch: {}
-permissions: { contents: write, id-token: write, pull-requests: write, checks: read, actions: write }
+  workflow_dispatch:
+    inputs:
+      issue_number: { description: "issue/PR number to act on", required: false, type: string }
+  issue_comment:
+    types: [created]
+permissions: {}
+concurrency:
+  group: >-
+    strategist-${{ github.event.issue.number || inputs.issue_number }}${{
+    (startsWith(github.event.comment.body || '', '/agent cancel') || startsWith(github.event.comment.body || '', '/agent pause') || startsWith(github.event.comment.body || '', '/agent resume') || startsWith(github.event.comment.body || '', '/agent status') || startsWith(github.event.comment.body || '', '/agent retry')) && '-control' || '' }}
+  cancel-in-progress: false
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
 jobs:
-  strategist:
+  control:
+    if: github.event_name == 'issue_comment' && startsWith(github.event.comment.body, '/agent ')
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    permissions: { contents: read, issues: write, actions: write }
     env:
       GH_TOKEN: ${{ github.token }}
-      PUBLIC_AGENT_STRATEGIST_MODEL: ${{ vars.PUBLIC_AGENT_STRATEGIST_MODEL || vars.PUBLIC_AGENT_PM_MODEL || 'deepseek/deepseek-v4-flash' }}
-      PUBLIC_AGENT_STRATEGIST_PROVIDER: ${{ vars.PUBLIC_AGENT_STRATEGIST_PROVIDER || 'anthropic' }}
-      PUBLIC_AGENT_STRATEGIST_MAX_USD_CENTS: ${{ vars.PUBLIC_AGENT_STRATEGIST_MAX_USD_CENTS || '100' }}
-      PUBLIC_AGENT_STRATEGIST_MAX_ITEMS: ${{ vars.PUBLIC_AGENT_STRATEGIST_MAX_ITEMS || '3' }}
+      CONTROL_WORKFLOW: strategist.yml
+    steps:
+      - uses: actions/checkout@v4
+      - run: node .github/agent-control.mjs
+  setup:
+    if: github.event_name != 'issue_comment' || !startsWith(github.event.comment.body, '/agent ')
+    runs-on: ubuntu-latest
+    permissions: { contents: read, issues: read, id-token: write }
+    env:
+      GH_TOKEN: ${{ github.token }}
+      MODEL_PROXY_URL: ${{ vars.MODEL_PROXY_URL }}
+      MODEL_PROXY_OIDC_AUDIENCE: ${{ vars.MODEL_PROXY_OIDC_AUDIENCE || 'volter-agent-model-proxy' }}
     steps:
       - uses: actions/checkout@v4
       - uses: oven-sh/setup-bun@v2
       - run: bun install --frozen-lockfile || bun install
-      - name: Provision model endpoint
-        env:
-          MODEL_PROXY_URL: ${{ vars.MODEL_PROXY_URL }}
-          MODEL_PROXY_OIDC_AUDIENCE: ${{ vars.MODEL_PROXY_OIDC_AUDIENCE || 'volter-agent-model-proxy' }}
-          MODEL_ALLOWLIST: ${{ vars.PUBLIC_AGENT_MODELS || 'deepseek/deepseek-v4-flash' }}
-          PUBLIC_AGENT_RUN_MAX_USD_CENTS: ${{ vars.PUBLIC_AGENT_RUN_MAX_USD_CENTS || '500' }}
-          PUBLIC_AGENT_RUN_MAX_REQUESTS: ${{ vars.PUBLIC_AGENT_RUN_MAX_REQUESTS || '60' }}
-        run: bun scripts/provision-model-endpoint.ts
+      - name: Provide subject (autonomous — no work item)
+        run: |
+          mkdir -p .agent-run
+          printf '{"number":0,"title":"strategist","body":""}\n' > .agent-run/issue.json
+      - name: Mint bounded model token
+        run: bun scripts/model-proxy-mint.ts --run-id "ir-strategist-${{ github.run_id }}" --models "${{ vars.PUBLIC_AGENT_MODEL || 'deepseek/deepseek-v4-flash' }}" --max-usd-cents "${{ vars.PUBLIC_AGENT_MAX_USD_CENTS || '200' }}" --max-requests "${{ vars.PUBLIC_AGENT_MAX_REQUESTS || '60' }}" --issue .agent-run/issue.json
+  strategist:
+    needs: setup
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    permissions: { contents: write, id-token: write, pull-requests: write, actions: write }
+    env:
+      MODEL_PROXY_URL: ${{ vars.MODEL_PROXY_URL }}
+      MODEL_PROXY_OIDC_AUDIENCE: ${{ vars.MODEL_PROXY_OIDC_AUDIENCE || 'volter-agent-model-proxy' }}
+      PUBLIC_AGENT_MODEL: ${{ vars.PUBLIC_AGENT_MODEL || 'deepseek/deepseek-v4-flash' }}
+      PUBLIC_AGENT_CITED_VERSION: ${{ vars.PUBLIC_AGENT_CLAUDE_CODE_VERSION }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+      - run: bun install --frozen-lockfile || bun install
       - name: install Claude Code CLI
-        run: npm install -g "@anthropic-ai/claude-code@${{ vars.PUBLIC_AGENT_CLAUDE_CODE_VERSION || 'latest' }}" && claude --version
-      - run: bun scripts/agent-strategist.ts
-      - name: Revoke the run token
-        if: always() && env.AGENT_RUN_ID != ''
+        run: npm install -g "@anthropic-ai/claude-code@${PUBLIC_AGENT_CITED_VERSION:-latest}" && claude --version
+      - name: Provide subject (autonomous — no work item)
+        run: |
+          mkdir -p .agent-run
+          printf '{"number":0,"title":"strategist","body":""}\n' > .agent-run/issue.json
+      - name: Exchange OIDC for the bounded token
+        run: bun scripts/model-proxy-exchange.ts --run-id "ir-strategist-${{ github.run_id }}" --audience "$MODEL_PROXY_OIDC_AUDIENCE"
+      - name: Run agent (Claude Code + skill)
         env:
-          MODEL_PROXY_URL: ${{ vars.MODEL_PROXY_URL }}
-          MODEL_PROXY_OIDC_AUDIENCE: ${{ vars.MODEL_PROXY_OIDC_AUDIENCE || 'volter-agent-model-proxy' }}
-        run: bun scripts/model-proxy-revoke.ts --run-id "${{ env.AGENT_RUN_ID }}" || true
-      - uses: actions/upload-artifact@v4
+          OSS_AGENT_TASK_DIR: .agent-run
+          OSS_AGENT_ISSUE_PATH: .agent-run/issue.json
+        run: |
+          bun scripts/claude-agent-run.ts --skill .codex/skills/strategist/SKILL.md; rc=$?; bun scripts/agent-visual-verify.ts || true; exit $rc
+      - name: Effect — propose the change as an auto-merging PR (if the tree changed)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          if [ -z "$(git status --porcelain)" ]; then echo "no working-tree changes; nothing to propose"; exit 0; fi
+          branch="agent/ir-strategist-${{ github.run_id }}"
+          git config user.name volter-agent
+          git config user.email volter-agent@users.noreply.github.com
+          git config core.filemode false
+          git checkout -b "$branch"
+          git add -A
+          git commit -m "agent: ir-strategist-${{ github.run_id }}"
+          git push --force origin "$branch"
+          base="${{ github.event.repository.default_branch }}"
+          body="$(cat .agent-run/artifacts/pr.md 2>/dev/null || echo "Automated agent change (ir-strategist-${{ github.run_id }}).")"
+          gh pr create --base "$base" --head "$branch" --title "Agent: ir-strategist-${{ github.run_id }}" --body "$body" || gh pr view "$branch" >/dev/null
+          gh pr merge "$branch" --squash --auto || echo "auto-merge enable failed (non-fatal)"
+          head_sha="$(git rev-parse HEAD)"
+          pr_number="$(gh pr view "$branch" --json number --jq .number 2>/dev/null || echo "")"
+          gh workflow run ci.yml --ref "$branch" -f sha="$head_sha" -f pr="$pr_number" || echo "ci dispatch failed (non-fatal)"
+      - run: bun scripts/model-proxy-revoke.ts --run-id "ir-strategist-${{ github.run_id }}" || true
         if: always()
-        with:
-          name: strategist-${{ github.run_id }}
-          path: .agent-run
-          if-no-files-found: warn

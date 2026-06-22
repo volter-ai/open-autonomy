@@ -28,7 +28,6 @@ documents:
     - package.json
     - scripts/agent-pm.ts
     - scripts/agent-planner.ts
-    - scripts/agent-strategist.ts
     - scripts/public-agent-pm.ts
     - scripts/public-agent-dispatcher.ts
     - scripts/public-agent-review.ts
@@ -53,6 +52,7 @@ documents:
 skills:
   developer: .codex/skills/developer
   reviewer: .codex/skills/reviewer
+  strategist: .codex/skills/strategist
   strategy_reviewer: .codex/skills/strategy-reviewer
 agents:
   developer:
@@ -119,20 +119,13 @@ agents:
       - tasks:converse
       - tasks:author
   strategist:
-    skill: scripts/agent-strategist.ts
+    skill: strategist
     workflowFile: open-autonomy-strategist.yml
     triggers:
       schedule: 23 7 * * 1
     timeout: 25
-    env:
-      PUBLIC_AGENT_STRATEGIST_MODEL: ${{ vars.PUBLIC_AGENT_STRATEGIST_MODEL ||
-        vars.PUBLIC_AGENT_PM_MODEL || 'deepseek/deepseek-v4-flash' }}
-      PUBLIC_AGENT_STRATEGIST_PROVIDER: ${{ vars.PUBLIC_AGENT_STRATEGIST_PROVIDER || 'anthropic' }}
-      PUBLIC_AGENT_STRATEGIST_MAX_USD_CENTS: ${{ vars.PUBLIC_AGENT_STRATEGIST_MAX_USD_CENTS || '100' }}
-      PUBLIC_AGENT_STRATEGIST_MAX_ITEMS: ${{ vars.PUBLIC_AGENT_STRATEGIST_MAX_ITEMS || '3' }}
     capabilities:
-      - code:propose
-      - agent:launch
+      - code:propose@roadmap
   strategy_reviewer:
     skill: strategy-reviewer
     workflowFile: public-agent-strategy-review.yml
@@ -144,6 +137,11 @@ agents:
       issue_comment:
         types:
           - created
+      pull_request_target:
+        types:
+          - opened
+          - synchronize
+          - reopened
     timeout: 20
     capabilities:
       - code:review

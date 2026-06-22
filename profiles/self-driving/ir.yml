@@ -80,27 +80,23 @@ agents:
   # human_required path the CI token cannot push). It ships as a maintainer-run local command,
   # scripts/open-autonomy-upgrade-cli.ts (vendored into every installation). See docs.
 
-  # Deterministic strategist: gathers research signals, synthesizes a roadmap proposal PR, hands off to
-  # strategy review. Proposes; never merges.
+  # Strategist: a skill agent that researches outside the repo and edits roadmap.yml to propose items.
+  # The effect step proposes its edit as an auto-merging PR; strategy_reviewer (which also triggers on the
+  # PR) blesses it. Scoped to roadmap files (code:propose@roadmap); proposes, never merges.
   strategist:
-    behavior: scripts/agent-strategist.ts
-    capabilities: [code:propose, agent:launch]
+    behavior: strategist
+    capabilities: [code:propose@roadmap]
     triggers:
       - cron: "23 7 * * 1"
     config:
       workflowFile: open-autonomy-strategist.yml
-      model: true
       timeout: 25
-      env:
-        PUBLIC_AGENT_STRATEGIST_MODEL: ${{ vars.PUBLIC_AGENT_STRATEGIST_MODEL || vars.PUBLIC_AGENT_PM_MODEL || 'deepseek/deepseek-v4-flash' }}
-        PUBLIC_AGENT_STRATEGIST_PROVIDER: ${{ vars.PUBLIC_AGENT_STRATEGIST_PROVIDER || 'anthropic' }}
-        PUBLIC_AGENT_STRATEGIST_MAX_USD_CENTS: ${{ vars.PUBLIC_AGENT_STRATEGIST_MAX_USD_CENTS || '100' }}
-        PUBLIC_AGENT_STRATEGIST_MAX_ITEMS: ${{ vars.PUBLIC_AGENT_STRATEGIST_MAX_ITEMS || '3' }}
 
   # Strategy reviewer: a skill agent that reviews a strategist roadmap proposal against the constitution +
   # merit rubric and posts its verdict as the `agent-review` status (code:review). No contents:write, so it
   # cannot merge; auto-merge lands the proposal once ci + agent-review are green. A maintainer "/agent
-  # ratify" is the human override (a native approval), outside the agent's authority.
+  # ratify" is the human override (a native approval), outside the agent's authority. Triggers on the
+  # strategist's PR (pull_request_target) and on an explicit comment; its skill reviews only roadmap-only PRs.
   strategy_reviewer:
     behavior: strategy-reviewer
     capabilities: [code:review, tasks:converse]
@@ -111,6 +107,8 @@ agents:
           TARGET_REF: subject.ref
           SUBJECT_TEXT: subject.text
           ACTOR_ROLE: subject.actorRole
+      - event: pull_request_target
+        config: { types: [opened, synchronize, reopened] }
     config:
       workflowFile: public-agent-strategy-review.yml
       timeout: 20
@@ -181,7 +179,6 @@ resources:
   # the first five; the rest are their import closure. A different profile (e.g. simple-sdlc) ships none.
   - scripts/agent-pm.ts
   - scripts/agent-planner.ts
-  - scripts/agent-strategist.ts
   - scripts/public-agent-pm.ts
   - scripts/public-agent-dispatcher.ts
   - scripts/public-agent-review.ts

@@ -19,6 +19,9 @@ The proposal PR number is in the `TARGET_REF` environment variable.
 
 1. Fetch the proposal and its head SHA:
    - `gh pr view "$TARGET_REF" --json headRefOid,labels,body,files` — head SHA, labels, rationale, changed files.
+   - **Scope guard:** review only roadmap proposals — PRs whose changed files are entirely within
+     `.open-autonomy/roadmap.yml` + `.open-autonomy/strategist-archive.json`. If the PR touches anything
+     else (a code change), it is the code reviewer's job — exit without posting a status.
    - `gh pr diff "$TARGET_REF"` — the roadmap change.
    - Read `docs/CONSTITUTION.md` and `.open-autonomy/strategy-rubric.yml` from the checkout.
    - Only ratify strategist proposals (`origin:strategist` label). Skip otherwise.

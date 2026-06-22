@@ -24,6 +24,9 @@ The PR number is in the `TARGET_REF` environment variable.
      from the checkout — the criteria you apply.
    - Only review canonical agent branches (`agent/issue-*`); for anything else, post failure and
      comment that human review is required.
+   - **Scope guard:** if the PR's changed files are entirely roadmap files
+     (`.open-autonomy/roadmap.yml` + the idea archive), it is a strategist proposal — the strategy
+     reviewer handles it; exit without posting a status.
 2. Judge correctness, security, regression, and test-coverage risk. Decide: **pass** (low-risk,
    safe to land) or **fail** (needs another developer attempt or a human).
 3. **Post the verdict** to the head SHA (`SHA` = the headRefOid above), into the repo `GITHUB_REPOSITORY`:

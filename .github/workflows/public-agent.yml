@@ -40,7 +40,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: oven-sh/setup-bun@v2
       - run: bun install --frozen-lockfile || bun install
-      - name: Build issue payload
+      - name: Provide subject
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -54,7 +54,7 @@ jobs:
     needs: setup
     runs-on: ubuntu-latest
     timeout-minutes: 90
-    permissions: { contents: read, issues: read, pull-requests: read, id-token: write }
+    permissions: { contents: write, id-token: write, pull-requests: write, actions: write, issues: write }
     env:
       MODEL_PROXY_URL: ${{ vars.MODEL_PROXY_URL }}
       MODEL_PROXY_OIDC_AUDIENCE: ${{ vars.MODEL_PROXY_OIDC_AUDIENCE || 'volter-agent-model-proxy' }}
@@ -64,12 +64,11 @@ jobs:
       ISSUE_REF: ${{ github.event.issue.number || github.event.inputs.issue_number || github.event.pull_request.number }}
     steps:
       - uses: actions/checkout@v4
-        with: { persist-credentials: false }
       - uses: oven-sh/setup-bun@v2
       - run: bun install --frozen-lockfile || bun install
       - name: install Claude Code CLI
         run: npm install -g "@anthropic-ai/claude-code@${PUBLIC_AGENT_CITED_VERSION:-latest}" && claude --version
-      - name: Build issue payload
+      - name: Provide subject
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -79,59 +78,32 @@ jobs:
           gh issue view "$ref" --json number,title,body,author,labels,comments --jq '{number,title,body,user:{login:.author.login},labels,comments}' > .agent-run/issue.json
       - name: Exchange OIDC for the bounded token
         run: bun scripts/model-proxy-exchange.ts --run-id "ir-developer-${{ github.run_id }}" --audience "$MODEL_PROXY_OIDC_AUDIENCE"
-      - name: Run agent (Claude Code + skill) and bundle the result
+      - name: Run agent (Claude Code + skill)
+        env:
+          OSS_AGENT_TASK_DIR: .agent-run
+          OSS_AGENT_ISSUE_PATH: .agent-run/issue.json
         run: |
-          bun scripts/github-agent-session.ts --issue .agent-run/issue.json --run-id "ir-developer-${{ github.run_id }}" --out .agent-run/out --repo "${{ github.repository }}" --actor "${{ github.actor }}" -- bash -lc "bun scripts/claude-agent-run.ts --skill .codex/skills/open-autonomy-developer/SKILL.md; rc=\$?; bun scripts/agent-visual-verify.ts || true; exit \$rc"
-      - uses: actions/upload-artifact@v4
-        with:
-          name: agent-bundle-${{ github.run_id }}
-          path: .agent-run/out/bundle
-          if-no-files-found: error
-  publisher:
-    needs: [setup, developer]
-    runs-on: ubuntu-latest
-    permissions: { contents: write, id-token: write, actions: write, pull-requests: write, issues: write }
-    env:
-      GH_TOKEN: ${{ github.token }}
-      ISSUE_REF: ${{ github.event.issue.number || github.event.inputs.issue_number || github.event.pull_request.number }}
-    steps:
-      - uses: actions/checkout@v4
-      - uses: oven-sh/setup-bun@v2
-      - run: bun install --frozen-lockfile || bun install
-      - uses: actions/download-artifact@v4
-        with:
-          name: agent-bundle-${{ github.run_id }}
-          path: .agent-run/bundle
-      - name: Validate and apply the agent bundle
-        run: bun scripts/github-agent-publish.ts --bundle .agent-run/bundle --apply --promote-dir "agent-sessions/ir-developer-${{ github.run_id }}" --promote-decisions-only --expected-run-id "ir-developer-${{ github.run_id }}" --expected-repo "${{ github.repository }}"
-      - name: Open the agent's pull request
+          bun scripts/claude-agent-run.ts --skill .codex/skills/open-autonomy-developer/SKILL.md; rc=$?; bun scripts/agent-visual-verify.ts || true; exit $rc
+      - name: Effect — propose the change as an auto-merging PR (if the tree changed)
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
+          if [ -z "$(git status --porcelain)" ]; then echo "no working-tree changes; nothing to propose"; exit 0; fi
           branch="agent/issue-${ISSUE_REF}"
           git config user.name volter-agent
           git config user.email volter-agent@users.noreply.github.com
           git config core.filemode false
           git checkout -b "$branch"
-          git add -f "agent-sessions/ir-developer-${{ github.run_id }}"
           git add -A
-          if git diff --cached --quiet; then echo "agent produced no changes"; exit 0; fi
           git commit -m "agent: ir-developer-${{ github.run_id }}"
           git push --force origin "$branch"
-          body="$(find .agent-run/bundle -name pr.md | head -1)"
-          if [ -n "$body" ]; then gh pr create --base "${{ github.event.repository.default_branch }}" --head "$branch" --title "Agent run ir-developer-${{ github.run_id }}" --body-file "$body"; else gh pr create --base "${{ github.event.repository.default_branch }}" --head "$branch" --title "Agent run ir-developer-${{ github.run_id }}" --body "Automated agent run ir-developer-${{ github.run_id }}"; fi
+          base="${{ github.event.repository.default_branch }}"
+          body="$(cat .agent-run/artifacts/pr.md 2>/dev/null || echo "Automated agent change (ir-developer-${{ github.run_id }}).")"
+          gh pr create --base "$base" --head "$branch" --title "Agent: ir-developer-${{ github.run_id }}" --body "$body" || gh pr view "$branch" >/dev/null
+          gh pr merge "$branch" --squash --auto || echo "auto-merge enable failed (non-fatal)"
           head_sha="$(git rev-parse HEAD)"
           pr_number="$(gh pr view "$branch" --json number --jq .number 2>/dev/null || echo "")"
           gh workflow run ci.yml --ref "$branch" -f sha="$head_sha" -f pr="$pr_number" || echo "ci dispatch failed (non-fatal)"
-  revoke:
-    needs: [setup, developer, publisher]
-    if: always() && needs.setup.result == 'success'
-    runs-on: ubuntu-latest
-    permissions: { contents: read, id-token: write }
-    env:
-      MODEL_PROXY_URL: ${{ vars.MODEL_PROXY_URL }}
-      MODEL_PROXY_OIDC_AUDIENCE: ${{ vars.MODEL_PROXY_OIDC_AUDIENCE || 'volter-agent-model-proxy' }}
-    steps:
-      - uses: actions/checkout@v4
-      - uses: oven-sh/setup-bun@v2
-      - run: bun install --frozen-lockfile || bun install
       - run: bun scripts/model-proxy-revoke.ts --run-id "ir-developer-${{ github.run_id }}" || true
+        if: always()

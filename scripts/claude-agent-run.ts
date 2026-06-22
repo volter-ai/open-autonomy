@@ -1,22 +1,21 @@
 #!/usr/bin/env bun
+// Thin skill runner: builds the prompt (the agent's skill + its subject + the universal job contract) and
+// runs Claude Code against the bounded model proxy. The agent acts DIRECTLY with its own scoped token —
+// if it changes the working tree, the wrapper's effect step proposes it as an auto-merging PR; if its job
+// is to review/comment/label, the skill does that itself via gh. There is no bundle and no result schema:
+// the agent's actions ARE its output (docs/CAPABILITIES.md). This script only sets up the model + prompt.
 import { spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { runClaudeAgent } from './agent.js';
 
-type Options = {
-  issue?: string;
-  context?: string;
-  model: string;
-  skill?: string; // path to the agent's SKILL.md — its role/instructions (the per-agent variable)
-  resultSchema?: string; // path to the agent's declared IR result schema (JSON Schema); absent ⇒ raw run
-};
+type Options = { issue?: string; context?: string; model: string; skill?: string };
 
 const root = resolve(import.meta.dir, '..');
 
 function usage(): never {
   throw new Error(`Usage:
-  MODEL_PROXY_URL=... MODEL_PROXY_TOKEN=... OSS_AGENT_TASK_DIR=... bun scripts/claude-agent-run.ts [--issue issue.json] [--context context.json] [--model deepseek/deepseek-v4-flash]`);
+  MODEL_PROXY_URL=... MODEL_PROXY_TOKEN=... OSS_AGENT_TASK_DIR=... bun scripts/claude-agent-run.ts --skill skills/x/SKILL.md [--issue issue.json] [--model deepseek/deepseek-v4-flash]`);
 }
 
 function argValue(argv: string[], name: string): string | undefined {
@@ -31,12 +30,15 @@ function parseArgs(argv: string[]): Options {
     context: argValue(argv, '--context') ?? process.env.OSS_AGENT_CONTEXT_PATH,
     model: argValue(argv, '--model') ?? process.env.PUBLIC_AGENT_MODEL ?? 'deepseek/deepseek-v4-flash',
     skill: argValue(argv, '--skill') ?? process.env.OSS_AGENT_SKILL_PATH,
-    resultSchema: argValue(argv, '--result-schema') ?? process.env.OSS_AGENT_RESULT_SCHEMA_PATH,
   };
 }
 
 function readIssue(issuePath: string): { number?: number; title?: string; body?: string } {
-  return JSON.parse(readFileSync(issuePath, 'utf8')) as { number?: number; title?: string; body?: string };
+  try {
+    return JSON.parse(readFileSync(issuePath, 'utf8')) as { number?: number; title?: string; body?: string };
+  } catch {
+    return {};
+  }
 }
 
 function redactSensitive(text: string): string {
@@ -47,128 +49,39 @@ function redactSensitive(text: string): string {
     .replace(/ghp_[A-Za-z0-9]{30,}/g, '[redacted-secret-like-token]')
     .replace(/github_pat_[A-Za-z0-9_]{30,}/g, '[redacted-secret-like-token]')
     .replace(/sk-or-v1-[A-Za-z0-9]{20,}/g, '[redacted-secret-like-token]')
-    .replace(/anthropic_[A-Za-z0-9_-]{20,}/g, '[redacted-secret-like-token]')
-    .replace(/OPENAI_API_KEY\s*=\s*sk-[A-Za-z0-9_-]{20,}/g, 'OPENAI_API_KEY=[redacted-secret-like-token]');
+    .replace(/anthropic_[A-Za-z0-9_-]{20,}/g, '[redacted-secret-like-token]');
 }
 
-function buildPrompt(issuePath: string, taskDir: string, contextPath?: string, skillPath?: string, hasResultSchema = false): string {
-  const issue = readIssue(issuePath);
-  const context = contextPath && existsSync(contextPath)
-    ? readFileSync(contextPath, 'utf8')
-    : '';
-  // The agent's role/instructions come from its skill (the per-agent variable); everything else in
-  // this prompt is the universal job contract (act on the issue, write the bundle artifacts).
+function buildPrompt(issuePath: string | undefined, taskDir: string, contextPath?: string, skillPath?: string): string {
+  const issue = issuePath ? readIssue(issuePath) : {};
+  const context = contextPath && existsSync(contextPath) ? readFileSync(contextPath, 'utf8') : '';
+  // The agent's role/instructions come from its skill (the per-agent variable); the rest is the universal
+  // job contract. The agent acts directly — its skill says what to do and which of its tools/capabilities
+  // to use; there is no bundle to assemble.
   const skill = skillPath && existsSync(skillPath) ? readFileSync(skillPath, 'utf8') : '';
   return [
     ...(skill
       ? ['Your role and instructions (your skill):', '', skill, '']
       : ['You are an autonomous agent running in a bounded GitHub Actions job.', '']),
-    // A result-schema agent's deliverable is its typed result (e.g. a reviewer's verdict), not necessarily
-    // a code change — so don't tell it to "make a change"; let its skill define the work. A raw run (the
-    // developer) makes a focused change.
-    hasResultSchema
-      ? 'Act according to your role and instructions above. Use your tools to do the work, then emit your result.'
-      : 'Act on the GitHub issue below according to your role. Make a small but real, focused change that addresses it; do not make unrelated refactors.',
+    'Act according to your role and instructions above, on the subject below. Use your own tools and',
+    'capabilities directly (gh, git). If your role is to change code, edit the working tree — a later step',
+    'proposes your changes as an auto-merging pull request. If your role is to review, comment, or label,',
+    'perform that yourself via gh. Keep the change focused; make no unrelated edits.',
     '',
-    `Issue #${issue.number ?? 'unknown'}: ${issue.title ?? '(untitled)'}`,
+    `Subject #${issue.number ?? 'unknown'}: ${issue.title ?? '(untitled)'}`,
     '',
     issue.body ?? '',
-    ...(context ? [
-      '',
-      'Resolved public-agent context:',
-      '```json',
-      context,
-      '```',
-    ] : []),
+    ...(context ? ['', 'Resolved context:', '```json', context, '```'] : []),
     '',
     'Execution constraints:',
     '- Use only the repository checkout and environment provided to this job.',
     '- Do not read, print, or persist secrets.',
     '- Prefer focused checks over broad, slow commands.',
-    '- Leave GitHub workflow/security-sensitive changes alone unless the issue explicitly asks for them.',
+    '- Leave GitHub workflow/security-sensitive files alone unless your subject explicitly asks for them.',
     '',
-    'Before finishing, write these files:',
-    `- ${taskDir}/artifacts/pr.md with a PR-ready summary and tests run.`,
-    // With a declared result schema, runClaudeAgent appends its own "emit a schema-valid JSON" instruction
-    // and that typed value becomes result.json — so don't also ask for the generic result.json shape here.
-    ...(hasResultSchema
-      ? []
-      : [`- ${taskDir}/artifacts/result.json with JSON fields: ok, issue, summary, tests.`]),
-    `- ${taskDir}/artifacts/transcript.md with concise notes about what you changed and verified.`,
-    '',
-    'If you cannot complete the requested change, write blocked.md in the artifacts directory explaining exactly what is missing.',
+    'If you change code, write a short PR summary (what changed + tests run) to',
+    `${taskDir}/artifacts/pr.md so it becomes the pull request body.`,
   ].join('\n');
-}
-
-function writeContextSummary(artifactsDir: string, contextPath?: string): void {
-  if (!contextPath || !existsSync(contextPath)) return;
-  const context = JSON.parse(readFileSync(contextPath, 'utf8')) as {
-    context_sources?: string[];
-    recent_issue_comments?: unknown[];
-    previous_decisions?: unknown[];
-    current_pr?: unknown;
-  };
-  writeFileSync(join(artifactsDir, 'context-sources.json'), `${JSON.stringify({
-    context_sources: context.context_sources ?? [],
-    recent_issue_comments: context.recent_issue_comments?.length ?? 0,
-    previous_decisions: context.previous_decisions?.length ?? 0,
-    has_current_pr: Boolean(context.current_pr),
-  }, null, 2)}\n`);
-}
-
-function changedFiles(): string[] {
-  const result = spawnSync('git', ['status', '--short'], { cwd: root, encoding: 'utf8' });
-  if (result.status !== 0) return [];
-  return result.stdout
-    .split('\n')
-    .map((line) => line.trim())
-    .filter(Boolean)
-    .filter((line) => !line.includes(' .agent-run/'))
-    .filter((line) => !line.includes(' agent-sessions/'));
-}
-
-function ensureArtifacts(taskDir: string, issuePath: string, exitCode: number, finalMessage: string): void {
-  const artifactsDir = join(taskDir, 'artifacts');
-  mkdirSync(artifactsDir, { recursive: true });
-  const issue = readIssue(issuePath);
-  const files = changedFiles();
-
-  if (exitCode !== 0 && !existsSync(join(artifactsDir, 'blocked.md'))) {
-    writeFileSync(join(artifactsDir, 'blocked.md'), [
-      '# Agent Blocked',
-      '',
-      `Claude Code exited with code ${exitCode}.`,
-      '',
-      finalMessage.trim(),
-      '',
-    ].join('\n'));
-  }
-
-  if (!existsSync(join(artifactsDir, 'pr.md'))) {
-    writeFileSync(join(artifactsDir, 'pr.md'), [
-      `# PR for ${issue.title ?? `issue ${issue.number ?? 'unknown'}`}`,
-      '',
-      '## Summary',
-      finalMessage.trim() || '- Claude Code completed the requested run.',
-      '',
-      '## Changed files',
-      ...(files.length ? files.map((file) => `- \`${file}\``) : ['- No repository file changes detected.']),
-      '',
-      '## Tests',
-      '- See `artifacts/transcript.md` and `artifacts/result.json`.',
-      '',
-    ].join('\n'));
-  }
-
-  if (!existsSync(join(artifactsDir, 'result.json'))) {
-    writeFileSync(join(artifactsDir, 'result.json'), `${JSON.stringify({
-      ok: exitCode === 0,
-      issue: issue.number,
-      summary: finalMessage.trim(),
-      changed_files: files,
-      tests: [],
-    }, null, 2)}\n`);
-  }
 }
 
 async function main(): Promise<void> {
@@ -176,49 +89,20 @@ async function main(): Promise<void> {
   const taskDir = process.env.OSS_AGENT_TASK_DIR;
   const proxyUrl = process.env.MODEL_PROXY_URL;
   const proxyToken = process.env.MODEL_PROXY_TOKEN;
-  if (!taskDir || !proxyUrl || !proxyToken || !options.issue) usage();
+  if (!taskDir || !proxyUrl || !proxyToken) usage();
 
-  const issuePath = resolve(options.issue);
   const artifactsDir = join(taskDir, 'artifacts');
   mkdirSync(artifactsDir, { recursive: true });
   spawnSync('git', ['config', 'core.filemode', 'false'], { cwd: root });
 
-  const finalPath = join(artifactsDir, 'claude-final.txt');
+  const issuePath = options.issue ? resolve(options.issue) : undefined;
   const contextPath = options.context ? resolve(options.context) : undefined;
-  writeContextSummary(artifactsDir, contextPath);
-  // An agent that declared an IR `result` schema must emit a value validating against it; the compiler
-  // ships the schema and the wrapper passes its path. Absent ⇒ raw run (the developer keeps its bundle).
-  const schema = options.resultSchema && existsSync(resolve(options.resultSchema))
-    ? (JSON.parse(readFileSync(resolve(options.resultSchema), 'utf8')) as Record<string, unknown>)
-    : undefined;
-  const prompt = buildPrompt(issuePath, taskDir, contextPath, options.skill ? resolve(options.skill) : undefined, Boolean(schema));
+  const prompt = buildPrompt(issuePath, taskDir, contextPath, options.skill ? resolve(options.skill) : undefined);
 
-  // Claude Code talks the Anthropic Messages wire; point it at the bounded proxy (whose native
-  // /v1/messages route serves it) and authenticate with the minted run token — no provider key in the
-  // sandbox. Every model slot maps to the one allowed model so background/subagent calls stay in budget.
-  // The developer is the SAME agent at full capability (it writes code): no allowedTools limit → full
-  // tools, pointed at the bounded proxy with the minted run token. Decisions use the same primitive with
-  // a `result` schema (see runClaudeAgent in agent.ts). Capability + endpoint are the only knobs.
-  const runOpts = { prompt, cwd: root, model: options.model, baseUrl: proxyUrl, authToken: proxyToken };
-  // With a schema, runClaudeAgent returns the validated typed artifact (the seam the interpreter acts on);
-  // persist it as the bundle's result.json. Without, the raw run; ensureArtifacts writes the generic shape.
-  let typedResult: Record<string, unknown> | undefined;
-  let result: { stdout: string; stderr: string; exitCode: number };
-  if (schema) {
-    try {
-      typedResult = await runClaudeAgent({ ...runOpts, result: { schema } });
-      writeFileSync(join(artifactsDir, 'result.json'), `${JSON.stringify(typedResult, null, 2)}\n`);
-      result = { stdout: JSON.stringify(typedResult, null, 2), stderr: '', exitCode: 0 };
-    } catch (error) {
-      // No schema-valid result ⇒ the run is blocked, not silently passed (the typed seam is the contract).
-      result = { stdout: '', stderr: error instanceof Error ? error.message : String(error), exitCode: 1 };
-    }
-  } else {
-    result = await runClaudeAgent(runOpts);
-  }
-  writeFileSync(finalPath, result.stdout);
+  // Claude Code talks the Anthropic Messages wire; point it at the bounded proxy and authenticate with the
+  // minted run token — no provider key in the sandbox. Full tools, scoped by the job's own permissions.
+  const result = await runClaudeAgent({ prompt, cwd: root, model: options.model, baseUrl: proxyUrl, authToken: proxyToken });
 
-  let finalMessage = redactSensitive(existsSync(finalPath) ? readFileSync(finalPath, 'utf8') : (result.stdout ?? ''));
   writeFileSync(join(artifactsDir, 'transcript.md'), [
     '# Claude Code Agent Transcript',
     '',
@@ -227,29 +111,16 @@ async function main(): Promise<void> {
     '',
     '## Final Message',
     '',
-    finalMessage.trim(),
+    redactSensitive((result.stdout ?? '').trim()),
     '',
     '## stderr',
     '',
     '```text',
-    redactSensitive(result.stderr.trim()),
+    redactSensitive((result.stderr ?? '').trim()),
     '```',
     '',
   ].join('\n'));
-
-  let exitCode = result.exitCode;
-  // A raw run's deliverable is a code change; no changes ⇒ blocked. But a result-schema agent's deliverable
-  // IS the typed result (e.g. a reviewer's verdict) — it legitimately changes no files, so don't block it.
-  if (!schema && exitCode === 0 && changedFiles().length === 0 && !existsSync(join(artifactsDir, 'blocked.md'))) {
-    exitCode = 1;
-    finalMessage = [
-      finalMessage.trim(),
-      '',
-      'No repository changes were produced, so this run is marked blocked rather than PR-ready.',
-    ].join('\n').trim();
-  }
-  ensureArtifacts(taskDir, issuePath, exitCode, finalMessage);
-  process.exit(exitCode);
+  process.exit(result.exitCode);
 }
 
 main().catch((error) => {

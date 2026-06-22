@@ -27,12 +27,8 @@ documents:
     - docs/standards/tests.md
     - package.json
     - scripts/agent-pm.ts
-    - scripts/prepare-review.ts
-    - scripts/interpret-review.ts
     - scripts/agent-planner.ts
     - scripts/agent-strategist.ts
-    - scripts/prepare-strategy-review.ts
-    - scripts/interpret-strategy-review.ts
     - scripts/public-agent-pm.ts
     - scripts/public-agent-dispatcher.ts
     - scripts/public-agent-review.ts
@@ -110,18 +106,9 @@ agents:
           - reopened
           - ready_for_review
     timeout: 20
-    concurrency: public-agent-review-${{ github.event.issue.number ||
-      github.event.pull_request.number || inputs.issue_number }}
-    env:
-      PUBLIC_AGENT_MAX_CI_RETRIES: ${{ vars.PUBLIC_AGENT_MAX_CI_RETRIES || '2' }}
-      PUBLIC_AGENT_MAX_REVIEW_RETRIES: ${{ vars.PUBLIC_AGENT_MAX_REVIEW_RETRIES || '2' }}
-      PUBLIC_AGENT_REVIEW_MODEL: ${{ vars.PUBLIC_AGENT_REVIEW_MODEL ||
-        vars.PUBLIC_AGENT_TRIAGE_MODEL || 'deepseek/deepseek-v4-flash' }}
-      PUBLIC_AGENT_REVIEW_PROVIDER: ${{ vars.PUBLIC_AGENT_REVIEW_PROVIDER || 'anthropic' }}
-      PUBLIC_AGENT_REVIEW_MAX_USD_CENTS: ${{ vars.PUBLIC_AGENT_REVIEW_MAX_USD_CENTS || '50' }}
     capabilities:
+      - code:review
       - tasks:converse
-      - code:propose
   planner:
     skill: scripts/agent-planner.ts
     workflowFile: open-autonomy-planner.yml
@@ -158,15 +145,9 @@ agents:
         types:
           - created
     timeout: 20
-    env:
-      PUBLIC_AGENT_STRATEGY_REVIEW_MODEL: ${{ vars.PUBLIC_AGENT_STRATEGY_REVIEW_MODEL
-        || vars.PUBLIC_AGENT_REVIEW_MODEL || vars.PUBLIC_AGENT_PM_MODEL ||
-        'deepseek/deepseek-v4-flash' }}
-      PUBLIC_AGENT_STRATEGY_REVIEW_PROVIDER: ${{ vars.PUBLIC_AGENT_STRATEGY_REVIEW_PROVIDER || 'anthropic' }}
-      PUBLIC_AGENT_STRATEGY_REVIEW_MAX_USD_CENTS: ${{ vars.PUBLIC_AGENT_STRATEGY_REVIEW_MAX_USD_CENTS || '50' }}
     capabilities:
+      - code:review
       - tasks:converse
-      - code:propose
 policy:
   autonomy:
     max_open_agent_prs: 5

@@ -46,13 +46,13 @@ agents:
         PUBLIC_AGENT_REPO_PAUSED: ${{ vars.PUBLIC_AGENT_REPO_PAUSED || 'false' }}
         PUBLIC_AGENT_PM_MAX_USD_CENTS: ${{ vars.PUBLIC_AGENT_PM_MAX_USD_CENTS || '25' }}
 
-  # Reviewer: a real skill agent that JUDGES the PR (reads the diff + control files + CI, emits a typed
-  # verdict), then a thin privileged interpreter runs the deterministic merge gate on that verdict and
-  # merges a low-risk, CI-green, head-stable agent PR. prepare (read) gathers the skill's inputs;
-  # interpreter (write) acts on its result. The PR number arrives as the declared TARGET_REF param.
+  # Reviewer: a skill agent that reviews an agent PR and posts its verdict as the `agent-review` status
+  # (code:review = statuses:write). It holds NO contents:write, so it cannot merge; GitHub auto-merge lands
+  # the PR once `ci` + `agent-review` are both green (docs/CAPABILITIES.md, the merge boundary). The PR
+  # number arrives as TARGET_REF; the skill fetches the diff + CI itself via gh.
   reviewer:
     behavior: reviewer
-    capabilities: [tasks:converse, code:propose]
+    capabilities: [code:review, tasks:converse]
     triggers:
       - event: issue_comment
         config: { types: [created] }
@@ -62,34 +62,9 @@ agents:
           ACTOR_ROLE: subject.actorRole
       - event: pull_request_target
         config: { types: [opened, synchronize, reopened, ready_for_review] }
-    # The skill ends its run by emitting this verdict; the interpreter acts on it (the merge gate).
-    result:
-      schema:
-        type: object
-        properties:
-          verdict: { type: string, enum: [pass, fail] }
-          risk: { type: string, enum: [low, medium, high] }
-          human_required: { type: boolean }
-          summary: { type: string }
-          findings: { type: array, items: { type: string } }
-        required: [verdict, risk, human_required, summary, findings]
     config:
       workflowFile: public-agent-review.yml
-      prepare: scripts/prepare-review.ts
-      interpreter: scripts/interpret-review.ts
-      persistCredentials: false
       timeout: 20
-      # checks+statuses:read so the interpreter's CI gate can SEE the `ci` commit status. Bot-opened PRs
-      # don't fire pull_request CI (anti-recursion), so CI is dispatched via workflow_dispatch and reports a
-      # commit STATUS (not a PR check-run) — invisible without statuses:read, which falsely blocks the gate.
-      permissions: { checks: read, statuses: read }
-      concurrency: public-agent-review-${{ github.event.issue.number || github.event.pull_request.number || inputs.issue_number }}
-      env:
-        PUBLIC_AGENT_MAX_CI_RETRIES: ${{ vars.PUBLIC_AGENT_MAX_CI_RETRIES || '2' }}
-        PUBLIC_AGENT_MAX_REVIEW_RETRIES: ${{ vars.PUBLIC_AGENT_MAX_REVIEW_RETRIES || '2' }}
-        PUBLIC_AGENT_REVIEW_MODEL: ${{ vars.PUBLIC_AGENT_REVIEW_MODEL || vars.PUBLIC_AGENT_TRIAGE_MODEL || 'deepseek/deepseek-v4-flash' }}
-        PUBLIC_AGENT_REVIEW_PROVIDER: ${{ vars.PUBLIC_AGENT_REVIEW_PROVIDER || 'anthropic' }}
-        PUBLIC_AGENT_REVIEW_MAX_USD_CENTS: ${{ vars.PUBLIC_AGENT_REVIEW_MAX_USD_CENTS || '50' }}
 
   # Deterministic planner: reconciles roadmap.yml against the planner-owned roadmap issues.
   planner:
@@ -122,14 +97,13 @@ agents:
         PUBLIC_AGENT_STRATEGIST_MAX_USD_CENTS: ${{ vars.PUBLIC_AGENT_STRATEGIST_MAX_USD_CENTS || '100' }}
         PUBLIC_AGENT_STRATEGIST_MAX_ITEMS: ${{ vars.PUBLIC_AGENT_STRATEGIST_MAX_ITEMS || '3' }}
 
-  # Strategy reviewer: a skill agent that JUDGES a strategist roadmap proposal against the merit rubric +
-  # constitution (emits a typed verdict), then a thin interpreter runs the deterministic governance guard
-  # and, on a clean pass, promotes + checks + merges. A maintainer "/agent ratify" overrides the verdict
-  # (human-in-the-loop) but not the guard. Needs statuses:write to report "ci" on a GITHUB_TOKEN-authored
-  # proposal branch.
+  # Strategy reviewer: a skill agent that reviews a strategist roadmap proposal against the constitution +
+  # merit rubric and posts its verdict as the `agent-review` status (code:review). No contents:write, so it
+  # cannot merge; auto-merge lands the proposal once ci + agent-review are green. A maintainer "/agent
+  # ratify" is the human override (a native approval), outside the agent's authority.
   strategy_reviewer:
     behavior: strategy-reviewer
-    capabilities: [tasks:converse, code:propose]
+    capabilities: [code:review, tasks:converse]
     triggers:
       - event: issue_comment
         config: { types: [created] }
@@ -137,25 +111,9 @@ agents:
           TARGET_REF: subject.ref
           SUBJECT_TEXT: subject.text
           ACTOR_ROLE: subject.actorRole
-    result:
-      schema:
-        type: object
-        properties:
-          verdict: { type: string, enum: [pass, fail] }
-          human_required: { type: boolean }
-          summary: { type: string }
-          findings: { type: array, items: { type: string } }
-        required: [verdict, human_required, summary, findings]
     config:
       workflowFile: public-agent-strategy-review.yml
-      prepare: scripts/prepare-strategy-review.ts
-      interpreter: scripts/interpret-strategy-review.ts
       timeout: 20
-      permissions: { statuses: write }
-      env:
-        PUBLIC_AGENT_STRATEGY_REVIEW_MODEL: ${{ vars.PUBLIC_AGENT_STRATEGY_REVIEW_MODEL || vars.PUBLIC_AGENT_REVIEW_MODEL || vars.PUBLIC_AGENT_PM_MODEL || 'deepseek/deepseek-v4-flash' }}
-        PUBLIC_AGENT_STRATEGY_REVIEW_PROVIDER: ${{ vars.PUBLIC_AGENT_STRATEGY_REVIEW_PROVIDER || 'anthropic' }}
-        PUBLIC_AGENT_STRATEGY_REVIEW_MAX_USD_CENTS: ${{ vars.PUBLIC_AGENT_STRATEGY_REVIEW_MAX_USD_CENTS || '50' }}
 
 policy:
   maxConcurrent: 5
@@ -222,12 +180,8 @@ resources:
   # mirror carries only the generic runtime). The `behavior: scripts/agent-*.ts` entries above resolve to
   # the first five; the rest are their import closure. A different profile (e.g. simple-sdlc) ships none.
   - scripts/agent-pm.ts
-  - scripts/prepare-review.ts
-  - scripts/interpret-review.ts
   - scripts/agent-planner.ts
   - scripts/agent-strategist.ts
-  - scripts/prepare-strategy-review.ts
-  - scripts/interpret-strategy-review.ts
   - scripts/public-agent-pm.ts
   - scripts/public-agent-dispatcher.ts
   - scripts/public-agent-review.ts

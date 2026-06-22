@@ -36,12 +36,17 @@ describe('public agent production readiness', () => {
     for (const verb of ['cancel', 'pause', 'resume', 'status', 'retry']) expect(control()).toContain(verb);
   });
 
-  test('the agent job is credential-less; the publisher validates the bundle out-of-band', () => {
+  test('the agent job is credentialed (scoped to its capabilities); it proposes its own auto-merging PR', () => {
     const text = workflow('public-agent.yml');
-    expect(text).toContain('persist-credentials: false');
-    expect(text).toContain('permissions: { contents: read, issues: read, pull-requests: read, id-token: write }');
-    expect(text).toContain('github-agent-publish.ts');
-    expect(text).toContain('--expected-run-id');
+    // developer = code:propose + tasks:converse → contents/pull-requests/actions/issues:write + id-token.
+    expect(text).toContain('pull-requests: write');
+    expect(text).toContain('contents: write');
+    // It acts directly: the generic effect step pushes its change and queues native auto-merge.
+    expect(text).toContain('gh pr merge "$branch" --squash --auto');
+    // The credential-less + bundle + publisher model is gone.
+    expect(text).not.toContain('persist-credentials: false');
+    expect(text).not.toContain('github-agent-publish.ts');
+    expect(text).not.toContain('agent-bundle');
   });
 
   test('PM sweep respects pause/backpressure controls', () => {
@@ -54,21 +59,17 @@ describe('public agent production readiness', () => {
     expect(workflow('public-agent-pm.yml')).toContain('bun scripts/agent-pm.ts');
   });
 
-  test('reviewer skill: prepare gathers control files; interpreter runs the merge gate + loop budgets', () => {
-    // The reviewer is a skill agent: a prepare (read) phase gathers the skill's inputs, the skill emits a
-    // typed verdict, and the interpreter (write) runs the deterministic merge gate on it.
-    const prep = script('prepare-review.ts');
-    expect(prep).toContain('public-agent-control-files.ts');
-    expect(prep).toContain('gh pr diff');
-    const interp = script('interpret-review.ts');
-    expect(interp).toContain('decideMerge'); // the deterministic merge gate, on the skill's verdict
-    expect(interp).toContain('public-agent-loop-budget.ts');
-    expect(interp).toContain('--kind ci');
-    expect(interp).toContain('--kind review');
-    // The wrapper wires prepare → skill → interpreter (the privileged action on the typed result).
-    const wf = workflow('public-agent-review.yml');
-    expect(wf).toContain('bun scripts/prepare-review.ts');
-    expect(wf).toContain('bun scripts/interpret-review.ts');
+  test('reviewer holds code:review (statuses:write) and cannot merge (no contents:write)', () => {
+    // The reviewer posts the agent-review verdict status; it has no contents:write, so it cannot merge.
+    // GitHub native auto-merge lands the PR once ci + agent-review are green (the permission-split boundary).
+    const text = workflow('public-agent-review.yml');
+    const agentJob = text.slice(text.indexOf('  reviewer:'));
+    expect(agentJob).toContain('statuses: write');
+    expect(agentJob).not.toContain('contents: write');
+    // No prepare/interpreter scripts and no bundle — the skill acts directly.
+    expect(text).not.toContain('prepare-review');
+    expect(text).not.toContain('interpret-review');
+    expect(text).not.toContain('github-agent-publish');
   });
 
   test('planner workflow applies roadmap issue plans', () => {

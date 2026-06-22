@@ -112,13 +112,15 @@ function onLines(agent: IRAgent, kind: 'run' | 'launch'): string[] {
 // Realize an agent's capabilities (docs/CAPABILITIES.md) as a GitHub job `permissions:` block. Pure
 // authority → github's permission model; another substrate maps it differently or ignores it.
 function capsToPermissions(caps: string[], extra?: unknown): string {
-  // actions:write so the publisher can dispatch CI (workflow_dispatch) on the bot-opened PR head —
-  // bot PRs don't trigger pull_request CI (GITHUB_TOKEN anti-recursion), but workflow_dispatch is exempt.
-  const p: Record<string, string> = { contents: 'write', 'id-token': 'write', actions: 'write' };
+  // The agent job's LEAST-PRIVILEGE token: baseline is checkout (contents:read) + OIDC for the model token
+  // (id-token:write); each capability widens it (docs/CAPABILITIES.md). The merge boundary is the split:
+  // code:propose can push/PR/queue-auto-merge/dispatch-CI but never gets statuses:write (can't self-certify
+  // a review); code:review gets statuses:write but never contents:write (can't merge). No agent gets both.
+  const p: Record<string, string> = { contents: 'read', 'id-token': 'write' };
   const grant = (k: string, lvl: string) => { if (p[k] !== 'write') p[k] = lvl; };
   for (const rawC of caps) {
     const c = rawC.split('@')[0]; // strip an optional @scope (e.g. code:propose@roadmap)
-    if (c === 'code:propose') p['pull-requests'] = 'write';
+    if (c === 'code:propose') { p.contents = 'write'; p['pull-requests'] = 'write'; p.actions = 'write'; }
     else if (c === 'code:review') p.statuses = 'write'; // bless-a-merge: post the agent-review status
     else if (c === 'tasks:author' || c === 'tasks:converse') p.issues = 'write';
     else if (c === 'agent:launch' || c === 'agent:update' || c === 'agent:cancel') p.actions = 'write';
@@ -281,37 +283,22 @@ function modelRevokeStep(agent: IRAgent): string[] {
   ];
 }
 
-// A model-interpreted agent (skill behavior): the universal privilege-separated wrapper. The agent job
-// holds NO write creds and NO admin token (persist-credentials:false, read-only); its only output is the
-// bundle, which the trusted publisher validates and applies. Trust boundary correct by construction.
-// Where the compiler ships a skill agent's declared IR result schema, so the wrapper can hand it to the
-// run. Absent for agents with no `result` (those keep the raw-bundle run).
-function resultSchemaPath(name: string): string {
-  return `.open-autonomy/results/${name}.schema.json`;
-}
-
+// A skill (model) agent: a single CREDENTIALED job whose token is scoped to its capabilities. It reads its
+// subject, runs the skill, and acts directly (a generic effect step turns a working-tree change into an
+// auto-merging PR; non-proposing agents post their verdict/comment via gh in-skill). No credential-less
+// job, no bundle, no publisher — the merge boundary is the capability/permission split (docs/CAPABILITIES.md).
 function wrapperYml(name: string, agent: IRAgent): string {
   const caps = agent.capabilities ?? [];
   const skillPath = `.codex/skills/${agent.behavior}/SKILL.md`;
-  // A declared result schema flows into the run: the agent must emit a value validating against it, which
-  // becomes the bundle's result.json (the typed seam a thin interpreter acts on). Absent ⇒ raw run.
-  const resultFlag = agent.result ? ` --result-schema ${resultSchemaPath(name)}` : '';
-  // Two substrate-config hooks generalize the developer's implicit shape (prepare-issue → skill →
-  // publish-bundle-as-PR). `prepare` is a privileged-READ script that gathers the skill's input before it
-  // runs (replacing the default issue-payload build); `interpreter` is the privileged-WRITE script the
-  // publisher job runs to act on the typed result (replacing the default bundle→PR publish). Both are
-  // deterministic scripts — the trusted side of the boundary — so their authority is the job's capabilities.
-  const prepare = typeof cfg(agent).prepare === 'string' ? (cfg(agent).prepare as string) : undefined;
-  const interpreter = typeof cfg(agent).interpreter === 'string' ? (cfg(agent).interpreter as string) : undefined;
   const RID = `ir-${name}-\${{ github.run_id }}`;
-  const BUNDLE = `agent-bundle-\${{ github.run_id }}`;
-  // The work item comes from the trigger's declared `subject.ref` param (resolved into job env), fetched
-  // via tooling — not implicit $GITHUB_EVENT_PATH. An agent with no subject.ref is autonomous (cron):
-  // it gets a minimal synthetic payload rather than a work item.
+  // The work item comes from the trigger's declared `subject.ref` param (resolved into job env). An agent
+  // with no subject.ref is autonomous (cron): it gets a minimal synthetic payload. The skill fetches any
+  // deeper context itself (it is credentialed — it has gh + read).
   const refParam = subjectRefParam(agent);
+  const branchExpr = refParam ? `agent/issue-\${${refParam}}` : `agent/${RID}`;
   const buildIssue = refParam
     ? [
-        `      - name: Build issue payload`,
+        `      - name: Provide subject`,
         `        env:`,
         `          GH_TOKEN: \${{ github.token }}`,
         `        run: |`,
@@ -321,67 +308,41 @@ function wrapperYml(name: string, agent: IRAgent): string {
         `          gh issue view "$ref" --json number,title,body,author,labels,comments --jq '{number,title,body,user:{login:.author.login},labels,comments}' > .agent-run/issue.json`,
       ]
     : [
-        `      - name: Build payload (autonomous — no work item)`,
+        `      - name: Provide subject (autonomous — no work item)`,
         `        run: |`,
         `          mkdir -p .agent-run`,
         `          printf '{"number":0,"title":${JSON.stringify(name)},"body":""}\\n' > .agent-run/issue.json`,
       ];
-  // The agent job gathers the skill's input: a custom `prepare` (read-only) or the default issue payload.
-  const prepareSteps = prepare
-    ? [`      - name: Prepare agent input (privileged read)`, `        run: bun ${prepare}`]
-    : buildIssue;
-  // The publisher job acts on the agent's output. A custom `interpreter` reads the typed result from the
-  // bundle and does whatever the agent's purpose requires (e.g. the merge gate + merge); the default
-  // publishes the bundle as a PR. Either way the bundle is downloaded first; capability = the job's perms.
-  const publisherSteps = interpreter
-    ? [
-        `      - uses: actions/download-artifact@v4`,
-        `        with:`,
-        `          name: ${BUNDLE}`,
-        `          path: .agent-run/bundle`,
-        `      - name: Interpret the agent result (privileged action on the typed result)`,
-        `        run: bun ${interpreter} --bundle .agent-run/bundle --expected-run-id "${RID}" --expected-repo "\${{ github.repository }}"`,
-      ]
-    : [
-        `      - uses: actions/download-artifact@v4`,
-        `        with:`,
-        `          name: ${BUNDLE}`,
-        `          path: .agent-run/bundle`,
-        `      - name: Validate and apply the agent bundle`,
-        // --promote-dir + --promote-decisions-only persists ONLY the run's decision records into the repo
-        // tree at agent-sessions/<run-id>/decisions/, so the records the agent already wrote ride into the
-        // PR's patch and survive the squash-merge onto the default branch. Without this, decisions live only
-        // in the uploaded CI artifact and `bench --score` (which clones the default branch) sees none —
-        // the autonomy grader's vacuous steps:0 / ratio:1; the governance audit trail (require_decision_records)
-        // is also lost. Decisions-only keeps the user's branch from accreting artifacts/transcripts each run.
-        // The path matches the **/decisions/*.json convention autonomy-ratio.ts + public-agent-decision-index walk.
-        `        run: bun scripts/github-agent-publish.ts --bundle .agent-run/bundle --apply --promote-dir "agent-sessions/${RID}" --promote-decisions-only --expected-run-id "${RID}" --expected-repo "\${{ github.repository }}"`,
-        `      - name: Open the agent's pull request`,
-        `        run: |`,
-        `          set -euo pipefail`,
-        // The branch is the canonical per-work-item branch the reviewer/merge-gate recognize
-        // (agent/issue-<ref>); a develop retry replaces it. An autonomous agent (no subject.ref) has no
-        // work item, so it falls back to a per-run branch.
-        refParam ? `          branch="agent/issue-\${${refParam}}"` : `          branch="agent/${RID}"`,
-        `          git config user.name volter-agent`,
-        `          git config user.email volter-agent@users.noreply.github.com`,
-        `          git config core.filemode false`,
-        `          git checkout -b "$branch"`,
-        // agent-sessions/ is gitignored (it is also a live-session scratch dir); force-add only this run's
-        // promoted session so its decision records are committed, then stage the agent's code changes.
-        `          git add -f "agent-sessions/${RID}"`,
-        `          git add -A`,
-        `          if git diff --cached --quiet; then echo "agent produced no changes"; exit 0; fi`,
-        `          git commit -m "agent: ${RID}"`,
-        `          git push --force origin "$branch"`,
-        `          body="$(find .agent-run/bundle -name pr.md | head -1)"`,
-        `          if [ -n "$body" ]; then gh pr create --base "\${{ github.event.repository.default_branch }}" --head "$branch" --title "Agent run ${RID}" --body-file "$body"; else gh pr create --base "\${{ github.event.repository.default_branch }}" --head "$branch" --title "Agent run ${RID}" --body "Automated agent run ${RID}"; fi`,
-        // Bot-opened PRs don't trigger pull_request CI (GITHUB_TOKEN anti-recursion → action_required), but
-        // workflow_dispatch is exempt: dispatch CI on the PR head so it posts the required 'ci' commit status.
-        `          head_sha="$(git rev-parse HEAD)"`,
-        `          pr_number="$(gh pr view "$branch" --json number --jq .number 2>/dev/null || echo "")"`,
-        `          gh workflow run ci.yml --ref "$branch" -f sha="$head_sha" -f pr="$pr_number" || echo "ci dispatch failed (non-fatal)"`,
-      ];
+  // The generic EFFECT step: the agent acts directly in its own credentialed job. If the skill changed the
+  // working tree (a code:propose agent), push it as an auto-merging PR — GitHub lands it once `ci` +
+  // `agent-review` are green (docs/CAPABILITIES.md, the merge boundary). A non-proposing agent (reviewer:
+  // posts agent-review via gh; pm/planner: comment/label via gh) changes no files, so this no-ops. There is
+  // no bundle and no publisher — the agent's own token (scoped to its capabilities) does the work.
+  const effect = [
+    `      - name: Effect — propose the change as an auto-merging PR (if the tree changed)`,
+    `        env:`,
+    `          GH_TOKEN: \${{ github.token }}`,
+    `        run: |`,
+    `          set -euo pipefail`,
+    `          if [ -z "$(git status --porcelain)" ]; then echo "no working-tree changes; nothing to propose"; exit 0; fi`,
+    `          branch="${branchExpr}"`,
+    `          git config user.name volter-agent`,
+    `          git config user.email volter-agent@users.noreply.github.com`,
+    `          git config core.filemode false`,
+    `          git checkout -b "$branch"`,
+    `          git add -A`,
+    `          git commit -m "agent: ${RID}"`,
+    `          git push --force origin "$branch"`,
+    `          base="\${{ github.event.repository.default_branch }}"`,
+    `          body="$(cat .agent-run/artifacts/pr.md 2>/dev/null || echo "Automated agent change (${RID}).")"`,
+    `          gh pr create --base "$base" --head "$branch" --title "Agent: ${RID}" --body "$body" || gh pr view "$branch" >/dev/null`,
+    `          gh pr merge "$branch" --squash --auto || echo "auto-merge enable failed (non-fatal)"`,
+    // Bot-opened PRs don't fire pull_request CI (GITHUB_TOKEN anti-recursion); workflow_dispatch is exempt,
+    // so dispatch ci.yml on the PR head to post the required `ci` status that gates auto-merge.
+    `          head_sha="$(git rev-parse HEAD)"`,
+    `          pr_number="$(gh pr view "$branch" --json number --jq .number 2>/dev/null || echo "")"`,
+    `          gh workflow run ci.yml --ref "$branch" -f sha="$head_sha" -f pr="$pr_number" || echo "ci dispatch failed (non-fatal)"`,
+  ];
   return [
     `name: ${name}`,
     ...onLines(agent, 'launch'),
@@ -416,11 +377,14 @@ function wrapperYml(name: string, agent: IRAgent): string {
     ...buildIssue,
     `      - name: Mint bounded model token`,
     `        run: bun scripts/model-proxy-mint.ts --run-id "${RID}" --models "\${{ vars.PUBLIC_AGENT_MODEL || 'deepseek/deepseek-v4-flash' }}" --max-usd-cents "\${{ vars.PUBLIC_AGENT_MAX_USD_CENTS || '200' }}" --max-requests "\${{ vars.PUBLIC_AGENT_MAX_REQUESTS || '60' }}" --issue .agent-run/issue.json`,
+    // The agent job is CREDENTIALED — its token is scoped to its capabilities (docs/CAPABILITIES.md). It
+    // reads its subject, runs the skill, and acts directly; the only thing it can never do is merge (no
+    // statuses:write on a proposer; no contents:write on a reviewer), enforced by the permission split.
     `  ${name}:`,
     `    needs: setup`,
     `    runs-on: ubuntu-latest`,
     ...timeoutLines(agent),
-    `    permissions: { contents: read, issues: read, pull-requests: read, id-token: write }`,
+    `    permissions: ${capsToPermissions(caps, cfg(agent).permissions)}`,
     `    env:`,
     `      MODEL_PROXY_URL: \${{ vars.MODEL_PROXY_URL }}`,
     `      MODEL_PROXY_OIDC_AUDIENCE: \${{ vars.MODEL_PROXY_OIDC_AUDIENCE || 'volter-agent-model-proxy' }}`,
@@ -431,50 +395,22 @@ function wrapperYml(name: string, agent: IRAgent): string {
     ...envLines(agent),
     `    steps:`,
     `      - uses: actions/checkout@v4`,
-    `        with: { persist-credentials: false }`,
     `      - uses: oven-sh/setup-bun@v2`,
     `      - run: bun install --frozen-lockfile || bun install`,
     `      - name: install Claude Code CLI`,
     `        run: npm install -g "@anthropic-ai/claude-code@\${PUBLIC_AGENT_CITED_VERSION:-latest}" && claude --version`,
-    ...prepareSteps,
+    ...buildIssue,
     `      - name: Exchange OIDC for the bounded token`,
     `        run: bun scripts/model-proxy-exchange.ts --run-id "${RID}" --audience "$MODEL_PROXY_OIDC_AUDIENCE"`,
-    `      - name: Run agent (Claude Code + skill) and bundle the result`,
+    `      - name: Run agent (Claude Code + skill)`,
+    `        env:`,
+    `          OSS_AGENT_TASK_DIR: .agent-run`,
+    `          OSS_AGENT_ISSUE_PATH: .agent-run/issue.json`,
     `        run: |`,
-    `          bun scripts/github-agent-session.ts --issue .agent-run/issue.json --run-id "${RID}" --out .agent-run/out --repo "\${{ github.repository }}" --actor "\${{ github.actor }}" -- bash -lc "bun scripts/claude-agent-run.ts --skill ${skillPath}${resultFlag}; rc=\\$?; bun scripts/agent-visual-verify.ts || true; exit \\$rc"`,
-    `      - uses: actions/upload-artifact@v4`,
-    `        with:`,
-    `          name: ${BUNDLE}`,
-    `          path: .agent-run/out/bundle`,
-    `          if-no-files-found: error`,
-    `  publisher:`,
-    `    needs: [setup, ${name}]`,
-    `    runs-on: ubuntu-latest`,
-    `    permissions: ${capsToPermissions(caps, cfg(agent).permissions)}`,
-    `    env:`,
-    `      GH_TOKEN: \${{ github.token }}`,
-    ...triggerParamsEnv(agent),
-    ...envLines(agent),
-    `    steps:`,
-    `      - uses: actions/checkout@v4`,
-    `      - uses: oven-sh/setup-bun@v2`,
-    `      - run: bun install --frozen-lockfile || bun install`,
-    ...publisherSteps,
-    `  revoke:`,
-    `    needs: [setup, ${name}, publisher]`,
-    `    if: always() && needs.setup.result == 'success'`,
-    `    runs-on: ubuntu-latest`,
-    // contents:read so checkout can fetch a PRIVATE repo (without it the checkout 404s "repository not
-    // found" and the cleanup job false-fails, even though the agent work already published).
-    `    permissions: { contents: read, id-token: write }`,
-    `    env:`,
-    `      MODEL_PROXY_URL: \${{ vars.MODEL_PROXY_URL }}`,
-    `      MODEL_PROXY_OIDC_AUDIENCE: \${{ vars.MODEL_PROXY_OIDC_AUDIENCE || 'volter-agent-model-proxy' }}`,
-    `    steps:`,
-    `      - uses: actions/checkout@v4`,
-    `      - uses: oven-sh/setup-bun@v2`,
-    `      - run: bun install --frozen-lockfile || bun install`,
+    `          bun scripts/claude-agent-run.ts --skill ${skillPath}; rc=$?; bun scripts/agent-visual-verify.ts || true; exit $rc`,
+    ...effect,
     `      - run: bun scripts/model-proxy-revoke.ts --run-id "${RID}" || true`,
+    `        if: always()`,
     ``,
   ].join('\n');
 }
@@ -513,10 +449,6 @@ export function compileGithub(ir: AutonomyIR): CompileOutput {
     if (isHuman(agent)) continue; // a human actor is declared in the manifest, not realized as a github job
     const file = typeof cfg(agent).workflowFile === 'string' ? (cfg(agent).workflowFile as string) : `${name}.yml`;
     generated[`.github/workflows/${file}`] = agentYml(name, agent);
-    // A skill agent that declared an IR result schema ships it alongside, for the wrapper to pass to the run.
-    if (agent.result && !isScript(agent.behavior)) {
-      generated[resultSchemaPath(name)] = `${JSON.stringify(agent.result.schema, null, 2)}\n`;
-    }
   }
   // Model-interpreted agents carry the operator control plane, so emit its handler.
   if (Object.values(ir.agents).some((a) => !isScript(a.behavior) && !isHuman(a))) {

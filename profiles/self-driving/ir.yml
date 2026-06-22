@@ -46,11 +46,13 @@ agents:
         PUBLIC_AGENT_REPO_PAUSED: ${{ vars.PUBLIC_AGENT_REPO_PAUSED || 'false' }}
         PUBLIC_AGENT_PM_MAX_USD_CENTS: ${{ vars.PUBLIC_AGENT_PM_MAX_USD_CENTS || '25' }}
 
-  # Deterministic reviewer: confirms an autonomous branch, waits on CI, runs the model reviewer, applies
-  # the merge gate. The PR number arrives as the declared TARGET_REF param, not implicit event magic.
+  # Reviewer: a real skill agent that JUDGES the PR (reads the diff + control files + CI, emits a typed
+  # verdict), then a thin privileged interpreter runs the deterministic merge gate on that verdict and
+  # merges a low-risk, CI-green, head-stable agent PR. prepare (read) gathers the skill's inputs;
+  # interpreter (write) acts on its result. The PR number arrives as the declared TARGET_REF param.
   reviewer:
-    behavior: scripts/agent-reviewer.ts
-    capabilities: [tasks:converse, agent:launch]
+    behavior: reviewer
+    capabilities: [tasks:converse, artifact:author]
     triggers:
       - event: issue_comment
         config: { types: [created] }
@@ -60,15 +62,27 @@ agents:
           ACTOR_ROLE: subject.actorRole
       - event: pull_request_target
         config: { types: [opened, synchronize, reopened, ready_for_review] }
+    # The skill ends its run by emitting this verdict; the interpreter acts on it (the merge gate).
+    result:
+      schema:
+        type: object
+        properties:
+          verdict: { type: string, enum: [pass, fail] }
+          risk: { type: string, enum: [low, medium, high] }
+          human_required: { type: boolean }
+          summary: { type: string }
+          findings: { type: array, items: { type: string } }
+        required: [verdict, risk, human_required, summary, findings]
     config:
       workflowFile: public-agent-review.yml
-      model: true
+      prepare: scripts/prepare-review.ts
+      interpreter: scripts/interpret-review.ts
       persistCredentials: false
       timeout: 20
-      # statuses:read so the CI gate can SEE the `ci` commit status. Bot-opened PRs don't fire
-      # pull_request CI (anti-recursion), so CI is dispatched via workflow_dispatch and reports a commit
-      # STATUS (not a PR check-run) — invisible with only checks:read, which falsely blocks the gate.
-      permissions: { statuses: read }
+      # checks+statuses:read so the interpreter's CI gate can SEE the `ci` commit status. Bot-opened PRs
+      # don't fire pull_request CI (anti-recursion), so CI is dispatched via workflow_dispatch and reports a
+      # commit STATUS (not a PR check-run) — invisible without statuses:read, which falsely blocks the gate.
+      permissions: { checks: read, statuses: read }
       concurrency: public-agent-review-${{ github.event.issue.number || github.event.pull_request.number || inputs.issue_number }}
       env:
         PUBLIC_AGENT_MAX_CI_RETRIES: ${{ vars.PUBLIC_AGENT_MAX_CI_RETRIES || '2' }}
@@ -196,7 +210,8 @@ resources:
   # mirror carries only the generic runtime). The `behavior: scripts/agent-*.ts` entries above resolve to
   # the first five; the rest are their import closure. A different profile (e.g. simple-sdlc) ships none.
   - scripts/agent-pm.ts
-  - scripts/agent-reviewer.ts
+  - scripts/prepare-review.ts
+  - scripts/interpret-review.ts
   - scripts/agent-planner.ts
   - scripts/agent-strategist.ts
   - scripts/agent-strategy-reviewer.ts

@@ -27,7 +27,8 @@ documents:
     - docs/standards/tests.md
     - package.json
     - scripts/agent-pm.ts
-    - scripts/agent-reviewer.ts
+    - scripts/prepare-review.ts
+    - scripts/interpret-review.ts
     - scripts/agent-planner.ts
     - scripts/agent-strategist.ts
     - scripts/agent-strategy-reviewer.ts
@@ -54,6 +55,7 @@ documents:
     - scripts/open-autonomy-upgrade-cli.ts
 skills:
   developer: .codex/skills/open-autonomy-developer
+  reviewer: .codex/skills/reviewer
 agents:
   developer:
     skill: open-autonomy-developer
@@ -89,7 +91,7 @@ agents:
       - tasks:author
       - agent:launch
   reviewer:
-    skill: scripts/agent-reviewer.ts
+    skill: reviewer
     workflowFile: public-agent-review.yml
     params:
       TARGET_REF: subject.ref
@@ -117,7 +119,7 @@ agents:
       PUBLIC_AGENT_REVIEW_MAX_USD_CENTS: ${{ vars.PUBLIC_AGENT_REVIEW_MAX_USD_CENTS || '50' }}
     capabilities:
       - tasks:converse
-      - agent:launch
+      - artifact:author
   planner:
     skill: scripts/agent-planner.ts
     workflowFile: open-autonomy-planner.yml

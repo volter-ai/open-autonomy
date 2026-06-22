@@ -111,7 +111,7 @@ function onLines(agent: IRAgent, kind: 'run' | 'launch'): string[] {
 
 // Realize an agent's capabilities (docs/CAPABILITIES.md) as a GitHub job `permissions:` block. Pure
 // authority → github's permission model; another substrate maps it differently or ignores it.
-function capsToPermissions(caps: string[]): string {
+function capsToPermissions(caps: string[], extra?: unknown): string {
   // actions:write so the publisher can dispatch CI (workflow_dispatch) on the bot-opened PR head —
   // bot PRs don't trigger pull_request CI (GITHUB_TOKEN anti-recursion), but workflow_dispatch is exempt.
   const p: Record<string, string> = { contents: 'write', 'id-token': 'write', actions: 'write' };
@@ -122,6 +122,10 @@ function capsToPermissions(caps: string[]): string {
     else if (c === 'agent:launch' || c === 'agent:update' || c === 'agent:cancel') p.actions = 'write';
     else if (c === 'agent:list') grant('actions', 'read');
   }
+  // A github-specific permission the capability vocabulary does not name (e.g. statuses:read so an
+  // interpreter's merge gate can SEE the `ci` commit status) rides via `config.permissions`, merged
+  // last-write-wins — same escape hatch deterministicPerms uses.
+  if (extra && typeof extra === 'object') for (const [k, v] of Object.entries(extra as Record<string, unknown>)) p[k] = String(v);
   return `{ ${Object.entries(p).map(([k, v]) => `${k}: ${v}`).join(', ')} }`;
 }
 
@@ -442,7 +446,7 @@ function wrapperYml(name: string, agent: IRAgent): string {
     `  publisher:`,
     `    needs: [setup, ${name}]`,
     `    runs-on: ubuntu-latest`,
-    `    permissions: ${capsToPermissions(caps)}`,
+    `    permissions: ${capsToPermissions(caps, cfg(agent).permissions)}`,
     `    env:`,
     `      GH_TOKEN: \${{ github.token }}`,
     ...triggerParamsEnv(agent),

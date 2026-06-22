@@ -63,7 +63,12 @@ function buildPrompt(issuePath: string, taskDir: string, contextPath?: string, s
     ...(skill
       ? ['Your role and instructions (your skill):', '', skill, '']
       : ['You are an autonomous agent running in a bounded GitHub Actions job.', '']),
-    'Act on the GitHub issue below according to your role. Make a small but real, focused change that addresses it; do not make unrelated refactors.',
+    // A result-schema agent's deliverable is its typed result (e.g. a reviewer's verdict), not necessarily
+    // a code change — so don't tell it to "make a change"; let its skill define the work. A raw run (the
+    // developer) makes a focused change.
+    hasResultSchema
+      ? 'Act according to your role and instructions above. Use your tools to do the work, then emit your result.'
+      : 'Act on the GitHub issue below according to your role. Make a small but real, focused change that addresses it; do not make unrelated refactors.',
     '',
     `Issue #${issue.number ?? 'unknown'}: ${issue.title ?? '(untitled)'}`,
     '',

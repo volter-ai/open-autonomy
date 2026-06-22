@@ -54,14 +54,21 @@ describe('public agent production readiness', () => {
     expect(workflow('public-agent-pm.yml')).toContain('bun scripts/agent-pm.ts');
   });
 
-  test('direct review uses shared control files and loop budgets', () => {
-    const rv = script('agent-reviewer.ts');
-    expect(rv).toContain('public-agent-control-files.ts');
-    expect(rv).toContain('public-agent-loop-budget.ts');
-    expect(rv).toContain('--kind ci');
-    expect(rv).toContain('--kind review');
-    expect(rv).toContain('--control-files .agent-run/control-files.json');
-    expect(workflow('public-agent-review.yml')).toContain('bun scripts/agent-reviewer.ts');
+  test('reviewer skill: prepare gathers control files; interpreter runs the merge gate + loop budgets', () => {
+    // The reviewer is a skill agent: a prepare (read) phase gathers the skill's inputs, the skill emits a
+    // typed verdict, and the interpreter (write) runs the deterministic merge gate on it.
+    const prep = script('prepare-review.ts');
+    expect(prep).toContain('public-agent-control-files.ts');
+    expect(prep).toContain('gh pr diff');
+    const interp = script('interpret-review.ts');
+    expect(interp).toContain('decideMerge'); // the deterministic merge gate, on the skill's verdict
+    expect(interp).toContain('public-agent-loop-budget.ts');
+    expect(interp).toContain('--kind ci');
+    expect(interp).toContain('--kind review');
+    // The wrapper wires prepare → skill → interpreter (the privileged action on the typed result).
+    const wf = workflow('public-agent-review.yml');
+    expect(wf).toContain('bun scripts/prepare-review.ts');
+    expect(wf).toContain('bun scripts/interpret-review.ts');
   });
 
   test('planner workflow applies roadmap issue plans', () => {

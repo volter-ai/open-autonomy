@@ -116,8 +116,10 @@ function capsToPermissions(caps: string[], extra?: unknown): string {
   // bot PRs don't trigger pull_request CI (GITHUB_TOKEN anti-recursion), but workflow_dispatch is exempt.
   const p: Record<string, string> = { contents: 'write', 'id-token': 'write', actions: 'write' };
   const grant = (k: string, lvl: string) => { if (p[k] !== 'write') p[k] = lvl; };
-  for (const c of caps) {
+  for (const rawC of caps) {
+    const c = rawC.split('@')[0]; // strip an optional @scope (e.g. code:propose@roadmap)
     if (c === 'code:propose') p['pull-requests'] = 'write';
+    else if (c === 'code:review') p.statuses = 'write'; // bless-a-merge: post the agent-review status
     else if (c === 'tasks:author' || c === 'tasks:converse') p.issues = 'write';
     else if (c === 'agent:launch' || c === 'agent:update' || c === 'agent:cancel') p.actions = 'write';
     else if (c === 'agent:list') grant('actions', 'read');
@@ -183,8 +185,10 @@ function deterministicPerms(caps: string[], extra?: unknown): string {
     'pull-requests': 'read',
     checks: 'read',
   };
-  for (const c of caps) {
+  for (const rawC of caps) {
+    const c = rawC.split('@')[0]; // strip an optional @scope
     if (c === 'code:propose') p['pull-requests'] = 'write';
+    else if (c === 'code:review') p.statuses = 'write';
     else if (c === 'tasks:author' || c === 'tasks:converse') {
       p.issues = 'write';
       p['pull-requests'] = 'write';

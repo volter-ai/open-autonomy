@@ -29,6 +29,8 @@ const DEV_ONLY = new Set([
   'bench-judge.ts', 'bench-coverage.ts', 'bench-coverage.test.ts',
   // Packaging tooling: builds the published node CLI bundle — dev-only, never shipped into an install.
   'build-cli.ts',
+  // Operator treasury tooling: rotates the proxy admin token (worker secret + local .env) — dev-only.
+  'rotate-admin-token.ts',
 ]);
 const PROFILE_OWNED = new Set([
   // self-driving's agent behaviors + their deterministic logic — carried by profiles/self-driving.

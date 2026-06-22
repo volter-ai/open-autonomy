@@ -13,7 +13,7 @@
 // repo (volter-test-fixtures) from the workload seed, installs the profile, and seeds the goal as the org's
 // intake; the agents then run autonomously on cron (never hand-cranked). SCORE reads the result with the AI
 // rubric judge. (Pure per-profile compile coherence + import-closure is check:profiles.)
-import { readFileSync, readdirSync, existsSync, statSync, cpSync, mkdtempSync, mkdirSync } from 'node:fs';
+import { readFileSync, readdirSync, existsSync, statSync, cpSync, mkdtempSync, mkdirSync, writeFileSync } from 'node:fs';
 import { join, relative, dirname } from 'node:path';
 import { tmpdir } from 'node:os';
 import { execFileSync } from 'node:child_process';
@@ -73,7 +73,18 @@ if (process.argv.includes('--live')) {
     }
     console.log(`overlaid workload seed: ${added} project files added, ${kept} install-owned kept`);
   }
-  cpSync('bench/provision.template.json', join(build, 'provision.json'));
+  // The bench cell's provision manifest: the TEMPLATE owns the cell infrastructure (OIDC/model-proxy
+  // vars, secrets, branch protection — what makes a disposable funded cell), and the workload may
+  // contribute EXTRA labels its intake needs (e.g. the conformance scenarios' `manual-operator-test`).
+  // Union the labels so the seeder's labels exist; everything else comes from the template.
+  const provision = JSON.parse(readFileSync('bench/provision.template.json', 'utf8')) as { labels?: Array<{ name: string }> };
+  const seedProvision = join(seed, 'provision.json');
+  if (existsSync(seedProvision)) {
+    const sp = JSON.parse(readFileSync(seedProvision, 'utf8')) as { labels?: Array<{ name: string }> };
+    const have = new Set((provision.labels ?? []).map((l) => l.name));
+    for (const l of sp.labels ?? []) if (!have.has(l.name)) (provision.labels ??= []).push(l);
+  }
+  writeFileSync(join(build, 'provision.json'), `${JSON.stringify(provision, null, 2)}\n`);
 
   console.log(`provisioning ${repo} …`);
   run('bun', ['scripts/provision-target-repo.ts', '--repo', repo, '--source', build, '--private', '--force-content']);

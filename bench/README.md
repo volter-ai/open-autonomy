@@ -78,8 +78,11 @@ bun bin/bench.ts --score --repo <owner/name> --workload todo-cli   # runs the wo
 bun bin/bench.ts --teardown --repo <owner/name> --funder volter-test-fixtures
 ```
 
-The judge runs the box's model endpoint (the same agent the developer/decisions use, via `runClaudeAgent`
-over the universal proxy) — it investigates the result repo (reads the diff, runs the tests) before scoring.
+The judge is an **independent** agentic scorer (evaluator ≠ evaluated): it runs on the **operator's own
+model access** — your local `claude -p` (default) or `codex exec` (`--harness codex`) with *your* login —
+**never** the cell's funded proxy. It investigates the result repo (reads the diff, runs the tests) before
+scoring. `--model`/`BENCH_JUDGE_MODEL` override; otherwise each harness uses its own default. Keep it blind
+to the profile under test.
 
 ## Live bench: one-time setup
 

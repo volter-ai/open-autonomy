@@ -123,7 +123,7 @@ items:
   - id: strategist-roadmap-research
     phase: 14
     priority: high
-    status: proposed
+    status: planned
     title: Strategist Roadmap Research Loop
     proof_gate: strategist-proposes-roadmap-pr
     acceptance:
@@ -133,7 +133,7 @@ items:
   - id: actor-model-human-handoffs
     phase: 15
     priority: high
-    status: proposed
+    status: planned
     title: Actor Model And Explicit Human Handoffs
     proof_gate: human-approve-merges-live
     acceptance:
@@ -143,7 +143,7 @@ items:
   - id: bench-autonomy-ratio
     phase: 16
     priority: medium
-    status: proposed
+    status: planned
     title: Bench Autonomy Ratio From Live Runs
     proof_gate: autonomy-ratio-from-live-run
     acceptance:
@@ -153,7 +153,7 @@ items:
   - id: develop-oa-through-oa
     phase: 17
     priority: high
-    status: proposed
+    status: planned
     title: Develop OA Through OA (close the manual loophole)
     proof_gate: oa-feature-shipped-by-pipeline
     acceptance:
@@ -163,7 +163,7 @@ items:
   - id: loop-health-monitor
     phase: 18
     priority: high
-    status: proposed
+    status: planned
     title: Loop Health Monitor: detect and surface when the autonomy loop is down
     proof_gate: loop-health-monitor-detect-and-surface-w-proof
     acceptance:
@@ -173,7 +173,7 @@ items:
   - id: model-proxy-resource-discipline
     phase: 19
     priority: high
-    status: proposed
+    status: planned
     title: Model-Proxy Resource Guarantee: no silent run-slot leaks
     proof_gate: model-proxy-resource-guarantee-no-silent-proof
     acceptance:
@@ -183,7 +183,7 @@ items:
   - id: cost-accountability-per-gate
     phase: 20
     priority: medium
-    status: proposed
+    status: planned
     title: Cost Accountability Per Loop Gate
     proof_gate: cost-accountability-per-loop-gate-proof
     acceptance:

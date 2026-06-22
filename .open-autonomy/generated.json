@@ -47,6 +47,7 @@
     "scripts/claude-agent-run.ts",
     "scripts/github-agent-publish.ts",
     "scripts/github-agent-session.ts",
+    "scripts/human-runner.ts",
     "scripts/model-proxy-exchange.ts",
     "scripts/model-proxy-mint.ts",
     "scripts/model-proxy-revoke.ts",

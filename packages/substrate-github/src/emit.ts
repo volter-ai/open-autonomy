@@ -116,7 +116,10 @@ function capsToPermissions(caps: string[], extra?: unknown): string {
   // (id-token:write); each capability widens it (docs/CAPABILITIES.md). The merge boundary is the split:
   // code:propose can push/PR/queue-auto-merge/dispatch-CI but never gets statuses:write (can't self-certify
   // a review); code:review gets statuses:write but never contents:write (can't merge). No agent gets both.
-  const p: Record<string, string> = { contents: 'read', 'id-token': 'write' };
+  // Baseline OBSERVATION (docs/CAPABILITIES.md: reads are ambient, not a granted capability): checkout
+  // (contents:read), read the work item whether issue or PR (issues+pull-requests:read), and OIDC for the
+  // model token (id-token:write). Capabilities below widen WRITE authority.
+  const p: Record<string, string> = { contents: 'read', issues: 'read', 'pull-requests': 'read', 'id-token': 'write' };
   const grant = (k: string, lvl: string) => { if (p[k] !== 'write') p[k] = lvl; };
   for (const rawC of caps) {
     const c = rawC.split('@')[0]; // strip an optional @scope (e.g. code:propose@roadmap)
@@ -175,7 +178,7 @@ function wrapperYml(name: string, agent: IRAgent): string {
         `          mkdir -p .agent-run`,
         `          ref="\${${refParam}}"`,
         `          if [ -z "$ref" ]; then echo "no subject.ref forwarded by the trigger"; exit 1; fi`,
-        `          gh issue view "$ref" --json number,title,body,author,labels,comments --jq '{number,title,body,user:{login:.author.login},labels,comments}' > .agent-run/issue.json`,
+        `          gh api "repos/\${{ github.repository }}/issues/$ref" --jq '{number,title,body,user:{login:.user.login},labels:[.labels[].name]}' > .agent-run/issue.json`,
       ]
     : [
         `      - name: Provide subject (autonomous — no work item)`,
@@ -234,7 +237,7 @@ function wrapperYml(name: string, agent: IRAgent): string {
     `  setup:`,
     `    if: ${NOT_CONTROL}`,
     `    runs-on: ubuntu-latest`,
-    `    permissions: { contents: read, issues: read, id-token: write }`,
+    `    permissions: { contents: read, issues: read, pull-requests: read, id-token: write }`,
     `    env:`,
     `      GH_TOKEN: \${{ github.token }}`,
     `      MODEL_PROXY_URL: \${{ vars.MODEL_PROXY_URL }}`,

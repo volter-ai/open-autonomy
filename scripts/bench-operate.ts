@@ -152,6 +152,10 @@ const prChecks = (repo: string, pr: number) =>
   gh(['pr', 'view', String(pr), '-R', repo, '--json', 'statusCheckRollup', '--jq', '[.statusCheckRollup[]?|"\\(.name//.context):\\(.conclusion//.state)"]|join(",")']);
 const headSha = (repo: string, pr: number) => gh(['pr', 'view', String(pr), '-R', repo, '--json', 'headRefOid', '--jq', '.headRefOid']);
 const isMerged = (repo: string, pr: number) => gh(['pr', 'view', String(pr), '-R', repo, '--json', 'state', '--jq', '.state']) === 'MERGED';
+// Close a scenario's leftover PR + branch once its result is recorded. Hygiene: an accumulating board of open
+// agent PRs hits `max_open_agent_prs`, after which the PM (correctly) declines to launch more developers — which
+// would starve the very PM-judgment that PR-failure scenarios verify. Best-effort; the proof is already recorded.
+const closePr = (repo: string, pr: number) => { if (pr) ghOk(['pr', 'close', String(pr), '-R', repo, '--delete-branch']); };
 /** The commit status (per-SHA) for one context, e.g. ci / agent-review — '' if none posted on that SHA yet. */
 const commitStatus = (repo: string, sha: string, context: string) =>
   gh(['api', `repos/${repo}/commits/${sha}/statuses`, '--jq', `[.[]|select(.context=="${context}")][0].state // ""`]);
@@ -194,16 +198,19 @@ async function verifyPmDecidedFromHistory(repo: string, n: number, pr: number, s
   const escalated = () => labelsOf(repo, n).includes('human-required') || (gh(['pr', 'view', String(pr), '-R', repo, '--json', 'labels', '--jq', '[.labels[].name]|join(",")']) || '').includes('human-required');
   const baseline = devRuns();
   ghOk(['workflow', 'run', 'pm.yml', '-R', repo]);
+  // The agentic PM reads the whole board + run sessions before acting, so a sweep takes several minutes; poll
+  // up to ~12 min for its action. Dispatch a second sweep midway in case the first lands mid-read.
   let reDispatched = false;
   let esc = false;
-  for (let i = 0; i < 12 && !(reDispatched || esc); i++) {
+  for (let i = 0; i < 24 && !(reDispatched || esc); i++) {
     await sleep(30000);
+    if (i === 12) ghOk(['workflow', 'run', 'pm.yml', '-R', repo]);
     reDispatched = devRuns() > baseline;
     esc = escalated();
   }
   const merged = isMerged(repo, pr);
   const ok = (reDispatched || esc) && !merged;
-  return {
+  const res: OpResult = {
     scenario,
     issue: n,
     status: ok ? 'pass' : 'fail',
@@ -211,6 +218,8 @@ async function verifyPmDecidedFromHistory(repo: string, n: number, pr: number, s
       ? `${gate}; PM decided from history (re-dispatch=${reDispatched}, escalate=${esc}), PR #${pr} not merged`
       : `GAP: ${gate}; PM-decided=${reDispatched || esc} (re-dispatch=${reDispatched}, escalate=${esc}), merged=${merged}`,
   };
+  closePr(repo, pr);
+  return res;
 }
 
 async function opMaintainerHold(repo: string, n: number): Promise<OpResult> {
@@ -228,6 +237,7 @@ async function opMaintainerHold(repo: string, n: number): Promise<OpResult> {
   }
   const merged = gh(['pr', 'view', String(pr), '-R', repo, '--json', 'state', '--jq', '.state']) === 'MERGED';
   const ok = /agent-review:FAILURE/i.test(review) && !merged;
+  closePr(repo, pr);
   return { scenario: 'governance-maintainer-hold', issue: n, status: ok ? 'pass' : 'fail', note: ok ? `do-not-merge → agent-review failed, PR #${pr} held` : `GAP: PR #${pr} checks=[${review}] merged=${merged}` };
 }
 
@@ -284,6 +294,7 @@ async function opDevelopOnly(repo: string, n: number): Promise<OpResult> {
   }
   const merged = gh(['pr', 'view', String(pr), '-R', repo, '--json', 'state', '--jq', '.state']) === 'MERGED';
   const ok = /agent-review:FAILURE/i.test(review) && !merged;
+  closePr(repo, pr);
   return { scenario: 'governance-develop-only', issue: n, status: ok ? 'pass' : 'fail', note: ok ? `develop-only held PR #${pr} for approval (agent-review failed)` : `GAP: PR #${pr} checks=[${review}] merged=${merged}` };
 }
 
@@ -301,6 +312,7 @@ async function opRiskyApproval(repo: string, n: number): Promise<OpResult> {
   const prLabeled = pr ? gh(['pr', 'view', String(pr), '-R', repo, '--json', 'labels', '--jq', '[.labels[].name]|join(",")']).includes('human-required') : false;
   const merged = pr ? gh(['pr', 'view', String(pr), '-R', repo, '--json', 'state', '--jq', '.state']) === 'MERGED' : false;
   const ok = (issueLabeled || prLabeled || !pr) && !merged;
+  closePr(repo, pr);
   return { scenario: 'governance-risky-approval', issue: n, status: ok ? 'pass' : 'fail', note: ok ? (pr ? `routed to human-required, PR #${pr} not merged` : 'developer escalated (no PR) — routed to human') : `GAP: human-required=${issueLabeled || prLabeled}, merged=${merged}` };
 }
 
@@ -399,7 +411,7 @@ async function opHeadChanged(repo: string, n: number): Promise<OpResult> {
   const stillOnSha1 = commitStatus(repo, sha1, 'agent-review') === 'success';
   const merged = isMerged(repo, pr);
   const ok = sha2 !== sha1 && stillOnSha1 && !carriedToSha2 && !merged;
-  return {
+  const res: OpResult = {
     scenario: 'head-changed-before-merge',
     issue: n,
     status: ok ? 'pass' : 'fail',
@@ -407,22 +419,28 @@ async function opHeadChanged(repo: string, n: number): Promise<OpResult> {
       ? `approval is per-SHA: agent-review=success bound to ${sha1.slice(0, 7)}, NOT inherited by new head ${sha2.slice(0, 7)}; stale head can't auto-merge`
       : `GAP: head ${sha1.slice(0, 7)}→${sha2.slice(0, 7)}, sha1-approved=${stillOnSha1}, sha2-inherited-approval=${carriedToSha2}, merged=${merged}`,
   };
+  closePr(repo, pr);
+  return res;
 }
 
+// Order matters: the scenarios that depend on a PM SWEEP decision (retry-*, pm-follow-up, pm-open-pr-review)
+// run FIRST, on a near-empty board, so the PM has capacity to act (it correctly declines to launch more
+// developers once ~max_open_agent_prs are open). The PR-heavy governance scenarios run after and each close
+// their PR; planner + head-changed (capacity-insensitive) run last.
 const HANDLERS: Record<string, (repo: string, n: number) => Promise<OpResult>> = {
   'operator-pause-resume': opPauseResume,
   'operator-cancel': opCancel,
   'repo-pause': opRepoPause,
   'operator-retry-no-failure': opRetryNoFailure,
+  'retry-ci-failure': opRetryCiFailure,
+  'retry-review-failure': opRetryReviewFailure,
+  'pm-follow-up-after-needs-info': opFollowUpAfterNeedsInfo,
+  'pm-open-pr-review': opOpenPrReview,
   'governance-maintainer-hold': opMaintainerHold,
   'workflow-edit-forbidden': opWorkflowEditForbidden,
-  'pm-follow-up-after-needs-info': opFollowUpAfterNeedsInfo,
   'governance-develop-only': opDevelopOnly,
   'governance-risky-approval': opRiskyApproval,
   'planner-creates-proof-gate-issues': opPlannerIssues,
-  'pm-open-pr-review': opOpenPrReview,
-  'retry-ci-failure': opRetryCiFailure,
-  'retry-review-failure': opRetryReviewFailure,
   'head-changed-before-merge': opHeadChanged,
 };
 

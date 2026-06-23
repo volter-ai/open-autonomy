@@ -13,7 +13,7 @@ items:
       # Re-wire for the credentialed-skill model: the old staged-pipeline decision records were dropped in
       # the agent-model cutover. The proxy run-ledger (already durable, per-run) is the natural store.
       - Each credentialed agent run emits a structured decision record to the proxy run-ledger.
-      - A durable index reconstructs issue, PR, retry, and merge state from those records.
+      - A durable index reconstructs issue, PR, attempt, and merge state from those records.
   - id: unified-loop-budget
     phase: 2
     priority: high
@@ -49,11 +49,14 @@ items:
     phase: 5
     priority: high
     status: active
-    title: Review And Merge Gate Parity
+    title: Review And The Merge Boundary
     proof_gate: head-changed-before-merge
     acceptance:
-      - Direct review uses the same CI/review retry budget as post-publish review.
-      - Merge gate refuses changed heads after review.
+      # The merge boundary is GitHub-native: branch protection requires ci + agent-review and native
+      # auto-merge lands the PR. There is no separate merge-gate component, and no retry budget (failure
+      # handling is the PM's judgment, per the unified-loop-budget item).
+      - Every agent PR is blessed by an independent reviewer (code:review); the proposer cannot self-approve.
+      - Required checks are per-SHA — a head changed after review must re-earn ci + agent-review before it can auto-merge.
   - id: operator-observability
     phase: 6
     priority: medium

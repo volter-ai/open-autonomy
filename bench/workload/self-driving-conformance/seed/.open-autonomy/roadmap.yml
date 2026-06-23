@@ -5,21 +5,21 @@ items:
   - id: durable-decision-memory
     phase: 1
     priority: high
-    status: active
+    status: proposed
     title: Durable Decision Memory
     proof_gate: decision-memory-audit
     acceptance:
-      - Build a durable index from committed decision records.
-      - Reconstruct issue, PR, retry, and merge state from the index.
+      - Each credentialed agent run emits a structured decision record to the proxy run-ledger.
+      - A durable index reconstructs issue, PR, attempt, and merge state from those records.
   - id: unified-loop-budget
     phase: 2
     priority: high
     status: active
-    title: Unified Loop Budget And Stop Conditions
+    title: PM Failure Handling From History
     proof_gate: retry-ci-failure
     acceptance:
-      - Use the same retry budget rules in direct and post-publish review paths.
-      - Stop repeated CI and reviewer failures with visible comments.
+      - On a CI or review failure, the PM decides from history: re-develop-with-context, or escalate.
+      - Repeated/unclear failures stop and escalate to a human (max_develop_attempts), never auto-loop.
   - id: pm-proactive-backlog
     phase: 3
     priority: high
@@ -42,11 +42,11 @@ items:
     phase: 5
     priority: high
     status: active
-    title: Review And Merge Gate Parity
+    title: Review And The Merge Boundary
     proof_gate: head-changed-before-merge
     acceptance:
-      - Direct review uses the same CI/review retry budget as post-publish review.
-      - Merge gate refuses changed heads after review.
+      - Every agent PR is blessed by an independent reviewer (code:review); the proposer cannot self-approve.
+      - Required checks are per-SHA — a head changed after review must re-earn ci + agent-review before it can auto-merge.
   - id: operator-observability
     phase: 6
     priority: medium
@@ -86,21 +86,21 @@ items:
   - id: durable-state-index
     phase: 10
     priority: medium
-    status: planned
+    status: proposed
     title: Durable State And Audit Trail
     proof_gate: status-reconstruction
     acceptance:
-      - Decision index summarizes latest state by issue and PR.
+      - Decision index summarizes latest state by issue and PR (from the run-ledger).
       - Status commands can use reconstructed state.
   - id: repair-loops
     phase: 11
     priority: medium
     status: planned
-    title: Agent Quality And Repair Loops
+    title: PM-Directed Repair (not auto-repair)
     proof_gate: quality-review-repair
     acceptance:
-      - Failed review and CI findings feed the next developer attempt.
-      - Repeated failures stop with stable signatures.
+      - The PM feeds the reviewer's findings to the next developer attempt when it judges them addressable.
+      - Repeated/unclear findings escalate to a human rather than re-attempting indefinitely.
   - id: maintainer-governance
     phase: 12
     priority: medium

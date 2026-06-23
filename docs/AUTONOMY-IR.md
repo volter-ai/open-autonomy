@@ -45,25 +45,23 @@ targets: [github, local]
 
 actors:
   developer:                           # kind: agent (the default)
-    behavior: skills/developer        # what it does — instructions/spec; the box runs it however
-    capabilities: [artifact:author, tasks:converse]   # its authority (the standard's capability catalog)
+    behavior: skills/developer        # what it does — a SKILL (prose); run as a credentialed job
+    capabilities: [code:propose, tasks:converse]   # its authority (the standard's capability catalog)
     triggers:                          # when it fires; three forms — cron | event | task (lifecycle)
       - { task: ready, params: { ISSUE: subject.ref } }   # portable: fire when a task enters `ready`
       - { event: issue_comment }                          # substrate-native escape hatch
-    config: { timeout: 30 }            # opaque misc the substrate interprets (catalog below)
+    timeout: 30                        # a run-time bound (minutes) — the only non-capability field
 
   maintainer:                          # kind: human — a person; intrinsic, not a substrate choice
     kind: human
     behavior: humans/maintainer-review # the task spec the person is handed (situation / decision / result)
-    capabilities: [tasks:converse, artifact:author]
+    capabilities: [tasks:converse, code:review]
     triggers: [{ task: human-required }]   # fire when a task needs a maintainer
-    config: { decision: approve, candidates: maintainers, sla: 1d }   # worklist + escalation knobs
 
   planner:
     behavior: skills/planner
     capabilities: [tasks:author, tasks:converse]
     triggers: [{ cron: "17 6 * * *" }]
-    config: {}
 
 policy: { box: {} }                    # governance (merge/risk/…); substrate + agents read what they know
 resources: [docs/standards/code.md]    # verbatim files; the standard never interprets them
@@ -71,14 +69,14 @@ resources: [docs/standards/code.md]    # verbatim files; the standard never inte
 
 | slot | what it is | who reads it |
 |---|---|---|
-| **behavior** | what the actor does — its instructions/spec (a `kind: human` actor's is the task spec a person is handed) | the substrate *realizes* it: `kind: agent` → deterministic or model-interpreted; `kind: human` → a real person (prod) or a simulator (test); realization is the substrate's/environment's choice |
-| **capabilities** | the actor's authority — from the capability catalog (`docs/CAPABILITIES.md`) | the substrate realizes each as permissions/mediation |
+| **behavior** | what the actor does — a SKILL (prose); a `kind: human` actor's is the task spec a person is handed | the substrate *realizes* it: `kind: agent` → a credentialed job runs the skill via a model; `kind: human` → a real person (prod) or a simulator (test) |
+| **capabilities** | the actor's authority — from the capability catalog (`docs/CAPABILITIES.md`); realized as the agent's own scoped token | the substrate realizes each as a permission on that token |
 | **triggers** | when it fires + the **params** it forwards. Three forms: `cron`, substrate-native `event`, and the portable `task: <state>` (the task-lifecycle catalog, `docs/TASK-LIFECYCLE.md`) | the substrate's trigger executor; `cron` and `task` are portable, `event` is carried |
-| **config** | opaque misc knobs (catalog below) | each substrate reads the keys it understands, ignores the rest |
+| **timeout** | optional run-time bound (minutes) — the only non-capability field | the substrate's job timeout |
 
-An actor also carries a **kind** (`agent` | `human`, default `agent`) — a discriminator, not a fifth slot:
-the four slots are identical for both kinds. `kind` (the role) is the profile's; *realization* (how the
-role is filled — script/model/person/simulator) is the substrate's (see Kind/realization below). `policy`
+An actor also carries a **kind** (`agent` | `human`, default `agent`) — a discriminator, not a fifth slot.
+`kind` (the role) is the profile's; *realization* (how the role is filled — model/person/simulator) is the
+substrate's (see Kind/realization below). `policy`
 (global governance) and `resources` (verbatim files) sit at the top level. That is the entire IR.
 
 ## The four catalogs (the standard's concrete vocabulary)
@@ -86,29 +84,24 @@ role is filled — script/model/person/simulator) is the substrate's (see Kind/r
 A profile depends **only** on these named vocabularies, never on a substrate's raw shapes. New entries
 are added to a catalog first, then implemented by substrates — purely additive, never a restructure.
 
-1. **Capabilities** (`docs/CAPABILITIES.md`) — the agent's *authority*, over three nouns:
-   `artifact:author` · `tasks:author` · `tasks:converse` · `agent:launch|list|update|cancel`.
-   Pure authority — capabilities do **not** encode trust (see below).
+1. **Capabilities** (`docs/CAPABILITIES.md`) — the agent's *authority*, over three nouns (code · tasks ·
+   agent): `code:propose` · `code:review` · `code:merge` (gate-only) · `tasks:author` · `tasks:converse` ·
+   `agent:launch|list|update|cancel`. A capability IS a grant on the agent's own scoped token.
 2. **Trigger param sources** (`docs/TRIGGER-PARAMS.md`) — what a trigger can forward to the agent:
    `subject.ref` · `subject.actor` · `subject.text` · `trigger.kind`. A trigger declares
    `params: { OPAQUE_NAME: source }`; the substrate resolves the source from its firing context.
-3. **Config keys** — opaque misc the substrate interprets:
+3. **Agent fields** (no opaque config box) — the only non-capability field is `timeout`:
 
-   | key | meaning | github | local |
+   | field | meaning | github | local |
    |---|---|---|---|
    | `timeout` | minutes before kill | job `timeout-minutes` | runner kill-after |
-   | `concurrency` | serialization group | top-level `concurrency.group` | ignored |
-   | `env` | extra env for the box | merged job `env` | exported to the agent |
-   | `model.max_usd_cents` / `model.max_requests` | bounded model spend | mint bounds | local key budget |
-   | `maxConcurrent` | per-agent cap | (realized via concurrency) | runner counts sessions |
-   | `model` | the agent calls the box's model (provision its credentials) | inject `MODEL_PROXY_*` into the job | (always available) |
-   | `workflowFile` | pin the realized unit's filename | output `.github/workflows/<file>` (keeps proxy allowlist / cross-dispatch / branch protection stable) | ignored |
-   | `persistCredentials` | keep the checkout's push token | `actions/checkout` `persist-credentials` | ignored |
-   | `permissions` | extra substrate-native authority the capability vocabulary doesn't name | merged into the job `permissions:` (e.g. `statuses: write`) | ignored |
 
-   A substrate reads the keys it knows and ignores the rest; unknown keys round-trip but are inert. The
-   last four are github-specific today; another substrate ignores them (they are not part of the portable
-   core — that is what "partial implementation" means).
+   There is **no** `config` box. Everything the box once carried is now either a capability (authority),
+   substrate-DERIVED (the workflow filename = `<agent>.yml`; the model endpoint is provisioned for every
+   skill agent), or simply gone (the trust/credential knobs — trust is the capability/permission split,
+   below). The model budget is the bounded mint (a substrate concern, not an IR field). Substrate-specific
+   github knobs (`workflowFile`/`persistCredentials`/`permissions`/`env`/`concurrency`) were leaks and are
+   removed: a github permission set is *computed* from capabilities, never written in the IR.
 
 4. **Task lifecycle** (`docs/TASK-LIFECYCLE.md`) — the portable states a task can be in (`open` · `ready`
    · `working` · `in-review` · `input-required` · `blocked` · `done` · `rejected`). A `task: <state>`
@@ -125,22 +118,16 @@ This is the distinction that took the longest to get right, so it is stated expl
   script; that would be a *different org design*. `kind` says *who* the actor is — a different axis from
   realization (*how* the role is filled).
 - **Realization** (how the role is filled) — the **substrate's/environment's choice**, not in the IR. For
-  `kind: agent`: deterministic or model-interpreted. For `kind: human`: a **real person** in production,
-  or a **simulator** in a testbed — *same profile, different environment*. Filling the same role
-  differently per environment is what makes an org with human actors **testable** (`docs/HANDOFFS.md`).
-  (An earlier framing called `human` a "third execution mode" — wrong axis: `human` is a kind;
-  person/simulator are realizations of it.)
-- **Output trust** (does untrusted output need mediation before it touches the repo?) — the
-  **substrate's security responsibility**, *derived* from realization: if it runs `behavior` via a model,
-  output is untrusted → it mediates (github: a read-only agent emits a bundle → a separate trusted
-  publisher validates and applies it); if it runs a deterministic implementation, direct. The IR can't
-  run codex, so it can't mediate; declaring "untrusted" would not change that the substrate must
-  implement it. So trust is **not** an IR field, and **not** a capability.
-- **Change review** (does the resulting change get reviewed before merge?) — **policy** (`policy.box`:
-  merge gate, reviewers, decision records).
-
-If a profile ever needs to *override* trust (e.g. "mediate this even though it's deterministic"), that is
-a **config key** — the open `config` slot absorbs it without any restructure.
+  `kind: agent`: a credentialed job runs the skill via a model. For `kind: human`: a **real person** in
+  production, or a **simulator** in a testbed — *same profile, different environment*. Filling the same
+  role differently per environment is what makes an org with human actors **testable** (`docs/HANDOFFS.md`).
+- **Safety** (can a hijacked agent do harm?) — the **capability/permission split**, not mediation. The
+  agent acts directly with a token scoped to its capabilities; the one irreversible power — merge — is
+  withheld from every agent (`code:review` = bless via status, `code:propose` = push, never both), so no
+  agent can land unreviewed code (`docs/CAPABILITIES.md`). There is no credential-less job, no bundle, no
+  trusted publisher. Safety is capabilities + budget — not an IR trust field.
+- **Change review** (does the resulting change get reviewed before merge?) — the `code:review` status +
+  branch protection (`ci` + `agent-review` required); native auto-merge lands it.
 
 ## The substrate: a trigger executor + a runner, over a box
 

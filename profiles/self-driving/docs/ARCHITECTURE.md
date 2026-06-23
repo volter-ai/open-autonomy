@@ -1,59 +1,173 @@
-# Repository Architecture
+# open-autonomy Architecture
 
-This repository is operated through Open Autonomy. Issues describe work, agent
-runs prepare branches and pull requests, CI and review check the result, and the
-merge gate only advances changes that satisfy the repo policy in
-`.open-autonomy/autonomy.yml`.
+`open-autonomy` makes a GitHub repository operate through visible issues,
+bounded agent runs, deterministic write gates, reviewer checks, and maintainer
+controls. The repository remains the source of truth: issues define executable
+work, PRs carry proposed changes, committed/session evidence explains what
+happened, and committed autonomy config plus workflow gates decide what
+automation may do.
 
-## Repository Shape
+## System Shape
+
+```text
+roadmap + repo standards + issues
+  -> planner/PM triage
+  -> visible /agent command
+  -> developer: a credentialed skill-agent job (token scoped to its capabilities)
+  -> the agent edits code + opens its own PR with auto-merge queued
+  -> CI + an independent reviewer post `ci` + `agent-review`
+  -> native auto-merge (no agent can merge)
+  -> merge, retry, wait, or human-required escalation
+```
+
+The model can propose work. Deterministic code decides whether that work can be
+published, retried, merged, or escalated.
+
+## Repositories
+
+- `open-autonomy`: canonical OSS implementation and first dogfooding target.
+- `profiles/self-driving`: the self-driving recipe; `compile(…, github)` is the starter installation.
+- `bench/`: the live-eval harness. Live autonomy behavior is proven by the `self-driving-conformance` workload (graded by the coverage grader) and self-start by `self-driving-greenfield`.
+
+Future target repositories should install by compiling the profile, then keep
+repo-specific direction, policy, and standards in their own committed files.
+
+## Template Versus Runtime
+
+Open Autonomy has a source side and a target side.
+
+- Source side: this repository contains the reusable implementation, examples,
+  model proxy, the `bench/` live-eval harness, and the `profiles/` recipes (compiled into installations).
+- Target side: a repository that has installed Open Autonomy contains the
+  generated workflows, scripts, repo-local skills, and `.open-autonomy/*`
+  control files.
+- Meta side: this repository is also a target, so the source implementation is
+  maintained by the same loop it ships.
+
+Generated target files are not inert examples. They are the runnable autonomy
+surface for that target repository. The target still owns its own project
+direction, constitution, roadmap, standards, labels, secrets, and risk policy.
+
+## Agent Roles
+
+| Role | Purpose | Main inputs | Main output |
+| --- | --- | --- | --- |
+| Planner | Turns roadmap direction into issues | roadmap, issue/PR state, decision history | created/updated/prioritized issues |
+| PM/Triage | Decides what should happen to an issue now | issue, labels, comments, open PRs, active runs, autonomy config | visible comment, labels, dispatch decision |
+| Developer | Edits code and opens its own auto-merging PR | issue, acceptance criteria, repo guidance, prior decisions | a pull request (its own scoped token) |
+| Reviewer | Judges PR quality and risk; posts the `agent-review` status | PR diff, CI, issue, rubric, standards | the `agent-review` commit status (cannot merge) |
+| Merge | Native auto-merge once `ci` + `agent-review` are green | the two required status checks + branch protection | merged PR (no agent performs the merge) |
+| Operator | Lets maintainers control the system | issue comments, labels, run/proxy state | pause/resume/status/cancel/retry effects |
+
+Planner is directional. PM is operational. Every agent uses model judgment (each is a skill). The
+enforcement is structural: the capability/permission split + branch protection + native auto-merge.
+
+## Entry Points
+
+There are two normal ways work starts:
+
+- Maintainer-directed: a maintainer comments `/agent develop`, `/agent review`,
+  `/agent pause`, `/agent status`, or another supported command.
+- PM-directed: the scheduled or manual PM workflow sweeps eligible issues,
+  writes a visible status or command comment, and dispatches the matching
+  workflow only when the issue is clear enough.
+
+If PM asks for `needs-info`, that is not a failed dispatch. It is the expected
+outcome for broad, risky, or underspecified work. The next useful step is a
+human clarification, after which PM can reconsider the issue.
+
+## Trust Boundaries
+
+- The agent runs as a credentialed job whose token is scoped to its capabilities (least privilege).
+- Raw provider API keys are never passed to the agent job.
+- The agent receives a bounded model token through the model proxy (the budget guard).
+- The agent acts directly with a token scoped to its capabilities; it opens its own PR.
+- No agent can merge: `code:review` (statuses:write) blesses, `code:propose` (contents:write)
+  proposes, never both — so no agent lands unreviewed code.
+- GitHub native auto-merge lands a PR only once `ci` + `agent-review` are both green.
+
+This split is the core safety model. Prose instructions guide agents; the
+policy section of `autonomy.yml` and workflow code enforce limits.
+
+## Documentation Map
+
+| Document | Scope | Used by |
+| --- | --- | --- |
+| `README.md` | Product overview and quickstart | humans |
+| `docs/ARCHITECTURE.md` | Master map of the system | humans, agents needing orientation |
+| `docs/PUBLIC_AGENT_ACTIONS.md` | Detailed workflow/trust model and command architecture | maintainers, implementers |
+| `docs/OSS_AGENT_RUNBOOK.md` | Local checks, live smoke tests, operator commands | maintainers/operators |
+| `docs/PUBLIC_AGENT_PRODUCTION_ROLLOUT.md` | Enablement checklist for a target repo | maintainers |
+| `docs/ROADMAP.md` | Continuous roadmap, proof gates, and expanded product direction | planner/maintainers |
+| `bench/README.md` | Live-eval harness: workloads, graders, running a cell | bench operators |
+| `bench/workload/self-driving-conformance/` | Live conformance scenario catalog (coverage-graded) | bench operators, roadmap audit |
+
+`docs/ROADMAP.md` is the only canonical roadmap. The roadmap should explain
+direction; issues should execute work; runbooks should explain operation;
+decision records should prove what happened.
+
+## Target Repo Control Files
+
+The clean target shape is:
 
 ```text
 AGENTS.md
-.codex/skills/
-.github/workflows/
+.codex/
+  skills/
+    developer/SKILL.md
+    pm/SKILL.md
+    reviewer/SKILL.md
+    planner/SKILL.md
+    strategist/SKILL.md
+    strategy-reviewer/SKILL.md
 .open-autonomy/
   autonomy.yml
   roadmap.yml
   review-rubric.yml
-  version.json
 docs/
   CONSTITUTION.md
   PROJECT.md
   ROADMAP.md
   ARCHITECTURE.md
   standards/
-scripts/
+    code.md
+    docs.md
+    tests.md
+    security.md
 ```
 
-## Control Files
+- `AGENTS.md`: short always-loaded guidance shared across coding agents.
+- `.codex/skills/*/SKILL.md`: repo-local Codex skills for each agent role.
+- `autonomy.yml`: Open Autonomy index of docs, skills, agents, triggers, and
+  capabilities, plus machine-readable path, retry, budget, autonomy, and merge
+  policy.
+- `docs/CONSTITUTION.md`: non-negotiable principles and product standards.
+- `roadmap.yml`: planner-readable direction, priorities, dependencies, and proof
+  gates.
+- `review-rubric.yml`: structured reviewer criteria.
+- `docs/standards/*`: scoped implementation guidance.
 
-| File | Purpose |
-| --- | --- |
-| `AGENTS.md` | Short repo guidance for coding agents. |
-| `.open-autonomy/autonomy.yml` | The single Open Autonomy config: docs, skills, agents, triggers, capabilities, and enforced policy. |
-| `.open-autonomy/roadmap.yml` | Planner-readable direction and active work areas. |
-| `.open-autonomy/review-rubric.yml` | Reviewer criteria. |
-| `.codex/skills/*/SKILL.md` | Repo-local instructions for each agent role. |
-| `docs/CONSTITUTION.md` | Non-negotiable operating principles. |
-| `docs/PROJECT.md` | Project scope and intent. |
-| `docs/ROADMAP.md` | Human-readable roadmap. |
-| `docs/standards/*` | Code, docs, security, and test standards. |
+## Evidence And State
 
-## Workflow
+Each autonomous path should leave visible evidence:
 
-1. A maintainer or planner creates an issue.
-2. PM triage decides whether to ask for more information, escalate, wait, or
-   dispatch development.
-3. The developer agent proposes a bounded patch through a publisher bundle.
-4. The trusted publisher validates paths, secrets, and bundle shape before
-   opening or updating a pull request.
-5. CI and reviewer checks run on the pull request.
-6. The merge gate merges, retries, waits, or escalates based on current CI,
-   current review, current head SHA, labels, comments, and retry budgets.
+- issue comments and labels for user-visible state
+- workflow artifacts for raw run output
+- `agent-sessions/run_*/` for promoted session evidence
+- `decisions/*` records for target, triage, develop, publish, CI, review, retry,
+  merge-gate, and close decisions
+- PR comments/body for reviewable human context
 
-## Evidence
+The durable end state should be a queryable decision index. Until then, the
+session folders, decision records, issue/PR comments, and bench run evidence are the
+audit trail.
 
-The durable evidence lives in GitHub issues, pull requests, workflow artifacts,
-and committed decision records under `agent-sessions/` when an autonomous run
-publishes them. Long-form platform proof, release notes, and test matrices live
-in the Open Autonomy implementation repository, not in target repositories.
+## Operating Rules
+
+- Work starts from issues, PR comments, or explicit maintainer commands.
+- PM and planner actions must be visible; silent skips are only acceptable when
+  a current visible status already exists.
+- Risky, unclear, blocked, or repeatedly failing work escalates to humans.
+- Publisher policy handles write safety; reviewer handles product/code quality;
+  merge gate handles final merge safety.
+- Live proof from a bench workload (e.g. `self-driving-conformance`) is required before claiming roadmap completion.

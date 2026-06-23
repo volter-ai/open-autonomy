@@ -13,11 +13,10 @@ automation may do.
 roadmap + repo standards + issues
   -> planner/PM triage
   -> visible /agent command
-  -> trusted setup + target/autonomy/triage checks
-  -> untrusted developer agent in GitHub Actions
-  -> trusted publisher validates bundle and opens/updates PR
-  -> CI + reviewer
-  -> deterministic merge gate
+  -> developer: a credentialed skill-agent job (token scoped to its capabilities)
+  -> the agent edits code + opens its own PR with auto-merge queued
+  -> CI + an independent reviewer post `ci` + `agent-review`
+  -> native auto-merge (no agent can merge)
   -> merge, retry, wait, or human-required escalation
 ```
 
@@ -55,14 +54,13 @@ direction, constitution, roadmap, standards, labels, secrets, and risk policy.
 | --- | --- | --- | --- |
 | Planner | Turns roadmap direction into issues | roadmap, issue/PR state, decision history | created/updated/prioritized issues |
 | PM/Triage | Decides what should happen to an issue now | issue, labels, comments, open PRs, active runs, autonomy config | visible comment, labels, dispatch decision |
-| Developer | Produces a bounded patch proposal | issue, acceptance criteria, repo guidance, prior decisions | publisher bundle |
-| Publisher | Applies only valid bundles | bundle, manifest, patch, autonomy config | PR or rejected publish decision |
-| Reviewer | Judges PR quality and risk | PR diff, CI, issue, rubric, standards, autonomy config | structured review decision |
-| Merge Gate | Makes final deterministic merge decision | publisher, CI, review, PR head SHA, blockers, retry budget | merge/retry/wait/human-required |
+| Developer | Edits code and opens its own auto-merging PR | issue, acceptance criteria, repo guidance, prior decisions | a pull request (its own scoped token) |
+| Reviewer | Judges PR quality and risk; posts the `agent-review` status | PR diff, CI, issue, rubric, standards | the `agent-review` commit status (cannot merge) |
+| Merge | Native auto-merge once `ci` + `agent-review` are green | the two required status checks + branch protection | merged PR (no agent performs the merge) |
 | Operator | Lets maintainers control the system | issue comments, labels, run/proxy state | pause/resume/status/cancel/retry effects |
 
-Planner is directional. PM is operational. Developer and reviewer use model
-judgment. Publisher and merge gate are deterministic enforcement points.
+Planner is directional. PM is operational. Every agent uses model judgment (each is a skill). The
+enforcement is structural: the capability/permission split + branch protection + native auto-merge.
 
 ## Entry Points
 
@@ -80,13 +78,13 @@ human clarification, after which PM can reconsider the issue.
 
 ## Trust Boundaries
 
-- The developer agent runs as an untrusted job with read-only repository access.
+- The agent runs as a credentialed job whose token is scoped to its capabilities (least privilege).
 - Raw provider API keys are never passed to the agent job.
-- The agent receives a bounded model token through the model proxy.
-- The agent emits a bundle; it does not push to the repository.
-- The trusted publisher validates the bundle before writing a branch or PR.
-- The merge gate only merges when current CI, current review, current PR head,
-  autonomy config, and maintainer blockers all agree.
+- The agent receives a bounded model token through the model proxy (the budget guard).
+- The agent acts directly with a token scoped to its capabilities; it opens its own PR.
+- No agent can merge: `code:review` (statuses:write) blesses, `code:propose` (contents:write)
+  proposes, never both — so no agent lands unreviewed code.
+- GitHub native auto-merge lands a PR only once `ci` + `agent-review` are both green.
 
 This split is the core safety model. Prose instructions guide agents; the
 policy section of `autonomy.yml` and workflow code enforce limits.
@@ -116,11 +114,12 @@ The clean target shape is:
 AGENTS.md
 .codex/
   skills/
-    open-autonomy-pm/SKILL.md
-    open-autonomy-developer/SKILL.md
-    open-autonomy-reviewer/SKILL.md
-    open-autonomy-planner/SKILL.md
-    open-autonomy-upgrade/SKILL.md
+    developer/SKILL.md
+    pm/SKILL.md
+    reviewer/SKILL.md
+    planner/SKILL.md
+    strategist/SKILL.md
+    strategy-reviewer/SKILL.md
 .open-autonomy/
   autonomy.yml
   roadmap.yml

@@ -34,11 +34,10 @@ Read [`docs/AUTONOMY-IR.md`](./docs/AUTONOMY-IR.md) for the full model and confo
 ## What it does (the GitHub substrate)
 
 ```text
-issue or PM sweep -> /agent develop -> policy + triage
-  -> bounded Codex run through the model proxy
-  -> trusted publisher opens/updates a PR
-  -> CI + reviewer -> deterministic merge gate
-  -> merge, or human-required escalation
+issue or PM sweep -> developer (a credentialed skill agent, bounded model token)
+  -> the agent edits code + opens its own PR with auto-merge queued
+  -> CI + an independent reviewer post the required `ci` + `agent-review` statuses
+  -> GitHub native auto-merge lands it (no agent can merge), or human-required escalation
 ```
 
 Operators steer it with `/agent` issue comments (see Commands). The `local` substrate runs the same

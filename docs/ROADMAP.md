@@ -94,7 +94,7 @@ Rules:
 - stale required CI blocks auto-merge
 - failed required CI dispatches `develop` on the same PR until the retry cap
 - repeated failure after the retry cap requires a human
-- reviewer may recommend another develop run, but dispatcher enforces attempts
+- reviewer may recommend another develop run, but the PM enforces attempts
 
 ## Decision Audit
 
@@ -128,7 +128,7 @@ Common schema:
   "reason": "review passed with low risk and required CI passed",
   "failure_signature": null,
   "supersedes": [],
-  "evidence": ["publisher:passed", "ci:passed", "review:low-risk"],
+  "evidence": ["ci:passed", "review:low-risk"],
   "next_action": "merge",
   "created_at": "2026-06-16T04:00:00Z"
 }
@@ -199,7 +199,7 @@ it is not the only abuse control.
 Rules:
 
 - public users may request review
-- develop is authorized by trusted users or deterministic dispatcher policy
+- develop is authorized by trusted users or PM policy
 - agents cannot grant themselves authority by posting commands
 - security-sensitive issues should be labeled and escalated, not developed
   automatically
@@ -413,7 +413,7 @@ Acceptance criteria:
 
 Tests:
 
-- unit tests for PM prompt fixtures and dispatcher output
+- unit tests for PM prompt fixtures and triage output
 - trial issues for: ready docs issue, needs-info issue, open-PR review issue,
   failed-run retry issue, blocked label issue
 - live trial PR proving PM sees an open canonical agent PR, comments
@@ -508,7 +508,7 @@ Acceptance criteria:
 - A CI-fix pass receives the failed check names and failure summaries.
 - A PM-triggered second develop after human feedback receives that newer human
   feedback.
-- Patch bundle records which context sources were used.
+- The agent records which context sources it used.
 
 Tests:
 
@@ -743,7 +743,7 @@ Remaining live bench proof work:
 - Build conformance-only synthetic fixtures so retry/merge edge cases can be driven
   live without damaging real workflows: a required-CI-failure toggle, a reviewer
   `develop_retry` toggle, a head-changed-before-merge race harness, and a
-  maintainer-triggered forbidden-workflow-edit develop bundle.
+  maintainer-triggered forbidden-workflow-edit develop run.
 - With those fixtures, let the scheduled autonomy drive `retry-ci-failure`,
   `retry-review-failure`, `head-changed-before-merge`, and
   `workflow-edit-forbidden` in the `self-driving-conformance` workload, then record
@@ -770,7 +770,7 @@ Rollout stages:
 
 1. PM comments only, no dispatch, for dry-run/audit-only validation.
 2. PM comment plus dispatch for broad non-workflow changes.
-3. Reviewer/merge gate surfaces risky changes instead of publisher path policy
+3. Reviewer/merge gate surfaces risky changes instead of path policy
    deciding product risk.
 4. Auto-merge low-risk reviewed changes.
 5. Enable label management.
@@ -1054,7 +1054,7 @@ Build:
 Acceptance criteria:
 
 - Maintainers can change autonomy level without editing workflow code.
-- Risky changes are routed to explicit human approval before publisher or merge.
+- Risky changes are routed to explicit human approval before merge.
 - Weekly status can be generated from repository-visible data.
 
 Testbed proof plan:
@@ -1073,8 +1073,7 @@ Testbed proof plan:
 - `governance-risky-approval`
   - Trigger: issue requests workflow, dependency, security, release, or billing
     change.
-  - Expected: system routes to explicit maintainer approval before publisher or
-    merge.
+  - Expected: system routes to explicit maintainer approval before any merge.
   - Evidence: issue URL, policy decision, approval request comment.
   - Final state: `human-required`.
 - `governance-weekly-report`

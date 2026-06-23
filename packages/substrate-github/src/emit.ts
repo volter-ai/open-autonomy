@@ -200,17 +200,21 @@ function wrapperYml(name: string, agent: IRAgent): string {
     `          git config core.filemode false`,
     `          git checkout -b "$branch"`,
     `          git add -A`,
-    `          git commit -m "agent: ${RID}"`,
-    `          git push --force origin "$branch"`,
-    `          base="\${{ github.event.repository.default_branch }}"`,
-    `          body="$(cat .agent-run/artifacts/pr.md 2>/dev/null || echo "Automated agent change (${RID}).")"`,
-    // Link the PR to its issue so the merge auto-closes it. Only when the subject is an issue number
-    // (refParam present + numeric); roadmap/cron proposers have no issue to close.
+    // Link the PR to its issue so the merge auto-closes it. The closing keyword goes in the COMMIT message
+    // (squash-merge carries it into the merge commit — the reliable path; a PR-body keyword alone is dropped
+    // when the repo squashes from the commit message) AND the PR body. Only when the subject is an issue
+    // number (refParam present + numeric); roadmap/cron proposers have no issue to close.
     ...(refParam
       ? [
           `          ref="\${${refParam}}"`,
-          `          if printf '%s' "$ref" | grep -qE '^[0-9]+$'; then body="$(printf 'Closes #%s\\n\\n%s' "$ref" "$body")"; fi`,
+          `          if printf '%s' "$ref" | grep -qE '^[0-9]+$'; then git commit -m "agent: ${RID}" -m "Closes #$ref"; else git commit -m "agent: ${RID}"; fi`,
         ]
+      : [`          git commit -m "agent: ${RID}"`]),
+    `          git push --force origin "$branch"`,
+    `          base="\${{ github.event.repository.default_branch }}"`,
+    `          body="$(cat .agent-run/artifacts/pr.md 2>/dev/null || echo "Automated agent change (${RID}).")"`,
+    ...(refParam
+      ? [`          if printf '%s' "$ref" | grep -qE '^[0-9]+$'; then body="$(printf 'Closes #%s\\n\\n%s' "$ref" "$body")"; fi`]
       : []),
     `          gh pr create --base "$base" --head "$branch" --title "Agent: ${RID}" --body "$body" || gh pr view "$branch" >/dev/null`,
     `          gh pr merge "$branch" --squash --auto || echo "auto-merge enable failed (non-fatal)"`,

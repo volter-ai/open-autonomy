@@ -102,11 +102,11 @@ jobs:
           git config core.filemode false
           git checkout -b "$branch"
           git add -A
-          git commit -m "agent: ir-strategy_reviewer-${{ github.run_id }}"
+          ref="${TARGET_REF}"
+          if printf '%s' "$ref" | grep -qE '^[0-9]+$'; then git commit -m "agent: ir-strategy_reviewer-${{ github.run_id }}" -m "Closes #$ref"; else git commit -m "agent: ir-strategy_reviewer-${{ github.run_id }}"; fi
           git push --force origin "$branch"
           base="${{ github.event.repository.default_branch }}"
           body="$(cat .agent-run/artifacts/pr.md 2>/dev/null || echo "Automated agent change (ir-strategy_reviewer-${{ github.run_id }}).")"
-          ref="${TARGET_REF}"
           if printf '%s' "$ref" | grep -qE '^[0-9]+$'; then body="$(printf 'Closes #%s\n\n%s' "$ref" "$body")"; fi
           gh pr create --base "$base" --head "$branch" --title "Agent: ir-strategy_reviewer-${{ github.run_id }}" --body "$body" || gh pr view "$branch" >/dev/null
           gh pr merge "$branch" --squash --auto || echo "auto-merge enable failed (non-fatal)"

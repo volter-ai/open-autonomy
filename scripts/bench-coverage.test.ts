@@ -44,6 +44,32 @@ describe('bench coverage grader', () => {
     expect(get('head-changed-before-merge')?.status).toBe('pending');
   });
 
+  test('a CLOSED resolution scenario is proven; an OPEN one is in-progress', () => {
+    const r = classifyScenarios([
+      { number: 20, title: '[oa-test:review-low-risk-merge] a', state: 'CLOSED', labels: [] },
+      { number: 21, title: '[oa-test:pm-clear-docs] b', state: 'OPEN', labels: [] },
+    ]);
+    expect(r.find((x) => x.id === 'review-low-risk-merge')?.status).toBe('proven');
+    expect(r.find((x) => x.id === 'pm-clear-docs')?.status).toBe('in-progress');
+  });
+
+  test('a CLOSED non-resolution scenario without its success label is FAILED, not proven', () => {
+    // operator-cancel succeeds via its operator action, not by a bare close — closing it without the
+    // escalation/expected state means it did NOT demonstrate the behavior. This is the over-leniency the
+    // old `closed => proven` catch-all hid.
+    const r = classifyScenarios([{ number: 22, title: '[oa-test:operator-cancel] c', state: 'CLOSED', labels: [] }]);
+    expect(r.find((x) => x.id === 'operator-cancel')?.status).toBe('failed');
+  });
+
+  test('an escalation scenario (retry-ci-failure) is NOT proven by a bare close', () => {
+    // retry-ci-failure ends blocked/escalated (the PR never merges); a bare close is a fail, not proof.
+    const r = classifyScenarios([{ number: 23, title: '[oa-test:retry-ci-failure] d', state: 'CLOSED', labels: [] }]);
+    expect(r.find((x) => x.id === 'retry-ci-failure')?.status).toBe('failed');
+    // but its escalation label proves it
+    const r2 = classifyScenarios([{ number: 24, title: '[oa-test:retry-ci-failure] d', state: 'OPEN', labels: ['agent-blocked'] }]);
+    expect(r2.find((x) => x.id === 'retry-ci-failure')?.status).toBe('proven');
+  });
+
   test('renders a report with coverage counts', () => {
     const issues: IssueLite[] = [{ number: 10, title: '[oa-test:pm-needs-info] x', state: 'OPEN', labels: ['needs-info'] }];
     const report = renderReport('owner/name', summarizeMetrics(issues, [], []), classifyScenarios(issues), '2026-06-17T00:00:00Z');

@@ -45,14 +45,14 @@ publisher, or bundle.
 
 Use two public verbs:
 
-- `/agent develop`
-- `/agent review`
+- `/agent developer`
+- `/agent reviewer`
 
 Compatibility aliases may remain during migration:
 
-- `/agent run` -> `/agent develop`
-- `/agent continue` -> `/agent develop`
-- `/agent retry` -> infrastructure retry only, or `/agent develop` while
+- `/agent run` -> `/agent developer`
+- `/agent continue` -> `/agent developer`
+- `/agent retry` -> infrastructure retry only, or `/agent developer` while
   migrating
 
 `develop` is target-aware:
@@ -407,7 +407,7 @@ Build:
 Acceptance criteria:
 
 - PM does not restart an issue with an active run.
-- PM sends `/agent review` for an open agent PR when appropriate.
+- PM sends `/agent reviewer` for an open agent PR when appropriate.
 - PM notices a failed/stale run and either retries or escalates with a reason.
 - PM asks one clear question for underspecified issues.
 
@@ -417,14 +417,14 @@ Tests:
 - trial issues for: ready docs issue, needs-info issue, open-PR review issue,
   failed-run retry issue, blocked label issue
 - live trial PR proving PM sees an open canonical agent PR, comments
-  `/agent review`, directly dispatches `reviewer.yml`, and the
+  `/agent reviewer`, directly dispatches `reviewer.yml`, and the
   review completes
 
 Testbed proof plan:
 
 - `pm-clear-docs`
   - Trigger: PM sweep on a small exact docs issue.
-  - Expected: PM posts `/agent develop`, workflow dispatch starts, PR opens,
+  - Expected: PM posts `/agent developer`, workflow dispatch starts, PR opens,
     CI/review pass, merge gate closes the issue.
   - Evidence: issue URL, PR URL, PM run URL, develop run URL, session path.
   - Final state: `done`.
@@ -435,14 +435,14 @@ Testbed proof plan:
   - Final state: `needs-info`.
 - `pm-follow-up-after-needs-info`
   - Trigger: maintainer clarifies a `needs-info` issue, then PM sweeps again.
-  - Expected: PM does not repeat stale status; it starts `/agent develop` and
+  - Expected: PM does not repeat stale status; it starts `/agent developer` and
     clears or supersedes `needs-info`.
   - Evidence: issue URL, PM run URLs before/after clarification, develop run,
     final labels.
   - Final state: `done` or `in-progress`.
 - `pm-open-pr-review`
   - Trigger: issue has an open canonical `agent/issue-N` PR.
-  - Expected: PM does not start duplicate develop; it comments `/agent review`
+  - Expected: PM does not start duplicate develop; it comments `/agent reviewer`
     on the PR and dispatches review.
   - Evidence: issue URL, PR URL, PM run URL, review run URL, review decision.
   - Final state: `done`, `human-required`, or `in-progress`.
@@ -464,14 +464,14 @@ Required fixes from the live `open-autonomy-testbed` trials:
 - PM `human_required`, `spam`, `duplicate`, and `wont_fix` outcomes must have
   deterministic label/comment behavior that can be audited from the issue.
 - PM needs a conservative classification for test-harness/operator-control
-  issues. It should not start `/agent develop` for issues whose requested work
+  issues. It should not start `/agent developer` for issues whose requested work
   is to exercise controls such as pause/status/resume; those should be handled
   by explicit operator commands or marked human-required/test-only.
 - PM must not repeat a stale `needs-info` comment, but after a human provides
   clarifying acceptance criteria it should remove or supersede the blocker and
   start an appropriate develop run.
 - PM open-PR routing needs a live fixture: when a canonical `agent/issue-N` PR
-  exists, PM should avoid duplicate develop and should route to `/agent review`
+  exists, PM should avoid duplicate develop and should route to `/agent reviewer`
   when CI/review state allows it.
 - PM artifacts should be promoted into durable repo evidence or a stable
   downloadable format so PM-only conclusions are as inspectable as develop
@@ -485,7 +485,7 @@ Implemented from live trials:
   `spam`, and `manual-operator-test`
 - PM handoff comments that clear stale `needs-info` labels on `develop` or
   `review`
-- triage approval for PM-authored `/agent develop` handoffs after a maintainer
+- triage approval for PM-authored `/agent developer` handoffs after a maintainer
   clarification
 
 ### Phase 4: Developer Context And Patch Quality
@@ -560,7 +560,7 @@ Build:
 
 Acceptance criteria:
 
-- Manual/direct `/agent review` can trigger a bounded develop retry without
+- Manual/direct `/agent reviewer` can trigger a bounded develop retry without
   depending on comment-trigger side effects.
 - Merge gate refuses if PR head changed after review.
 - Merge gate refuses on maintainer-blocking labels/comments.
@@ -592,7 +592,7 @@ Testbed proof plan:
   - Evidence: PR URL, reviewed head SHA, current head SHA, merge-gate decision.
   - Final state: `blocked` or `human-required`.
 - `direct-review-retry`
-  - Trigger: maintainer comments `/agent review` on an agent PR where reviewer
+  - Trigger: maintainer comments `/agent reviewer` on an agent PR where reviewer
     returns `develop_retry`.
   - Expected: standalone review workflow starts a bounded develop retry without
     relying on comment-trigger side effects.
@@ -653,7 +653,7 @@ Tests:
 Testbed proof plan:
 
 - `operator-pause-resume`
-  - Trigger: `/agent pause`, `/agent status`, `/agent develop`, `/agent resume`
+  - Trigger: `/agent pause`, `/agent status`, `/agent developer`, `/agent resume`
     on a manual fixture issue.
   - Expected: pause label gates develop before model minting; status explains
     labels/runs; resume clears the label.
@@ -668,7 +668,7 @@ Testbed proof plan:
     or variable state.
   - Final state: `manual fixture`.
 - `workflow-edit-forbidden`
-  - Trigger: explicit maintainer `/agent develop` fixture prompted toward a
+  - Trigger: explicit maintainer `/agent developer` fixture prompted toward a
     `.github/workflows/*` edit.
   - Expected: the agent's scoped token has no `workflows: write`, so no workflow
     change reaches a branch or PR; the agent escalates with a visible comment.
@@ -686,7 +686,7 @@ Required fixes from the live `open-autonomy-testbed` trials:
 
 - Add first-class testbed fixture labels, for example `testbed-control` or
   `manual-operator-test`, that exclude an issue from PM auto-develop while still
-  allowing explicit `/agent pause`, `/agent status`, `/agent develop`, and
+  allowing explicit `/agent pause`, `/agent status`, `/agent developer`, and
   `/agent resume` checks.
 - Add a visible status path for skipped control issues so maintainers can tell
   whether PM intentionally ignored the issue because it is a manual operator

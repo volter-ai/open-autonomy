@@ -35,7 +35,7 @@ export class RunBudget implements DurableObject {
       return json({ ok: true });
     }
     if (op === 'release') {
-      await this.release(String(body.request_id));
+      await this.release(String(body.request_id), body.reached === true);
       return json({ ok: true });
     }
     return json({ ok: false, error: 'unknown_op' }, { status: 400 });
@@ -110,14 +110,17 @@ export class RunBudget implements DurableObject {
     await this.save();
   }
 
-  private async release(requestId: string): Promise<void> {
+  private async release(requestId: string, reached: boolean): Promise<void> {
     const reservation = this.state.reservations[requestId];
     if (!reservation) return;
     this.state.reserved_usd_cents = Math.max(0, this.state.reserved_usd_cents - reservation.amount);
-    // A released reservation never reached/succeeded with the provider (upstream failure, network error,
-    // global-cap rejection), so give back the request slot too — otherwise reserve()'s increment leaks and
-    // a run hits request_limit_reached before making max_requests real calls. consume() keeps the count.
-    this.state.request_count = Math.max(0, this.state.request_count - 1);
+    // Refund the request slot ONLY when the provider was never reached (pre-fetch cap rejection or a
+    // network error) — otherwise reserve()'s increment leaks and a run hits request_limit_reached before
+    // max_requests real calls. A reached request (any provider response, incl. non-2xx) MUST keep its slot,
+    // or a run that reliably triggers 4xx/5xx could loop unbounded outbound fetches at $0. consume() keeps
+    // the count too. gcReservations deliberately does NOT refund (a swept reservation is treated as reached
+    // — refunding on expiry would re-open the unbounded-fetch path via deliberate hangs).
+    if (!reached) this.state.request_count = Math.max(0, this.state.request_count - 1);
     delete this.state.reservations[requestId];
     await this.save();
   }
@@ -197,7 +200,7 @@ export class RunBudgetClient {
     return this.rpc<{ ok: true }>('consume', { request_id: requestId, actual_usd_cents: actualUsdCents, event });
   }
 
-  release(requestId: string) {
-    return this.rpc<{ ok: true }>('release', { request_id: requestId });
+  release(requestId: string, reached: boolean) {
+    return this.rpc<{ ok: true }>('release', { request_id: requestId, reached });
   }
 }

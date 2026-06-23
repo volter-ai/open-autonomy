@@ -69,12 +69,12 @@ export async function handleAnthropic(req: Request, env: Env, claims: RunClaims,
       body: JSON.stringify(body),
     });
   } catch {
-    await reservation.release();
+    await reservation.release(false); // network error — provider never reached, refund the slot
     return error('upstream_unavailable', 502);
   }
 
   if (!upstream.ok) {
-    await reservation.release();
+    await reservation.release(true); // provider responded (non-2xx) — the request reached it, keep the slot
     return sanitizeUpstream(upstream);
   }
 

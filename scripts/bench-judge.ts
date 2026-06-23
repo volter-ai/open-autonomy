@@ -47,6 +47,7 @@ function runJudgeAgent(
   const wellFormed = (v: Record<string, unknown>): boolean =>
     missingRequired(schema, v).length === 0 &&
     Array.isArray(v.criteria) &&
+    (v.criteria as unknown[]).length > 0 && // an EMPTY array passes .every() and scores 0% silently
     (v.criteria as unknown[]).every(
       (c) =>
         !!c &&

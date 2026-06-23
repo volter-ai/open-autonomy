@@ -39,12 +39,14 @@ const PR_TRUSTED = `(github.event.pull_request.head.repo.full_name == github.rep
 const controlIf = (name: string) =>
   `github.event_name == 'issue_comment' && startsWith(github.event.comment.body, '/agent ') && !startsWith(github.event.comment.body, '/agent ${name}') && ${COMMENT_MAINTAINER}`;
 // The agent (setup + work) job runs ONLY on a legitimate, trust-checked trigger: any non-comment /
-// non-fork-PR event (workflow_dispatch from the PM, schedule, issues — labeling needs write access);
-// a same-repo-or-maintainer pull_request_target; or an explicit maintainer `/agent <name>` launch.
-// A plain comment matches none of these, so it never launches the agent.
+// non-fork-PR event (workflow_dispatch from the PM, schedule); a labeled `issues` event (applying a label
+// needs triage/write, so it is implicitly maintainer-gated — but `issues: opened/reopened/edited` are
+// firable by ANY user, so those must NOT launch the agent); a same-repo-or-maintainer pull_request_target;
+// or an explicit maintainer `/agent <name>` launch. A plain comment matches none of these.
 const agentRunIf = (name: string) =>
   [
-    `(github.event_name != 'issue_comment' && github.event_name != 'pull_request_target')`,
+    `(github.event_name != 'issue_comment' && github.event_name != 'pull_request_target' && github.event_name != 'issues')`,
+    `(github.event_name == 'issues' && github.event.action == 'labeled')`,
     `(github.event_name == 'pull_request_target' && ${PR_TRUSTED})`,
     `(github.event_name == 'issue_comment' && startsWith(github.event.comment.body, '/agent ${name}') && ${COMMENT_MAINTAINER})`,
   ].join(' || ');
@@ -282,7 +284,7 @@ function wrapperYml(name: string, agent: IRAgent): string {
     `    steps:`,
     `      - uses: actions/checkout@v4`,
     `      - uses: oven-sh/setup-bun@v2`,
-    `      - run: bun install --frozen-lockfile || bun install`,
+    `      - run: bun install --frozen-lockfile`,
     ...buildIssue,
     `      - name: Mint bounded model token`,
     `        run: bun scripts/model-proxy-mint.ts --run-id "${RID}" --models "\${{ vars.PUBLIC_AGENT_MODEL || 'deepseek/deepseek-v4-flash' }}" --max-usd-cents "\${{ vars.PUBLIC_AGENT_MAX_USD_CENTS || '200' }}" --max-requests "\${{ vars.PUBLIC_AGENT_MAX_REQUESTS || '60' }}" --issue .agent-run/issue.json`,
@@ -304,7 +306,7 @@ function wrapperYml(name: string, agent: IRAgent): string {
     `    steps:`,
     `      - uses: actions/checkout@v4`,
     `      - uses: oven-sh/setup-bun@v2`,
-    `      - run: bun install --frozen-lockfile || bun install`,
+    `      - run: bun install --frozen-lockfile`,
     `      - name: install Claude Code CLI`,
     `        run: npm install -g "@anthropic-ai/claude-code@\${PUBLIC_AGENT_CITED_VERSION:-latest}" && claude --version`,
     ...buildIssue,

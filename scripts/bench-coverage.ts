@@ -95,14 +95,13 @@ export function summarizeMetrics(issues: IssueLite[], prs: PrLite[], runs: RunLi
 }
 
 // Scenarios whose success condition is "the issue gets resolved / its PR merges" — for these a CLOSED
-// issue is genuine proof. Every other scenario succeeds by reaching a specific labeled state, so a bare
-// close does not prove it (and a close without that state counts as failed).
+// issue is genuine proof. Every other scenario succeeds by reaching a specific labeled/escalated state, so
+// a bare close does not prove it (and a close without that state counts as failed). NOTE: the retry-* and
+// head-changed-before-merge scenarios deliberately END BLOCKED/ESCALATED (the PR never merges), so they are
+// NOT resolution scenarios — they prove via their escalation label, not a close.
 const RESOLUTION_SCENARIOS = new Set<string>([
   'pm-clear-docs',
   'pm-open-pr-review',
-  'retry-ci-failure',
-  'retry-review-failure',
-  'head-changed-before-merge',
   'review-low-risk-merge',
 ]);
 

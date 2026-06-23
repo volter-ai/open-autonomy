@@ -8,7 +8,11 @@ export interface BudgetReservation {
   remainingRunUsdCents: number;
   remainingGlobalUsdCents: number;
   consume(actualUsdCents: number, event: UsageEvent): Promise<void>;
-  release(): Promise<void>;
+  // `reached` = did the request actually reach the provider? A provider response (even a non-2xx error)
+  // counts against max_requests; only a request that never touched the provider (pre-fetch cap rejection,
+  // network error) refunds its request slot. Refunding a reached request would let failing calls loop
+  // unboundedly (max_requests is the ONLY outbound-fetch cap — a failed call bills $0).
+  release(reached: boolean): Promise<void>;
 }
 
 export async function reserveBudget(
@@ -26,7 +30,7 @@ export async function reserveBudget(
 
   const globalReservation = await ledger.reserve(requestId, amountUsdCents, limitConfig, runId);
   if (!globalReservation.ok) {
-    await runBudget.release(requestId);
+    await runBudget.release(requestId, false); // rejected before any provider fetch — refund the slot
     return error(globalReservation.error, 402);
   }
 
@@ -40,9 +44,9 @@ export async function reserveBudget(
         ledger.consume(requestId, actualUsdCents),
       ]);
     },
-    async release(): Promise<void> {
+    async release(reached: boolean): Promise<void> {
       await Promise.all([
-        runBudget.release(requestId),
+        runBudget.release(requestId, reached),
         ledger.release(requestId),
       ]);
     },

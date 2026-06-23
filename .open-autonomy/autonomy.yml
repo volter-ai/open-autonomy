@@ -60,6 +60,8 @@ agents:
       - tasks:converse
       - tasks:author
       - agent:launch
+      - agent:list
+      - agent:cancel
   reviewer:
     skill: reviewer
     workflowFile: reviewer.yml

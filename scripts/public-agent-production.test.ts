@@ -123,10 +123,12 @@ describe('public agent production readiness', () => {
     expect(pmJob).toContain('actions: write'); // agent:launch — dispatch the developer
     expect(pmJob).toContain('issues: write'); // tasks:author/converse
     expect(pmJob).not.toContain('contents: write'); // pm changes no code
-    // The pm skill encodes the backpressure controls.
+    // The pm skill is the orchestrator: full situational awareness (every issue + the runner) + capacity +
+    // escalation doctrine. (Repo-pause is now a deterministic substrate kill-switch, not a PM-model check.)
     const skill = readFileSync(new URL('../.codex/skills/pm/SKILL.md', import.meta.url), 'utf8');
-    expect(skill).toContain('agent-repo-paused');
-    expect(skill).toContain('max_open_agent_prs');
+    expect(skill).toContain('max_open_agent_prs'); // capacity judgment
+    expect(skill).toContain('gh run list'); // inspects running agents/sessions via the runner
+    expect(skill).toContain('human-required'); // escalates rather than looping
   });
 
   test('reviewer holds code:review (statuses:write) and cannot merge (no contents:write)', () => {

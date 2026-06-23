@@ -25,11 +25,12 @@ agents:
         params: { ISSUE_REF: subject.ref }
     timeout: 90
 
-  # PM: a skill agent that sweeps the open-issue queue, triages each issue, and launches the developer on
-  # ready work — applying capacity + backpressure. Comments + labels + launches; changes no code.
+  # PM: the orchestrator. Each sweep it builds a full picture of EVERY open issue (with history) and every
+  # running agent + session (the runner: agent:list/launch/cancel), then decides per its skill doctrine —
+  # develop, re-develop-with-context, escalate, wait, or cancel a stuck run. Comments + labels; changes no code.
   pm:
     behavior: pm
-    capabilities: [tasks:converse, tasks:author, agent:launch]
+    capabilities: [tasks:converse, tasks:author, agent:launch, agent:list, agent:cancel]
     triggers:
       - cron: "*/30 * * * *"
     timeout: 30

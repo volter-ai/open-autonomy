@@ -221,6 +221,10 @@ function wrapperYml(name: string, agent: IRAgent): string {
   // model step — close issues whose linked PR merged. Mechanical wiring (not judgment), so it must not depend
   // on the model remembering to do it; symmetric to `effect` for code:propose. Idempotent.
   const reconciles = caps.some((c) => typeof c === 'string' && c.split('@')[0] === 'tasks:author');
+  // The planner additionally reconciles roadmap.yml → tracking issues deterministically. Creating one issue
+  // per planned/active item is mechanical wiring (matched by a `roadmap:<id>` label), not judgment — so, like
+  // closing merged issues, it must not hinge on a (possibly weak) model executing its skill. Idempotent.
+  const reconcilesRoadmap = agent.behavior === 'planner';
   const skillPath = `.codex/skills/${agent.behavior}/SKILL.md`;
   const RID = `ir-${name}-\${{ github.run_id }}`;
   // The work item comes from the trigger's declared `subject.ref` param (resolved into job env). An agent
@@ -262,15 +266,19 @@ function wrapperYml(name: string, agent: IRAgent): string {
     `          git config user.email volter-agent@users.noreply.github.com`,
     `          git config core.filemode false`,
     `          git checkout -b "$branch"`,
-    // Persist this run's processed transcript INTO the proposal so it rides into the PR and becomes part of
-    // PERMANENT history only if the PR merges (non-merged proposals never land it). Only proposers reach this
-    // effect step, so only developer (develop runs) and strategist (strategy decisions) keep transcripts —
-    // never the PM/reviewer/planner bookkeeping. `.agent-run/` stays gitignored; this copy is the durable record.
+    // Persist this run's processed transcript AND its visual evidence INTO the proposal so they ride into the
+    // PR and become part of PERMANENT history only if the PR merges (non-merged proposals never land them).
+    // Each run gets its own folder (transcript.md + any harvested screenshots) so the evidence travels with the
+    // record — screenshots would otherwise vanish with the 30-day Actions artifact. Only proposers reach this
+    // effect step, so only developer (develop runs) and strategist (strategy decisions) keep records — never
+    // the PM/reviewer/planner bookkeeping. `.agent-run/` stays gitignored; this copy is the durable record.
     ...(refParam
       ? [`          ref_slug="$(printf '%s' "\${${refParam}}" | tr -cd '0-9A-Za-z._-' | cut -c1-40)"; [ -z "$ref_slug" ] && ref_slug=item`]
       : [`          ref_slug=autonomous`]),
-    `          mkdir -p ".open-autonomy/history/${name}"`,
-    `          cp -f .agent-run/artifacts/transcript.md ".open-autonomy/history/${name}/\${ref_slug}-run-\${{ github.run_id }}.md" 2>/dev/null || true`,
+    `          run_dir=".open-autonomy/history/${name}/\${ref_slug}-run-\${{ github.run_id }}"`,
+    `          mkdir -p "$run_dir"`,
+    `          cp -f .agent-run/artifacts/transcript.md "$run_dir/transcript.md" 2>/dev/null || true`,
+    `          cp -f .agent-run/artifacts/screenshot-* "$run_dir/" 2>/dev/null || true`,
     `          git add -A`,
     // Link the PR to its issue so the merge auto-closes it. The closing keyword goes in the COMMIT message
     // (squash-merge carries it into the merge commit — the reliable path; a PR-body keyword alone is dropped
@@ -369,6 +377,14 @@ function wrapperYml(name: string, agent: IRAgent): string {
           `        env:`,
           `          GH_TOKEN: \${{ github.token }}`,
           `        run: bun scripts/reconcile-merged-issues.ts || true`,
+        ]
+      : []),
+    ...(reconcilesRoadmap
+      ? [
+          `      - name: Reconcile roadmap (deterministic — create tracking issues for planned/active items)`,
+          `        env:`,
+          `          GH_TOKEN: \${{ github.token }}`,
+          `        run: bun scripts/reconcile-roadmap-issues.ts || true`,
         ]
       : []),
     `      - name: Run agent (Claude Code + skill)`,

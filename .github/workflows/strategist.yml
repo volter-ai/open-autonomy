@@ -109,8 +109,10 @@ jobs:
           git config core.filemode false
           git checkout -b "$branch"
           ref_slug=autonomous
-          mkdir -p ".open-autonomy/history/strategist"
-          cp -f .agent-run/artifacts/transcript.md ".open-autonomy/history/strategist/${ref_slug}-run-${{ github.run_id }}.md" 2>/dev/null || true
+          run_dir=".open-autonomy/history/strategist/${ref_slug}-run-${{ github.run_id }}"
+          mkdir -p "$run_dir"
+          cp -f .agent-run/artifacts/transcript.md "$run_dir/transcript.md" 2>/dev/null || true
+          cp -f .agent-run/artifacts/screenshot-* "$run_dir/" 2>/dev/null || true
           git add -A
           git commit -m "agent: ir-strategist-${{ github.run_id }}"
           git push --force origin "$branch"

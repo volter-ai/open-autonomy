@@ -463,7 +463,14 @@ export async function operate(repo: string): Promise<OpResult[]> {
       continue;
     }
     process.stderr.write(`operator-sim: ${scenario} (#${n})…\n`);
-    const r = await handler(repo, n);
+    // A handler that throws must not abort the remaining scenarios (one crash used to take the whole suite
+    // down, losing every later result). Treat a throw as a failed scenario and keep going.
+    let r: OpResult;
+    try {
+      r = await handler(repo, n);
+    } catch (e) {
+      r = { scenario, issue: n, status: 'fail', note: `handler threw: ${e instanceof Error ? e.message : String(e)}` };
+    }
     if (r.status === 'pass') {
       ghOk(['issue', 'edit', String(n), '-R', repo, '--add-label', 'oa-test-passed']);
       comment(repo, n, `operator-sim ✓ ${scenario}: ${r.note}`);

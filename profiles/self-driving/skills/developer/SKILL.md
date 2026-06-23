@@ -32,7 +32,14 @@ your own work). The issue number is in the `ISSUE_REF` environment variable.
 5. When building or changing a UI, add or update Playwright tests that exercise the UI and capture
    screenshots into `screenshots/`, runnable via a `screenshots`/`e2e` script — a visual change is
    not done without a screenshot.
-6. Write a short PR summary (what changed + tests run) to `.agent-run/artifacts/pr.md`; it becomes
+6. Record the change in the changelog: add a one-line entry to the `## Unreleased` section of the
+   root `CHANGELOG.md`, under the matching `### Added` / `### Changed` / `### Fixed` heading (Keep a
+   Changelog format — create the heading if it is missing). Write it for a human reader: what changed
+   and why it matters, not the implementation. Append your line; never rewrite or reorder existing
+   entries (concurrent PRs each append, and `CHANGELOG.md` is union-merged so appends never conflict).
+   Skip this only for changes with no user- or maintainer-facing effect (a pure internal refactor that
+   alters no behavior).
+7. Write a short PR summary (what changed + tests run) to `.agent-run/artifacts/pr.md`; it becomes
    the pull request body.
 
 ## Escalate (a clean escalation is success, not failure)

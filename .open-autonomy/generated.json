@@ -13,6 +13,7 @@
     ".codex/skills/reviewer/SKILL.md",
     ".codex/skills/strategist/SKILL.md",
     ".codex/skills/strategy-reviewer/SKILL.md",
+    ".gitattributes",
     ".github/ISSUE_TEMPLATE/bug_report.yml",
     ".github/ISSUE_TEMPLATE/public_agent_session.yml",
     ".github/agent-control.mjs",
@@ -56,6 +57,7 @@
     "scripts/open-autonomy-preflight.ts",
     "scripts/open-autonomy-upgrade-cli.ts",
     "scripts/reconcile-merged-issues.ts",
+    "scripts/reconcile-roadmap-issues.ts",
     "scripts/runner.ts",
     "scripts/transcript.ts"
   ]

@@ -22,7 +22,9 @@ label/triage issues (`tasks:author`), and launch the developer (`agent:launch`).
 1. List candidate issues, excluding paused/blocked/awaiting ones:
    `gh issue list --state open --search "-label:agent-paused -label:agent-repo-paused -label:agent-maintainer-hold -label:needs-info -label:human-required" --json number,title,labels,body`.
    Process at most 10 issues per sweep.
-2. Triage each issue against the constitution, roadmap, and standards (read from the checkout):
+2. Triage each issue against the constitution, roadmap, and standards (read from the checkout).
+   **Concurrency:** the fleet runs at most a few agents at once — launch the developer on **at most 3**
+   ready issues this sweep; triage the rest (comment/label) and leave them for the next sweep to launch.
    - **Ready** (clear, scoped, actionable): launch the developer —
      `gh workflow run developer.yml -f issue_number=<n>` — and post a short status comment.
    - **Needs info** (underspecified): comment the specific questions and add the `needs-info` label.

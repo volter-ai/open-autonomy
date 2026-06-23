@@ -25,208 +25,21 @@ issue/comment/PR comment
   -> the agent edits code + opens its own PR with auto-merge queued
   -> CI
   -> reviewer agent posts the agent-review status
-  -> deterministic merge gate merges, retries develop, or escalates
+  -> native auto-merge lands it (ci + agent-review green), retries develop, or escalates
 ```
 
 Human review is the exception path. The system should ask for a human only when
 it can clearly explain why the change is risky, ambiguous, blocked, or outside
 policy.
 
-## Agents
+## Agents and Gates
 
-### PM Agent
-
-Purpose: operate the public backlog.
-
-Capabilities:
-
-- read issues, labels, comments, and related PRs
-- comment on issues
-- emit structured triage decisions
-- surface urgent maintainer issues
-
-No code-writing capability.
-
-Responsibilities:
-
-- classify issues: bug, docs, feature, question, duplicate, spam, security
-- ask clarifying questions
-- detect duplicates
-- identify missing reproduction or acceptance criteria
-- mark issues ready or blocked
-- flag suspicious/security-sensitive input for maintainers
-- recommend `develop`, `review`, `needs-info`, `duplicate`, or `human_required`
-
-The PM agent operates through visible command comments. For reliability, the PM
-workflow mirrors those comments into `workflow_dispatch`; the comment is the
-auditable intent, and the dispatch is the transport.
-
-Implemented first pass:
-
-- scheduled/manual `Public Agent PM` workflow
-- bounded `pm` model token purpose
-- strict PM JSON parser
-- deterministic dispatcher for `develop`, `needs_info`, duplicate, spam,
-  human-required, wont-fix, and ignore recommendations
-- PM context includes labels, comments, open canonical agent PR, and recent
-  issue-addressed public-agent workflow runs
-- PM starts agents by writing command comments such as `/agent develop` on the
-  issue or `/agent review` on the open agent PR
-- PM workflow then directly dispatches the matching workflow as a reliable
-  transport for that visible command comment
-
-Target capabilities not yet granted:
-
-- add/remove a constrained set of labels
-- close obvious duplicates/spam after explicit maintainer policy exists
-
-### Developer Agent
-
-Purpose: implement requested work.
-
-Capabilities:
-
-- read-only GitHub token
-- workspace write inside the runner
-- bounded model token from model proxy
-- no repo write token
-- no model provider keys
-- no admin token
-
-Responsibilities:
-
-- create or update the canonical agent branch for an issue
-- use issue, PR, comment, CI, and prior decision context
-- run focused checks
-- emit a publisher bundle with patch, manifest, artifacts, and transcript
-
-The developer agent never publishes directly. The publisher applies only
-mechanically safe `pr-ready` bundles.
-
-### Reviewer Agent
-
-Purpose: decide whether a PR is low-risk, needs more development, or needs a
-human.
-
-Capabilities:
-
-- read-only repository/PR/CI context
-- issue/PR comment permission for review output
-- bounded model token
-- no patch publishing
-- no merge permission
-
-Responsibilities:
-
-- review diff, changed files, CI, tests run, comments, and prior decisions
-- classify merge risk
-- identify missing tests, risky behavior, security concerns, API changes,
-  dependency/build changes, or unclear product choices
-- emit strict JSON verdict plus a concise public comment
-
-The reviewer agent may mark broad non-workflow code changes as low-risk. Path
-alone is not the policy; actual risk is the policy.
-
-## Deterministic Gates
-
-### Dispatcher
-
-Purpose: convert PM/reviewer command intent into allowed workflow starts.
-
-Checks:
-
-- budget and rate limits
-- active run limits
-- duplicate active PR/run detection
-- actor/repo/issue cooldowns
-- loop limits
-- blocking labels
-- whether the requested verb is allowed from this context
-
-The dispatcher is not the product brain. It should be boring transport and
-policy enforcement.
-
-Currently implemented:
-
-- render the PM's selected command into a public comment
-- dispatch the matching workflow reliably
-- refuse malformed or impossible review targets
-
-Target behavior:
-
-- render the PM's selected command into a public comment
-- dispatch the matching workflow reliably
-- enforce budgets, run limits, loop limits, and blocking labels
-- refuse malformed or impossible commands
-- record why a command was allowed or denied
-
-### Publisher
-
-Purpose: apply developer output only if mechanically safe.
-
-Already implemented:
-
-- requires `manifest.status === "pr-ready"`
-- binds manifest run/repo/issue/actor to workflow context
-- rejects path traversal and absolute paths
-- rejects workflow edits
-- rejects `.git` and `.gitmodules`
-- rejects symlinks
-- rejects binary patches
-- rejects mode changes
-- rejects file deletions
-- enforces artifact count, per-file size, total size, extension, and regular
-  file constraints
-- rejects secret-looking strings as a backup check
-- applies broad non-workflow repo changes by default
-
-Publisher does not decide product risk. Reviewer and merge gate do.
-
-### Merge Gate
-
-Purpose: merge or escalate deterministically.
-
-Auto-merge only if all are true:
-
-- PR branch is the expected `agent/issue-N`
-- publisher passed for the current PR head
-- reviewer verdict is `pass`
-- reviewer says `risk: "low"`
-- reviewer says `human_required: false`
-- required CI checks passed for the current PR head
-- no maintainer-blocking label or comment exists
-- loop/attempt/budget limits are within policy
-- branch protection allows merge
-
-Do not auto-merge if:
-
-- reviewer is risky, uncertain, or blocked
-- CI is missing, stale, or repeatedly failing
-- a maintainer has applied a blocking label
-- there is an unresolved maintainer request
-- the PR branch is unexpected
-- repeated develop/review loops hit stop conditions
-
-The merge gate writes a structured decision record before merging or
-escalating.
-
-### Model Proxy
-
-Purpose: bound model access.
-
-Already implemented:
-
-- admin mint/revoke
-- bounded per-run tokens
-- GitHub OIDC exchange for runner tokens
-- run/repo/actor/workflow binding
-- run id/run attempt binding when present
-- per-run request and spend caps
-- repo/actor/issue/global active and daily limits
-- provider request metering
-- `review` token purpose is distinct from `agent`
-- `pm` token purpose is distinct from `agent`
-- GitHub OIDC exchange only works for `agent` purpose runs
+The agent roles, the capability model, and the merge boundary are canonical in
+`docs/ARCHITECTURE.md` and `docs/CAPABILITIES.md`. In brief: every agent is a credentialed skill that
+acts directly with a token scoped to its capabilities; no agent can merge — `code:review`
+(statuses:write, bless) and `code:propose` (contents:write, push) are never held by one agent, and
+GitHub native auto-merge lands a PR once `ci` + `agent-review` are green. There is no dispatcher,
+publisher, or bundle.
 
 ## Public Commands
 
@@ -397,49 +210,20 @@ Rules:
 
 Done:
 
-- GitHub Actions setup, runner, cleanup, publisher split
-- target-aware `/agent develop` command
-- compatibility aliases for `/agent run`, `/agent continue`, and `/agent retry`
-- issue and PR target resolver
-- canonical `agent/issue-N` branch reuse
-- PR comments on existing agent PRs update that branch instead of opening
-  duplicates
-- deterministic rejection of fork/manual PR branches for autonomous
-  development
-- bounded model proxy with Durable Object run and limit state
-- Codex custom provider through proxy `wire_api = "responses"`
-- OIDC exchange for bounded runner model tokens
-- Codex prompt receives resolved issue/PR target context
-- no model/admin token handoff through job outputs
-- issue/comment trigger with trusted comment author check
-- deterministic GitHub Actions bot dispatch is allowed for CI retry comments
-- publisher `pr-ready` enforcement
-- publisher manifest identity binding
-- broad non-workflow patch support
-- workflow edit rejection
-- binary patch, symlink, mode change, deletion rejection
-- artifact limits and symlink rejection
-- explicit CI reader with required check policy
-- reviewer workflow for `/agent review` and canonical agent PR updates
-- read-only reviewer model with strict JSON verdict
-- merge gate that auto-merges only low-risk passing reviews with passing CI
-- same-workflow post-publish read-only CI and review handoff, because PRs
-  created with `GITHUB_TOKEN` do not trigger downstream PR workflows
-- CI failure dispatches another bounded develop pass on the same PR up to 2
-  attempts
-- reviewer `develop_retry` verdicts dispatch another bounded develop pass up
-  to the same retry cap
-- successful low-risk merge closes the source issue explicitly
-- public-agent session run names include the issue number so PM can see whether
-  an issue has queued, running, successful, or failed agent work
-- PM direct-dispatches `/agent develop` and `/agent review` after writing the
-  corresponding visible command comment
-- live self-hosting smoke tests for issue-to-PR flow
-- live self-hosting smoke test for issue -> develop -> publish -> read-only CI ->
-  reviewer pass -> merge gate -> merged PR
-- live self-hosting smoke test for PM -> command comment/workflow dispatch develop
-  -> publish -> read-only CI -> reviewer pass -> merge gate -> merged PR ->
-  source issue closed
+- `compile(profile, substrate)` — a substrate-free IR (`autonomy.ir.v1`: behavior(skill) +
+  capabilities + triggers + timeout + result); the github substrate; the self-driving profile.
+- Every agent is a credentialed **skill** (developer, pm, reviewer, strategist, strategy-reviewer,
+  planner) run as one job whose token is scoped to its capabilities (least privilege).
+- The agent acts directly: it edits code and opens its own PR with auto-merge queued; reviewers post
+  the `agent-review` status; pm sweeps + launches; planner reconciles issues; strategist proposes roadmap.
+- The merge boundary: `code:review` (statuses:write, bless) and `code:propose` (contents:write, push)
+  are never held by one agent; no agent can merge; branch protection + native auto-merge land a PR once
+  `ci` + `agent-review` are green.
+- Bounded model proxy: OIDC-minted per-run tokens with spend/request caps (the budget guard); no
+  provider/admin keys in any install.
+- Operator control plane (`/agent pause|resume|status|cancel|retry`); decision records + governance
+  report + the bench autonomy grader.
+- Branch protection on the canonical repo; the model proxy trusts workflows by repo (OIDC).
 
 ## Next Implementation Roadmap
 

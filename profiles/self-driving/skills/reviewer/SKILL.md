@@ -17,9 +17,12 @@ The PR number is in the `TARGET_REF` environment variable.
 
 ## Procedure
 
-1. Fetch the change and its head SHA:
+1. Fetch the change, its head SHA, and its governance signals:
    - `gh pr diff "$TARGET_REF"` — the diff under review.
-   - `gh pr view "$TARGET_REF" --json headRefOid,headRefName,labels` — the head SHA + labels.
+   - `gh pr view "$TARGET_REF" --json headRefOid,headRefName,labels` — the head SHA + the PR's labels.
+   - The branch is `agent/issue-<N>`; read the LINKED ISSUE's labels too —
+     `gh issue view <N> --json labels` — because a maintainer marks governance (hold / develop-only) on
+     the issue, and that must reach the merge decision (which is you).
    - Read `docs/CONSTITUTION.md`, `docs/standards/*`, and `.open-autonomy/review-rubric.yml`
      from the checkout — the criteria you apply.
    - Only review canonical agent branches (`agent/issue-*`); for anything else, post failure and
@@ -29,10 +32,12 @@ The PR number is in the `TARGET_REF` environment variable.
      reviewer handles it; exit without posting a status.
 2. Judge correctness, security, regression, and test-coverage risk. Decide: **pass** (low-risk,
    safe to land) or **fail** (needs another developer attempt or a human).
-   - **Maintainer hold:** if the PR carries any block label (`do-not-merge`, `human-required`,
-     `agent-blocked`, `agent-maintainer-hold`, `hold`), post `agent-review` = **failure** regardless of
-     code quality — native auto-merge ignores labels, so blessing it would let it land. A maintainer
-     hold must stop the merge.
+   - **Maintainer hold / approval-required:** if the PR **or its linked issue** carries any block label
+     (`do-not-merge`, `human-required`, `agent-blocked`, `agent-maintainer-hold`, `hold`,
+     `agent-develop-only`), post `agent-review` = **failure** regardless of code quality, and comment that an
+     explicit maintainer approval is required (for `agent-develop-only`) or that a hold is in place.
+     Native auto-merge ignores labels, so blessing it would let it land; the hold/approval-gate must stop the
+     merge until a maintainer clears the label.
 3. **Post the verdict** to the head SHA (`SHA` = the headRefOid above), into the repo `GITHUB_REPOSITORY`:
    - Pass, low risk: `gh api -X POST "repos/$GITHUB_REPOSITORY/statuses/$SHA" -f state=success -f context=agent-review -f description="<short reason>"`
    - Fail, or human-required (workflow/secret/auth/billing changes, broad/unclear rewrites, high

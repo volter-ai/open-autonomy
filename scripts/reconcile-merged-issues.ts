@@ -21,29 +21,35 @@ const gh = (args: string[]) => {
   }
 };
 
-// Open issues, then for each ask whether a MERGED PR closes it (the GitHub-tracked closing link).
-const openRaw = gh(['issue', 'list', '-R', repo, '--state', 'open', '--limit', '100', '--json', 'number']);
-let open: { number: number }[] = [];
+// Go from MERGED PRs to their issue. GitHub's `closedByPullRequestsReferences` does NOT reliably include a
+// MERGED PR (it drops/relists it without a MERGED state once merged), so issue->link doesn't work. Instead
+// use our own convention: a developer PR is on branch `agent/issue-<N>`, so the issue number is the branch.
+// (Robust + independent of GitHub's flaky closing-keyword link tracking.) Idempotent: closing an already-
+// closed issue is a no-op we skip.
+const openSet = new Set<number>();
 try {
-  open = JSON.parse(openRaw || '[]');
+  for (const it of JSON.parse(gh(['issue', 'list', '-R', repo, '--state', 'open', '--limit', '200', '--json', 'number']) || '[]') as { number: number }[]) {
+    openSet.add(it.number);
+  }
 } catch {
-  open = [];
+  /* none */
+}
+
+let mergedPrs: { number: number; headRefName: string }[] = [];
+try {
+  mergedPrs = JSON.parse(gh(['pr', 'list', '-R', repo, '--state', 'merged', '--limit', '100', '--json', 'number,headRefName']) || '[]');
+} catch {
+  mergedPrs = [];
 }
 
 let closed = 0;
-for (const { number } of open) {
-  const linkedRaw = gh(['issue', 'view', String(number), '-R', repo, '--json', 'closedByPullRequestsReferences']);
-  let refs: { number: number; state: string }[] = [];
-  try {
-    refs = (JSON.parse(linkedRaw || '{}').closedByPullRequestsReferences ?? []) as { number: number; state: string }[];
-  } catch {
-    refs = [];
-  }
-  const mergedPr = refs.find((r) => (r.state || '').toUpperCase() === 'MERGED');
-  if (!mergedPr) continue;
-  if (gh(['issue', 'close', String(number), '-R', repo, '-c', `Resolved by #${mergedPr.number} (merged). Closed by the deterministic reconcile.`]) !== undefined) {
-    process.stdout.write(`reconcile: closed #${number} (resolved by merged #${mergedPr.number})\n`);
-    closed++;
-  }
+for (const pr of mergedPrs) {
+  const m = /^agent\/issue-(\d+)$/.exec(pr.headRefName || '');
+  if (!m) continue; // not an issue-bound developer PR (e.g. a strategist roadmap branch)
+  const issue = Number(m[1]);
+  if (!openSet.has(issue)) continue; // already closed (or no such open issue)
+  gh(['issue', 'close', String(issue), '-R', repo, '-c', `Resolved by #${pr.number} (merged). Closed by the deterministic reconcile.`]);
+  process.stdout.write(`reconcile: closed #${issue} (resolved by merged #${pr.number})\n`);
+  closed++;
 }
-process.stdout.write(`reconcile: ${closed} issue(s) closed across ${open.length} open\n`);
+process.stdout.write(`reconcile: ${closed} issue(s) closed (${mergedPrs.length} merged PRs, ${openSet.size} open issues)\n`);

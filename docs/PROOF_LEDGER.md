@@ -7,7 +7,7 @@ model run less reliable than the gate being tested.
 
 | Proof Gate | Evidence | Status |
 | --- | --- | --- |
-| `decision-memory-audit` | `scripts/public-agent-decision-index.ts`, `scripts/public-agent-planner.test.ts`, canonical governance run `27649191830` | done |
+| `decision-memory-audit` | `scripts/public-agent-decision-index.ts`, canonical governance run `27649191830` | done |
 | `retry-ci-failure` | `.codex/skills/reviewer/SKILL.md`, `docs/CAPABILITIES.md` (CI gating + re-trigger in the credentialed skill model) | done |
 | `pm-open-pr-review` | `.codex/skills/pm/SKILL.md` (PM sweep + backpressure + launch routing) | done |
 | `developer-context-review-fix` | `.codex/skills/developer/SKILL.md` (reads issue/CI/review context; escalates) | done |

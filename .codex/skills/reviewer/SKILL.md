@@ -29,6 +29,10 @@ The PR number is in the `TARGET_REF` environment variable.
      reviewer handles it; exit without posting a status.
 2. Judge correctness, security, regression, and test-coverage risk. Decide: **pass** (low-risk,
    safe to land) or **fail** (needs another developer attempt or a human).
+   - **Maintainer hold:** if the PR carries any block label (`do-not-merge`, `human-required`,
+     `agent-blocked`, `agent-maintainer-hold`, `hold`), post `agent-review` = **failure** regardless of
+     code quality — native auto-merge ignores labels, so blessing it would let it land. A maintainer
+     hold must stop the merge.
 3. **Post the verdict** to the head SHA (`SHA` = the headRefOid above), into the repo `GITHUB_REPOSITORY`:
    - Pass, low risk: `gh api -X POST "repos/$GITHUB_REPOSITORY/statuses/$SHA" -f state=success -f context=agent-review -f description="<short reason>"`
    - Fail, or human-required (workflow/secret/auth/billing changes, broad/unclear rewrites, high

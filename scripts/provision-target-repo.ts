@@ -263,10 +263,17 @@ async function main(): Promise<void> {
     if (options.dryRun || !(hasCommits || shouldPush)) {
       branchProtection = 'skipped';
     } else {
+      // Enable native auto-merge so a PR lands the instant its required checks are green — the new merge
+      // model (no agent merges; GitHub performs the merge). Best-effort; non-fatal if the API rejects it.
+      tryRun('gh', ['api', '-X', 'PATCH', `repos/${options.repo}`, '-F', 'allow_auto_merge=true']);
       const body = JSON.stringify({
-        required_status_checks: { strict: true, contexts: manifest.branch_protection.required_checks },
+        // Require a PR (no direct push to main, even for a contents:write agent) + the two status checks
+        // that gate a merge: `ci` and `agent-review`. 0 approvals — the agent-review status is the gate
+        // (the reviewer can't post a PR approval), and a proposer can't post agent-review (no statuses:write),
+        // so no agent can land unreviewed code. strict:false avoids the up-to-date-with-base deadlock.
+        required_status_checks: { strict: false, contexts: manifest.branch_protection.required_checks },
         enforce_admins: false,
-        required_pull_request_reviews: null,
+        required_pull_request_reviews: { required_approving_review_count: 0 },
         restrictions: null,
       });
       const result = tryRun('gh', [

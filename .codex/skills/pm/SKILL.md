@@ -24,10 +24,14 @@ label/triage issues (`tasks:author`), and launch the developer (`agent:launch`).
    Process at most 10 issues per sweep.
 2. Triage each issue against the constitution, roadmap, and standards (read from the checkout):
    - **Ready** (clear, scoped, actionable): launch the developer —
-     `gh workflow run public-agent.yml -f issue_number=<n>` — and post a short status comment.
+     `gh workflow run developer.yml -f issue_number=<n>` — and post a short status comment.
    - **Needs info** (underspecified): comment the specific questions and add the `needs-info` label.
    - **Not actionable / out of scope**: comment why and add `human-required`.
-3. Keep a visible status: every issue you act on gets a comment saying what you did and why
+3. **Route open agent PRs to review** (a bot-opened PR does not trigger the reviewer on its own — you
+   are the bridge): for each open `agent/issue-*` PR that has no `agent-review` commit status yet,
+   dispatch the right reviewer — `gh workflow run reviewer.yml -f issue_number=<pr>` for a code PR, or
+   `gh workflow run strategy_reviewer.yml -f issue_number=<pr>` for a roadmap-only PR (`origin:strategist`).
+4. Keep a visible status: every issue you act on gets a comment saying what you did and why
    (the autonomy audit requires a visible PM status).
 
 ## Constraints

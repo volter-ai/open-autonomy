@@ -1,4 +1,5 @@
 import type { DirectoryEntry, Flow, Patron, ProjectView } from './limit-ledger.js';
+import { renderCharterPanel, renderRoadmapPanel, renderChangelogPanel } from './project-docs.js';
 
 // Server-rendered HTML for the funding platform — a Patreon-style storefront over the ledger.
 // Two pages: the explore grid (GET /) and the creator page (GET /p/:account). No client JS beyond
@@ -155,10 +156,10 @@ function shell(title: string, body: string): string {
   .cardfoot{margin-top:auto;padding-top:14px;}
   .cardfoot .join{margin-top:14px;}
   .cover-hero{height:200px;border-radius:20px;background-size:cover;background-position:center;border:1px solid ${C.line};}
-  .phead{margin:-52px 0 36px 8px;}
+  .phead{margin:-52px 0 48px 8px;}
   .phead .avatar{display:block;position:relative;z-index:1;}
   .phead .htext{margin-top:18px;}
-  .phead h1{font-size:34px;font-weight:800;letter-spacing:-.03em;margin:0 0 4px;}
+  .phead h1{font-size:38px;font-weight:800;letter-spacing:-.03em;margin:0 0 4px;}
   .phead .tag{color:${C.muted};font-size:17px;margin:0 0 12px;}
   .metarow{display:flex;gap:16px;align-items:center;flex-wrap:wrap;color:${C.body};font-size:15px;}
   .metarow b{font-weight:800;}
@@ -198,6 +199,46 @@ function shell(title: string, body: string): string {
   .coupon input{flex:1;min-width:0;background:${C.bg};border:1.5px solid ${C.line};border-radius:12px;color:${C.ink};padding:11px 14px;font:14px 'Inter',ui-monospace,Menlo,monospace;letter-spacing:.04em;}
   .coupon input:focus{outline:none;border-color:${C.accent};}
   .note{color:${C.faint};font-size:13px;line-height:1.5;margin-top:10px;}
+  .prose{color:${C.body};font-size:15px;line-height:1.65;}
+  .prose p{margin:0 0 12px;}
+  .prose p:last-child{margin-bottom:0;}
+  .prose strong{font-weight:700;color:${C.ink};}
+  .prose code{background:${C.wash};border-radius:5px;padding:1px 5px;font:13px ui-monospace,Menlo,monospace;}
+  .docmore{display:inline-block;margin-top:14px;color:${C.accent};font-weight:600;font-size:14px;}
+  .docmore:hover{color:${C.accentDark};text-decoration:underline;}
+  .rm-momentum{margin-bottom:24px;}
+  .rm-stats{display:flex;gap:16px;font-size:14px;color:${C.muted};margin-bottom:8px;}
+  .rm-stats span{display:flex;align-items:baseline;gap:5px;}
+  .rm-stats b{font-weight:700;color:${C.ink};}
+  .rm-stats .act b{color:${C.accent};}
+  .rm-track{height:6px;background:${C.wash};border-radius:999px;overflow:hidden;}
+  .rm-fill{height:100%;background:${C.accent};border-radius:999px;}
+  .roadmap{list-style:none;margin:0;padding:0;position:relative;}
+  .roadmap::before{content:'';position:absolute;top:16px;bottom:24px;left:14px;width:2px;background:${C.line};z-index:1;}
+  .rm-phase-hdr{position:relative;padding:24px 0 12px 38px;}
+  .rm-phase-hdr:first-child{padding-top:8px;}
+  .rm-phase-label{font-weight:700;font-size:12px;text-transform:uppercase;letter-spacing:.08em;color:${C.faint};background:${C.panel};display:inline-block;padding-right:8px;position:relative;z-index:3;}
+  .rm-item{position:relative;padding:12px 0 12px 38px;}
+  .rm-node{position:absolute;left:8px;top:15px;width:14px;height:14px;border-radius:50%;z-index:2;background:${C.bg};}
+  .rm-item.active .rm-content{background:#fff;border:1.5px solid ${C.accent};border-radius:10px;padding:12px 14px;margin-top:-6px;box-shadow:0 4px 12px rgba(255,66,77,.08);}
+  .rm-item.active .rm-node{background:${C.accent};box-shadow:0 0 0 4px rgba(255,66,77,.15);}
+  .rm-item.active .rtitle{color:${C.accentDark};font-weight:700;}
+  .rm-item.planned .rm-node{border:2px solid ${C.muted};}
+  .rm-item.proposed{padding:8px 0 8px 38px;}
+  .rm-item.proposed .rm-node{width:10px;height:10px;left:10px;top:12px;border:2px solid ${C.line};}
+  .rm-item.proposed .rtitle{font-size:14px;font-weight:500;color:${C.muted};}
+  .rm-item.done .rm-node{background:${C.accent};display:flex;align-items:center;justify-content:center;}
+  .rm-item.done .rm-node::after{content:'';width:4px;height:7px;border:solid #fff;border-width:0 2px 2px 0;transform:rotate(45deg);margin-top:-2px;}
+  .rtitle{font-weight:600;color:${C.ink};font-size:15px;line-height:1.4;}
+  .rmeta{color:${C.muted};font-size:13px;margin-top:2px;}
+  .rm-item.done .rtitle{color:${C.muted};font-weight:500;}
+  .rm-item.done .rmeta{color:${C.faint};}
+  .release{margin-bottom:18px;}
+  .release:last-child{margin-bottom:0;}
+  .rel-head{font-weight:800;font-size:14px;color:${C.ink};margin-bottom:8px;letter-spacing:-.01em;}
+  .changelog{list-style:none;margin:0;padding:0;}
+  .changelog li{color:${C.body};font-size:14px;line-height:1.55;padding:5px 0 5px 18px;position:relative;}
+  .changelog li:before{content:'';position:absolute;left:2px;top:11px;width:5px;height:5px;border-radius:50%;background:${C.accent};}
   .empty{color:${C.muted};text-align:center;padding:72px 0;border:1px dashed ${C.line};border-radius:18px;}
   .legend{color:${C.faint};font-size:13px;margin-top:28px;}
 </style>
@@ -297,6 +338,13 @@ export function renderProject(v: ProjectView): string {
   const feed = v.feed.length ? `<ul class="feed">${v.feed.map(feedItem).join('')}</ul>` : `<p class="sub">No activity yet.</p>`;
   const patrons = v.patrons.length ? `<div class="patrons">${v.patrons.map(patronChip).join('')}</div>` : `<p class="sub">No patrons yet — be the first.</p>`;
 
+  // The project's own identity, read from its repo: what it's for (charter), where it's going (roadmap),
+  // and what it has shipped (changelog). Each renders to '' when the repo ships no such doc.
+  const repoUrl = v.account.includes('/') ? `https://github.com/${v.account}` : undefined;
+  const charter = renderCharterPanel(v.profile.charter_md, repoUrl);
+  const roadmap = renderRoadmapPanel(v.profile.roadmap_yml, repoUrl);
+  const shipped = renderChangelogPanel(v.profile.changelog_md, repoUrl);
+
   const body = `${nav()}<div class="wrap">
     <div class="cover-hero" style="${coverStyle(v.profile.cover_url, v.account)}"></div>
     <div class="phead">
@@ -309,6 +357,9 @@ export function renderProject(v: ProjectView): string {
     </div>
     <div class="cols">
       <div>
+        ${charter}
+        ${roadmap}
+        ${shipped}
         <div class="panel">
           <h3>Goal</h3>
           <div class="goalrow" style="margin-bottom:2px"><span style="font-size:15px;color:${C.body};font-weight:600">${escapeHtml(g.label)}</span></div>

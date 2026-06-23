@@ -95,6 +95,13 @@ async function route(req: Request, env: Env, ctx: ExecutionContext): Promise<Res
     if (req.method !== 'POST') return methodNotAllowed();
     return json(await new LimitLedgerClient(env.LIMITS).reap());
   }
+  // Operator escape hatch: zero today's global daily spend rail (e.g. after a metering bug polluted the
+  // counter and pinned the cap before the UTC rollover). Corrects the rail; leaves balances + reservations.
+  if (path === '/admin/limits/reset-daily') {
+    if (!isAdmin(req, env)) return error('auth_failed', 401);
+    if (req.method !== 'POST') return methodNotAllowed();
+    return json(await new LimitLedgerClient(env.LIMITS).resetDaily());
+  }
   // Release every active run for a repo — the teardown hook for a disposable cell (its repo is being
   // deleted, so its in-flight runs are abandoned and must not pin active-run slots for the token TTL).
   const reapRepo = path.match(/^\/admin\/accounts\/([^/]+)\/reap-runs$/);

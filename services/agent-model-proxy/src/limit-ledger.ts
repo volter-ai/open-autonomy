@@ -93,6 +93,11 @@ export interface AccountProfile {
   synced_at?: string;
   tagline_override?: string;
   cover_override?: string;
+  // Cached raw text of the project's identity docs, synced from its repo (see github-sync). The page
+  // parses + renders these; storing the raw doc keeps the ledger ignorant of presentation.
+  charter_md?: string;
+  roadmap_yml?: string;
+  changelog_md?: string;
 }
 
 export interface Tier {
@@ -191,6 +196,7 @@ export class LimitLedger implements DurableObject {
     if (op === 'status') return json(this.snapshot());
     if (op === 'reap') return json(await this.reapAdmin());
     if (op === 'reap_repo') return json(await this.reapRepo(String(body.repo)));
+    if (op === 'reset_daily') return json(await this.resetDailyAdmin());
     return json({ ok: false, error: 'unknown_op' }, { status: 400 });
   }
 
@@ -550,7 +556,7 @@ export class LimitLedger implements DurableObject {
     if (!account) return { ok: false, error: 'invalid_account' };
     const a = this.ensureAcct(account);
     const p = (a.profile ??= {});
-    for (const k of ['tagline', 'avatar_url', 'cover_url', 'homepage', 'synced_at', 'tagline_override', 'cover_override'] as const) {
+    for (const k of ['tagline', 'avatar_url', 'cover_url', 'homepage', 'synced_at', 'tagline_override', 'cover_override', 'charter_md', 'roadmap_yml', 'changelog_md'] as const) {
       if (profile[k] !== undefined) p[k] = profile[k];
     }
     if (typeof goalDays === 'number' && goalDays > 0) a.goal_days = Math.floor(goalDays);
@@ -745,6 +751,17 @@ export class LimitLedger implements DurableObject {
   // Admin bulk recovery: free active slots for every run whose token has expired, then return what
   // remains active. Surfaces the leak set without enumerating-and-revoking one run at a time, and is
   // the operator escape hatch when active counters drift from reality.
+  // Operator escape hatch: zero today's global daily spend rail. The daily counter normally only resets on
+  // the UTC rollover, so a metering bug that polluted `consumed_usd_cents` (e.g. an over-count) otherwise pins
+  // the cap — and the whole fleet — until midnight. This corrects the rail without waiting. Does not touch
+  // account balances or in-flight reservations; it only clears the daily safety counter.
+  private async resetDailyAdmin(): Promise<Record<string, unknown>> {
+    const before = this.state.consumed_usd_cents;
+    this.state.consumed_usd_cents = 0;
+    await this.save();
+    return { ok: true, day_key: this.state.day_key, cleared_consumed_usd_cents: before, consumed_usd_cents: 0, reserved_usd_cents: this.state.reserved_usd_cents };
+  }
+
   private async reapAdmin(): Promise<Record<string, unknown>> {
     const before = this.state.active_global;
     this.reapExpiredRuns();
@@ -852,6 +869,9 @@ function displayProfile(a: Account | undefined): AccountProfile {
     cover_url: p.cover_override ?? p.cover_url,
     homepage: p.homepage,
     synced_at: p.synced_at,
+    charter_md: p.charter_md,
+    roadmap_yml: p.roadmap_yml,
+    changelog_md: p.changelog_md,
   };
 }
 
@@ -1040,6 +1060,10 @@ export class LimitLedgerClient {
 
   reap() {
     return this.rpc<{ ok: true; reaped: number; active_global: number }>('reap');
+  }
+
+  resetDaily() {
+    return this.rpc<{ ok: true; day_key: string; cleared_consumed_usd_cents: number; consumed_usd_cents: number }>('reset_daily');
   }
 
   reapRepo(repo: string) {

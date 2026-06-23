@@ -36,16 +36,45 @@ export async function syncProfile(env: Env, account: string): Promise<boolean> {
     // it empty so the page renders a clean, deterministic coral gradient (the GitHub OG social card is
     // a busy link-preview card with its own text, so it makes a poor banner).
     const cover = (await firstReadmeImage(env, account)) ?? '';
+    // The project's identity docs, read from its own repo. A repo that ships none simply has empty
+    // panels — the page degrades cleanly. Size-capped so the cached profile record stays small.
+    const [charter, roadmap, changelog] = await Promise.all([
+      fetchRepoText(env, account, 'docs/CONSTITUTION.md'),
+      fetchRepoText(env, account, '.open-autonomy/roadmap.yml'),
+      fetchRepoText(env, account, 'CHANGELOG.md'),
+    ]);
     await new LimitLedgerClient(env.LIMITS).setProfile(account, {
       tagline: repo.description ?? undefined,
       avatar_url: repo.owner?.avatar_url ?? undefined,
       cover_url: cover,
       homepage: repo.homepage || repo.html_url || undefined,
       synced_at: new Date().toISOString(),
+      charter_md: charter ?? '',
+      roadmap_yml: roadmap ?? '',
+      changelog_md: changelog ?? '',
     });
     return true;
   } catch {
     return false;
+  }
+}
+
+// Fetch a UTF-8 text file from the repo (default branch) via the contents API, decoded and size-capped.
+// Returns undefined when the file is absent (so the page omits that panel). Best-effort; never throws.
+async function fetchRepoText(env: Env, account: string, path: string, maxBytes = 24_000): Promise<string | undefined> {
+  const base = env.GITHUB_API_BASE ?? 'https://api.github.com';
+  try {
+    const res = await fetch(`${base}/repos/${account}/contents/${path}`, {
+      headers: { accept: 'application/vnd.github+json', 'user-agent': 'open-autonomy-funding' },
+    });
+    if (!res.ok) return undefined;
+    const j = await res.json() as { content?: string; encoding?: string };
+    if (!j.content || j.encoding !== 'base64') return undefined;
+    const bin = atob(j.content.replace(/\s/g, ''));
+    const bytes = Uint8Array.from(bin, (c) => c.charCodeAt(0));
+    return new TextDecoder().decode(bytes).slice(0, maxBytes);
+  } catch {
+    return undefined;
   }
 }
 

@@ -76,8 +76,10 @@ The command must write one terminal artifact in `artifacts/`:
 6. Verify the PR diff, the reviewer's `agent-review` status, and native auto-merge once `ci` + `agent-review` are green.
 7. If active-run limits block PM or agent dispatch, use the manual `Model Proxy Admin`
    workflow to inspect proxy saturation and revoke stale run IDs before retrying.
-   The post-publish retry path uses deterministic retry-budget evaluation for CI
-   and reviewer `develop_retry` retries.
+   On a CI or review failure the PR simply does not merge (the merge boundary holds);
+   there is no automatic retry loop. On its next sweep the PM decides from the full
+   issue/PR history — re-dispatch the developer with the failure as context (if
+   addressable and under `max_develop_attempts`) or escalate `human-required`.
 
 ## Operator Controls
 

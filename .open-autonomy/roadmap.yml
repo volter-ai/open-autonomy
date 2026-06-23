@@ -163,3 +163,52 @@ items:
       - A canonical-repo feature is authored by the develop agent on an issue, reviewed, and merged by the gate (not hand-written in a chat).
       - Manual driving of canonical is scoped to the bootstrap substrate only, and even bootstrap work cites live-run evidence.
       - Significant changes trace to a roadmap item and a satisfied proof gate; proven by the pipeline shipping at least one OA feature end to end.
+  - id: multi-provider-model-routing
+    phase: 18
+    priority: medium
+    status: proposed
+    title: Multi-Provider Model Routing For Loop Roles
+    proof_gate: alternate-model-routed
+    acceptance:
+      # OA's own recent failures (issue #67: 403 errors on PM calls, PM budget
+      # unavailability comments) show single-provider brittleness. OpenHands'
+      # multi-backend ACP architecture proves the demand. The constitution demands
+      # robustness — a single API outage should not silence the loop.
+      - Each loop role (PM, developer, reviewer, planner) can be configured with a different provider and model.
+      - Routing considers provider availability with graceful fallback on provider failure.
+      - The compute-unit or model-proxy handles provider-agnostic credential management across an execution group.
+      - Proven by a live testbed run where at least two different providers serve different roles; run IDs in the ledger.
+  - id: quality-benchmark-gate
+    phase: 19
+    priority: medium
+    status: proposed
+    title: Output Quality Benchmark Gate (proof beyond process)
+    proof_gate: benchmark-integration-smoke
+    acceptance:
+      # The constitution's "proof" merit criterion requires capabilities to be
+      # demonstrated, not asserted. OA's bench-autonomy-ratio tracks process
+      # metrics (autonomy ratio, cycle time) but never measures output quality.
+      # DGM validates every code change against SWE-bench — OA should do the
+      # same to show the loop actually produces better code.
+      - Agent output patches are evaluated against a standard coding benchmark (e.g., SWE-bench verified subset or Polyglot).
+      - Quality trend is recorded per-issue per-run and surfaced in operator observability.
+      - Quality regression (benchmark score drop vs prior run) blocks merge at the review gate.
+      - The benchmark fixture is deterministic or uses a fixed-cost testbed; no model spend for the gate itself.
+      - Proven by at least one benchmark-evaluated run with result recorded in the ledger.
+  - id: substrate-complexity-reduction
+    phase: 20
+    priority: medium
+    status: proposed
+    title: Substrate Complexity Reduction For Adopter Portability
+    proof_gate: onboarding-path-measured
+    acceptance:
+      # The portability merit criterion requires a new repo can adopt the loop.
+      # SWE-agent's community shift to mini-SWE-agent (100-line Python) and
+      # DGM's unreachable-CLI-bug (#31) both signal that self-improving systems
+      # naturally accrete complexity beyond what new adopters can absorb. OA's
+      # compilation model (skills, profiles, github installation, runtime sync,
+      # dogfood checks) is powerful but the surface area is high.
+      - A new-adopter onboarding path is documented and tested, covering 80%+ of the "install and run a low-risk issue" flow.
+      - The number of steps/files a new adopter must touch to go from clone to first autonomous PR is measured and published.
+      - Irreducible complexity is distinguished from accidental complexity in the scoring; the goal is reducing the latter.
+      - Measured by a testbed run that scaffolds a fresh repo and completes one end-to-end cycle.

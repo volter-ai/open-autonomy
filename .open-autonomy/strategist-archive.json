@@ -1,0 +1,60 @@
+{
+  "schema": "open-autonomy.strategist-archive.v1",
+  "note": "Archive of previously proposed and considered strategist candidates. Prevents re-proposal. Append-only; entries are never removed, only superseded.",
+  "archived_candidates": [
+    {
+      "id": "loop-health-monitor",
+      "title": "Loop Health Monitor",
+      "proposed_in": "strategist-run-2026-06-22",
+      "pr_number": 79,
+      "status": "proposed",
+      "rationale": "Detect and surface when the autonomy loop is down. Customer demand from issue #66.",
+      "falsified_by": null
+    },
+    {
+      "id": "model-proxy-resource-guarantee",
+      "title": "Model-Proxy Resource Guarantee",
+      "proposed_in": "strategist-run-2026-06-22",
+      "pr_number": 79,
+      "status": "proposed",
+      "rationale": "Stop silent run-slot leaks. Customer demand from issue #67.",
+      "falsified_by": null
+    },
+    {
+      "id": "cost-accountability-per-gate",
+      "title": "Cost Accountability Per Loop Gate",
+      "proposed_in": "strategist-run-2026-06-22",
+      "pr_number": 79,
+      "status": "proposed",
+      "rationale": "Aggregate cost visibility needed for portability and operator trust. Competitor gap from SWE-agent cost pain.",
+      "falsified_by": null
+    },
+    {
+      "id": "multi-provider-model-routing",
+      "title": "Multi-Provider Model Routing For Loop Roles",
+      "proposed_in": "strategist-run-2026-06-23",
+      "pr_number": null,
+      "status": "proposed",
+      "rationale": "Customer demand: single-provider brittleness (403 failures in issue #67, PM budget unavailability). Competitor gap: OpenHands multi-backend ACP. Improves robustness and portability.",
+      "falsified_by": "Routing doesn't improve cost/quality tradeoffs, or model-specific prompt engineering makes routing infeasible."
+    },
+    {
+      "id": "quality-benchmark-gate",
+      "title": "Output Quality Benchmark Gate",
+      "proposed_in": "strategist-run-2026-06-23",
+      "pr_number": null,
+      "status": "proposed",
+      "rationale": "Analogous field: DGM validates every code change against SWE-bench. Fills proof merit criterion gap: OA tracks process but not output quality.",
+      "falsified_by": "Standard coding benchmarks don't distinguish OA-produced code quality, or benchmark cost exceeds benefit."
+    },
+    {
+      "id": "substrate-complexity-reduction",
+      "title": "Substrate Complexity Reduction For Adopter Portability",
+      "proposed_in": "strategist-run-2026-06-23",
+      "pr_number": null,
+      "status": "proposed",
+      "rationale": "Competitor gap: SWE-agent migration to mini-SWE-agent (100-line Python). Analogous field: DGM issue #31 unreachable CLI modes. Portability merit criterion blocked by surface area.",
+      "falsified_by": "Usability surveys show adopters don't find the substrate complex, or simplification doesn't reduce onboarding time."
+    }
+  ]
+}

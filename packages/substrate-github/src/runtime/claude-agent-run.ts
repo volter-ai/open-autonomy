@@ -9,6 +9,7 @@ import { randomBytes } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { runClaudeAgent } from './agent.js';
+import { renderTranscript, redactSensitive } from './transcript.js';
 
 type Options = { issue?: string; context?: string; model: string; skill?: string };
 
@@ -40,17 +41,6 @@ function readIssue(issuePath: string): { number?: number; title?: string; body?:
   } catch {
     return {};
   }
-}
-
-function redactSensitive(text: string): string {
-  return text
-    .replace(/sk_live_[A-Za-z0-9]{12,}/g, '[redacted-secret-like-token]')
-    .replace(/rk_live_[A-Za-z0-9]{12,}/g, '[redacted-secret-like-token]')
-    .replace(/xox(?:b|p|a|r)-[A-Za-z0-9-]{20,}/g, '[redacted-secret-like-token]')
-    .replace(/ghp_[A-Za-z0-9]{30,}/g, '[redacted-secret-like-token]')
-    .replace(/github_pat_[A-Za-z0-9_]{30,}/g, '[redacted-secret-like-token]')
-    .replace(/sk-or-v1-[A-Za-z0-9]{20,}/g, '[redacted-secret-like-token]')
-    .replace(/anthropic_[A-Za-z0-9_-]{20,}/g, '[redacted-secret-like-token]');
 }
 
 function buildPrompt(issuePath: string | undefined, taskDir: string, contextPath?: string, skillPath?: string): string {
@@ -118,23 +108,17 @@ async function main(): Promise<void> {
   // minted run token — no provider key in the sandbox. Full tools, scoped by the job's own permissions.
   const result = await runClaudeAgent({ prompt, cwd: root, model: options.model, baseUrl: proxyUrl, authToken: proxyToken });
 
-  writeFileSync(join(artifactsDir, 'transcript.md'), [
-    '# Claude Code Agent Transcript',
-    '',
-    `Model: ${options.model}`,
-    `Exit code: ${result.exitCode}`,
-    '',
-    '## Final Message',
-    '',
-    redactSensitive((result.stdout ?? '').trim()),
-    '',
-    '## stderr',
-    '',
-    '```text',
-    redactSensitive((result.stderr ?? '').trim()),
-    '```',
-    '',
-  ].join('\n'));
+  // Render the run into a durable, divable transcript via the shared (substrate-neutral) transcript module.
+  // Best-effort: a rendering bug must NEVER turn a successful agent run into a failure (this is the last step
+  // before we propagate the real exit code). WHERE this lands is the substrate's call — on github the effect
+  // step copies it into the merged PR's `.open-autonomy/history/`.
+  try {
+    const issue = issuePath ? readIssue(issuePath) : {};
+    const subject = `#${issue.number ?? '—'}${issue.title ? ` · ${issue.title}` : ''}`;
+    writeFileSync(join(artifactsDir, 'transcript.md'), renderTranscript({ events: result.events ?? [], subject, model: options.model, stdout: result.stdout, stderr: result.stderr, exitCode: result.exitCode }));
+  } catch (e) {
+    writeFileSync(join(artifactsDir, 'transcript.md'), `# Agent run transcript\n\n_(transcript render failed: ${e instanceof Error ? e.message : String(e)})_\n\n${redactSensitive((result.stdout ?? '').trim())}\n`);
+  }
   process.exit(result.exitCode);
 }
 

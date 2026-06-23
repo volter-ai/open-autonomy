@@ -56,6 +56,7 @@
     "scripts/open-autonomy-preflight.ts",
     "scripts/open-autonomy-upgrade-cli.ts",
     "scripts/reconcile-merged-issues.ts",
-    "scripts/runner.ts"
+    "scripts/runner.ts",
+    "scripts/transcript.ts"
   ]
 }

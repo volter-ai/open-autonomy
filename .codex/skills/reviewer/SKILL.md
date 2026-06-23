@@ -27,9 +27,12 @@ The PR number is in the `TARGET_REF` environment variable.
      and `.open-autonomy/review-rubric.yml` from the checkout — the criteria you apply.
    - Only review canonical agent branches (`agent/issue-*`); for anything else, post failure and
      comment that human review is required.
+   - **Generated run records:** files under `.open-autonomy/history/**` are the proposer's own processed
+     transcript, committed so merged work keeps a durable record. They are informational, not code — never
+     block on them, and ignore them when judging the change (and when applying the scope guard below).
    - **Scope guard:** if the PR's changed files are entirely roadmap files
-     (`.open-autonomy/roadmap.yml` + the idea archive), it is a strategist proposal — the strategy
-     reviewer handles it; exit without posting a status.
+     (`.open-autonomy/roadmap.yml` + the idea archive), ignoring any `.open-autonomy/history/**` record, it is a
+     strategist proposal — the strategy reviewer handles it; exit without posting a status.
 2. Judge correctness, security, regression, and test-coverage risk. Decide: **pass** (low-risk,
    safe to land) or **fail** (needs another developer attempt or a human).
    - **Maintainer hold / approval-required:** if the PR **or its linked issue** carries any block label

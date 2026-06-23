@@ -116,6 +116,9 @@ jobs:
           git config user.email volter-agent@users.noreply.github.com
           git config core.filemode false
           git checkout -b "$branch"
+          ref_slug="$(printf '%s' "${ISSUE_REF}" | tr -cd '0-9A-Za-z._-' | cut -c1-40)"; [ -z "$ref_slug" ] && ref_slug=item
+          mkdir -p ".open-autonomy/history/developer"
+          cp -f .agent-run/artifacts/transcript.md ".open-autonomy/history/developer/${ref_slug}-run-${{ github.run_id }}.md" 2>/dev/null || true
           git add -A
           ref="${ISSUE_REF}"
           if printf '%s' "$ref" | grep -qE '^[0-9]+$'; then git commit -m "agent: ir-developer-${{ github.run_id }}" -m "Closes #$ref"; else git commit -m "agent: ir-developer-${{ github.run_id }}"; fi

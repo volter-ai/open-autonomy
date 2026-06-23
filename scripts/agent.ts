@@ -11,11 +11,16 @@ import { spawnSync } from 'node:child_process';
 import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { type AgentEvent, parseEvents, extractFinalText } from './transcript.js';
 
 export interface AgentRun {
   exitCode: number;
   stdout: string;
   stderr: string;
+  /** The structured Claude Code event stream (stream-json), one object per turn/tool-call. Empty if the CLI
+   *  did not emit a parseable stream (then stdout falls back to the raw final text). Rendered into a durable,
+   *  human-readable transcript by the substrate-neutral `transcript` module. */
+  events: AgentEvent[];
 }
 
 interface AgentOpts {
@@ -39,11 +44,15 @@ export async function runClaudeAgent(opts: AgentOpts & { result?: { schema: Reco
     const perm = opts.allowedTools
       ? ['--allowedTools', ...opts.allowedTools, '--permission-mode', 'default']
       : ['--permission-mode', 'bypassPermissions'];
-    const res = spawnSync('claude', ['-p', '--model', model, ...perm], {
+    // Run in stream-json so we capture the full event stream (every turn + tool call), not just the final
+    // message — that stream is what a durable, divable transcript is rendered from. We still surface the final
+    // text as `stdout` for callers (and the schema-salvage path); if the CLI emits no parseable stream we fall
+    // back to treating raw stdout as the final text, i.e. exactly the prior behavior.
+    const res = spawnSync('claude', ['-p', '--output-format', 'stream-json', '--verbose', '--model', model, ...perm], {
       input: prompt,
       cwd: opts.cwd,
       encoding: 'utf8',
-      maxBuffer: 64 * 1024 * 1024,
+      maxBuffer: 128 * 1024 * 1024,
       env: {
         ...process.env,
         ...(opts.baseUrl ? { ANTHROPIC_BASE_URL: opts.baseUrl } : {}),
@@ -57,7 +66,9 @@ export async function runClaudeAgent(opts: AgentOpts & { result?: { schema: Reco
         CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: '1',
       },
     });
-    return { exitCode: res.status ?? 1, stdout: res.stdout || '', stderr: res.stderr || '' };
+    const events = parseEvents(res.stdout || '');
+    const finalText = events.length ? extractFinalText(events) : (res.stdout || '');
+    return { exitCode: res.status ?? 1, stdout: finalText, stderr: res.stderr || '', events };
   };
 
   const basePrompt = opts.prompt ?? [opts.system, opts.goal].filter(Boolean).join('\n\n');

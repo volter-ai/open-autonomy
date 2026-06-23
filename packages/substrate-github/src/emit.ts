@@ -262,6 +262,15 @@ function wrapperYml(name: string, agent: IRAgent): string {
     `          git config user.email volter-agent@users.noreply.github.com`,
     `          git config core.filemode false`,
     `          git checkout -b "$branch"`,
+    // Persist this run's processed transcript INTO the proposal so it rides into the PR and becomes part of
+    // PERMANENT history only if the PR merges (non-merged proposals never land it). Only proposers reach this
+    // effect step, so only developer (develop runs) and strategist (strategy decisions) keep transcripts —
+    // never the PM/reviewer/planner bookkeeping. `.agent-run/` stays gitignored; this copy is the durable record.
+    ...(refParam
+      ? [`          ref_slug="$(printf '%s' "\${${refParam}}" | tr -cd '0-9A-Za-z._-' | cut -c1-40)"; [ -z "$ref_slug" ] && ref_slug=item`]
+      : [`          ref_slug=autonomous`]),
+    `          mkdir -p ".open-autonomy/history/${name}"`,
+    `          cp -f .agent-run/artifacts/transcript.md ".open-autonomy/history/${name}/\${ref_slug}-run-\${{ github.run_id }}.md" 2>/dev/null || true`,
     `          git add -A`,
     // Link the PR to its issue so the merge auto-closes it. The closing keyword goes in the COMMIT message
     // (squash-merge carries it into the merge commit — the reliable path; a PR-body keyword alone is dropped

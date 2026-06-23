@@ -17,10 +17,10 @@ Include: the affected component, reproduction steps, impact, and any proof-of-co
 ## Scope
 
 **In scope**
-- The agent execution + gate system (`packages/`, `scripts/`, `.github/workflows/`): privilege
-  escalation, gate/sandbox bypass, any path that makes an agent merge or push without the
-  deterministic publisher/merge gates, secret/token exfiltration, and `pull_request_target` / fork
-  escalation in the workflows.
+- The agent execution + capability system (`packages/`, `scripts/`, `.github/workflows/`): privilege
+  escalation, any path that lets an agent merge or land unreviewed code (defeating the
+  `code:review`/`code:propose` permission split or branch protection), secret/token exfiltration, and
+  `pull_request_target` / fork escalation in the workflows.
 - The model-token / funding proxy (`services/agent-model-proxy`): auth bypass, minting tokens beyond
   their bounds, spend-cap bypass, fund manipulation, webhook-signature bypass, storefront injection.
 
@@ -31,8 +31,9 @@ Include: the affected component, reproduction steps, impact, and any proof-of-co
 
 ## Trust model
 
-The intended trust boundaries are documented in `docs/ARCHITECTURE.md` (untrusted agent → bundle →
-deterministic publisher/merge gate) and the proxy's abuse/spend model in
+The intended trust boundaries are documented in `docs/CAPABILITIES.md` (agents act with
+capability-scoped tokens; the merge boundary is the `code:review`/`code:propose` split + native
+auto-merge — no agent can merge) and the proxy's abuse/spend model in
 `services/agent-model-proxy/README.md`. Reports that violate those boundaries are especially valuable.
 
 ## Operating it yourself

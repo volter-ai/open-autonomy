@@ -6,7 +6,7 @@ exercise one wired capability of the self-driving profile end-to-end on real Git
 
 - PM triage (clear docs → PR, needs-info, follow-up, human-required risky workflow, open-PR review)
 - operator control (pause/resume, repo-pause, cancel, retry-no-failure)
-- publisher policy rejection, retry on CI/review failure, head-changed-before-merge
+- the workflow-edit capability boundary, retry on CI/review failure, head-changed-before-merge
 - review low-risk merge, governance (maintainer hold, develop-only, risky approval)
 - planner proof-gate issues, decision-memory smoke
 

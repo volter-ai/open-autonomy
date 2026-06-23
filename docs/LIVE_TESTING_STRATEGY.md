@@ -46,8 +46,8 @@ record it as a gap, never paper over it.
 
 ## 2. Roles
 
-- **The autonomy** (must drive itself): scheduled PM triage, the dispatcher,
-  developer agent, publisher, CI gate, reviewer agent, merge gate, planner,
+- **The autonomy** (must drive itself): scheduled PM triage,
+  developer agent, CI gate, reviewer agent, native auto-merge, planner,
   upgrade, decision memory.
 - **The proctor** (human-in-the-loop, played by a maintainer or an AI agent acting
   as one): sets up preconditions, supplies human inputs that unblock new lines,
@@ -95,16 +95,15 @@ actually writes, so there is no model/CI stubbing:
   is present. The `retry-ci-failure` seed issue asks the agent to add that file, so
   the required check really fails and the CI-retry loop + `ci-repeated-failure` /
   `budget-exhausted` stop run live.
-- **Reviewer `develop_retry`** — `scripts/public-agent-review.ts` returns a stable
-  `develop_retry` verdict when the PR diff adds `.testbed/force-review-retry`
-  (`forcedReviewRetryVerdict`). The `retry-review-failure` seed issue asks for that
-  marker, exercising the review-retry loop + `review-repeated-failure` stop.
-- **Forbidden-edit** — `scripts/github-agent-session.ts`
-  (`maybeApplyPublisherRejectionFixture`) injects a real `.github/workflows/ci.yml`
-  edit into the bundle for the `publisher-policy-rejection` fixture issue, so the
-  publisher rejects a genuine forbidden edit.
-- **Head-change** — a proctor procedure (no code): push a commit to a reviewed PR
-  before the merge gate to prove SHA-binding refusal.
+- **Reviewer fail** — the reviewer skill posts a failing `agent-review` status while a
+  `.testbed/force-review-retry` marker is present, so the PR does not auto-merge and the
+  developer is re-triggered (the `retry-review-failure` seed issue exercises this).
+- **Forbidden-edit** — the `workflow-edit-forbidden` seed issue prompts a `.github/workflows/*`
+  change; the agent's token has no `workflows: write`, so the edit cannot be committed or pushed —
+  the boundary is the credential, not a downstream validator.
+- **Head-change** — required status checks re-run on the current head: a commit pushed to a
+  reviewed PR clears `agent-review`/`ci` until they pass again on the new head, so a moved head
+  cannot auto-merge on stale approval.
 
 ### Coverage map (feature → live scenario → human unblock → proof)
 
@@ -118,7 +117,7 @@ actually writes, so there is no model/CI stubbing:
 | PM visible no-op / duplicate suppression | (seeded broad issue) | none | `needs-info`/`blocked` |
 | Dispatcher budget / loop / blocking-label enforcement | observed across lines | apply blocking label | n/a |
 | Developer creates/updates agent PR | every develop line | none | n/a |
-| Publisher rejects forbidden workflow edit | `publisher-policy-rejection` | maintainer `/agent develop` fixture | `blocked` |
+| Agent cannot land a workflow edit (no `workflows:write`) | `workflow-edit-forbidden` | maintainer `/agent develop` fixture | `blocked` |
 | CI required-check gate + retry then stop | `retry-ci-failure` | CI-failure fixture marker | `human-required` |
 | Reviewer low-risk pass → auto-merge | `review-low-risk-merge` / dogfood | none | `done` |
 | Reviewer `develop_retry` then stop | `retry-review-failure` | reviewer fixture marker | `human-required` |
@@ -197,8 +196,8 @@ work between proctor ticks.
   (`governance-maintainer-hold` / `review-human-block`); confirm the merge gate
   refuses with a reason. Create a head-change on a reviewed PR
   (`head-changed-before-merge`); confirm SHA-binding refusal.
-- **T+30 — Publisher policy.** Trigger the forbidden-workflow-edit develop fixture
-  (`publisher-policy-rejection`); confirm visible rejection + rejected-publish
+- **T+30 — Capability boundary.** Trigger the forbidden-workflow-edit develop fixture
+  (`workflow-edit-forbidden`); confirm visible rejection + rejected-publish
   decision before the job fails.
 - **T+35 — Operator controls.** `/agent pause` → `/agent status` → maintainer
   `/agent develop` (blocked) → `/agent resume` (`operator-pause-resume`).

@@ -26,8 +26,8 @@ amending this document.
    the issue, roadmap, policy, and explicit maintainer comments.
 2. Every meaningful autonomous decision must be visible through comments,
    artifacts, committed decisions, or status reconstruction.
-3. The developer may propose code; deterministic publisher, CI, reviewer, and
-   merge gates decide whether it can progress.
+3. The developer may propose code; CI, an independent reviewer, and branch
+   protection decide whether it lands — no agent can merge.
 4. Risky changes require human attention. Workflow, auth, secrets, billing,
    deployment, dependency trust, and broad rewrites are never silently merged.
 5. Retry loops are bounded by stable failure signatures and attempt budgets.

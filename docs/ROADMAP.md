@@ -21,11 +21,10 @@ Agents make judgments and artifacts. Deterministic gates grant authority.
 ```text
 issue/comment/PR comment
   -> PM agent triage
-  -> deterministic dispatcher
-  -> developer agent creates or updates PR
-  -> deterministic publisher validates and pushes
+  -> developer skill agent (credentialed, scoped token)
+  -> the agent edits code + opens its own PR with auto-merge queued
   -> CI
-  -> reviewer agent emits structured verdict
+  -> reviewer agent posts the agent-review status
   -> deterministic merge gate merges, retries develop, or escalates
 ```
 
@@ -634,7 +633,7 @@ Tests:
 - trial issues for: ready docs issue, needs-info issue, open-PR review issue,
   failed-run retry issue, blocked label issue
 - live trial PR proving PM sees an open canonical agent PR, comments
-  `/agent review`, directly dispatches `public-agent-review.yml`, and the
+  `/agent review`, directly dispatches `reviewer.yml`, and the
   review completes
 
 Testbed proof plan:
@@ -763,7 +762,7 @@ Goal: ensure all review paths have the same reliable behavior.
 
 Build:
 
-- direct-dispatch retry behavior in standalone `public-agent-review.yml`,
+- direct-dispatch retry behavior in standalone `reviewer.yml`,
   matching the same-workflow post-publish review path
 - explicit branch/head SHA binding for review decisions
 - merge gate check that the reviewed head SHA equals the merged head SHA
@@ -884,13 +883,12 @@ Testbed proof plan:
   - Evidence: issue URL, pause run, paused PM/develop run, resume run, labels
     or variable state.
   - Final state: `manual fixture`.
-- `publisher-policy-rejection`
-  - Trigger: explicit maintainer `/agent develop` fixture attempts a forbidden
-    workflow edit.
-  - Expected: publisher rejects before push, comments visibly, records rejected
-    publish decision, and fails the job.
-  - Evidence: issue URL, run URL, rejection comment, publish-summary artifact,
-    publish decision artifact.
+- `workflow-edit-forbidden`
+  - Trigger: explicit maintainer `/agent develop` fixture prompted toward a
+    `.github/workflows/*` edit.
+  - Expected: the agent's scoped token has no `workflows: write`, so no workflow
+    change reaches a branch or PR; the agent escalates with a visible comment.
+  - Evidence: issue URL, run URL, escalation comment.
   - Final state: `blocked`.
 - `operator-cancel`
   - Trigger: `/agent cancel` while an issue has active workflow/proxy runs.
@@ -909,7 +907,7 @@ Required fixes from the live `open-autonomy-testbed` trials:
 - Add a visible status path for skipped control issues so maintainers can tell
   whether PM intentionally ignored the issue because it is a manual operator
   test.
-- Publisher policy rejections, such as blocked workflow edits, must post a
+- workflow-edit boundary blocks, such as blocked workflow edits, must post a
   stable issue/PR comment and decision record before the workflow exits failed.
 - Add repo-pause smoke coverage proving scheduled PM sweeps and direct develop
   stop before model token minting while `PUBLIC_AGENT_REPO_PAUSED` is enabled.
@@ -922,7 +920,7 @@ Implemented:
   default GitHub workflow token
 - PM sweeps and direct develop both stop while the repo-pause label fallback is
   present
-- publisher policy rejections now write a visible issue comment plus a rejected
+- workflow-edit boundary blocks now write a visible issue comment plus a rejected
   publish decision artifact before the workflow fails
 
 Live proof status:
@@ -939,7 +937,7 @@ Live proof status:
   `bench/workload/self-driving-conformance/seed/provision.json`), not a one-off manual setup.
 - Remaining live demonstrations require synthetic fixtures that do not exist yet:
   `retry-ci-failure`, `retry-review-failure`, `head-changed-before-merge`, and
-  `publisher-policy-rejection`. Their deterministic gate behavior is already
+  `workflow-edit-forbidden`. Their deterministic gate behavior is already
   covered by unit tests; only the *live* testbed demonstration is outstanding.
   `pm-open-pr-review` is awaiting a clean scheduled sweep after a transient
   reviewer-model outage.
@@ -964,7 +962,7 @@ Remaining live bench proof work:
   maintainer-triggered forbidden-workflow-edit develop bundle.
 - With those fixtures, let the scheduled autonomy drive `retry-ci-failure`,
   `retry-review-failure`, `head-changed-before-merge`, and
-  `publisher-policy-rejection` in the `self-driving-conformance` workload, then record
+  `workflow-edit-forbidden` in the `self-driving-conformance` workload, then record
   run IDs and final states.
 - Capture one clean scheduled `pm-open-pr-review` sweep once the reviewer-model
   path is healthy. The human-in-the-loop rule applies: set preconditions, then

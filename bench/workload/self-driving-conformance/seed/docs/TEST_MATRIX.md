@@ -36,7 +36,7 @@ pull requests. Every scenario should end in one of these states:
 | `retry-ci-failure` | Agent PR has a failed required check | Post-publish CI/review | One bounded develop retry is posted, then repeated failures escalate |
 | `retry-review-failure` | Reviewer requests another develop pass | Post-publish review | Bounded retry starts; repeated reviewer failure escalates |
 | `head-changed-before-merge` | PR head changes after review evidence | Update PR before merge gate | Merge gate refuses because reviewed SHA no longer matches |
-| `publisher-policy-rejection` | Generated bundle attempts a forbidden workflow edit | Explicit maintainer-triggered develop fixture | Publisher rejects before push, comments on the issue, and records a rejected publish decision |
+| `workflow-edit-forbidden` | Develop run prompted toward a `.github/workflows/*` edit | Explicit maintainer-triggered develop fixture | The agent's token has no `workflows: write`, so no workflow change reaches a branch/PR; the agent escalates visibly |
 
 ## Evidence Rules
 

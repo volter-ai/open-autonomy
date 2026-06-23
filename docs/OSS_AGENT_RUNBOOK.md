@@ -2,7 +2,6 @@
 
 This is the source-checkout path for the issue-driven self-building agent. The
 full GitHub Actions and model-proxy architecture is in
-[`PUBLIC_AGENT_ACTIONS.md`](./PUBLIC_AGENT_ACTIONS.md).
 
 ## Local Checks
 
@@ -31,17 +30,16 @@ cat > /tmp/volter-issue.json <<'JSON'
 JSON
 ```
 
-Run the session wrapper with a simple local command:
+Run the agent locally — the thin skill runner against the bounded model proxy (the same entrypoint
+the credentialed agent job uses). It edits the working tree directly; the github job's effect step is
+what turns that into an auto-merging PR.
 
 ```bash
-bun scripts/github-agent-session.ts \
-  --issue /tmp/volter-issue.json \
-  --run-id run_local_101 \
-  --out /tmp/public-agent-101 \
-  --repo volter-ai/open-autonomy \
-  --actor local \
-  -- \
-  node -e 'const fs=require("node:fs"),p=require("node:path"); const d=process.env.OSS_AGENT_TASK_DIR; fs.mkdirSync(p.join(d,"artifacts"),{recursive:true}); fs.writeFileSync(p.join(d,"artifacts","result.json"),"{\"ok\":true}\\n"); fs.writeFileSync(p.join(d,"artifacts","pr.md"),"# PR\\n")'
+OSS_AGENT_TASK_DIR=/tmp/agent-101 \
+MODEL_PROXY_URL=... MODEL_PROXY_TOKEN=... \
+bun scripts/claude-agent-run.ts \
+  --skill .codex/skills/developer/SKILL.md \
+  --issue /tmp/volter-issue.json
 ```
 
 Inspect:
@@ -108,6 +106,6 @@ Before enabling the agent on a public backlog, work through
 ## Secrets
 
 The runner and published evidence must not contain real API keys, tokens,
-cookies, private URLs, or customer data. The session wrapper scans the bundle
-patch, session, decision files, and promoted artifacts for common real-looking
-secret patterns before publisher validation.
+cookies, private URLs, or customer data. The skill runner redacts common
+secret-like patterns from the transcript it writes; the install holds no
+provider secrets (model access is the OIDC-minted bounded token).

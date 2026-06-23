@@ -43,7 +43,7 @@ Model proxy deployment:
 
 GitHub repository:
 
-- Branch protection allows the trusted publisher and merge gate pattern.
+- Branch protection requires ci + agent-review; native auto-merge lands reviewed PRs (no agent merges).
 - Required CI check name matches `ci`.
 - Actions artifact retention is long enough for operator audits.
 - Workflow permissions stay capability-separated; do not use `write-all`.

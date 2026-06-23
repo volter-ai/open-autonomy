@@ -42,7 +42,7 @@ run id, result, and any blocker in the relevant issue or PR.
 - The untrusted agent job must not receive raw provider keys, repo write tokens,
   or model-proxy admin tokens.
 - The publisher is the only job that applies patches and writes PR branches.
-- Workflow edits stay blocked by publisher policy unless explicitly changed by a
+- Workflow edits stay blocked (agents hold no workflows:write) unless explicitly changed by a
   human-owned policy update.
 - Do not commit real API keys, tokens, cookies, private URLs, or customer data.
 - Keep `volter-autonomy` paid-product code out of this OSS repository unless it

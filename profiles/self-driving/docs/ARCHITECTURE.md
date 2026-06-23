@@ -95,7 +95,6 @@ policy section of `autonomy.yml` and workflow code enforce limits.
 | --- | --- | --- |
 | `README.md` | Product overview and quickstart | humans |
 | `docs/ARCHITECTURE.md` | Master map of the system | humans, agents needing orientation |
-| `docs/PUBLIC_AGENT_ACTIONS.md` | Detailed workflow/trust model and command architecture | maintainers, implementers |
 | `docs/OSS_AGENT_RUNBOOK.md` | Local checks, live smoke tests, operator commands | maintainers/operators |
 | `docs/PUBLIC_AGENT_PRODUCTION_ROLLOUT.md` | Enablement checklist for a target repo | maintainers |
 | `docs/ROADMAP.md` | Continuous roadmap, proof gates, and expanded product direction | planner/maintainers |
@@ -168,6 +167,6 @@ audit trail.
 - PM and planner actions must be visible; silent skips are only acceptable when
   a current visible status already exists.
 - Risky, unclear, blocked, or repeatedly failing work escalates to humans.
-- Publisher policy handles write safety; reviewer handles product/code quality;
+- The capability/permission split handles write safety; reviewer handles product/code quality;
   merge gate handles final merge safety.
 - Live proof from a bench workload (e.g. `self-driving-conformance`) is required before claiming roadmap completion.

@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+### Cutover
+
+- Cut over to the **credentialed-skill agent model**: each agent is a single
+  credentialed job scoped to its capabilities. The merge boundary is the
+  `code:review` / `code:propose` permission split plus native auto-merge
+  (required checks: `ci` + `agent-review`). There is no publisher, bundle, or
+  merge-gate job.
+
 - Collapsed the IR to **one unit, the agent** (`behavior + capabilities + triggers(+params) + config`)
   and migrated open-autonomy's own profile onto it: the 6 agent workflows + control plane are now
   *generated* from `profiles/self-driving/ir.yml`; the 5 deterministic agents are self-contained

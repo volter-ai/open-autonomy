@@ -50,13 +50,16 @@ export function openrouterReservePrice(reserveUsdPerMtok: number): ModelPrice {
   return { provider: 'openrouter', input_usd_per_mtok: reserveUsdPerMtok, output_usd_per_mtok: reserveUsdPerMtok };
 }
 
-// The amount to actually charge a run. If the upstream reported a real cost, that is authoritative;
-// otherwise fall back to metering token counts against the price table.
+// The amount to actually charge a run, in US cents (fractional — sub-cent precision is kept). If the
+// upstream reported a real cost, that is authoritative; otherwise fall back to metering token counts
+// against the price table. We must NOT floor/ceil each request to a whole cent: a deepseek request costs
+// a small fraction of a cent, and agents fire thousands of requests, so a 1¢-per-request floor over-counts
+// real spend ~3× — inflating account balances and tripping the global daily cap at a third of true spend.
+// Cents are carried as real numbers throughout the ledger; rounding happens only at display.
 export function settleCents(price: ModelPrice, usage: TokenUsage, fallbackCents: number): number {
   if (usage.cost_usd !== undefined) {
-    // Round to sub-cent precision before ceiling so float noise (0.07 * 100 = 7.0000000000000001)
-    // doesn't push the charge up a whole cent.
-    return Math.max(1, Math.ceil(Number((usage.cost_usd * 100).toFixed(4))));
+    // toFixed(6) tames float noise (0.07 * 100 = 7.0000000000000001) without losing sub-cent precision.
+    return Number((usage.cost_usd * 100).toFixed(6));
   }
   return actualCents(price, usage, fallbackCents);
 }
@@ -73,5 +76,6 @@ export function actualCents(price: ModelPrice, usage: TokenUsage, fallbackCents:
   const cacheReadUsd = ((usage.cache_read_input_tokens ?? 0) / 1_000_000)
     * price.input_usd_per_mtok
     * (price.cache_read_multiplier ?? 1);
-  return Math.max(1, Math.ceil((inputUsd + outputUsd + cacheWriteUsd + cacheReadUsd) * 100));
+  // Fractional cents — no per-request whole-cent floor (see settleCents): flooring over-counts cheap models.
+  return Number(((inputUsd + outputUsd + cacheWriteUsd + cacheReadUsd) * 100).toFixed(6));
 }

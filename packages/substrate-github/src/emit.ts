@@ -275,6 +275,13 @@ function wrapperYml(name: string, agent: IRAgent): string {
     `          head_sha="$(git rev-parse HEAD)"`,
     `          pr_number="$(gh pr view "$branch" --json number --jq .number 2>/dev/null || echo "")"`,
     `          gh workflow run ci.yml --ref "$branch" -f sha="$head_sha" -f pr="$pr_number" || echo "ci dispatch failed (non-fatal)"`,
+    // Trigger review DETERMINISTICALLY — the same anti-recursion that blocks pull_request CI blocks the
+    // reviewer's auto-trigger on a bot PR, so the proposer requests its independent review here (wiring, not
+    // a judgment), exactly as it dispatches ci. The reviewer (agent.review) then judges + posts agent-review.
+    // No model/PM step in the routing path. (The merge boundary holds: the proposer can dispatch but not bless.)
+    ...(agent.review
+      ? [`          gh workflow run ${agent.review}.yml -f issue_number="$pr_number" || echo "review dispatch failed (non-fatal)"`]
+      : []),
   ];
   return [
     `name: ${name}`,

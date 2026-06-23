@@ -57,6 +57,17 @@ describe('public agent production readiness', () => {
     }
   });
 
+  test('PR review is triggered DETERMINISTICALLY by the proposer effect, not the PM model', () => {
+    // The stall the bench found: PR-routing was a step in the PM's model skill, which a cheap model skips.
+    // Routing is mechanical wiring — the proposer's effect dispatches its independent reviewer when the PR
+    // opens (same path as the ci dispatch). Encoded as a check so routing never silently depends on a model.
+    expect(workflow('developer.yml')).toContain('gh workflow run reviewer.yml -f issue_number=');
+    expect(workflow('strategist.yml')).toContain('gh workflow run strategy_reviewer.yml -f issue_number=');
+    // The PM no longer carries a PR-routing step (it owns triage + capacity + close, all judgments/sweeps).
+    const pm = readFileSync(new URL('../.codex/skills/pm/SKILL.md', import.meta.url), 'utf8');
+    expect(pm).not.toContain('Route open agent PRs to review');
+  });
+
   test('credentialed jobs lock down egress (no token exfiltration from untrusted-derived work)', () => {
     // The agent runs untrusted-derived work with a scoped GH_TOKEN + bounded model token in env. Every
     // agent workflow must block egress (harden-runner) so a prompt-injected agent can't ship a token to an

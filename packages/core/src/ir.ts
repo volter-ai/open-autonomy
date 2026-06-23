@@ -30,6 +30,12 @@ export interface IRAgent {
   triggers: Trigger[]; // when it fires + the params it forwards (≥1; only cron is interpreted)
   kind?: ActorKind; // the role; default `agent`. `human` → realized by routing to a person (or a simulator in test).
   timeout?: number; // a run-time bound (minutes); an agnostic resource limit the substrate realizes
+  // The review edge of the merge boundary: a code:propose agent names the INDEPENDENT reviewer agent that
+  // judges its proposals. Requesting that review is mechanical WIRING, not a judgment — so the substrate
+  // triggers `review` deterministically when the proposal is opened (never an LLM remembering to route).
+  // The reviewer still makes the judgment (posts agent-review). Required-ish for a proposer; absent ⇒ no
+  // auto-review wiring (e.g. a profile that gates merges only on ci, or reviews out-of-band).
+  review?: string; // the name of the reviewer agent (must hold code:review and not be this agent)
   // Optional formal result of a skill agent's run: a value that validates against `result.schema` (a JSON
   // Schema object). A declarative seam for a typed result; absent ⇒ the agent just runs and acts directly.
   result?: { schema: Record<string, unknown> };
@@ -97,6 +103,19 @@ export function validateIR(ir: AutonomyIR): string[] {
     if (!a.triggers || a.triggers.length === 0) errors.push(`agent ${name}: needs at least one trigger`);
     if (a.kind !== undefined && a.kind !== 'agent' && a.kind !== 'human')
       errors.push(`agent ${name}: kind must be 'agent' or 'human'`);
+    // The review edge must name an INDEPENDENT reviewer (the merge boundary): it must exist, hold
+    // code:review, and not be the proposer itself — otherwise the auto-review wiring would point at a
+    // non-reviewer or let an agent route its own proposal to itself.
+    if (a.review !== undefined) {
+      if (typeof a.review !== 'string' || a.review.length === 0) errors.push(`agent ${name}: review must be a reviewer agent name`);
+      else if (a.review === name) errors.push(`agent ${name}: review must name an INDEPENDENT reviewer, not itself`);
+      else {
+        const reviewer = ir.agents?.[a.review];
+        if (!reviewer) errors.push(`agent ${name}: review names unknown agent '${a.review}'`);
+        else if (!(reviewer.capabilities ?? []).some((c) => typeof c === 'string' && c.split('@')[0] === 'code:review'))
+          errors.push(`agent ${name}: review target '${a.review}' must hold code:review`);
+      }
+    }
     if (a.result !== undefined) {
       if (!a.result.schema || typeof a.result.schema !== 'object')
         errors.push(`agent ${name}: result must be { schema: <object> }`);

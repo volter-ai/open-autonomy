@@ -118,5 +118,6 @@ jobs:
           head_sha="$(git rev-parse HEAD)"
           pr_number="$(gh pr view "$branch" --json number --jq .number 2>/dev/null || echo "")"
           gh workflow run ci.yml --ref "$branch" -f sha="$head_sha" -f pr="$pr_number" || echo "ci dispatch failed (non-fatal)"
+          gh workflow run strategy_reviewer.yml -f issue_number="$pr_number" || echo "review dispatch failed (non-fatal)"
       - run: bun scripts/model-proxy-revoke.ts --run-id "ir-strategist-${{ github.run_id }}" || true
         if: always()

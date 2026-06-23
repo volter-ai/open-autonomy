@@ -82,6 +82,30 @@ describe('validateIR — code:merge is gate-only (the merge boundary)', () => {
   });
 });
 
+describe('validateIR — the review edge (deterministic routing target)', () => {
+  test('accepts a proposer whose review names an independent code:review agent', () => {
+    const dev = agent({ capabilities: ['code:propose'], review: 'rev' });
+    const rev = agent({ capabilities: ['code:review'] });
+    expect(validateIR(ir({ dev, rev }))).toEqual([]);
+  });
+
+  test('rejects review naming an unknown agent', () => {
+    const dev = agent({ capabilities: ['code:propose'], review: 'ghost' });
+    expect(validateIR(ir({ dev })).some((e) => e.includes("review names unknown agent 'ghost'"))).toBe(true);
+  });
+
+  test('rejects review naming a non-reviewer (no code:review)', () => {
+    const dev = agent({ capabilities: ['code:propose'], review: 'rev' });
+    const rev = agent({ capabilities: ['tasks:converse'] }); // not a reviewer
+    expect(validateIR(ir({ dev, rev })).some((e) => e.includes("must hold code:review"))).toBe(true);
+  });
+
+  test('rejects an agent reviewing itself (independence)', () => {
+    const dev = agent({ capabilities: ['code:propose'], review: 'dev' });
+    expect(validateIR(ir({ dev })).some((e) => e.includes('INDEPENDENT reviewer, not itself'))).toBe(true);
+  });
+});
+
 describe('validateIR — schema/agents', () => {
   test('rejects a bad schema', () => {
     const bad = { ...ir({ a: agent() }), schema: 'nope' as never };

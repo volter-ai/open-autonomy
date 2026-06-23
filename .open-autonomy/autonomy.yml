@@ -49,6 +49,7 @@ agents:
     capabilities:
       - code:propose
       - tasks:converse
+    review: reviewer
   pm:
     skill: pm
     workflowFile: pm.yml
@@ -97,6 +98,7 @@ agents:
     timeout: 25
     capabilities:
       - code:propose@roadmap
+    review: strategy_reviewer
   strategy_reviewer:
     skill: strategy-reviewer
     workflowFile: strategy_reviewer.yml

@@ -18,6 +18,7 @@ export interface OAManifest {
       triggers?: { schedule?: string; [event: string]: unknown };
       capabilities?: string[];
       timeout?: number;
+      review?: string; // the reviewer agent that judges this proposer's PRs (the merge-boundary review edge)
     }
   >;
   // Portable governance data, carried verbatim — each substrate reads the keys it knows
@@ -53,6 +54,7 @@ export function emitAutonomy(ir: AutonomyIR): OAManifest {
       ...(Object.keys(triggers).length ? { triggers } : {}),
       ...(typeof agent.timeout === 'number' ? { timeout: agent.timeout } : {}),
       ...(agent.capabilities?.length ? { capabilities: agent.capabilities } : {}),
+      ...(agent.review ? { review: agent.review } : {}),
     };
   }
   // Carry the policy box verbatim — it is opaque governance, not a fixed schema (see OAManifest.policy).

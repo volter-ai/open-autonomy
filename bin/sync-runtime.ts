@@ -1,8 +1,9 @@
 #!/usr/bin/env bun
 // The github substrate VENDORS a copy of the GENERIC runtime under packages/substrate-github/src/runtime/
 // so compileGithub can inject it into EVERY installation. The mirror holds only substrate machinery —
-// the codex wrapper, the session/publish bundler, the model proxy + transparent model-call seam, and the
-// runner. The canonical source is scripts/ (where it is developed + tested) and the mirror tracks it.
+// the thin credentialed skill runner (claude-agent-run.ts + agent.ts), the model-proxy mint/exchange/
+// revoke clients, the visual-verify helper, and the runner. The canonical source is scripts/ (where it is
+// developed + tested) and the mirror tracks it.
 //
 //   bun bin/sync-runtime.ts            re-sync the mirror (scripts/ -> packages/.../runtime/)
 //   bun bin/sync-runtime.ts --check    verify they match (CI); nonzero exit on drift

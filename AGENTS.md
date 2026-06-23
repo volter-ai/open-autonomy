@@ -16,7 +16,7 @@ Read these files before changing behavior:
 - `docs/CONSTITUTION.md` for non-negotiable operating principles.
 - `.open-autonomy/review-rubric.yml` for review criteria.
 - `docs/standards/*.md` for code, docs, tests, and security rules.
-- `.codex/skills/open-autonomy-*/SKILL.md` for repo-local agent skills.
+- `.codex/skills/*/SKILL.md` and `.claude/skills/*/SKILL.md` for repo-local agent skills.
 - `.open-autonomy/autonomy.yml` for docs, skills, agents, triggers,
   capabilities, and enforced policy.
 

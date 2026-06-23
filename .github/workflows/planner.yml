@@ -73,26 +73,5 @@ jobs:
           OSS_AGENT_ISSUE_PATH: .agent-run/issue.json
         run: |
           bun scripts/claude-agent-run.ts --skill .codex/skills/planner/SKILL.md; rc=$?; bun scripts/agent-visual-verify.ts || true; exit $rc
-      - name: Effect — propose the change as an auto-merging PR (if the tree changed)
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          set -euo pipefail
-          if [ -z "$(git status --porcelain)" ]; then echo "no working-tree changes; nothing to propose"; exit 0; fi
-          branch="agent/ir-planner-${{ github.run_id }}"
-          git config user.name volter-agent
-          git config user.email volter-agent@users.noreply.github.com
-          git config core.filemode false
-          git checkout -b "$branch"
-          git add -A
-          git commit -m "agent: ir-planner-${{ github.run_id }}"
-          git push --force origin "$branch"
-          base="${{ github.event.repository.default_branch }}"
-          body="$(cat .agent-run/artifacts/pr.md 2>/dev/null || echo "Automated agent change (ir-planner-${{ github.run_id }}).")"
-          gh pr create --base "$base" --head "$branch" --title "Agent: ir-planner-${{ github.run_id }}" --body "$body" || gh pr view "$branch" >/dev/null
-          gh pr merge "$branch" --squash --auto || echo "auto-merge enable failed (non-fatal)"
-          head_sha="$(git rev-parse HEAD)"
-          pr_number="$(gh pr view "$branch" --json number --jq .number 2>/dev/null || echo "")"
-          gh workflow run ci.yml --ref "$branch" -f sha="$head_sha" -f pr="$pr_number" || echo "ci dispatch failed (non-fatal)"
       - run: bun scripts/model-proxy-revoke.ts --run-id "ir-planner-${{ github.run_id }}" || true
         if: always()

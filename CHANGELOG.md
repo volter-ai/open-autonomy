@@ -10,12 +10,11 @@
   (required checks: `ci` + `agent-review`). There is no publisher, bundle, or
   merge-gate job.
 
-- Collapsed the IR to **one unit, the agent** (`behavior + capabilities + triggers(+params) + config`)
-  and migrated open-autonomy's own profile onto it: the 6 agent workflows + control plane are now
-  *generated* from `profiles/self-driving/ir.yml`; the 5 deterministic agents are self-contained
-  `scripts/agent-*.ts` orchestrators, the developer is the privilege-separated codex wrapper. Added the
-  `subject.actorRole` trigger source and the `model`/`workflowFile`/`persistCredentials`/`permissions`
-  config keys (all documented in the standard).
+- Collapsed the IR to **one unit, the agent** (`behavior + capabilities + triggers(+params)` plus
+  optional `timeout`/`result`/`kind`) and migrated open-autonomy's own profile onto it: the 6 agent
+  workflows + control plane are now *generated* from `profiles/self-driving/ir.yml`; the 5 deterministic
+  agents are self-contained `scripts/agent-*.ts` orchestrators, the developer is the privilege-separated
+  codex wrapper. Added the `subject.actorRole` trigger source.
 - Upgrading an installation is now a **maintainer-run local command**
   (`scripts/open-autonomy-upgrade-cli.ts`), not an autonomous workflow: it compiles the canonical
   template, applies the diff to your working tree, and stops — you review, commit, and push. An upgrade

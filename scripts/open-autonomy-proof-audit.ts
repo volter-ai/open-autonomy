@@ -1,5 +1,6 @@
 #!/usr/bin/env bun
-import { existsSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { dirname } from 'node:path';
 // The proof_gate of every non-`proposed` roadmap item (proposed items are aspirational, exempt until a
 // human ratifies them). A focused roadmap reader — the audit needs only status + proof_gate per item.
 function nonProposedProofGates(roadmapText: string): string[] {
@@ -115,6 +116,7 @@ function isRunId(value: string): boolean {
 async function main(): Promise<void> {
   const options = parseArgs(process.argv.slice(2));
   const result = auditProofLedger(readFileSync(options.roadmap, 'utf8'), readFileSync(options.ledger, 'utf8'));
+  mkdirSync(dirname(options.out), { recursive: true }); // .agent-run/ is gitignored — create it on a fresh checkout
   writeFileSync(options.out, `${JSON.stringify(result, null, 2)}\n`);
   process.stdout.write(`proof-audit=${result.passed ? 'pass' : 'fail'}\n`);
   if (!result.passed) process.exit(78);

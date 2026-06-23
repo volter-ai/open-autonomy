@@ -1,5 +1,5 @@
 // Ingest an open-autonomy manifest (autonomy.yml) → autonomy.ir.v1 agents.
-import type { AutonomyIR, Box, OAManifest, Trigger } from '@open-autonomy/core';
+import type { AutonomyIR, OAManifest, Trigger } from '@open-autonomy/core';
 
 export type { OAManifest };
 
@@ -12,7 +12,7 @@ export function ingestAutonomy(m: OAManifest): AutonomyIR {
     for (const [key, val] of Object.entries(a.triggers ?? {})) {
       if (val === false || val == null) continue;
       if (key === 'schedule' && typeof val === 'string') triggers.push({ cron: val });
-      else triggers.push({ event: key, ...(val && typeof val === 'object' ? { config: val as Box } : {}) });
+      else triggers.push({ event: key, ...(val && typeof val === 'object' ? { config: val as Record<string, unknown> } : {}) });
     }
     agents[name] = {
       behavior: skillRef.split('/').pop() ?? skillRef,
@@ -25,8 +25,8 @@ export function ingestAutonomy(m: OAManifest): AutonomyIR {
   const autonomy = m.policy?.autonomy as Record<string, unknown> | undefined;
   const maxConcurrent =
     typeof autonomy?.max_open_agent_prs === 'number' ? (autonomy.max_open_agent_prs as number) : undefined;
-  // Carry the policy box verbatim (opaque governance); see emitAutonomy. An unknown knob round-trips.
-  const policyBox: Box = { ...(m.policy ?? {}) };
+  // Carry the policy governance data verbatim; see emitAutonomy. An unknown knob round-trips.
+  const policyBox: Record<string, unknown> = { ...(m.policy ?? {}) };
 
   return {
     schema: 'autonomy.ir.v1',

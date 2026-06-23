@@ -114,6 +114,10 @@ export class RunBudget implements DurableObject {
     const reservation = this.state.reservations[requestId];
     if (!reservation) return;
     this.state.reserved_usd_cents = Math.max(0, this.state.reserved_usd_cents - reservation.amount);
+    // A released reservation never reached/succeeded with the provider (upstream failure, network error,
+    // global-cap rejection), so give back the request slot too — otherwise reserve()'s increment leaks and
+    // a run hits request_limit_reached before making max_requests real calls. consume() keeps the count.
+    this.state.request_count = Math.max(0, this.state.request_count - 1);
     delete this.state.reservations[requestId];
     await this.save();
   }

@@ -29,7 +29,7 @@ github leak.)
 
 | capability | meaning | github realization |
 |---|---|---|
-| `code:propose` | propose a change (write a feature branch, open a PR, queue auto-merge) | `contents: write` + `pull-requests: write` |
+| `code:propose` | propose a change (write a feature branch, open a PR, queue auto-merge, dispatch CI) | `contents: write` + `pull-requests: write` + `actions: write` |
 | `code:review` | **bless** a change for merge (post the verdict that gates landing) | `statuses: write` (posts the `agent-review` status) |
 | `code:merge` | **land** a reviewed change onto the default branch | **never granted to anyone** — landing is native auto-merge (see the merge boundary) |
 | `tasks:author` | create / update / label / set state of work | `issues: write` |

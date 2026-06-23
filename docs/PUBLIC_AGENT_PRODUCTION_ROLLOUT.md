@@ -53,7 +53,7 @@ GitHub repository:
 
 Start with a narrow allowed surface:
 
-- trusted maintainers only for manual `/agent develop`
+- trusted maintainers only for manual `/agent developer`
 - PM sweep limit of 1-3 issues
 - conservative `PUBLIC_AGENT_ALLOWED_PATHS`
 - low per-run spend caps
@@ -68,12 +68,12 @@ reviewer high-risk verdicts.
 Before opening broader access, verify these in the target repo:
 
 - `/agent pause` applies `agent-paused`.
-- `/agent develop` on a paused issue stops before model minting.
+- `/agent developer` on a paused issue stops before model minting.
 - `/agent status` reports labels, open PR, active workflow runs, and active proxy
   runs.
 - `/agent resume` clears `agent-paused`.
 - `/agent retry` reports no infrastructure retry when no failed run exists, or
-  reruns failed jobs without posting a fresh `/agent develop`.
+  reruns failed jobs without posting a fresh `/agent developer`.
 - `/agent cancel` cancels active public-agent workflow runs and revokes active
   proxy runs for the issue.
 - `Model Proxy Admin` `status` shows active-run saturation and daily counters.
@@ -88,7 +88,7 @@ These live trial runs are the baseline acceptance evidence as of
   `run-receipt.json` and `transcript.md` promoted into
   `agent-sessions/run_966fe8ea-2e22-4752-89dd-25db8fcd0e82/`.
 - Phase 7 operator controls: issue #70 live-tested `/agent pause`, a paused
-  `/agent develop` policy block before model minting, `/agent status`, and
+  `/agent developer` policy block before model minting, `/agent status`, and
   `/agent resume`.
 - Push CI for operator controls: run `27633520672`.
 - Push CI for production rollout checks: run `27633852289`.

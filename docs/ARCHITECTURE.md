@@ -52,9 +52,9 @@ direction, constitution, roadmap, standards, labels, secrets, and risk policy.
 
 | Role | Purpose | Main inputs | Main output |
 | --- | --- | --- | --- |
-| Planner | Turns roadmap direction into issues | roadmap, issue/PR state, decision history | created/updated/prioritized issues |
+| Planner | Turns roadmap direction into issues | roadmap, issue/PR state, labels | created/updated/prioritized issues |
 | PM/Triage | Decides what should happen to an issue now | issue, labels, comments, open PRs, active runs, autonomy config | visible comment, labels, dispatch decision |
-| Developer | Edits code and opens its own auto-merging PR | issue, acceptance criteria, repo guidance, prior decisions | a pull request (its own scoped token) |
+| Developer | Edits code and opens its own auto-merging PR | issue, acceptance criteria, repo guidance, control files | a pull request (its own scoped token) |
 | Reviewer | Judges PR quality and risk; posts the `agent-review` status | PR diff, CI, issue, rubric, standards | the `agent-review` commit status (cannot merge) |
 | Merge | Native auto-merge once `ci` + `agent-review` are green | the two required status checks + branch protection | merged PR (no agent performs the merge) |
 | Operator | Lets maintainers control the system | issue comments, labels, run/proxy state | pause/resume/status/cancel/retry effects |
@@ -103,8 +103,10 @@ policy section of `autonomy.yml` and workflow code enforce limits.
 | `bench/workload/self-driving-conformance/` | Live conformance scenario catalog (coverage-graded) | bench operators, roadmap audit |
 
 `docs/ROADMAP.md` is the only canonical roadmap. The roadmap should explain
-direction; issues should execute work; runbooks should explain operation;
-decision records should prove what happened.
+direction; issues should execute work; runbooks should explain operation; and
+the audit trail (issue/PR comments, the `ci`+`agent-review` commit statuses, the
+merged PR, the model-proxy run-ledger, run logs, and bench evidence) should prove
+what happened.
 
 ## Target Repo Control Files
 

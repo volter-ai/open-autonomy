@@ -1,7 +1,7 @@
 // Emit autonomy.ir.v1 → an open-autonomy manifest + the github installation. The IR is the standard;
-// this is github's (partial) implementation. One unit: an agent. The substrate decides execution from
-// the behavior artifact — a prose skill runs via a model (the privilege-separated wrapper, untrusted →
-// mediated); a script runs deterministically (a job, trusted → direct). See docs/AUTONOMY-IR.md.
+// this is github's (partial) implementation. One unit: an agent — a prose skill realized as ONE
+// credentialed job whose token is scoped to its capabilities; the agent acts directly. There is no
+// mediated/credential-less wrapper and no script-as-job path — one realization. See docs/AUTONOMY-IR.md.
 import { readFileSync, readdirSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -101,32 +101,35 @@ function subjectRefParam(agent: IRAgent): string | undefined {
   return undefined;
 }
 
-function onLines(agent: IRAgent, kind: 'run' | 'launch'): string[] {
+// Every agent is a skill realized as one credentialed wrapper job, so every workflow exposes the same
+// launch + control surface: workflow_dispatch (the PM / a maintainer dispatches a work item) and
+// issue_comment (the operator control plane + maintainer `/agent <name>` launch). The agent's own IR
+// triggers (cron, native events) are appended after.
+function onLines(agent: IRAgent): string[] {
   const lines = ['on:'];
   const cron = cronOf(agent);
   if (cron) lines.push('  schedule:', `    - cron: "${cron}"`);
   const seen = new Set<string>();
-  if (kind === 'launch') {
-    lines.push('  workflow_dispatch:', '    inputs:', ...DISPATCH_INPUTS);
-    lines.push('  issue_comment:', '    types: [created]');
-    seen.add('workflow_dispatch').add('issue_comment');
-  } else {
-    // A deterministic agent that targets a work item exposes the standard `issue_number` dispatch
-    // input (the github resolution of subject.ref reads it); otherwise plain manual dispatch.
-    if (subjectRefParam(agent)) {
-      lines.push('  workflow_dispatch:', '    inputs:', ...DISPATCH_INPUTS);
-    } else {
-      lines.push('  workflow_dispatch: {}');
-    }
-    seen.add('workflow_dispatch');
-  }
+  lines.push('  workflow_dispatch:', '    inputs:', ...DISPATCH_INPUTS);
+  lines.push('  issue_comment:', '    types: [created]');
+  seen.add('workflow_dispatch').add('issue_comment');
+  // Collect the agent's native-event triggers, MERGING configs when two triggers resolve to the same
+  // github event (e.g. two `event: issues`, or a `task:` that maps to issues:labeled colliding with an
+  // explicit `event: issues`) — array keys like `types` are unioned, scalars last-write-wins. Dropping the
+  // later trigger's config (the old behavior) silently lost declared event types.
+  const eventConfigs = new Map<string, Record<string, unknown>>();
   for (const t of agent.triggers) {
     if ('cron' in t) continue;
     const e = 'task' in t ? taskAsEvent(t.task) : { event: t.event, config: t.config };
-    if (seen.has(e.event)) continue;
-    seen.add(e.event);
-    lines.push(...eventLines(e.event, e.config));
+    if (seen.has(e.event)) continue; // workflow_dispatch / issue_comment already on the launch surface
+    const merged = eventConfigs.get(e.event) ?? {};
+    for (const [k, v] of Object.entries(e.config ?? {})) {
+      const prev = merged[k];
+      merged[k] = Array.isArray(v) && Array.isArray(prev) ? [...new Set([...prev, ...v])] : v;
+    }
+    eventConfigs.set(e.event, merged);
   }
+  for (const [event, config] of eventConfigs) lines.push(...eventLines(event, config));
   return lines;
 }
 
@@ -147,7 +150,7 @@ function capsToPermissions(caps: string[]): string {
     if (c === 'code:propose') { p.contents = 'write'; p['pull-requests'] = 'write'; p.actions = 'write'; }
     else if (c === 'code:review') p.statuses = 'write'; // bless-a-merge: post the agent-review status
     else if (c === 'tasks:author' || c === 'tasks:converse') p.issues = 'write';
-    else if (c === 'agent:launch' || c === 'agent:update' || c === 'agent:cancel') p.actions = 'write';
+    else if (c === 'agent:launch' || c === 'agent:cancel') p.actions = 'write';
     else if (c === 'agent:list') grant('actions', 'read');
   }
   return `{ ${Object.entries(p).map(([k, v]) => `${k}: ${v}`).join(', ')} }`;
@@ -179,6 +182,10 @@ function launchConcurrencyLines(name: string, _agent: IRAgent): string[] {
 // job, no bundle, no publisher — the merge boundary is the capability/permission split (docs/CAPABILITIES.md).
 function wrapperYml(name: string, agent: IRAgent): string {
   const caps = agent.capabilities ?? [];
+  // Only a code:propose agent gets the effect step (push branch + open auto-merging PR). A non-proposer
+  // (reviewer/pm/planner) has contents:read, so a stray tracked-file write would make the effect's
+  // `git push` 403 and fail the job after the verdict was posted — tie the step to the capability.
+  const proposes = caps.some((c) => typeof c === 'string' && c.split('@')[0] === 'code:propose');
   const skillPath = `.codex/skills/${agent.behavior}/SKILL.md`;
   const RID = `ir-${name}-\${{ github.run_id }}`;
   // The work item comes from the trigger's declared `subject.ref` param (resolved into job env). An agent
@@ -247,7 +254,7 @@ function wrapperYml(name: string, agent: IRAgent): string {
   ];
   return [
     `name: ${name}`,
-    ...onLines(agent, 'launch'),
+    ...onLines(agent),
     `permissions: {}`,
     ...launchConcurrencyLines(name, agent),
     `env:`,
@@ -309,7 +316,7 @@ function wrapperYml(name: string, agent: IRAgent): string {
     `          OSS_AGENT_ISSUE_PATH: .agent-run/issue.json`,
     `        run: |`,
     `          bun scripts/claude-agent-run.ts --skill ${skillPath}; rc=$?; bun scripts/agent-visual-verify.ts || true; exit $rc`,
-    ...effect,
+    ...(proposes ? effect : []),
     `      - run: bun scripts/model-proxy-revoke.ts --run-id "${RID}" || true`,
     `        if: always()`,
     ``,
@@ -322,10 +329,6 @@ function wrapperYml(name: string, agent: IRAgent): string {
 // varies via config — not a template frozen in the compiler. So github generates no workflow for a human.
 function isHuman(agent: IRAgent): boolean {
   return agent.kind === 'human';
-}
-
-function agentYml(name: string, agent: IRAgent): string {
-  return wrapperYml(name, agent); // every agent is a skill
 }
 
 // The shared, substrate-neutral runtime scripts (portable agent implementations + gates + the
@@ -348,7 +351,7 @@ export function compileGithub(ir: AutonomyIR): CompileOutput {
   // the substrate's to choose.
   for (const [name, agent] of Object.entries(ir.agents)) {
     if (isHuman(agent)) continue; // a human actor is declared in the manifest, not realized as a github job
-    generated[`.github/workflows/${name}.yml`] = agentYml(name, agent);
+    generated[`.github/workflows/${name}.yml`] = wrapperYml(name, agent); // every agent is a skill
   }
   // Agents carry the operator control plane, so emit its handler.
   if (Object.values(ir.agents).some((a) => !isHuman(a))) {

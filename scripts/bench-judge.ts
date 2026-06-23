@@ -41,6 +41,20 @@ function runJudgeAgent(
     JSON.stringify(schema),
   ].join('\n');
   const common = { input: fullPrompt, cwd, encoding: 'utf8' as const, maxBuffer: 64 * 1024 * 1024 };
+  // missingRequired only checks TOP-LEVEL keys, so `{criteria:[{}], summary:'s'}` would pass and then
+  // score 0 silently (every byId.get(id) undefined). Validate the nested criteria shape too, so a
+  // malformed artifact is rejected and the attempt retries / salvages instead of corrupting the score.
+  const wellFormed = (v: Record<string, unknown>): boolean =>
+    missingRequired(schema, v).length === 0 &&
+    Array.isArray(v.criteria) &&
+    (v.criteria as unknown[]).every(
+      (c) =>
+        !!c &&
+        typeof c === 'object' &&
+        typeof (c as Record<string, unknown>).id === 'string' &&
+        typeof (c as Record<string, unknown>).score === 'number' &&
+        typeof (c as Record<string, unknown>).justification === 'string',
+    );
   for (let attempt = 1; attempt <= 2; attempt++) {
     const res =
       harness === 'codex'
@@ -51,12 +65,13 @@ function runJudgeAgent(
     if (existsSync(outFile)) {
       try {
         const v = JSON.parse(readFileSync(outFile, 'utf8')) as Record<string, unknown>;
-        fromFile = missingRequired(schema, v).length ? null : v;
+        fromFile = wellFormed(v) ? v : null;
       } catch {
         /* corrupt — fall through to salvage */
       }
     }
-    const artifact = fromFile ?? salvageSubmission(res.stdout || '', schema);
+    const salvaged = fromFile ?? salvageSubmission(res.stdout || '', schema);
+    const artifact = salvaged && wellFormed(salvaged) ? salvaged : null;
     if (artifact) return artifact;
   }
   throw new Error(`bench-judge: ${harness} produced no schema-valid result${model ? ` (model=${model})` : ''}`);

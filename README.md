@@ -56,7 +56,7 @@ loop with a scheduler loop + a termfleet runner instead of GitHub Actions.
 
 **The GitHub app** — open-autonomy running on the github substrate (the complete, dogfooded substrate today):
 
-- `scripts/` — the github runtime: PM / triage / policy / dispatch / review / CI / control, the Codex runner (the credentialed agent that edits code and opens its own auto-merging PR), and the strategy loop.
+- `scripts/` — the github runtime: the model-proxy mint/exchange/revoke clients, the credentialed skill runner (`scripts/claude-agent-run.ts`), the operator control handler (`.github/agent-control.mjs`), `runner.ts`, and the preflight/proof-audit tooling. Each agent is a skill run by Claude Code under a capability-scoped token.
 - `services/agent-model-proxy/` — a Cloudflare Worker that mints bounded, revocable model tokens (no raw keys) and meters spend against a sponsor-funded budget ledger.
 - `.open-autonomy/`, `.codex/skills/`, `.github/workflows/` — this repo's own installation (the dogfood).
 

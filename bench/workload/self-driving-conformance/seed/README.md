@@ -7,8 +7,8 @@ It is intentionally small but has enough surface area to exercise:
 
 - PM triage
 - unclear issue handling
-- `/agent develop`
-- `/agent review`
+- `/agent developer`
+- `/agent reviewer`
 - operator controls
 - evidence publication
 - auto-merge for low-risk changes

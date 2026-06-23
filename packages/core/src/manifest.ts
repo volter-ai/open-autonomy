@@ -18,11 +18,9 @@ export interface OAManifest {
       triggers?: { schedule?: string; [event: string]: unknown };
       capabilities?: string[];
       timeout?: number;
-      concurrency?: string;
-      env?: Record<string, string>;
     }
   >;
-  // The policy box is opaque governance, carried verbatim — each substrate reads the keys it knows
+  // Portable governance data, carried verbatim — each substrate reads the keys it knows
   // (autonomy/risk/merge/planner for github) and a profile's own knob (e.g. wip) survives untouched.
   policy?: Record<string, unknown>;
 }

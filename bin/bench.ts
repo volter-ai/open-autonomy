@@ -191,8 +191,8 @@ if (process.argv.includes('--score')) {
   const dir = mkdtempSync(join(tmpdir(), 'bench-result-'));
   console.log(`cloning ${repo} -> ${dir}`);
   run('gh', ['repo', 'clone', repo, dir, '--', '--depth', '1']);
-  // Run the graders the workload declares — pluggable per workload (rubric judge / coverage / autonomy),
-  // the eval-framework idiom (one case suite, scorers chosen per case). Default to the rubric judge.
+  // Run the graders the workload declares — pluggable per workload (rubric judge / coverage), the
+  // eval-framework idiom (one case suite, scorers chosen per case). Default to the rubric judge.
   const meta = JSON.parse(readFileSync(join(WL, wl, 'workload.json'), 'utf8')) as { graders?: string[] };
   const graders = meta.graders ?? ['rubric'];
   const out = arg('--out');

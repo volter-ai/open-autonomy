@@ -13,9 +13,9 @@ pull requests. Every scenario should end in one of these states:
 
 | ID | Scenario | Trigger | Expected visible result |
 | --- | --- | --- | --- |
-| `pm-clear-docs` | Small, exact docs change | PM sweep or `/agent develop` | PR opens, CI passes, review passes, merge gate closes issue |
+| `pm-clear-docs` | Small, exact docs change | PM sweep or `/agent developer` | PR opens, CI passes, review passes, merge gate closes issue |
 | `pm-needs-info` | Broad request without acceptance criteria | PM sweep | PM comments with one question and applies `needs-info` |
-| `pm-follow-up-after-needs-info` | Human clarifies a needs-info issue | PM sweep after human comment | PM may start `/agent develop`; it must not repeat stale needs-info before human input |
+| `pm-follow-up-after-needs-info` | Human clarifies a needs-info issue | PM sweep after human comment | PM may start `/agent developer`; it must not repeat stale needs-info before human input |
 | `pm-human-required-risky-workflow` | Request to bypass workflow/review controls | PM sweep | PM escalates with `human-required` or an equivalent maintainer-facing comment |
 | `pm-open-pr-review` | Issue already has an open canonical agent PR | PM sweep | PM does not start duplicate develop; it routes to review when appropriate |
 
@@ -23,7 +23,7 @@ pull requests. Every scenario should end in one of these states:
 
 | ID | Scenario | Trigger | Expected visible result |
 | --- | --- | --- | --- |
-| `operator-pause-resume` | Pause an issue, check status, try develop, resume | `/agent pause`, `/agent status`, `/agent develop`, `/agent resume` | Pause label gates develop before model minting; status shows pause state; resume clears the label |
+| `operator-pause-resume` | Pause an issue, check status, try develop, resume | `/agent pause`, `/agent status`, `/agent developer`, `/agent resume` | Pause label gates develop before model minting; status shows pause state; resume clears the label |
 | `operator-retry-no-failure` | Retry without failed infra run | `/agent retry` | Comment explains no failed infrastructure run was found |
 | `repo-pause` | Pause the whole repo | `/agent pause repo` then PM/develop | PM/develop work is skipped until `/agent resume repo` |
 

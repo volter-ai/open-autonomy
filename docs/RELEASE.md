@@ -7,7 +7,7 @@ Release checklist:
 
 1. Update `VERSION`, `.open-autonomy/version.json`, and `CHANGELOG.md`.
 2. Run `bun run check`.
-3. Run planner, preflight, and governance-report workflows on `main`.
+3. Run planner and preflight workflows on `main`.
 4. Compile into a clean directory (`bun bin/open-autonomy.ts compile profiles/self-driving github <dir>`)
    and run its `bun run check`.
 5. Verify the committed release evidence in [`docs/PROOF_LEDGER.md`](./PROOF_LEDGER.md).

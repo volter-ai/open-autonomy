@@ -94,6 +94,18 @@ export function summarizeMetrics(issues: IssueLite[], prs: PrLite[], runs: RunLi
   };
 }
 
+// Scenarios whose success condition is "the issue gets resolved / its PR merges" — for these a CLOSED
+// issue is genuine proof. Every other scenario succeeds by reaching a specific labeled state, so a bare
+// close does not prove it (and a close without that state counts as failed).
+const RESOLUTION_SCENARIOS = new Set<string>([
+  'pm-clear-docs',
+  'pm-open-pr-review',
+  'retry-ci-failure',
+  'retry-review-failure',
+  'head-changed-before-merge',
+  'review-low-risk-merge',
+]);
+
 // Classify each coverage scenario from the live issue that carries its marker. Conservative:
 // only `proven` when the visible end state matches the scenario's success condition.
 export function classifyScenarios(issues: IssueLite[]): ScenarioResult[] {
@@ -112,9 +124,13 @@ export function classifyScenarios(issues: IssueLite[]): ScenarioResult[] {
     if (id === 'pm-needs-info' && has('needs-info')) status = 'proven';
     else if (id === 'pm-human-required-risky-workflow' && (has('human-required') || has('agent-blocked'))) status = 'proven';
     else if (id === 'governance-maintainer-hold' && (has('agent-maintainer-hold') || has('human-required'))) status = 'proven';
-    else if (closed) status = 'proven';
+    // Resolution scenarios succeed by the issue being resolved/merged, so `closed` is genuine proof.
+    else if (RESOLUTION_SCENARIOS.has(id)) status = closed ? 'proven' : 'in-progress';
+    // State/operator scenarios succeed by reaching a specific labeled state — `closed` alone is NOT proof
+    // (an operator/won't-fix close doesn't demonstrate the behavior); a close without that state is a fail.
     else if (has('human-required') || has('agent-blocked')) status = 'proven';
     else if (has('needs-info')) status = 'in-progress';
+    else if (closed) status = 'failed';
     return { id, status, evidence: `#${issue.number} ${issue.state}${issue.labels.length ? ' [' + issue.labels.join(', ') + ']' : ''}` };
   });
 }

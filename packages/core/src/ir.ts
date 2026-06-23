@@ -1,8 +1,7 @@
 // autonomy.ir.v1 — the substrate-agnostic standard. See docs/AUTONOMY-IR.md.
-// One unit: an agent = behavior + capabilities + triggers(+params) + config. The core only validates
-// spec-validity and WIRES; it never interprets what a capability does, where a trigger param is
-// sourced, or what a config key means — that is each substrate's (partial) implementation.
-export type Box = Record<string, unknown>;
+// One unit: an agent = behavior + capabilities + triggers(+params) (+ optional timeout/result/kind). There
+// is NO per-agent config box. The core only validates spec-validity and WIRES; it never interprets what a
+// capability does or where a trigger param is sourced — that is each substrate's (partial) implementation.
 
 // A trigger fires an agent and forwards `params` to it (the Runner contract's opaque LaunchParams).
 // `params` maps an opaque param NAME (the profile's choice; the core never interprets it) to a
@@ -11,7 +10,9 @@ export type Box = Record<string, unknown>;
 // fired where the substrate supports them.
 export type Trigger =
   | { cron: string; params?: Record<string, string> }
-  | { event: string; config?: Box; params?: Record<string, string> }
+  // `config` is the native event's own filter (e.g. github `types: [opened]`) — substrate-native data on
+  // the `event` escape hatch, not an opaque IR box; the core carries it verbatim and never interprets it.
+  | { event: string; config?: Record<string, unknown>; params?: Record<string, string> }
   // `task` fires when a task enters a portable lifecycle state (docs/TASK-LIFECYCLE.md) — the portable
   // handoff form. The substrate maps the state to its own events; `event` stays as the native escape hatch.
   | { task: string; params?: Record<string, string> };
@@ -29,13 +30,10 @@ export interface IRAgent {
   triggers: Trigger[]; // when it fires + the params it forwards (≥1; only cron is interpreted)
   kind?: ActorKind; // the role; default `agent`. `human` → realized by routing to a person (or a simulator in test).
   timeout?: number; // a run-time bound (minutes); an agnostic resource limit the substrate realizes
-  // Optional formal result of a skill agent's run: a value that validates against `result.schema` (JSON
-  // Schema). A declarative seam for a typed result; absent ⇒ the agent just runs and acts directly.
-  result?: { schema: Box };
+  // Optional formal result of a skill agent's run: a value that validates against `result.schema` (a JSON
+  // Schema object). A declarative seam for a typed result; absent ⇒ the agent just runs and acts directly.
+  result?: { schema: Record<string, unknown> };
 }
-
-/** Forward-compat alias: the unit is an actor (kinds agent|human). */
-export type IRActor = IRAgent;
 
 /** The first cron trigger across an agent's triggers, if any — the only trigger the IR interprets. */
 export function cronOf(a: IRAgent): string | undefined {
@@ -52,7 +50,10 @@ export function isScript(behavior: string): boolean {
 
 export interface IRPolicy {
   maxConcurrent?: number; // global fleet cap
-  box: Box; // opaque governance (merge/risk/…); substrate + agents read what they understand
+  // Portable governance DATA (merge/risk/planner knobs) the substrate + skills read. Intentionally NOT a
+  // core-typed schema — governance vocabulary is per-profile (standalone presets), so the core carries it
+  // verbatim and never interprets it. Not an opaque per-agent config box; profile-level policy data.
+  box: Record<string, unknown>;
 }
 
 export interface AutonomyIR {

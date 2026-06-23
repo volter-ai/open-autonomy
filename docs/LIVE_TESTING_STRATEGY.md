@@ -27,7 +27,7 @@ designed to consume):
   `agent-blocked`, `agent-maintainer-hold`, `manual-operator-test`)
 - type operator commands a human owns: `/agent pause`, `/agent resume`,
   `/agent pause repo`, `/agent resume repo`, `/agent status`, `/agent retry`,
-  `/agent cancel`, and an explicit maintainer `/agent develop` or `/agent review`
+  `/agent cancel`, and an explicit maintainer `/agent developer` or `/agent reviewer`
 - review and approve or merge a PR that the system has deliberately routed to
   `human-required` (a maintainer decision the system asked for)
 - edit a PR branch as a maintainer (e.g. to create a head-change condition)
@@ -117,7 +117,7 @@ actually writes, so there is no model/CI stubbing:
 | PM visible no-op / duplicate suppression | (seeded broad issue) | none | `needs-info`/`blocked` |
 | Dispatcher budget / loop / blocking-label enforcement | observed across lines | apply blocking label | n/a |
 | Developer creates/updates agent PR | every develop line | none | n/a |
-| Agent cannot land a workflow edit (no `workflows:write`) | `workflow-edit-forbidden` | maintainer `/agent develop` fixture | `blocked` |
+| Agent cannot land a workflow edit (no `workflows:write`) | `workflow-edit-forbidden` | maintainer `/agent developer` fixture | `blocked` |
 | CI required-check gate + retry then stop | `retry-ci-failure` | CI-failure fixture marker | `human-required` |
 | Reviewer low-risk pass → auto-merge | `review-low-risk-merge` / dogfood | none | `done` |
 | Reviewer `develop_retry` then stop | `retry-review-failure` | reviewer fixture marker | `human-required` |
@@ -200,7 +200,7 @@ work between proctor ticks.
   (`workflow-edit-forbidden`); confirm visible rejection + rejected-publish
   decision before the job fails.
 - **T+35 — Operator controls.** `/agent pause` → `/agent status` → maintainer
-  `/agent develop` (blocked) → `/agent resume` (`operator-pause-resume`).
+  `/agent developer` (blocked) → `/agent resume` (`operator-pause-resume`).
   `/agent pause repo` → confirm PM/develop stop → `/agent resume repo`
   (`repo-pause`). `/agent retry` on a clean issue (`operator-retry-no-failure`).
   `/agent cancel` on an active run (`operator-cancel`).
@@ -211,7 +211,7 @@ work between proctor ticks.
   proof-gate issues and dedupes (`planner-creates-proof-gate-issues`). Confirm the
   decision index reconstructs state (`decision-memory-smoke`).
 - **T+50 — PM open-PR routing.** With an open agent PR present, let the scheduled
-  sweep route it to `/agent review` (`pm-open-pr-review`).
+  sweep route it to `/agent reviewer` (`pm-open-pr-review`).
 - **T+55 — Fleet & upgrade.** Run preflight and the upgrade workflow; confirm version
   is recorded in session evidence (`scaffold-install-check`, `fleet-version-recorded`).
 - **T+60 — Coverage report.** Produce the final report: every coverage-map row marked

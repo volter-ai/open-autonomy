@@ -76,5 +76,5 @@ A human touchpoint is therefore exactly one of two things:
 
 The **ask type** decides which is required: `inform` → notification (no AC); `do` / `decide` / `approve`
 → outcome required → AC + check mandatory. The forbidden middle is a task that gates or counts on a human
-but has no AC — that fabricates completion. (`scripts/autonomy-ratio.ts` enforces the measurement side:
-an unanswered handoff is `humanPending`, and a flow is `complete` only when no handoff is left unresolved.)
+but has no AC — that fabricates completion. (The lifecycle rule: an unanswered handoff is `humanPending`,
+and a flow is `complete` only when no handoff is left unresolved.)

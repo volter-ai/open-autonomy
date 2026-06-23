@@ -9,14 +9,13 @@ outcome.
 ### Graders — pluggable per workload
 
 Each workload declares which graders apply (`"graders": [...]`) — the eval-framework idiom (one case suite,
-scorers chosen per case; cf. OpenAI Evals / HELM / braintrust). Three exist:
+scorers chosen per case; cf. OpenAI Evals / HELM / braintrust). Two exist:
 
 - **`rubric`** — quality: did it achieve the goal? An AI judge investigates the result repo and scores the
   workload's weighted rubric (`scripts/bench-judge.ts`). Right for **open-ended** goals (feature/refactor),
   where a fixed test oracle would over-constrain.
 - **`coverage`** — did each wired capability fire? Maps the run's live issues/PRs/runs to `[oa-test:<id>]`
   scenarios (`scripts/bench-coverage.ts`). Right for **conformance/smoke** workloads.
-- **`autonomy`** — how much was done by agents vs humans, over the decision records (`scripts/autonomy-ratio.ts`).
 
 `bun bin/bench.ts --score` runs exactly the graders the workload declares.
 

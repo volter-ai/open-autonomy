@@ -5,6 +5,7 @@
 //
 //   bun bin/bench.ts                                   PREFLIGHT: every cell installs without clobbering
 //   bun bin/bench.ts --live --workload W --profile P   provision a disposable repo + seed the goal
+//   bun bin/bench.ts --drive --repo O/N                OVERCLOCK: fast/reliable test heartbeat until settled
 //   bun bin/bench.ts --score --repo O/N --workload W   clone the run's result + judge it (AI rubric)
 //
 // PREFLIGHT is static: overlay compile(profile, substrate) onto each workload and assert the install
@@ -134,8 +135,59 @@ if (process.argv.includes('--live')) {
   }
 
   console.log(`\nlive cell up: https://github.com/${repo}`);
-  console.log(`the agents now run autonomously on cron. when the run has settled, score it:`);
+  console.log(`the agents now run autonomously on cron. overclock the heartbeat for a fast test run:`);
+  console.log(`  bun bin/bench.ts --drive --repo ${repo}`);
+  console.log(`then score it:`);
   console.log(`  bun bin/bench.ts --score --repo ${repo} --workload ${wl}`);
+  process.exit(0);
+}
+
+// ---- DRIVE (overclock): a fast, reliable test heartbeat ----
+// The production heartbeat is GitHub `schedule` cron, but it is slow (min */5) and flaky on fresh repos, so a
+// live cell can idle 30+ min between sweeps. The heartbeat is the CLOCK, not a judgment — so for TESTING we
+// drive it fast via workflow_dispatch (always reliable), paced by actual sweep completion. The agents still
+// make EVERY decision (triage/develop/review); we only remove the cron dead-time. This is a bench-only
+// accelerator — the installed system is unchanged. (Per-PR review+merge is already deterministic, so once a
+// sweep launches developers the work flows on its own; we only re-tick the periodic PM/planner sweep.)
+if (process.argv.includes('--drive')) {
+  const repo = arg('--repo');
+  if (!repo) throw new Error('usage: --drive --repo <owner/name> [--ticks N] [--settle SECONDS] [--planner]');
+  const maxTicks = Number(arg('--ticks', '12'));
+  const settleMs = Number(arg('--settle', '300')) * 1000;
+  const withPlanner = process.argv.includes('--planner'); // also tick the planner (greenfield / planner-gated workloads)
+  const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+  const sh = (a: string[]) => { try { return execFileSync('gh', a, { encoding: 'utf8' }).trim(); } catch { return ''; } };
+  const num = (a: string[]) => Number(sh(a) || '0');
+  const snapshot = () => ({
+    openPRs: num(['pr', 'list', '-R', repo, '--state', 'open', '--json', 'number', '--jq', 'length']),
+    merged: num(['pr', 'list', '-R', repo, '--state', 'merged', '--json', 'number', '--jq', 'length']),
+    closed: num(['issue', 'list', '-R', repo, '--state', 'closed', '--json', 'number', '--jq', 'length']),
+    openIssues: num(['issue', 'list', '-R', repo, '--state', 'open', '--json', 'number', '--jq', 'length']),
+  });
+  console.log(`overclock: driving ${repo} — up to ${maxTicks} ticks, ${settleMs / 1000}s settle/tick${withPlanner ? ' (+planner)' : ''}`);
+  let prev = '';
+  let stable = 0;
+  for (let tick = 1; tick <= maxTicks; tick++) {
+    run('gh', ['workflow', 'run', 'pm.yml', '-R', repo]);
+    if (tick === 1 && withPlanner) run('gh', ['workflow', 'run', 'planner.yml', '-R', repo]);
+    // Pace by the PM sweep actually completing (not a blind sleep), then a settle window for the developers
+    // it launched to flow develop -> auto-review -> auto-merge before the next sweep triages/closes.
+    await sleep(20000); // let the dispatched run register
+    const deadline = Date.now() + 7 * 60 * 1000;
+    while (Date.now() < deadline && sh(['run', 'list', '-R', repo, '--workflow', 'pm.yml', '--limit', '1', '--json', 'status', '--jq', '.[0].status']) !== 'completed') {
+      await sleep(15000);
+    }
+    await sleep(settleMs);
+    const s = snapshot();
+    const key = `${s.openPRs}/${s.merged}/${s.closed}/${s.openIssues}`;
+    console.log(`  tick ${tick}: PRs open=${s.openPRs} merged=${s.merged} | issues open=${s.openIssues} closed=${s.closed}`);
+    // Settled = no open PRs in flight AND nothing changed since the last tick, twice running (steady state).
+    if (s.openPRs === 0 && key === prev) {
+      if (++stable >= 2) { console.log('  settled (steady state).'); break; }
+    } else stable = 0;
+    prev = key;
+  }
+  console.log(`overclock done. score: bun bin/bench.ts --score --repo ${repo} --workload <W>`);
   process.exit(0);
 }
 

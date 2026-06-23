@@ -61,6 +61,28 @@ const DISPATCH_INPUTS = [
   '      issue_number: { description: "issue/PR number to act on", required: false, type: string }',
 ];
 
+// Egress lockdown for the credentialed jobs. The agent runs untrusted-derived work (issue/PR/comment text)
+// with a capability-scoped GH_TOKEN + a bounded model token in env and full Bash, so a prompt-injected
+// agent could try to exfiltrate those over the network. harden-runner block mode denies all egress except
+// the allowlist (github API/clone, the npm registry for installs, and the model proxy), so a token can't be
+// shipped to an attacker host even if read. The proxy host defaults to the live deployment and is
+// overridable per-install via the PUBLIC_AGENT_PROXY_HOST var. harden-runner auto-allows the Actions
+// control plane; we only list app-level egress.
+const HARDEN_RUNNER = [
+  '      - name: Lock down egress (block token exfiltration from untrusted-derived work)',
+  '        uses: step-security/harden-runner@v2',
+  '        with:',
+  '          egress-policy: block',
+  '          allowed-endpoints: >',
+  '            api.github.com:443',
+  '            github.com:443',
+  '            codeload.github.com:443',
+  '            objects.githubusercontent.com:443',
+  '            release-assets.githubusercontent.com:443',
+  '            registry.npmjs.org:443',
+  "            ${{ vars.PUBLIC_AGENT_PROXY_HOST || 'volter-agent-model-proxy.aaron-0ed.workers.dev' }}:443",
+];
+
 // Render a carried (non-cron) event trigger as github `on:` YAML; its config (issues `types`, …) is
 // carried verbatim block-style (scalar | string[]).
 // github's realization of the portable `task:` trigger (docs/TASK-LIFECYCLE.md): a lifecycle state is a
@@ -282,6 +304,7 @@ function wrapperYml(name: string, agent: IRAgent): string {
     `      MODEL_PROXY_OIDC_AUDIENCE: \${{ vars.MODEL_PROXY_OIDC_AUDIENCE || 'volter-agent-model-proxy' }}`,
     ...triggerParamsEnv(agent),
     `    steps:`,
+    ...HARDEN_RUNNER,
     `      - uses: actions/checkout@v4`,
     `      - uses: oven-sh/setup-bun@v2`,
     `      - run: bun install --frozen-lockfile`,
@@ -304,6 +327,7 @@ function wrapperYml(name: string, agent: IRAgent): string {
     `      GH_TOKEN: \${{ github.token }}`,
     ...triggerParamsEnv(agent),
     `    steps:`,
+    ...HARDEN_RUNNER,
     `      - uses: actions/checkout@v4`,
     `      - uses: oven-sh/setup-bun@v2`,
     `      - run: bun install --frozen-lockfile`,

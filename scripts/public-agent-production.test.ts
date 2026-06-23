@@ -57,6 +57,17 @@ describe('public agent production readiness', () => {
     }
   });
 
+  test('credentialed jobs lock down egress (no token exfiltration from untrusted-derived work)', () => {
+    // The agent runs untrusted-derived work with a scoped GH_TOKEN + bounded model token in env. Every
+    // agent workflow must block egress (harden-runner) so a prompt-injected agent can't ship a token to an
+    // attacker host. Encoded as a check so the lockdown can't silently regress.
+    for (const wf of ['developer.yml', 'reviewer.yml', 'pm.yml', 'planner.yml', 'strategist.yml', 'strategy_reviewer.yml']) {
+      const text = workflow(wf);
+      expect(text).toContain('step-security/harden-runner');
+      expect(text).toContain('egress-policy: block');
+    }
+  });
+
   test('the agent job is credentialed (scoped to its capabilities); it proposes its own auto-merging PR', () => {
     const text = workflow('developer.yml');
     // developer = code:propose + tasks:converse → contents/pull-requests/actions/issues:write + id-token.

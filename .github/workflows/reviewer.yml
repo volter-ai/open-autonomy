@@ -42,6 +42,18 @@ jobs:
       SUBJECT_TEXT: ${{ github.event.comment.body || github.event.issue.body }}
       ACTOR_ROLE: ${{ github.event.comment.author_association }}
     steps:
+      - name: Lock down egress (block token exfiltration from untrusted-derived work)
+        uses: step-security/harden-runner@v2
+        with:
+          egress-policy: block
+          allowed-endpoints: >
+            api.github.com:443
+            github.com:443
+            codeload.github.com:443
+            objects.githubusercontent.com:443
+            release-assets.githubusercontent.com:443
+            registry.npmjs.org:443
+            ${{ vars.PUBLIC_AGENT_PROXY_HOST || 'volter-agent-model-proxy.aaron-0ed.workers.dev' }}:443
       - uses: actions/checkout@v4
       - uses: oven-sh/setup-bun@v2
       - run: bun install --frozen-lockfile
@@ -70,6 +82,18 @@ jobs:
       SUBJECT_TEXT: ${{ github.event.comment.body || github.event.issue.body }}
       ACTOR_ROLE: ${{ github.event.comment.author_association }}
     steps:
+      - name: Lock down egress (block token exfiltration from untrusted-derived work)
+        uses: step-security/harden-runner@v2
+        with:
+          egress-policy: block
+          allowed-endpoints: >
+            api.github.com:443
+            github.com:443
+            codeload.github.com:443
+            objects.githubusercontent.com:443
+            release-assets.githubusercontent.com:443
+            registry.npmjs.org:443
+            ${{ vars.PUBLIC_AGENT_PROXY_HOST || 'volter-agent-model-proxy.aaron-0ed.workers.dev' }}:443
       - uses: actions/checkout@v4
       - uses: oven-sh/setup-bun@v2
       - run: bun install --frozen-lockfile

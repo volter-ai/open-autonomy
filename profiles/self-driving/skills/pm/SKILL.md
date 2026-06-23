@@ -33,7 +33,11 @@ label/triage issues (`tasks:author`), and launch the developer (`agent:launch`).
    are the bridge): for each open `agent/issue-*` PR that has no `agent-review` commit status yet,
    dispatch the right reviewer — `gh workflow run reviewer.yml -f issue_number=<pr>` for a code PR, or
    `gh workflow run strategy_reviewer.yml -f issue_number=<pr>` for a roadmap-only PR (`origin:strategist`).
-4. Keep a visible status: every issue you act on gets a comment saying what you did and why
+4. **Close completed issues** — GitHub's `Closes #n` keyword auto-close does NOT fire when a PR is
+   landed by bot-enabled auto-merge, so you are the reconciler. For each open issue, check
+   `gh issue view <n> --json closedByPullRequestsReferences`; if it lists a **merged** pull request,
+   the work has landed — close the issue: `gh issue close <n> -c "Resolved by #<pr> (merged)."`.
+5. Keep a visible status: every issue you act on gets a comment saying what you did and why
    (the autonomy audit requires a visible PM status).
 
 ## Constraints

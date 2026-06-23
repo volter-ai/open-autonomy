@@ -51,7 +51,7 @@ export const COVERAGE_SCENARIOS = [
   'retry-ci-failure',
   'retry-review-failure',
   'head-changed-before-merge',
-  'review-low-risk-merge',
+  'workflow-edit-forbidden',
   'governance-maintainer-hold',
   'governance-develop-only',
   'governance-risky-approval',
@@ -102,7 +102,6 @@ export function summarizeMetrics(issues: IssueLite[], prs: PrLite[], runs: RunLi
 const RESOLUTION_SCENARIOS = new Set<string>([
   'pm-clear-docs',
   'pm-open-pr-review',
-  'review-low-risk-merge',
 ]);
 
 // Classify each coverage scenario from the live issue that carries its marker. Conservative:

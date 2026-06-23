@@ -46,10 +46,10 @@ describe('bench coverage grader', () => {
 
   test('a CLOSED resolution scenario is proven; an OPEN one is in-progress', () => {
     const r = classifyScenarios([
-      { number: 20, title: '[oa-test:review-low-risk-merge] a', state: 'CLOSED', labels: [] },
+      { number: 20, title: '[oa-test:pm-open-pr-review] a', state: 'CLOSED', labels: [] },
       { number: 21, title: '[oa-test:pm-clear-docs] b', state: 'OPEN', labels: [] },
     ]);
-    expect(r.find((x) => x.id === 'review-low-risk-merge')?.status).toBe('proven');
+    expect(r.find((x) => x.id === 'pm-open-pr-review')?.status).toBe('proven');
     expect(r.find((x) => x.id === 'pm-clear-docs')?.status).toBe('in-progress');
   });
 

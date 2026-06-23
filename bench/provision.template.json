@@ -30,6 +30,6 @@
   ],
   "branch_protection": {
     "branch": "main",
-    "required_checks": ["ci"]
+    "required_checks": ["ci", "agent-review"]
   }
 }

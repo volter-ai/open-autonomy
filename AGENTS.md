@@ -5,6 +5,8 @@ review gates, and committed evidence. Agents working here must preserve the
 public OSS contract: small scoped changes, deterministic safety checks, visible
 status, and reversible maintainer control.
 
+Every agent is one credentialed job scoped to its capabilities; the merge boundary is the `code:review` / `code:propose` permission split plus native auto-merge (required checks: **ci** + **agent-review**).
+
 Read these files before changing behavior:
 
 - `docs/ARCHITECTURE.md` for the system model and document map.

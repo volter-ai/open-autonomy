@@ -26,7 +26,7 @@ const DEV_ONLY = new Set([
   'provision-target-repo.ts', 'provision-target-repo.test.ts',
   // Bench (dev/analysis): the one eval harness's graders — fitness measurement, not shipped.
   // Workloads + the runner live in bench/; these are the per-grader scripts under scripts/.
-  'bench-judge.ts', 'bench-coverage.ts', 'bench-coverage.test.ts',
+  'bench-judge.ts', 'bench-coverage.ts', 'bench-coverage.test.ts', 'bench-operate.ts',
   // Packaging tooling: builds the published node CLI bundle — dev-only, never shipped into an install.
   'build-cli.ts',
   // Operator treasury tooling: rotates the proxy admin token (worker secret + local .env) — dev-only.

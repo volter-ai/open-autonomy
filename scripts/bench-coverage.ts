@@ -120,7 +120,10 @@ export function classifyScenarios(issues: IssueLite[]): ScenarioResult[] {
     const closed = issue.state.toUpperCase() === 'CLOSED';
     const has = (l: string) => labels.has(l);
     let status: ScenarioStatus = 'in-progress';
-    if (id === 'pm-needs-info' && has('needs-info')) status = 'proven';
+    // The operator-sim (bench-operate) drove + VERIFIED a manual-operator scenario's system response and
+    // labeled it — count that as proven (it's the operator half of conformance, checked against real behavior).
+    if (has('oa-test-passed')) status = 'proven';
+    else if (id === 'pm-needs-info' && has('needs-info')) status = 'proven';
     else if (id === 'pm-human-required-risky-workflow' && (has('human-required') || has('agent-blocked'))) status = 'proven';
     else if (id === 'governance-maintainer-hold' && (has('agent-maintainer-hold') || has('human-required'))) status = 'proven';
     // Resolution scenarios succeed by the issue being resolved/merged, so `closed` is genuine proof.

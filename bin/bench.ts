@@ -6,6 +6,7 @@
 //   bun bin/bench.ts                                   PREFLIGHT: every cell installs without clobbering
 //   bun bin/bench.ts --live --workload W --profile P   provision a disposable repo + seed the goal
 //   bun bin/bench.ts --drive --repo O/N                OVERCLOCK: fast/reliable test heartbeat until settled
+//   bun bin/bench.ts --operate --repo O/N              OPERATOR-SIM: drive+verify the manual-operator scenarios
 //   bun bin/bench.ts --score --repo O/N --workload W   clone the run's result + judge it (AI rubric)
 //
 // PREFLIGHT is static: overlay compile(profile, substrate) onto each workload and assert the install
@@ -188,6 +189,17 @@ if (process.argv.includes('--drive')) {
     prev = key;
   }
   console.log(`overclock done. score: bun bin/bench.ts --score --repo ${repo} --workload <W>`);
+  process.exit(0);
+}
+
+// ---- OPERATE (operator/human sim): drive + verify the manual-operator-test scenarios ----
+// The autonomous half of conformance is driven by --drive; the operator half needs a maintainer's inputs
+// (/agent commands, labels, induced conditions). This simulates that operator and verifies the system's
+// real response, labeling confirmed scenarios `oa-test-passed` (the coverage grader counts that as proven).
+if (process.argv.includes('--operate')) {
+  const repo = arg('--repo');
+  if (!repo) throw new Error('usage: --operate --repo <owner/name>');
+  run('bun', ['scripts/bench-operate.ts', '--repo', repo]);
   process.exit(0);
 }
 

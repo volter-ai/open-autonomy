@@ -53,6 +53,13 @@ describe('bench coverage grader', () => {
     expect(r.find((x) => x.id === 'pm-clear-docs')?.status).toBe('in-progress');
   });
 
+  test('an operator-sim-verified scenario (oa-test-passed) is proven', () => {
+    const r = classifyScenarios([
+      { number: 30, title: '[oa-test:operator-pause-resume] x', state: 'OPEN', labels: ['manual-operator-test', 'oa-test-passed'] },
+    ]);
+    expect(r.find((x) => x.id === 'operator-pause-resume')?.status).toBe('proven');
+  });
+
   test('a CLOSED non-resolution scenario without its success label is FAILED, not proven', () => {
     // operator-cancel succeeds via its operator action, not by a bare close — closing it without the
     // escalation/expected state means it did NOT demonstrate the behavior. This is the over-leniency the

@@ -6,7 +6,7 @@
 //
 // SCOPE: a "human step" is any recorded step that TOUCHES a person — a handoff (`escalation` /
 // `human_required`) or a RESOLUTION (a real person acting, recorded with the `human:<login>` actor
-// convention; extract it from a PR's merge signals via public-agent-merge-gate.humanResolution). The
+// convention; a native human Approve on the current head is the resolution signal). The
 // remaining gap is the live wiring that WRITES the resolution decision into the session during a run —
 // until that lands, real flows record handoffs but not resolutions, so state the source when reporting.
 import { readdirSync, readFileSync } from 'node:fs';

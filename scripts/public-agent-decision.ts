@@ -1,8 +1,7 @@
 #!/usr/bin/env bun
 import { createHash } from 'node:crypto';
-import { mkdirSync } from 'node:fs';
+import { mkdirSync, writeFileSync } from 'node:fs';
 import { basename, join, resolve } from 'node:path';
-import { writeJson } from './public-agent-bundle.js';
 
 export const DECISION_SCHEMA = 'volter.agent.decision.v1' as const;
 
@@ -139,7 +138,7 @@ export function writeDecision(outDir: string, decision: AgentDecision): string {
   const filename = `${safeSegment(valid.stage)}-${safeSegment(valid.id)}.json`;
   mkdirSync(outDir, { recursive: true });
   const path = join(outDir, filename);
-  writeJson(path, valid);
+  writeFileSync(path, `${JSON.stringify(valid, null, 2)}\n`);
   return path;
 }
 

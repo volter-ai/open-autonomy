@@ -26,10 +26,6 @@ const GITHUB_ONLY = new Set([
   'scripts/model-proxy-mint.ts',
   'scripts/model-proxy-exchange.ts',
   'scripts/model-proxy-revoke.ts',
-  'scripts/github-agent-publish.ts',
-  'scripts/github-agent-publish.test.ts',
-  'scripts/github-agent-session.ts',
-  'scripts/github-agent-session.test.ts',
   'scripts/claude-agent-run.ts',
 ]);
 

@@ -33,19 +33,11 @@ const DEV_ONLY = new Set([
   'rotate-admin-token.ts',
 ]);
 const PROFILE_OWNED = new Set([
-  // self-driving's agent behaviors + their deterministic logic — carried by profiles/self-driving.
-  'agent-planner.ts', 'agent-pm.ts', 'agent-strategist.ts',
-  // reviewer + strategy-reviewer are now skill agents: each a prepare (read) + interpreter (write) pair,
-  // profile-owned (they must NOT leak into the generic runtime mirror).
-  'prepare-review.ts', 'interpret-review.ts',
-  'prepare-strategy-review.ts', 'interpret-strategy-review.ts',
-  'open-autonomy-config.ts', 'open-autonomy-governance-report.ts', 'open-autonomy-preflight.ts',
-  'open-autonomy-upgrade-cli.ts',
-  'public-agent-ci.ts', 'public-agent-command.ts', 'public-agent-context.ts', 'public-agent-control-files.ts',
-  'public-agent-control.ts', 'public-agent-decision-index.ts', 'public-agent-dispatcher.ts',
-  'public-agent-loop-budget.ts', 'public-agent-merge-gate.ts', 'public-agent-planner.ts', 'public-agent-pm.ts',
-  'public-agent-policy.ts', 'public-agent-review.ts', 'public-agent-strategist.ts',
-  'public-agent-strategy-ratify.ts', 'public-agent-strategy-review.ts', 'public-agent-target.ts',
+  // self-driving's OWN governance/preflight/upgrade tooling — profile content, shipped via the profile's
+  // `resources`, NOT vendored into the generic runtime mirror. (All agents are skills; there are no agent
+  // behavior scripts.)
+  'public-agent-decision-index.ts', 'open-autonomy-config.ts', 'open-autonomy-governance-report.ts',
+  'open-autonomy-preflight.ts', 'open-autonomy-upgrade-cli.ts',
 ]);
 // Unit tests are dev artifacts, NOT install content — they never run in an installation and would carry
 // dangling deps if vendored. They stay in scripts/ (run by check:public-agent) and ship to no profile.

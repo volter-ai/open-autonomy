@@ -2,7 +2,6 @@ import { describe, expect, test } from 'bun:test';
 import { readFileSync } from 'node:fs';
 import { buildGovernanceReport } from './open-autonomy-governance-report.js';
 import { buildPreflightReport } from './open-autonomy-preflight.js';
-import { summarizeAgentStatus, renderStatusComment } from './public-agent-control.js';
 import { buildDecisionIndex } from './public-agent-decision-index.js';
 import { makeDecision } from './public-agent-decision.js';
 
@@ -26,27 +25,6 @@ describe('open autonomy fleet and audit surfaces', () => {
     const report = buildPreflightReport({ root: '/tmp/open-autonomy-missing-root', env: {}, labels: [] });
     expect(report.ready).toBe(false);
     expect(report.missing).toContain('file:AGENTS.md');
-  });
-
-  test('status can reconstruct latest state from the decision index', () => {
-    const index = buildDecisionIndex([
-      makeDecision({
-        stage: 'merge_gate',
-        issue: 12,
-        pr: 13,
-        actor: 'merge-gate',
-        decision: 'human_required',
-        reason: 'maintainer hold',
-        next_action: 'human_required',
-      }, new Date('2026-06-16T12:00:00Z')),
-    ]);
-    const status = summarizeAgentStatus({
-      issue: { number: 12, labels: [] },
-      decisionIndex: index,
-    });
-    expect(status.open_pr).toBe(13);
-    expect(status.latest_decision?.decision).toBe('human_required');
-    expect(renderStatusComment(status)).toContain('latest indexed decision: merge_gate:human_required');
   });
 
   test('governance report summarizes decision index outcomes', () => {

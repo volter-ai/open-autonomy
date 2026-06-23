@@ -1,6 +1,5 @@
 import { describe, expect, test } from 'bun:test';
 import { isHumanStep, measureFlow } from './autonomy-ratio.js';
-import { humanResolution } from './public-agent-merge-gate.js';
 import { type DecisionStage, makeDecision } from './public-agent-decision.js';
 
 function dec(stage: DecisionStage, actor: string, decision: string, atMs: number) {
@@ -63,12 +62,9 @@ describe('measureFlow — the autonomy ratio', () => {
     });
   });
 
-  test('the human seam end-to-end: observe a resolution → record human:<login> → the ratio counts it', () => {
-    // A maintainer approves via a NATIVE PR review — the merge gate observes the resolution with attribution.
-    const res = humanResolution({
-      reviews: [{ state: 'APPROVED', author: { login: 'alice' }, submittedAt: '2026-06-20T11:00:00Z', commitId: 'abc123' }],
-    });
-    expect(res).toEqual({ login: 'alice', at: '2026-06-20T11:00:00Z', decision: 'approve', sha: 'abc123' });
+  test('the human seam end-to-end: a human:<login> resolution → the ratio counts it', () => {
+    // A maintainer approval (a native PR review, observed elsewhere) is recorded as a human resolution.
+    const res = { login: 'alice', at: '2026-06-20T11:00:00Z', decision: 'approve' as const };
 
     // Recorded with the human:<login> convention, the resolution counts as a human step.
     const resolution = makeDecision(

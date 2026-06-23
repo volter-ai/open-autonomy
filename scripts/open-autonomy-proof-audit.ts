@@ -1,6 +1,16 @@
 #!/usr/bin/env bun
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
-import { parseRoadmapItems } from './public-agent-planner.js';
+// The proof_gate of every non-`proposed` roadmap item (proposed items are aspirational, exempt until a
+// human ratifies them). A focused roadmap reader — the audit needs only status + proof_gate per item.
+function nonProposedProofGates(roadmapText: string): string[] {
+  const unq = (s: string) => s.replace(/^["']|["']$/g, '').trim();
+  return roadmapText
+    .split(/^\s*-\s+id:/m)
+    .slice(1)
+    .map((block) => ({ status: /\bstatus:\s*(\S+)/.exec(block)?.[1], gate: /\bproof_gate:\s*([^\n]+)/.exec(block)?.[1] }))
+    .filter((it) => it.gate && it.status !== 'proposed')
+    .map((it) => unq(it.gate as string));
+}
 
 export interface ProofAuditResult {
   schema: 'open-autonomy.proof-audit.v1';
@@ -34,9 +44,7 @@ export function auditProofLedger(roadmapText: string, ledgerText: string): Proof
   // Proposed items are aspirational roadmap candidates awaiting human ratification. They carry
   // no proven evidence yet, so they are exempt from the ledger audit until a human promotes them
   // to active work. Every non-proposed item must still cite real evidence.
-  const gates = parseRoadmapItems(roadmapText)
-    .filter((item) => item.status !== 'proposed')
-    .map((item) => item.proof_gate);
+  const gates = nonProposedProofGates(roadmapText);
   const proof_gates = gates.map((id) => {
     const row = ledgerRow(ledgerText, id);
     const evidence = row ? validatedEvidence(row.evidence) : [];

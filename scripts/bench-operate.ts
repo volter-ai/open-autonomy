@@ -7,7 +7,7 @@
 // checks real behavior, it also surfaces where the system does not yet match a scenario's spec (a fail with
 // a GAP note). Dev/test tooling only — never shipped into an install.
 import { execFileSync } from 'node:child_process';
-import { mkdtempSync, readFileSync, writeFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, readFileSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -189,6 +189,14 @@ const tweakDoc = (dir: string) => {
   const p = join(dir, 'README.md');
   writeFileSync(p, readFileSync(p, 'utf8') + '\n<!-- operator-sim: head change to re-trigger checks -->\n');
 };
+const addBuggyCode = (dir: string) => {
+  // Induce a GENUINE quality rejection (not a maintainer hold): the doc says "sum" but the body subtracts — a
+  // clear correctness bug the reviewer must fail. Valid TypeScript, so `ci` stays green and ONLY `agent-review`
+  // fails — and there is no block label, so the PM treats it as a fixable failed review to act on, not a hold.
+  const d = join(dir, 'src');
+  mkdirSync(d, { recursive: true });
+  writeFileSync(join(d, 'arithmetic.ts'), '/** Returns the sum of a and b. */\nexport function add(a: number, b: number): number {\n  return a - b;\n}\n');
+};
 
 /** After inducing a failed required gate on PR #pr, verify the PM decides FROM HISTORY (re-dispatch with
  * context, or escalate human-required) — never an automatic loop — and that the PR did not merge. operate()
@@ -366,25 +374,24 @@ async function opRetryCiFailure(repo: string, n: number): Promise<OpResult> {
 }
 
 async function opRetryReviewFailure(repo: string, n: number): Promise<OpResult> {
-  // Develop → clean PR → induce a REAL failing agent-review → verify the PM decides from history. The
-  // deterministic review-failure inducer is a maintainer block label (the spec's allowed path): the reviewer's
-  // hard rule posts agent-review=failure regardless of code quality. (maintainer-hold checks the reviewer honors
-  // the label; THIS checks the PM's subsequent judgment.) Disable auto-merge so the clean PR can't land first.
+  // Develop → clean PR → induce a GENUINE quality rejection (push an obviously-incorrect change; NO block
+  // label, so the PM treats the resulting agent-review=failure as a fixable failed review, not a hold) →
+  // verify the PM decides from history (re-dispatch-with-context, or escalate). Disable auto-merge first so the
+  // clean PR can't land before we make it fail.
   const pr = await developAndWaitForPr(repo, n);
   if (!pr) return { scenario: 'retry-review-failure', issue: n, status: 'fail', note: 'no agent PR produced to fail review on' };
   ghOk(['pr', 'merge', String(pr), '-R', repo, '--disable-auto']);
-  ghOk(['label', 'create', 'agent-blocked', '-R', repo, '--color', 'b60205', '--description', 'reviewer must reject — needs another attempt or a human']);
-  ghOk(['pr', 'edit', String(pr), '-R', repo, '--add-label', 'agent-blocked']);
-  await sleep(5000);
+  const sha = inducePush(repo, `agent/issue-${n}`, addBuggyCode);
+  if (!sha) return { scenario: 'retry-review-failure', issue: n, status: 'skip', note: 'could not push the buggy change (git not gh-authenticated?)' };
   ghOk(['workflow', 'run', 'reviewer.yml', '-R', repo, '-f', `issue_number=${pr}`]);
   let review = '';
   for (let i = 0; i < 16 && !/agent-review:FAILURE/i.test(review); i++) {
     await sleep(30000);
     review = prChecks(repo, pr);
   }
-  if (!/agent-review:FAILURE/i.test(review)) return { scenario: 'retry-review-failure', issue: n, status: 'fail', note: `GAP: reviewer did not fail the PR (checks=[${review}])` };
+  if (!/agent-review:FAILURE/i.test(review)) return { scenario: 'retry-review-failure', issue: n, status: 'fail', note: `GAP: reviewer did not reject the buggy change (checks=[${review}])` };
   ghOk(['pr', 'merge', String(pr), '-R', repo, '--auto']); // re-arm: a failed agent-review must still hold it
-  return verifyPmDecidedFromHistory(repo, n, pr, 'retry-review-failure', `agent-review failed on PR #${pr}`);
+  return verifyPmDecidedFromHistory(repo, n, pr, 'retry-review-failure', `agent-review failed (quality) on PR #${pr} head ${sha.slice(0, 7)}`);
 }
 
 async function opHeadChanged(repo: string, n: number): Promise<OpResult> {

@@ -274,11 +274,18 @@ async function mintRunOidc(req: Request, env: Env): Promise<Response> {
     return error('forbidden_workflow', 403);
   }
   const body = parseJson<MintRunRequest>(await req.text()) ?? ({} as MintRunRequest);
+  // An OIDC minter (any allowlisted repo workflow, including owner-wildcard fleet repos) must NOT
+  // self-elect into the trusted SYSTEM lane: a non-user `purpose` makes limit-ledger skip the
+  // per-repo / per-actor / per-day abuse caps (the rail for the externally-triggerable surface). Clamp
+  // OIDC mints to a user purpose; the system lane (e.g. cron heartbeats) is reachable only via the
+  // admin-token mint path. Default 'agent' for any unknown/system value.
+  const OIDC_USER_PURPOSES = new Set(['agent', 'review', 'triage']);
   const merged: MintRunRequest = {
     ...body,
     repo: oidc.repository,
     actor: oidc.actor ?? body.actor ?? 'unknown',
     issue: Number.isInteger(body.issue) && (body.issue as number) >= 0 ? body.issue : 0,
+    purpose: OIDC_USER_PURPOSES.has(body.purpose ?? 'agent') ? body.purpose ?? 'agent' : 'agent',
     github_run_id: oidc.run_id ?? body.github_run_id,
     github_run_attempt: oidc.run_attempt ?? body.github_run_attempt,
     github_workflow_ref: workflowRef || body.github_workflow_ref,

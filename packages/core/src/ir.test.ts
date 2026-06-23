@@ -67,6 +67,19 @@ describe('validateIR — code:merge is gate-only (the merge boundary)', () => {
     expect(validateIR(ir({ a: agent({ capabilities: ['code:propose'] }) }))).toEqual([]);
     expect(validateIR(ir({ a: agent({ capabilities: ['code:propose@roadmap'] }) }))).toEqual([]);
   });
+
+  test('rejects an agent holding both code:review and code:propose (the bless/propose split)', () => {
+    const a = agent({ capabilities: ['code:propose', 'code:review'] });
+    expect(validateIR(ir({ a })).some((e) => e.includes('no agent may hold both code:review and code:propose'))).toBe(true);
+    // also when scoped
+    const b = agent({ capabilities: ['code:propose@roadmap', 'code:review'] });
+    expect(validateIR(ir({ a: b })).some((e) => e.includes('no agent may hold both code:review and code:propose'))).toBe(true);
+  });
+
+  test('accepts code:review alone and code:propose alone (the boundary is satisfied by separate agents)', () => {
+    expect(validateIR(ir({ a: agent({ capabilities: ['code:review'] }) }))).toEqual([]);
+    expect(validateIR(ir({ a: agent({ capabilities: ['code:propose'] }) }))).toEqual([]);
+  });
 });
 
 describe('validateIR — schema/agents', () => {

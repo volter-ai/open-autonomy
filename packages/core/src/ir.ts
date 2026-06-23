@@ -84,9 +84,15 @@ export function validateIR(ir: AutonomyIR): string[] {
     if (!Array.isArray(a.capabilities)) errors.push(`agent ${name}: capabilities must be an array`);
     // code:merge is gate-only: merge is the one irreversible, default-branch act, never granted to an
     // agent (docs/CAPABILITIES.md — the merge boundary). The base (before any @scope) must not be code:merge.
-    for (const cap of a.capabilities ?? [])
-      if (typeof cap === 'string' && cap.split('@')[0] === 'code:merge')
+    const capBases = (a.capabilities ?? []).filter((c): c is string => typeof c === 'string').map((c) => c.split('@')[0]);
+    for (const cap of capBases)
+      if (cap === 'code:merge')
         errors.push(`agent ${name}: code:merge is gate-only — no agent may merge`);
+    // The merge boundary itself: bless (code:review = statuses:write) and propose (code:propose =
+    // contents:write) are deliberately split so no single agent can write code AND certify it. Enforce it
+    // here, not by convention (docs/CAPABILITIES.md — the merge boundary).
+    if (capBases.includes('code:review') && capBases.includes('code:propose'))
+      errors.push(`agent ${name}: merge boundary — no agent may hold both code:review and code:propose`);
     if (!a.triggers || a.triggers.length === 0) errors.push(`agent ${name}: needs at least one trigger`);
     if (a.kind !== undefined && a.kind !== 'agent' && a.kind !== 'human')
       errors.push(`agent ${name}: kind must be 'agent' or 'human'`);

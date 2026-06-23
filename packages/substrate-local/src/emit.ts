@@ -18,11 +18,10 @@ import { SUPPORTED_RUNNERS, type RunnerName } from '@open-autonomy/core';
 import { runtimeFiles } from '@open-autonomy/substrate-github';
 import { runnerDefaultsModule } from './runner-config';
 
-// github-only runtime scripts — the proxy/mint clients, the privilege-separated wrapper machinery, and
-// the box-setup provisioner. A trusted local box never mints or wraps, so these are excluded from the
-// local install (keeping it free of github execution-layer code).
+// github-only runtime scripts — the proxy/mint+exchange clients and the credentialed skill runner. A
+// trusted local box never mints a bounded run token, so these are excluded from the local install
+// (keeping it free of github execution-layer code).
 const GITHUB_ONLY = new Set([
-  'scripts/provision-model-endpoint.ts',
   'scripts/model-proxy-mint.ts',
   'scripts/model-proxy-exchange.ts',
   'scripts/model-proxy-revoke.ts',

@@ -55,7 +55,6 @@
     "scripts/open-autonomy-config.ts",
     "scripts/open-autonomy-preflight.ts",
     "scripts/open-autonomy-upgrade-cli.ts",
-    "scripts/provision-model-endpoint.ts",
     "scripts/runner.ts"
   ]
 }

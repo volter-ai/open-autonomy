@@ -66,8 +66,9 @@ enforcement is structural: the capability/permission split + branch protection +
 
 There are two normal ways work starts:
 
-- Maintainer-directed: a maintainer comments `/agent develop`, `/agent review`,
-  `/agent pause`, `/agent status`, or another supported command.
+- Maintainer-directed: a maintainer comments `/agent <agent>` to launch one by name
+  (`/agent developer`, `/agent reviewer`) or `/agent pause`, `/agent status`, etc. Only a
+  maintainer (OWNER/MEMBER/COLLABORATOR) can drive these; other commenters are ignored.
 - PM-directed: the scheduled or manual PM workflow sweeps eligible issues,
   writes a visible status or command comment, and dispatches the matching
   workflow only when the issue is clear enough.

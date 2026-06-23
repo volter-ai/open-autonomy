@@ -10,8 +10,9 @@ targets: [github]
 agents:
   # Developer: edits code in its credentialed sandbox; the effect step proposes its change as an
   # auto-merging PR (landed only after ci + an independent agent-review). PM-gated: it runs when the PM
-  # dispatches it (workflow_dispatch) or a maintainer comments `/agent develop` (issue_comment) — NOT on
-  # raw issue labels, which would auto-develop any labeled issue and bypass triage + the concurrency throttle.
+  # dispatches it (workflow_dispatch) or a MAINTAINER comments `/agent developer` (issue_comment) — NOT on
+  # plain comments or raw issue labels, which would bypass triage + the concurrency throttle. The substrate
+  # gates the comment surface on author_association (no drive-by launch); see emit.ts agentRunIf/controlIf.
   developer:
     behavior: developer
     capabilities: [code:propose, tasks:converse]

@@ -35,6 +35,28 @@ describe('public agent production readiness', () => {
     for (const verb of ['cancel', 'pause', 'resume', 'status', 'retry']) expect(control()).toContain(verb);
   });
 
+  test('the comment surface is maintainer-gated and fork-gated (no drive-by launch, no fork escalation)', () => {
+    // Every agent that fires on issue_comment / pull_request_target must gate those untrusted-actor
+    // surfaces. The control plane and the comment-launch require a maintainer (author_association); a
+    // pull_request_target agent run requires a same-repo PR or a maintainer author. A plain comment
+    // launches nothing. These are the merge-boundary / control-plane guards — encoded as a check so they
+    // can never silently regress (the deep-review found both missing).
+    for (const wf of ['developer.yml', 'reviewer.yml', 'pm.yml', 'planner.yml', 'strategist.yml', 'strategy_reviewer.yml']) {
+      const text = workflow(wf);
+      // control job: maintainer-gated
+      expect(text).toContain('contains(fromJSON(\'["OWNER","MEMBER","COLLABORATOR"]\'), github.event.comment.author_association)');
+      // a plain (non-/agent) comment must NOT reach the setup/agent job: the only issue_comment path into
+      // the agent job is an explicit `/agent <name>` launch, also maintainer-gated.
+      expect(text).toContain("startsWith(github.event.comment.body, '/agent ");
+    }
+    // pull_request_target reviewers must carry the fork gate (same-repo PR or maintainer author).
+    for (const wf of ['reviewer.yml', 'strategy_reviewer.yml']) {
+      const text = workflow(wf);
+      expect(text).toContain('github.event.pull_request.head.repo.full_name == github.repository');
+      expect(text).toContain('github.event.pull_request.author_association');
+    }
+  });
+
   test('the agent job is credentialed (scoped to its capabilities); it proposes its own auto-merging PR', () => {
     const text = workflow('developer.yml');
     // developer = code:propose + tasks:converse → contents/pull-requests/actions/issues:write + id-token.

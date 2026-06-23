@@ -103,8 +103,11 @@ open-autonomy compile profiles/simple-sdlc local ../my-repo     # local-loop sub
 
 ## Operator commands
 
-- `/agent develop` — ask the agent to work on an issue.
-- `/agent review` — run the reviewer on an agent PR.
+Operator commands work only for maintainers (repo OWNER/MEMBER/COLLABORATOR); a comment from anyone
+else is ignored. To launch an agent by comment, name it: `/agent <agent>` (the workflow name).
+
+- `/agent developer` — ask the developer to work on the issue.
+- `/agent reviewer` — run the reviewer on an agent PR.
 - `/agent pause` / `/agent resume` — pause or resume issue-level work.
 - `/agent pause repo` / `/agent resume repo` — pause or resume the whole repo.
 - `/agent status` — show issue agent state.

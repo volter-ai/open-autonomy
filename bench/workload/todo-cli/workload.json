@@ -4,7 +4,7 @@
   "summary": "Greenfield: build a usable, persistent command-line todo application from a one-line brief.",
   "timeBudgetMinutes": 120,
   "appliesTo": ["self-driving", "simple-sdlc"],
-  "graders": ["rubric", "autonomy"],
+  "graders": ["rubric"],
   "intake": { "mode": "goal" },
   "rubric": [
     {

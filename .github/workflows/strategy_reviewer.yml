@@ -20,7 +20,7 @@ env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
 jobs:
   control:
-    if: github.event_name == 'issue_comment' && startsWith(github.event.comment.body, '/agent ')
+    if: github.event_name == 'issue_comment' && startsWith(github.event.comment.body, '/agent ') && !startsWith(github.event.comment.body, '/agent strategy_reviewer') && contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.comment.author_association)
     runs-on: ubuntu-latest
     permissions: { contents: read, issues: write, actions: write }
     env:
@@ -30,7 +30,7 @@ jobs:
       - uses: actions/checkout@v4
       - run: node .github/agent-control.mjs
   setup:
-    if: github.event_name != 'issue_comment' || !startsWith(github.event.comment.body, '/agent ')
+    if: (github.event_name != 'issue_comment' && github.event_name != 'pull_request_target') || (github.event_name == 'pull_request_target' && (github.event.pull_request.head.repo.full_name == github.repository || contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.pull_request.author_association))) || (github.event_name == 'issue_comment' && startsWith(github.event.comment.body, '/agent strategy_reviewer') && contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.comment.author_association))
     runs-on: ubuntu-latest
     permissions: { contents: read, issues: read, pull-requests: read, id-token: write }
     env:

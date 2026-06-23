@@ -25,8 +25,29 @@ for (const f of readdirSync(RUNTIME_DIR)) {
 }
 
 const CONTROL_VERBS = ['cancel', 'pause', 'resume', 'status', 'retry'];
-const IS_CONTROL = "github.event_name == 'issue_comment' && startsWith(github.event.comment.body, '/agent ')";
-const NOT_CONTROL = "github.event_name != 'issue_comment' || !startsWith(github.event.comment.body, '/agent ')";
+
+// Authorization for the comment surface. issue_comment / pull_request_target fire for ANY user (incl.
+// drive-by commenters and fork PRs), so the control plane and any comment-launch MUST be gated on a
+// maintainer (author_association), and a pull_request_target agent run MUST be gated on a same-repo PR
+// or a maintainer author — otherwise a plain comment launches the credentialed agent and a fork PR
+// reaches the bless/mint job. (docs/CAPABILITIES.md — the merge boundary; the operator control plane.)
+const MAINTAINER_ROLES = `fromJSON('["OWNER","MEMBER","COLLABORATOR"]')`;
+const COMMENT_MAINTAINER = `contains(${MAINTAINER_ROLES}, github.event.comment.author_association)`;
+const PR_TRUSTED = `(github.event.pull_request.head.repo.full_name == github.repository || contains(${MAINTAINER_ROLES}, github.event.pull_request.author_association))`;
+// The control job: a maintainer `/agent <control-verb>` comment (anything that is NOT this agent's
+// `/agent <name>` launch command). agent-control.mjs acts on the control verbs and no-ops the rest.
+const controlIf = (name: string) =>
+  `github.event_name == 'issue_comment' && startsWith(github.event.comment.body, '/agent ') && !startsWith(github.event.comment.body, '/agent ${name}') && ${COMMENT_MAINTAINER}`;
+// The agent (setup + work) job runs ONLY on a legitimate, trust-checked trigger: any non-comment /
+// non-fork-PR event (workflow_dispatch from the PM, schedule, issues — labeling needs write access);
+// a same-repo-or-maintainer pull_request_target; or an explicit maintainer `/agent <name>` launch.
+// A plain comment matches none of these, so it never launches the agent.
+const agentRunIf = (name: string) =>
+  [
+    `(github.event_name != 'issue_comment' && github.event_name != 'pull_request_target')`,
+    `(github.event_name == 'pull_request_target' && ${PR_TRUSTED})`,
+    `(github.event_name == 'issue_comment' && startsWith(github.event.comment.body, '/agent ${name}') && ${COMMENT_MAINTAINER})`,
+  ].join(' || ');
 
 
 // --- `on:` + trigger params ---
@@ -233,7 +254,7 @@ function wrapperYml(name: string, agent: IRAgent): string {
     `  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"`,
     `jobs:`,
     `  control:`,
-    `    if: ${IS_CONTROL}`,
+    `    if: ${controlIf(name)}`,
     `    runs-on: ubuntu-latest`,
     `    permissions: { contents: read, issues: write, actions: write }`,
     `    env:`,
@@ -243,7 +264,7 @@ function wrapperYml(name: string, agent: IRAgent): string {
     `      - uses: actions/checkout@v4`,
     `      - run: node .github/agent-control.mjs`,
     `  setup:`,
-    `    if: ${NOT_CONTROL}`,
+    `    if: ${agentRunIf(name)}`,
     `    runs-on: ubuntu-latest`,
     `    permissions: { contents: read, issues: read, pull-requests: read, id-token: write }`,
     `    env:`,

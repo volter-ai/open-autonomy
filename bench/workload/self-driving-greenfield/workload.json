@@ -4,7 +4,7 @@
   "summary": "From a constitution alone, does the org self-start — strategist generates a roadmap, then the loop executes it?",
   "timeBudgetMinutes": 240,
   "appliesTo": ["self-driving"],
-  "graders": ["rubric", "autonomy"],
+  "graders": ["rubric"],
   "intake": { "mode": "none" },
   "rubric": [
     {

@@ -93,7 +93,7 @@ three things must be true for that org — set once:
    `GITHUB_OIDC_ALLOWED_WORKFLOW`. Add an owner wildcard (`volter-test-fixtures/*`) so disposable repos
    mint without per-repo edits, then redeploy the worker.
 2. **Org Actions policy allows write.** GitHub orgs default workflow tokens to read-only and block
-   Actions from creating PRs; the publisher needs both. Set once:
+   Actions from creating PRs; a `code:propose` agent needs both. Set once:
    `gh api -X PUT orgs/<org>/actions/permissions/workflow -f default_workflow_permissions=write -F can_approve_pull_request_reviews=true`.
 3. **A funded pool account.** `ENFORCE_ACCOUNT_BALANCE` is on, so each repo needs its own balance to mint.
    Fund a pool (a treasury action, admin token) — e.g. grant the `volter-test-fixtures` account a budget —

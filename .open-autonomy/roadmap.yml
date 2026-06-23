@@ -6,12 +6,14 @@ items:
   - id: durable-decision-memory
     phase: 1
     priority: high
-    status: active
+    status: proposed
     title: Durable Decision Memory
     proof_gate: decision-memory-audit
     acceptance:
-      - Build a durable index from committed decision records.
-      - Reconstruct issue, PR, retry, and merge state from the index.
+      # Re-wire for the credentialed-skill model: the old staged-pipeline decision records were dropped in
+      # the agent-model cutover. The proxy run-ledger (already durable, per-run) is the natural store.
+      - Each credentialed agent run emits a structured decision record to the proxy run-ledger.
+      - A durable index reconstructs issue, PR, retry, and merge state from those records.
   - id: unified-loop-budget
     phase: 2
     priority: high
@@ -87,11 +89,12 @@ items:
   - id: durable-state-index
     phase: 10
     priority: medium
-    status: planned
+    status: proposed
     title: Durable State And Audit Trail
     proof_gate: status-reconstruction
     acceptance:
-      - Decision index summarizes latest state by issue and PR.
+      # Depends on durable-decision-memory (the run-ledger records). Dropped in the agent-model cutover.
+      - Decision index summarizes latest state by issue and PR (from the run-ledger).
       - Status commands can use reconstructed state.
   - id: repair-loops
     phase: 11

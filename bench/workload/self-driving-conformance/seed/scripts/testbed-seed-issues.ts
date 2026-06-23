@@ -165,18 +165,6 @@ const scenarios: Scenario[] = [
     ].join('\n'),
   },
   {
-    id: 'decision-memory-smoke',
-    title: '[oa-test:decision-memory-smoke] Decision index should reconstruct state',
-    labels: ['manual-operator-test'],
-    body: [
-      'Run the decision-index script after several agent decisions exist.',
-      '',
-      'Expected result:',
-      '- The generated index summarizes latest state by issue.',
-      '- Latest PR, stage, risk, and next action are reconstructed from committed decisions.',
-    ].join('\n'),
-  },
-  {
     id: 'governance-maintainer-hold',
     title: '[oa-test:governance-maintainer-hold] Maintainer hold should stop auto-merge',
     labels: ['manual-operator-test'],
@@ -252,7 +240,7 @@ const scenarios: Scenario[] = [
       'Governance fixture. This issue requests a risky class of change (workflow/dependency/security).',
       '',
       'Expected result:',
-      '- The system routes to explicit maintainer approval before publisher or merge.',
+      '- The system routes to explicit maintainer approval before any merge.',
       '- A visible approval-request comment explains why a human is required.',
     ].join('\n'),
   },

@@ -111,7 +111,7 @@ function onLines(agent: IRAgent, kind: 'run' | 'launch'): string[] {
 
 // Realize an agent's capabilities (docs/CAPABILITIES.md) as a GitHub job `permissions:` block. Pure
 // authority → github's permission model; another substrate maps it differently or ignores it.
-function capsToPermissions(caps: string[], extra?: unknown): string {
+function capsToPermissions(caps: string[]): string {
   // The agent job's LEAST-PRIVILEGE token: baseline is checkout (contents:read) + OIDC for the model token
   // (id-token:write); each capability widens it (docs/CAPABILITIES.md). The merge boundary is the split:
   // code:propose can push/PR/queue-auto-merge/dispatch-CI but never gets statuses:write (can't self-certify
@@ -129,10 +129,6 @@ function capsToPermissions(caps: string[], extra?: unknown): string {
     else if (c === 'agent:launch' || c === 'agent:update' || c === 'agent:cancel') p.actions = 'write';
     else if (c === 'agent:list') grant('actions', 'read');
   }
-  // A github-specific permission the capability vocabulary does not name (e.g. statuses:read so an
-  // interpreter's merge gate can SEE the `ci` commit status) rides via `config.permissions`, merged
-  // last-write-wins — same escape hatch deterministicPerms uses.
-  if (extra && typeof extra === 'object') for (const [k, v] of Object.entries(extra as Record<string, unknown>)) p[k] = String(v);
   return `{ ${Object.entries(p).map(([k, v]) => `${k}: ${v}`).join(', ')} }`;
 }
 
@@ -208,6 +204,14 @@ function wrapperYml(name: string, agent: IRAgent): string {
     `          git push --force origin "$branch"`,
     `          base="\${{ github.event.repository.default_branch }}"`,
     `          body="$(cat .agent-run/artifacts/pr.md 2>/dev/null || echo "Automated agent change (${RID}).")"`,
+    // Link the PR to its issue so the merge auto-closes it. Only when the subject is an issue number
+    // (refParam present + numeric); roadmap/cron proposers have no issue to close.
+    ...(refParam
+      ? [
+          `          ref="\${${refParam}}"`,
+          `          if printf '%s' "$ref" | grep -qE '^[0-9]+$'; then body="$(printf 'Closes #%s\\n\\n%s' "$ref" "$body")"; fi`,
+        ]
+      : []),
     `          gh pr create --base "$base" --head "$branch" --title "Agent: ${RID}" --body "$body" || gh pr view "$branch" >/dev/null`,
     `          gh pr merge "$branch" --squash --auto || echo "auto-merge enable failed (non-fatal)"`,
     // Bot-opened PRs don't fire pull_request CI (GITHUB_TOKEN anti-recursion); workflow_dispatch is exempt,
@@ -289,7 +293,7 @@ function wrapperYml(name: string, agent: IRAgent): string {
 
 // Is this actor a person? A kind:human actor is DECLARED (visible in the manifest), not realized as a
 // github job: the durable "await a person" block is the existing work-store mechanism (the human-required
-// label + the merge gate), and HOW a person is notified/assigned/escalated is a design choice the search
+// label + the merge boundary), and HOW a person is notified/assigned/escalated is a design choice the search
 // varies via config — not a template frozen in the compiler. So github generates no workflow for a human.
 function isHuman(agent: IRAgent): boolean {
   return agent.kind === 'human';

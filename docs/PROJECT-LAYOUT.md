@@ -29,9 +29,9 @@ a substrate is a partial implementation of the standard ; conformance reports wh
 an agent's behavior calls tooling inside its box
 ```
 
-Per-substrate internal terms are **scoped to their substrate**, not global: github's `publisher
-bundle` / `gates` / `model proxy`; local's `loop` / `termfleet` / `evidence gate`. `bundle` only
-ever means the github publisher bundle. **There is no `templates/` and no "bundle" in the core.**
+Per-substrate internal terms are **scoped to their substrate**, not global: github's `control plane`
+/ `model proxy` / native `auto-merge`; local's `loop` / `termfleet` / `evidence gate`. **There is no
+`templates/` in the core.**
 
 ## Layout
 
@@ -41,7 +41,7 @@ open-autonomy/                  # the substrate-agnostic autonomy system (also d
 │   ├── core/                   # @open-autonomy/core — IR + Runner contract + conformance + materialize (no substrate deps)
 │   ├── substrate-local/        # @open-autonomy/substrate-local — loop + TermfleetRunner + emit/ingest + runner backend
 │   └── substrate-github/       # @open-autonomy/substrate-github — Actions emit + GithubRunner + control plane + ingest
-│       └── src/runtime/        #   (coordinated follow-up) the github runtime: public-agent loop, gates, publisher bundle, proxy clients
+│       └── src/runtime/        #   (coordinated follow-up) the github runtime: public-agent loop, control plane, credentialed agent runner, proxy clients
 ├── bin/autonomy-conformance.ts # CLI wiring concrete runners across substrates
 ├── profiles/                   # example profiles (recipes): compile to ANY substrate
 ├── bench/                      # the one live-eval harness (workloads + graders); proves behavior live

@@ -24,9 +24,11 @@ compile(profile, substrate) → installation
   (runs agents), over a **box** (the agent's POSIX environment). `github` and `local` are peers.
 - **installation** — the materialized files laid into a repo for one substrate.
 
-An agent only *proposes* changes; **deterministic gates** (the publisher and the merge gate) decide
-whether they are published, reviewed, and merged. The agent runs untrusted, gets bounded model
-access (no raw keys), and can only emit a proposed change — never push directly.
+Each agent is a **credentialed job** whose token is scoped to its capabilities; it acts directly
+(edits code, pushes a branch, opens an auto-merging PR). The merge boundary is a **permission split**:
+no single agent holds both `code:review` (statuses:write — blesses) and `code:propose` (contents:write
+— pushes), so none can both write code and bless it. GitHub native auto-merge lands a PR once `ci` +
+`agent-review` are both green. The agent gets bounded model access (no raw keys) and can never merge.
 
 Read [`docs/AUTONOMY-IR.md`](./docs/AUTONOMY-IR.md) for the full model and conformance contract, and
 [`docs/PROJECT-LAYOUT.md`](./docs/PROJECT-LAYOUT.md) for the vocabulary and layout.
@@ -54,7 +56,7 @@ loop with a scheduler loop + a termfleet runner instead of GitHub Actions.
 
 **The GitHub app** — open-autonomy running on the github substrate (the complete, dogfooded substrate today):
 
-- `scripts/` — the github runtime: PM / triage / policy / dispatch / review / CI / merge-gate / control, the Codex runner, the publisher bundle, and the strategy loop.
+- `scripts/` — the github runtime: PM / triage / policy / dispatch / review / CI / control, the Codex runner (the credentialed agent that edits code and opens its own auto-merging PR), and the strategy loop.
 - `services/agent-model-proxy/` — a Cloudflare Worker that mints bounded, revocable model tokens (no raw keys) and meters spend against a sponsor-funded budget ledger.
 - `.open-autonomy/`, `.codex/skills/`, `.github/workflows/` — this repo's own installation (the dogfood).
 

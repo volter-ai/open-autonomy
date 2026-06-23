@@ -18,7 +18,6 @@
     ".github/agent-control.mjs",
     ".github/workflows/ci.yml",
     ".github/workflows/developer.yml",
-    ".github/workflows/open-autonomy-governance-report.yml",
     ".github/workflows/open-autonomy-preflight.yml",
     ".github/workflows/planner.yml",
     ".github/workflows/pm.yml",
@@ -54,12 +53,9 @@
     "scripts/model-proxy-mint.ts",
     "scripts/model-proxy-revoke.ts",
     "scripts/open-autonomy-config.ts",
-    "scripts/open-autonomy-governance-report.ts",
     "scripts/open-autonomy-preflight.ts",
     "scripts/open-autonomy-upgrade-cli.ts",
     "scripts/provision-model-endpoint.ts",
-    "scripts/public-agent-decision-index.ts",
-    "scripts/public-agent-decision.ts",
     "scripts/runner.ts"
   ]
 }

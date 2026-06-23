@@ -39,9 +39,11 @@ run id, result, and any blocker in the relevant issue or PR.
 
 ## Boundaries
 
-- The untrusted agent job must not receive raw provider keys, repo write tokens,
-  or model-proxy admin tokens.
-- The publisher is the only job that applies patches and writes PR branches.
+- An agent job must not receive raw provider keys or model-proxy admin tokens; it holds only a
+  token scoped to its declared capabilities.
+- No single agent may hold both `code:review` (statuses:write — blesses) and `code:propose`
+  (contents:write — pushes), so none can both write code and bless it; merging is GitHub native
+  auto-merge, gated on `ci` + `agent-review`, and no agent holds `code:merge`.
 - Workflow edits stay blocked (agents hold no workflows:write) unless explicitly changed by a
   human-owned policy update.
 - Do not commit real API keys, tokens, cookies, private URLs, or customer data.

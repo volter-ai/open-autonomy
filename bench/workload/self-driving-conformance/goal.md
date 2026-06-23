@@ -8,7 +8,7 @@ exercise one wired capability of the self-driving profile end-to-end on real Git
 - operator control (pause/resume, repo-pause, cancel, retry-no-failure)
 - the workflow-edit capability boundary, retry on CI/review failure, head-changed-before-merge
 - review low-risk merge, governance (maintainer hold, develop-only, risky approval)
-- planner proof-gate issues, decision-memory smoke
+- planner proof-gate issues
 
 It is graded by the **coverage** grader (`scripts/bench-coverage.ts`): for each scenario, did the live
 issue/PR/run state prove the capability fired correctly? "Done" = every scenario proven. This replaces

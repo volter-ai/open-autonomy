@@ -4,8 +4,8 @@
 // org is handed a substantial goal, runs for real time, and the result is a matter of JUDGMENT. It runs
 // the agent (full capability) over the result repo so the judge reads the diff, runs the tests, and
 // reproduces the behavior before scoring — not a truncated text dump — and returns a schema'd score via
-// runClaudeAgent's result. Pair with scripts/autonomy-ratio.ts (how much was done by agents) for the full
-// fitness reading: quality × autonomy.
+// runClaudeAgent's result. Pair with the coverage grader (scripts/bench-coverage.ts: which scenarios the
+// live run proved) for the full fitness reading: quality × coverage.
 //
 //   bun scripts/bench-judge.ts --workload bench/workload/todo-cli --result <run-repo> [--out score.json]
 //

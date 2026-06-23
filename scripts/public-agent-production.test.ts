@@ -19,7 +19,6 @@ describe('public agent production readiness', () => {
       'reviewer.yml',
       'planner.yml',
       'open-autonomy-preflight.yml',
-      'open-autonomy-governance-report.yml',
     ]) {
       expect(workflow(name)).toContain('FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"');
     }
@@ -86,13 +85,10 @@ describe('public agent production readiness', () => {
     expect(skill).toContain('gh issue create');
   });
 
-  test('fleet preflight and governance workflows are wired', () => {
+  test('fleet preflight workflow is wired', () => {
     const preflight = workflow('open-autonomy-preflight.yml');
     expect(preflight).toContain('open-autonomy-preflight.ts');
     expect(preflight).toContain('gh label list');
-    const report = workflow('open-autonomy-governance-report.yml');
-    expect(report).toContain('public-agent-decision-index.ts');
-    expect(report).toContain('open-autonomy-governance-report.ts');
   });
 
   test('upgrade is a maintainer-run local command, not an autonomous workflow', () => {

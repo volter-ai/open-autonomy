@@ -200,8 +200,7 @@ if (process.argv.includes('--score')) {
     console.log(`\n— grader: ${g} —`);
     if (g === 'rubric') run('bun', ['scripts/bench-judge.ts', '--workload', join(WL, wl), '--result', dir, ...(out ? ['--out', out] : [])]);
     else if (g === 'coverage') run('bun', ['scripts/bench-coverage.ts', '--repo', repo]);
-    else if (g === 'autonomy') run('bun', ['scripts/autonomy-ratio.ts', dir]);
-    else throw new Error(`unknown grader "${g}" in ${wl}/workload.json (use rubric|coverage|autonomy)`);
+    else throw new Error(`unknown grader "${g}" in ${wl}/workload.json (use rubric|coverage)`);
   }
   process.exit(0);
 }

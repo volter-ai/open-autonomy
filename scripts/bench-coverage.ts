@@ -48,7 +48,6 @@ export const COVERAGE_SCENARIOS = [
   'operator-retry-no-failure',
   'repo-pause',
   'operator-cancel',
-  'publisher-policy-rejection',
   'retry-ci-failure',
   'retry-review-failure',
   'head-changed-before-merge',
@@ -57,7 +56,6 @@ export const COVERAGE_SCENARIOS = [
   'governance-develop-only',
   'governance-risky-approval',
   'planner-creates-proof-gate-issues',
-  'decision-memory-smoke',
 ] as const;
 
 export function scenarioIdFromTitle(title: string): string | undefined {

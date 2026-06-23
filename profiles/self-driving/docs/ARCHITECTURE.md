@@ -151,15 +151,14 @@ docs/
 Each autonomous path should leave visible evidence:
 
 - issue comments and labels for user-visible state
-- workflow artifacts for raw run output
-- `agent-sessions/run_*/` for promoted session evidence
-- `decisions/*` records for target, triage, develop, publish, CI, review, retry,
-  merge-gate, and close decisions
+- workflow run logs and artifacts for raw run output
+- the `ci` and `agent-review` commit statuses on each PR (the merge boundary)
+- the model-proxy run-ledger (one bounded record per agent run)
 - PR comments/body for reviewable human context
 
-The durable end state should be a queryable decision index. Until then, the
-session folders, decision records, issue/PR comments, and bench run evidence are the
-audit trail.
+The durable end state should be a queryable decision index built from the run-ledger
+(roadmap: durable-decision-memory). Until then, the run logs, commit statuses,
+issue/PR comments, and bench run evidence are the audit trail.
 
 ## Operating Rules
 
@@ -168,5 +167,5 @@ audit trail.
   a current visible status already exists.
 - Risky, unclear, blocked, or repeatedly failing work escalates to humans.
 - The capability/permission split handles write safety; reviewer handles product/code quality;
-  merge gate handles final merge safety.
+  native auto-merge (branch protection: `ci` + `agent-review`) handles final merge safety.
 - Live proof from a bench workload (e.g. `self-driving-conformance`) is required before claiming roadmap completion.

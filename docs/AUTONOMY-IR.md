@@ -194,8 +194,8 @@ uses a feature its target does not support: **partial support is first-class, no
 **Trigger core (MUST):** fire `cron` and launch the agent. PM-on-cron is the universal dispatcher, so cron
 alone yields a working fleet.
 **Expanded (MAY):** `get`/`update`; enforce `maxConcurrent`/`timeout`/model-bounds/permissions; isolation;
-event triggers; the operator control surface; trust mediation. Honored where present, declared
-unsupported where not.
+event triggers; the operator control surface; the merge boundary (the capability/permission split +
+native auto-merge). Honored where present, declared unsupported where not.
 
 ## Validation — by running it for real, not by tests
 

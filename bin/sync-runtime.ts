@@ -23,9 +23,8 @@ const DEV_ONLY = new Set([
   'fund-bootstrap.ts',
   'open-autonomy-proof-audit.ts', 'open-autonomy-proof-audit.test.ts',
   'provision-target-repo.ts', 'provision-target-repo.test.ts',
-  // Bench (dev/analysis): the one eval harness's graders + sim — fitness measurement, not shipped.
+  // Bench (dev/analysis): the one eval harness's graders — fitness measurement, not shipped.
   // Workloads + the runner live in bench/; these are the per-grader scripts under scripts/.
-  'autonomy-ratio.ts', 'autonomy-ratio.test.ts', 'human-sim.ts', 'human-sim.test.ts',
   'bench-judge.ts', 'bench-coverage.ts', 'bench-coverage.test.ts',
   // Packaging tooling: builds the published node CLI bundle — dev-only, never shipped into an install.
   'build-cli.ts',
@@ -36,8 +35,7 @@ const PROFILE_OWNED = new Set([
   // self-driving's OWN governance/preflight/upgrade tooling — profile content, shipped via the profile's
   // `resources`, NOT vendored into the generic runtime mirror. (All agents are skills; there are no agent
   // behavior scripts.)
-  'public-agent-decision-index.ts', 'open-autonomy-config.ts', 'open-autonomy-governance-report.ts',
-  'open-autonomy-preflight.ts', 'open-autonomy-upgrade-cli.ts',
+  'open-autonomy-config.ts', 'open-autonomy-preflight.ts', 'open-autonomy-upgrade-cli.ts',
 ]);
 // Unit tests are dev artifacts, NOT install content — they never run in an installation and would carry
 // dangling deps if vendored. They stay in scripts/ (run by check:public-agent) and ship to no profile.

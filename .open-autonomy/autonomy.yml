@@ -4,7 +4,6 @@ documents:
     - .github/ISSUE_TEMPLATE/bug_report.yml
     - .github/ISSUE_TEMPLATE/public_agent_session.yml
     - .github/workflows/ci.yml
-    - .github/workflows/open-autonomy-governance-report.yml
     - .github/workflows/open-autonomy-preflight.yml
     - .gitignore
     - .open-autonomy/review-rubric.yml
@@ -26,10 +25,8 @@ documents:
     - docs/standards/security.md
     - docs/standards/tests.md
     - package.json
-    - scripts/public-agent-decision-index.ts
     - scripts/open-autonomy-config.ts
     - scripts/open-autonomy-preflight.ts
-    - scripts/open-autonomy-governance-report.ts
     - scripts/open-autonomy-upgrade-cli.ts
 skills:
   developer: .codex/skills/developer
@@ -128,8 +125,6 @@ policy:
     max_review_retries: 2
     stale_needs_info_minutes: 10080
     require_visible_pm_status: true
-    require_decision_records: true
-    require_acceptance_evidence: true
   risk:
     human_required_paths:
       - .github/workflows/**

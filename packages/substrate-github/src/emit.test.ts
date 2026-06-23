@@ -36,7 +36,7 @@ describe('compileGithub — task: trigger realization', () => {
 });
 
 describe('compileGithub — kind: human is declared, not job-realized', () => {
-  // A person needs no runner job: the durable "await a human" block is the existing label + merge gate,
+  // A person needs no runner job: the durable "await a human" block is the existing label + merge boundary,
   // and how a person is notified/assigned/escalated is config the search varies, not a frozen template.
   test('a human actor generates NO github workflow', () => {
     expect(workflows(compileGithub(irWith([{ task: 'human-required' }], 'human'))).length).toBe(0);

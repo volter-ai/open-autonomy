@@ -45,14 +45,14 @@ bun scripts/claude-agent-run.ts \
 Inspect:
 
 ```bash
-cat /tmp/public-agent-101/bundle/manifest.json
-ls /tmp/public-agent-101/bundle/artifacts
+cat /tmp/agent-101/manifest.json
+ls /tmp/agent-101/artifacts
 ```
 
-Merged develop session bundles now include target, triage, develop, publish, CI, review, and merge-gate decision records, so operators should review the full chain when checking evidence.
+Merged develop session evidence includes target, triage, develop, CI, and review decision records, so operators should review the full chain when checking evidence.
 Merged session evidence includes a `run-receipt.json` file and a root `transcript.md` file.
-The workflow waits for GitHub to report the evidence commit as the PR head before SHA-bound auto-merge.
-When bounded developer context is provided, developer bundles also include `context-sources.json`.
+The agent opens its own PR and queues native auto-merge; GitHub lands it once `ci` + `agent-review` are both green.
+When bounded developer context is provided, the developer's session evidence also includes `context-sources.json`.
 
 The agent command receives:
 
@@ -72,8 +72,8 @@ The command must write one terminal artifact in `artifacts/`:
 3. Open or reuse a low-risk issue.
 4. Comment `/agent develop`, or trigger `Public Agent PM`.
 5. Verify the run uses `scripts/claude-agent-run.ts`, exchanges GitHub OIDC for a
-   bounded model token, and emits a publisher bundle.
-6. Verify publisher output, reviewer verdict, and merge-gate behavior.
+   bounded model token, edits code, and opens its own PR with auto-merge queued.
+6. Verify the PR diff, the reviewer's `agent-review` status, and native auto-merge once `ci` + `agent-review` are green.
 7. If active-run limits block PM or agent dispatch, use the manual `Model Proxy Admin`
    workflow to inspect proxy saturation and revoke stale run IDs before retrying.
    The post-publish retry path uses deterministic retry-budget evaluation for CI

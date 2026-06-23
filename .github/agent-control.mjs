@@ -45,11 +45,18 @@ if (verb === 'cancel') {
   const s = out(`gh run list --repo ${repo} --workflow ${wf} --limit 5 --json databaseId,status,conclusion,createdAt`);
   sh(`gh issue comment ${issue} --repo ${repo} --body ${q(`Recent agent runs:\n${s}`)}`);
 } else if (verb === 'retry') {
-  // Retry relaunches ONLY when there is a failed run to retry; otherwise it says so (don't silently
-  // relaunch — that hides whether anything actually failed). Bounded: a maintainer command, one launch.
-  const failed = out(
-    `gh run list --repo ${repo} --workflow ${wf} --json conclusion --jq '[.[]|select(.conclusion=="failure" or .conclusion=="cancelled")]|length'`,
-  ).trim();
+  // Retry is per-ISSUE and relaunches ONLY when THIS issue's work actually failed; otherwise it says so
+  // (don't silently relaunch — that hides whether anything failed; and don't count unrelated failures from
+  // other issues). The per-issue signal is a failed check on this issue's agent PR (agent/issue-<n>); no PR
+  // → nothing failed. Bounded: a maintainer command, one launch.
+  let failed = '0';
+  try {
+    failed = out(
+      `gh pr view agent/issue-${issue} --repo ${repo} --json statusCheckRollup --jq '[.statusCheckRollup[]?|select((.conclusion//.state)=="FAILURE")]|length'`,
+    ).trim();
+  } catch {
+    failed = '0'; // no agent PR for this issue → no failed run
+  }
   if (Number(failed) > 0) {
     sh(`gh workflow run ${wf} --repo ${repo} -f issue_number=${issue}`);
     sh(`gh issue comment ${issue} --repo ${repo} --body ${q('Retrying: relaunched after a failed run (/agent retry).')}`);

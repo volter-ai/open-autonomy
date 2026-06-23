@@ -232,6 +232,30 @@ async function opRiskyApproval(repo: string, n: number): Promise<OpResult> {
   return { scenario: 'governance-risky-approval', issue: n, status: ok ? 'pass' : 'fail', note: ok ? (pr ? `routed to human-required, PR #${pr} not merged` : 'developer escalated (no PR) — routed to human') : `GAP: human-required=${issueLabeled || prLabeled}, merged=${merged}` };
 }
 
+async function opPlannerIssues(repo: string, n: number): Promise<OpResult> {
+  // The planner reconciles the roadmap into origin:roadmap-planner tracking issues. Dispatch it and verify
+  // it created/maintains those issues (the planner cron is daily, so a bench must kick it).
+  const before = Number(gh(['issue', 'list', '-R', repo, '--state', 'all', '--label', 'origin:roadmap-planner', '--json', 'number', '--jq', 'length']) || '0');
+  ghOk(['workflow', 'run', 'planner.yml', '-R', repo]);
+  await sleep(200000);
+  const after = Number(gh(['issue', 'list', '-R', repo, '--state', 'all', '--label', 'origin:roadmap-planner', '--json', 'number', '--jq', 'length']) || '0');
+  const ok = after > 0; // the planner produced tracking issues (idempotent: ok if they already existed)
+  return { scenario: 'planner-creates-proof-gate-issues', issue: n, status: ok ? 'pass' : 'fail', note: ok ? `planner maintains ${after} roadmap tracking issue(s) (was ${before})` : 'GAP: planner produced no origin:roadmap-planner issues' };
+}
+
+async function opOpenPrReview(repo: string, n: number): Promise<OpResult> {
+  // Develop the issue; the effect auto-routes it to review, the reviewer blesses, native auto-merge lands it.
+  // Verify the open-PR → review → merge flow completes (the PR merges).
+  const pr = await developAndWaitForPr(repo, n);
+  if (!pr) return { scenario: 'pm-open-pr-review', issue: n, status: 'fail', note: 'no agent PR produced' };
+  let state = '';
+  for (let i = 0; i < 20 && state !== 'MERGED'; i++) {
+    await sleep(30000);
+    state = gh(['pr', 'view', String(pr), '-R', repo, '--json', 'state', '--jq', '.state']);
+  }
+  return { scenario: 'pm-open-pr-review', issue: n, status: state === 'MERGED' ? 'pass' : 'fail', note: state === 'MERGED' ? `PR #${pr} routed to review + merged autonomously` : `GAP: PR #${pr} state=${state || '-'} (did not merge)` };
+}
+
 const HANDLERS: Record<string, (repo: string, n: number) => Promise<OpResult>> = {
   'operator-pause-resume': opPauseResume,
   'operator-cancel': opCancel,
@@ -242,6 +266,8 @@ const HANDLERS: Record<string, (repo: string, n: number) => Promise<OpResult>> =
   'pm-follow-up-after-needs-info': opFollowUpAfterNeedsInfo,
   'governance-develop-only': opDevelopOnly,
   'governance-risky-approval': opRiskyApproval,
+  'planner-creates-proof-gate-issues': opPlannerIssues,
+  'pm-open-pr-review': opOpenPrReview,
 };
 
 /** Drive + verify every operator scenario present in the cell; label passes `oa-test-passed`. */

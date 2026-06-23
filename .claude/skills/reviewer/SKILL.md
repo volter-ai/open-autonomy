@@ -23,8 +23,8 @@ The PR number is in the `TARGET_REF` environment variable.
    - The branch is `agent/issue-<N>`; read the LINKED ISSUE's labels too —
      `gh issue view <N> --json labels` — because a maintainer marks governance (hold / develop-only) on
      the issue, and that must reach the merge decision (which is you).
-   - Read `docs/CONSTITUTION.md`, `docs/standards/*`, and `.open-autonomy/review-rubric.yml`
-     from the checkout — the criteria you apply.
+   - Read `docs/CONSTITUTION.md`, `.open-autonomy/roadmap.yml`, `docs/standards/*`,
+     and `.open-autonomy/review-rubric.yml` from the checkout — the criteria you apply.
    - Only review canonical agent branches (`agent/issue-*`); for anything else, post failure and
      comment that human review is required.
    - **Scope guard:** if the PR's changed files are entirely roadmap files

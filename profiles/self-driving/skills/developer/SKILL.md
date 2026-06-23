@@ -20,8 +20,11 @@ your own work). The issue number is in the `ISSUE_REF` environment variable.
 
 ## Procedure
 
-1. Read the issue, the control files referenced by `.open-autonomy/autonomy.yml`, the relevant
-   source files, and current CI/review context (use `gh` as needed).
+1. Read the issue and its acceptance criteria. Read the control files for direction and
+   policy context: `docs/CONSTITUTION.md` (north star, merit criteria, rules),
+   `.open-autonomy/roadmap.yml` (current roadmap items, proof gates, acceptance criteria),
+   `.open-autonomy/autonomy.yml` (policy knobs), and `docs/standards/*` (code, docs, security,
+   tests). Read the relevant source files and current CI/review context (use `gh` as needed).
 2. Judge whether the work is clear-cut. If completing it requires a decision you are not authorized
    to make (see Escalate), stop and escalate rather than proceed.
 3. Make focused code or documentation changes in the working tree.

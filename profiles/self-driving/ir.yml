@@ -54,7 +54,7 @@ agents:
     timeout: 20
 
   # Planner: a skill agent that reconciles roadmap.yml into planner-owned tracking issues (one per
-  # planned item). Creates + edits issues; changes no code.
+  # planned or active item). Creates + edits issues; changes no code.
   planner:
     behavior: planner
     capabilities: [tasks:converse, tasks:author]

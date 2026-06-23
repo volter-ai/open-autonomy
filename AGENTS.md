@@ -7,6 +7,8 @@ status, and reversible maintainer control.
 
 Every agent is one credentialed job scoped to its capabilities; the merge boundary is the `code:review` / `code:propose` permission split plus native auto-merge (required checks: **ci** + **agent-review**).
 
+Operator commands (`/agent launch`, `/agent pause`, etc.) are maintainer-only (OWNER/MEMBER/COLLABORATOR); launch an agent by name, e.g. `/agent developer`.
+
 Read these files before changing behavior:
 
 - `docs/ARCHITECTURE.md` for the system model and document map.

@@ -16,3 +16,7 @@ the proof, not the definition.
 
 See `docs/VISION.md` for the category and direction, `docs/CONSTITUTION.md` for the
 north star and merit criteria, and `docs/AUTONOMY-IR.md` for the spec.
+
+Agents run with locked-down egress — outbound network access is blocked at the
+infrastructure level — as a defense-in-depth measure against credential
+exfiltration.

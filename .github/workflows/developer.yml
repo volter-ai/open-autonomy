@@ -5,9 +5,6 @@ on:
       issue_number: { description: "issue/PR number to act on", required: false, type: string }
   issue_comment:
     types: [created]
-  issues:
-    types:
-      - "labeled"
 permissions: {}
 concurrency:
   group: >-

@@ -45,9 +45,9 @@ agents:
     params:
       ISSUE_REF: subject.ref
     triggers:
-      issues:
+      issue_comment:
         types:
-          - labeled
+          - created
     timeout: 90
     capabilities:
       - code:propose

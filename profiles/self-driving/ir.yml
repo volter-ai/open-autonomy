@@ -9,13 +9,15 @@ targets: [github]
 
 agents:
   # Developer: edits code in its credentialed sandbox; the effect step proposes its change as an
-  # auto-merging PR (landed only after ci + an independent agent-review). Triggered by an issue label.
+  # auto-merging PR (landed only after ci + an independent agent-review). PM-gated: it runs when the PM
+  # dispatches it (workflow_dispatch) or a maintainer comments `/agent develop` (issue_comment) — NOT on
+  # raw issue labels, which would auto-develop any labeled issue and bypass triage + the concurrency throttle.
   developer:
     behavior: developer
     capabilities: [code:propose, tasks:converse]
     triggers:
-      - event: issues
-        config: { types: [labeled] }
+      - event: issue_comment
+        config: { types: [created] }
         params: { ISSUE_REF: subject.ref }
     timeout: 90
 

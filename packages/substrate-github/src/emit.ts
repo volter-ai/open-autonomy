@@ -42,14 +42,21 @@ const controlIf = (name: string) =>
 // non-fork-PR event (workflow_dispatch from the PM, schedule); a labeled `issues` event (applying a label
 // needs triage/write, so it is implicitly maintainer-gated — but `issues: opened/reopened/edited` are
 // firable by ANY user, so those must NOT launch the agent); a same-repo-or-maintainer pull_request_target;
-// or an explicit maintainer `/agent <name>` launch. A plain comment matches none of these.
-const agentRunIf = (name: string) =>
-  [
+// or an explicit maintainer `/agent <name>` launch. A plain comment matches none of these. The whole thing
+// is gated by the repo-pause kill-switch: `PUBLIC_AGENT_REPO_PAUSED` is a repo VARIABLE (deterministically
+// checkable in `if:`, unlike "does any issue carry a label"), so a paused fleet skips every agent job
+// deterministically — not by the PM model noticing a label. (Control commands like /agent resume are NOT
+// gated, so the fleet can be un-paused.)
+const REPO_NOT_PAUSED = `vars.PUBLIC_AGENT_REPO_PAUSED != 'true'`;
+const agentRunIf = (name: string) => {
+  const triggers = [
     `(github.event_name != 'issue_comment' && github.event_name != 'pull_request_target' && github.event_name != 'issues')`,
     `(github.event_name == 'issues' && github.event.action == 'labeled')`,
     `(github.event_name == 'pull_request_target' && ${PR_TRUSTED})`,
     `(github.event_name == 'issue_comment' && startsWith(github.event.comment.body, '/agent ${name}') && ${COMMENT_MAINTAINER})`,
   ].join(' || ');
+  return `${REPO_NOT_PAUSED} && (${triggers})`;
+};
 
 
 // --- `on:` + trigger params ---
@@ -210,6 +217,10 @@ function wrapperYml(name: string, agent: IRAgent): string {
   // (reviewer/pm/planner) has contents:read, so a stray tracked-file write would make the effect's
   // `git push` 403 and fail the job after the verdict was posted — tie the step to the capability.
   const proposes = caps.some((c) => typeof c === 'string' && c.split('@')[0] === 'code:propose');
+  // A tasks:author agent (the periodic issue-manager: pm/planner) runs a deterministic reconcile before its
+  // model step — close issues whose linked PR merged. Mechanical wiring (not judgment), so it must not depend
+  // on the model remembering to do it; symmetric to `effect` for code:propose. Idempotent.
+  const reconciles = caps.some((c) => typeof c === 'string' && c.split('@')[0] === 'tasks:author');
   const skillPath = `.codex/skills/${agent.behavior}/SKILL.md`;
   const RID = `ir-${name}-\${{ github.run_id }}`;
   // The work item comes from the trigger's declared `subject.ref` param (resolved into job env). An agent
@@ -343,6 +354,14 @@ function wrapperYml(name: string, agent: IRAgent): string {
     ...buildIssue,
     `      - name: Exchange OIDC for the bounded token`,
     `        run: bun scripts/model-proxy-exchange.ts --run-id "${RID}" --audience "$MODEL_PROXY_OIDC_AUDIENCE"`,
+    ...(reconciles
+      ? [
+          `      - name: Reconcile (deterministic — close issues whose PR merged)`,
+          `        env:`,
+          `          GH_TOKEN: \${{ github.token }}`,
+          `        run: bun scripts/reconcile-merged-issues.ts || true`,
+        ]
+      : []),
     `      - name: Run agent (Claude Code + skill)`,
     `        env:`,
     `          OSS_AGENT_TASK_DIR: .agent-run`,

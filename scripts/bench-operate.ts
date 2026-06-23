@@ -39,8 +39,6 @@ const labelsOf = (repo: string, n: number) =>
 const comment = (repo: string, n: number, body: string) => ghOk(['issue', 'comment', String(n), '-R', repo, '--body', body]);
 const recentComments = (repo: string, n: number, k = 4) =>
   gh(['issue', 'view', String(n), '-R', repo, '--json', 'comments', '--jq', `[.comments[-${k}:][].body]|join("\\n---\\n")`]);
-const devRunCount = (repo: string) =>
-  Number(gh(['run', 'list', '-R', repo, '--workflow', 'developer.yml', '--json', 'databaseId', '--jq', 'length']) || '0');
 
 /** Map each `[oa-test:<id>]` scenario marker to its issue number. */
 export function scenarioIssues(repo: string): Record<string, number> {
@@ -104,20 +102,23 @@ async function opCancel(repo: string, n: number): Promise<OpResult> {
 }
 
 async function opRepoPause(repo: string, n: number): Promise<OpResult> {
-  // Repo-level pause = the `agent-repo-paused` signal (the PM checks it first and exits). Apply it, sweep the
-  // PM, and assert NO developer is launched while paused; then clear it.
-  ghOk(['issue', 'edit', String(n), '-R', repo, '--add-label', 'agent-repo-paused']);
-  const before = devRunCount(repo);
-  ghOk(['workflow', 'run', 'pm.yml', '-R', repo]);
-  await sleep(210000); // a PM sweep under repo-pause must no-op (no develop launches)
-  const after = devRunCount(repo);
-  ghOk(['issue', 'edit', String(n), '-R', repo, '--remove-label', 'agent-repo-paused']);
-  const launched = after - before;
+  // Repo-level pause = the deterministic `PUBLIC_AGENT_REPO_PAUSED` variable kill-switch (gated in every
+  // agent job's `if:`). Set it, dispatch a developer, and assert its job is SKIPPED (not run) — deterministic,
+  // not the PM model noticing a label; then clear it.
+  ghOk(['variable', 'set', 'PUBLIC_AGENT_REPO_PAUSED', '-R', repo, '--body', 'true']);
+  await sleep(8000);
+  ghOk(['workflow', 'run', 'developer.yml', '-R', repo, '-f', `issue_number=${n}`]);
+  await sleep(70000); // the dispatch registers and the if: evaluates (a skipped job needs no runner)
+  const conclusion = gh([
+    'run', 'list', '-R', repo, '--workflow', 'developer.yml', '--event', 'workflow_dispatch', '--limit', '1', '--json', 'conclusion', '--jq', '.[0].conclusion',
+  ]);
+  ghOk(['variable', 'set', 'PUBLIC_AGENT_REPO_PAUSED', '-R', repo, '--body', 'false']);
+  const ok = conclusion === 'skipped';
   return {
     scenario: 'repo-pause',
     issue: n,
-    status: launched === 0 ? 'pass' : 'fail',
-    note: launched === 0 ? 'PM honored repo-pause (0 developers launched)' : `GAP: ${launched} developer(s) launched while repo-paused`,
+    status: ok ? 'pass' : 'fail',
+    note: ok ? 'repo-pause variable → developer job skipped deterministically' : `GAP: developer run conclusion=${conclusion || '-'} under repo-pause (expected skipped)`,
   };
 }
 

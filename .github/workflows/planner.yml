@@ -27,7 +27,7 @@ jobs:
       - uses: actions/checkout@v4
       - run: node .github/agent-control.mjs
   setup:
-    if: (github.event_name != 'issue_comment' && github.event_name != 'pull_request_target' && github.event_name != 'issues') || (github.event_name == 'issues' && github.event.action == 'labeled') || (github.event_name == 'pull_request_target' && (github.event.pull_request.head.repo.full_name == github.repository || contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.pull_request.author_association))) || (github.event_name == 'issue_comment' && startsWith(github.event.comment.body, '/agent planner') && contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.comment.author_association))
+    if: vars.PUBLIC_AGENT_REPO_PAUSED != 'true' && ((github.event_name != 'issue_comment' && github.event_name != 'pull_request_target' && github.event_name != 'issues') || (github.event_name == 'issues' && github.event.action == 'labeled') || (github.event_name == 'pull_request_target' && (github.event.pull_request.head.repo.full_name == github.repository || contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.pull_request.author_association))) || (github.event_name == 'issue_comment' && startsWith(github.event.comment.body, '/agent planner') && contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.comment.author_association)))
     runs-on: ubuntu-latest
     permissions: { contents: read, issues: read, pull-requests: read, id-token: write }
     env:
@@ -91,6 +91,10 @@ jobs:
           printf '{"number":0,"title":"planner","body":""}\n' > .agent-run/issue.json
       - name: Exchange OIDC for the bounded token
         run: bun scripts/model-proxy-exchange.ts --run-id "ir-planner-${{ github.run_id }}" --audience "$MODEL_PROXY_OIDC_AUDIENCE"
+      - name: Reconcile (deterministic — close issues whose PR merged)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: bun scripts/reconcile-merged-issues.ts || true
       - name: Run agent (Claude Code + skill)
         env:
           OSS_AGENT_TASK_DIR: .agent-run

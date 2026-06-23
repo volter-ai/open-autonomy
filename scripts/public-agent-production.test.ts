@@ -68,6 +68,18 @@ describe('public agent production readiness', () => {
     expect(pm).not.toContain('Route open agent PRs to review');
   });
 
+  test('mechanical sweep ops are deterministic, not PM-model steps (reconcile + repo-pause)', () => {
+    // Closing a merged-PR issue and honoring repo-pause are mechanical wiring — they must not depend on the
+    // model. A tasks:author agent runs a deterministic reconcile step; every agent job is gated on the
+    // repo-pause variable kill-switch. Encoded as a check (the bench found these stalling as model steps).
+    const pm = workflow('pm.yml');
+    expect(pm).toContain('reconcile-merged-issues.ts');
+    expect(pm).toContain("vars.PUBLIC_AGENT_REPO_PAUSED != 'true'");
+    expect(workflow('developer.yml')).toContain("vars.PUBLIC_AGENT_REPO_PAUSED != 'true'");
+    // a non-tasks:author agent does NOT reconcile (capability-gated, like effect on code:propose)
+    expect(workflow('reviewer.yml')).not.toContain('reconcile-merged-issues.ts');
+  });
+
   test('every agent run persists its call result (durable transcript artifact + live-log echo)', () => {
     // The model output is otherwise written to gitignored scratch that dies with the runner. Each agent
     // run must upload .agent-run/ (transcript + pr.md + subject) as an artifact (if: always, so failures are

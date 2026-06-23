@@ -29,13 +29,11 @@ label/triage issues (`tasks:author`), and launch the developer (`agent:launch`).
      `gh workflow run developer.yml -f issue_number=<n>` — and post a short status comment.
    - **Needs info** (underspecified): comment the specific questions and add the `needs-info` label.
    - **Not actionable / out of scope**: comment why and add `human-required`.
-   (You do NOT route PRs to review — the developer's effect triggers its reviewer deterministically when it
-   opens the PR. Routing is mechanical wiring, not your judgment; your job is triage + capacity.)
-3. **Close completed issues** — GitHub's `Closes #n` keyword auto-close does NOT fire when a PR is
-   landed by bot-enabled auto-merge, so you are the reconciler. For each open issue, check
-   `gh issue view <n> --json closedByPullRequestsReferences`; if it lists a **merged** pull request,
-   the work has landed — close the issue: `gh issue close <n> -c "Resolved by #<pr> (merged)."`.
-4. Keep a visible status: every issue you act on gets a comment saying what you did and why
+   (You do NOT route PRs to review and you do NOT close merged-PR issues — both are mechanical wiring done
+   deterministically by the substrate: the developer's effect triggers its reviewer when the PR opens, and a
+   deterministic reconcile step closes issues whose PR merged before this skill runs. Your job is the
+   JUDGMENT: triage + capacity.)
+3. Keep a visible status: every issue you act on gets a comment saying what you did and why
    (the autonomy audit requires a visible PM status).
 
 ## Constraints

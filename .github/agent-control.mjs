@@ -45,6 +45,16 @@ if (verb === 'cancel') {
   const s = out(`gh run list --repo ${repo} --workflow ${wf} --limit 5 --json databaseId,status,conclusion,createdAt`);
   sh(`gh issue comment ${issue} --repo ${repo} --body ${q(`Recent agent runs:\n${s}`)}`);
 } else if (verb === 'retry') {
-  sh(`gh workflow run ${wf} --repo ${repo} -f issue_number=${issue}`);
+  // Retry relaunches ONLY when there is a failed run to retry; otherwise it says so (don't silently
+  // relaunch — that hides whether anything actually failed). Bounded: a maintainer command, one launch.
+  const failed = out(
+    `gh run list --repo ${repo} --workflow ${wf} --json conclusion --jq '[.[]|select(.conclusion=="failure" or .conclusion=="cancelled")]|length'`,
+  ).trim();
+  if (Number(failed) > 0) {
+    sh(`gh workflow run ${wf} --repo ${repo} -f issue_number=${issue}`);
+    sh(`gh issue comment ${issue} --repo ${repo} --body ${q('Retrying: relaunched after a failed run (/agent retry).')}`);
+  } else {
+    sh(`gh issue comment ${issue} --repo ${repo} --body ${q('No failed infrastructure run was found to retry (/agent retry).')}`);
+  }
 }
 console.log(`handled /agent ${verb}`);

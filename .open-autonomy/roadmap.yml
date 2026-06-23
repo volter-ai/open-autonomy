@@ -18,11 +18,15 @@ items:
     phase: 2
     priority: high
     status: active
-    title: Unified Loop Budget And Stop Conditions
+    title: PM Failure Handling From History
     proof_gate: retry-ci-failure
     acceptance:
-      - Use the same retry budget rules in direct and post-publish review paths.
-      - Stop repeated CI and reviewer failures with visible comments.
+      # Failure handling is a PM JUDGMENT from full issue/PR history — NOT an automatic retry loop (the
+      # agent must not self-heal; the old loop-budget was overreach). The PM reads a failed PR's history and
+      # either re-dispatches the developer WITH the failure context (if clearly addressable and under
+      # max_develop_attempts) or escalates human-required. It never loops.
+      - On a CI or review failure, the PM decides from history: re-develop-with-context, or escalate.
+      - Repeated/unclear failures stop and escalate to a human (max_develop_attempts), never auto-loop.
   - id: pm-proactive-backlog
     phase: 3
     priority: high
@@ -100,11 +104,14 @@ items:
     phase: 11
     priority: medium
     status: planned
-    title: Agent Quality And Repair Loops
+    title: PM-Directed Repair (not auto-repair)
     proof_gate: quality-review-repair
     acceptance:
-      - Failed review and CI findings feed the next developer attempt.
-      - Repeated failures stop with stable signatures.
+      # NOT an autonomous repair loop. The PM, seeing the reviewer's findings in the issue/PR history,
+      # decides whether to re-dispatch the developer with those findings as context, or escalate — judgment,
+      # not machinery. The developer only ever acts on an explicit PM dispatch.
+      - The PM feeds the reviewer's findings to the next developer attempt when it judges them addressable.
+      - Repeated/unclear findings escalate to a human rather than re-attempting indefinitely.
   - id: maintainer-governance
     phase: 12
     priority: medium

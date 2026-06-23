@@ -348,8 +348,20 @@ function wrapperYml(name: string, agent: IRAgent): string {
     `          OSS_AGENT_TASK_DIR: .agent-run`,
     `          OSS_AGENT_ISSUE_PATH: .agent-run/issue.json`,
     `        run: |`,
-    `          bun scripts/claude-agent-run.ts --skill ${skillPath}; rc=$?; bun scripts/agent-visual-verify.ts || true; exit $rc`,
+    `          bun scripts/claude-agent-run.ts --skill ${skillPath}; rc=$?; bun scripts/agent-visual-verify.ts || true; echo "::group::agent transcript (${RID})"; cat .agent-run/artifacts/transcript.md 2>/dev/null || true; echo "::endgroup::"; exit $rc`,
     ...(proposes ? effect : []),
+    // Persist the call result as a durable per-run artifact: claude-agent-run writes .agent-run/artifacts/
+    // transcript.md (the model's final message + stderr, secret-redacted) plus pr.md and the subject it
+    // acted on — all in gitignored scratch that dies with the runner. Upload it (if: always(), so failed
+    // runs are captured too) so every agent call's result is recoverable from the run, not lost.
+    `      - name: Save the agent run result (durable transcript artifact)`,
+    `        if: always()`,
+    `        uses: actions/upload-artifact@v4`,
+    `        with:`,
+    `          name: agent-run-${name}`,
+    `          path: .agent-run/`,
+    `          retention-days: 30`,
+    `          if-no-files-found: ignore`,
     `      - run: bun scripts/model-proxy-revoke.ts --run-id "${RID}" || true`,
     `        if: always()`,
     ``,

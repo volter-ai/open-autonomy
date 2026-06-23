@@ -96,7 +96,7 @@ jobs:
           OSS_AGENT_TASK_DIR: .agent-run
           OSS_AGENT_ISSUE_PATH: .agent-run/issue.json
         run: |
-          bun scripts/claude-agent-run.ts --skill .codex/skills/strategist/SKILL.md; rc=$?; bun scripts/agent-visual-verify.ts || true; exit $rc
+          bun scripts/claude-agent-run.ts --skill .codex/skills/strategist/SKILL.md; rc=$?; bun scripts/agent-visual-verify.ts || true; echo "::group::agent transcript (ir-strategist-${{ github.run_id }})"; cat .agent-run/artifacts/transcript.md 2>/dev/null || true; echo "::endgroup::"; exit $rc
       - name: Effect — propose the change as an auto-merging PR (if the tree changed)
         env:
           GH_TOKEN: ${{ github.token }}
@@ -119,5 +119,13 @@ jobs:
           pr_number="$(gh pr view "$branch" --json number --jq .number 2>/dev/null || echo "")"
           gh workflow run ci.yml --ref "$branch" -f sha="$head_sha" -f pr="$pr_number" || echo "ci dispatch failed (non-fatal)"
           gh workflow run strategy_reviewer.yml -f issue_number="$pr_number" || echo "review dispatch failed (non-fatal)"
+      - name: Save the agent run result (durable transcript artifact)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: agent-run-strategist
+          path: .agent-run/
+          retention-days: 30
+          if-no-files-found: ignore
       - run: bun scripts/model-proxy-revoke.ts --run-id "ir-strategist-${{ github.run_id }}" || true
         if: always()

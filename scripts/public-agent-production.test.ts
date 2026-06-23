@@ -68,6 +68,18 @@ describe('public agent production readiness', () => {
     expect(pm).not.toContain('Route open agent PRs to review');
   });
 
+  test('every agent run persists its call result (durable transcript artifact + live-log echo)', () => {
+    // The model output is otherwise written to gitignored scratch that dies with the runner. Each agent
+    // run must upload .agent-run/ (transcript + pr.md + subject) as an artifact (if: always, so failures are
+    // captured) AND echo the transcript into the run log — so no agent call's result is ever lost.
+    for (const wf of ['developer.yml', 'reviewer.yml', 'pm.yml', 'planner.yml', 'strategist.yml', 'strategy_reviewer.yml']) {
+      const text = workflow(wf);
+      expect(text).toContain('actions/upload-artifact@v4');
+      expect(text).toContain('path: .agent-run/');
+      expect(text).toContain('agent transcript');
+    }
+  });
+
   test('credentialed jobs lock down egress (no token exfiltration from untrusted-derived work)', () => {
     // The agent runs untrusted-derived work with a scoped GH_TOKEN + bounded model token in env. Every
     // agent workflow must block egress (harden-runner) so a prompt-injected agent can't ship a token to an

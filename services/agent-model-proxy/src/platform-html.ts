@@ -1,5 +1,5 @@
 import type { DirectoryEntry, Flow, LiveRun, Patron, ProjectView } from './limit-ledger.js';
-import { renderCharterPanel, renderRoadmapPanel, renderChangelogPanel } from './project-docs.js';
+import { renderCharterPanel, renderRoadmapPanel, renderChangelogPanel, GITHUB_ICON } from './project-docs.js';
 
 // Server-rendered HTML for the funding platform — a Patreon-style storefront over the ledger.
 // Two pages: the explore grid (GET /) and the creator page (GET /p/:account). No client JS beyond
@@ -297,6 +297,30 @@ ${refreshSeconds ? `<meta http-equiv="refresh" content="${refreshSeconds}">\n` :
   .rd-who{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:${C.faint};margin-bottom:5px;}
   .rd-turn pre{margin:0;white-space:pre-wrap;word-break:break-word;font:12.5px/1.5 ui-monospace,Menlo,monospace;color:${C.body};}
   .rd-empty{color:${C.muted};text-align:center;padding:44px 0;}
+  /* Unified activity feed (runs + funding), paginated. */
+  .act-list{list-style:none;margin:0;padding:0;}
+  .act{display:flex;align-items:center;gap:12px;padding:12px 0;border-bottom:1px solid ${C.line};}
+  .act:last-child{border-bottom:0;}
+  .act-dot{width:9px;height:9px;border-radius:50%;flex:none;}
+  .act-dot.running{background:${C.green};box-shadow:0 0 0 0 rgba(10,135,84,.5);animation:pulse 1.8s infinite;}
+  .act-dot.done{background:#cfd2d6;}
+  .act-dot.fund{width:auto;height:auto;border-radius:0;background:none;color:${C.green};font-weight:800;}
+  .act-main{flex:1;min-width:0;}
+  .act-title{font-weight:700;font-size:15px;color:${C.ink};letter-spacing:-.01em;}
+  .act-title .badge{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:${C.muted};background:${C.wash};border-radius:999px;padding:2px 8px;margin-left:8px;vertical-align:middle;}
+  .act-sub{color:${C.muted};font-size:13.5px;margin-top:2px;}
+  .act-sub a{color:${C.body};font-weight:600;}
+  .act-sub a:hover{color:${C.accent};}
+  .act-right{display:flex;align-items:center;gap:13px;white-space:nowrap;}
+  .act-amt{font-weight:700;font-variant-numeric:tabular-nums;font-size:14.5px;color:${C.body};}
+  .act-amt.pos{color:${C.green};}
+  .act .watch{display:inline-flex;align-items:center;gap:5px;color:${C.accent};font-weight:700;font-size:13px;border:1.5px solid #ffd0d3;border-radius:999px;padding:6px 12px;}
+  .act .watch:hover{background:#fff5f5;border-color:${C.accent};}
+  .act-gh{color:${C.faint};display:inline-flex;align-items:center;}
+  .act-gh:hover{color:${C.ink};}
+  .act-page{display:flex;justify-content:space-between;align-items:center;margin-top:16px;padding-top:14px;border-top:1px solid ${C.line};font-size:13.5px;}
+  .act-page a{color:${C.accent};font-weight:600;}
+  .act-page .dim{color:${C.faint};}
 </style>
 </head><body>${body}</body></html>`;
 }
@@ -354,21 +378,6 @@ export function renderExplore(entries: DirectoryEntry[]): string {
   return shell('Fund a self-driving repo · open-autonomy', body);
 }
 
-function feedItem(f: Flow): string {
-  if (f.kind === 'consume') {
-    const who = f.actor ? ` by @${escapeHtml(f.actor)}` : '';
-    const where = f.issue ? ` · issue #${f.issue}` : '';
-    return `<li><span class="who">Agent run${where}${who}</span><span class="amt neg">−${usd(f.amount_usd_cents)}</span></li>`;
-  }
-  if (f.kind === 'grant') {
-    const fromProj = f.from?.includes('/');
-    const label = fromProj ? `Granted by ${escapeHtml(f.from!)}` : `Granted from ${escapeHtml(f.from ?? '')}`;
-    return `<li><span class="who">${label}</span><span class="amt pos">+${usd(f.amount_usd_cents)}</span></li>`;
-  }
-  const src = f.sponsor_login ? `Sponsored by @${escapeHtml(f.sponsor_login)}` : 'Funded';
-  return `<li><span class="who">${src}</span><span class="amt pos">+${usd(f.amount_usd_cents)}</span></li>`;
-}
-
 function patronChip(p: Patron): string {
   const inner = `${avatar(p.avatar_url, 26)}<span>${escapeHtml(p.name ?? p.login)}${p.kind === 'project' ? ' <span class="tag">project</span>' : ''}</span>`;
   return p.url ? `<a class="patron" href="${escapeHtml(p.url)}">${inner}</a>` : `<span class="patron">${inner}</span>`;
@@ -394,32 +403,74 @@ function relTime(fromMs: number | undefined, now: number): string {
   return `${Math.floor(m / 60)}h ${m % 60}m`;
 }
 
-function runRow(r: LiveRun, repo: string, now: number): string {
+const ACT_PAGE = 12;
+
+// One agent-run row in the unified activity feed: status dot, role + issue/actor, when, spend, a "Watch
+// live"/"View session" drawer trigger, and a GitHub-mark link to the raw Actions run.
+function runActivityRow(r: LiveRun, now: number): string {
   const role = PURPOSE_LABEL[r.purpose] ?? (r.purpose.charAt(0).toUpperCase() + r.purpose.slice(1));
-  const issueLink = r.issue > 0
-    ? `<a href="https://github.com/${escapeHtml(repo)}/issues/${r.issue}">#${r.issue}</a>`
+  const issue = r.issue > 0
+    ? `<a href="https://github.com/${escapeHtml(r.repo)}/issues/${r.issue}">#${r.issue}</a>`
     : 'autonomous';
   const elapsed = relTime(r.started_at_ms, now);
-  const sub = `${issueLink} · @${escapeHtml(r.actor)}${elapsed ? ` · running ${elapsed}` : ''} · ${r.request_count} call${r.request_count === 1 ? '' : 's'}`;
-  // Watch live → opens the slide-in session drawer (JS); falls back to the full-page session view without JS.
-  // The proxy captures the run's turns as they happen — GitHub serves no in-progress logs.
-  const watch = `<a class="watch" href="/p/${encodeURIComponent(repo)}/runs/${encodeURIComponent(r.run_id)}" data-run="${escapeHtml(r.run_id)}" data-repo="${escapeHtml(repo)}">Watch live ›</a>`;
-  return `<li>
-    <div class="rd">
-      <div class="rrole">${escapeHtml(role)}${r.system ? '<span class="badge">system</span>' : ''}</div>
-      <div class="rsub">${sub}</div>
+  const when = r.active ? (elapsed ? `running ${elapsed}` : 'running') : (elapsed ? `${elapsed} ago` : 'recently');
+  const calls = `${r.request_count} call${r.request_count === 1 ? '' : 's'}`;
+  const watchLabel = r.active ? 'Watch live ›' : 'View session ›';
+  const watch = `<a class="watch" href="/p/${encodeURIComponent(r.repo)}/runs/${encodeURIComponent(r.run_id)}" data-run="${escapeHtml(r.run_id)}" data-repo="${escapeHtml(r.repo)}">${watchLabel}</a>`;
+  const gh = r.github_run_id
+    ? `<a class="act-gh" title="Open the run on GitHub Actions" href="https://github.com/${escapeHtml(r.repo)}/actions/runs/${escapeHtml(r.github_run_id)}">${GITHUB_ICON}</a>`
+    : '';
+  return `<li class="act run">
+    <span class="act-dot ${r.active ? 'running' : 'done'}"></span>
+    <div class="act-main">
+      <div class="act-title">${escapeHtml(role)}${r.system ? '<span class="badge">system</span>' : ''}</div>
+      <div class="act-sub">${issue} · @${escapeHtml(r.actor)} · ${when} · ${calls}</div>
     </div>
-    <div class="rspend"><div class="v">${usd(r.consumed_usd_cents)}</div><div class="l">spent</div></div>
-    ${watch}
+    <div class="act-right"><span class="act-amt">${usd(r.consumed_usd_cents)}</span>${watch}${gh}</div>
   </li>`;
 }
 
-function renderLiveAgents(runs: LiveRun[], repo: string, now: number): string {
-  const head = `<h3>Live agents${runs.length ? `<span class="live"><span class="pulse"></span>${runs.length} running</span>` : ''}</h3>`;
-  if (!runs.length) {
-    return `<div class="panel">${head}<p class="sub">No agents running right now. When this repo's workflows fire, each run shows up here — follow along live in GitHub Actions.</p></div>`;
+// One funding event row (money IN — grant / sponsor / mint). Consume flows are omitted: an agent's spend
+// is already shown on its run row, so listing it again would double-count the activity.
+function fundActivityRow(f: Flow, now: number): string {
+  const label = f.kind === 'grant'
+    ? `Granted from ${escapeHtml(f.from ?? '')}`
+    : f.sponsor_login ? `Sponsored by @${escapeHtml(f.sponsor_login)}` : 'Funded';
+  const when = relTime(Date.parse(f.ts) || undefined, now);
+  return `<li class="act fund">
+    <span class="act-dot fund">$</span>
+    <div class="act-main"><div class="act-title">${label}</div><div class="act-sub">${when ? `${when} ago` : ''}</div></div>
+    <div class="act-right"><span class="act-amt pos">+${usd(f.amount_usd_cents)}</span></div>
+  </li>`;
+}
+
+// The unified, time-sorted, paginated activity feed: recent agent runs (running + finished, with "when" +
+// status + a live session drawer) interleaved with funding events. Replaces the old separate "Live agents"
+// and money-only "Recent activity" panels.
+function renderActivity(runs: LiveRun[], feed: Flow[], page: number, now: number): string {
+  type Item = { ts: number; html: string };
+  const items: Item[] = [
+    ...runs.map((r) => ({ ts: r.started_at_ms ?? 0, html: runActivityRow(r, now) })),
+    // Only money-IN events; consume flows are represented by their run rows.
+    ...feed.filter((f) => f.kind === 'grant' || f.kind === 'mint').map((f) => ({ ts: Date.parse(f.ts) || 0, html: fundActivityRow(f, now) })),
+  ].sort((a, b) => b.ts - a.ts);
+
+  const running = runs.filter((r) => r.active).length;
+  const head = `<h3 id="activity">Recent activity${running ? `<span class="live"><span class="pulse"></span>${running} running</span>` : ''}</h3>`;
+  if (!items.length) {
+    return `<div class="panel">${head}<p class="sub">No activity yet. When this repo runs an agent or receives funding, it shows up here.</p></div>`;
   }
-  return `<div class="panel">${head}<ul class="runs">${runs.map((r) => runRow(r, repo, now)).join('')}</ul></div>`;
+  const pages = Math.max(1, Math.ceil(items.length / ACT_PAGE));
+  const p = Math.min(Math.max(0, page), pages - 1);
+  const rows = items.slice(p * ACT_PAGE, p * ACT_PAGE + ACT_PAGE).map((i) => i.html).join('');
+  const pager = pages > 1
+    ? `<div class="act-page">
+        ${p > 0 ? `<a href="?p=${p - 1}#activity">← newer</a>` : '<span class="dim">← newer</span>'}
+        <span class="dim">page ${p + 1} of ${pages}</span>
+        ${p < pages - 1 ? `<a href="?p=${p + 1}#activity">older →</a>` : '<span class="dim">older →</span>'}
+      </div>`
+    : '';
+  return `<div class="panel">${head}<ul class="act-list">${rows}</ul>${pager}</div>`;
 }
 
 export interface RunSessionView {
@@ -505,7 +556,7 @@ function runDrawer(): string {
 <script>${DRAWER_JS}</script>`;
 }
 
-export function renderProject(v: ProjectView): string {
+export function renderProject(v: ProjectView, page = 0): string {
   const owner = ownerOf(v.account);
   const color = STATUS[v.status].color;
   const g = goalLine(v);
@@ -522,7 +573,6 @@ export function renderProject(v: ProjectView): string {
     </div>`;
   }).join('\n');
 
-  const feed = v.feed.length ? `<ul class="feed">${v.feed.map(feedItem).join('')}</ul>` : `<p class="sub">No activity yet.</p>`;
   const patrons = v.patrons.length ? `<div class="patrons">${v.patrons.map(patronChip).join('')}</div>` : `<p class="sub">No patrons yet — be the first.</p>`;
 
   // The project's own identity, read from its repo: what it's for (charter), where it's going (roadmap),
@@ -532,7 +582,9 @@ export function renderProject(v: ProjectView): string {
   const roadmap = renderRoadmapPanel(v.profile.roadmap_yml, repoUrl, v.profile.roadmap_status_json);
   const shipped = renderChangelogPanel(v.profile.changelog_md, repoUrl);
   const now = Date.now();
-  const live = renderLiveAgents(v.live_runs, v.account, now);
+  // One unified, paginated activity feed: recent runs (running + finished, with when + status + a live
+  // session drawer) interleaved with funding events — replaces the old separate Live agents + feed panels.
+  const activity = renderActivity(v.recent_runs, v.feed, page, now);
 
   const body = `${nav()}<div class="wrap">
     <div class="cover-hero" style="${coverStyle(v.profile.cover_url, v.account)}"></div>
@@ -555,11 +607,7 @@ export function renderProject(v: ProjectView): string {
           ${progress(g.frac, color)}
           <p class="note">Keep ${v.goal_days} days of agent runway funded. Days remaining is a Bayesian estimate of daily spend.</p>
         </div>
-        ${live}
-        <div class="panel">
-          <h3>Recent activity</h3>
-          ${feed}
-        </div>
+        ${activity}
         <div class="panel">
           <h3>Funding</h3>
           <img src="/v1/accounts/${enc}/runway.svg" width="460" height="116" style="max-width:100%;border-radius:12px;border:1px solid ${C.line}" alt="funding runway">
@@ -590,7 +638,7 @@ export function renderProject(v: ProjectView): string {
         </div>
       </div>
     </div>
-  </div>${v.live_runs.length ? runDrawer() : ''}`;
+  </div>${v.recent_runs.some((r) => r.active) ? runDrawer() : ''}`;
   // No page-level auto-refresh: the live surface is now the drawer, which polls session.json without a full
   // reload (a meta-refresh would close an open drawer). The panel itself refreshes on navigation.
   return shell(`${nameOf(v.account)} · open-autonomy`, body);

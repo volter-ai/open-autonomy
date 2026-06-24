@@ -651,11 +651,12 @@ export class LimitLedger implements DurableObject {
       amount_label: s.monthly_usd_cents ? `$${(s.monthly_usd_cents / 100).toFixed(0)}/mo` : undefined,
     }));
     const projectPatrons = projectPatronsOf(this.state.flows, account, (id) => displayProfile(this.acct(id)));
-    // Runs executing right now for this repo. Filter expired-but-not-yet-reaped runs inline (pure read
-    // model — don't mutate/reap here; register() and the cron reap own that), newest first, bounded.
+    // Recent runs for this repo — running AND recently-finished — newest first, bounded. The page renders
+    // these as the unified activity feed (with "when" + status). `active` = still executing (token unexpired
+    // and not completed). Pure read model: don't mutate/reap here (register() + the cron reap own that).
     const now = Date.now();
-    const liveRuns: LiveRun[] = Object.entries(this.state.runs)
-      .filter(([, r]) => r.active && r.repo === account && (typeof r.expires_at_ms !== 'number' || r.expires_at_ms > now))
+    const recentRuns: LiveRun[] = Object.entries(this.state.runs)
+      .filter(([, r]) => r.repo === account)
       .map(([run_id, r]) => ({
         run_id,
         repo: r.repo,
@@ -663,20 +664,21 @@ export class LimitLedger implements DurableObject {
         actor: r.actor,
         purpose: r.purpose ?? 'agent',
         system: Boolean(r.system),
+        active: Boolean(r.active) && (typeof r.expires_at_ms !== 'number' || r.expires_at_ms > now),
         github_run_id: r.github_run_id,
         started_at_ms: r.started_at_ms,
         consumed_usd_cents: r.consumed_usd_cents ?? 0,
         request_count: r.request_count ?? 0,
       }))
       .sort((x, y) => (y.started_at_ms ?? 0) - (x.started_at_ms ?? 0))
-      .slice(0, 12);
+      .slice(0, 50);
     return {
       found: Boolean(a),
       ...entry,
       tiers: a?.tiers ?? FLEET_TIERS,
       feed,
       patrons: [...projectPatrons, ...sponsorPatrons],
-      live_runs: liveRuns,
+      recent_runs: recentRuns,
     };
   }
 
@@ -864,6 +866,7 @@ export interface LiveRun {
   actor: string;
   purpose: string;
   system: boolean;
+  active: boolean; // still executing (token unexpired + not completed) vs a recent finished run
   github_run_id?: string;
   started_at_ms?: number;
   consumed_usd_cents: number;
@@ -875,7 +878,7 @@ export interface ProjectView extends DirectoryEntry {
   tiers: Tier[];
   feed: Flow[];
   patrons: Patron[];
-  live_runs: LiveRun[];
+  recent_runs: LiveRun[];
 }
 
 function upsertSponsor(list: Sponsor[], sponsor: Sponsor): void {

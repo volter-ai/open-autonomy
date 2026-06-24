@@ -235,8 +235,8 @@ describe('platform: review hardening', () => {
   });
 });
 
-describe('platform: live agents (follow along)', () => {
-  test('an active run surfaces on its project with spend + a live Actions link', async () => {
+describe('platform: recent activity (runs + funding)', () => {
+  test('an active run surfaces in the activity feed with spend + a live session link', async () => {
     const l = ledger();
     await l.mint('acme/widget', 10000);
     await l.register({ ...claims(), github_run_id: '99887766' }, CONFIG); // run_1 → repo acme/widget, issue 7
@@ -244,36 +244,51 @@ describe('platform: live agents (follow along)', () => {
     await l.consume('req-1', 90);
 
     const v = await l.project('acme/widget');
-    expect(v.live_runs.length).toBe(1);
-    const run = v.live_runs[0];
+    expect(v.recent_runs.length).toBe(1);
+    const run = v.recent_runs[0];
     expect(run.issue).toBe(7);
     expect(run.actor).toBe('octocat');
+    expect(run.active).toBe(true);
     expect(run.consumed_usd_cents).toBe(90);
     expect(run.request_count).toBe(1);
     expect(run.github_run_id).toBe('99887766');
 
     const html = renderProject(v);
-    expect(html.includes('Live agents')).toBe(true);
+    expect(html.includes('Recent activity')).toBe(true);
     expect(html.includes('1 running')).toBe(true);
-    // "Watch live" now points at our own session view (the proxy-captured live session), not the raw run.
+    // "Watch live" opens the slide-in drawer (data-run hook), falling back to the full-page session view.
     expect(html.includes('/p/acme%2Fwidget/runs/run_1')).toBe(true);
+    expect(html.includes('data-run="run_1"')).toBe(true);
+    expect(html.includes('id="run-drawer"')).toBe(true);
+    // Pops into GitHub: the run links to its Actions run, the issue to the issue.
+    expect(html.includes('https://github.com/acme/widget/actions/runs/99887766')).toBe(true);
     expect(html.includes('https://github.com/acme/widget/issues/7')).toBe(true);
     expect(html.includes('$0.90')).toBe(true);
-    // The live surface is the slide-in drawer (polls session.json); the "Watch live" link carries the
-    // data-run hook the drawer opens on, and falls back to the full-page session view without JS.
-    expect(html.includes('id="run-drawer"')).toBe(true);
-    expect(html.includes('data-run="run_1"')).toBe(true);
   });
 
-  test('a completed run drops off the live panel (empty state, no refresh)', async () => {
+  test('a finished run stays in recent activity (with "ended" status), no live drawer', async () => {
     const l = ledger();
     await l.mint('acme/widget', 10000);
     await l.register(claims(), CONFIG);
+    await l.reserve('req-1', 50, CONFIG, 'run_1');
+    await l.consume('req-1', 40);
     await l.complete('run_1');
     const v = await l.project('acme/widget');
-    expect(v.live_runs.length).toBe(0);
+    expect(v.recent_runs.length).toBe(1); // still listed (recent), not dropped
+    expect(v.recent_runs[0].active).toBe(false);
     const html = renderProject(v);
-    expect(html.includes('No agents running right now')).toBe(true);
-    expect(html.includes('http-equiv="refresh"')).toBe(false);
+    expect(html.includes('Recent activity')).toBe(true);
+    expect(html.includes('1 running')).toBe(false); // nothing actively running
+    expect(html.includes('View session ›')).toBe(true); // finished run → view, not "watch live"
+    expect(html.includes('id="run-drawer"')).toBe(false); // no active run → no drawer
+  });
+
+  test('funding events appear in the same feed; pagination kicks in past a page', async () => {
+    const l = ledger();
+    await l.mint('acme/widget', 10000); // a mint flow → appears as a funding row
+    await l.grant('acme/widget', 'beta/helper', 500); // grant from acme → beta
+    const v = await l.project('beta/helper');
+    const html = renderProject(v);
+    expect(html.includes('Granted from acme/widget')).toBe(true);
   });
 });

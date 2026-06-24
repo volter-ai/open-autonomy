@@ -36,7 +36,8 @@ your own work). The issue number is in the `ISSUE_REF` environment variable.
    root `CHANGELOG.md`, under the matching `### Added` / `### Changed` / `### Fixed` heading (Keep a
    Changelog format — create the heading if it is missing). Write it for a human reader: what changed
    and why it matters, not the implementation. Append your line; never rewrite or reorder existing
-   entries (concurrent PRs each append, and `CHANGELOG.md` is union-merged so appends never conflict).
+   entries. If a sibling PR landed ahead of you and your branch is now behind on `CHANGELOG.md`, rebase
+   onto fresh `main` and re-append (GitHub's auto-merge does not union-merge the changelog for you).
    Skip this only for changes with no user- or maintainer-facing effect (a pure internal refactor that
    alters no behavior).
 7. Write a short PR summary (what changed + tests run) to `.agent-run/artifacts/pr.md`; it becomes

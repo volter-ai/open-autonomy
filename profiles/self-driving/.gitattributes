@@ -1,4 +1,8 @@
 # Concurrent agent PRs each append their own line to the `## Unreleased` section of the changelog.
-# Union-merge it so two PRs appending different lines never conflict (both lines are kept) — the
-# changelog stays in its canonical location with no fragment/assembly machinery.
+# Union-merge keeps both lines when a merge runs the driver — but NOTE: GitHub's server-side auto-merge,
+# update-branch, and mergeability check do NOT apply .gitattributes merge drivers (only a LOCAL `git merge`
+# does). So a stale PR that branched before a sibling appended its line can still show CONFLICTING on GitHub
+# and won't auto-merge; the PM resolves it by re-developing the PR onto fresh main (it re-appends its line).
+# Keep this attribute (it helps any local rebase/merge and is harmless), but don't rely on it to make
+# concurrent appends conflict-free on GitHub. Changelog stays canonical with no fragment/assembly machinery.
 CHANGELOG.md merge=union

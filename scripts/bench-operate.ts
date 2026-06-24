@@ -189,10 +189,14 @@ function inducePush(repo: string, branch: string, mutate: (dir: string) => void)
 }
 // Mutators that induce a REAL failure (genuine breakage, not a sentinel the removed pipeline watched for):
 const breakLockfile = (dir: string) => {
-  // Add a dependency that is absent from bun.lock → `bun install --frozen-lockfile` (CI's first step) fails.
+  // Induce a REALISTIC ci failure: add a real dependency to package.json without updating bun.lock, so CI's
+  // `bun install --frozen-lockfile` fails on the out-of-date lockfile — a common genuine developer mistake.
+  // (Must look real: a self-labeled package like `@oa-bench/force-ci-fail` is transparently a test, and the PM
+  // correctly no-ops on it — "intentional test failure, no action" — so the scenario would never exercise the
+  // PM's failure-handling. `date-fns` reads as a real, addressable "added a dep, lockfile out of sync" failure.)
   const p = join(dir, 'package.json');
   const j = JSON.parse(readFileSync(p, 'utf8'));
-  j.dependencies = { ...(j.dependencies || {}), '@oa-bench/force-ci-fail': '^1.0.0' };
+  j.dependencies = { ...(j.dependencies || {}), 'date-fns': '^3.6.0' };
   writeFileSync(p, JSON.stringify(j, null, 2) + '\n');
 };
 const tweakDoc = (dir: string) => {
@@ -218,12 +222,16 @@ async function verifyPmDecidedFromHistory(repo: string, n: number, pr: number, s
   // start; counted even if the run is then SKIPPED by the vars gate, because the DECISION to launch is what's
   // tested (and the displayTitle match keeps a stray cron dispatch for another issue from counting); or (b) it
   // escalated (the human-required label). Plus the PR must not have merged.
-  const title = gh(['issue', 'view', String(n), '-R', repo, '--json', 'title', '--jq', '.title']) || `#${n}`;
   const since = new Date().toISOString();
+  // The PM re-dispatches by launching the developer via workflow_dispatch — its run is created AFTER we start.
+  // (workflow_dispatch developer runs all share displayTitle "developer", so we can't match by issue title; and
+  // operate runs serially with the operator-sim NOT dispatching developers during this window, so a new
+  // workflow_dispatch developer run here is the PM's re-dispatch for this failed PR.) Counts even if the run is
+  // then vars-gate-skipped — the DECISION to launch is what's tested. Escalate is the human-required label.
   const reDispatchedSince = (): boolean => {
     try {
-      const runs = JSON.parse(gh(['run', 'list', '-R', repo, '--workflow', 'developer.yml', '--limit', '40', '--json', 'displayTitle,createdAt']) || '[]') as { displayTitle?: string; createdAt?: string }[];
-      return runs.some((r) => (r.createdAt ?? '') > since && (r.displayTitle ?? '').includes(title));
+      const runs = JSON.parse(gh(['run', 'list', '-R', repo, '--workflow', 'developer.yml', '--event', 'workflow_dispatch', '--limit', '20', '--json', 'createdAt']) || '[]') as { createdAt?: string }[];
+      return runs.some((r) => (r.createdAt ?? '') > since);
     } catch { return false; }
   };
   const escalated = () => labelsOf(repo, n).includes('human-required') || (gh(['pr', 'view', String(pr), '-R', repo, '--json', 'labels', '--jq', '[.labels[].name]|join(",")']) || '').includes('human-required');

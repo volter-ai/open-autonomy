@@ -42,19 +42,24 @@ export type RoadmapState = 'proposed' | 'parked' | 'in_progress' | 'done';
 // issues; done = decomposed and every child issue closed. Adding an issue to a "done" item flips it back to
 // in_progress automatically (the state is derived), so nothing is ever frozen.
 export function roadmapItemState(item: RoadmapItem, counts?: RoadmapCounts): RoadmapState {
-  // Back-compat: a legacy item (old stored status, no v2 flags) keeps rendering from that status.
+  const total = counts?.total ?? 0;
+  const done = counts?.done ?? 0;
+  // Execution status is DERIVED: once an item has child issues, the issues are the truth — open work means
+  // in progress, all-closed means done — regardless of any hand-written `status`/`planned` flag. This is the
+  // whole two-layer point, and it also self-heals (reopen/add an issue and the item flips back automatically).
+  if (total > 0) return done >= total ? 'done' : 'in_progress';
+  // No child issues yet → fall back to the planning signal. A proposal is still at the strategy gate; a
+  // `planned: true` item is decomposition-in-progress (issues imminent); everything else is parked/queued.
+  if (item.proposed) return 'proposed';
+  if (item.planned) return 'in_progress';
+  // Legacy single-layer items (stored status, no v2 flags) keep their old meaning when they have no issues.
   if (item.proposed === undefined && item.planned === undefined && item.status) {
     if (item.status === 'proposed') return 'proposed';
     if (item.status === 'done') return 'done';
     if (item.status === 'active') return 'in_progress';
     return 'parked'; // legacy 'planned' → parked
   }
-  if (item.proposed) return 'proposed';
-  if (!item.planned) return 'parked';
-  const total = counts?.total ?? 0;
-  const done = counts?.done ?? 0;
-  if (total > 0 && done >= total) return 'done';
-  return 'in_progress';
+  return 'parked';
 }
 
 // Parse the synced `roadmap-status.json` (id → {total, done}) into a lookup. Tolerant: returns an empty map
@@ -225,11 +230,14 @@ function IssueList({ row, repoUrl }: { row: Row; repoUrl?: string }) {
   const shown = issues.slice(0, ISSUE_PREVIEW);
   const moreHref = repoUrl ? `${repoUrl}/issues?q=${encodeURIComponent(`label:roadmap:${row.item.id}`)}` : undefined;
   const remaining = row.c.total - shown.length;
+  // The planner names tracking issues `[roadmap:<id>] <title>`; strip that machine prefix so the issue reads
+  // as the work, not the label that wires it. (Defensive — a hand-filed issue without the prefix is untouched.)
+  const cleanTitle = (t: string): string => t.replace(/^\s*\[roadmap:[^\]]*\]\s*/i, '').trim() || t;
   return (
     <div class="rm-issues">
       <ul>
         {shown.map((is) => {
-          const label = <><span class={`rm-ic ${is.c ? 'closed' : 'open'}`}>{is.c ? '✓' : '○'}</span><span class="rm-inum">{`#${is.n}`}</span><span class="rm-it">{is.t}</span></>;
+          const label = <><span class={`rm-ic ${is.c ? 'closed' : 'open'}`}>{is.c ? '✓' : '○'}</span><span class="rm-inum">{`#${is.n}`}</span><span class="rm-it">{cleanTitle(is.t)}</span></>;
           return <li>{repoUrl ? <a href={`${repoUrl}/issues/${is.n}`}>{label}</a> : <span>{label}</span>}</li>;
         })}
       </ul>

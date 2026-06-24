@@ -30,11 +30,17 @@ describe('roadmapItemState: execution status is derived, two-layer', () => {
     expect(roadmapItemState(it, { total: 3, done: 3 })).toBe('done');
     expect(roadmapItemState(it, { total: 4, done: 3 })).toBe('in_progress'); // a 4th issue appeared
   });
-  test('legacy back-compat: old stored status renders without v2 flags', () => {
+  test('legacy back-compat: old stored status renders (only when there are no child issues)', () => {
     expect(roadmapItemState({ id: 'a', title: 'A', status: 'active' })).toBe('in_progress');
     expect(roadmapItemState({ id: 'a', title: 'A', status: 'planned' })).toBe('parked');
     expect(roadmapItemState({ id: 'a', title: 'A', status: 'done' })).toBe('done');
     expect(roadmapItemState({ id: 'a', title: 'A', status: 'proposed' })).toBe('proposed');
+  });
+  test('child issues OVERRIDE a stale hand-written status (derived wins)', () => {
+    // A legacy `status: planned` item that actually has open issues is in progress, not parked.
+    expect(roadmapItemState({ id: 'a', title: 'A', status: 'planned' }, { total: 3, done: 1 })).toBe('in_progress');
+    // And once they all close it's done, even if the file still says active.
+    expect(roadmapItemState({ id: 'a', title: 'A', status: 'active' }, { total: 3, done: 3 })).toBe('done');
   });
 });
 

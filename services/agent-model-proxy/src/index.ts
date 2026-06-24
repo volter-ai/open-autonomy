@@ -5,7 +5,7 @@ import { verifyGitHubOidcToken } from './github-oidc.js';
 import { isStale, syncAllStale, syncProfile } from './github-sync.js';
 import { LimitLedger, LimitLedgerClient, type Moderation, type Sponsor, type Tier, type AccountProfile } from './limit-ledger.js';
 import { handleOpenAI } from './openai.js';
-import { LOGO_SVG, renderExplore, renderProject, renderRedeemResult } from './platform-html.js';
+import { LOGO_SVG, renderExplore, renderProject, renderRedeemResult, renderRunSession } from './platform-html.js';
 import { RunBudget, RunBudgetClient } from './run-budget.js';
 import { renderRunwaySvg } from './runway-svg.js';
 import { handleSponsorsWebhook } from './sponsors-webhook.js';
@@ -68,6 +68,31 @@ async function route(req: Request, env: Env, ctx: ExecutionContext): Promise<Res
       : redeemMessage(result.error);
     return html(renderRedeemResult(account, result.ok, message), result.ok ? 200 : 400);
   }
+  // Live session view (human): the proxy-captured rolling window of a run's session, under its public
+  // project. Server-side DO read (no token) — the session of a run in a public repo is public, exactly like
+  // the project page. Must match BEFORE the generic project page (which would swallow the /runs/<id> suffix).
+  const runSession = path.match(/^\/p\/(.+)\/runs\/([^/]+)$/);
+  if (runSession) {
+    if (req.method !== 'GET') return methodNotAllowed();
+    const account = decodeURIComponent(runSession[1]);
+    const runId = decodeURIComponent(runSession[2]);
+    const st = await new RunBudgetClient(env.RUNS, runId).status() as { claims?: RunClaims | null; session?: { updated_at: string; turns: Array<{ role: string; text: string }> } | null; consumed_usd_cents?: number; request_count?: number; revoked?: boolean };
+    if (!st.claims || st.claims.repo !== account) return html(renderRedeemResult(account, false, `No run ${runId} for ${account}.`), 404);
+    return html(renderRunSession({
+      run_id: runId,
+      repo: st.claims.repo,
+      issue: st.claims.issue,
+      actor: st.claims.actor,
+      purpose: st.claims.purpose ?? 'agent',
+      github_run_id: st.claims.github_run_id,
+      consumed_usd_cents: st.consumed_usd_cents ?? 0,
+      request_count: st.request_count ?? 0,
+      revoked: st.revoked ?? false,
+      updated_at: st.session?.updated_at,
+      turns: st.session?.turns ?? [],
+    }, Date.now()));
+  }
+
   // Creator page.
   const projectPage = path.match(/^\/p\/(.+)$/);
   if (projectPage) {
@@ -225,6 +250,30 @@ async function route(req: Request, env: Env, ctx: ExecutionContext): Promise<Res
     const runId = decodeURIComponent(statusRun[1]);
     if (runId !== claims.run_id) return error('forbidden_run', 403);
     return json(await new RunBudgetClient(env.RUNS, runId).status());
+  }
+
+  // Live session read: a token scoped to repo X may read the rolling session window of ANY run in repo X.
+  // This is how the PM peers into a sibling run WHILE it executes — GitHub serves no in-progress logs, so the
+  // proxy (which every model call flows through) is the only live vantage point. Repo-scoped, not run-scoped.
+  const sessionRun = path.match(/^\/v1\/runs\/([^/]+)\/session$/);
+  if (sessionRun) {
+    if (req.method !== 'GET') return methodNotAllowed();
+    const claims = await authedClaims(req, env);
+    if (!claims) return error('auth_failed', 401);
+    const runId = decodeURIComponent(sessionRun[1]);
+    const target = await new RunBudgetClient(env.RUNS, runId).status() as { claims?: RunClaims | null; session?: { updated_at: string; turns: unknown[] } | null; request_count?: number; consumed_usd_cents?: number };
+    if (!target.claims) return error('run_not_found', 404);
+    if (target.claims.repo !== claims.repo) return error('forbidden_run', 403);
+    return json({
+      run_id: runId,
+      repo: target.claims.repo,
+      issue: target.claims.issue,
+      actor: target.claims.actor,
+      purpose: target.claims.purpose,
+      request_count: target.request_count ?? 0,
+      consumed_usd_cents: target.consumed_usd_cents ?? 0,
+      session: target.session ?? { updated_at: '', turns: [] },
+    });
   }
 
   const exchangeRun = path.match(/^\/v1\/runs\/([^/]+)\/exchange$/);

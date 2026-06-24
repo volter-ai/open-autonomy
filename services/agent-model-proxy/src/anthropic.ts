@@ -1,6 +1,8 @@
 import { limitsFromEnv } from './config.js';
 import { error, methodNotAllowed, parseJson, readCappedBody } from './errors.js';
 import { estimateInputTokensFromBody, openrouterReservePrice, priceTable, settleCents, worstCaseCents, type ModelPrice, type TokenUsage } from './pricing.js';
+import { RunBudgetClient } from './run-budget.js';
+import { sessionTurnsFromBody } from './session-capture.js';
 import { reserveBudget } from './spend.js';
 import type { Env, Provider, RunClaims, UsageEvent } from './types.js';
 
@@ -55,6 +57,11 @@ export async function handleAnthropic(req: Request, env: Env, claims: RunClaims,
   const reserved = worstCaseCents(price, body.max_tokens as number, estimateInputTokensFromBody(bodyText));
   const reservation = await reserveBudget(env, claims.run_id, reserved, limitsFromEnv(env));
   if (reservation instanceof Response) return reservation;
+
+  // Capture the run's live session window (redacted, capped) so the platform view + the PM can watch it move.
+  // The proxy is the only vantage point on an in-flight run — GitHub buffers the agent step and serves no
+  // in-progress logs. Fire-and-forget: a capture failure must never affect the model call.
+  ctx.waitUntil(new RunBudgetClient(env.RUNS, claims.run_id).recordSession(sessionTurnsFromBody(body)).then(() => {}, () => {}));
 
   let upstream: Response;
   try {

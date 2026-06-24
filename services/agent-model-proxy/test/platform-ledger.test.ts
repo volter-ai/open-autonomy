@@ -255,7 +255,8 @@ describe('platform: live agents (follow along)', () => {
     const html = renderProject(v);
     expect(html.includes('Live agents')).toBe(true);
     expect(html.includes('1 running')).toBe(true);
-    expect(html.includes('https://github.com/acme/widget/actions/runs/99887766')).toBe(true);
+    // "Watch live" now points at our own session view (the proxy-captured live session), not the raw run.
+    expect(html.includes('/p/acme%2Fwidget/runs/run_1')).toBe(true);
     expect(html.includes('https://github.com/acme/widget/issues/7')).toBe(true);
     expect(html.includes('$0.90')).toBe(true);
     expect(html.includes('http-equiv="refresh"')).toBe(true); // soft-refresh while live

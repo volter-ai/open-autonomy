@@ -25,10 +25,16 @@ Understand the entire state before acting:
   issue has been attempted. The history is how you avoid repeating yourself and how you judge failures.
 - **Every agent PR + its checks.** `gh pr list --state open --json number,headRefName,labels,statusCheckRollup`
   — note each PR's `ci` and `agent-review` result (success / failure / pending).
-- **Every running and recent agent run + its session.** This is the runner tool: `gh run list --json
-  databaseId,workflowName,status,conclusion,displayTitle` shows what is in-flight and what just finished. When
-  you need to know what a run actually DID (especially a failure), read its session: `gh run view <id> --log`,
-  or download its uploaded `agent-run-<agent>` artifact (the transcript). Inspect, don't guess.
+- **Every running and recent agent run + its session.** `gh run list --json
+  databaseId,workflowName,status,conclusion,displayTitle` shows what is in-flight and what just finished.
+  - **For a RUNNING run, read its LIVE session from the model proxy** — GitHub serves no in-progress logs
+    (`gh run view --log` only works once complete). A run's proxy id is `ir-<workflowName>-<databaseId>`;
+    fetch its rolling session window (recent model turns + tool calls, redacted) with your run token:
+    `curl -s -H "authorization: Bearer $MODEL_PROXY_TOKEN" "$MODEL_PROXY_URL/v1/runs/ir-<workflow>-<databaseId>/session"`.
+    This is how you tell **looping/stuck** (repeating the same failing action) from **deep but productive**
+    work — judge a live run on what it's *doing*, not just how long it's taken.
+  - **For a COMPLETED run**, read `gh run view <id> --log` or its uploaded `agent-run-<agent>` artifact
+    (the durable transcript). Inspect, don't guess.
 
 ## Step 2 — decide and act per issue (strict doctrine)
 
@@ -48,8 +54,9 @@ visible status comment saying what you decided and why:
 - **`needs-info` where a human has since replied** (a non-bot comment after your question) → re-triage it as fresh.
 - **`human-required`** → understand it; act only if the blocking condition is now resolved, else leave it
   (a deliberate decision to wait, not blindness).
-- **A stuck or runaway run** (far past expected duration, or duplicate concurrent runs for one issue) → cancel
-  it via the runner (`gh run cancel <id>`), comment why.
+- **A stuck or runaway run** (far past expected duration, or duplicate concurrent runs for one issue) → read
+  its live session first (above); if it's looping on the same failing action or clearly off-track, cancel it
+  via the runner (`gh run cancel <id>`) and comment why. If it's making real progress, let it finish.
 
 ## Step 3 — capacity (judgment, not a blindfold)
 

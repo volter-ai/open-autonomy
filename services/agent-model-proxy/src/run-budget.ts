@@ -1,4 +1,5 @@
 import { json } from './errors.js';
+import type { SessionTurn } from './session-capture.js';
 import type { RunClaims, UsageEvent } from './types.js';
 
 interface RunState {
@@ -9,6 +10,9 @@ interface RunState {
   request_count: number;
   reservations: Record<string, { amount: number; expires_at_ms: number }>;
   events: UsageEvent[];
+  // Rolling redacted window of the run's live session (recent model turns + tool calls), refreshed on each
+  // proxied request. The only way to observe a run's interior WHILE it runs — read by the live page + the PM.
+  session: { updated_at: string; turns: SessionTurn[] } | null;
   created_at: string;
   updated_at: string;
 }
@@ -36,6 +40,10 @@ export class RunBudget implements DurableObject {
     }
     if (op === 'release') {
       await this.release(String(body.request_id), body.reached === true);
+      return json({ ok: true });
+    }
+    if (op === 'record_session') {
+      await this.recordSession((body.turns as SessionTurn[]) ?? []);
       return json({ ok: true });
     }
     return json({ ok: false, error: 'unknown_op' }, { status: 400 });
@@ -112,6 +120,14 @@ export class RunBudget implements DurableObject {
     await this.save();
   }
 
+  // Overwrite the live session window with the latest request's recent turns (already redacted + capped by
+  // the caller). Replace, not append — each request carries the full conversation so far, so the newest one
+  // is the freshest complete window. Bounded so the DO stays small regardless of run length.
+  private async recordSession(turns: SessionTurn[]): Promise<void> {
+    this.state.session = { updated_at: new Date().toISOString(), turns: turns.slice(-20) };
+    await this.save();
+  }
+
   private async release(requestId: string, reached: boolean): Promise<void> {
     const reservation = this.state.reservations[requestId];
     if (!reservation) return;
@@ -135,6 +151,7 @@ export class RunBudget implements DurableObject {
       reserved_usd_cents: this.state.reserved_usd_cents,
       request_count: this.state.request_count,
       recent_events: this.state.events,
+      session: this.state.session,
       created_at: this.state.created_at,
       updated_at: this.state.updated_at,
     };
@@ -161,6 +178,7 @@ function emptyState(): RunState {
     request_count: 0,
     reservations: {},
     events: [],
+    session: null,
     created_at: now,
     updated_at: now,
   };
@@ -204,5 +222,9 @@ export class RunBudgetClient {
 
   release(requestId: string, reached: boolean) {
     return this.rpc<{ ok: true }>('release', { request_id: requestId, reached });
+  }
+
+  recordSession(turns: SessionTurn[]) {
+    return this.rpc<{ ok: true }>('record_session', { turns });
   }
 }

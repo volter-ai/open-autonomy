@@ -265,6 +265,17 @@ ${refreshSeconds ? `<meta http-equiv="refresh" content="${refreshSeconds}">\n` :
   .runs .rspend .l{color:${C.faint};font-size:12px;}
   .runs .watch{display:inline-flex;align-items:center;gap:5px;white-space:nowrap;color:${C.accent};font-weight:700;font-size:13.5px;border:1.5px solid #ffd0d3;border-radius:999px;padding:7px 13px;}
   .runs .watch:hover{background:#fff5f5;border-color:${C.accent};}
+  .sess-head{display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin:8px 0 6px;}
+  .sess-head .role{font-weight:800;font-size:22px;letter-spacing:-.02em;}
+  .sess-head .meta{color:${C.muted};font-size:14px;}
+  .sess-head .meta a{color:${C.body};font-weight:600;}
+  .sess-live{display:inline-flex;align-items:center;gap:6px;color:${C.green};font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;}
+  .turns{list-style:none;margin:18px 0 0;padding:0;}
+  .turn{border:1px solid ${C.line};border-radius:12px;padding:12px 14px;margin-bottom:12px;background:${C.panel};}
+  .turn .who{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:${C.faint};margin-bottom:6px;}
+  .turn.assistant{border-left:3px solid ${C.accent};}
+  .turn.user{border-left:3px solid #c9ccd1;}
+  .turn pre{margin:0;white-space:pre-wrap;word-break:break-word;font:13px/1.55 ui-monospace,Menlo,monospace;color:${C.body};}
 </style>
 </head><body>${body}</body></html>`;
 }
@@ -369,10 +380,9 @@ function runRow(r: LiveRun, repo: string, now: number): string {
     : 'autonomous';
   const elapsed = relTime(r.started_at_ms, now);
   const sub = `${issueLink} · @${escapeHtml(r.actor)}${elapsed ? ` · running ${elapsed}` : ''} · ${r.request_count} call${r.request_count === 1 ? '' : 's'}`;
-  // The GitHub Actions run is the real-time view: public, live-streaming logs. We just index + deep-link it.
-  const watch = r.github_run_id
-    ? `<a class="watch" href="https://github.com/${escapeHtml(repo)}/actions/runs/${escapeHtml(r.github_run_id)}">Watch live ›</a>`
-    : '';
+  // Watch live → our own readable, auto-refreshing session view (the proxy captures the run's turns as they
+  // happen — GitHub serves no in-progress logs). The session page links out to the raw Actions run too.
+  const watch = `<a class="watch" href="/p/${encodeURIComponent(repo)}/runs/${encodeURIComponent(r.run_id)}">Watch live ›</a>`;
   return `<li>
     <div class="rd">
       <div class="rrole">${escapeHtml(role)}${r.system ? '<span class="badge">system</span>' : ''}</div>
@@ -389,6 +399,48 @@ function renderLiveAgents(runs: LiveRun[], repo: string, now: number): string {
     return `<div class="panel">${head}<p class="sub">No agents running right now. When this repo's workflows fire, each run shows up here — follow along live in GitHub Actions.</p></div>`;
   }
   return `<div class="panel">${head}<ul class="runs">${runs.map((r) => runRow(r, repo, now)).join('')}</ul></div>`;
+}
+
+export interface RunSessionView {
+  run_id: string;
+  repo: string;
+  issue: number;
+  actor: string;
+  purpose: string;
+  github_run_id?: string;
+  consumed_usd_cents: number;
+  request_count: number;
+  revoked: boolean;
+  updated_at?: string;
+  turns: Array<{ role: string; text: string }>;
+}
+
+// The live session page behind "Watch live →": a redacted, rolling window of the agent's actual turns (model
+// reasoning + tool calls), captured at the proxy as they happen. Auto-refreshes while the run is active. This
+// is the in-progress view GitHub can't give (it buffers the step + serves no in-progress logs).
+export function renderRunSession(v: RunSessionView, nowMs: number): string {
+  const role = PURPOSE_LABEL[v.purpose] ?? (v.purpose ? v.purpose.charAt(0).toUpperCase() + v.purpose.slice(1) : 'Agent');
+  const issueLink = v.issue > 0
+    ? `<a href="https://github.com/${escapeHtml(v.repo)}/issues/${v.issue}">#${v.issue}</a>`
+    : 'autonomous';
+  const actions = v.github_run_id
+    ? ` · <a href="https://github.com/${escapeHtml(v.repo)}/actions/runs/${escapeHtml(v.github_run_id)}">raw Actions log ›</a>`
+    : '';
+  const updatedMs = v.updated_at ? Date.parse(v.updated_at) : 0;
+  const active = !v.revoked && updatedMs > 0 && nowMs - updatedMs < 10 * 60 * 1000;
+  const ago = updatedMs ? relTime(updatedMs, nowMs) : '';
+  const live = active ? `<span class="sess-live"><span class="pulse"></span>live${ago && ago !== 'just now' ? ` · updated ${ago} ago` : ''}</span>` : '';
+  const turns = v.turns.length
+    ? `<ul class="turns">${v.turns.map((t) => `<li class="turn ${t.role === 'assistant' ? 'assistant' : t.role === 'user' ? 'user' : ''}"><div class="who">${escapeHtml(t.role)}</div><pre>${escapeHtml(t.text)}</pre></li>`).join('')}</ul>`
+    : `<div class="empty">No session captured yet — the agent hasn't called the model.${active ? ' This page refreshes automatically.' : ''}</div>`;
+  const body = `${nav()}<div class="wrap">
+    <a class="docmore" href="/p/${encodeURIComponent(v.repo)}">← ${escapeHtml(v.repo)}</a>
+    <div class="sess-head"><span class="role">${escapeHtml(role)}</span>${live}</div>
+    <div class="metarow"><span>${issueLink} · @${escapeHtml(v.actor)} · <b>${v.request_count}</b> call${v.request_count === 1 ? '' : 's'} · <b>${usd(v.consumed_usd_cents)}</b> spent${actions}</span></div>
+    <p class="note">A redacted, rolling window of the agent's live session — recent model turns and tool calls, captured at the model proxy as they happen.</p>
+    ${turns}
+  </div>`;
+  return shell(`${role} · ${nameOf(v.repo)} · open-autonomy`, body, active ? 8 : undefined);
 }
 
 export function renderProject(v: ProjectView): string {

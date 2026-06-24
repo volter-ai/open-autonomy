@@ -123,6 +123,11 @@ async function fetchRoadmapStatus(env: Env, account: string): Promise<string | u
         const name = l.name ?? '';
         if (!name.startsWith('roadmap:')) continue;
         const id = name.slice('roadmap:'.length);
+        // `roadmap:<id>` links an issue to its roadmap item. Legacy phase labels were `roadmap:phase-N`
+        // (the prefix is now `phase:`), which collide with this rollup namespace — an issue carrying only
+        // `roadmap:phase-1` would otherwise strand its count in a phantom `phase-1` bucket that matches no
+        // item, leaving the real item showing zero issues. Skip phase labels: they are not item ids.
+        if (/^phase-\d+$/.test(id)) continue;
         const row = items[id] ?? (items[id] = { total: 0, done: 0, issues: [] });
         row.total += 1;
         if (closed) row.done += 1;

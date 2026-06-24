@@ -216,11 +216,26 @@ type Row = { item: RoadmapItem; state: RoadmapState; c: RoadmapCounts };
 const ISSUE_PREVIEW = 6;
 
 // The status word shown on an item's right edge: in-flight items get their issue tally, others a plain label.
-function stateLabel(state: RoadmapState, c: RoadmapCounts): string {
-  if (state === 'in_progress') return c.total > 0 ? `${c.done}/${c.total}` : 'in progress';
+function stateLabel(state: RoadmapState, c: RoadmapCounts, isSingleRedundantIssue: boolean): string {
+  if (state === 'in_progress') {
+    if (isSingleRedundantIssue) return 'in progress';
+    return c.total > 0 ? `${c.done}/${c.total}` : 'in progress';
+  }
   if (state === 'done') return c.total > 0 ? `${c.total} done` : 'shipped';
   if (state === 'proposed') return 'proposed';
   return 'queued';
+}
+
+// The planner names tracking issues `[roadmap:<id>] <title>`; strip that machine prefix so the issue reads
+// as the work, not the label that wires it. (Defensive — a hand-filed issue without the prefix is untouched.)
+const cleanTitle = (t: string): string => t.replace(/^\s*\[roadmap:[^\]]*\]\s*/i, '').trim() || t;
+
+// An item whose single child issue just restates its own title is a self-referential umbrella. Don't let it
+// expand into a pointless echo of itself — detect and collapse the redundancy into a single clear state.
+function isRedundant(itemTitle: string, issueTitle: string): boolean {
+  // Compare titles after stripping machine prefixes and normalizing noise (case, punctuation).
+  const norm = (s: string): string => s.toLowerCase().replace(/[^a-z0-9]/g, '');
+  return norm(itemTitle) === norm(cleanTitle(issueTitle));
 }
 
 // The child-issue list revealed when an item is expanded — layer 2 beneath the intent. Each issue links to
@@ -230,9 +245,6 @@ function IssueList({ row, repoUrl }: { row: Row; repoUrl?: string }) {
   const shown = issues.slice(0, ISSUE_PREVIEW);
   const moreHref = repoUrl ? `${repoUrl}/issues?q=${encodeURIComponent(`label:roadmap:${row.item.id}`)}` : undefined;
   const remaining = row.c.total - shown.length;
-  // The planner names tracking issues `[roadmap:<id>] <title>`; strip that machine prefix so the issue reads
-  // as the work, not the label that wires it. (Defensive — a hand-filed issue without the prefix is untouched.)
-  const cleanTitle = (t: string): string => t.replace(/^\s*\[roadmap:[^\]]*\]\s*/i, '').trim() || t;
   return (
     <div class="rm-issues">
       <ul>
@@ -255,18 +267,19 @@ function RoadmapStation({ row, repoUrl, now }: { row: Row; repoUrl?: string; now
   const { item: it, state, c } = row;
   const phase = it.phase ? (isNaN(parseInt(it.phase, 10)) ? it.phase : `P${it.phase}`) : '';
   const frac = c.total > 0 ? Math.min(1, c.done / c.total) : 0;
-  const expandable = c.total > 0;
+  const isSingleRedundantIssue = c.total === 1 && !!c.issues?.length && isRedundant(it.title, c.issues[0].t);
+  const expandable = c.total > 0 && !isSingleRedundantIssue;
   const head = (
     <div class="rm-shead">
       <span class="rm-stitle">{it.title}</span>
       {now ? <span class="rm-now">now</span> : null}
       {phase ? <span class="rm-sphase">{phase}</span> : null}
-      <span class="rm-sstatus">{stateLabel(state, c)}</span>
+      <span class="rm-sstatus">{stateLabel(state, c, isSingleRedundantIssue)}</span>
     </div>
   );
   const bar = expandable && state === 'in_progress' ? <div class="rm-ebar"><div class="rm-efill" style={`width:${Math.round(frac * 100)}%`} /></div> : null;
   return (
-    <li class={`rm-stn ${STATE_CLASS[state]}${now ? ' is-now' : ''}`}>
+    <li class={`rm-stn ${STATE_CLASS[state]}${now ? ' is-now' : ''}${isSingleRedundantIssue ? ' is-single' : ''}`}>
       <span class="rm-node" aria-hidden="true" />
       {expandable
         ? <details><summary>{head}{bar}</summary><IssueList row={row} repoUrl={repoUrl} /></details>

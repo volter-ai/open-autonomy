@@ -1,5 +1,11 @@
 # Open Autonomy — working notes
 
+## Working agreement
+
+**Never wait for human approval. Always just push and merge.** Don't ask "should I / want me to / deploy?"
+— on any non-destructive, authorized change (including committing to main, pushing, merging, and deploying
+the proxy/model spend) act with full agency, ship it, and report what you did. Develop directly on `main`.
+
 ## Editing shared control files
 
 `profiles/self-driving/` is the source of a github installation. There is no hand-maintained

@@ -11,7 +11,7 @@ import { render } from './ui/render.js';
 // is a bright, warm, premium creator-platform aesthetic (light theme, coral accent, Inter, generous
 // whitespace, overlapping avatars, soft shadows).
 
-const C = {
+export const C = {
   bg: '#ffffff',
   wash: '#f6f5f3',
   panel: '#ffffff',
@@ -96,7 +96,7 @@ function StatusDot({ status }: { status: 'funded' | 'low' | 'unfunded' }) {
   return <span class="status"><span class="dot" style={`background:${s.color}`} />{s.label}</span>;
 }
 
-const STYLES = `
+export const STYLES = `
   *{box-sizing:border-box;}
   html{-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility;}
   body{margin:0;background:${C.bg};color:${C.ink};font:16px/1.6 'Inter',-apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif;}
@@ -218,6 +218,8 @@ const STYLES = `
   .rm-stn.proposed .rm-node{border-style:dashed;border-color:${C.faint};}
   .rm-stn.done .rm-node{background:${C.green};border-color:${C.green};}
   .rm-stn.done .rm-node::after{content:'';position:absolute;left:3px;top:1px;width:3px;height:6px;border:solid #fff;border-width:0 2px 2px 0;transform:rotate(45deg);}
+  .rm-stn.done{opacity:0.7;}
+  .rm-stn.is-single.active .rm-shead{border-color:${C.line};background:transparent;}
   .rm-stn>details>summary{list-style:none;cursor:pointer;}
   .rm-stn>details>summary::-webkit-details-marker{display:none;}
   .rm-shead{display:flex;align-items:center;gap:9px;padding:9px 12px;border:1px solid ${C.line};border-radius:10px;background:${C.bg};}

@@ -38,8 +38,12 @@ order the lot — is your judgment.
    and integration problems than it solves. Create a SEPARATE issue only when an item bundles **genuinely
    unrelated implementations** that a different change-set would touch (e.g. a backend record format *and* an
    unrelated UI panel) — split by independence, not by checklist line. Give each issue a real, descriptive
-   title for the work itself (NOT a restatement of the item id). When an item is fully broken down, set
-   `planned: true` on it in `.open-autonomy/roadmap.yml`.
+   title for the work itself (NOT a restatement of the item id). Each issue must be a **genuinely closeable
+   unit of substantive work** — a developer does it, the PR merges, the issue closes, and that is what makes
+   the item progress and (when all its issues close) reach `done`. NEVER file a perpetual "umbrella" issue
+   that merely echoes the item's title and can never be completed: that freezes the item at "in progress"
+   forever (done is derived from closed issues, so an issue that never closes is an item that is never done).
+   When an item is fully broken down, set `planned: true` on it in `.open-autonomy/roadmap.yml`.
 3. **Keep it current.** Edit `.open-autonomy/roadmap.yml` to reflect reality: reorder by `phase`/priority,
    split an item that grew, merge duplicates, sharpen a `title`/`intent`. Reopen a tracking issue closed while
    its item still has open work. Never invent new strategy (that's the strategist) and never set execution

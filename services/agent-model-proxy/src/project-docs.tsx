@@ -216,12 +216,11 @@ type Row = { item: RoadmapItem; state: RoadmapState; c: RoadmapCounts };
 const ISSUE_PREVIEW = 6;
 
 // The status word shown on an item's right edge: in-flight items get their issue tally, others a plain label.
-function stateLabel(state: RoadmapState, c: RoadmapCounts, isSingleRedundantIssue: boolean): string {
-  if (state === 'in_progress') {
-    if (isSingleRedundantIssue) return 'in progress';
-    return c.total > 0 ? `${c.done}/${c.total}` : 'in progress';
-  }
-  if (state === 'done') return c.total > 0 ? `${c.total} done` : 'shipped';
+function stateLabel(state: RoadmapState, c: RoadmapCounts): string {
+  // The x/y tally only carries meaning with MORE THAN ONE issue (real partial progress). A single in-flight
+  // issue reading "0/1" is just noise — it reads cleaner as a plain "in progress".
+  if (state === 'in_progress') return c.total > 1 ? `${c.done}/${c.total}` : 'in progress';
+  if (state === 'done') return c.total > 1 ? `${c.total} done` : 'shipped';
   if (state === 'proposed') return 'proposed';
   return 'queued';
 }
@@ -274,7 +273,7 @@ function RoadmapStation({ row, repoUrl, now }: { row: Row; repoUrl?: string; now
       <span class="rm-stitle">{it.title}</span>
       {now ? <span class="rm-now">now</span> : null}
       {phase ? <span class="rm-sphase">{phase}</span> : null}
-      <span class="rm-sstatus">{stateLabel(state, c, isSingleRedundantIssue)}</span>
+      <span class="rm-sstatus">{stateLabel(state, c)}</span>
     </div>
   );
   const bar = expandable && state === 'in_progress' ? <div class="rm-ebar"><div class="rm-efill" style={`width:${Math.round(frac * 100)}%`} /></div> : null;

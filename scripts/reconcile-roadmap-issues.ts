@@ -70,7 +70,9 @@ function parseRoadmap(yml: string): Item[] {
     }
   }
   if (cur) items.push(cur);
-  return items.filter((i) => i.id && i.title);
+  // Keep every item with an id (even titleless) — a planned item missing a title is a roadmap authoring bug we
+  // must SURFACE, not silently drop (it would leave a planned item with no tracking issue and no warning).
+  return items.filter((i) => i.id);
 }
 
 let yml = '';
@@ -82,12 +84,19 @@ try {
 }
 // A `proposed: true` item is still the strategy reviewer's gate — never create issues for it, even if it
 // also (incorrectly) carries planned: true. proposed wins, matching the planner skill + the page deriver.
-const items = parseRoadmap(yml).filter((i) => i.planned === true && i.proposed !== true);
+const planned = parseRoadmap(yml).filter((i) => i.planned === true && i.proposed !== true);
+// A planned item with no title can't become a tracking issue — surface it loudly instead of dropping it.
+for (const i of planned.filter((i) => !i.title)) {
+  process.stderr.write(`roadmap-reconcile: WARNING planned item '${i.id}' has no title — cannot create a tracking issue; fix the roadmap\n`);
+}
+const items = planned.filter((i) => i.title);
 
 // Which roadmap ids already have a tracking issue (matched by the `roadmap:<id>` label, the stable marker).
+// High --limit so the dedup set is COMPLETE: a truncated list would miss existing trackers and create
+// DUPLICATE issues (gh paginates internally up to the limit; roadmap-planner issues are well under this).
 const tracked = new Set<string>();
 try {
-  const existing = JSON.parse(gh(['issue', 'list', '-R', repo, '--state', 'all', '--label', 'origin:roadmap-planner', '--limit', '200', '--json', 'labels']) || '[]') as { labels: { name: string }[] }[];
+  const existing = JSON.parse(gh(['issue', 'list', '-R', repo, '--state', 'all', '--label', 'origin:roadmap-planner', '--limit', '5000', '--json', 'labels']) || '[]') as { labels: { name: string }[] }[];
   for (const it of existing) for (const l of it.labels) if (l.name.startsWith('roadmap:')) tracked.add(l.name.slice('roadmap:'.length));
 } catch {
   /* none yet */

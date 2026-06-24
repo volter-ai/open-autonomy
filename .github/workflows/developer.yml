@@ -129,7 +129,8 @@ jobs:
           body="$(cat .agent-run/artifacts/pr.md 2>/dev/null || echo "Automated agent change (ir-developer-${{ github.run_id }}).")"
           if printf '%s' "$ref" | grep -qE '^[0-9]+$'; then body="$(printf 'Closes #%s\n\n%s' "$ref" "$body")"; fi
           gh pr create --base "$base" --head "$branch" --title "Agent: ir-developer-${{ github.run_id }}" --body "$body" || gh pr view "$branch" >/dev/null
-          gh pr merge "$branch" --squash --auto || echo "auto-merge enable failed (non-fatal)"
+          armed=; for i in 1 2 3 4 5 6; do gh pr merge "$branch" --squash --auto && { armed=1; break; } || sleep 4; done
+          [ -n "$armed" ] || echo "auto-merge enable failed after retries (non-fatal)"
           head_sha="$(git rev-parse HEAD)"
           pr_number="$(gh pr view "$branch" --json number --jq .number 2>/dev/null || echo "")"
           gh workflow run ci.yml --ref "$branch" -f sha="$head_sha" -f pr="$pr_number" || echo "ci dispatch failed (non-fatal)"

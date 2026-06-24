@@ -297,7 +297,13 @@ function wrapperYml(name: string, agent: IRAgent): string {
       ? [`          if printf '%s' "$ref" | grep -qE '^[0-9]+$'; then body="$(printf 'Closes #%s\\n\\n%s' "$ref" "$body")"; fi`]
       : []),
     `          gh pr create --base "$base" --head "$branch" --title "Agent: ${RID}" --body "$body" || gh pr view "$branch" >/dev/null`,
-    `          gh pr merge "$branch" --squash --auto || echo "auto-merge enable failed (non-fatal)"`,
+    // Arm native auto-merge — and RETRY. Right after 'pr create' GitHub still reports mergeable=UNKNOWN for a
+    // moment, so a single --auto often fails; with the failure swallowed, the PR's checks then go green but
+    // nothing ever merges it (no agent holds contents:write to re-arm, and the PM is forbidden to merge), so it
+    // sits green-but-stuck forever. Retry until it sticks. This cannot bypass review: branch protection still
+    // requires ci + agent-review server-side, so --auto only lands the PR once those are green.
+    `          armed=; for i in 1 2 3 4 5 6; do gh pr merge "$branch" --squash --auto && { armed=1; break; } || sleep 4; done`,
+    `          [ -n "$armed" ] || echo "auto-merge enable failed after retries (non-fatal)"`,
     // Bot-opened PRs don't fire pull_request CI (GITHUB_TOKEN anti-recursion); workflow_dispatch is exempt,
     // so dispatch ci.yml on the PR head to post the required `ci` status that gates auto-merge.
     `          head_sha="$(git rev-parse HEAD)"`,

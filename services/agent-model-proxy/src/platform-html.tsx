@@ -2,6 +2,7 @@ import { raw } from 'hono/html';
 import type { DirectoryEntry, Flow, LiveRun, Patron, ProjectView } from './limit-ledger.js';
 import { renderCharterPanel, renderRoadmapPanel, renderChangelogPanel } from './project-docs.js';
 import { icon } from './icons.js';
+import { Icon } from './ui/Icon.js';
 import { render } from './ui/render.js';
 
 // Server-rendered HTML for the funding platform — a Patreon-style storefront over the ledger.
@@ -428,72 +429,81 @@ function relTime(fromMs: number | undefined, now: number): string {
 
 const ACT_PAGE = 12;
 
-// One agent-run row in the unified activity feed: status dot, role + issue/actor, when, spend, a "Watch
-// live"/"View session" drawer trigger, and a GitHub-mark link to the raw Actions run.
-function runActivityRow(r: LiveRun, now: number): string {
+// One agent-run row: status dot, role + issue/actor, when, spend, a "Watch live"/"View session" drawer
+// trigger, and a GitHub-mark link to the raw Actions run.
+function RunRow({ r, now }: { r: LiveRun; now: number }) {
   const role = PURPOSE_LABEL[r.purpose] ?? (r.purpose.charAt(0).toUpperCase() + r.purpose.slice(1));
-  const issue = r.issue > 0
-    ? `<a href="https://github.com/${escapeHtml(r.repo)}/issues/${r.issue}">#${r.issue}</a>`
-    : 'autonomous';
+  const ghRepo = `https://github.com/${r.repo}`;
   const elapsed = relTime(r.started_at_ms, now);
   const when = r.active ? (elapsed ? `running ${elapsed}` : 'running') : (elapsed ? `${elapsed} ago` : 'recently');
-  const calls = `${r.request_count} call${r.request_count === 1 ? '' : 's'}`;
-  const watchLabel = r.active ? 'Watch live ›' : 'View session ›';
-  const watch = `<a class="watch" href="/p/${encodeURIComponent(r.repo)}/runs/${encodeURIComponent(r.run_id)}" data-run="${escapeHtml(r.run_id)}" data-repo="${escapeHtml(r.repo)}">${watchLabel}</a>`;
-  const gh = r.github_run_id
-    ? `<a class="act-gh" title="Open the run on GitHub Actions" href="https://github.com/${escapeHtml(r.repo)}/actions/runs/${escapeHtml(r.github_run_id)}">${icon('github')}</a>`
-    : '';
-  return `<li class="act run">
-    <span class="act-dot ${r.active ? 'running' : 'done'}"></span>
-    <div class="act-main">
-      <div class="act-title">${escapeHtml(role)}${r.system ? '<span class="badge">system</span>' : ''}</div>
-      <div class="act-sub">${issue} · @${escapeHtml(r.actor)} · ${when} · ${calls}</div>
-    </div>
-    <div class="act-right"><span class="act-amt">${usd(r.consumed_usd_cents)}</span>${watch}${gh}</div>
-  </li>`;
+  return (
+    <li class="act run">
+      <span class={`act-dot ${r.active ? 'running' : 'done'}`} />
+      <div class="act-main">
+        <div class="act-title">{role}{r.system ? <span class="badge">system</span> : null}</div>
+        <div class="act-sub">
+          {r.issue > 0 ? <a href={`${ghRepo}/issues/${r.issue}`}>#{r.issue}</a> : 'autonomous'}
+          {` · @${r.actor} · ${when} · ${r.request_count} call${r.request_count === 1 ? '' : 's'}`}
+        </div>
+      </div>
+      <div class="act-right">
+        <span class="act-amt">{usd(r.consumed_usd_cents)}</span>
+        <a class="watch" href={`/p/${encodeURIComponent(r.repo)}/runs/${encodeURIComponent(r.run_id)}`} data-run={r.run_id} data-repo={r.repo}>{r.active ? 'Watch live ›' : 'View session ›'}</a>
+        {r.github_run_id ? <a class="act-gh" title="Open the run on GitHub Actions" href={`${ghRepo}/actions/runs/${r.github_run_id}`}><Icon name="github" /></a> : null}
+      </div>
+    </li>
+  );
 }
 
-// One funding event row (money IN — grant / sponsor / mint). Consume flows are omitted: an agent's spend
-// is already shown on its run row, so listing it again would double-count the activity.
-function fundActivityRow(f: Flow, now: number): string {
+// One funding event row (money IN — grant / sponsor / mint). Consume flows are omitted: an agent's spend is
+// already shown on its run row, so listing it again would double-count the activity.
+function FundRow({ f, now }: { f: Flow; now: number }) {
   const label = f.kind === 'grant'
-    ? `Granted from ${escapeHtml(f.from ?? '')}`
-    : f.sponsor_login ? `Sponsored by @${escapeHtml(f.sponsor_login)}` : 'Funded';
+    ? `Granted from ${f.from ?? ''}`
+    : f.sponsor_login ? `Sponsored by @${f.sponsor_login}` : 'Funded';
   const when = relTime(Date.parse(f.ts) || undefined, now);
-  return `<li class="act fund">
-    <span class="act-dot fund">${icon('heart')}</span>
-    <div class="act-main"><div class="act-title">${label}</div><div class="act-sub">${when ? `${when} ago` : ''}</div></div>
-    <div class="act-right"><span class="act-amt pos">+${usd(f.amount_usd_cents)}</span></div>
-  </li>`;
+  return (
+    <li class="act fund">
+      <span class="act-dot fund"><Icon name="heart" /></span>
+      <div class="act-main"><div class="act-title">{label}</div><div class="act-sub">{when ? `${when} ago` : ''}</div></div>
+      <div class="act-right"><span class="act-amt pos">+{usd(f.amount_usd_cents)}</span></div>
+    </li>
+  );
 }
 
 // The unified, time-sorted, paginated activity feed: recent agent runs (running + finished, with "when" +
-// status + a live session drawer) interleaved with funding events. Replaces the old separate "Live agents"
-// and money-only "Recent activity" panels.
-function renderActivity(runs: LiveRun[], feed: Flow[], page: number, now: number): string {
-  type Item = { ts: number; html: string };
-  const items: Item[] = [
-    ...runs.map((r) => ({ ts: r.started_at_ms ?? 0, html: runActivityRow(r, now) })),
+// status + a live session drawer) interleaved with funding events.
+function Activity({ runs, feed, page, now }: { runs: LiveRun[]; feed: Flow[]; page: number; now: number }) {
+  const items = [
+    ...runs.map((r) => ({ ts: r.started_at_ms ?? 0, node: <RunRow r={r} now={now} /> })),
     // Only money-IN events; consume flows are represented by their run rows.
-    ...feed.filter((f) => f.kind === 'grant' || f.kind === 'mint').map((f) => ({ ts: Date.parse(f.ts) || 0, html: fundActivityRow(f, now) })),
+    ...feed.filter((f) => f.kind === 'grant' || f.kind === 'mint').map((f) => ({ ts: Date.parse(f.ts) || 0, node: <FundRow f={f} now={now} /> })),
   ].sort((a, b) => b.ts - a.ts);
-
   const running = runs.filter((r) => r.active).length;
-  const head = `<h3 id="activity">Recent activity${running ? `<span class="live"><span class="pulse"></span>${running} running</span>` : ''}</h3>`;
+  const head = <h3 id="activity">Recent activity{running ? <span class="live"><span class="pulse" />{`${running} running`}</span> : null}</h3>;
   if (!items.length) {
-    return `<div class="panel">${head}<p class="sub">No activity yet. When this repo runs an agent or receives funding, it shows up here.</p></div>`;
+    return <div class="panel">{head}<p class="sub">No activity yet. When this repo runs an agent or receives funding, it shows up here.</p></div>;
   }
   const pages = Math.max(1, Math.ceil(items.length / ACT_PAGE));
   const p = Math.min(Math.max(0, page), pages - 1);
-  const rows = items.slice(p * ACT_PAGE, p * ACT_PAGE + ACT_PAGE).map((i) => i.html).join('');
-  const pager = pages > 1
-    ? `<div class="act-page">
-        ${p > 0 ? `<a href="?p=${p - 1}#activity">← newer</a>` : '<span class="dim">← newer</span>'}
-        <span class="dim">page ${p + 1} of ${pages}</span>
-        ${p < pages - 1 ? `<a href="?p=${p + 1}#activity">older →</a>` : '<span class="dim">older →</span>'}
-      </div>`
-    : '';
-  return `<div class="panel">${head}<ul class="act-list">${rows}</ul>${pager}</div>`;
+  const slice = items.slice(p * ACT_PAGE, p * ACT_PAGE + ACT_PAGE);
+  return (
+    <div class="panel">
+      {head}
+      <ul class="act-list">{slice.map((i) => i.node)}</ul>
+      {pages > 1 ? (
+        <div class="act-page">
+          {p > 0 ? <a href={`?p=${p - 1}#activity`}>← newer</a> : <span class="dim">← newer</span>}
+          <span class="dim">{`page ${p + 1} of ${pages}`}</span>
+          {p < pages - 1 ? <a href={`?p=${p + 1}#activity`}>older →</a> : <span class="dim">older →</span>}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function renderActivity(runs: LiveRun[], feed: Flow[], page: number, now: number): string {
+  return render(<Activity runs={runs} feed={feed} page={page} now={now} />);
 }
 
 export interface RunSessionView {
@@ -570,13 +580,22 @@ const DRAWER_JS = `
 })();
 `;
 
+function Drawer() {
+  const boot = `var OI_GH=${JSON.stringify(icon('github'))},OI_EXT=${JSON.stringify(icon('linkExternal'))};${DRAWER_JS}`;
+  return (
+    <>
+      <div id="run-backdrop" data-rd-close="" />
+      <aside id="run-drawer" aria-hidden="true">
+        <div class="rd-head"><a class="rd-close" href="#" data-rd-close="" aria-label="Close">×</a><div class="rd-title">—</div><div class="rd-meta" /><div class="rd-links" /></div>
+        <div class="rd-body" />
+      </aside>
+      <script dangerouslySetInnerHTML={{ __html: boot }} />
+    </>
+  );
+}
+
 function runDrawer(): string {
-  return `<div id="run-backdrop" data-rd-close></div>
-<aside id="run-drawer" aria-hidden="true">
-  <div class="rd-head"><a class="rd-close" href="#" data-rd-close aria-label="Close">&times;</a><div class="rd-title">—</div><div class="rd-meta"></div><div class="rd-links"></div></div>
-  <div class="rd-body"></div>
-</aside>
-<script>var OI_GH=${JSON.stringify(icon('github'))},OI_EXT=${JSON.stringify(icon('linkExternal'))};${DRAWER_JS}</script>`;
+  return render(<Drawer />);
 }
 
 export function renderProject(v: ProjectView, page = 0): string {

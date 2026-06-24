@@ -221,10 +221,9 @@ function wrapperYml(name: string, agent: IRAgent): string {
   // model step — close issues whose linked PR merged. Mechanical wiring (not judgment), so it must not depend
   // on the model remembering to do it; symmetric to `effect` for code:propose. Idempotent.
   const reconciles = caps.some((c) => typeof c === 'string' && c.split('@')[0] === 'tasks:author');
-  // The planner additionally reconciles roadmap.yml → tracking issues deterministically. Creating one issue
-  // per planned/active item is mechanical wiring (matched by a `roadmap:<id>` label), not judgment — so, like
-  // closing merged issues, it must not hinge on a (possibly weak) model executing its skill. Idempotent.
-  const reconcilesRoadmap = agent.behavior === 'planner';
+  // (No deterministic roadmap reconcile: creating tracking issues from planned roadmap items is the PLANNER's
+  // own job, not a script. The model is strong enough to own it — a missed issue self-corrects next run — and
+  // scripting an agent's work just because "a model might skip it" is the wrong instinct. See AGENTS.md.)
   const skillPath = `.codex/skills/${agent.behavior}/SKILL.md`;
   const RID = `ir-${name}-\${{ github.run_id }}`;
   // The work item comes from the trigger's declared `subject.ref` param (resolved into job env). An agent
@@ -391,14 +390,6 @@ function wrapperYml(name: string, agent: IRAgent): string {
           `        env:`,
           `          GH_TOKEN: \${{ github.token }}`,
           `        run: bun scripts/rearm-auto-merge.ts || true`,
-        ]
-      : []),
-    ...(reconcilesRoadmap
-      ? [
-          `      - name: Reconcile roadmap (deterministic — create tracking issues for planned/active items)`,
-          `        env:`,
-          `          GH_TOKEN: \${{ github.token }}`,
-          `        run: bun scripts/reconcile-roadmap-issues.ts || true`,
         ]
       : []),
     `      - name: Run agent (Claude Code + skill)`,

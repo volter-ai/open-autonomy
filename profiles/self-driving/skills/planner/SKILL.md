@@ -20,9 +20,10 @@ you never write `status: active`/`done`. Your one planning signal is the soft **
 when you've finished breaking an item into issues. It's reversible — if scope grows, add issues (the item
 self-heals back to in-progress) or clear the flag.
 
-A deterministic step still **closes** issues whose PR merged (wiring, not judgment), and a safety reconcile
-ensures a `planned` item without any tracking issue gets one. Everything else — what to decompose into, how to
-order the lot — is your judgment.
+A deterministic step still **closes** issues whose PR merged (wiring, not judgment). Everything else — what to
+decompose into, how to order the lot, and **ensuring every `planned: true` item has at least one tracking
+issue** — is your job. There is no safety net for that last part: if a `planned` item has no `roadmap:<id>`
+issue, the roadmap shows it as parked with no progress, so every sweep verify it and create the missing issue.
 
 ## Procedure
 

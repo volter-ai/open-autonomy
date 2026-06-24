@@ -99,10 +99,6 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: bun scripts/rearm-auto-merge.ts || true
-      - name: Reconcile roadmap (deterministic — create tracking issues for planned/active items)
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: bun scripts/reconcile-roadmap-issues.ts || true
       - name: Run agent (Claude Code + skill)
         env:
           OSS_AGENT_TASK_DIR: .agent-run

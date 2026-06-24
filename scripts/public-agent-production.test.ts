@@ -147,10 +147,11 @@ describe('public agent production readiness', () => {
   test('planner owns layer 2: creates issues + proposes roadmap edits (blessed by strategy_reviewer)', () => {
     const text = workflow('planner.yml');
     expect(text).toContain('bun scripts/claude-agent-run.ts --skill .codex/skills/planner/SKILL.md');
-    // Deterministic safety nets remain: close issues whose PR merged, and ensure a planned item has a tracking
-    // issue. Decomposition itself (1 item → many issues) is the planner's judgment, not a mechanical step.
-    expect(text).toContain('scripts/reconcile-roadmap-issues.ts');
+    // Close-on-merge stays a deterministic step (bot auto-merge fires no event for `Closes #n`). But creating
+    // tracking issues from planned roadmap items is the PLANNER's job, NOT a script — so there is no
+    // roadmap-reconcile step; an agent owns its own work (scripts are for security boundaries only).
     expect(text).toContain('scripts/reconcile-merged-issues.ts');
+    expect(text).not.toContain('scripts/reconcile-roadmap-issues.ts');
     const plJob = text.slice(text.indexOf('  planner:'));
     expect(plJob).toContain('issues: write'); // tasks:author — creates/edits issues directly
     expect(plJob).toContain('contents: write'); // code:propose@roadmap — proposes roadmap.yml edits

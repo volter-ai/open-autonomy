@@ -27,8 +27,17 @@ your own work). The issue number is in the `ISSUE_REF` environment variable.
    tests). Read the relevant source files and current CI/review context (use `gh` as needed).
 2. Judge whether the work is clear-cut. If completing it requires a decision you are not authorized
    to make (see Escalate), stop and escalate rather than proceed.
-3. Make focused code or documentation changes in the working tree.
-4. Run the required checks for the touched surface.
+3. Make focused code or documentation changes in the working tree. **Control files are compiled, not
+   hand-edited in their derived form.** `profiles/self-driving/` is the SOURCE; the repo's skills
+   (`.codex/skills/`, `.claude/skills/`), workflows (`.github/workflows/`), `AGENTS.md`, and `docs/*` are
+   GENERATED from it. If your change touches any of those, edit the file **under `profiles/self-driving/`**
+   and then regenerate the derived copies with `bun scripts/open-autonomy-upgrade-cli.ts` — never edit a
+   generated copy directly (a hand-edited `.codex`/`.claude`/workflow copy that doesn't match the profile
+   fails `check:dogfood` and the PR can never merge). Commit both the profile edit and the regenerated files.
+4. **Run `bun run check` and make it pass before you finish.** This is the same gate CI runs (`check:dogfood`,
+   `check:runtime-sync`, tests, tsc, …); a green local `check` is what makes your PR mergeable. If you edited
+   anything under `profiles/self-driving/`, recompiling (step 3) is what makes `check:dogfood` pass. Also run
+   any narrower checks for the touched surface.
 5. When building or changing a UI, add or update Playwright tests that exercise the UI and capture
    screenshots into `screenshots/`, runnable via a `screenshots`/`e2e` script — a visual change is
    not done without a screenshot.

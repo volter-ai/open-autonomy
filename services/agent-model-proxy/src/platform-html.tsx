@@ -520,32 +520,53 @@ export interface RunSessionView {
   turns: Array<{ role: string; text: string }>;
 }
 
+function roleLabel(purpose: string): string {
+  return PURPOSE_LABEL[purpose] ?? (purpose ? purpose.charAt(0).toUpperCase() + purpose.slice(1) : 'Agent');
+}
+
+function sessionActive(v: RunSessionView, now: number): boolean {
+  const updatedMs = v.updated_at ? Date.parse(v.updated_at) : 0;
+  return !v.revoked && updatedMs > 0 && now - updatedMs < 10 * 60 * 1000;
+}
+
 // The live session page behind "Watch live →": a redacted, rolling window of the agent's actual turns (model
 // reasoning + tool calls), captured at the proxy as they happen. Auto-refreshes while the run is active. This
 // is the in-progress view GitHub can't give (it buffers the step + serves no in-progress logs).
+function RunSessionBody({ v, now }: { v: RunSessionView; now: number }) {
+  const active = sessionActive(v, now);
+  const ago = v.updated_at ? relTime(Date.parse(v.updated_at) || undefined, now) : '';
+  return (
+    <div class="wrap">
+      <a class="docmore" href={`/p/${encodeURIComponent(v.repo)}`}>← {v.repo}</a>
+      <div class="sess-head">
+        <span class="role">{roleLabel(v.purpose)}</span>
+        {active ? <span class="sess-live"><span class="pulse" />{`live${ago && ago !== 'just now' ? ` · updated ${ago} ago` : ''}`}</span> : null}
+      </div>
+      <div class="metarow"><span>
+        {v.issue > 0 ? <a href={`https://github.com/${v.repo}/issues/${v.issue}`}>#{v.issue}</a> : 'autonomous'}
+        {` · @${v.actor} · `}<b>{v.request_count}</b>{` call${v.request_count === 1 ? '' : 's'} · `}<b>{usd(v.consumed_usd_cents)}</b>{' spent'}
+        {v.github_run_id ? <> · <a href={`https://github.com/${v.repo}/actions/runs/${v.github_run_id}`}><Icon name="github" /> raw Actions log ›</a></> : null}
+      </span></div>
+      <p class="note">A redacted, rolling window of the agent's live session — recent model turns and tool calls, captured at the model proxy as they happen.</p>
+      {v.turns.length
+        ? <ul class="turns">{v.turns.map((t) => (
+            <li class={`turn ${t.role === 'assistant' ? 'assistant' : t.role === 'user' ? 'user' : ''}`}>
+              <div class="who">{t.role}</div><pre>{t.text}</pre>
+            </li>
+          ))}</ul>
+        : <div class="empty">{`No session captured yet — the agent hasn't called the model.${active ? ' This page refreshes automatically.' : ''}`}</div>}
+    </div>
+  );
+}
+
 export function renderRunSession(v: RunSessionView, nowMs: number): string {
-  const role = PURPOSE_LABEL[v.purpose] ?? (v.purpose ? v.purpose.charAt(0).toUpperCase() + v.purpose.slice(1) : 'Agent');
-  const issueLink = v.issue > 0
-    ? `<a href="https://github.com/${escapeHtml(v.repo)}/issues/${v.issue}">#${v.issue}</a>`
-    : 'autonomous';
-  const actions = v.github_run_id
-    ? ` · <a href="https://github.com/${escapeHtml(v.repo)}/actions/runs/${escapeHtml(v.github_run_id)}">raw Actions log ›</a>`
-    : '';
-  const updatedMs = v.updated_at ? Date.parse(v.updated_at) : 0;
-  const active = !v.revoked && updatedMs > 0 && nowMs - updatedMs < 10 * 60 * 1000;
-  const ago = updatedMs ? relTime(updatedMs, nowMs) : '';
-  const live = active ? `<span class="sess-live"><span class="pulse"></span>live${ago && ago !== 'just now' ? ` · updated ${ago} ago` : ''}</span>` : '';
-  const turns = v.turns.length
-    ? `<ul class="turns">${v.turns.map((t) => `<li class="turn ${t.role === 'assistant' ? 'assistant' : t.role === 'user' ? 'user' : ''}"><div class="who">${escapeHtml(t.role)}</div><pre>${escapeHtml(t.text)}</pre></li>`).join('')}</ul>`
-    : `<div class="empty">No session captured yet — the agent hasn't called the model.${active ? ' This page refreshes automatically.' : ''}</div>`;
-  const body = `${nav()}<div class="wrap">
-    <a class="docmore" href="/p/${encodeURIComponent(v.repo)}">← ${escapeHtml(v.repo)}</a>
-    <div class="sess-head"><span class="role">${escapeHtml(role)}</span>${live}</div>
-    <div class="metarow"><span>${issueLink} · @${escapeHtml(v.actor)} · <b>${v.request_count}</b> call${v.request_count === 1 ? '' : 's'} · <b>${usd(v.consumed_usd_cents)}</b> spent${actions}</span></div>
-    <p class="note">A redacted, rolling window of the agent's live session — recent model turns and tool calls, captured at the model proxy as they happen.</p>
-    ${turns}
-  </div>`;
-  return shell(`${role} · ${nameOf(v.repo)} · open-autonomy`, body, active ? 8 : undefined);
+  const active = sessionActive(v, nowMs);
+  return render(
+    <Shell title={`${roleLabel(v.purpose)} · ${nameOf(v.repo)} · open-autonomy`} refreshSeconds={active ? 8 : undefined}>
+      <Nav />
+      <RunSessionBody v={v} now={nowMs} />
+    </Shell>,
+  );
 }
 
 // The slide-in drawer's behavior. Vanilla, dependency-free, no template literals inside (so the outer

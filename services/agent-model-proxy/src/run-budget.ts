@@ -104,7 +104,9 @@ export class RunBudget implements DurableObject {
       this.state.reserved_usd_cents = Math.max(0, this.state.reserved_usd_cents - reservation.amount);
       delete this.state.reservations[requestId];
     }
-    this.state.consumed_usd_cents += Math.max(0, actual);
+    // Guard non-finite charges (a malformed upstream cost_usd → settleCents can return NaN): NaN would poison
+    // consumed_usd_cents permanently and disable the per-run cap (the ledger guards this the same way).
+    this.state.consumed_usd_cents += Number.isFinite(actual) ? Math.max(0, actual) : 0;
     this.state.events.push(event);
     this.state.events = this.state.events.slice(-200);
     await this.save();

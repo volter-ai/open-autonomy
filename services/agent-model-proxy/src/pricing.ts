@@ -57,7 +57,9 @@ export function openrouterReservePrice(reserveUsdPerMtok: number): ModelPrice {
 // real spend ~3× — inflating account balances and tripping the global daily cap at a third of true spend.
 // Cents are carried as real numbers throughout the ledger; rounding happens only at display.
 export function settleCents(price: ModelPrice, usage: TokenUsage, fallbackCents: number): number {
-  if (usage.cost_usd !== undefined) {
+  // Only trust the reported cost when it is a finite, non-negative number — a malformed upstream value
+  // (NaN/Infinity/negative) must not become the charge (it would poison the ledger / disable a cap).
+  if (usage.cost_usd !== undefined && Number.isFinite(usage.cost_usd) && usage.cost_usd >= 0) {
     // toFixed(6) tames float noise (0.07 * 100 = 7.0000000000000001) without losing sub-cent precision.
     return Number((usage.cost_usd * 100).toFixed(6));
   }
@@ -77,5 +79,6 @@ export function actualCents(price: ModelPrice, usage: TokenUsage, fallbackCents:
     * price.input_usd_per_mtok
     * (price.cache_read_multiplier ?? 1);
   // Fractional cents — no per-request whole-cent floor (see settleCents): flooring over-counts cheap models.
-  return Number(((inputUsd + outputUsd + cacheWriteUsd + cacheReadUsd) * 100).toFixed(6));
+  // Clamp to >= 0 so a malformed (negative) token count can never produce a negative charge.
+  return Math.max(0, Number(((inputUsd + outputUsd + cacheWriteUsd + cacheReadUsd) * 100).toFixed(6)));
 }

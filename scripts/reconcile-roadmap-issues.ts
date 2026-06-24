@@ -28,6 +28,7 @@ interface Item {
   id: string;
   title: string;
   planned: boolean;
+  proposed: boolean;
   phase?: string;
   priority?: string;
   proof_gate?: string;
@@ -45,19 +46,20 @@ function parseRoadmap(yml: string): Item[] {
     const idm = line.match(/^\s*-\s+id:\s*(.+?)\s*$/);
     if (idm) {
       if (cur) items.push(cur);
-      cur = { id: unquote(idm[1]), title: '', planned: false, acceptance: [] };
+      cur = { id: unquote(idm[1]), title: '', planned: false, proposed: false, acceptance: [] };
       inAcceptance = false;
       continue;
     }
     if (!cur) continue;
     if (/^\s*acceptance:\s*$/.test(line)) { inAcceptance = true; continue; }
-    const fm = line.match(/^\s+(phase|priority|planned|title|proof_gate):\s*(.+?)\s*$/);
+    const fm = line.match(/^\s+(phase|priority|planned|proposed|title|proof_gate):\s*(.+?)\s*$/);
     if (fm) {
       inAcceptance = false;
       const [, key, val] = fm;
       if (key === 'phase') cur.phase = unquote(val);
       else if (key === 'priority') cur.priority = unquote(val);
       else if (key === 'planned') cur.planned = unquote(val) === 'true';
+      else if (key === 'proposed') cur.proposed = unquote(val) === 'true';
       else if (key === 'title') cur.title = unquote(val);
       else if (key === 'proof_gate') cur.proof_gate = unquote(val);
       continue;
@@ -78,7 +80,9 @@ try {
   process.stderr.write('roadmap-reconcile: no .open-autonomy/roadmap.yml — skipping\n');
   process.exit(0);
 }
-const items = parseRoadmap(yml).filter((i) => i.planned === true);
+// A `proposed: true` item is still the strategy reviewer's gate — never create issues for it, even if it
+// also (incorrectly) carries planned: true. proposed wins, matching the planner skill + the page deriver.
+const items = parseRoadmap(yml).filter((i) => i.planned === true && i.proposed !== true);
 
 // Which roadmap ids already have a tracking issue (matched by the `roadmap:<id>` label, the stable marker).
 const tracked = new Set<string>();

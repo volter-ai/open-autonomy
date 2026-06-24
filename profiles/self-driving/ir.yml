@@ -127,7 +127,9 @@ policy:
     planner:
       enabled: true
       issue_origin_label_prefix: "origin:"
-      phase_label_prefix: "roadmap:"
+      # MUST differ from the `roadmap:<id>` parent-link namespace — fetchRoadmapStatus counts every
+      # `roadmap:*` label as an item id, so a phase label of `roadmap:<phase>` would corrupt the rollup.
+      phase_label_prefix: "phase:"
       priority_labels: { high: priority:high, medium: priority:medium, low: priority:low }
 
 # Repo-owned + substrate-infra files carried verbatim (NOT agents): repo CI, the model-proxy admin

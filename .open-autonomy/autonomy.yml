@@ -158,7 +158,7 @@ policy:
   planner:
     enabled: true
     issue_origin_label_prefix: "origin:"
-    phase_label_prefix: "roadmap:"
+    phase_label_prefix: "phase:"
     priority_labels:
       high: priority:high
       medium: priority:medium

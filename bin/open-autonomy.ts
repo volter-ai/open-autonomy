@@ -4,7 +4,7 @@
 // shape: `open-autonomy <verb> …`) so adoption is one command, not "clone the
 // repo and learn three scripts".
 //
-//   open-autonomy compile <profileDir> <local|github> [outDir]
+//   open-autonomy compile <profileName|profileDir> <local|github> [outDir]
 //   open-autonomy conformance <exec|termfleet|github> [probeAgent]
 //   open-autonomy upgrade --profile <dir> --target <dir> [--apply]
 //
@@ -14,9 +14,11 @@ export {}; // make this a module so top-level await is allowed (delegation uses 
 
 const HELP = `open-autonomy <command> [args]
 
-  compile <profileDir> <local|github> [outDir]      compile a profile onto a substrate (dry run without outDir)
-  conformance <exec|termfleet|github> [probeAgent]  run the substrate conformance battery
-  upgrade --profile <dir> --target <dir> [--apply]  re-compile an installation in place (dry run without --apply)
+  compile <profileName|profileDir> <local|github> [outDir]  compile a profile onto a substrate (dry run without outDir)
+  conformance <exec|termfleet|github> [probeAgent]          run the substrate conformance battery
+  upgrade --profile <dir> --target <dir> [--apply]          re-compile an installation in place (dry run without --apply)
+
+Adopt into the current repo:  npx open-autonomy compile self-driving github .  (bundled profiles: self-driving, simple-sdlc, hello)
 
 Run a subcommand with no/invalid arguments to see its specific usage.`;
 

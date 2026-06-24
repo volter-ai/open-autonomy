@@ -1,16 +1,39 @@
 #!/usr/bin/env bun
 // Compile a profile (an `autonomy.ir.v1` ir.yml) onto a substrate, producing an installation.
-//   bun bin/autonomy-compile.ts <profileDir> <local|github> [outDir]
-// With no outDir, prints the installation's file list (a dry run). With outDir, materializes it.
-import { readFileSync } from 'node:fs';
-import { join } from 'node:path';
+//   bun bin/autonomy-compile.ts <profileName|profileDir> <local|github> [outDir]
+// The first arg is either a BUNDLED profile name (e.g. `self-driving`, resolved to the profiles/ shipped
+// with this package) or a path to a profile dir of your own. With no outDir, prints the installation's file
+// list (a dry run). With outDir, materializes it.
+import { existsSync, readFileSync, readdirSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { parseIr, compiledPaths, materialize } from '@open-autonomy/core';
 import { compileLocal } from '@open-autonomy/substrate-local';
 import { compileGithub } from '@open-autonomy/substrate-github';
 
-const [profileDir, substrate, outDir] = process.argv.slice(2);
-if (!profileDir || (substrate !== 'local' && substrate !== 'github')) {
-  console.error('usage: autonomy-compile <profileDir> <local|github> [outDir]');
+// The bundled profiles ship next to this module's package root: at dist/cli.js when installed from npm
+// (import.meta.url → dist/, profiles/ is its sibling), and at bin/ in the dev checkout (../profiles/). So
+// `../profiles` resolves correctly in both. A bare name picks a bundled profile; an existing path wins first.
+const profilesRoot = join(dirname(fileURLToPath(import.meta.url)), '..', 'profiles');
+function resolveProfile(arg: string): string | undefined {
+  if (existsSync(join(arg, 'ir.yml'))) return arg; // an explicit path to a profile dir
+  const bundled = join(profilesRoot, arg); // a bare bundled-profile name
+  if (existsSync(join(bundled, 'ir.yml'))) return bundled;
+  return undefined;
+}
+function bundledProfileNames(): string[] {
+  try { return readdirSync(profilesRoot).filter((n) => existsSync(join(profilesRoot, n, 'ir.yml'))).sort(); } catch { return []; }
+}
+
+const [profileArg, substrate, outDir] = process.argv.slice(2);
+if (!profileArg || (substrate !== 'local' && substrate !== 'github')) {
+  console.error(`usage: autonomy-compile <profileName|profileDir> <local|github> [outDir]\n  bundled profiles: ${bundledProfileNames().join(', ') || '(none found)'}`);
+  process.exit(2);
+}
+
+const profileDir = resolveProfile(profileArg);
+if (!profileDir) {
+  console.error(`open-autonomy: no profile "${profileArg}" — not a path with an ir.yml, and not a bundled profile.\n  bundled profiles: ${bundledProfileNames().join(', ') || '(none found)'}`);
   process.exit(2);
 }
 

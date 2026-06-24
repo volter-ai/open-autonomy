@@ -83,22 +83,25 @@ bun run autonomy conformance exec   # check the Runner contract on the reference
 One command is the front door — `open-autonomy <verb>` (alias `oa`):
 
 ```bash
-open-autonomy compile <profileDir> <local|github> [outDir]   # compile a profile onto a substrate
-open-autonomy conformance <exec|termfleet|github>            # run the substrate conformance battery
-open-autonomy upgrade --profile <dir> --target <dir> [--apply]   # re-compile an installation in place
+open-autonomy compile <profileName|profileDir> <local|github> [outDir]   # compile a profile onto a substrate
+open-autonomy conformance <exec|termfleet|github>                        # run the substrate conformance battery
+open-autonomy upgrade --profile <dir> --target <dir> [--apply]           # re-compile an installation in place
 ```
 
-No clone required once published — `npx open-autonomy <verb>` (or `bunx open-autonomy <verb>`). The
-published package is a self-contained Node bundle, so plain Node works; bun is not required to *use* it.
-From a clone (bun-native, runs TypeScript directly): `bun run autonomy <verb>` or
-`bun bin/open-autonomy.ts <verb>`. The published bundle is produced by `bun run build`.
+The first argument is a **bundled profile name** (`self-driving`, `simple-sdlc`, `hello` — shipped with the
+package) or a path to your own profile dir. No clone required once published — `npx open-autonomy <verb>`
+(or `bunx open-autonomy <verb>`). The published package is a self-contained Node bundle, so plain Node works;
+bun is not required to *use* it. From a clone (bun-native, runs TypeScript directly): `bun run autonomy <verb>`
+or `bun bin/open-autonomy.ts <verb>`. The published bundle is produced by `bun run build`.
 
-To adopt into your own repo, scaffold an installation by compiling a profile, then follow
+To adopt open-autonomy into your repo, compile a profile into it, then follow
 [`docs/PUBLIC_AGENT_PRODUCTION_ROLLOUT.md`](./docs/PUBLIC_AGENT_PRODUCTION_ROLLOUT.md):
 
 ```bash
-open-autonomy compile profiles/self-driving github ../my-repo   # GitHub substrate
-open-autonomy compile profiles/simple-sdlc local ../my-repo     # local-loop substrate
+cd my-repo
+npx open-autonomy compile self-driving github .    # GitHub substrate, bundled profile, into the current repo
+npx open-autonomy compile simple-sdlc local .      # local-loop substrate
+# from a clone, a profile path also works: open-autonomy compile profiles/self-driving github ../my-repo
 ```
 
 ## Operator commands

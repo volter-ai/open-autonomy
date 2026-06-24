@@ -78,11 +78,13 @@ const scenarios: Scenario[] = [
     id: 'pm-open-pr-review',
     title: '[oa-test:pm-open-pr-review] PM should notice an open agent PR',
     body: [
-      'Create or leave open an agent PR for this issue, then run the PM sweep.',
+      'Concrete change (so an agent PR exists): add a single line to `docs/PROJECT.md` noting that the PM',
+      'routes an already-open agent PR to review instead of starting duplicate work.',
       '',
       'Expected result:',
-      '- PM does not start a second develop run while a canonical agent PR is open.',
-      '- PM should route to `/agent review` when review is appropriate.',
+      '- A PR opens with the one-line docs change.',
+      '- PM does not start a second develop run while that canonical agent PR is open.',
+      '- PM routes it to review and it merges autonomously.',
     ].join('\n'),
   },
   {

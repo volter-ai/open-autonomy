@@ -59,13 +59,16 @@ if (process.argv.includes('--live')) {
   run('bun', ['bin/autonomy-compile.ts', join(PROFILES, profile), substrate, build]);
   const seed = join(wdir, 'seed');
   if (existsSync(seed)) {
-    // Overlay the project onto the installed machinery, but let the install win for install-owned files
-    // (package.json/README/…) so the runtime's deps survive — the same seed-if-missing rule the upgrade
-    // uses, applied to the project axis. The project's own source (src/…) is added.
+    // Overlay the project onto the installed machinery. Keep ONLY the runtime-critical install files
+    // (package.json/bun.lock) so the runtime's deps survive; the workload seed otherwise WINS. A workload's
+    // roadmap/docs/README are its TEST FIXTURE — a conformance scenario sets the board it is scored against
+    // (e.g. planner-creates-proof-gate-issues needs a roadmap WITH planned/active items) — so they must
+    // override the profile's defaults, not be silently dropped by the broader install-owned keep rule.
+    const KEEP_FROM_INSTALL = new Set(['package.json', 'bun.lock']);
     let added = 0;
     let kept = 0;
     for (const rel of repoFiles(seed, seed)) {
-      if (isInstallOwned(rel) && existsSync(join(build, rel))) {
+      if (KEEP_FROM_INSTALL.has(rel) && existsSync(join(build, rel))) {
         kept++;
         continue;
       }

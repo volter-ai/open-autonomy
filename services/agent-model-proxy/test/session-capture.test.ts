@@ -20,6 +20,18 @@ describe('session-capture', () => {
     expect(turns[2].text).toContain('[tool result]');
   });
 
+  test('image and unknown blocks render to something (so they never flatten a turn to empty)', () => {
+    const turns = sessionTurnsFromBody({
+      messages: [
+        { role: 'user', content: [{ type: 'image', source: { data: '...' } }] },
+        { role: 'assistant', content: [{ type: 'redacted_thinking', data: 'xx' }] },
+      ],
+    });
+    expect(turns.length).toBe(2);
+    expect(turns[0].text).toContain('[image]');
+    expect(turns[1].text).toContain('[redacted_thinking]');
+  });
+
   test('redacts secret-shaped tokens', () => {
     expect(redactSecrets('token ghp_abcdefghijklmnopqrstuvwxyz0123456789 here')).toContain('[redacted]');
     expect(redactSecrets('sk-ant-abcdefghij0123456789ABCDEFGHIJ')).toBe('[redacted]');

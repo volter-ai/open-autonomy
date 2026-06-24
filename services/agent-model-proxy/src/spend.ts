@@ -1,6 +1,7 @@
 import { error } from './errors.js';
 import { LimitLedgerClient, type LimitConfig } from './limit-ledger.js';
 import { RunBudgetClient } from './run-budget.js';
+import type { SessionTurn } from './session-capture.js';
 import type { Env, UsageEvent } from './types.js';
 
 export interface BudgetReservation {
@@ -20,12 +21,16 @@ export async function reserveBudget(
   runId: string,
   amountUsdCents: number,
   limitConfig: LimitConfig,
+  // The run's live session window (recent redacted turns from THIS request). Captured in the same in-request
+  // DO write as the reservation — reliable + lag-free, unlike a best-effort waitUntil — so the live view and
+  // the PM see the session as it moves. Empty windows are ignored by the DO (never clobber a good one).
+  sessionTurns?: SessionTurn[],
 ): Promise<BudgetReservation | Response> {
   const requestId = crypto.randomUUID();
   const runBudget = new RunBudgetClient(env.RUNS, runId);
   const ledger = new LimitLedgerClient(env.LIMITS);
 
-  const runReservation = await runBudget.reserve(requestId, amountUsdCents);
+  const runReservation = await runBudget.reserve(requestId, amountUsdCents, sessionTurns);
   if (!runReservation.ok) return error(runReservation.error, 402);
 
   const globalReservation = await ledger.reserve(requestId, amountUsdCents, limitConfig, runId);

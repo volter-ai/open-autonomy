@@ -71,6 +71,8 @@ describe('renderRoadmapPanel: Now / Next / Later from derived state', () => {
     expect(html.includes('✓ 1 shipped')).toBe(true);
     // 4 parked, 3 shown under Up next → 1 folds as "more queued"
     expect(html.includes('1 more queued')).toBe(true);
+    // An item with linked issues gets a "pop into GitHub" link to its label-filtered issue list.
+    expect(html.includes('/issues?q=label%3Aroadmap%3Anow1')).toBe(true);
 
     // In progress leads; shipped is folded after.
     expect(html.indexOf('In progress')).toBeLessThan(html.indexOf('<details'));

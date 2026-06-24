@@ -32,7 +32,7 @@ export class RunBudget implements DurableObject {
     if (op === 'status') return json(this.snapshot());
     if (op === 'revoke') return json(await this.revoke());
     if (op === 'reserve') {
-      return json(await this.reserve(String(body.request_id), Number(body.amount_usd_cents)));
+      return json(await this.reserve(String(body.request_id), Number(body.amount_usd_cents), body.turns as SessionTurn[] | undefined));
     }
     if (op === 'consume') {
       await this.consume(String(body.request_id), Number(body.actual_usd_cents), body.event as UsageEvent);
@@ -40,10 +40,6 @@ export class RunBudget implements DurableObject {
     }
     if (op === 'release') {
       await this.release(String(body.request_id), body.reached === true);
-      return json({ ok: true });
-    }
-    if (op === 'record_session') {
-      await this.recordSession((body.turns as SessionTurn[]) ?? []);
       return json({ ok: true });
     }
     return json({ ok: false, error: 'unknown_op' }, { status: 400 });
@@ -78,8 +74,12 @@ export class RunBudget implements DurableObject {
     return { ok: true };
   }
 
-  private async reserve(requestId: string, amount: number): Promise<Record<string, unknown>> {
+  private async reserve(requestId: string, amount: number, turns?: SessionTurn[]): Promise<Record<string, unknown>> {
     this.gcReservations();
+    // Capture the live session window in this same in-request write (reliable, lag-free), persisted by the
+    // save() on the success path below. Only on a non-empty window so a request that flattens to nothing
+    // can't clobber a good one.
+    if (turns && turns.length) this.state.session = { updated_at: new Date().toISOString(), turns: turns.slice(-20) };
     const claims = this.state.claims;
     if (!claims) return { ok: false, error: 'run_not_found' };
     if (this.state.revoked) return { ok: false, error: 'run_revoked' };
@@ -117,14 +117,6 @@ export class RunBudget implements DurableObject {
     this.state.consumed_usd_cents += Number.isFinite(actual) ? Math.max(0, actual) : 0;
     this.state.events.push(event);
     this.state.events = this.state.events.slice(-200);
-    await this.save();
-  }
-
-  // Overwrite the live session window with the latest request's recent turns (already redacted + capped by
-  // the caller). Replace, not append — each request carries the full conversation so far, so the newest one
-  // is the freshest complete window. Bounded so the DO stays small regardless of run length.
-  private async recordSession(turns: SessionTurn[]): Promise<void> {
-    this.state.session = { updated_at: new Date().toISOString(), turns: turns.slice(-20) };
     await this.save();
   }
 
@@ -209,10 +201,10 @@ export class RunBudgetClient {
     return this.rpc<{ ok: true }>('revoke');
   }
 
-  reserve(requestId: string, amountUsdCents: number) {
+  reserve(requestId: string, amountUsdCents: number, turns?: SessionTurn[]) {
     return this.rpc<{ ok: true; remaining_usd_cents: number; request_count: number } | { ok: false; error: string }>(
       'reserve',
-      { request_id: requestId, amount_usd_cents: amountUsdCents },
+      { request_id: requestId, amount_usd_cents: amountUsdCents, turns },
     );
   }
 
@@ -222,9 +214,5 @@ export class RunBudgetClient {
 
   release(requestId: string, reached: boolean) {
     return this.rpc<{ ok: true }>('release', { request_id: requestId, reached });
-  }
-
-  recordSession(turns: SessionTurn[]) {
-    return this.rpc<{ ok: true }>('record_session', { turns });
   }
 }

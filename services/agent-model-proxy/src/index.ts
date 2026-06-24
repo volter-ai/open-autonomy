@@ -68,6 +68,23 @@ async function route(req: Request, env: Env, ctx: ExecutionContext): Promise<Res
       : redeemMessage(result.error);
     return html(renderRedeemResult(account, result.ok, message), result.ok ? 200 : 400);
   }
+  // Live session as JSON — what the slide-in drawer polls for live updates (public, same scope as the HTML
+  // page below: the run's repo must equal the path account). No token: a public project's run is public.
+  const runSessionJson = path.match(/^\/p\/(.+)\/runs\/([^/]+)\/session\.json$/);
+  if (runSessionJson) {
+    if (req.method !== 'GET') return methodNotAllowed();
+    const account = decodeURIComponent(runSessionJson[1]);
+    const runId = decodeURIComponent(runSessionJson[2]);
+    const st = await new RunBudgetClient(env.RUNS, runId).status() as { claims?: RunClaims | null; session?: { updated_at: string; turns: unknown[] } | null; consumed_usd_cents?: number; request_count?: number; revoked?: boolean };
+    if (!st.claims || st.claims.repo !== account) return error('run_not_found', 404);
+    return json({
+      run_id: runId, repo: st.claims.repo, issue: st.claims.issue, actor: st.claims.actor,
+      purpose: st.claims.purpose ?? 'agent', github_run_id: st.claims.github_run_id,
+      request_count: st.request_count ?? 0, consumed_usd_cents: st.consumed_usd_cents ?? 0,
+      revoked: st.revoked ?? false, updated_at: st.session?.updated_at ?? '', turns: st.session?.turns ?? [],
+    }, { headers: { 'cache-control': 'no-store' } });
+  }
+
   // Live session view (human): the proxy-captured rolling window of a run's session, under its public
   // project. Server-side DO read (no token) — the session of a run in a public repo is public, exactly like
   // the project page. Must match BEFORE the generic project page (which would swallow the /runs/<id> suffix).

@@ -276,6 +276,27 @@ ${refreshSeconds ? `<meta http-equiv="refresh" content="${refreshSeconds}">\n` :
   .turn.assistant{border-left:3px solid ${C.accent};}
   .turn.user{border-left:3px solid #c9ccd1;}
   .turn pre{margin:0;white-space:pre-wrap;word-break:break-word;font:13px/1.55 ui-monospace,Menlo,monospace;color:${C.body};}
+  .rm-gh{margin-left:8px;font-size:12px;font-weight:600;color:${C.faint};white-space:nowrap;}
+  .rm-gh:hover{color:${C.accent};text-decoration:underline;}
+  /* Slide-in session drawer (LangSmith-style) — progressive enhancement over the full-page session view. */
+  #run-backdrop{position:fixed;inset:0;background:rgba(16,17,26,.38);opacity:0;pointer-events:none;transition:opacity .2s ease;z-index:40;}
+  #run-backdrop.open{opacity:1;pointer-events:auto;}
+  #run-drawer{position:fixed;top:0;right:0;height:100vh;width:min(620px,94vw);background:#fff;box-shadow:-16px 0 48px -12px rgba(16,17,26,.28);transform:translateX(100%);transition:transform .26s cubic-bezier(.4,0,.2,1);z-index:41;display:flex;flex-direction:column;}
+  #run-drawer.open{transform:translateX(0);}
+  #run-drawer .rd-head{padding:18px 22px 16px;border-bottom:1px solid ${C.line};position:relative;}
+  #run-drawer .rd-title{font-weight:800;font-size:20px;letter-spacing:-.02em;}
+  #run-drawer .rd-meta{color:${C.muted};font-size:13.5px;margin-top:3px;}
+  #run-drawer .rd-links{margin-top:9px;font-size:13px;}
+  #run-drawer .rd-links a{color:${C.accent};font-weight:600;}
+  #run-drawer .rd-close{position:absolute;top:14px;right:18px;font-size:24px;line-height:1;color:${C.faint};cursor:pointer;text-decoration:none;}
+  #run-drawer .rd-close:hover{color:${C.ink};}
+  #run-drawer .rd-body{flex:1;overflow-y:auto;padding:16px 22px 48px;background:${C.wash};}
+  .rd-turn{border:1px solid ${C.line};border-radius:10px;padding:10px 12px;margin-bottom:10px;background:#fff;}
+  .rd-turn.assistant{border-left:3px solid ${C.accent};}
+  .rd-turn.user{border-left:3px solid #c9ccd1;}
+  .rd-who{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:${C.faint};margin-bottom:5px;}
+  .rd-turn pre{margin:0;white-space:pre-wrap;word-break:break-word;font:12.5px/1.5 ui-monospace,Menlo,monospace;color:${C.body};}
+  .rd-empty{color:${C.muted};text-align:center;padding:44px 0;}
 </style>
 </head><body>${body}</body></html>`;
 }
@@ -380,9 +401,9 @@ function runRow(r: LiveRun, repo: string, now: number): string {
     : 'autonomous';
   const elapsed = relTime(r.started_at_ms, now);
   const sub = `${issueLink} · @${escapeHtml(r.actor)}${elapsed ? ` · running ${elapsed}` : ''} · ${r.request_count} call${r.request_count === 1 ? '' : 's'}`;
-  // Watch live → our own readable, auto-refreshing session view (the proxy captures the run's turns as they
-  // happen — GitHub serves no in-progress logs). The session page links out to the raw Actions run too.
-  const watch = `<a class="watch" href="/p/${encodeURIComponent(repo)}/runs/${encodeURIComponent(r.run_id)}">Watch live ›</a>`;
+  // Watch live → opens the slide-in session drawer (JS); falls back to the full-page session view without JS.
+  // The proxy captures the run's turns as they happen — GitHub serves no in-progress logs.
+  const watch = `<a class="watch" href="/p/${encodeURIComponent(repo)}/runs/${encodeURIComponent(r.run_id)}" data-run="${escapeHtml(r.run_id)}" data-repo="${escapeHtml(repo)}">Watch live ›</a>`;
   return `<li>
     <div class="rd">
       <div class="rrole">${escapeHtml(role)}${r.system ? '<span class="badge">system</span>' : ''}</div>
@@ -441,6 +462,47 @@ export function renderRunSession(v: RunSessionView, nowMs: number): string {
     ${turns}
   </div>`;
   return shell(`${role} · ${nameOf(v.repo)} · open-autonomy`, body, active ? 8 : undefined);
+}
+
+// The slide-in drawer's behavior. Vanilla, dependency-free, no template literals inside (so the outer
+// template literal that embeds it doesn't try to interpolate). Clicking any [data-run] link opens the
+// drawer and polls the public session.json every 4s; Esc / × / backdrop closes it. Without JS, the
+// [data-run] anchor is a normal link to the full-page session view — progressive enhancement.
+const DRAWER_JS = `
+(function(){
+  var drawer=document.getElementById('run-drawer'),backdrop=document.getElementById('run-backdrop');
+  if(!drawer)return;
+  var titleEl=drawer.querySelector('.rd-title'),metaEl=drawer.querySelector('.rd-meta'),linksEl=drawer.querySelector('.rd-links'),bodyEl=drawer.querySelector('.rd-body'),timer=null;
+  function esc(s){var d=document.createElement('div');d.textContent=(s==null?'':String(s));return d.innerHTML;}
+  function usd(c){return '$'+((Number(c)||0)/100).toFixed(2);}
+  function gh(repo){return 'https://github.com/'+repo.split('/').map(encodeURIComponent).join('/');}
+  function render(d){
+    var role=String(d.purpose||'agent');
+    titleEl.textContent=role.charAt(0).toUpperCase()+role.slice(1);
+    var iss=d.issue>0?('<a target="_blank" href="'+gh(d.repo)+'/issues/'+d.issue+'">#'+d.issue+'</a>'):'autonomous';
+    metaEl.innerHTML=iss+' \\u00b7 @'+esc(d.actor)+' \\u00b7 '+(d.request_count||0)+' calls \\u00b7 '+usd(d.consumed_usd_cents)+' spent'+(d.revoked?' \\u00b7 ended':'');
+    var links=[];
+    if(d.github_run_id)links.push('<a target="_blank" href="'+gh(d.repo)+'/actions/runs/'+esc(d.github_run_id)+'">Open in GitHub Actions \\u2197</a>');
+    links.push('<a target="_blank" href="/p/'+encodeURIComponent(d.repo)+'/runs/'+encodeURIComponent(d.run_id)+'">Full page \\u2197</a>');
+    linksEl.innerHTML=links.join(' \\u00b7 ');
+    var turns=(d.session&&d.session.turns)||[];
+    bodyEl.innerHTML=turns.length?turns.map(function(t){return '<div class="rd-turn '+esc(t.role)+'"><div class="rd-who">'+esc(t.role)+'</div><pre>'+esc(t.text)+'</pre></div>';}).join(''):'<div class="rd-empty">No session captured yet \\u2014 the agent has not called the model.</div>';
+  }
+  function poll(repo,id){fetch('/p/'+encodeURIComponent(repo)+'/runs/'+encodeURIComponent(id)+'/session.json',{cache:'no-store'}).then(function(r){return r.json();}).then(render).catch(function(){});}
+  function open(repo,id){drawer.classList.add('open');backdrop.classList.add('open');drawer.setAttribute('aria-hidden','false');bodyEl.innerHTML='<div class="rd-empty">Loading\\u2026</div>';poll(repo,id);clearInterval(timer);timer=setInterval(function(){poll(repo,id);},4000);}
+  function close(){drawer.classList.remove('open');backdrop.classList.remove('open');drawer.setAttribute('aria-hidden','true');clearInterval(timer);timer=null;}
+  document.addEventListener('click',function(e){var t=e.target.closest('[data-run]');if(t){e.preventDefault();open(t.getAttribute('data-repo'),t.getAttribute('data-run'));return;}if(e.target.closest('[data-rd-close]')){e.preventDefault();close();}});
+  document.addEventListener('keydown',function(e){if(e.key==='Escape')close();});
+})();
+`;
+
+function runDrawer(): string {
+  return `<div id="run-backdrop" data-rd-close></div>
+<aside id="run-drawer" aria-hidden="true">
+  <div class="rd-head"><a class="rd-close" href="#" data-rd-close aria-label="Close">&times;</a><div class="rd-title">—</div><div class="rd-meta"></div><div class="rd-links"></div></div>
+  <div class="rd-body"></div>
+</aside>
+<script>${DRAWER_JS}</script>`;
 }
 
 export function renderProject(v: ProjectView): string {
@@ -528,9 +590,10 @@ export function renderProject(v: ProjectView): string {
         </div>
       </div>
     </div>
-  </div>`;
-  // When agents are running, soft-refresh so spend + elapsed tick forward and finished runs drop off.
-  return shell(`${nameOf(v.account)} · open-autonomy`, body, v.live_runs.length ? 15 : undefined);
+  </div>${v.live_runs.length ? runDrawer() : ''}`;
+  // No page-level auto-refresh: the live surface is now the drawer, which polls session.json without a full
+  // reload (a meta-refresh would close an open drawer). The panel itself refreshes on navigation.
+  return shell(`${nameOf(v.account)} · open-autonomy`, body);
 }
 
 export function renderRedeemResult(account: string, ok: boolean, message: string): string {

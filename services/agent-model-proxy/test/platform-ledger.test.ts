@@ -259,7 +259,10 @@ describe('platform: live agents (follow along)', () => {
     expect(html.includes('/p/acme%2Fwidget/runs/run_1')).toBe(true);
     expect(html.includes('https://github.com/acme/widget/issues/7')).toBe(true);
     expect(html.includes('$0.90')).toBe(true);
-    expect(html.includes('http-equiv="refresh"')).toBe(true); // soft-refresh while live
+    // The live surface is the slide-in drawer (polls session.json); the "Watch live" link carries the
+    // data-run hook the drawer opens on, and falls back to the full-page session view without JS.
+    expect(html.includes('id="run-drawer"')).toBe(true);
+    expect(html.includes('data-run="run_1"')).toBe(true);
   });
 
   test('a completed run drops off the live panel (empty state, no refresh)', async () => {

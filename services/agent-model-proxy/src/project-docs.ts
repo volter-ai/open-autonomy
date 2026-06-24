@@ -230,17 +230,17 @@ export function renderRoadmapPanel(roadmapYml: string | undefined, repoUrl: stri
   const laterParked = parked.slice(next.length);
 
   const sections: string[] = [];
-  if (inProgress.length) sections.push(roadmapSection('In progress', inProgress));
-  if (next.length) sections.push(roadmapSection('Up next', next));
+  if (inProgress.length) sections.push(roadmapSection('In progress', inProgress, repoUrl));
+  if (next.length) sections.push(roadmapSection('Up next', next, repoUrl));
   // Nothing committed yet (only proposals) → show the proposals rather than an empty panel.
-  if (!sections.length && proposed.length) sections.push(roadmapSection('Proposed', proposed));
+  if (!sections.length && proposed.length) sections.push(roadmapSection('Proposed', proposed, repoUrl));
 
   const folds: string[] = [];
-  if (laterParked.length) folds.push(roadmapFold(`${laterParked.length} more queued`, laterParked));
-  if (sections.length && proposed.length) folds.push(roadmapFold(`${proposed.length} proposed`, proposed));
+  if (laterParked.length) folds.push(roadmapFold(`${laterParked.length} more queued`, laterParked, repoUrl));
+  if (sections.length && proposed.length) folds.push(roadmapFold(`${proposed.length} proposed`, proposed, repoUrl));
   if (done.length) {
-    if (sections.length) folds.push(roadmapFold(`✓ ${done.length} shipped`, done));
-    else sections.push(roadmapSection('Shipped', done));
+    if (sections.length) folds.push(roadmapFold(`✓ ${done.length} shipped`, done, repoUrl));
+    else sections.push(roadmapSection('Shipped', done, repoUrl));
   }
 
   return `<div class="panel roadmap-panel">
@@ -253,11 +253,11 @@ export function renderRoadmapPanel(roadmapYml: string | undefined, repoUrl: stri
 }
 
 // One labelled section ("In progress" / "Up next" / "Proposed" / "Shipped") — a header row then its items.
-function roadmapSection(label: string, rows: Array<{ item: RoadmapItem; state: RoadmapState; c: RoadmapCounts }>): string {
-  return `<li class="rm-phase-hdr"><div class="rm-phase-label">${esc(label)}</div></li>` + rows.map(roadmapItemRow).join('');
+function roadmapSection(label: string, rows: Array<{ item: RoadmapItem; state: RoadmapState; c: RoadmapCounts }>, repoUrl?: string): string {
+  return `<li class="rm-phase-hdr"><div class="rm-phase-label">${esc(label)}</div></li>` + rows.map((r) => roadmapItemRow(r, repoUrl)).join('');
 }
 
-function roadmapItemRow(row: { item: RoadmapItem; state: RoadmapState; c: RoadmapCounts }): string {
+function roadmapItemRow(row: { item: RoadmapItem; state: RoadmapState; c: RoadmapCounts }, repoUrl?: string): string {
   const { item: it, state, c } = row;
   const phase = it.phase ? (isNaN(parseInt(it.phase, 10)) ? esc(it.phase) : `Phase ${esc(it.phase)}`) : '';
   // Surface the child-issue tally where it's meaningful: progress while in flight, the count once shipped.
@@ -265,18 +265,23 @@ function roadmapItemRow(row: { item: RoadmapItem; state: RoadmapState; c: Roadma
     : state === 'done' && c.total > 0 ? `${c.total} issue${c.total === 1 ? '' : 's'}`
     : '';
   const meta = [phase, it.priority ? esc(it.priority) : '', tally].filter(Boolean).join(' · ');
+  // Pop into GitHub: when an item has linked tracking issues, link to the label-filtered issue list so the
+  // roadmap item is one click from its real issues + PRs. (Parked/proposed items have none yet — no link.)
+  const ghIssues = repoUrl && c.total > 0
+    ? `<a class="rm-gh" href="${esc(repoUrl)}/issues?q=${encodeURIComponent(`label:roadmap:${it.id}`)}" title="View linked issues on GitHub">↗ ${c.total} issue${c.total === 1 ? '' : 's'}</a>`
+    : '';
   return `<li class="rm-item ${STATE_CLASS[state]}">
     <div class="rm-node"></div>
     <div class="rm-content">
-      <div class="rtitle">${esc(it.title)}</div>
+      <div class="rtitle">${esc(it.title)}${ghIssues}</div>
       ${meta ? `<div class="rmeta">${meta}</div>` : ''}
     </div>
   </li>`;
 }
 
 // A collapsed-by-default group (overflow backlog / proposals / shipped history) — native <details>, no JS.
-function roadmapFold(label: string, rows: Array<{ item: RoadmapItem; state: RoadmapState; c: RoadmapCounts }>): string {
-  return `<details class="rm-fold"><summary>${label}</summary><ul class="roadmap">${rows.map(roadmapItemRow).join('')}</ul></details>`;
+function roadmapFold(label: string, rows: Array<{ item: RoadmapItem; state: RoadmapState; c: RoadmapCounts }>, repoUrl?: string): string {
+  return `<details class="rm-fold"><summary>${label}</summary><ul class="roadmap">${rows.map((r) => roadmapItemRow(r, repoUrl)).join('')}</ul></details>`;
 }
 
 export function renderChangelogPanel(changelogMd: string | undefined, repoUrl: string | undefined): string {

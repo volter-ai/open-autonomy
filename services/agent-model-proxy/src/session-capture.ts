@@ -45,6 +45,8 @@ function renderContent(content: unknown): string {
     else if (block.type === 'thinking' && typeof block.thinking === 'string') parts.push(`[thinking] ${block.thinking}`);
     else if (block.type === 'tool_use') parts.push(`[tool: ${String(block.name ?? '?')}] ${brief(block.input)}`);
     else if (block.type === 'tool_result') parts.push(`[tool result] ${brief(block.content)}`);
+    else if (block.type === 'image') parts.push('[image]');
+    else if (typeof block.type === 'string') parts.push(`[${block.type}]`); // any other block → at least name it
   }
   return parts.join('\n');
 }

@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Fixed
+
+- Fixed a dangling sentence in `docs/OSS_AGENT_RUNBOOK.md` — the incomplete "is in" fragment now correctly references `docs/ARCHITECTURE.md`.
+
 ### Cutover
 
 - Cut over to the **credentialed-skill agent model**: each agent is a single

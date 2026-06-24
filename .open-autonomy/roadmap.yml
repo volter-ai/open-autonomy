@@ -1,4 +1,4 @@
-schema: open-autonomy.roadmap.v1
+schema: open-autonomy.roadmap.v2
 direction: Pursue the north star and merit criteria in docs/CONSTITUTION.md. The strategist
   proposes strategy toward that north star and humans ratify it; this file records the
   resulting roadmap items and their proof gates.
@@ -6,7 +6,7 @@ items:
   - id: durable-decision-memory
     phase: 1
     priority: high
-    status: proposed
+    proposed: true
     title: Durable Decision Memory
     proof_gate: decision-memory-audit
     acceptance:
@@ -17,7 +17,7 @@ items:
   - id: unified-loop-budget
     phase: 2
     priority: high
-    status: planned
+    planned: true
     title: PM Failure Handling From History
     proof_gate: retry-ci-failure
     acceptance:
@@ -30,7 +30,7 @@ items:
   - id: pm-proactive-backlog
     phase: 3
     priority: high
-    status: planned
+    planned: true
     title: PM Operations And Backlog Policy
     proof_gate: pm-open-pr-review
     acceptance:
@@ -39,7 +39,7 @@ items:
   - id: developer-context-quality
     phase: 4
     priority: medium
-    status: planned
+    planned: true
     title: Developer Context And Patch Quality
     proof_gate: developer-context-review-fix
     acceptance:
@@ -48,7 +48,7 @@ items:
   - id: review-merge-parity
     phase: 5
     priority: high
-    status: planned
+    planned: true
     title: Review And The Merge Boundary
     proof_gate: head-changed-before-merge
     acceptance:
@@ -60,7 +60,7 @@ items:
   - id: operator-observability
     phase: 6
     priority: medium
-    status: planned
+    planned: true
     title: Observability And Operator Controls
     proof_gate: operator-pause-resume
     acceptance:
@@ -69,7 +69,7 @@ items:
   - id: production-rollout
     phase: 7
     priority: medium
-    status: planned
+    planned: true
     title: Production Rollout
     proof_gate: five-issue-dogfood
     acceptance:
@@ -78,7 +78,7 @@ items:
   - id: direction-control-files
     phase: 8
     priority: high
-    status: planned
+    planned: true
     title: Direction, Constitution, And Planning Loop
     proof_gate: planner-creates-proof-gate-issues
     acceptance:
@@ -87,7 +87,7 @@ items:
   - id: self-hosted-fleet
     phase: 9
     priority: medium
-    status: planned
+    planned: true
     title: Self-Hosted Repository Fleet
     proof_gate: scaffold-install-check
     acceptance:
@@ -96,7 +96,7 @@ items:
   - id: durable-state-index
     phase: 10
     priority: medium
-    status: proposed
+    proposed: true
     title: Durable State And Audit Trail
     proof_gate: status-reconstruction
     acceptance:
@@ -106,7 +106,7 @@ items:
   - id: repair-loops
     phase: 11
     priority: medium
-    status: planned
+    planned: true
     title: PM-Directed Repair (not auto-repair)
     proof_gate: quality-review-repair
     acceptance:
@@ -118,7 +118,7 @@ items:
   - id: maintainer-governance
     phase: 12
     priority: medium
-    status: planned
+    planned: true
     title: Maintainer Governance
     proof_gate: governance-maintainer-hold
     acceptance:
@@ -127,7 +127,7 @@ items:
   - id: public-oss-readiness
     phase: 13
     priority: medium
-    status: planned
+    planned: true
     title: Public OSS Readiness
     proof_gate: release-dogfood
     acceptance:
@@ -136,7 +136,7 @@ items:
   - id: strategist-roadmap-research
     phase: 14
     priority: high
-    status: proposed
+    proposed: true
     title: Strategist Roadmap Research Loop
     proof_gate: strategist-proposes-roadmap-pr
     acceptance:
@@ -146,7 +146,7 @@ items:
   - id: actor-model-human-handoffs
     phase: 15
     priority: high
-    status: proposed
+    proposed: true
     title: Actor Model And Explicit Human Handoffs
     proof_gate: human-approve-merges-live
     acceptance:
@@ -156,7 +156,7 @@ items:
   - id: bench-autonomy-ratio
     phase: 16
     priority: medium
-    status: proposed
+    proposed: true
     title: Bench Autonomy Ratio From Live Runs
     proof_gate: autonomy-ratio-from-live-run
     acceptance:
@@ -166,7 +166,7 @@ items:
   - id: develop-oa-through-oa
     phase: 17
     priority: high
-    status: proposed
+    proposed: true
     title: Develop OA Through OA (close the manual loophole)
     proof_gate: oa-feature-shipped-by-pipeline
     acceptance:
@@ -176,7 +176,7 @@ items:
   - id: multi-provider-model-routing
     phase: 18
     priority: medium
-    status: proposed
+    proposed: true
     title: Multi-Provider Model Routing For Loop Roles
     proof_gate: alternate-model-routed
     acceptance:
@@ -191,7 +191,7 @@ items:
   - id: quality-benchmark-gate
     phase: 19
     priority: medium
-    status: proposed
+    proposed: true
     title: Output Quality Benchmark Gate (proof beyond process)
     proof_gate: benchmark-integration-smoke
     acceptance:
@@ -208,7 +208,7 @@ items:
   - id: substrate-complexity-reduction
     phase: 20
     priority: medium
-    status: proposed
+    proposed: true
     title: Substrate Complexity Reduction For Adopter Portability
     proof_gate: onboarding-path-measured
     acceptance:

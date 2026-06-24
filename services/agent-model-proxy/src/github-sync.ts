@@ -99,47 +99,55 @@ function nextPageUrl(linkHeader: string | null): string | undefined {
   return m ? m[1] : undefined;
 }
 
+// A raw GitHub issue as returned by the issues endpoint — only the fields the rollup reads.
+export type RawRoadmapIssue = { number?: number; title?: string; state?: string; pull_request?: unknown; labels?: Array<{ name?: string }> };
+
+// Bucket planner tracking issues into per-item {total, done, issues[]} keyed by their `roadmap:<id>` label.
+// PURE (no network) so it's unit-testable; fetchRoadmapStatus just feeds it the fetched pages.
+export function rollupRoadmapStatus(issues: RawRoadmapIssue[]): string {
+  type Ref = { n: number; t: string; c: boolean }; // number, title, closed — short keys to keep the payload small
+  const items: Record<string, { total: number; done: number; issues: Ref[] }> = {};
+  for (const issue of issues) {
+    if (issue.pull_request) continue; // the issues endpoint also returns PRs — skip them
+    const closed = issue.state === 'closed';
+    const ref: Ref = { n: issue.number ?? 0, t: (issue.title ?? '').slice(0, 140), c: closed };
+    for (const l of issue.labels ?? []) {
+      const name = l.name ?? '';
+      if (!name.startsWith('roadmap:')) continue;
+      const id = name.slice('roadmap:'.length);
+      // `roadmap:<id>` links an issue to its roadmap item. Legacy phase labels were `roadmap:phase-N`
+      // (the prefix is now `phase:`), which collide with this rollup namespace — an issue carrying only
+      // `roadmap:phase-1` would otherwise strand its count in a phantom `phase-1` bucket that matches no
+      // item, leaving the real item showing zero issues. Skip phase labels: they are not item ids.
+      if (/^phase-\d+$/.test(id)) continue;
+      const row = items[id] ?? (items[id] = { total: 0, done: 0, issues: [] });
+      row.total += 1;
+      if (closed) row.done += 1;
+      row.issues.push(ref);
+    }
+  }
+  // Open issues first (the actionable work), then closed; within each, lowest number first. Keep a bounded slice.
+  for (const row of Object.values(items)) {
+    row.issues.sort((a, b) => (Number(a.c) - Number(b.c)) || (a.n - b.n));
+    row.issues = row.issues.slice(0, ROADMAP_ISSUES_PER_ITEM);
+  }
+  return JSON.stringify({ items });
+}
+
 async function fetchRoadmapStatus(env: Env, account: string): Promise<string | undefined> {
   const base = env.GITHUB_API_BASE ?? 'https://api.github.com';
   try {
-    type RawIssue = { number?: number; title?: string; state?: string; pull_request?: unknown; labels?: Array<{ name?: string }> };
-    const issues: RawIssue[] = [];
+    const issues: RawRoadmapIssue[] = [];
     let url: string | undefined = `${base}/repos/${account}/issues?labels=origin:roadmap-planner&state=all&per_page=100`;
     for (let page = 0; url && page < MAX_ROADMAP_PAGES; page++) {
       const res: Response = await fetch(url, {
         headers: { accept: 'application/vnd.github+json', 'user-agent': 'open-autonomy-funding' },
       });
       if (!res.ok) { if (page === 0) return undefined; break; } // first page fails → nothing; later page → use partial
-      issues.push(...(await res.json() as RawIssue[]));
+      issues.push(...(await res.json() as RawRoadmapIssue[]));
       url = nextPageUrl(res.headers.get('link'));
     }
-    type Ref = { n: number; t: string; c: boolean }; // number, title, closed — short keys to keep the payload small
-    const items: Record<string, { total: number; done: number; issues: Ref[] }> = {};
-    for (const issue of issues) {
-      if (issue.pull_request) continue; // the issues endpoint also returns PRs — skip them
-      const closed = issue.state === 'closed';
-      const ref: Ref = { n: issue.number ?? 0, t: (issue.title ?? '').slice(0, 140), c: closed };
-      for (const l of issue.labels ?? []) {
-        const name = l.name ?? '';
-        if (!name.startsWith('roadmap:')) continue;
-        const id = name.slice('roadmap:'.length);
-        // `roadmap:<id>` links an issue to its roadmap item. Legacy phase labels were `roadmap:phase-N`
-        // (the prefix is now `phase:`), which collide with this rollup namespace — an issue carrying only
-        // `roadmap:phase-1` would otherwise strand its count in a phantom `phase-1` bucket that matches no
-        // item, leaving the real item showing zero issues. Skip phase labels: they are not item ids.
-        if (/^phase-\d+$/.test(id)) continue;
-        const row = items[id] ?? (items[id] = { total: 0, done: 0, issues: [] });
-        row.total += 1;
-        if (closed) row.done += 1;
-        row.issues.push(ref);
-      }
-    }
-    // Open issues first (the actionable work), then closed; within each, lowest number first. Keep a bounded slice.
-    for (const row of Object.values(items)) {
-      row.issues.sort((a, b) => (Number(a.c) - Number(b.c)) || (a.n - b.n));
-      row.issues = row.issues.slice(0, ROADMAP_ISSUES_PER_ITEM);
-    }
-    return JSON.stringify({ items });
+    return rollupRoadmapStatus(issues);
   } catch {
     return undefined;
   }

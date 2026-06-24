@@ -391,23 +391,51 @@ async function opPlannerIssues(repo: string, n: number): Promise<OpResult> {
 }
 
 async function opOpenPrReview(repo: string, n: number): Promise<OpResult> {
-  // "The PM notices an open agent PR, routes it to review, and it merges" is an AUTONOMOUS behavior — and this
-  // issue carries no `manual-operator-test` label, so the DRIVE phase's autonomous PM may already have completed
-  // it (developed → reviewed → merged → closed). Be IDEMPOTENT with drive: if an agent PR for this issue has
-  // already merged, that IS the behavior under test → pass. Only develop when none has merged yet — blindly
-  // re-developing a closed issue yields no PR and would FALSELY fail a scenario the system already satisfied
-  // (the handler must agree with the scorer, which counts the merged/closed issue as proven).
-  const mergedPr = () => gh(['pr', 'list', '-R', repo, '--head', `agent/issue-${n}`, '--state', 'merged', '--json', 'number', '--jq', '.[0].number // empty']);
-  let pr = mergedPr();
-  if (!pr) {
-    const dev = await developAndWaitForPr(repo, n);
-    if (!dev) return { scenario: 'pm-open-pr-review', issue: n, status: 'fail', note: 'no agent PR produced and none merged autonomously' };
-    for (let i = 0; i < 20 && !pr; i++) {
-      await sleep(30000);
-      pr = mergedPr();
+  // The scenario needs an OPEN agent PR that the PM routes to review → it merges. The DRIVE phase's developer
+  // already opens one. CRITICAL: do NOT re-develop when a PR already exists — the developer force-pushes the
+  // branch (developer.yml `git push --force`), which RESETS the head and its ci/agent-review statuses, and a
+  // failed re-run then leaves a status-less head that can never auto-merge (this exact clobber stalled the
+  // scenario). So: find the existing PR (already-merged = pass; else the open one); only develop if there is
+  // none at all. Then DRIVE the merge of that PR — the developer pushes via GITHUB_TOKEN, so the head's
+  // `pull_request` ci/review never auto-trigger (anti-recursion); dispatch ci.yml + reviewer.yml for the head
+  // (the same workflow_dispatch the developer uses to post the required `ci`/`agent-review` statuses) and kick
+  // the PM to route it, then wait for the armed auto-merge to land it.
+  const prsAll = (): { number: number; state: string }[] => {
+    try { return JSON.parse(gh(['pr', 'list', '-R', repo, '--head', `agent/issue-${n}`, '--state', 'all', '--json', 'number,state']) || '[]'); } catch { return []; }
+  };
+  let prs = prsAll();
+  if (prs.some((p) => p.state === 'MERGED')) {
+    return { scenario: 'pm-open-pr-review', issue: n, status: 'pass', note: `agent PR #${prs.find((p) => p.state === 'MERGED')!.number} routed to review + merged` };
+  }
+  let pr = prs.find((p) => p.state === 'OPEN')?.number ?? 0;
+  // A STALE open PR can never merge: GitHub's auto-merge does NOT honor `.gitattributes merge=union`, so a PR
+  // that branched before sibling PRs appended their `## Unreleased` CHANGELOG lines conflicts on that file
+  // (normally the PM re-develops a stale PR onto fresh main; here we ensure a clean one). Never blind-wait on a
+  // conflicting PR — close it and develop fresh on CURRENT main (clean base → union-free → merges).
+  if (pr) {
+    const mergeState = gh(['pr', 'view', String(pr), '-R', repo, '--json', 'mergeStateStatus', '--jq', '.mergeStateStatus']);
+    if (mergeState === 'DIRTY' || mergeState === 'CONFLICTING') {
+      closePr(repo, pr);
+      pr = 0;
     }
   }
-  return { scenario: 'pm-open-pr-review', issue: n, status: pr ? 'pass' : 'fail', note: pr ? `agent PR #${pr} routed to review + merged` : 'GAP: agent PR did not merge' };
+  if (!pr) {
+    pr = await developAndWaitForPr(repo, n);
+    if (!pr) return { scenario: 'pm-open-pr-review', issue: n, status: 'fail', note: 'no agent PR produced and none merged autonomously' };
+  }
+  // Help the autonomous merge chain along for THIS open PR (no re-develop): post the required statuses on its
+  // head and route it via the PM, then poll ~15 min for the armed auto-merge to land it.
+  const head = headSha(repo, pr);
+  ghOk(['workflow', 'run', 'ci.yml', '-R', repo, '-f', `sha=${head}`, '-f', `pr=${pr}`]);
+  ghOk(['workflow', 'run', 'reviewer.yml', '-R', repo, '-f', `issue_number=${pr}`]);
+  ghOk(['workflow', 'run', 'pm.yml', '-R', repo]);
+  let merged = isMerged(repo, pr);
+  for (let i = 0; i < 30 && !merged; i++) {
+    await sleep(30000);
+    if (i === 15) ghOk(['workflow', 'run', 'pm.yml', '-R', repo]);
+    merged = isMerged(repo, pr);
+  }
+  return { scenario: 'pm-open-pr-review', issue: n, status: merged ? 'pass' : 'fail', note: merged ? `open agent PR #${pr} routed to review + merged` : `GAP: open agent PR #${pr} did not merge (head ${head.slice(0, 7)})` };
 }
 
 // Hand a manual-operator-test issue back to the PM. With that label present the PM (correctly, for production)

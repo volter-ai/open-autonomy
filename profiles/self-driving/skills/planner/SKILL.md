@@ -29,10 +29,12 @@ order the lot — is your judgment.
 1. Read `.open-autonomy/roadmap.yml` (layer 1) and list existing issues:
    `gh issue list --state all --label origin:roadmap-planner --json number,title,labels,state,body`.
 2. **Convert.** For each ratified item that isn't `planned` yet (a `proposed` item is still the strategy
-   reviewer's gate — leave it), decide its issues and create them with `gh issue create`, each carrying the
-   parent link label `roadmap:<id>` plus the `priority:`/`phase:` labels (create a missing label first with
-   `gh label create "<name>" --force`). Big item → several issues; a one-line item → one. When an item is fully
-   broken down, set `planned: true` on it in `.open-autonomy/roadmap.yml`.
+   reviewer's gate — leave it), decide its issues and create them with `gh issue create`, each carrying THREE
+   labels: `origin:roadmap-planner` (so it's recognized as a tracking issue), the parent link `roadmap:<id>`
+   (so it rolls up to its item — this 1→many link is how progress is derived), and `priority:`/`phase:`
+   (create a missing label first with `gh label create "<name>" --force`). Big item → several issues; a
+   one-line item → one. When an item is fully broken down, set `planned: true` on it in
+   `.open-autonomy/roadmap.yml`.
 3. **Keep it current.** Edit `.open-autonomy/roadmap.yml` to reflect reality: reorder by `phase`/priority,
    split an item that grew, merge duplicates, sharpen a `title`/`intent`. Reopen a tracking issue closed while
    its item still has open work. Never invent new strategy (that's the strategist) and never set execution

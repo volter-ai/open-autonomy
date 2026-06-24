@@ -1,11 +1,11 @@
 #!/usr/bin/env bun
-// Deterministic reconcile: ensure every `planned`/`active` item in `.open-autonomy/roadmap.yml` has exactly
-// one planner-owned tracking issue. Reconciling the roadmap into issues is mechanical WIRING (one issue per
-// committed item, matched by a `roadmap:<id>` label), not a judgment — so, like closing merged issues, it must
-// not depend on a model remembering (or being strong enough) to do it. It runs as a deterministic step in the
-// planner's job, which holds issues:write + GH_TOKEN. Idempotent: an item that already has a tracking issue is
-// left alone, so running it on every planner sweep is safe. `proposed` items are deliberately skipped — they are
-// the strategy reviewer's gate, not yet planned.
+// Safety reconcile (layer 2 of the two-layer roadmap): ensure every `planned: true` item in
+// `.open-autonomy/roadmap.yml` has at least one planner-owned tracking issue. Decomposing an item INTO issues
+// is the planner's JUDGMENT (model) — but a `planned` item with NO tracking issue at all is a hole, and this
+// net closes it deterministically so a planned item is never silently dropped. Matched by the `roadmap:<id>`
+// label; idempotent (an item that already has any tracking issue is left to the planner). Runs as a step in the
+// planner's job (issues:write + GH_TOKEN). Items that are `proposed: true` (the strategy reviewer's gate) or not
+// yet `planned` are deliberately skipped. Execution status is DERIVED from child issues, never read here.
 import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 
@@ -27,7 +27,7 @@ const gh = (args: string[]): string => {
 interface Item {
   id: string;
   title: string;
-  status: string;
+  planned: boolean;
   phase?: string;
   priority?: string;
   proof_gate?: string;
@@ -45,19 +45,19 @@ function parseRoadmap(yml: string): Item[] {
     const idm = line.match(/^\s*-\s+id:\s*(.+?)\s*$/);
     if (idm) {
       if (cur) items.push(cur);
-      cur = { id: unquote(idm[1]), title: '', status: '', acceptance: [] };
+      cur = { id: unquote(idm[1]), title: '', planned: false, acceptance: [] };
       inAcceptance = false;
       continue;
     }
     if (!cur) continue;
     if (/^\s*acceptance:\s*$/.test(line)) { inAcceptance = true; continue; }
-    const fm = line.match(/^\s+(phase|priority|status|title|proof_gate):\s*(.+?)\s*$/);
+    const fm = line.match(/^\s+(phase|priority|planned|title|proof_gate):\s*(.+?)\s*$/);
     if (fm) {
       inAcceptance = false;
       const [, key, val] = fm;
       if (key === 'phase') cur.phase = unquote(val);
       else if (key === 'priority') cur.priority = unquote(val);
-      else if (key === 'status') cur.status = unquote(val);
+      else if (key === 'planned') cur.planned = unquote(val) === 'true';
       else if (key === 'title') cur.title = unquote(val);
       else if (key === 'proof_gate') cur.proof_gate = unquote(val);
       continue;
@@ -78,7 +78,7 @@ try {
   process.stderr.write('roadmap-reconcile: no .open-autonomy/roadmap.yml — skipping\n');
   process.exit(0);
 }
-const items = parseRoadmap(yml).filter((i) => i.status === 'planned' || i.status === 'active');
+const items = parseRoadmap(yml).filter((i) => i.planned === true);
 
 // Which roadmap ids already have a tracking issue (matched by the `roadmap:<id>` label, the stable marker).
 const tracked = new Set<string>();
@@ -100,7 +100,7 @@ for (const item of items) {
   const priorityLabel = item.priority ? `priority:${item.priority}` : '';
   if (priorityLabel) ensureLabel(priorityLabel);
   const body = [
-    `Tracking issue for roadmap item \`${item.id}\` (status: ${item.status}${item.phase ? `, phase ${item.phase}` : ''}).`,
+    `Tracking issue for roadmap item \`${item.id}\` (planned${item.phase ? `, phase ${item.phase}` : ''}).`,
     item.proof_gate ? `\nProof gate: \`${item.proof_gate}\`` : '',
     item.acceptance.length ? `\nAcceptance:\n${item.acceptance.map((a) => `- ${a}`).join('\n')}` : '',
     `\n<!-- roadmap:${item.id} -->`,
@@ -111,4 +111,4 @@ for (const item of items) {
   const out = gh(args);
   if (out) { created++; process.stdout.write(`roadmap-reconcile: created tracking issue for ${item.id} → ${out}\n`); }
 }
-process.stdout.write(`roadmap-reconcile: ${created} issue(s) created (${items.length} planned/active item(s), ${tracked.size} already tracked)\n`);
+process.stdout.write(`roadmap-reconcile: ${created} issue(s) created (${items.length} planned item(s), ${tracked.size} already tracked)\n`);

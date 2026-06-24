@@ -1,11 +1,11 @@
-schema: open-autonomy.roadmap.v1
+schema: open-autonomy.roadmap.v2
 direction: Build an OSS self-driving repository template that can maintain itself
   and install the same autonomy loop into other repositories.
 items:
   - id: durable-decision-memory
     phase: 1
     priority: high
-    status: proposed
+    proposed: true
     title: Durable Decision Memory
     proof_gate: decision-memory-audit
     acceptance:
@@ -14,7 +14,7 @@ items:
   - id: unified-loop-budget
     phase: 2
     priority: high
-    status: active
+    planned: true
     title: PM Failure Handling From History
     proof_gate: retry-ci-failure
     acceptance:
@@ -23,7 +23,7 @@ items:
   - id: pm-proactive-backlog
     phase: 3
     priority: high
-    status: active
+    planned: true
     title: PM Operations And Backlog Policy
     proof_gate: pm-open-pr-review
     acceptance:
@@ -32,7 +32,7 @@ items:
   - id: developer-context-quality
     phase: 4
     priority: medium
-    status: planned
+    planned: true
     title: Developer Context And Patch Quality
     proof_gate: developer-context-review-fix
     acceptance:
@@ -41,7 +41,7 @@ items:
   - id: review-merge-parity
     phase: 5
     priority: high
-    status: active
+    planned: true
     title: Review And The Merge Boundary
     proof_gate: head-changed-before-merge
     acceptance:
@@ -50,7 +50,7 @@ items:
   - id: operator-observability
     phase: 6
     priority: medium
-    status: active
+    planned: true
     title: Observability And Operator Controls
     proof_gate: operator-pause-resume
     acceptance:
@@ -59,7 +59,7 @@ items:
   - id: production-rollout
     phase: 7
     priority: medium
-    status: active
+    planned: true
     title: Production Rollout
     proof_gate: five-issue-dogfood
     acceptance:
@@ -68,7 +68,7 @@ items:
   - id: direction-control-files
     phase: 8
     priority: high
-    status: active
+    planned: true
     title: Direction, Constitution, And Planning Loop
     proof_gate: planner-creates-proof-gate-issues
     acceptance:
@@ -77,7 +77,7 @@ items:
   - id: self-hosted-fleet
     phase: 9
     priority: medium
-    status: planned
+    planned: true
     title: Self-Hosted Repository Fleet
     proof_gate: scaffold-install-check
     acceptance:
@@ -86,7 +86,7 @@ items:
   - id: durable-state-index
     phase: 10
     priority: medium
-    status: proposed
+    proposed: true
     title: Durable State And Audit Trail
     proof_gate: status-reconstruction
     acceptance:
@@ -95,7 +95,7 @@ items:
   - id: repair-loops
     phase: 11
     priority: medium
-    status: planned
+    planned: true
     title: PM-Directed Repair (not auto-repair)
     proof_gate: quality-review-repair
     acceptance:
@@ -104,7 +104,7 @@ items:
   - id: maintainer-governance
     phase: 12
     priority: medium
-    status: planned
+    planned: true
     title: Maintainer Governance
     proof_gate: governance-maintainer-hold
     acceptance:
@@ -113,7 +113,7 @@ items:
   - id: public-oss-readiness
     phase: 13
     priority: medium
-    status: planned
+    planned: true
     title: Public OSS Readiness
     proof_gate: release-dogfood
     acceptance:

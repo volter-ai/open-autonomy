@@ -1,6 +1,8 @@
+import { raw } from 'hono/html';
 import type { DirectoryEntry, Flow, LiveRun, Patron, ProjectView } from './limit-ledger.js';
 import { renderCharterPanel, renderRoadmapPanel, renderChangelogPanel } from './project-docs.js';
 import { icon } from './icons.js';
+import { render } from './ui/render.js';
 
 // Server-rendered HTML for the funding platform — a Patreon-style storefront over the ledger.
 // Two pages: the explore grid (GET /) and the creator page (GET /p/:account). No client JS beyond
@@ -98,17 +100,7 @@ function statusDot(status: 'funded' | 'low' | 'unfunded'): string {
   return `<span class="status"><span class="dot" style="background:${s.color}"></span>${s.label}</span>`;
 }
 
-function shell(title: string, body: string, refreshSeconds?: number): string {
-  return `<!doctype html>
-<html lang="en"><head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-${refreshSeconds ? `<meta http-equiv="refresh" content="${refreshSeconds}">\n` : ''}<link rel="icon" href="/favicon.svg" type="image/svg+xml">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-<title>${escapeHtml(title)}</title>
-<style>
+const STYLES = `
   *{box-sizing:border-box;}
   html{-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility;}
   body{margin:0;background:${C.bg};color:${C.ink};font:16px/1.6 'Inter',-apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif;}
@@ -322,17 +314,47 @@ ${refreshSeconds ? `<meta http-equiv="refresh" content="${refreshSeconds}">\n` :
   .act-page{display:flex;justify-content:space-between;align-items:center;margin-top:16px;padding-top:14px;border-top:1px solid ${C.line};font-size:13.5px;}
   .act-page a{color:${C.accent};font-weight:600;}
   .act-page .dim{color:${C.faint};}
-</style>
-</head><body>${body}</body></html>`;
+`;
+
+// Page chrome (head + global CSS + body wrapper) as a TSX component. The CSS lives in STYLES (one big block,
+// injected raw). Pages render their body to a string and pass it via the shell() bridge below until they're
+// fully TSX, at which point they can use <Shell> directly.
+function Shell({ title, refreshSeconds, children }: { title: string; refreshSeconds?: number; children?: unknown }) {
+  return (
+    <html lang="en">
+      <head>
+        <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1" />
+        {refreshSeconds ? <meta http-equiv="refresh" content={String(refreshSeconds)} /> : null}
+        <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+        <link rel="preconnect" href="https://fonts.googleapis.com" />
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="" />
+        <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+        <title>{title}</title>
+        <style dangerouslySetInnerHTML={{ __html: STYLES }} />
+      </head>
+      <body>{children}</body>
+    </html>
+  );
+}
+
+function shell(title: string, body: string, refreshSeconds?: number): string {
+  return `<!doctype html>${render(<Shell title={title} refreshSeconds={refreshSeconds}>{raw(body)}</Shell>)}`;
+}
+
+function Nav() {
+  return (
+    <div class="nav"><div class="inner">
+      <a href="/" class="brand">{raw(LOGO_SVG)}<span>open-autonomy</span></a>
+      <span class="links"><a href="/">Explore</a></span>
+      <span class="spacer"></span>
+      <a class="btn" href="https://github.com/sponsors/volter-ai">Become a patron</a>
+    </div></div>
+  );
 }
 
 function nav(): string {
-  return `<div class="nav"><div class="inner">
-    <a href="/" class="brand">${LOGO_SVG}<span>open-autonomy</span></a>
-    <span class="links"><a href="/">Explore</a></span>
-    <span class="spacer"></span>
-    <a class="btn" href="https://github.com/sponsors/volter-ai">Become a patron</a>
-  </div></div>`;
+  return render(<Nav />);
 }
 
 export function renderExplore(entries: DirectoryEntry[]): string {

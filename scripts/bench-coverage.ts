@@ -108,6 +108,14 @@ const RESOLUTION_SCENARIOS = new Set<string>([
   'pm-follow-up-after-needs-info',
 ]);
 
+// Retry scenarios (induced ci/review failure): a fixable failure resolves EITHER by escalation OR by the PM
+// re-dispatching a developer that heals it and the PR merging. A closed/merged retry issue is therefore proof
+// of recovery (auto-merge stays held while the failure is unfixed), NOT a broken PR landing. See classify below.
+const RETRY_SCENARIOS = new Set<string>([
+  'retry-ci-failure',
+  'retry-review-failure',
+]);
+
 // Classify each coverage scenario from the live issue that carries its marker. Conservative:
 // only `proven` when the visible end state matches the scenario's success condition.
 export function classifyScenarios(issues: IssueLite[]): ScenarioResult[] {
@@ -131,6 +139,11 @@ export function classifyScenarios(issues: IssueLite[]): ScenarioResult[] {
     else if (id === 'governance-maintainer-hold' && (has('agent-maintainer-hold') || has('human-required'))) status = 'proven';
     // Resolution scenarios succeed by the issue being resolved/merged, so `closed` is genuine proof.
     else if (RESOLUTION_SCENARIOS.has(id)) status = closed ? 'proven' : 'in-progress';
+    // Retry scenarios prove the PM ENGAGED a ci/review failure — and a fixable failure has TWO correct
+    // endings: escalation (handled above), or RECOVERY (re-dispatch heals it → PR merges → issue closes).
+    // The induced failure holds auto-merge, so a closed/merged retry issue means the PM recovered it, not that
+    // a broken PR slipped through. Only an OPEN, un-escalated retry issue (failure ignored) is not yet proven.
+    else if (RETRY_SCENARIOS.has(id)) status = (closed || has('human-required') || has('agent-blocked')) ? 'proven' : 'in-progress';
     // State/operator scenarios succeed by reaching a specific labeled state — `closed` alone is NOT proof
     // (an operator/won't-fix close doesn't demonstrate the behavior); a close without that state is a fail.
     else if (has('human-required') || has('agent-blocked')) status = 'proven';

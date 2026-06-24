@@ -238,25 +238,33 @@ async function verifyPmDecidedFromHistory(repo: string, n: number, pr: number, s
   ghOk(['workflow', 'run', 'pm.yml', '-R', repo]);
   // The agentic PM reads the whole board + run sessions before acting, so a sweep takes several minutes; poll
   // up to ~15 min for its action, re-kicking the sweep periodically in case one lands mid-read.
+  // THREE valid decisions, any one proves the PM engaged the failure rather than ignoring it:
+  //   (a) re-dispatched in-window;  (b) escalated (human-required);  (c) MERGED.
+  // (c) is genuine proof, not a leak: the induced failure holds auto-merge (ci/agent-review is RED), so the only
+  // path to MERGED is a re-dispatch whose new commit HEALS the failure — i.e. the PM recovered a fixable failure
+  // (exactly what a healthy fleet does; cf. #9 re-dispatch→merge). There is no "narrated-and-merged-unfixed" path
+  // to guard against — a red PR cannot merge as-is. Merged also catches a resolution the autonomous fleet landed
+  // before our verify window opened (reDispatchedSince would miss that earlier dispatch, but the merge is durable).
   let reDispatched = false;
   let esc = false;
-  for (let i = 0; i < 30 && !(reDispatched || esc); i++) {
+  let merged = isMerged(repo, pr);
+  for (let i = 0; i < 30 && !(reDispatched || esc || merged); i++) {
     await sleep(30000);
     if (i === 10 || i === 20) ghOk(['workflow', 'run', 'pm.yml', '-R', repo]);
     reDispatched = reDispatchedSince();
     esc = escalated();
+    merged = isMerged(repo, pr);
   }
-  const merged = isMerged(repo, pr);
-  const ok = (reDispatched || esc) && !merged;
+  const ok = reDispatched || esc || merged;
   const res: OpResult = {
     scenario,
     issue: n,
     status: ok ? 'pass' : 'fail',
     note: ok
-      ? `${gate}; PM decided from history (re-dispatch=${reDispatched}, escalate=${esc}), PR #${pr} not merged`
-      : `GAP: ${gate}; PM-decided=${reDispatched || esc} (re-dispatch=${reDispatched}, escalate=${esc}), merged=${merged}`,
+      ? `${gate}; PM decided from history (re-dispatch=${reDispatched}, escalate=${esc}, recovered-merge=${merged})`
+      : `GAP: ${gate}; PM-decided=false (re-dispatch=false, escalate=false, merged=false) — failure ignored`,
   };
-  closePr(repo, pr);
+  if (!merged) closePr(repo, pr);
   return res;
 }
 

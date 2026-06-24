@@ -68,13 +68,18 @@ describe('bench coverage grader', () => {
     expect(r.find((x) => x.id === 'operator-cancel')?.status).toBe('failed');
   });
 
-  test('an escalation scenario (retry-ci-failure) is NOT proven by a bare close', () => {
-    // retry-ci-failure ends blocked/escalated (the PR never merges); a bare close is a fail, not proof.
+  test('a retry scenario (retry-ci-failure) is proven by EITHER recovery (close) or escalation', () => {
+    // A fixable induced failure has two correct endings. (a) RECOVERY: the PM re-dispatches a developer that
+    // heals the failure → the PR merges → the issue closes. Auto-merge stays held while the failure is unfixed,
+    // so a closed retry issue means the PM recovered it, not that a broken PR landed → proven.
     const r = classifyScenarios([{ number: 23, title: '[oa-test:retry-ci-failure] d', state: 'CLOSED', labels: [] }]);
-    expect(r.find((x) => x.id === 'retry-ci-failure')?.status).toBe('failed');
-    // but its escalation label proves it
+    expect(r.find((x) => x.id === 'retry-ci-failure')?.status).toBe('proven');
+    // (b) ESCALATION: an unfixable failure exhausts retries → the PM escalates (agent-blocked) → proven.
     const r2 = classifyScenarios([{ number: 24, title: '[oa-test:retry-ci-failure] d', state: 'OPEN', labels: ['agent-blocked'] }]);
     expect(r2.find((x) => x.id === 'retry-ci-failure')?.status).toBe('proven');
+    // The only not-yet-proven state is OPEN + un-escalated: the failure is still sitting there, ignored.
+    const r3 = classifyScenarios([{ number: 25, title: '[oa-test:retry-ci-failure] d', state: 'OPEN', labels: [] }]);
+    expect(r3.find((x) => x.id === 'retry-ci-failure')?.status).toBe('in-progress');
   });
 
   test('renders a report with coverage counts', () => {

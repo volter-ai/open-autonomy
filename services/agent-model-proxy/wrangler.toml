@@ -2,6 +2,10 @@ name = "volter-agent-model-proxy"
 main = "src/index.ts"
 compatibility_date = "2026-06-15"
 
+# Keep the default *.workers.dev URL live (the proxy's known endpoint). The public
+# open-autonomy.org custom domain is attached separately in the Cloudflare dashboard.
+workers_dev = true
+
 [vars]
 DEFAULT_MAX_USD_CENTS = "500"
 DEFAULT_MAX_REQUESTS = "200"

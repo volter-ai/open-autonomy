@@ -339,10 +339,6 @@ function Shell({ title, refreshSeconds, children }: { title: string; refreshSeco
   );
 }
 
-function shell(title: string, body: string, refreshSeconds?: number): string {
-  return `<!doctype html>${render(<Shell title={title} refreshSeconds={refreshSeconds}>{raw(body)}</Shell>)}`;
-}
-
 function Nav() {
   return (
     <div class="nav"><div class="inner">
@@ -354,8 +350,26 @@ function Nav() {
   );
 }
 
-function nav(): string {
-  return render(<Nav />);
+function ProjectCard({ e }: { e: DirectoryEntry }) {
+  const g = goalLine(e);
+  const href = `/p/${encodeURIComponent(e.account)}`;
+  const monthly = e.monthly_usd_cents ? `${usd0(e.monthly_usd_cents)}/mo` : '$0/mo';
+  return (
+    <div class="card">
+      <a href={href}><div class="cover" style={coverStyle(e.profile.cover_url, e.account)} /></a>
+      <div class="cbody">
+        <div class="av">{raw(avatar(e.profile.avatar_url, 60, 'ring'))}</div>
+        <a href={href} class="pname">{nameOf(e.account)}</a>
+        <div class="ptag">{e.profile.tagline ?? ''}</div>
+        <div class="pmeta"><b>{e.patron_count}</b>{` patron${e.patron_count === 1 ? '' : 's'} · `}<b>{monthly}</b></div>
+        <div class="cardfoot">
+          <div class="goalrow"><span>{g.label}</span>{raw(statusDot(e.status))}</div>
+          {raw(progress(g.frac, STATUS[e.status].color))}
+          <a class="btn block join" href={`https://github.com/sponsors/${ownerOf(e.account)}`}>Join</a>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 export function renderExplore(entries: DirectoryEntry[]): string {
@@ -364,42 +378,26 @@ export function renderExplore(entries: DirectoryEntry[]): string {
   const totalIn = listed.reduce((s, e) => s + (e.granted_in_usd_cents - e.granted_out_usd_cents), 0);
   const totalSpent = listed.reduce((s, e) => s + e.consumed_usd_cents, 0);
   const patrons = listed.reduce((s, e) => s + e.patron_count, 0);
-
-  const cards = listed.map((e) => {
-    const g = goalLine(e);
-    const color = STATUS[e.status].color;
-    const href = `/p/${encodeURIComponent(e.account)}`;
-    const monthly = e.monthly_usd_cents ? `${usd0(e.monthly_usd_cents)}/mo` : '$0/mo';
-    return `<div class="card">
-      <a href="${href}"><div class="cover" style="${coverStyle(e.profile.cover_url, e.account)}"></div></a>
-      <div class="cbody">
-        <div class="av">${avatar(e.profile.avatar_url, 60, 'ring')}</div>
-        <a href="${href}" class="pname">${escapeHtml(nameOf(e.account))}</a>
-        <div class="ptag">${escapeHtml(e.profile.tagline ?? '')}</div>
-        <div class="pmeta"><b>${e.patron_count}</b> patron${e.patron_count === 1 ? '' : 's'} · <b>${monthly}</b></div>
-        <div class="cardfoot">
-          <div class="goalrow"><span>${escapeHtml(g.label)}</span>${statusDot(e.status)}</div>
-          ${progress(g.frac, color)}
-          <a class="btn block join" href="https://github.com/sponsors/${escapeHtml(ownerOf(e.account))}">Join</a>
+  return render(
+    <Shell title="Fund a self-driving repo · open-autonomy">
+      <Nav />
+      <div class="wrap">
+        <h1 class="display">Fund a self-driving repo.</h1>
+        <p class="lede">Self-coding projects that pay their own way. Back one monthly — the agents do the work, and you watch every dollar burn down in the open.</p>
+        <div class="stripe">
+          <div><span class="n">{usd0(totalIn)}</span><span class="k">funded</span></div>
+          <div><span class="n">{usd0(totalSpent)}</span><span class="k">spent by agents</span></div>
+          <div><span class="n">{listed.length}</span><span class="k">{`project${listed.length === 1 ? '' : 's'}`}</span></div>
+          <div><span class="n">{patrons}</span><span class="k">{`patron${patrons === 1 ? '' : 's'}`}</span></div>
         </div>
+        <div class="sectionhdr"><h2>Projects</h2></div>
+        {listed.length
+          ? <div class="grid">{listed.map((e) => <ProjectCard e={e} />)}</div>
+          : <div class="empty">No projects funded yet. A repo appears here the first time it runs an open-autonomy agent.</div>}
+        <div class="legend">A project self-lists the first time it runs an agent and its public repo is synced.</div>
       </div>
-    </div>`;
-  }).join('\n');
-
-  const body = `${nav()}<div class="wrap">
-    <h1 class="display">Fund a self-driving repo.</h1>
-    <p class="lede">Self-coding projects that pay their own way. Back one monthly — the agents do the work, and you watch every dollar burn down in the open.</p>
-    <div class="stripe">
-      <div><span class="n">${usd0(totalIn)}</span><span class="k">funded</span></div>
-      <div><span class="n">${usd0(totalSpent)}</span><span class="k">spent by agents</span></div>
-      <div><span class="n">${listed.length}</span><span class="k">project${listed.length === 1 ? '' : 's'}</span></div>
-      <div><span class="n">${patrons}</span><span class="k">patron${patrons === 1 ? '' : 's'}</span></div>
-    </div>
-    <div class="sectionhdr"><h2>Projects</h2></div>
-    ${listed.length ? `<div class="grid">${cards}</div>` : `<div class="empty">No projects funded yet. A repo appears here the first time it runs an open-autonomy agent.</div>`}
-    <div class="legend">A project self-lists the first time it runs an agent and its public repo is synced.</div>
-  </div>`;
-  return shell('Fund a self-driving repo · open-autonomy', body);
+    </Shell>,
+  );
 }
 
 function patronChip(p: Patron): string {
@@ -703,14 +701,17 @@ export function renderProject(v: ProjectView, page = 0): string {
 }
 
 export function renderRedeemResult(account: string, ok: boolean, message: string): string {
-  const enc = encodeURIComponent(account);
-  const body = `${nav()}<div class="wrap">
-    <div class="panel" style="max-width:540px;margin:56px auto;text-align:center;padding:44px 40px">
-      <div style="font-size:44px;margin-bottom:8px">${ok ? '🎉' : '😕'}</div>
-      <h1 style="font-size:26px;font-weight:800;letter-spacing:-.02em;margin:0 0 10px">${ok ? 'Coupon redeemed' : 'Coupon not redeemed'}</h1>
-      <p style="color:${C.muted};font-size:16px;margin:0 0 24px">${escapeHtml(message)}</p>
-      <a class="btn ghost" href="/p/${enc}">← Back to ${escapeHtml(account)}</a>
-    </div>
-  </div>`;
-  return shell('Coupon · open-autonomy', body);
+  return render(
+    <Shell title="Coupon · open-autonomy">
+      <Nav />
+      <div class="wrap">
+        <div class="panel" style="max-width:540px;margin:56px auto;text-align:center;padding:44px 40px">
+          <div style="font-size:44px;margin-bottom:8px">{ok ? '🎉' : '😕'}</div>
+          <h1 style="font-size:26px;font-weight:800;letter-spacing:-.02em;margin:0 0 10px">{ok ? 'Coupon redeemed' : 'Coupon not redeemed'}</h1>
+          <p style={`color:${C.muted};font-size:16px;margin:0 0 24px`}>{message}</p>
+          <a class="btn ghost" href={`/p/${encodeURIComponent(account)}`}>← Back to {account}</a>
+        </div>
+      </div>
+    </Shell>,
+  );
 }

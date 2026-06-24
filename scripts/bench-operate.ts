@@ -353,6 +353,15 @@ async function opOpenPrReview(repo: string, n: number): Promise<OpResult> {
   return { scenario: 'pm-open-pr-review', issue: n, status: state === 'MERGED' ? 'pass' : 'fail', note: state === 'MERGED' ? `PR #${pr} routed to review + merged autonomously` : `GAP: PR #${pr} state=${state || '-'} (did not merge)` };
 }
 
+// Hand a manual-operator-test issue back to the PM. With that label present the PM (correctly, for production)
+// treats the issue as operator-managed and takes NO action — confirmed in its own sweep notes: "manual-operator-
+// test fixtures … Excluded from PM auto-develop … No action." The retry scenarios need the PM to engage the
+// induced failure (re-dispatch-with-context or escalate), so once the operator has finished staging it we drop
+// the label to signal "this is yours now". The label only ever existed to stop PREMATURE auto-develop.
+function handBackToPm(repo: string, n: number): void {
+  ghOk(['issue', 'edit', String(n), '-R', repo, '--remove-label', 'manual-operator-test']);
+}
+
 async function opRetryCiFailure(repo: string, n: number): Promise<OpResult> {
   // Develop → clean PR → induce a REAL ci failure (a lockfile mismatch breaks CI's frozen install) → verify
   // the PM decides from history. Disable auto-merge first so the clean PR can't land before we break it; the
@@ -370,6 +379,7 @@ async function opRetryCiFailure(repo: string, n: number): Promise<OpResult> {
   }
   if (ci !== 'failure') return { scenario: 'retry-ci-failure', issue: n, status: 'fail', note: `GAP: induced ci status=${ci || '-'} on ${sha.slice(0, 7)} (expected failure)` };
   ghOk(['pr', 'merge', String(pr), '-R', repo, '--auto']); // re-arm auto-merge: a failed ci must still hold it
+  handBackToPm(repo, n); // operator is done setting up; let the PM engage the failure (see helper)
   return verifyPmDecidedFromHistory(repo, n, pr, 'retry-ci-failure', `ci failed on ${sha.slice(0, 7)}`);
 }
 
@@ -391,6 +401,7 @@ async function opRetryReviewFailure(repo: string, n: number): Promise<OpResult> 
   }
   if (!/agent-review:FAILURE/i.test(review)) return { scenario: 'retry-review-failure', issue: n, status: 'fail', note: `GAP: reviewer did not reject the buggy change (checks=[${review}])` };
   ghOk(['pr', 'merge', String(pr), '-R', repo, '--auto']); // re-arm: a failed agent-review must still hold it
+  handBackToPm(repo, n); // operator is done setting up; let the PM engage the failure (see helper)
   return verifyPmDecidedFromHistory(repo, n, pr, 'retry-review-failure', `agent-review failed (quality) on PR #${pr} head ${sha.slice(0, 7)}`);
 }
 

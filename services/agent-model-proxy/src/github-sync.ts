@@ -89,14 +89,30 @@ async function fetchRepoText(env: Env, account: string, path: string, maxBytes =
 // reflect the FULL count, and the panel links to GitHub for the rest. Best-effort: undefined on any failure.
 const ROADMAP_ISSUES_PER_ITEM = 8;
 
+// GitHub paginates the issues endpoint at 100/page; follow the `Link: <…>; rel="next"` header so the rollup's
+// total/done counts stay correct past 100 tracking issues (without it the roadmap silently truncated). Bounded
+// to MAX_ROADMAP_PAGES so a pathological repo can't make the funding page hang.
+const MAX_ROADMAP_PAGES = 10;
+function nextPageUrl(linkHeader: string | null): string | undefined {
+  if (!linkHeader) return undefined;
+  const m = linkHeader.match(/<([^>]+)>\s*;\s*rel="next"/);
+  return m ? m[1] : undefined;
+}
+
 async function fetchRoadmapStatus(env: Env, account: string): Promise<string | undefined> {
   const base = env.GITHUB_API_BASE ?? 'https://api.github.com';
   try {
-    const res = await fetch(`${base}/repos/${account}/issues?labels=origin:roadmap-planner&state=all&per_page=100`, {
-      headers: { accept: 'application/vnd.github+json', 'user-agent': 'open-autonomy-funding' },
-    });
-    if (!res.ok) return undefined;
-    const issues = await res.json() as Array<{ number?: number; title?: string; state?: string; pull_request?: unknown; labels?: Array<{ name?: string }> }>;
+    type RawIssue = { number?: number; title?: string; state?: string; pull_request?: unknown; labels?: Array<{ name?: string }> };
+    const issues: RawIssue[] = [];
+    let url: string | undefined = `${base}/repos/${account}/issues?labels=origin:roadmap-planner&state=all&per_page=100`;
+    for (let page = 0; url && page < MAX_ROADMAP_PAGES; page++) {
+      const res: Response = await fetch(url, {
+        headers: { accept: 'application/vnd.github+json', 'user-agent': 'open-autonomy-funding' },
+      });
+      if (!res.ok) { if (page === 0) return undefined; break; } // first page fails → nothing; later page → use partial
+      issues.push(...(await res.json() as RawIssue[]));
+      url = nextPageUrl(res.headers.get('link'));
+    }
     type Ref = { n: number; t: string; c: boolean }; // number, title, closed — short keys to keep the payload small
     const items: Record<string, { total: number; done: number; issues: Ref[] }> = {};
     for (const issue of issues) {

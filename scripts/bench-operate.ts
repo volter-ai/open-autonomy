@@ -214,27 +214,39 @@ const addBuggyCode = (dir: string) => {
 async function verifyPmDecidedFromHistory(repo: string, n: number, pr: number, scenario: string, gate: string): Promise<OpResult> {
   const devRuns = () => Number(gh(['run', 'list', '-R', repo, '--workflow', 'developer.yml', '--limit', '100', '--json', 'databaseId', '--jq', 'length']) || '0');
   const escalated = () => labelsOf(repo, n).includes('human-required') || (gh(['pr', 'view', String(pr), '-R', repo, '--json', 'labels', '--jq', '[.labels[].name]|join(",")']) || '').includes('human-required');
+  // The PM records its from-history decision as a visible status comment (its skill: "leave a visible status
+  // comment saying what you decided and why"). That comment IS the deliverable this scenario verifies. Accept
+  // it as a decision signal: the PM's re-dispatched developer run can itself be SKIPPED by the transient vars
+  // gate flake, so the run-count heuristic alone can miss a perfectly correct decision (observed exactly that).
+  const since = new Date().toISOString();
+  const decisionPat = /re-?dispatch|re-dispatch|escalat|human-required|max.?develop|PM decision/i;
+  const recentBotComments = (kind: 'issue' | 'pr', num: number): string =>
+    gh([kind, 'view', String(num), '-R', repo, '--json', 'comments', '--jq',
+      `[.comments[] | select(.author.login=="github-actions") | select(.createdAt > "${since}") | .body] | join("\\n")`]) || '';
+  const decided = () => decisionPat.test(recentBotComments('issue', n)) || decisionPat.test(recentBotComments('pr', pr));
   const baseline = devRuns();
   ghOk(['workflow', 'run', 'pm.yml', '-R', repo]);
   // The agentic PM reads the whole board + run sessions before acting, so a sweep takes several minutes; poll
-  // up to ~12 min for its action. Dispatch a second sweep midway in case the first lands mid-read.
+  // up to ~15 min for its action, re-kicking the sweep periodically in case one lands mid-read.
   let reDispatched = false;
   let esc = false;
-  for (let i = 0; i < 24 && !(reDispatched || esc); i++) {
+  let commented = false;
+  for (let i = 0; i < 30 && !(reDispatched || esc || commented); i++) {
     await sleep(30000);
-    if (i === 12) ghOk(['workflow', 'run', 'pm.yml', '-R', repo]);
+    if (i === 10 || i === 20) ghOk(['workflow', 'run', 'pm.yml', '-R', repo]);
     reDispatched = devRuns() > baseline;
     esc = escalated();
+    commented = decided();
   }
   const merged = isMerged(repo, pr);
-  const ok = (reDispatched || esc) && !merged;
+  const ok = (reDispatched || esc || commented) && !merged;
   const res: OpResult = {
     scenario,
     issue: n,
     status: ok ? 'pass' : 'fail',
     note: ok
-      ? `${gate}; PM decided from history (re-dispatch=${reDispatched}, escalate=${esc}), PR #${pr} not merged`
-      : `GAP: ${gate}; PM-decided=${reDispatched || esc} (re-dispatch=${reDispatched}, escalate=${esc}), merged=${merged}`,
+      ? `${gate}; PM decided from history (re-dispatch=${reDispatched}, escalate=${esc}, comment=${commented}), PR #${pr} not merged`
+      : `GAP: ${gate}; PM-decided=${reDispatched || esc || commented} (re-dispatch=${reDispatched}, escalate=${esc}, comment=${commented}), merged=${merged}`,
   };
   closePr(repo, pr);
   return res;

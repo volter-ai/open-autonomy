@@ -102,6 +102,10 @@ export function summarizeMetrics(issues: IssueLite[], prs: PrLite[], runs: RunLi
 const RESOLUTION_SCENARIOS = new Set<string>([
   'pm-clear-docs',
   'pm-open-pr-review',
+  // pm-follow-up culminates in the PM developing the clarified issue → PR → merge → close. The operate
+  // handler also sets `oa-test-passed`, but the live PM acts on this same (non-manual-operator-test) issue
+  // and can strip labels it tidies; a CLOSED issue is the durable, un-strippable proof the follow-up resolved.
+  'pm-follow-up-after-needs-info',
 ]);
 
 // Classify each coverage scenario from the live issue that carries its marker. Conservative:

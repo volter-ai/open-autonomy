@@ -383,16 +383,23 @@ async function opPlannerIssues(repo: string, n: number): Promise<OpResult> {
 }
 
 async function opOpenPrReview(repo: string, n: number): Promise<OpResult> {
-  // Develop the issue; the effect auto-routes it to review, the reviewer blesses, native auto-merge lands it.
-  // Verify the open-PR → review → merge flow completes (the PR merges).
-  const pr = await developAndWaitForPr(repo, n);
-  if (!pr) return { scenario: 'pm-open-pr-review', issue: n, status: 'fail', note: 'no agent PR produced' };
-  let state = '';
-  for (let i = 0; i < 20 && state !== 'MERGED'; i++) {
-    await sleep(30000);
-    state = gh(['pr', 'view', String(pr), '-R', repo, '--json', 'state', '--jq', '.state']);
+  // "The PM notices an open agent PR, routes it to review, and it merges" is an AUTONOMOUS behavior — and this
+  // issue carries no `manual-operator-test` label, so the DRIVE phase's autonomous PM may already have completed
+  // it (developed → reviewed → merged → closed). Be IDEMPOTENT with drive: if an agent PR for this issue has
+  // already merged, that IS the behavior under test → pass. Only develop when none has merged yet — blindly
+  // re-developing a closed issue yields no PR and would FALSELY fail a scenario the system already satisfied
+  // (the handler must agree with the scorer, which counts the merged/closed issue as proven).
+  const mergedPr = () => gh(['pr', 'list', '-R', repo, '--head', `agent/issue-${n}`, '--state', 'merged', '--json', 'number', '--jq', '.[0].number // empty']);
+  let pr = mergedPr();
+  if (!pr) {
+    const dev = await developAndWaitForPr(repo, n);
+    if (!dev) return { scenario: 'pm-open-pr-review', issue: n, status: 'fail', note: 'no agent PR produced and none merged autonomously' };
+    for (let i = 0; i < 20 && !pr; i++) {
+      await sleep(30000);
+      pr = mergedPr();
+    }
   }
-  return { scenario: 'pm-open-pr-review', issue: n, status: state === 'MERGED' ? 'pass' : 'fail', note: state === 'MERGED' ? `PR #${pr} routed to review + merged autonomously` : `GAP: PR #${pr} state=${state || '-'} (did not merge)` };
+  return { scenario: 'pm-open-pr-review', issue: n, status: pr ? 'pass' : 'fail', note: pr ? `agent PR #${pr} routed to review + merged` : 'GAP: agent PR did not merge' };
 }
 
 // Hand a manual-operator-test issue back to the PM. With that label present the PM (correctly, for production)

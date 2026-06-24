@@ -1,77 +1,115 @@
 import { describe, expect, test } from 'bun:test';
-import { renderRoadmapPanel, parseRoadmap } from '../src/project-docs.js';
+import { renderRoadmapPanel, parseRoadmap, parseRoadmapStatus, roadmapItemState } from '../src/project-docs.js';
 
-// Build a roadmap.yml with one item per status; item i gets phase i+1 and statuses[i].
-function roadmapYml(statuses: string[]): string {
-  return statuses
-    .map((status, i) => `- id: item-${i}\n  title: Item ${i}\n  phase: ${i + 1}\n  status: ${status}`)
-    .join('\n');
+// One YAML item from a flat spec object.
+function item(o: Record<string, unknown>): string {
+  return `- id: ${o.id}\n` + Object.entries(o).filter(([k]) => k !== 'id').map(([k, v]) => `  ${k}: ${v}`).join('\n');
+}
+function yml(items: Array<Record<string, unknown>>): string {
+  return items.map(item).join('\n');
+}
+function status(map: Record<string, { total: number; done: number }>): string {
+  return JSON.stringify({ items: map });
 }
 
-describe('roadmap: Now / Next / Later centers on current work', () => {
-  test('leads with In progress, then Up next, and folds the Later backlog', () => {
-    // 7 active (phases 1-7) + 9 planned (phases 8-16), like the testbed.
-    const yml = roadmapYml([...Array(7).fill('active'), ...Array(9).fill('planned')]);
-    const html = renderRoadmapPanel(yml, 'https://github.com/acme/widget');
+describe('roadmapItemState: execution status is derived, two-layer', () => {
+  test('v2: planned + child issues → in_progress until all closed, then done', () => {
+    expect(roadmapItemState({ id: 'a', title: 'A', planned: true }, { total: 5, done: 2 })).toBe('in_progress');
+    expect(roadmapItemState({ id: 'a', title: 'A', planned: true }, { total: 5, done: 5 })).toBe('done');
+  });
+  test('v2: not-yet-decomposed item is parked; a proposal is proposed', () => {
+    expect(roadmapItemState({ id: 'a', title: 'A', planned: false })).toBe('parked');
+    expect(roadmapItemState({ id: 'a', title: 'A' })).toBe('parked'); // no flags, no legacy status
+    expect(roadmapItemState({ id: 'a', title: 'A', proposed: true })).toBe('proposed');
+  });
+  test('v2: planned but zero issues stays in_progress, never falsely done', () => {
+    expect(roadmapItemState({ id: 'a', title: 'A', planned: true }, { total: 0, done: 0 })).toBe('in_progress');
+  });
+  test('adding an issue to a done item flips it back to in_progress (self-healing)', () => {
+    const it = { id: 'a', title: 'A', planned: true };
+    expect(roadmapItemState(it, { total: 3, done: 3 })).toBe('done');
+    expect(roadmapItemState(it, { total: 4, done: 3 })).toBe('in_progress'); // a 4th issue appeared
+  });
+  test('legacy back-compat: old stored status renders without v2 flags', () => {
+    expect(roadmapItemState({ id: 'a', title: 'A', status: 'active' })).toBe('in_progress');
+    expect(roadmapItemState({ id: 'a', title: 'A', status: 'planned' })).toBe('parked');
+    expect(roadmapItemState({ id: 'a', title: 'A', status: 'done' })).toBe('done');
+    expect(roadmapItemState({ id: 'a', title: 'A', status: 'proposed' })).toBe('proposed');
+  });
+});
+
+describe('parseRoadmap / parseRoadmapStatus', () => {
+  test('parses v2 boolean flags', () => {
+    const items = parseRoadmap(yml([{ id: 'a', title: 'A', planned: true }, { id: 'b', title: 'B', proposed: true }]));
+    expect(items[0].planned).toBe(true);
+    expect(items[1].proposed).toBe(true);
+  });
+  test('tolerates a missing/garbage status cache', () => {
+    expect(parseRoadmapStatus(undefined).size).toBe(0);
+    expect(parseRoadmapStatus('not json').size).toBe(0);
+    const m = parseRoadmapStatus(status({ a: { total: 3, done: 1 } }));
+    expect(m.get('a')).toEqual({ total: 3, done: 1 });
+  });
+});
+
+describe('renderRoadmapPanel: Now / Next / Later from derived state', () => {
+  test('in-progress leads with a per-item issue tally; queue and shipped fold', () => {
+    const items = [
+      { id: 'now1', title: 'Now One', phase: '1', planned: true },
+      { id: 'park1', title: 'Park One', phase: '2', planned: false },
+      { id: 'park2', title: 'Park Two', phase: '3', planned: false },
+      { id: 'park3', title: 'Park Three', phase: '4', planned: false },
+      { id: 'park4', title: 'Park Four', phase: '5', planned: false },
+      { id: 'shipped1', title: 'Shipped One', phase: '6', planned: true },
+    ];
+    const counts = status({ now1: { total: 5, done: 2 }, shipped1: { total: 3, done: 3 } });
+    const html = renderRoadmapPanel(yml(items), 'https://github.com/acme/widget', counts);
 
     expect(html.includes('In progress')).toBe(true);
+    expect(html.includes('2/5 issues')).toBe(true); // derived progress
     expect(html.includes('Up next')).toBe(true);
-    // 9 planned − 3 shown under "Up next" = 6 folded into "later".
-    expect(html.includes('<details class="rm-fold"')).toBe(true);
-    expect(html.includes('6 later')).toBe(true);
+    expect(html.includes('✓ 1 shipped')).toBe(true);
+    // 4 parked, 3 shown under Up next → 1 folds as "more queued"
+    expect(html.includes('1 more queued')).toBe(true);
 
-    // "In progress" leads the visible list; the folded backlog comes after the <details>.
-    const ip = html.indexOf('In progress');
-    const un = html.indexOf('Up next');
-    const fold = html.indexOf('<details');
-    expect(ip).toBeGreaterThan(-1);
-    expect(ip).toBeLessThan(un); // In progress before Up next
-    expect(un).toBeLessThan(fold); // both sections before the folded tail
-
-    // An active item is visible; the last planned item is inside the fold.
-    expect(html.indexOf('Item 0')).toBeLessThan(fold); // active → In progress
-    expect(html.indexOf('Item 15')).toBeGreaterThan(fold); // far planned → later
-
-    // Phase context is preserved as item meta.
-    expect(html.includes('Phase 1')).toBe(true);
+    // In progress leads; shipped is folded after.
+    expect(html.indexOf('In progress')).toBeLessThan(html.indexOf('<details'));
+    expect(html.indexOf('Now One')).toBeLessThan(html.indexOf('<details'));
+    expect(html.indexOf('Shipped One')).toBeGreaterThan(html.indexOf('<details'));
   });
 
-  test('a not-yet-started roadmap (nothing in progress) surfaces the plan, not an empty panel', () => {
-    const yml = roadmapYml(Array(10).fill('planned'));
-    const html = renderRoadmapPanel(yml, undefined);
-    expect(html.includes('In progress')).toBe(false); // nothing active
-    expect(html.includes('Up next')).toBe(true);
-    expect(html.includes('Item 0')).toBe(true); // plan is visible
-    // 10 planned − 5 shown (the wider next window when idle) = 5 folded.
-    expect(html.includes('5 later')).toBe(true);
+  test('only proposals (nothing committed) → show Proposed rather than an empty panel', () => {
+    const items = [
+      { id: 'p1', title: 'Prop One', proposed: true },
+      { id: 'p2', title: 'Prop Two', proposed: true },
+    ];
+    const html = renderRoadmapPanel(yml(items), undefined);
+    expect(html.includes('Proposed')).toBe(true);
+    expect(html.includes('Prop One')).toBe(true);
   });
 
-  test('shipped history folds behind a checked summary when work is in flight', () => {
-    const yml = roadmapYml([...Array(2).fill('active'), ...Array(10).fill('done')]);
-    const html = renderRoadmapPanel(yml, undefined);
-    expect(html.includes('✓ 10 shipped')).toBe(true);
-    const fold = html.indexOf('<details');
-    expect(html.indexOf('Item 0')).toBeLessThan(fold); // active stays visible
+  test('momentum counts in-progress / queued / shipped (proposals excluded)', () => {
+    const items = [
+      { id: 'a', title: 'A', planned: true },
+      { id: 'b', title: 'B', planned: false },
+      { id: 'c', title: 'C', planned: true },
+      { id: 'd', title: 'D', proposed: true },
+    ];
+    const html = renderRoadmapPanel(yml(items), undefined, status({ a: { total: 2, done: 1 }, c: { total: 2, done: 2 } }));
+    expect(html.includes('<b>1</b> in progress')).toBe(true);
+    expect(html.includes('<b>1</b> queued')).toBe(true);
+    expect(html.includes('<b>1</b> shipped')).toBe(true);
   });
 
-  test('an all-shipped roadmap shows the shipped set rather than hiding everything', () => {
-    const yml = roadmapYml(Array(9).fill('done'));
-    const html = renderRoadmapPanel(yml, undefined);
-    expect(html.includes('Shipped')).toBe(true);
-    expect(html.includes('Item 0')).toBe(true);
-    expect(html.includes('<details')).toBe(false); // nothing to fold
-  });
-
-  test('a short roadmap renders inline with no folds', () => {
-    const yml = roadmapYml(['active', 'planned', 'planned']);
-    const html = renderRoadmapPanel(yml, undefined);
+  test('legacy roadmap (stored status, no counts) still renders sensibly', () => {
+    const items = [
+      { id: 'a', title: 'Active A', status: 'active' },
+      { id: 'b', title: 'Planned B', status: 'planned' },
+      { id: 'c', title: 'Done C', status: 'done' },
+    ];
+    const html = renderRoadmapPanel(yml(items), undefined);
     expect(html.includes('In progress')).toBe(true);
-    expect(html.includes('Up next')).toBe(true);
-    expect(html.includes('<details')).toBe(false);
-    expect(html.includes('Item 2')).toBe(true);
-  });
-
-  test('parseRoadmap still reads every item regardless of length', () => {
-    expect(parseRoadmap(roadmapYml(Array(16).fill('planned'))).length).toBe(16);
+    expect(html.includes('Active A')).toBe(true);
+    expect(html.includes('✓ 1 shipped')).toBe(true);
   });
 });

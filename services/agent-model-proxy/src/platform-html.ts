@@ -415,7 +415,7 @@ export function renderProject(v: ProjectView): string {
   // and what it has shipped (changelog). Each renders to '' when the repo ships no such doc.
   const repoUrl = v.account.includes('/') ? `https://github.com/${v.account}` : undefined;
   const charter = renderCharterPanel(v.profile.charter_md, repoUrl);
-  const roadmap = renderRoadmapPanel(v.profile.roadmap_yml, repoUrl);
+  const roadmap = renderRoadmapPanel(v.profile.roadmap_yml, repoUrl, v.profile.roadmap_status_json);
   const shipped = renderChangelogPanel(v.profile.changelog_md, repoUrl);
   const now = Date.now();
   const live = renderLiveAgents(v.live_runs, v.account, now);

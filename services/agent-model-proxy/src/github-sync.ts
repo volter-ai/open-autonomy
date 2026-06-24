@@ -38,10 +38,11 @@ export async function syncProfile(env: Env, account: string): Promise<boolean> {
     const cover = (await firstReadmeImage(env, account)) ?? '';
     // The project's identity docs, read from its own repo. A repo that ships none simply has empty
     // panels — the page degrades cleanly. Size-capped so the cached profile record stays small.
-    const [charter, roadmap, changelog] = await Promise.all([
+    const [charter, roadmap, changelog, roadmapStatus] = await Promise.all([
       fetchRepoText(env, account, 'docs/CONSTITUTION.md'),
       fetchRepoText(env, account, '.open-autonomy/roadmap.yml'),
       fetchRepoText(env, account, 'CHANGELOG.md'),
+      fetchRoadmapStatus(env, account),
     ]);
     await new LimitLedgerClient(env.LIMITS).setProfile(account, {
       tagline: repo.description ?? undefined,
@@ -52,6 +53,7 @@ export async function syncProfile(env: Env, account: string): Promise<boolean> {
       charter_md: charter ?? '',
       roadmap_yml: roadmap ?? '',
       changelog_md: changelog ?? '',
+      roadmap_status_json: roadmapStatus ?? '',
     });
     return true;
   } catch {
@@ -73,6 +75,38 @@ async function fetchRepoText(env: Env, account: string, path: string, maxBytes =
     const bin = atob(j.content.replace(/\s/g, ''));
     const bytes = Uint8Array.from(bin, (c) => c.charCodeAt(0));
     return new TextDecoder().decode(bytes).slice(0, maxBytes);
+  } catch {
+    return undefined;
+  }
+}
+
+// Roll up each roadmap item's child issues into {id → {total, done}} in ONE API call. Tracking issues all
+// carry `origin:roadmap-planner` and the parent link label `roadmap:<id>` (1 item → many issues). We count
+// every `roadmap:*` label seen; the page looks up by item id, so unrelated labels (e.g. a phase label) just
+// never match. This is the execution-status source the two-layer roadmap derives from — no status is stored
+// in roadmap.yml. Best-effort: returns undefined on any failure so the page falls back to parked/derived-empty.
+async function fetchRoadmapStatus(env: Env, account: string): Promise<string | undefined> {
+  const base = env.GITHUB_API_BASE ?? 'https://api.github.com';
+  try {
+    const res = await fetch(`${base}/repos/${account}/issues?labels=origin:roadmap-planner&state=all&per_page=100`, {
+      headers: { accept: 'application/vnd.github+json', 'user-agent': 'open-autonomy-funding' },
+    });
+    if (!res.ok) return undefined;
+    const issues = await res.json() as Array<{ state?: string; pull_request?: unknown; labels?: Array<{ name?: string }> }>;
+    const items: Record<string, { total: number; done: number }> = {};
+    for (const issue of issues) {
+      if (issue.pull_request) continue; // the issues endpoint also returns PRs — skip them
+      const closed = issue.state === 'closed';
+      for (const l of issue.labels ?? []) {
+        const name = l.name ?? '';
+        if (!name.startsWith('roadmap:')) continue;
+        const id = name.slice('roadmap:'.length);
+        const row = items[id] ?? (items[id] = { total: 0, done: 0 });
+        row.total += 1;
+        if (closed) row.done += 1;
+      }
+    }
+    return JSON.stringify({ items });
   } catch {
     return undefined;
   }

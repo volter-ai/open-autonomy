@@ -102,6 +102,10 @@ export interface AccountProfile {
   charter_md?: string;
   roadmap_yml?: string;
   changelog_md?: string;
+  // Generated rollup of each roadmap item's child issues (id → {total, done}), computed at sync time from
+  // the repo's `roadmap:<id>`-labelled issues. Lets the page derive execution status (in progress / done)
+  // without storing it in roadmap.yml — the two-layer model. JSON string to keep the ledger format-agnostic.
+  roadmap_status_json?: string;
 }
 
 export interface Tier {

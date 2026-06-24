@@ -7,9 +7,59 @@
 export interface RoadmapItem {
   id: string;
   title: string;
-  status: string;
+  // v2 (two-layer model): the roadmap is a parking lot of intents at any granularity. `proposed` marks an
+  // item still awaiting the strategy gate; `planned` marks one the planner has fully decomposed into issues.
+  // Execution status (in progress / done) is NOT stored here — it is DERIVED from the item's child issues
+  // (see roadmapItemState). `status` is the legacy single-layer field, kept only for back-compat rendering.
+  proposed?: boolean;
+  planned?: boolean;
+  status?: string;
   phase?: string;
   priority?: string;
+}
+
+// Child-issue rollup for one roadmap item (issues labelled `roadmap:<id>`), used to derive execution status.
+export interface RoadmapCounts {
+  total: number;
+  done: number;
+}
+
+export type RoadmapState = 'proposed' | 'parked' | 'in_progress' | 'done';
+
+// The two-layer truth: a roadmap item's execution state is a function of its planning flag and its child
+// issues — never hand-stored. parked = ratified but not yet decomposed; in_progress = decomposed with open
+// issues; done = decomposed and every child issue closed. Adding an issue to a "done" item flips it back to
+// in_progress automatically (the state is derived), so nothing is ever frozen.
+export function roadmapItemState(item: RoadmapItem, counts?: RoadmapCounts): RoadmapState {
+  // Back-compat: a legacy item (old stored status, no v2 flags) keeps rendering from that status.
+  if (item.proposed === undefined && item.planned === undefined && item.status) {
+    if (item.status === 'proposed') return 'proposed';
+    if (item.status === 'done') return 'done';
+    if (item.status === 'active') return 'in_progress';
+    return 'parked'; // legacy 'planned' → parked
+  }
+  if (item.proposed) return 'proposed';
+  if (!item.planned) return 'parked';
+  const total = counts?.total ?? 0;
+  const done = counts?.done ?? 0;
+  if (total > 0 && done >= total) return 'done';
+  return 'in_progress';
+}
+
+// Parse the synced `roadmap-status.json` (id → {total, done}) into a lookup. Tolerant: returns an empty map
+// for absent/garbage input so the panel still renders (every item simply falls back to parked/derived-empty).
+export function parseRoadmapStatus(json: string | undefined): Map<string, RoadmapCounts> {
+  const map = new Map<string, RoadmapCounts>();
+  if (!json) return map;
+  try {
+    const parsed = JSON.parse(json) as { items?: Record<string, { total?: number; done?: number }> };
+    for (const [id, c] of Object.entries(parsed.items ?? {})) {
+      map.set(id, { total: Math.max(0, Number(c.total) || 0), done: Math.max(0, Number(c.done) || 0) });
+    }
+  } catch {
+    /* malformed cache — degrade to empty */
+  }
+  return map;
 }
 
 export interface ChangelogEntry {
@@ -79,13 +129,15 @@ export function parseRoadmap(yml: string): RoadmapItem[] {
       continue;
     }
     if (!cur) continue;
-    const fm = line.match(/^\s+(phase|priority|status|title):\s*(.+?)\s*$/);
+    const fm = line.match(/^\s+(phase|priority|status|title|proposed|planned):\s*(.+?)\s*$/);
     if (fm) {
       const [, key, val] = fm;
       if (key === 'phase') cur.phase = unquote(val);
       else if (key === 'priority') cur.priority = unquote(val);
       else if (key === 'status') cur.status = unquote(val);
       else if (key === 'title') cur.title = unquote(val);
+      else if (key === 'proposed') cur.proposed = unquote(val) === 'true';
+      else if (key === 'planned') cur.planned = unquote(val) === 'true';
     }
   }
   if (cur) items.push(cur);
@@ -126,66 +178,69 @@ export function renderCharterPanel(constitutionMd: string | undefined, repoUrl: 
   </div>`;
 }
 
-export function renderRoadmapPanel(roadmapYml: string | undefined, repoUrl: string | undefined): string {
+// State → CSS class (reuse the existing node colours): in_progress reads as "active", parked as "planned".
+const STATE_CLASS: Record<RoadmapState, string> = {
+  in_progress: 'active',
+  parked: 'planned',
+  proposed: 'proposed',
+  done: 'done',
+};
+
+export function renderRoadmapPanel(roadmapYml: string | undefined, repoUrl: string | undefined, statusJson?: string): string {
   const items = parseRoadmap(roadmapYml ?? '');
   if (!items.length) return '';
+  const counts = parseRoadmapStatus(statusJson);
 
-  let activeCount = 0;
-  let plannedCount = 0;
-  let proposedCount = 0;
-  let doneCount = 0;
-  for (const it of items) {
-    if (it.status === 'active') activeCount++;
-    else if (it.status === 'planned') plannedCount++;
-    else if (it.status === 'proposed') proposedCount++;
-    else if (it.status === 'done') doneCount++;
-  }
-  const total = items.length;
-  const unlocked = activeCount + doneCount;
-  const pct = total > 0 ? Math.round((unlocked / total) * 100) : 0;
+  // Derive each item's execution state from its planning flag + child issues (two-layer model). The item
+  // carries its own rollup so a row can show "3/5 issues" without re-deriving.
+  type Row = { item: RoadmapItem; state: RoadmapState; c: RoadmapCounts };
+  const rows: Row[] = items.map((item) => ({ item, state: roadmapItemState(item, counts.get(item.id)), c: counts.get(item.id) ?? { total: 0, done: 0 } }));
 
+  const phaseNum = (i: RoadmapItem): number => {
+    const n = parseInt(i.phase ?? '', 10);
+    return isNaN(n) ? Number.MAX_SAFE_INTEGER : n;
+  };
+  const byPhase = (a: Row, b: Row): number => phaseNum(a.item) - phaseNum(b.item);
+  const of = (s: RoadmapState): Row[] => rows.filter((r) => r.state === s).sort(byPhase);
+
+  const inProgress = of('in_progress');
+  const parked = of('parked');
+  const proposed = of('proposed');
+  const done = of('done');
+
+  // Momentum: progress over the committed work (proposed candidates aren't committed yet, so they're excluded).
+  const committed = inProgress.length + parked.length + done.length;
+  const pct = committed > 0 ? Math.round((done.length / committed) * 100) : 0;
   const momentumHtml = `<div class="rm-momentum">
     <div class="rm-stats">
-      <span class="act"><b>${activeCount}</b> active</span>
-      <span><b>${plannedCount}</b> planned</span>
-      <span><b>${doneCount}</b> shipped</span>
+      <span class="act"><b>${inProgress.length}</b> in progress</span>
+      <span><b>${parked.length}</b> queued</span>
+      <span><b>${done.length}</b> shipped</span>
     </div>
     <div class="rm-track"><div class="rm-fill" style="width:${pct}%"></div></div>
   </div>`;
 
   const more = repoUrl ? `<a class="docmore" href="${esc(repoUrl)}/blob/HEAD/.open-autonomy/roadmap.yml">Full roadmap →</a>` : '';
 
-  // Now / Next / Later — the standard product-roadmap idiom. Instead of listing phase 1 downward (which
-  // buries the current work under everything that came "before" it on a roadmap that may never mark items
-  // done), the panel centers on the current steps: what's IN PROGRESS now, what's UP NEXT, then folds the
-  // LATER backlog and SHIPPED history into native <details> (no client JS). Each item keeps its phase as
-  // meta, so nothing is lost. Short roadmaps simply have empty/absent folds — same code path, no special-case.
-  const phaseNum = (i: RoadmapItem): number => {
-    const n = parseInt(i.phase ?? '', 10);
-    return isNaN(n) ? Number.MAX_SAFE_INTEGER : n;
-  };
-  const byPhase = (a: RoadmapItem, b: RoadmapItem): number => phaseNum(a) - phaseNum(b);
-
-  const inProgress = items.filter((i) => i.status !== 'planned' && i.status !== 'proposed' && i.status !== 'done').sort(byPhase);
-  const upcoming = items.filter((i) => i.status === 'planned' || i.status === 'proposed').sort(byPhase);
-  const shipped = items.filter((i) => i.status === 'done').sort(byPhase);
-
-  // Show the immediate next steps inline; if nothing is in progress (a not-yet-started project), surface a
-  // few more of the plan so the panel still says something.
+  // Now / Next / Later — center on the current steps. IN PROGRESS leads (with a per-item issue tally), then a
+  // few UP NEXT from the parked backlog; the rest of the backlog, the proposed candidates, and the shipped
+  // history fold into native <details> (no client JS). If nothing is in progress, surface more of the queue.
   const nextCount = inProgress.length ? 3 : 5;
-  const next = upcoming.slice(0, nextCount);
-  const later = upcoming.slice(next.length);
+  const next = parked.slice(0, nextCount);
+  const laterParked = parked.slice(next.length);
 
   const sections: string[] = [];
   if (inProgress.length) sections.push(roadmapSection('In progress', inProgress));
   if (next.length) sections.push(roadmapSection('Up next', next));
+  // Nothing committed yet (only proposals) → show the proposals rather than an empty panel.
+  if (!sections.length && proposed.length) sections.push(roadmapSection('Proposed', proposed));
 
   const folds: string[] = [];
-  if (later.length) folds.push(roadmapFold(`${later.length} later`, later));
-  if (shipped.length) {
-    // Everything's shipped and nothing is in flight/planned → show it rather than hide the whole roadmap.
-    if (sections.length) folds.push(roadmapFold(`✓ ${shipped.length} shipped`, shipped));
-    else sections.push(roadmapSection('Shipped', shipped));
+  if (laterParked.length) folds.push(roadmapFold(`${laterParked.length} more queued`, laterParked));
+  if (sections.length && proposed.length) folds.push(roadmapFold(`${proposed.length} proposed`, proposed));
+  if (done.length) {
+    if (sections.length) folds.push(roadmapFold(`✓ ${done.length} shipped`, done));
+    else sections.push(roadmapSection('Shipped', done));
   }
 
   return `<div class="panel roadmap-panel">
@@ -197,16 +252,20 @@ export function renderRoadmapPanel(roadmapYml: string | undefined, repoUrl: stri
   </div>`;
 }
 
-// One labelled section ("In progress" / "Up next" / "Shipped") of the Now/Next/Later roadmap: a header
-// row followed by its items, each carrying its phase + priority as meta so phase context isn't lost.
-function roadmapSection(label: string, items: RoadmapItem[]): string {
-  return `<li class="rm-phase-hdr"><div class="rm-phase-label">${esc(label)}</div></li>` + items.map(roadmapItemRow).join('');
+// One labelled section ("In progress" / "Up next" / "Proposed" / "Shipped") — a header row then its items.
+function roadmapSection(label: string, rows: Array<{ item: RoadmapItem; state: RoadmapState; c: RoadmapCounts }>): string {
+  return `<li class="rm-phase-hdr"><div class="rm-phase-label">${esc(label)}</div></li>` + rows.map(roadmapItemRow).join('');
 }
 
-function roadmapItemRow(it: RoadmapItem): string {
+function roadmapItemRow(row: { item: RoadmapItem; state: RoadmapState; c: RoadmapCounts }): string {
+  const { item: it, state, c } = row;
   const phase = it.phase ? (isNaN(parseInt(it.phase, 10)) ? esc(it.phase) : `Phase ${esc(it.phase)}`) : '';
-  const meta = [phase, it.priority ? esc(it.priority) : ''].filter(Boolean).join(' · ');
-  return `<li class="rm-item ${esc(it.status)}">
+  // Surface the child-issue tally where it's meaningful: progress while in flight, the count once shipped.
+  const tally = state === 'in_progress' && c.total > 0 ? `${c.done}/${c.total} issues`
+    : state === 'done' && c.total > 0 ? `${c.total} issue${c.total === 1 ? '' : 's'}`
+    : '';
+  const meta = [phase, it.priority ? esc(it.priority) : '', tally].filter(Boolean).join(' · ');
+  return `<li class="rm-item ${STATE_CLASS[state]}">
     <div class="rm-node"></div>
     <div class="rm-content">
       <div class="rtitle">${esc(it.title)}</div>
@@ -215,9 +274,9 @@ function roadmapItemRow(it: RoadmapItem): string {
   </li>`;
 }
 
-// A collapsed-by-default group (the Later backlog / Shipped history) — native <details>, no client JS.
-function roadmapFold(label: string, items: RoadmapItem[]): string {
-  return `<details class="rm-fold"><summary>${label}</summary><ul class="roadmap">${items.map(roadmapItemRow).join('')}</ul></details>`;
+// A collapsed-by-default group (overflow backlog / proposals / shipped history) — native <details>, no JS.
+function roadmapFold(label: string, rows: Array<{ item: RoadmapItem; state: RoadmapState; c: RoadmapCounts }>): string {
+  return `<details class="rm-fold"><summary>${label}</summary><ul class="roadmap">${rows.map(roadmapItemRow).join('')}</ul></details>`;
 }
 
 export function renderChangelogPanel(changelogMd: string | undefined, repoUrl: string | undefined): string {

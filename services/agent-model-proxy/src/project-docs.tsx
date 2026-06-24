@@ -247,58 +247,53 @@ function IssueList({ row, repoUrl }: { row: Row; repoUrl?: string }) {
   );
 }
 
-// One roadmap item — an intent sitting ABOVE its issues. When it has been decomposed (has child issues), it
-// renders as a native <details> the reader can expand into those issues; the summary always carries the
-// derived progress (a thin bar + tally). Items not yet decomposed (parked/proposed) are flat, unexpandable
-// rows with a status word — there's nothing beneath them to open yet.
-function RoadmapEpic({ row, repoUrl }: { row: Row; repoUrl?: string }) {
+// One station on the journey timeline — a roadmap item sitting on the phase spine. Its node colour is the
+// derived state (✓ shipped / ● in flight / ○ queued / ◌ proposed); the frontier in-flight item wears a "now"
+// marker. A decomposed item expands (native <details>) into its child issues; the spine connects them in
+// phase order so the panel reads as a path, not a list.
+function RoadmapStation({ row, repoUrl, now }: { row: Row; repoUrl?: string; now?: boolean }) {
   const { item: it, state, c } = row;
   const phase = it.phase ? (isNaN(parseInt(it.phase, 10)) ? it.phase : `P${it.phase}`) : '';
   const frac = c.total > 0 ? Math.min(1, c.done / c.total) : 0;
   const expandable = c.total > 0;
   const head = (
-    <>
-      <span class="rm-caret" aria-hidden="true" />
-      <span class="rm-etitle">{it.title}</span>
-      {phase ? <span class="rm-ephase">{phase}</span> : null}
-      <span class="rm-estatus">{stateLabel(state, c)}</span>
-    </>
+    <div class="rm-shead">
+      <span class="rm-stitle">{it.title}</span>
+      {now ? <span class="rm-now">now</span> : null}
+      {phase ? <span class="rm-sphase">{phase}</span> : null}
+      <span class="rm-sstatus">{stateLabel(state, c)}</span>
+    </div>
   );
-  const bar = expandable ? <div class="rm-ebar"><div class="rm-efill" style={`width:${Math.round(frac * 100)}%`} /></div> : null;
-  if (!expandable) {
-    // Not yet decomposed — nothing to open beneath it; a flat row with its status word.
-    return <li class={`rm-epic flat ${STATE_CLASS[state]}`}><div class="rm-ehead">{head}{bar}</div></li>;
-  }
-  // The bar lives inside <summary> so it stays visible whether the item is collapsed or expanded.
+  const bar = expandable && state === 'in_progress' ? <div class="rm-ebar"><div class="rm-efill" style={`width:${Math.round(frac * 100)}%`} /></div> : null;
   return (
-    <li class={`rm-epic ${STATE_CLASS[state]}`}>
-      <details open={state === 'in_progress'}>
-        <summary><div class="rm-ehead">{head}</div>{bar}</summary>
-        <IssueList row={row} repoUrl={repoUrl} />
+    <li class={`rm-stn ${STATE_CLASS[state]}${now ? ' is-now' : ''}`}>
+      <span class="rm-node" aria-hidden="true" />
+      {expandable
+        ? <details><summary>{head}{bar}</summary><IssueList row={row} repoUrl={repoUrl} /></details>
+        : <div class="rm-stnbody">{head}</div>}
+    </li>
+  );
+}
+
+// The proposed candidates — not yet on the committed path — as one collapsed station at the foot of the spine.
+function RoadmapFuture({ rows }: { rows: Row[] }) {
+  const phaseNums = rows.map((r) => parseInt(r.item.phase ?? '', 10)).filter((n) => !isNaN(n));
+  const range = phaseNums.length ? `P${Math.min(...phaseNums)}–${Math.max(...phaseNums)}` : '';
+  return (
+    <li class="rm-stn proposed">
+      <span class="rm-node" aria-hidden="true" />
+      <details>
+        <summary><div class="rm-shead"><span class="rm-stitle">{`${rows.length} proposed`}</span>{range ? <span class="rm-sphase">{range}</span> : null}<span class="rm-sstatus">candidates</span></div></summary>
+        <ul class="rm-future">{rows.map((r) => <li>{r.item.title}{r.item.phase ? <span class="rm-sphase">{`P${r.item.phase}`}</span> : null}</li>)}</ul>
       </details>
     </li>
   );
 }
 
-// A labelled group of epics ("In progress" / "Up next" / "Proposed") — a small header then the item tree.
-function RoadmapGroup({ label, rows, repoUrl }: { label: string; rows: Row[]; repoUrl?: string }) {
-  return (
-    <div class="rm-group">
-      <div class="rm-group-hdr">{label}<span class="n">{rows.length}</span></div>
-      <ul class="rm-epics">{rows.map((r) => <RoadmapEpic row={r} repoUrl={repoUrl} />)}</ul>
-    </div>
-  );
-}
-
-// A collapsed-by-default group (proposed candidates / shipped history) — native <details>, no JS.
-function RoadmapFold({ label, rows, repoUrl }: { label: string; rows: Row[]; repoUrl?: string }) {
-  return <details class="rm-fold"><summary>{label}</summary><ul class="rm-epics">{rows.map((r) => <RoadmapEpic row={r} repoUrl={repoUrl} />)}</ul></details>;
-}
-
-// A Roadmap-above-Issues tree. Each item is an intent; the ones the planner has decomposed expand into their
-// actual child issues (layer 2). In-progress items lead (open by default); the ratified queue and proposed
-// candidates follow; shipped history folds away. Bounded by collapsing everything but the current work — the
-// panel reads as "what we're building and how far along," with the issues one click beneath each item.
+// A Roadmap-above-Issues JOURNEY TIMELINE. Items are stations on a phase-ordered spine — shipped behind us,
+// the in-flight frontier marked "now", the ratified queue ahead, proposed candidates folded at the foot.
+// Each decomposed station expands into its actual child issues (layer 2). Reads as a path; bounded because
+// every station is collapsed until clicked.
 export function RoadmapPanel({ yml, repoUrl, statusJson }: { yml?: string; repoUrl?: string; statusJson?: string }) {
   const items = parseRoadmap(yml ?? '');
   if (!items.length) return null;
@@ -311,14 +306,22 @@ export function RoadmapPanel({ yml, repoUrl, statusJson }: { yml?: string; repoU
   const parked = of('parked');
   const proposed = of('proposed');
   const done = of('done');
-  const committed = inProgress.length + parked.length + done.length;
-  const pct = committed > 0 ? Math.round((done.length / committed) * 100) : 0;
+  // The committed path: shipped → in flight → queued, one spine in phase order. Proposed candidates fold below.
+  const spine = rows.filter((r) => r.state !== 'proposed').sort(byPhase);
+  const frontier = inProgress[0] ?? parked[0]; // the "now" station — earliest live (else next queued)
+  const phaseNumbers = items.map(phaseNum).filter((n) => n < Number.MAX_SAFE_INTEGER);
+  const maxPhase = phaseNumbers.length ? Math.max(...phaseNumbers) : 0;
+  const curPhase = frontier && phaseNum(frontier.item) < Number.MAX_SAFE_INTEGER ? phaseNum(frontier.item) : (done.length ? maxPhase : 0);
+  const committedTotal = inProgress.length + parked.length + done.length;
+  const pct = committedTotal > 0 ? Math.round((done.length / committedTotal) * 100) : 0;
   const roadmapUrl = repoUrl ? `${repoUrl}/blob/HEAD/.open-autonomy/roadmap.yml` : undefined;
-  const hasCommitted = inProgress.length > 0 || parked.length > 0;
 
   return (
     <div class="panel roadmap-panel">
-      <h3>Roadmap</h3>
+      <div class="rm-phasehdr">
+        <h3>Roadmap</h3>
+        {maxPhase > 0 ? <span class="rm-phasenum">{`Phase ${curPhase || 1} / ${maxPhase}`}</span> : null}
+      </div>
       <div class="rm-momentum">
         <div class="rm-stats">
           <span class="act"><b>{inProgress.length}</b> in progress</span>
@@ -327,11 +330,10 @@ export function RoadmapPanel({ yml, repoUrl, statusJson }: { yml?: string; repoU
         </div>
         <div class="rm-track"><div class="rm-fill" style={`width:${pct}%`} /></div>
       </div>
-      {inProgress.length ? <RoadmapGroup label="In progress" rows={inProgress} repoUrl={repoUrl} /> : null}
-      {parked.length ? <RoadmapGroup label="Up next" rows={parked} repoUrl={repoUrl} /> : null}
-      {!hasCommitted && proposed.length ? <RoadmapGroup label="Proposed" rows={proposed} repoUrl={repoUrl} /> : null}
-      {hasCommitted && proposed.length ? <RoadmapFold label={`${proposed.length} proposed`} rows={proposed} repoUrl={repoUrl} /> : null}
-      {done.length ? <RoadmapFold label={`✓ ${done.length} shipped`} rows={done} repoUrl={repoUrl} /> : null}
+      <ol class="rm-spine">
+        {spine.map((r) => <RoadmapStation row={r} repoUrl={repoUrl} now={frontier && r.item.id === frontier.item.id} />)}
+        {proposed.length ? <RoadmapFuture rows={proposed} /> : null}
+      </ol>
       {roadmapUrl ? <a class="docmore" href={roadmapUrl}>Full roadmap →</a> : null}
     </div>
   );

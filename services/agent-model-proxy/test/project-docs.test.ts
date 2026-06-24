@@ -63,8 +63,8 @@ describe('parseRoadmap / parseRoadmapStatus', () => {
   });
 });
 
-describe('renderRoadmapPanel: roadmap-above-issues tree', () => {
-  test('a decomposed item expands into its actual child issues; in-progress leads, shipped folds', () => {
+describe('renderRoadmapPanel: journey timeline (phase spine of stations)', () => {
+  test('a decomposed station expands into its child issues; spine carries phase + now marker', () => {
     const items = [
       { id: 'now1', title: 'Now One', phase: '1', planned: true },
       { id: 'park1', title: 'Park One', phase: '2', planned: false },
@@ -76,44 +76,46 @@ describe('renderRoadmapPanel: roadmap-above-issues tree', () => {
     });
     const html = renderRoadmapPanel(yml(items), 'https://github.com/acme/widget', counts);
 
-    // The item carries its derived rollup tally...
+    // Rendered as a spine of stations, with a phase counter and a "now" marker on the frontier.
+    expect(html.includes('rm-spine')).toBe(true);
+    expect(html.includes('Phase 1 / 6')).toBe(true);
+    expect(html.includes('class="rm-now"')).toBe(true);
+    // The in-flight station carries its derived tally and expands into its real child issues.
     expect(html.includes('2/9')).toBe(true);
-    // ...and expands into its real child issues, each linking to itself on GitHub.
     expect(html.includes('Gate merges on verdict')).toBe(true);
     expect(html.includes('/issues/128')).toBe(true);
     expect(html.includes('#140')).toBe(true);
-    // 9 total but only 2 issues in the synced slice → "+7 more on GitHub" link to the label-filtered list.
     expect(html.includes('+7 more on GitHub')).toBe(true);
     expect(html.includes('/issues?q=label%3Aroadmap%3Anow1')).toBe(true);
-    // Grouped: In progress leads, shipped is the archival fold below.
-    expect(html.includes('In progress')).toBe(true);
-    expect(html.includes('✓ 1 shipped')).toBe(true);
-    expect(html.indexOf('Now One')).toBeLessThan(html.indexOf('✓ 1 shipped'));
+    // Shipped station sits on the spine (done node), not in a separate fold.
+    expect(html.includes('rm-stn done')).toBe(true);
   });
 
-  test('an in-flight item with no synced issue slice still links out to GitHub', () => {
+  test('an in-flight station with no synced issue slice still links out to GitHub', () => {
     const items = [{ id: 'a', title: 'Epic A', planned: true }];
     const html = renderRoadmapPanel(yml(items), 'https://github.com/acme/widget', status({ a: { total: 4, done: 1 } }));
     expect(html.includes('1/4')).toBe(true);
     expect(html.includes('View 4 issues on GitHub')).toBe(true);
   });
 
-  test('a not-yet-decomposed item is a flat, unexpandable row (no <details>)', () => {
+  test('a not-yet-decomposed station is unexpandable (no <details> for it)', () => {
     const items = [{ id: 'q', title: 'Queued Q', planned: false }];
     const html = renderRoadmapPanel(yml(items), 'https://github.com/acme/widget');
     expect(html.includes('Queued Q')).toBe(true);
-    expect(html.includes('rm-epic flat')).toBe(true);
+    expect(html.includes('rm-stnbody')).toBe(true); // flat body, not a <details>
     expect(html.includes('queued')).toBe(true);
     expect(html.includes('<details')).toBe(false);
   });
 
-  test('only proposals (nothing committed) → shown as a Proposed group, not folded away', () => {
+  test('proposed candidates fold into a single future station at the foot of the spine', () => {
     const items = [
-      { id: 'p1', title: 'Prop One', proposed: true },
-      { id: 'p2', title: 'Prop Two', proposed: true },
+      { id: 'a', title: 'Active A', phase: '1', planned: true },
+      { id: 'p1', title: 'Prop One', phase: '4', proposed: true },
+      { id: 'p2', title: 'Prop Two', phase: '5', proposed: true },
     ];
-    const html = renderRoadmapPanel(yml(items), undefined);
-    expect(html.includes('Proposed')).toBe(true);
+    const html = renderRoadmapPanel(yml(items), undefined, status({ a: { total: 1, done: 0 } }));
+    expect(html.includes('2 proposed')).toBe(true);
+    expect(html.includes('P4–5')).toBe(true);
     expect(html.includes('Prop One')).toBe(true);
   });
 
@@ -137,8 +139,9 @@ describe('renderRoadmapPanel: roadmap-above-issues tree', () => {
       { id: 'c', title: 'Done C', status: 'done' },
     ];
     const html = renderRoadmapPanel(yml(items), undefined);
-    expect(html.includes('In progress')).toBe(true);
+    expect(html.includes('rm-spine')).toBe(true);
     expect(html.includes('Active A')).toBe(true);
-    expect(html.includes('✓ 1 shipped')).toBe(true);
+    expect(html.includes('rm-stn active')).toBe(true); // status:active → in-flight node
+    expect(html.includes('rm-stn done')).toBe(true); // status:done → shipped node on the spine
   });
 });

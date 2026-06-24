@@ -14,12 +14,16 @@
     "packages/core": {
       "name": "@open-autonomy/core",
       "version": "0.0.0",
+      "dependencies": {
+        "yaml": "^2.9.0",
+      },
     },
     "packages/substrate-github": {
       "name": "@open-autonomy/substrate-github",
       "version": "0.0.0",
       "dependencies": {
         "@open-autonomy/core": "workspace:*",
+        "yaml": "^2.9.0",
       },
     },
     "packages/substrate-local": {
@@ -28,6 +32,7 @@
       "dependencies": {
         "@open-autonomy/core": "workspace:*",
         "@open-autonomy/substrate-github": "workspace:*",
+        "yaml": "^2.9.0",
       },
     },
   },

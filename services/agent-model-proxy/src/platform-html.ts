@@ -1,5 +1,6 @@
 import type { DirectoryEntry, Flow, LiveRun, Patron, ProjectView } from './limit-ledger.js';
-import { renderCharterPanel, renderRoadmapPanel, renderChangelogPanel, GITHUB_ICON } from './project-docs.js';
+import { renderCharterPanel, renderRoadmapPanel, renderChangelogPanel } from './project-docs.js';
+import { icon } from './icons.js';
 
 // Server-rendered HTML for the funding platform — a Patreon-style storefront over the ledger.
 // Two pages: the explore grid (GET /) and the creator page (GET /p/:account). No client JS beyond
@@ -418,7 +419,7 @@ function runActivityRow(r: LiveRun, now: number): string {
   const watchLabel = r.active ? 'Watch live ›' : 'View session ›';
   const watch = `<a class="watch" href="/p/${encodeURIComponent(r.repo)}/runs/${encodeURIComponent(r.run_id)}" data-run="${escapeHtml(r.run_id)}" data-repo="${escapeHtml(r.repo)}">${watchLabel}</a>`;
   const gh = r.github_run_id
-    ? `<a class="act-gh" title="Open the run on GitHub Actions" href="https://github.com/${escapeHtml(r.repo)}/actions/runs/${escapeHtml(r.github_run_id)}">${GITHUB_ICON}</a>`
+    ? `<a class="act-gh" title="Open the run on GitHub Actions" href="https://github.com/${escapeHtml(r.repo)}/actions/runs/${escapeHtml(r.github_run_id)}">${icon('github')}</a>`
     : '';
   return `<li class="act run">
     <span class="act-dot ${r.active ? 'running' : 'done'}"></span>
@@ -438,7 +439,7 @@ function fundActivityRow(f: Flow, now: number): string {
     : f.sponsor_login ? `Sponsored by @${escapeHtml(f.sponsor_login)}` : 'Funded';
   const when = relTime(Date.parse(f.ts) || undefined, now);
   return `<li class="act fund">
-    <span class="act-dot fund">$</span>
+    <span class="act-dot fund">${icon('heart')}</span>
     <div class="act-main"><div class="act-title">${label}</div><div class="act-sub">${when ? `${when} ago` : ''}</div></div>
     <div class="act-right"><span class="act-amt pos">+${usd(f.amount_usd_cents)}</span></div>
   </li>`;
@@ -533,8 +534,8 @@ const DRAWER_JS = `
     var iss=d.issue>0?('<a target="_blank" href="'+gh(d.repo)+'/issues/'+d.issue+'">#'+d.issue+'</a>'):'autonomous';
     metaEl.innerHTML=iss+' \\u00b7 @'+esc(d.actor)+' \\u00b7 '+(d.request_count||0)+' calls \\u00b7 '+usd(d.consumed_usd_cents)+' spent'+(d.revoked?' \\u00b7 ended':'');
     var links=[];
-    if(d.github_run_id)links.push('<a target="_blank" href="'+gh(d.repo)+'/actions/runs/'+esc(d.github_run_id)+'">Open in GitHub Actions \\u2197</a>');
-    links.push('<a target="_blank" href="/p/'+encodeURIComponent(d.repo)+'/runs/'+encodeURIComponent(d.run_id)+'">Full page \\u2197</a>');
+    if(d.github_run_id)links.push('<a target="_blank" href="'+gh(d.repo)+'/actions/runs/'+esc(d.github_run_id)+'">'+OI_GH+' Open in GitHub Actions</a>');
+    links.push('<a target="_blank" href="/p/'+encodeURIComponent(d.repo)+'/runs/'+encodeURIComponent(d.run_id)+'">'+OI_EXT+' Full page</a>');
     linksEl.innerHTML=links.join(' \\u00b7 ');
     var turns=(d.session&&d.session.turns)||[];
     bodyEl.innerHTML=turns.length?turns.map(function(t){return '<div class="rd-turn '+esc(t.role)+'"><div class="rd-who">'+esc(t.role)+'</div><pre>'+esc(t.text)+'</pre></div>';}).join(''):'<div class="rd-empty">No session captured yet \\u2014 the agent has not called the model.</div>';
@@ -553,7 +554,7 @@ function runDrawer(): string {
   <div class="rd-head"><a class="rd-close" href="#" data-rd-close aria-label="Close">&times;</a><div class="rd-title">—</div><div class="rd-meta"></div><div class="rd-links"></div></div>
   <div class="rd-body"></div>
 </aside>
-<script>${DRAWER_JS}</script>`;
+<script>var OI_GH=${JSON.stringify(icon('github'))},OI_EXT=${JSON.stringify(icon('linkExternal'))};${DRAWER_JS}</script>`;
 }
 
 export function renderProject(v: ProjectView, page = 0): string {

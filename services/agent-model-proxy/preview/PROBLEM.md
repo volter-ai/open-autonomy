@@ -71,9 +71,9 @@ don't have to do all of these):
   never closes makes "done" unreachable. Reconcile these: either the item's single issue IS the work and must
   be closeable (so the item can reach done), or items decompose into a few real completable issues. Write up
   the precise rule.
-- **Label hygiene / reconcile** in `src/github-sync.ts` (rollup) and `scripts/reconcile-roadmap-issues.ts`:
-  the rollup should ignore `roadmap:phase-*` (phase labels, not item ids) so phase labels can never form
-  phantom buckets; reconcile should guarantee every planner issue carries its `roadmap:<item-id>` label.
+- **Label hygiene** in `src/github-sync.ts` (rollup): ignore `roadmap:phase-*` (phase labels, not item ids)
+  so phase labels can never form phantom buckets (done — see `rollupRoadmapStatus`). The planner (not a
+  script — the deterministic reconcile was removed) must guarantee every issue carries its `roadmap:<id>` label.
 
 ## Constraints / guardrails
 - The render functions in `project-docs.tsx` are **pure** (no network/DOM) and unit-tested. Keep them pure.

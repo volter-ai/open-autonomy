@@ -11,9 +11,21 @@
 //
 // This is the feedback loop for iterating on the panel's look: edit the CSS/structure, re-run, look at
 // the PNGs, repeat.
-// playwright isn't a dep of this worker package (it ships nothing to the edge); resolve the machine-global
-// install for the preview-only screenshot step.
-const { chromium } = await import('/opt/homebrew/lib/node_modules/playwright/index.js');
+// playwright isn't a dep of this worker package (it ships nothing to the edge); resolve it for the
+// preview-only screenshot step from wherever it's installed — in-tree, then common global locations.
+async function loadPlaywright(): Promise<{ chromium: { launch(): Promise<any> } }> {
+  const candidates = [
+    'playwright',
+    '/opt/homebrew/lib/node_modules/playwright/index.js',
+    `${process.env.HOME}/node_modules/playwright/index.js`,
+    '/usr/local/lib/node_modules/playwright/index.js',
+  ];
+  for (const c of candidates) {
+    try { return await import(c); } catch { /* try next */ }
+  }
+  throw new Error('playwright not found — install it (e.g. `bun add -g playwright`) to run this preview harness');
+}
+const { chromium } = await loadPlaywright();
 import { renderRoadmapPanel } from '../src/project-docs.js';
 import { STYLES } from '../src/platform-html.js';
 

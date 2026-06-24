@@ -95,6 +95,10 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: bun scripts/reconcile-merged-issues.ts || true
+      - name: Re-arm auto-merge (deterministic — recover green PRs the proposer failed to arm)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: bun scripts/rearm-auto-merge.ts || true
       - name: Reconcile roadmap (deterministic — create tracking issues for planned/active items)
         env:
           GH_TOKEN: ${{ github.token }}

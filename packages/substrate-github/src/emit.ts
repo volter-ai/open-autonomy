@@ -383,6 +383,14 @@ function wrapperYml(name: string, agent: IRAgent): string {
           `        env:`,
           `          GH_TOKEN: \${{ github.token }}`,
           `        run: bun scripts/reconcile-merged-issues.ts || true`,
+          // Re-arm native auto-merge on any agent PR missing it. The proposer arms it once at create time, but
+          // that call can fail transiently and nothing else re-arms (no agent holds contents:write; the PM may
+          // not merge) — so without this backstop a green PR can sit unmerged forever. Mechanical wiring, not
+          // judgment: it cannot bypass review (branch protection still requires ci + agent-review server-side).
+          `      - name: Re-arm auto-merge (deterministic — recover green PRs the proposer failed to arm)`,
+          `        env:`,
+          `          GH_TOKEN: \${{ github.token }}`,
+          `        run: bun scripts/rearm-auto-merge.ts || true`,
         ]
       : []),
     ...(reconcilesRoadmap
@@ -464,6 +472,10 @@ export function compileGithub(ir: AutonomyIR): CompileOutput {
       copies.push({ from: `skills/${agent.behavior}/SKILL.md`, to: `.claude/skills/${agent.behavior}/SKILL.md` });
     }
   }
-  for (const r of ir.resources) copies.push({ from: r, to: r });
+  // npm UNCONDITIONALLY strips files literally named `.gitignore` from a published package (even under a
+  // `files` whitelist), so a profile can't ship its `.gitignore` resource under that name — it stores the
+  // content as `gitignore` (no dot) and we emit it to `.gitignore` in the installation. (Standard template
+  // workaround; cf. create-react-app/Next.) Every other dotfile packs fine, so this maps only `.gitignore`.
+  for (const r of ir.resources) copies.push({ from: r === '.gitignore' ? 'gitignore' : r, to: r });
   return withGeneratedManifest({ generated, copies });
 }

@@ -52,42 +52,44 @@ describe('parseRoadmap / parseRoadmapStatus', () => {
   });
 });
 
-describe('renderRoadmapPanel: Now / Next / Later from derived state', () => {
-  test('in-progress leads with a per-item issue tally; queue and shipped fold', () => {
+describe('renderRoadmapPanel: Now / Next / Later board from derived state', () => {
+  test('three lanes, compact tiles, per-item progress, overflow link, shipped fold', () => {
     const items = [
       { id: 'now1', title: 'Now One', phase: '1', planned: true },
-      { id: 'park1', title: 'Park One', phase: '2', planned: false },
-      { id: 'park2', title: 'Park Two', phase: '3', planned: false },
-      { id: 'park3', title: 'Park Three', phase: '4', planned: false },
-      { id: 'park4', title: 'Park Four', phase: '5', planned: false },
-      { id: 'shipped1', title: 'Shipped One', phase: '6', planned: true },
+      ...Array.from({ length: 8 }, (_, i) => ({ id: `park${i}`, title: `Park ${i}`, phase: `${i + 2}`, planned: false })),
+      { id: 'shipped1', title: 'Shipped One', phase: '20', planned: true },
     ];
     const counts = status({ now1: { total: 5, done: 2 }, shipped1: { total: 3, done: 3 } });
     const html = renderRoadmapPanel(yml(items), 'https://github.com/acme/widget', counts);
 
-    expect(html.includes('In progress')).toBe(true);
-    expect(html.includes('2/5 issues')).toBe(true); // derived progress
-    expect(html.includes('Up next')).toBe(true);
+    // The board's three lanes.
+    expect(html.includes('>Now<')).toBe(true);
+    expect(html.includes('>Next<')).toBe(true);
+    expect(html.includes('>Later<')).toBe(true);
+    // In-flight tile shows its derived issue progress.
+    expect(html.includes('2/5 issues')).toBe(true);
+    // 8 parked, cap 6 → 2 overflow into a "+N more" link rather than scrolling the lane.
+    expect(html.includes('+2 more')).toBe(true);
+    // Shipped work is an archival fold, not a lane.
     expect(html.includes('✓ 1 shipped')).toBe(true);
-    // 4 parked, 3 shown under Up next → 1 folds as "more queued"
-    expect(html.includes('1 more queued')).toBe(true);
     // An item with linked issues gets a "pop into GitHub" link to its label-filtered issue list.
     expect(html.includes('/issues?q=label%3Aroadmap%3Anow1')).toBe(true);
 
-    // In progress leads; shipped is folded after.
-    expect(html.indexOf('In progress')).toBeLessThan(html.indexOf('<details'));
+    // The board precedes the shipped fold; shipped items live inside it.
     expect(html.indexOf('Now One')).toBeLessThan(html.indexOf('<details'));
     expect(html.indexOf('Shipped One')).toBeGreaterThan(html.indexOf('<details'));
   });
 
-  test('only proposals (nothing committed) → show Proposed rather than an empty panel', () => {
+  test('only proposals (nothing committed) → Later lane carries them; panel still renders', () => {
     const items = [
       { id: 'p1', title: 'Prop One', proposed: true },
       { id: 'p2', title: 'Prop Two', proposed: true },
     ];
     const html = renderRoadmapPanel(yml(items), undefined);
-    expect(html.includes('Proposed')).toBe(true);
+    expect(html.includes('>Later<')).toBe(true);
     expect(html.includes('Prop One')).toBe(true);
+    // Empty Now / Next lanes render an honest placeholder rather than collapsing the board.
+    expect(html.includes('rm-empty')).toBe(true);
   });
 
   test('momentum counts in-progress / queued / shipped (proposals excluded)', () => {
@@ -110,7 +112,7 @@ describe('renderRoadmapPanel: Now / Next / Later from derived state', () => {
       { id: 'c', title: 'Done C', status: 'done' },
     ];
     const html = renderRoadmapPanel(yml(items), undefined);
-    expect(html.includes('In progress')).toBe(true);
+    expect(html.includes('>Now<')).toBe(true);
     expect(html.includes('Active A')).toBe(true);
     expect(html.includes('✓ 1 shipped')).toBe(true);
   });

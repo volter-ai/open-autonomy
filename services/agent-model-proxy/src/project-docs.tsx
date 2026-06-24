@@ -195,40 +195,62 @@ const STATE_CLASS: Record<RoadmapState, string> = {
 
 type Row = { item: RoadmapItem; state: RoadmapState; c: RoadmapCounts };
 
-function RoadmapItemRow({ row, repoUrl }: { row: Row; repoUrl?: string }) {
+// At most this many items per board column; the rest collapse into a "+N more →" link to the full roadmap.
+// Bounds the panel height: it can never grow past three short columns regardless of how big the backlog gets.
+const COL_CAP = 6;
+
+// One compact card. A whole item is a single short tile (title, a meta line, and — for in-flight work — a
+// thin issue-progress bar), not a tall timeline node. The GitHub mark links to the item's labelled issues.
+function RoadmapRow({ row, repoUrl }: { row: Row; repoUrl?: string }) {
   const { item: it, state, c } = row;
-  const phase = it.phase ? (isNaN(parseInt(it.phase, 10)) ? it.phase : `Phase ${it.phase}`) : '';
-  // Surface the child-issue tally where it's meaningful: progress while in flight, the count once shipped.
+  const phase = it.phase ? (isNaN(parseInt(it.phase, 10)) ? it.phase : `P${it.phase}`) : '';
   const tally = state === 'in_progress' && c.total > 0 ? `${c.done}/${c.total} issues`
     : state === 'done' && c.total > 0 ? `${c.total} issue${c.total === 1 ? '' : 's'}`
     : '';
   const meta = [phase, it.priority ?? '', tally].filter(Boolean).join(' · ');
+  const frac = state === 'in_progress' && c.total > 0 ? Math.min(1, c.done / c.total) : 0;
+  const ghHref = repoUrl && c.total > 0 ? `${repoUrl}/issues?q=${encodeURIComponent(`label:roadmap:${it.id}`)}` : undefined;
   return (
-    <li class={`rm-item ${STATE_CLASS[state]}`}>
-      <div class="rm-node" />
-      <div class="rm-content">
-        <div class="rtitle">
-          {it.title}
-          {repoUrl && c.total > 0
-            ? <a class="rm-gh" href={`${repoUrl}/issues?q=${encodeURIComponent(`label:roadmap:${it.id}`)}`} title="View linked issues on GitHub"><Icon name="github" /> {`${c.total} issue${c.total === 1 ? '' : 's'}`}</a>
-            : null}
-        </div>
-        {meta ? <div class="rmeta">{meta}</div> : null}
+    <li class={`rm-row ${STATE_CLASS[state]}`}>
+      <div class="rm-row-head">
+        <span class="t">{it.title}</span>
+        {ghHref ? <a class="rm-gh" href={ghHref} title="View linked issues on GitHub"><Icon name="github" /></a> : null}
       </div>
+      {meta ? <div class="m">{meta}</div> : null}
+      {frac > 0 ? <div class="rm-rowtrack"><div class="rm-rowfill" style={`width:${Math.round(frac * 100)}%`} /></div> : null}
     </li>
   );
 }
 
-// One labelled section ("In progress" / "Up next" / "Proposed" / "Shipped") — a header row then its items.
-function RoadmapSection({ label, rows, repoUrl }: { label: string; rows: Row[]; repoUrl?: string }) {
-  return <>{[<li class="rm-phase-hdr"><div class="rm-phase-label">{label}</div></li>, ...rows.map((r) => <RoadmapItemRow row={r} repoUrl={repoUrl} />)]}</>;
+// One board column (Now / Next / Later). Always rendered so the three-lane shape is stable even when a lane
+// is empty (an honest "—" rather than a collapsing layout). Overflow past COL_CAP becomes a link, not scroll.
+function RoadmapColumn({ label, state, rows, repoUrl, roadmapUrl }: { label: string; state: RoadmapState; rows: Row[]; repoUrl?: string; roadmapUrl?: string }) {
+  const shown = rows.slice(0, COL_CAP);
+  const extra = rows.length - shown.length;
+  return (
+    <div class="rm-col">
+      <div class="rm-col-hdr"><span class={`rm-col-dot ${STATE_CLASS[state]}`} />{label}<span class="n">{rows.length}</span></div>
+      {rows.length
+        ? <ul class="rm-list">{shown.map((r) => <RoadmapRow row={r} repoUrl={repoUrl} />)}</ul>
+        : <p class="rm-empty">—</p>}
+      {extra > 0 && roadmapUrl ? <a class="rm-more" href={roadmapUrl}>{`+${extra} more →`}</a> : null}
+    </div>
+  );
 }
 
-// A collapsed-by-default group (overflow backlog / proposals / shipped history) — native <details>, no JS.
-function RoadmapFold({ label, rows, repoUrl }: { label: string; rows: Row[]; repoUrl?: string }) {
-  return <details class="rm-fold"><summary>{label}</summary><ul class="roadmap">{rows.map((r) => <RoadmapItemRow row={r} repoUrl={repoUrl} />)}</ul></details>;
+// Shipped history is genuinely archival, so it stays a collapsed <details> below the board (not a fourth lane).
+function RoadmapShipped({ rows, repoUrl }: { rows: Row[]; repoUrl?: string }) {
+  return (
+    <details class="rm-fold rm-shipped">
+      <summary>{`✓ ${rows.length} shipped`}</summary>
+      <ul class="rm-list">{rows.map((r) => <RoadmapRow row={r} repoUrl={repoUrl} />)}</ul>
+    </details>
+  );
 }
 
+// A Now / Next / Later board — the idiomatic public-roadmap shape. Each lane is a bounded stack of compact
+// tiles, so the panel reads at a glance and never sprawls vertically: Now = in flight, Next = ratified queue,
+// Later = proposed candidates, with shipped work tucked into a fold beneath.
 export function RoadmapPanel({ yml, repoUrl, statusJson }: { yml?: string; repoUrl?: string; statusJson?: string }) {
   const items = parseRoadmap(yml ?? '');
   if (!items.length) return null;
@@ -244,23 +266,7 @@ export function RoadmapPanel({ yml, repoUrl, statusJson }: { yml?: string; repoU
   const done = of('done');
   const committed = inProgress.length + parked.length + done.length;
   const pct = committed > 0 ? Math.round((done.length / committed) * 100) : 0;
-
-  // Now / Next / Later — center on the current steps. IN PROGRESS leads, then a few UP NEXT from the parked
-  // backlog; the rest of the backlog, the proposed candidates, and the shipped history fold into <details>.
-  const nextCount = inProgress.length ? 3 : 5;
-  const next = parked.slice(0, nextCount);
-  const laterParked = parked.slice(next.length);
-  const sections: Array<{ label: string; rows: Row[] }> = [];
-  if (inProgress.length) sections.push({ label: 'In progress', rows: inProgress });
-  if (next.length) sections.push({ label: 'Up next', rows: next });
-  if (!sections.length && proposed.length) sections.push({ label: 'Proposed', rows: proposed });
-  const folds: Array<{ label: string; rows: Row[] }> = [];
-  if (laterParked.length) folds.push({ label: `${laterParked.length} more queued`, rows: laterParked });
-  if (sections.length && proposed.length) folds.push({ label: `${proposed.length} proposed`, rows: proposed });
-  if (done.length) {
-    if (sections.length) folds.push({ label: `✓ ${done.length} shipped`, rows: done });
-    else sections.push({ label: 'Shipped', rows: done });
-  }
+  const roadmapUrl = repoUrl ? `${repoUrl}/blob/HEAD/.open-autonomy/roadmap.yml` : undefined;
 
   return (
     <div class="panel roadmap-panel">
@@ -273,9 +279,13 @@ export function RoadmapPanel({ yml, repoUrl, statusJson }: { yml?: string; repoU
         </div>
         <div class="rm-track"><div class="rm-fill" style={`width:${pct}%`} /></div>
       </div>
-      <ul class="roadmap">{sections.map((s) => <RoadmapSection label={s.label} rows={s.rows} repoUrl={repoUrl} />)}</ul>
-      {folds.map((f) => <RoadmapFold label={f.label} rows={f.rows} repoUrl={repoUrl} />)}
-      {repoUrl ? <a class="docmore" href={`${repoUrl}/blob/HEAD/.open-autonomy/roadmap.yml`}>Full roadmap →</a> : null}
+      <div class="rm-board">
+        <RoadmapColumn label="Now" state="in_progress" rows={inProgress} repoUrl={repoUrl} roadmapUrl={roadmapUrl} />
+        <RoadmapColumn label="Next" state="parked" rows={parked} repoUrl={repoUrl} roadmapUrl={roadmapUrl} />
+        <RoadmapColumn label="Later" state="proposed" rows={proposed} repoUrl={repoUrl} roadmapUrl={roadmapUrl} />
+      </div>
+      {done.length ? <RoadmapShipped rows={done} repoUrl={repoUrl} /> : null}
+      {roadmapUrl ? <a class="docmore" href={roadmapUrl}>Full roadmap →</a> : null}
     </div>
   );
 }

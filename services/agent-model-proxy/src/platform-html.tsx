@@ -153,6 +153,9 @@ const STYLES = `
   .metarow{display:flex;gap:16px;align-items:center;flex-wrap:wrap;color:${C.body};font-size:15px;}
   .metarow b{font-weight:800;}
   .metarow .sep{color:${C.line};}
+  .repo-pill{display:inline-flex;align-items:center;gap:7px;background:${C.wash};border:1px solid ${C.line};border-radius:999px;padding:5px 12px;font-size:13.5px;font-weight:600;color:${C.ink};line-height:1;}
+  .repo-pill:hover{border-color:${C.accent};color:${C.accent};}
+  .repo-pill .ext{color:${C.faint};margin-left:-2px;}
   .cols{display:grid;grid-template-columns:1fr 360px;gap:32px;align-items:start;}
   @media(max-width:880px){.cols{grid-template-columns:1fr;}}
   .side{position:sticky;top:92px;}
@@ -202,33 +205,38 @@ const STYLES = `
   .rm-stats .act b{color:${C.accent};}
   .rm-track{height:6px;background:${C.wash};border-radius:999px;overflow:hidden;}
   .rm-fill{height:100%;background:${C.accent};border-radius:999px;}
-  .roadmap{list-style:none;margin:0;padding:0;position:relative;}
-  .roadmap::before{content:'';position:absolute;top:16px;bottom:24px;left:14px;width:2px;background:${C.line};z-index:1;}
-  .rm-phase-hdr{position:relative;padding:24px 0 12px 38px;}
-  .rm-phase-hdr:first-child{padding-top:8px;}
-  .rm-phase-label{font-weight:700;font-size:12px;text-transform:uppercase;letter-spacing:.08em;color:${C.faint};background:${C.panel};display:inline-block;padding-right:8px;position:relative;z-index:3;}
-  .rm-item{position:relative;padding:12px 0 12px 38px;}
-  .rm-node{position:absolute;left:8px;top:15px;width:14px;height:14px;border-radius:50%;z-index:2;background:${C.bg};}
-  .rm-item.active .rm-content{background:#fff;border:1.5px solid ${C.accent};border-radius:10px;padding:12px 14px;margin-top:-6px;box-shadow:0 4px 12px rgba(255,66,77,.08);}
-  .rm-item.active .rm-node{background:${C.accent};box-shadow:0 0 0 4px rgba(255,66,77,.15);}
-  .rm-item.active .rtitle{color:${C.accentDark};font-weight:700;}
-  .rm-item.planned .rm-node{border:2px solid ${C.muted};}
-  .rm-item.proposed{padding:8px 0 8px 38px;}
-  .rm-item.proposed .rm-node{width:10px;height:10px;left:10px;top:12px;border:2px solid ${C.line};}
-  .rm-item.proposed .rtitle{font-size:14px;font-weight:500;color:${C.muted};}
-  .rm-item.done .rm-node{background:${C.accent};display:flex;align-items:center;justify-content:center;}
-  .rm-item.done .rm-node::after{content:'';width:4px;height:7px;border:solid #fff;border-width:0 2px 2px 0;transform:rotate(45deg);margin-top:-2px;}
-  .rtitle{font-weight:600;color:${C.ink};font-size:15px;line-height:1.4;}
-  .rmeta{color:${C.muted};font-size:13px;margin-top:2px;}
-  .rm-item.done .rtitle{color:${C.muted};font-weight:500;}
-  .rm-item.done .rmeta{color:${C.faint};}
-  .rm-fold{margin-top:6px;}
+  .rm-board{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;align-items:start;}
+  @media(max-width:600px){.rm-board{grid-template-columns:1fr;}}
+  .rm-col{min-width:0;}
+  .rm-col-hdr{display:flex;align-items:center;gap:7px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:${C.faint};padding:0 2px 9px;border-bottom:1px solid ${C.line};margin-bottom:10px;}
+  .rm-col-hdr .n{margin-left:auto;background:${C.wash};color:${C.muted};font-size:11px;font-weight:700;line-height:1;padding:3px 7px;border-radius:999px;}
+  .rm-col-dot{width:8px;height:8px;border-radius:50%;flex:none;}
+  .rm-col-dot.active{background:${C.accent};box-shadow:0 0 0 3px rgba(255,66,77,.15);}
+  .rm-col-dot.planned{background:${C.muted};}
+  .rm-col-dot.proposed{background:transparent;border:1.5px solid ${C.faint};}
+  .rm-col-dot.done{background:${C.green};}
+  .rm-list{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:8px;}
+  .rm-row{border:1px solid ${C.line};border-radius:10px;padding:9px 11px;background:${C.bg};}
+  .rm-row-head{display:flex;align-items:flex-start;gap:6px;}
+  .rm-row .t{font-size:13px;font-weight:600;color:${C.ink};line-height:1.35;flex:1;min-width:0;}
+  .rm-row .m{color:${C.muted};font-size:11.5px;margin-top:4px;}
+  .rm-row.active{border-color:${C.accent};border-left:3px solid ${C.accent};background:#fffafa;}
+  .rm-row.active .t{color:${C.accentDark};}
+  .rm-row.proposed{background:transparent;border-style:dashed;}
+  .rm-row.proposed .t{font-weight:500;color:${C.body};}
+  .rm-row.done .t{color:${C.muted};font-weight:500;}
+  .rm-rowtrack{height:4px;background:${C.wash};border-radius:999px;overflow:hidden;margin-top:8px;}
+  .rm-rowfill{height:100%;background:${C.accent};border-radius:999px;}
+  .rm-empty{color:${C.faint};font-size:13px;margin:2px 2px 0;}
+  .rm-more{display:inline-block;margin-top:9px;font-size:12px;font-weight:600;color:${C.accent};}
+  .rm-more:hover{text-decoration:underline;}
+  .rm-fold{margin-top:18px;}
   .rm-fold>summary{cursor:pointer;list-style:none;display:flex;align-items:center;gap:8px;padding:11px 0 5px;font-weight:700;font-size:12px;text-transform:uppercase;letter-spacing:.08em;color:${C.faint};border-top:1px solid ${C.line};}
   .rm-fold>summary::-webkit-details-marker{display:none;}
   .rm-fold>summary::before{content:'▸';color:${C.muted};font-size:11px;transition:transform .15s ease;}
   .rm-fold[open]>summary::before{transform:rotate(90deg);}
   .rm-fold>summary:hover{color:${C.ink};}
-  .rm-fold .roadmap{margin-top:4px;}
+  .rm-fold .rm-list{margin-top:10px;}
   .release{margin-bottom:18px;}
   .release:last-child{margin-bottom:0;}
   .rel-head{font-weight:800;font-size:14px;color:${C.ink};margin-bottom:8px;letter-spacing:-.01em;}
@@ -265,8 +273,8 @@ const STYLES = `
   .turn.assistant{border-left:3px solid ${C.accent};}
   .turn.user{border-left:3px solid #c9ccd1;}
   .turn pre{margin:0;white-space:pre-wrap;word-break:break-word;font:13px/1.55 ui-monospace,Menlo,monospace;color:${C.body};}
-  .rm-gh{margin-left:8px;font-size:12px;font-weight:600;color:${C.faint};white-space:nowrap;}
-  .rm-gh:hover{color:${C.accent};text-decoration:underline;}
+  .rm-gh{flex:none;color:${C.faint};line-height:0;margin-top:1px;}
+  .rm-gh:hover{color:${C.accent};}
   /* Slide-in session drawer (LangSmith-style) — progressive enhancement over the full-page session view. */
   #run-backdrop{position:fixed;inset:0;background:rgba(16,17,26,.38);opacity:0;pointer-events:none;transition:opacity .2s ease;z-index:40;}
   #run-backdrop.open{opacity:1;pointer-events:auto;}
@@ -639,7 +647,12 @@ function Project({ v, page }: { v: ProjectView; page: number }) {
           <div class="htext">
             <h1>{nameOf(v.account)}</h1>
             <p class="tag">{v.profile.tagline ?? `${owner}/${nameOf(v.account)}`}</p>
-            <div class="metarow"><span><b>{v.patron_count}</b> patrons</span><span class="sep">|</span><span><b>{monthly}</b></span><span class="sep">|</span><StatusDot status={v.status} /></div>
+            <div class="metarow">
+              <span><b>{v.patron_count}</b> patrons</span><span class="sep">|</span>
+              <span><b>{monthly}</b></span><span class="sep">|</span>
+              <StatusDot status={v.status} />
+              {repoUrl ? <><span class="sep">|</span><a class="repo-pill" href={repoUrl} target="_blank" rel="noopener"><Icon name="github" size={15} />{v.account}<span class="ext"><Icon name="linkExternal" size={11} /></span></a></> : null}
+            </div>
           </div>
         </div>
         <div class="cols">

@@ -4,10 +4,14 @@
 
 [![funding](https://volter-agent-model-proxy.aaron-0ed.workers.dev/v1/funding/runway.svg)](https://github.com/sponsors/volter-ai)
 
-`open-autonomy` makes a repository drive its own maintenance work: issues become reviewed,
-gated, merged pull requests, produced by bounded AI agents under **deterministic guardrails**.
+`open-autonomy` makes a repository drive its own maintenance work: work items become reviewed,
+gated, merged changes, produced by bounded AI agents under **deterministic guardrails**.
 It is **substrate-agnostic** — the same setup compiles onto **GitHub Actions** or onto a **local**
 machine loop. The repo also runs open-autonomy against itself (it's its own first user).
+
+**Want to run it on your own repo?** Jump to [**Run it on your repo**](#run-it-on-your-repo) — it
+forks into **GitHub Actions** (public/team repos) and **fully local** (closed-source, your machine,
+no GitHub). If you have a private codebase you won't push to GitHub, the local path is for you.
 
 ## The model
 
@@ -32,6 +36,44 @@ no single agent holds both `code:review` (statuses:write — blesses) and `code:
 
 Read [`docs/AUTONOMY-IR.md`](./docs/AUTONOMY-IR.md) for the full model and conformance contract, and
 [`docs/PROJECT-LAYOUT.md`](./docs/PROJECT-LAYOUT.md) for the vocabulary and layout.
+
+## Run it on your repo
+
+Same profile, two substrates. Pick by **where you want the agents to run** — install with one
+`npx` command (no clone required):
+
+### GitHub Actions — public or team repos
+
+Agents run as GitHub Actions jobs; CI + an independent reviewer gate **native auto-merge**; you steer
+with `/agent` issue comments. Model access is bounded by a hosted token proxy. Best when your repo
+already lives on GitHub.
+
+```bash
+cd my-repo
+npx open-autonomy compile self-driving github .
+```
+
+Then wire it up with [`docs/PUBLIC_AGENT_PRODUCTION_ROLLOUT.md`](./docs/PUBLIC_AGENT_PRODUCTION_ROLLOUT.md)
+(repo variables/secrets, the model proxy, branch protection).
+
+### Local — closed-source, on your machine
+
+**No GitHub, no Actions, no hosted proxy.** Agents run as local terminal sessions via
+[termfleet](https://github.com/volter-ai/termfleet), using *your own* logged-in Claude Code (or
+Codex) CLI — so your model provider bills you directly. Work comes from a local tracker on disk, not
+GitHub issues. Best for a private/closed-source repo.
+
+```bash
+cd my-repo
+npx open-autonomy compile simple-sdlc local .   # or `hello` for a zero-tracker demo
+node scheduler/run.mjs                           # after termfleet + CLI sign-in (see the guide)
+```
+
+Full step-by-step (termfleet console/provider, agent sign-in, feeding the loop work) →
+[**`docs/LOCAL-QUICKSTART.md`**](./docs/LOCAL-QUICKSTART.md).
+
+> `self-driving` (open-autonomy's own recipe) is GitHub-only; on local use `simple-sdlc`, `hello`,
+> or your own profile dir. See [the CLI](#the-open-autonomy-cli) for all verbs and options.
 
 ## What it does (the GitHub substrate)
 
@@ -70,7 +112,10 @@ Docs: [`ARCHITECTURE.md`](./docs/ARCHITECTURE.md) (the github app's design + tru
 [`PROJECT-LAYOUT.md`](./docs/PROJECT-LAYOUT.md) (vocabulary + layout),
 [`ROADMAP.md`](./docs/ROADMAP.md).
 
-## Quickstart
+## Develop on open-autonomy itself
+
+This is **contributor setup** — clone this repo to hack on open-autonomy. You do **not** need it to
+*use* open-autonomy on your own repo (for that, see [Run it on your repo](#run-it-on-your-repo)).
 
 ```bash
 bun install
@@ -94,22 +139,17 @@ package) or a path to your own profile dir. No clone required once published —
 bun is not required to *use* it. From a clone (bun-native, runs TypeScript directly): `bun run autonomy <verb>`
 or `bun bin/open-autonomy.ts <verb>`. The published bundle is produced by `bun run build`.
 
-To adopt open-autonomy into your repo, compile a profile into it, then follow
-[`docs/PUBLIC_AGENT_PRODUCTION_ROLLOUT.md`](./docs/PUBLIC_AGENT_PRODUCTION_ROLLOUT.md):
-
-```bash
-cd my-repo
-npx open-autonomy compile self-driving github .    # GitHub substrate, bundled profile, into the current repo
-npx open-autonomy compile simple-sdlc local .      # local-loop substrate
-# from a clone, a profile path also works: open-autonomy compile profiles/self-driving github ../my-repo
-```
-
-**Closed-source / no GitHub?** Run the whole loop locally — see
-[`docs/LOCAL-QUICKSTART.md`](./docs/LOCAL-QUICKSTART.md) for the end-to-end step-by-step
-(termfleet + a logged-in Claude Code/Codex CLI, then `node scheduler/run.mjs`). No GitHub, no
-Actions, no hosted proxy.
+To adopt open-autonomy into your own repo, compile a profile into it — see
+[**Run it on your repo**](#run-it-on-your-repo) for the GitHub vs local fork and the follow-up guides
+([`PUBLIC_AGENT_PRODUCTION_ROLLOUT.md`](./docs/PUBLIC_AGENT_PRODUCTION_ROLLOUT.md) for GitHub,
+[`LOCAL-QUICKSTART.md`](./docs/LOCAL-QUICKSTART.md) for local). From a clone, a profile *path* also
+works: `open-autonomy compile profiles/self-driving github ../my-repo`.
 
 ## Operator commands
+
+These are the **GitHub substrate's** control plane (issue comments). Running local? You steer the
+fleet with termfleet directly and the tracker board instead — see
+[`docs/LOCAL-QUICKSTART.md`](./docs/LOCAL-QUICKSTART.md).
 
 Operator commands work only for maintainers (repo OWNER/MEMBER/COLLABORATOR); a comment from anyone
 else is ignored. To launch an agent by comment, name it: `/agent <agent>` (the workflow name).

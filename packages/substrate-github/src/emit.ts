@@ -92,14 +92,6 @@ const HARDEN_RUNNER = [
 
 // Render a carried (non-cron) event trigger as github `on:` YAML; its config (issues `types`, …) is
 // carried verbatim block-style (scalar | string[]).
-// github's realization of the portable `task:` trigger (docs/TASK-LIFECYCLE.md): a lifecycle state is a
-// label of that name, so every `task: <state>` fires on the `issues` `labeled` event and the runtime reads
-// which label = which state. Uniform by default — no per-state special-casing frozen into the compiler. A
-// richer per-state mapping, if a substrate ever wants one, is declared data + conformance, not a branch.
-function taskAsEvent(_state: string): { event: string; config?: Record<string, unknown> } {
-  return { event: 'issues', config: { types: ['labeled'] } };
-}
-
 function eventLines(event: string, config?: Record<string, unknown>): string[] {
   if (!config || Object.keys(config).length === 0) return [`  ${event}: {}`];
   const lines = [`  ${event}:`];
@@ -145,13 +137,13 @@ function onLines(agent: IRAgent): string[] {
   lines.push('  issue_comment:', '    types: [created]');
   seen.add('workflow_dispatch').add('issue_comment');
   // Collect the agent's native-event triggers, MERGING configs when two triggers resolve to the same
-  // github event (e.g. two `event: issues`, or a `task:` that maps to issues:labeled colliding with an
-  // explicit `event: issues`) — array keys like `types` are unioned, scalars last-write-wins. Dropping the
-  // later trigger's config (the old behavior) silently lost declared event types.
+  // github event (e.g. two `event: issues`) — array keys like `types` are unioned, scalars last-write-wins.
+  // Dropping the later trigger's config (the old behavior) silently lost declared event types. A `dispatch`
+  // trigger adds nothing here — it is already covered by the always-present workflow_dispatch launch surface.
   const eventConfigs = new Map<string, Record<string, unknown>>();
   for (const t of agent.triggers) {
-    if ('cron' in t) continue;
-    const e = 'task' in t ? taskAsEvent(t.task) : { event: t.event, config: t.config };
+    if ('cron' in t || 'dispatch' in t) continue;
+    const e = { event: t.event, config: t.config };
     if (seen.has(e.event)) continue; // workflow_dispatch / issue_comment already on the launch surface
     const merged = eventConfigs.get(e.event) ?? {};
     for (const [k, v] of Object.entries(e.config ?? {})) {

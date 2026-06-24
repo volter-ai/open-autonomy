@@ -2,7 +2,7 @@
   "name": "open-autonomy",
   "version": "0.1.2",
   "description": "Compile an agent profile onto a substrate (GitHub Actions or a local termfleet loop) — the open-autonomy CLI.",
-  "license": "MIT",
+  "license": "Apache-2.0",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/volter-ai/open-autonomy.git"

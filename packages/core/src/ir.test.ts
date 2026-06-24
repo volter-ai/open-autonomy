@@ -15,19 +15,19 @@ function ir(agents: Record<string, IRAgent>): AutonomyIR {
 }
 
 describe('validateIR — triggers', () => {
-  test('accepts cron, event, and task triggers', () => {
-    const a = agent({ triggers: [{ cron: '0 0 * * *' }, { event: 'issues' }, { task: 'human-required' }] });
+  test('accepts cron, event, and dispatch triggers', () => {
+    const a = agent({ triggers: [{ cron: '0 0 * * *' }, { event: 'issues' }, { dispatch: true }] });
     expect(validateIR(ir({ a }))).toEqual([]);
   });
 
-  test('rejects a trigger that is none of cron/event/task', () => {
+  test('rejects a trigger that is none of cron/event/dispatch', () => {
     const a = agent({ triggers: [{} as never] });
-    expect(validateIR(ir({ a })).some((e) => e.includes('trigger must be a cron, an event, or a task'))).toBe(true);
+    expect(validateIR(ir({ a })).some((e) => e.includes('trigger must be a cron, an event, or a dispatch'))).toBe(true);
   });
 
-  test('rejects a task trigger with an empty state', () => {
-    const a = agent({ triggers: [{ task: '' }] });
-    expect(validateIR(ir({ a })).some((e) => e.includes('task trigger needs a lifecycle state'))).toBe(true);
+  test('rejects a malformed dispatch trigger', () => {
+    const a = agent({ triggers: [{ dispatch: false } as never] });
+    expect(validateIR(ir({ a })).some((e) => e.includes('dispatch trigger must be { dispatch: true }'))).toBe(true);
   });
 
   test('requires at least one trigger', () => {
@@ -41,8 +41,8 @@ describe('validateIR — actor kind', () => {
     expect(validateIR(ir({ a: agent() }))).toEqual([]);
   });
 
-  test('accepts a human actor triggered by a task state', () => {
-    const a = agent({ kind: 'human', behavior: 'humans/maintainer', triggers: [{ task: 'human-required' }] });
+  test('accepts a human actor dispatched on demand', () => {
+    const a = agent({ kind: 'human', behavior: 'humans/maintainer', triggers: [{ dispatch: true }] });
     expect(validateIR(ir({ a }))).toEqual([]);
   });
 
@@ -135,10 +135,10 @@ describe('validateIR — result schema (optional, skill agents)', () => {
 });
 
 describe('irShape', () => {
-  test('renders a task trigger as task:<state> (not event:undefined)', () => {
-    const a = agent({ triggers: [{ task: 'human-required' }, { cron: '0 0 * * *' }] });
+  test('renders a dispatch trigger as dispatch (not event:undefined)', () => {
+    const a = agent({ triggers: [{ dispatch: true }, { cron: '0 0 * * *' }] });
     const triggers = irShape(ir({ a })).triggers.find((t) => t.agent === 'a')!.triggers;
-    expect(triggers).toContain('task:human-required');
+    expect(triggers).toContain('dispatch');
     expect(triggers).toContain('cron:0 0 * * *');
     expect(triggers.some((t) => t.startsWith('event:'))).toBe(false);
   });

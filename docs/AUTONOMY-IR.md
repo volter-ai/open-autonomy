@@ -4,9 +4,11 @@
 > `launch`, `run`, `raw`, `steps`, `box.model`, `skill|script`, `commit|propose` are **retired** — see
 > "What this replaces" at the end. If the code still shows them, the code is mid-migration, not the spec.
 >
-> **Actor model (current):** the one unit is the **actor** (`kind: agent | human`), and triggers gain a
-> portable `{ task: <state> }` form (`docs/TASK-LIFECYCLE.md`). These supersede the agent-only framing
-> where they differ; the code (`ir.ts`, the profile, the github substrate) is mid-migration to them.
+> **Actor model (current):** the one unit is the **actor** (`kind: agent | human`). Triggers are
+> `cron` | `event` | `dispatch` — the two PORTABLE kinds are `cron` (time) and `dispatch` (on-demand via
+> the Runner, `docs/RUNNER.md`); `event` is the substrate-native escape hatch. There is **no `task:`
+> trigger**: a task is a work ITEM whose lifecycle state is a property the orchestrator READS when deciding
+> what to dispatch (`docs/TASK-LIFECYCLE.md`), never a trigger the substrate watches.
 
 ## The shape of the whole thing
 
@@ -47,16 +49,16 @@ actors:
   developer:                           # kind: agent (the default)
     behavior: skills/developer        # what it does — a SKILL (prose); run as a credentialed job
     capabilities: [code:propose, tasks:converse]   # its authority (the standard's capability catalog)
-    triggers:                          # when it fires; three forms — cron | event | task (lifecycle)
-      - { task: ready, params: { ISSUE: subject.ref } }   # portable: fire when a task enters `ready`
-      - { event: issue_comment }                          # substrate-native escape hatch
+    triggers:                          # when it fires; three forms — cron | event | dispatch
+      - { dispatch: true, params: { ISSUE: subject.ref } }  # portable: launched on demand by the orchestrator
+      - { event: issue_comment }                            # substrate-native escape hatch
     timeout: 30                        # a run-time bound (minutes) — the only non-capability field
 
   maintainer:                          # kind: human — a person; intrinsic, not a substrate choice
     kind: human
     behavior: humans/maintainer-review # the task spec the person is handed (situation / decision / result)
     capabilities: [tasks:converse, code:review]
-    triggers: [{ task: human-required }]   # fire when a task needs a maintainer
+    triggers: [{ dispatch: true }]     # engaged on demand when the orchestrator routes work to a person
 
   planner:
     behavior: skills/planner
@@ -71,7 +73,7 @@ resources: [docs/standards/code.md]    # verbatim files; the standard never inte
 |---|---|---|
 | **behavior** | what the actor does — a SKILL (prose); a `kind: human` actor's is the task spec a person is handed | the substrate *realizes* it: `kind: agent` → a credentialed job runs the skill via a model; `kind: human` → a real person (prod) or a simulator (test) |
 | **capabilities** | the actor's authority — from the capability catalog (`docs/CAPABILITIES.md`); realized as the agent's own scoped token | the substrate realizes each as a permission on that token |
-| **triggers** | when it fires + the **params** it forwards. Three forms: `cron`, substrate-native `event`, and the portable `task: <state>` (the task-lifecycle catalog, `docs/TASK-LIFECYCLE.md`) | the substrate's trigger executor; `cron` and `task` are portable, `event` is carried |
+| **triggers** | when it fires + the **params** it forwards. Three forms: `cron` (time), the portable `dispatch` (on-demand via the Runner — `docs/RUNNER.md`), and the substrate-native `event` | the substrate's trigger executor; `cron` and `dispatch` are portable, `event` is carried |
 | **timeout** | optional run-time bound (minutes) — the only non-capability field | the substrate's job timeout |
 
 An actor also carries a **kind** (`agent` | `human`, default `agent`) — a discriminator, not a fifth slot.
@@ -103,11 +105,12 @@ are added to a catalog first, then implemented by substrates — purely additive
    github knobs (`workflowFile`/`persistCredentials`/`permissions`/`env`/`concurrency`) were leaks and are
    removed: a github permission set is *computed* from capabilities, never written in the IR.
 
-4. **Task lifecycle** (`docs/TASK-LIFECYCLE.md`) — the portable states a task can be in (`open` · `ready`
-   · `working` · `in-review` · `input-required` · `blocked` · `done` · `rejected`). A `task: <state>`
-   trigger fires when a task enters a state; a **handoff** (a seam, `docs/HANDOFFS.md`) is a typed edge
-   over these states — an upstream actor's work produces a transition, a downstream actor's `task:`
-   trigger consumes it. The substrate maps each state to its own events/labels.
+4. **Task lifecycle** (`docs/TASK-LIFECYCLE.md`) — the states a work item can be in (`open` · `ready`
+   · `working` · `in-review` · `input-required` · `blocked` · `done` · `rejected`). This is vocabulary the
+   **orchestrator reads** off a work item to decide what to dispatch — **not** a trigger. A task's state is
+   a property; the PM (on `cron`) reads it and `launch`es the matching worker (a `dispatch` agent). A
+   **handoff** (a seam, `docs/HANDOFFS.md`) is a typed edge over these states — an upstream actor's work
+   produces a transition the orchestrator observes and acts on. No substrate watches task state.
 
 ## Kind, realization, trust, review — orthogonal axes (only `kind` is in the IR)
 

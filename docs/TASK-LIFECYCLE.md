@@ -5,21 +5,25 @@
 catalog adds that — a small, portable set of lifecycle states — so a trigger or a handoff can name *the
 state a task is in* without reaching into a substrate's raw events or label strings.
 
-It is a catalog, peer to `CAPABILITIES.md` and `TRIGGER-PARAMS.md`: purely additive, the profile depends
-only on these names, each substrate maps them to its own machinery.
+It is a catalog, peer to `CAPABILITIES.md` and `TRIGGER-PARAMS.md`: purely additive. The state lives in
+the profile's **tracker** (a github issue, a ztrack item) and is **read by the orchestrator** — it is not
+realized per substrate, because no substrate watches it.
 
 ## The states
 
-| state | meaning | github realization (reference) | local (sketch) |
-|---|---|---|---|
-| `open` | created, not yet triaged | issue opened, no triage label | work-store item, new |
-| `ready` | triaged, ready for an actor to work | issue labeled ready (the agent-session label) | item marked ready |
-| `working` | an actor is acting on it | an open agent PR / running session exists | item claimed |
-| `in-review` | a change is proposed, awaiting review | PR opened (`pull_request_target`) | change submitted |
-| `input-required` | blocked awaiting input from a named party (see below) | a `needs-info` / `human-required` label | item awaiting input |
-| `blocked` | cannot proceed (policy / repeated failure / budget) | `agent-blocked` / a stop label | item blocked |
-| `done` | completed | issue closed via merge | item completed |
-| `rejected` | terminal, not done (duplicate / spam / wontfix / failed) | closed not-planned | item rejected |
+| state | meaning |
+|---|---|
+| `open` | created, not yet triaged |
+| `ready` | triaged, ready for an actor to work |
+| `working` | an actor is acting on it |
+| `in-review` | a change is proposed, awaiting review |
+| `input-required` | blocked awaiting input from a named party (see below) |
+| `blocked` | cannot proceed (policy / repeated failure / budget) |
+| `done` | completed |
+| `rejected` | terminal, not done (duplicate / spam / wontfix / failed) |
+
+A profile maps these to its tracker's own state names (e.g. ztrack's `Ready` / `In Progress` /
+`In Review` / `Done`); the orchestrator reads them there.
 
 `input-required` carries a **from** in the seam (who must supply the input): `requester` (OA's existing
 `needs-info`) or `maintainer` (OA's existing `human-required`). The state is portable; the *who* is part
@@ -28,28 +32,29 @@ of the handoff payload, not a separate state.
 These are not new inventions — they consolidate vocabulary OA already uses (`needs-info`,
 `human-required`, `agent-blocked`, and the stop-states in `ROADMAP.md`) into a portable set.
 
-## How a trigger uses it
+## How the orchestrator uses it
 
-A `task:` trigger fires when a task **enters** a state:
+A task's state is a **property the orchestrator reads** — it is **not** a trigger. There is no `task:`
+trigger and no substrate that watches task state (`docs/RUNNER.md`). The dispatcher (the PM, on `cron`)
+reads each work item's state off the tracker and `launch`es the matching worker (a `dispatch` actor)
+through the Runner:
 
-```yaml
-triggers:
-  - { task: ready }            # fire when a task becomes ready to work
-  - { task: human-required }   # fire when a task needs a maintainer (input-required / from: maintainer)
+```
+PM tick (cron) → read board → issue is `ready` → launch the developer (dispatch) with the item as --ref
 ```
 
-The substrate maps the state to its firing context (github: a label transition / a PR event). This is the
-portable form of a trigger; the substrate-native `event:` form remains as an escape hatch
-(partial-support is first-class — see `AUTONOMY-IR.md`).
+This is why the lifecycle is portable without any substrate machinery: the only primitives the substrate
+must provide are `cron` (time) and `launch` (the Runner) — both universal. The substrate-native `event:`
+form remains as an escape hatch (partial-support is first-class — see `AUTONOMY-IR.md`).
 
 ## How a handoff uses it
 
 A handoff (a **seam**, see `docs/HANDOFFS.md`) is a typed edge over this lifecycle: an upstream actor's
-work *produces* a state transition; a downstream actor's `task:` trigger *consumes* it. The lifecycle is
-the shared vocabulary that makes the producing and consuming ends name the same thing across substrates.
+work *produces* a state transition; the orchestrator *reads* it and dispatches the downstream actor. The
+lifecycle is the shared vocabulary that makes the producing and consuming ends name the same thing.
 
-New states are added here first, then realized by each substrate. Profiles depend only on this vocabulary,
-never on a substrate's labels or event names.
+New states are added here first. A profile's skills depend only on this vocabulary (mapped to their
+tracker's own states, e.g. ztrack), never on a substrate's labels or event names.
 
 ## Done is verified, not presumed
 

@@ -5,15 +5,22 @@ profile. Four agents, each a prose skill the substrate runs model-interpreted:
 
 | agent | trigger | does |
 |---|---|---|
-| `pm` | `cron */15` | the only dispatcher — sweeps the board, enforces WIP (≤1 in-progress, ≤1 in-review), produces the next lifecycle transition |
-| `draft` | `task: open` | shapes an untriaged request into a verifiable Ready issue (sources + 1-3 ACs + evidence scaffold) |
-| `develop` | `task: ready` | implements one Ready issue and produces real evidence per AC; stops on a human-required path/topic |
-| `review` | `task: in-review` | gates an In-Review change: `ztrack check` green, every passed AC backed by cited evidence, then Done or rework |
+| `pm` | `cron */15` | the only dispatcher — sweeps the board, enforces WIP (≤1 in-progress, ≤1 in-review), launches the next eligible worker |
+| `draft` | `dispatch` | shapes an untriaged request into a verifiable Ready issue (sources + 1-3 ACs + evidence scaffold) |
+| `develop` | `dispatch` | implements one Ready issue and produces real evidence per AC; stops on a human-required path/topic |
+| `review` | `dispatch` | gates an In-Review change: `ztrack check` green, every passed AC backed by cited evidence, then Done or rework |
 
-The three workers are **lifecycle consumers**: they fire when a task enters a portable state
-(`docs/TASK-LIFECYCLE.md`). The PM does not launch a worker process — it produces the transition the
-worker consumes, and the substrate launches the matching worker. The work item arrives as
-`$ZTRACK_ISSUE` via each trigger's `subject.ref` param.
+The PM is the only autonomous trigger (`cron`). The three workers are **`dispatch`** agents: the PM reads
+the ztrack board on its tick, decides the next move from each issue's state (a property it READS, not a
+trigger), and **launches** the matching worker through the Runner (`agent:launch`):
+
+```bash
+bun scripts/runner.ts launch develop --ref <issue-id>
+```
+
+The work item rides in as `--ref` and the worker reads it as `$ZTRACK_ISSUE` (its `subject.ref` param).
+This is fully substrate-agnostic — `cron` + `agent:launch` are the two portable primitives, so the same
+loop runs on local and github with no substrate task-state machinery (`docs/RUNNER.md`).
 
 The agents use [`ztrack`](https://github.com/volter-ai/ztrack) for tooling (issues, checks, evidence);
 the shared `standards/` are read by every skill.

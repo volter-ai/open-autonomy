@@ -4,47 +4,49 @@
 # Ready issue with evidence, and a reviewer that gates an In-Review change against ztrack's checks.
 #
 # Every agent is a prose skill (model-interpreted): the substrate runs each via the privilege-separated
-# wrapper. The three workers are lifecycle consumers — they fire when a task ENTERS a portable state
-# (docs/TASK-LIFECYCLE.md), and the PM (the only dispatcher) produces those transitions on its tick. The
-# work item reaches each worker as $ZTRACK_ISSUE via the trigger's `subject.ref` param. One unit: an
-# agent = behavior + capabilities + triggers(+params) + config. See docs/AUTONOMY-IR.md.
+# wrapper. The PM is the ONLY autonomous trigger (cron); the three workers are `dispatch` agents — the PM
+# reads the ztrack board on its tick and LAUNCHES the matching worker through the Runner (`agent:launch`),
+# forwarding the work item as `--ref` (the worker reads it as $ZTRACK_ISSUE via its `subject.ref` param).
+# This is fully substrate-agnostic: cron + agent:launch are the two portable primitives — there is no
+# `task:` trigger and no substrate task-state watching (docs/RUNNER.md). One unit: an agent = behavior +
+# capabilities + triggers(+params). See docs/AUTONOMY-IR.md.
 schema: autonomy.ir.v1
 targets: [local, github]
 
 agents:
-  # The only dispatcher. Sweeps the board on a tick, enforces WIP (≤1 in-progress, ≤1 in-review), shapes
-  # the next eligible transition (drafts/dispatches develop or review), and routes worker outcomes.
+  # The only dispatcher. Sweeps the board on a tick, enforces WIP (≤1 in-progress, ≤1 in-review), and
+  # LAUNCHES the next eligible worker (draft/develop/review) through the Runner, routing worker outcomes.
   pm:
     behavior: pm
-    capabilities: [tasks:converse, agent:launch]
+    capabilities: [tasks:converse, agent:launch, agent:list]
     triggers:
       - cron: "*/15 * * * *"
 
   # Turns an untriaged request into a verifiable Ready issue (source-grounded summary, 1-3 ACs, evidence
-  # scaffold). Consumes a task in the `open` state.
+  # scaffold). Launched by the PM with the work item as --ref.
   draft:
     behavior: draft
     capabilities: [tasks:author, tasks:converse]
     triggers:
-      - task: open
+      - dispatch: true
         params: { ZTRACK_ISSUE: subject.ref }
 
   # Implements exactly one Ready issue and produces real evidence for each AC; stops on a human-required
-  # path/topic. Consumes a task in the `ready` state.
+  # path/topic. Launched by the PM with the work item as --ref.
   develop:
     behavior: develop
     capabilities: [code:propose, tasks:converse]
     triggers:
-      - task: ready
+      - dispatch: true
         params: { ZTRACK_ISSUE: subject.ref }
 
   # Verifies one In-Review change: ztrack must be green, every passed AC backed by cited evidence, no
-  # unapproved human-required path/topic — then moves it to Done or back for rework. Consumes `in-review`.
+  # unapproved human-required path/topic — then moves it to Done or back for rework. Launched by the PM.
   review:
     behavior: review
     capabilities: [tasks:converse]
     triggers:
-      - task: in-review
+      - dispatch: true
         params: { ZTRACK_ISSUE: subject.ref }
 
 policy:

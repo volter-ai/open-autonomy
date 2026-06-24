@@ -29,6 +29,7 @@ Install these once, on the machine that will run the loop:
 | **tmux** | termfleet's local provider runs sessions in tmux | `brew install tmux` (macOS) / your package manager |
 | **termfleet** | the local runner — launches each agent as a terminal session | `npm install -g termfleet` |
 | **A coding agent CLI, logged in** | the agent's model access | Claude Code (default) **or** Codex — see next step |
+| **bun** (for `simple-sdlc`) | the orchestrator dispatches workers via `bun scripts/runner.ts launch …` | `curl -fsSL https://bun.sh/install \| bash` — not needed for the `hello` demo (Node-only) |
 
 ### Sign in to your coding agent
 

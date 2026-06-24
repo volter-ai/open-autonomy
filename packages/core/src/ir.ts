@@ -6,16 +6,20 @@
 // A trigger fires an agent and forwards `params` to it (the Runner contract's opaque LaunchParams).
 // `params` maps an opaque param NAME (the profile's choice; the core never interprets it) to a
 // documented SOURCE the substrate resolves from its firing context (docs/TRIGGER-PARAMS.md — e.g.
-// `subject.ref`, `subject.actor`, `trigger.kind`). Only `cron` is portable; events are carried and
-// fired where the substrate supports them.
+// `subject.ref`, `subject.actor`, `trigger.kind`). The two PORTABLE trigger kinds are `cron` (time) and
+// `dispatch` (on-demand via the Runner — docs/RUNNER.md); `event` is the substrate-native escape hatch,
+// carried verbatim and fired where the substrate supports it.
 export type Trigger =
   | { cron: string; params?: Record<string, string> }
   // `config` is the native event's own filter (e.g. github `types: [opened]`) — substrate-native data on
   // the `event` escape hatch, not an opaque IR box; the core carries it verbatim and never interprets it.
   | { event: string; config?: Record<string, unknown>; params?: Record<string, string> }
-  // `task` fires when a task enters a portable lifecycle state (docs/TASK-LIFECYCLE.md) — the portable
-  // handoff form. The substrate maps the state to its own events; `event` stays as the native escape hatch.
-  | { task: string; params?: Record<string, string> };
+  // `dispatch` fires when another actor LAUNCHES this one through the Runner (the `agent:launch` axis —
+  // docs/RUNNER.md). It is NOT autonomous: it carries no schedule/event, only the params the launcher
+  // forwards. This is how a worker is invoked by the orchestrator (the PM) on demand. There is no `task:`
+  // trigger — a task is a work ITEM whose lifecycle state is a property the orchestrator READS when
+  // deciding what to dispatch, never a trigger the substrate must watch.
+  | { dispatch: true; params?: Record<string, string> };
 
 // An actor's kind: `agent` (machine) or `human` (person). The role is intrinsic and declared; how the
 // role is *realized* (script / model / person / simulator-in-test) is the substrate's choice.
@@ -123,10 +127,10 @@ export function validateIR(ir: AutonomyIR): string[] {
         errors.push(`agent ${name}: result is for skill agents only — a script behavior returns its result directly`);
     }
     for (const t of a.triggers ?? []) {
-      if (!('cron' in t) && !('event' in t) && !('task' in t))
-        errors.push(`agent ${name}: trigger must be a cron, an event, or a task`);
-      else if ('task' in t && (typeof t.task !== 'string' || t.task.length === 0))
-        errors.push(`agent ${name}: task trigger needs a lifecycle state`);
+      if (!('cron' in t) && !('event' in t) && !('dispatch' in t))
+        errors.push(`agent ${name}: trigger must be a cron, an event, or a dispatch`);
+      else if ('dispatch' in t && t.dispatch !== true)
+        errors.push(`agent ${name}: dispatch trigger must be { dispatch: true }`);
     }
   }
   return errors;
@@ -141,7 +145,7 @@ export function irShape(ir: AutonomyIR) {
       .map(([name, a]) => ({
         agent: name,
         triggers: (a.triggers ?? [])
-          .map((t) => ('cron' in t ? `cron:${t.cron}` : 'task' in t ? `task:${t.task}` : `event:${t.event}`))
+          .map((t) => ('cron' in t ? `cron:${t.cron}` : 'dispatch' in t ? 'dispatch' : `event:${t.event}`))
           .sort(),
       }))
       .sort((x, y) => x.agent.localeCompare(y.agent)),

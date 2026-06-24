@@ -3,6 +3,13 @@
 // (workflow_dispatch via gh) is hidden here. A different substrate ships a different runner.ts with the
 // same interface (e.g. a termfleet launch); the agent code does not change. Tasks/artifact stay on gh
 // regardless of substrate — the runner is the one true substrate seam.
+//
+// It is BOTH a module (import { launch, list }) and a uniform agent-facing CLI so a prose orchestrator
+// (the PM) dispatches a worker the SAME way on every substrate, with no `gh`/`termfleet` knowledge:
+//   bun scripts/runner.ts launch <agent> --ref <work-item>   # dispatch a worker on demand
+//   bun scripts/runner.ts list   <agent>                     # its in-flight/recent runs (JSON)
+// `--ref` is the work item (the `subject.ref` source); github realizes it as the `issue_number` dispatch
+// input. Extra `--key value` pairs are forwarded verbatim.
 import { $ } from 'bun';
 import { existsSync, readFileSync } from 'node:fs';
 
@@ -49,3 +56,43 @@ export async function list(agent: string, limit = 50): Promise<RunInfo[]> {
     return [];
   }
 }
+
+// --- the uniform agent-facing CLI (same surface on every substrate) ---
+function parseFlags(args: string[]): LaunchParams {
+  const params: LaunchParams = {};
+  for (let i = 0; i < args.length; i++) {
+    const a = args[i];
+    if (a?.startsWith('--')) {
+      const key = a.slice(2);
+      const next = args[i + 1];
+      params[key] = next && !next.startsWith('--') ? (i++, next) : 'true';
+    }
+  }
+  return params;
+}
+
+export async function runCli(argv: string[]): Promise<number> {
+  const [cmd, agent, ...rest] = argv;
+  if (!cmd || !agent || agent.startsWith('--')) {
+    console.error('usage: runner.ts <launch|list> <agent> [--ref <work-item>] [--key value ...]');
+    return 2;
+  }
+  if (cmd === 'launch') {
+    const flags = parseFlags(rest);
+    // `--ref` is the work item (`subject.ref`); on github that is the `issue_number` dispatch input.
+    if ('ref' in flags) {
+      flags.issue_number = flags.ref;
+      delete flags.ref;
+    }
+    await launch(agent, flags);
+    return 0;
+  }
+  if (cmd === 'list') {
+    console.log(JSON.stringify(await list(agent)));
+    return 0;
+  }
+  console.error(`runner.ts: unknown command "${cmd}"`);
+  return 2;
+}
+
+if (import.meta.main) process.exit(await runCli(process.argv.slice(2)));

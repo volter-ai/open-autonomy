@@ -53,7 +53,7 @@ A handoff target may be a machine or a person, so the one unit is an **actor** w
 |---|---|---|
 | behavior | script / skill | a task spec for a person (situation / decision / result) |
 | capabilities | artifact/tasks/agent authority | *same vocabulary* — what the person may do |
-| triggers | cron / event / `task:` | *same* — when the person is asked (e.g. `task: human-required`) |
+| triggers | cron / event / `dispatch` | *same* — the person is `dispatch`ed (engaged on demand) when the orchestrator routes work to them |
 | config | timeout, model, … | assignee/candidates, escalation, sla, decision (RACI) |
 | realization | substrate runs it (deterministic / model-interpreted) | a real person (prod) or a **simulator** (test); notifies + escalates + blocks until the token is redeemed |
 
@@ -64,11 +64,11 @@ person/simulator are realizations of it.)
 
 ## The seam: a typed edge over the lifecycle
 
-A **seam** is the typed handoff between an upstream actor's output and a downstream actor's trigger,
-expressed over the task lifecycle:
+A **seam** is the typed handoff between an upstream actor's output and a downstream actor, mediated by the
+orchestrator reading the task lifecycle:
 
 ```
-upstream actor  ──produces──▶  task enters state S  ──consumes──▶  downstream actor's { task: S } trigger
+upstream actor  ──produces──▶  task enters state S  ──orchestrator reads S──▶  dispatches the downstream actor
 ```
 
 The seam carries a typed payload — validated by the structured-handoff research (clinical SBAR / I-PASS):
@@ -149,31 +149,32 @@ capability model, the trust/wrapper split.
 events: `event: issues`, `pull_request_target`). The changes make the handoff edge portable, typed, and
 give the human edge a declared consumer:
 
-1. **`tasks` lifecycle catalog** — portable state vocabulary (`TASK-LIFECYCLE.md`). *Additive.*
-2. **A `task:` trigger form** — fire when a task enters a portable state. *The one real `ir.ts` change:*
-   a third `Trigger` variant `{ task: string; params? }`; `event:` stays as the escape hatch.
+1. **`tasks` lifecycle catalog** — state vocabulary the orchestrator reads (`TASK-LIFECYCLE.md`). *Additive.*
+2. **The `dispatch` trigger form** — an actor invoked on demand through the Runner (`{ dispatch: true; params? }`);
+   `cron` + `dispatch` are the portable kinds, `event:` stays as the escape hatch. The orchestrator (PM)
+   reads a task's state and `launch`es the matching actor — no substrate watches task state.
 3. **The actor model** — `kind: agent | human` on the unit; `kind` declared, not inferred. The
    `kind: human` realization (worklist + escalation + durable-pause + payload) is the main new substrate
    build.
 4. **Migrate `human_required` from a risk flag to a declared consumer** — `policy.box.risk.*` stays the
    *producer rule* that transitions a task to `human-required`; add a `maintainer` actor of `kind: human`
-   triggered by `{ task: human-required }`, whose `out` (approve/reject, confirmed) resumes the merge
-   gate. The side-effect becomes an explicit, typed handoff.
+   that the orchestrator `dispatch`es when it reads that state, whose `out` (approve/reject, confirmed)
+   resumes the merge gate. The side-effect becomes an explicit, typed handoff.
 
 **Later (H4, the twin):** declare the *producing* side too, so the seam graph is explicit and measurable.
 
 ## The forks
 
 1. Keep `event:` as a substrate-native escape hatch (recommended — partial support is first-class), with
-   `task:` as the portable path.
+   `cron` + `dispatch` as the portable path.
 2. Payload *content* lives in the human behavior spec (opaque, like every behavior); only the `decision`
    *type* surfaces as a config key so the substrate routes approve vs consult vs inform.
 3. *Holding* and reconciling task state (H2) and the producing-side seam graph (H4) are separate, later
-   horizons — H1 needs only the lifecycle *vocabulary* + the `task:` trigger + the `kind: human` actor.
+   horizons — H1 needs only the lifecycle *vocabulary* + the `dispatch` trigger + the `kind: human` actor.
 
-## Incremental proof (no core change required)
+## Incremental proof
 
-The `maintainer` actor can ship on github *today* using the existing `event: issues, types:[labeled]`
-trigger (fire on the `human-required` label) + the `kind: human` realization — proving the actor model
-before the portable `task:` trigger exists. The `tasks` lifecycle + `task:` trigger are then the
-portability upgrade that de-couples it from github labels.
+The `maintainer` actor ships as a `dispatch` `kind: human` actor: the orchestrator (PM) reads the
+`human-required` state off a task and `launch`es the maintainer — the same portable seam on every
+substrate (the `human` realization — worklist + escalation + durable-pause — is the new build). No
+github-label-watching trigger is involved; task state is a property the orchestrator reads, not an event.

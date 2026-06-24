@@ -25,13 +25,16 @@ function workflows(out: { generated: Record<string, string> }): string[] {
     .map(([, c]) => c);
 }
 
-describe('compileGithub — task: trigger realization', () => {
-  // A lifecycle state is realized uniformly as a label of its name — no per-state special-casing.
-  test('a `task:` trigger maps to the issues/labeled event, whatever the state', () => {
-    for (const state of ['ready', 'in-review', 'human-required', 'done']) {
-      const wfs = workflows(compileGithub(irWith([{ task: state }]))); // non-human → a workflow is emitted
-      expect(wfs.some((c) => c.includes('issues:') && c.includes('labeled'))).toBe(true);
-    }
+describe('compileGithub — dispatch trigger realization', () => {
+  // A dispatch trigger is invoked on demand through the Runner — every workflow already exposes
+  // workflow_dispatch, so a dispatch trigger adds NO extra `on:` event (no issues:labeled label-watching).
+  test('a `dispatch` trigger emits workflow_dispatch and adds no issues-event to `on:`', () => {
+    const wfs = workflows(compileGithub(irWith([{ dispatch: true }]))); // non-human → a workflow is emitted
+    expect(wfs.length).toBe(1);
+    expect(wfs[0]).toContain('workflow_dispatch:');
+    // dispatch adds nothing to `on:` beyond the always-present launch surface — no `issues:` label-watch.
+    const onBlock = wfs[0]!.slice(wfs[0]!.indexOf('\non:'), wfs[0]!.indexOf('\njobs:'));
+    expect(onBlock.includes('\n  issues:')).toBe(false);
   });
 });
 
@@ -39,11 +42,11 @@ describe('compileGithub — kind: human is declared, not job-realized', () => {
   // A person needs no runner job: the durable "await a human" block is the existing label + merge boundary,
   // and how a person is notified/assigned/escalated is config the search varies, not a frozen template.
   test('a human actor generates NO github workflow', () => {
-    expect(workflows(compileGithub(irWith([{ task: 'human-required' }], 'human'))).length).toBe(0);
+    expect(workflows(compileGithub(irWith([{ dispatch: true }], 'human'))).length).toBe(0);
   });
 
   test('but the human actor IS declared in the manifest (visible labor)', () => {
-    const out = compileGithub(irWith([{ task: 'human-required' }], 'human'));
+    const out = compileGithub(irWith([{ dispatch: true }], 'human'));
     expect(out.generated['.open-autonomy/autonomy.yml']).toContain('maintainer');
   });
 

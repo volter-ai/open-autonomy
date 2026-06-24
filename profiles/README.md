@@ -35,11 +35,12 @@ bun bin/autonomy-compile.ts profiles/hello github /tmp/hello-gh
   github runtime (`scripts/*`) is **not** in the profile — the substrate owns and injects it, the same
   way `substrate-local` injects its runner backend (`check:runtime-sync` + `check:compile` guard it).
 - **`simple-sdlc/`** — a four-agent software-delivery loop (pm / draft / develop / review) ported from
-  the ztrack `simple-sdlc` profile. The PM is the only dispatcher (a cron tick that enforces WIP); the
-  three workers are **lifecycle consumers** — they fire when a task enters a portable state (`draft` on
-  `open`, `develop` on `ready`, `review` on `in-review`, see `docs/TASK-LIFECYCLE.md`), with the work
-  item delivered as `$ZTRACK_ISSUE` via each trigger's `subject.ref` param. Its agents use `ztrack` for
-  tooling. Compiles to both `local` and `github`.
+  the ztrack `simple-sdlc` profile. The PM is the only autonomous trigger (a `cron` tick that enforces
+  WIP); the three workers are **`dispatch`** agents — the PM reads the ztrack board, decides from each
+  issue's state (a property it reads, not a trigger), and **launches** the matching worker through the
+  Runner (`bun scripts/runner.ts launch develop --ref <id>`), delivering the work item as `$ZTRACK_ISSUE`.
+  `cron` + `agent:launch` are the two portable primitives, so it runs identically on `local` and `github`
+  with no substrate task-state machinery (`docs/RUNNER.md`). Its agents use `ztrack` for tooling.
 
 Every profile in this directory is smoke-checked by `check:profiles` (parses + compiles to each
 declared target). A profile's agents pick their own **tooling** (`ztrack`, or `gh` + `npm`); the core

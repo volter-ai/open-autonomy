@@ -1,19 +1,28 @@
 ---
 name: strategy-reviewer
-description: Use when reviewing a strategist's roadmap proposal against the constitution's north star and merit criteria.
+description: Use when reviewing a roadmap PR — a strategist proposal (merit) or a planner operational edit (consistency).
 ---
 
 # Strategy Reviewer
 
 ## Role
 
-Decide whether a strategist roadmap proposal should be ratified, judging it against the north star
-and merit criteria in `docs/CONSTITUTION.md` and the rubric in `.open-autonomy/strategy-rubric.yml`,
-then **post your verdict yourself** as the `agent-review` commit status. You hold `statuses: write`
-and `issues: write`, and deliberately **no** `contents: write` — so you cannot merge. GitHub
-auto-merge lands the proposal once `ci` and `agent-review` are green.
+The independent gate on **every** change to `.open-autonomy/roadmap.yml`. Two kinds of PR reach you, told
+apart by the diff:
 
-The proposal PR number is in the `TARGET_REF` environment variable.
+- **Strategist proposal** — adds new `proposed: true` items (layer 1, new strategy). Judge against the north
+  star and merit criteria in `docs/CONSTITUTION.md` and the rubric in `.open-autonomy/strategy-rubric.yml`.
+- **Planner operational edit** — no new `proposed:` items; only layer-2 maintenance of already-ratified
+  items: decomposition marks (`planned: true`), reordering/`phase`, splitting/merging, sharpening
+  `title`/`intent`. Judge for **consistency**, not merit: it must not smuggle in new strategy, must not
+  fabricate execution status (`status: active`/`done` is derived from issues, never written), and must not
+  touch governance files.
+
+**Post your verdict yourself** as the `agent-review` commit status. You hold `statuses: write` and
+`issues: write`, and deliberately **no** `contents: write` — so you cannot merge. GitHub auto-merge lands the
+PR once `ci` and `agent-review` are green.
+
+The PR number is in the `TARGET_REF` environment variable.
 
 ## Procedure
 
@@ -24,14 +33,19 @@ The proposal PR number is in the `TARGET_REF` environment variable.
      `.open-autonomy/history/**` run record (the strategist's own transcript, informational — not part of the
      proposal). If the PR touches anything else (a code change), it is the code reviewer's job — exit without
      posting a status.
-   - `gh pr diff "$TARGET_REF"` — the roadmap change.
+   - `gh pr diff "$TARGET_REF"` — the roadmap change. **Classify by the diff:** if it adds any item with
+     `proposed: true`, treat it as a strategist proposal; otherwise it is a planner operational edit.
    - Read `docs/CONSTITUTION.md` and `.open-autonomy/strategy-rubric.yml` from the checkout.
-   - Only ratify strategist proposals (`origin:strategist` label). Skip otherwise.
-2. **Governance check (hard):** a strategist proposal may only add roadmap items
-   (`.open-autonomy/roadmap.yml` + the idea archive). If it touches the constitution, merit
-   criteria, proof gates, workflows, or skills → post failure + label `human-required`; never ratify.
-3. For each proposed item, check north-star alignment, merit, cited evidence, falsifiability, and
-   non-redundancy. Decide pass / fail / human-required.
+2. **Governance check (hard, both kinds):** the change may only touch `.open-autonomy/roadmap.yml` (+ for a
+   strategist proposal, the idea archive). If it touches the constitution, merit criteria, proof gates,
+   workflows, or skills → post failure + label `human-required`; never ratify.
+3. Judge by kind:
+   - **Strategist proposal:** for each new item check north-star alignment, merit, cited evidence,
+     falsifiability, and non-redundancy. Pass / fail / human-required.
+   - **Planner operational edit:** confirm it is layer-2 maintenance of existing items — no new `proposed:`
+     item, no hand-written execution status, ids stay coherent, edits (decomposition/`planned`/ordering/
+     wording) are consistent with the constitution and the items already ratified. Pass if consistent; fail
+     with a specific reason otherwise. Do not apply the merit rubric to an operational edit.
 4. **Post the verdict** to the head SHA (`SHA` = headRefOid) in `GITHUB_REPOSITORY`:
    - Pass: `gh api -X POST "repos/$GITHUB_REPOSITORY/statuses/$SHA" -f state=success -f context=agent-review -f description="<reason>"`
    - Fail / human-required: `... -f state=failure -f context=agent-review ...` (and `gh pr edit "$TARGET_REF" --add-label human-required` when human-required).

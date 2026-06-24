@@ -1,5 +1,8 @@
-schema: open-autonomy.roadmap.v1
-direction: Pursue the north star and merit criteria in docs/CONSTITUTION.md. The strategist
-  proposes strategy toward that north star and the strategy reviewer ratifies it; this file
-  records only ratified roadmap items. Replace the constitution's north star for your project.
+schema: open-autonomy.roadmap.v2
+direction: Pursue the north star and merit criteria in docs/CONSTITUTION.md. This file is layer 1 —
+  a parking lot of ratified intents at any granularity. The strategist proposes items (proposed: true)
+  and the strategy reviewer ratifies them; the planner (layer 2) converts each item into tracking issues
+  (linked by the roadmap:<id> label) and keeps the lot ordered, marking planned: true once an item is fully
+  decomposed. Execution status (in progress / done) is DERIVED from each item's child issues — never written
+  here. Replace the constitution's north star for your project.
 items: []

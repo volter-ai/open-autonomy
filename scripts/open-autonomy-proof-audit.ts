@@ -1,15 +1,18 @@
 #!/usr/bin/env bun
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname } from 'node:path';
-// The proof_gate of every non-`proposed` roadmap item (proposed items are aspirational, exempt until a
-// human ratifies them). A focused roadmap reader — the audit needs only status + proof_gate per item.
+// The proof_gate of every ratified (non-`proposed`) roadmap item (proposed items are aspirational, exempt
+// until ratified). v2 marks a candidate with `proposed: true`; v1 used `status: proposed` — accept both.
 function nonProposedProofGates(roadmapText: string): string[] {
   const unq = (s: string) => s.replace(/^["']|["']$/g, '').trim();
   return roadmapText
     .split(/^\s*-\s+id:/m)
     .slice(1)
-    .map((block) => ({ status: /\bstatus:\s*(\S+)/.exec(block)?.[1], gate: /\bproof_gate:\s*([^\n]+)/.exec(block)?.[1] }))
-    .filter((it) => it.gate && it.status !== 'proposed')
+    .map((block) => ({
+      proposed: /\bstatus:\s*proposed\b/.test(block) || /\bproposed:\s*true\b/.test(block),
+      gate: /\bproof_gate:\s*([^\n]+)/.exec(block)?.[1],
+    }))
+    .filter((it) => it.gate && !it.proposed)
     .map((it) => unq(it.gate as string));
 }
 

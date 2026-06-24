@@ -93,6 +93,8 @@ agents:
     capabilities:
       - tasks:converse
       - tasks:author
+      - code:propose@roadmap
+    review: strategy_reviewer
   strategist:
     skill: strategist
     workflowFile: strategist.yml

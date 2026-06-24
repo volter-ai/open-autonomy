@@ -144,19 +144,21 @@ describe('public agent production readiness', () => {
     expect(text).not.toContain('github-agent-publish');
   });
 
-  test('planner reconciles roadmap into tracking issues (creation is deterministic, not the model)', () => {
+  test('planner owns layer 2: creates issues + proposes roadmap edits (blessed by strategy_reviewer)', () => {
     const text = workflow('planner.yml');
     expect(text).toContain('bun scripts/claude-agent-run.ts --skill .codex/skills/planner/SKILL.md');
-    // Creating one tracking issue per planned/active item is mechanical wiring, so it runs as a deterministic
-    // step (not left to a possibly-weak model executing the skill) — symmetric with closing merged issues.
+    // Deterministic safety nets remain: close issues whose PR merged, and ensure a planned item has a tracking
+    // issue. Decomposition itself (1 item → many issues) is the planner's judgment, not a mechanical step.
     expect(text).toContain('scripts/reconcile-roadmap-issues.ts');
     expect(text).toContain('scripts/reconcile-merged-issues.ts');
     const plJob = text.slice(text.indexOf('  planner:'));
-    expect(plJob).toContain('issues: write'); // tasks:author
-    expect(plJob).not.toContain('contents: write'); // planner changes no code
+    expect(plJob).toContain('issues: write'); // tasks:author — creates/edits issues directly
+    expect(plJob).toContain('contents: write'); // code:propose@roadmap — proposes roadmap.yml edits
+    expect(plJob).toContain('strategy_reviewer.yml'); // its roadmap PR is blessed by the strategy reviewer
     const skill = readFileSync(new URL('../.codex/skills/planner/SKILL.md', import.meta.url), 'utf8');
     expect(skill).toContain('origin:roadmap-planner');
-    expect(skill).not.toContain('gh issue create'); // creation is deterministic; the skill must not duplicate
+    expect(skill).toContain('gh issue create'); // the planner now decomposes items into issues
+    expect(skill).toContain('planned: true'); // and sets the soft "fully decomposed" gate
   });
 
   test('fleet preflight workflow is wired', () => {

@@ -53,11 +53,15 @@ agents:
         config: { types: [opened, synchronize, reopened, ready_for_review] }
     timeout: 20
 
-  # Planner: a skill agent that reconciles roadmap.yml into planner-owned tracking issues (one per
-  # planned or active item). Creates + edits issues; changes no code.
+  # Planner: owns layer 2 of the two-layer roadmap. Converts each ratified roadmap.yml item into tracking
+  # issues (1 item → many, linked by `roadmap:<id>`) via tasks:author, and keeps the roadmap current/ordered
+  # (decompose marks `planned`, reprioritize, split/merge) via code:propose@roadmap. Its roadmap edits are
+  # proposed as an auto-merging PR blessed by strategy_reviewer (operational-edit path) — it never merges.
+  # Execution status is derived from child issues, never written here.
   planner:
     behavior: planner
-    capabilities: [tasks:converse, tasks:author]
+    capabilities: [tasks:converse, tasks:author, code:propose@roadmap]
+    review: strategy_reviewer
     triggers:
       - cron: "17 6 * * *"
     timeout: 15

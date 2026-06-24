@@ -17,7 +17,7 @@ items:
   - id: unified-loop-budget
     phase: 2
     priority: high
-    status: active
+    status: planned
     title: PM Failure Handling From History
     proof_gate: retry-ci-failure
     acceptance:
@@ -30,7 +30,7 @@ items:
   - id: pm-proactive-backlog
     phase: 3
     priority: high
-    status: active
+    status: planned
     title: PM Operations And Backlog Policy
     proof_gate: pm-open-pr-review
     acceptance:
@@ -48,7 +48,7 @@ items:
   - id: review-merge-parity
     phase: 5
     priority: high
-    status: active
+    status: planned
     title: Review And The Merge Boundary
     proof_gate: head-changed-before-merge
     acceptance:
@@ -60,7 +60,7 @@ items:
   - id: operator-observability
     phase: 6
     priority: medium
-    status: active
+    status: planned
     title: Observability And Operator Controls
     proof_gate: operator-pause-resume
     acceptance:
@@ -69,7 +69,7 @@ items:
   - id: production-rollout
     phase: 7
     priority: medium
-    status: active
+    status: planned
     title: Production Rollout
     proof_gate: five-issue-dogfood
     acceptance:
@@ -78,7 +78,7 @@ items:
   - id: direction-control-files
     phase: 8
     priority: high
-    status: active
+    status: planned
     title: Direction, Constitution, And Planning Loop
     proof_gate: planner-creates-proof-gate-issues
     acceptance:

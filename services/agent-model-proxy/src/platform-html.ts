@@ -1,4 +1,4 @@
-import type { DirectoryEntry, Flow, Patron, ProjectView } from './limit-ledger.js';
+import type { DirectoryEntry, Flow, LiveRun, Patron, ProjectView } from './limit-ledger.js';
 import { renderCharterPanel, renderRoadmapPanel, renderChangelogPanel } from './project-docs.js';
 
 // Server-rendered HTML for the funding platform — a Patreon-style storefront over the ledger.
@@ -97,12 +97,12 @@ function statusDot(status: 'funded' | 'low' | 'unfunded'): string {
   return `<span class="status"><span class="dot" style="background:${s.color}"></span>${s.label}</span>`;
 }
 
-function shell(title: string, body: string): string {
+function shell(title: string, body: string, refreshSeconds?: number): string {
   return `<!doctype html>
 <html lang="en"><head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+${refreshSeconds ? `<meta http-equiv="refresh" content="${refreshSeconds}">\n` : ''}<link rel="icon" href="/favicon.svg" type="image/svg+xml">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
@@ -241,6 +241,23 @@ function shell(title: string, body: string): string {
   .changelog li:before{content:'';position:absolute;left:2px;top:11px;width:5px;height:5px;border-radius:50%;background:${C.accent};}
   .empty{color:${C.muted};text-align:center;padding:72px 0;border:1px dashed ${C.line};border-radius:18px;}
   .legend{color:${C.faint};font-size:13px;margin-top:28px;}
+  .panel h3 .live{display:inline-flex;align-items:center;gap:6px;float:right;color:${C.green};font-size:11px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;}
+  .pulse{width:8px;height:8px;border-radius:50%;background:${C.green};box-shadow:0 0 0 0 rgba(10,135,84,.5);animation:pulse 1.8s infinite;}
+  @keyframes pulse{0%{box-shadow:0 0 0 0 rgba(10,135,84,.5);}70%{box-shadow:0 0 0 7px rgba(10,135,84,0);}100%{box-shadow:0 0 0 0 rgba(10,135,84,0);}}
+  .runs{list-style:none;margin:0;padding:0;}
+  .runs li{display:flex;align-items:center;gap:12px;padding:13px 0;border-bottom:1px solid ${C.line};}
+  .runs li:last-child{border-bottom:0;}
+  .runs .rd{flex:1;min-width:0;}
+  .runs .rrole{font-weight:700;font-size:15px;color:${C.ink};letter-spacing:-.01em;}
+  .runs .rrole .badge{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:${C.muted};background:${C.wash};border-radius:999px;padding:2px 8px;margin-left:8px;vertical-align:middle;}
+  .runs .rsub{color:${C.muted};font-size:13.5px;margin-top:2px;}
+  .runs .rsub a{color:${C.body};font-weight:600;}
+  .runs .rsub a:hover{color:${C.accent};}
+  .runs .rspend{text-align:right;white-space:nowrap;}
+  .runs .rspend .v{font-weight:700;font-variant-numeric:tabular-nums;font-size:15px;}
+  .runs .rspend .l{color:${C.faint};font-size:12px;}
+  .runs .watch{display:inline-flex;align-items:center;gap:5px;white-space:nowrap;color:${C.accent};font-weight:700;font-size:13.5px;border:1.5px solid #ffd0d3;border-radius:999px;padding:7px 13px;}
+  .runs .watch:hover{background:#fff5f5;border-color:${C.accent};}
 </style>
 </head><body>${body}</body></html>`;
 }
@@ -318,6 +335,55 @@ function patronChip(p: Patron): string {
   return p.url ? `<a class="patron" href="${escapeHtml(p.url)}">${inner}</a>` : `<span class="patron">${inner}</span>`;
 }
 
+// Map a run's `purpose` (the role the agent is playing) to a human label for the live panel.
+const PURPOSE_LABEL: Record<string, string> = {
+  agent: 'Developer',
+  develop: 'Developer',
+  review: 'Reviewer',
+  triage: 'Triage',
+  pm: 'Project manager',
+  planner: 'Planner',
+  strategist: 'Strategist',
+};
+
+function relTime(fromMs: number | undefined, now: number): string {
+  if (!fromMs) return '';
+  const s = Math.max(0, Math.round((now - fromMs) / 1000));
+  if (s < 60) return 'just now';
+  const m = Math.floor(s / 60);
+  if (m < 60) return `${m}m`;
+  return `${Math.floor(m / 60)}h ${m % 60}m`;
+}
+
+function runRow(r: LiveRun, repo: string, now: number): string {
+  const role = PURPOSE_LABEL[r.purpose] ?? (r.purpose.charAt(0).toUpperCase() + r.purpose.slice(1));
+  const issueLink = r.issue > 0
+    ? `<a href="https://github.com/${escapeHtml(repo)}/issues/${r.issue}">#${r.issue}</a>`
+    : 'autonomous';
+  const elapsed = relTime(r.started_at_ms, now);
+  const sub = `${issueLink} · @${escapeHtml(r.actor)}${elapsed ? ` · running ${elapsed}` : ''} · ${r.request_count} call${r.request_count === 1 ? '' : 's'}`;
+  // The GitHub Actions run is the real-time view: public, live-streaming logs. We just index + deep-link it.
+  const watch = r.github_run_id
+    ? `<a class="watch" href="https://github.com/${escapeHtml(repo)}/actions/runs/${escapeHtml(r.github_run_id)}">Watch live ›</a>`
+    : '';
+  return `<li>
+    <div class="rd">
+      <div class="rrole">${escapeHtml(role)}${r.system ? '<span class="badge">system</span>' : ''}</div>
+      <div class="rsub">${sub}</div>
+    </div>
+    <div class="rspend"><div class="v">${usd(r.consumed_usd_cents)}</div><div class="l">spent</div></div>
+    ${watch}
+  </li>`;
+}
+
+function renderLiveAgents(runs: LiveRun[], repo: string, now: number): string {
+  const head = `<h3>Live agents${runs.length ? `<span class="live"><span class="pulse"></span>${runs.length} running</span>` : ''}</h3>`;
+  if (!runs.length) {
+    return `<div class="panel">${head}<p class="sub">No agents running right now. When this repo's workflows fire, each run shows up here — follow along live in GitHub Actions.</p></div>`;
+  }
+  return `<div class="panel">${head}<ul class="runs">${runs.map((r) => runRow(r, repo, now)).join('')}</ul></div>`;
+}
+
 export function renderProject(v: ProjectView): string {
   const owner = ownerOf(v.account);
   const color = STATUS[v.status].color;
@@ -344,6 +410,8 @@ export function renderProject(v: ProjectView): string {
   const charter = renderCharterPanel(v.profile.charter_md, repoUrl);
   const roadmap = renderRoadmapPanel(v.profile.roadmap_yml, repoUrl);
   const shipped = renderChangelogPanel(v.profile.changelog_md, repoUrl);
+  const now = Date.now();
+  const live = renderLiveAgents(v.live_runs, v.account, now);
 
   const body = `${nav()}<div class="wrap">
     <div class="cover-hero" style="${coverStyle(v.profile.cover_url, v.account)}"></div>
@@ -366,6 +434,7 @@ export function renderProject(v: ProjectView): string {
           ${progress(g.frac, color)}
           <p class="note">Keep ${v.goal_days} days of agent runway funded. Days remaining is a Bayesian estimate of daily spend.</p>
         </div>
+        ${live}
         <div class="panel">
           <h3>Recent activity</h3>
           ${feed}
@@ -401,7 +470,8 @@ export function renderProject(v: ProjectView): string {
       </div>
     </div>
   </div>`;
-  return shell(`${nameOf(v.account)} · open-autonomy`, body);
+  // When agents are running, soft-refresh so spend + elapsed tick forward and finished runs drop off.
+  return shell(`${nameOf(v.account)} · open-autonomy`, body, v.live_runs.length ? 15 : undefined);
 }
 
 export function renderRedeemResult(account: string, ok: boolean, message: string): string {

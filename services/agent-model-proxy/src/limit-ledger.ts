@@ -36,12 +36,16 @@ interface LedgerState {
   // is independent of, and complementary to, per-account balances.
   consumed_usd_cents: number;
   reserved_usd_cents: number;
-  reservations: Record<string, { amount: number; expires_at_ms: number; account?: string; issue?: number; actor?: string }>;
+  reservations: Record<string, { amount: number; expires_at_ms: number; account?: string; issue?: number; actor?: string; run_id?: string }>;
   // `expires_at_ms` is the run token's own expiry. An active run whose token has expired can no
   // longer spend, so it must not keep holding an active-run slot — reapExpiredRuns() frees it. This
   // is the safety net for the leak case: a workflow that dies before its release step would otherwise
   // pin the actor/repo/global active counters forever (see actor_active_run_limit_reached).
-  runs: Record<string, { repo: string; issue: number; actor: string; active: boolean; system?: boolean; expires_at_ms?: number }>;
+  // The extra fields beyond the active-slot accounting (github_run_id/purpose/started_at_ms +
+  // consumed/request_count) exist only to power the public "live agents" panel: they let the project
+  // page show what's running right now and deep-link to each run's live GitHub Actions log. They never
+  // gate spend (the RunBudget DO is the per-run source of truth); they are a denormalized read cache.
+  runs: Record<string, { repo: string; issue: number; actor: string; active: boolean; system?: boolean; expires_at_ms?: number; github_run_id?: string; purpose?: string; started_at_ms?: number; consumed_usd_cents?: number; request_count?: number }>;
   // The funding tree. Every project (repo slug) and named root (e.g. "volter") is an account.
   // balance = granted_in - granted_out - consumed. mint adds money at a node (the only way credits
   // enter the system); grant transfers between nodes (conserves total); spend consumes (leaves).
@@ -419,6 +423,11 @@ export class LimitLedger implements DurableObject {
       active: true,
       system: isSystem,
       expires_at_ms: Date.parse(claims.expires_at) || undefined,
+      github_run_id: claims.github_run_id,
+      purpose: claims.purpose,
+      started_at_ms: Date.now(),
+      consumed_usd_cents: 0,
+      request_count: 0,
     };
     await this.save();
     return { ok: true };
@@ -490,7 +499,7 @@ export class LimitLedger implements DurableObject {
     }
 
     this.state.reserved_usd_cents += amount;
-    this.state.reservations[requestId] = { amount, expires_at_ms: Date.now() + 10 * 60_000, account, issue: run?.issue, actor: run?.actor };
+    this.state.reservations[requestId] = { amount, expires_at_ms: Date.now() + 10 * 60_000, account, issue: run?.issue, actor: run?.actor, run_id: runId };
     await this.save();
     return { ok: true, remaining_global_usd_cents: available - amount };
   }
@@ -505,6 +514,13 @@ export class LimitLedger implements DurableObject {
         a.consumed_usd_cents += spent;
         recordDailySpend(a, spent);
         if (spent > 0) this.recordFlow({ kind: 'consume', to: reservation.account, amount_usd_cents: spent, issue: reservation.issue, actor: reservation.actor });
+      }
+      // Attribute the settled spend to the run so the live-agents panel can show per-run burn. A consume
+      // always follows a successful reserve (one provider round-trip), so count the request here too.
+      const run = reservation.run_id ? this.state.runs[reservation.run_id] : undefined;
+      if (run) {
+        run.consumed_usd_cents = (run.consumed_usd_cents ?? 0) + spent;
+        run.request_count = (run.request_count ?? 0) + 1;
       }
       delete this.state.reservations[requestId];
     }
@@ -631,12 +647,32 @@ export class LimitLedger implements DurableObject {
       amount_label: s.monthly_usd_cents ? `$${(s.monthly_usd_cents / 100).toFixed(0)}/mo` : undefined,
     }));
     const projectPatrons = projectPatronsOf(this.state.flows, account, (id) => displayProfile(this.acct(id)));
+    // Runs executing right now for this repo. Filter expired-but-not-yet-reaped runs inline (pure read
+    // model — don't mutate/reap here; register() and the cron reap own that), newest first, bounded.
+    const now = Date.now();
+    const liveRuns: LiveRun[] = Object.entries(this.state.runs)
+      .filter(([, r]) => r.active && r.repo === account && (typeof r.expires_at_ms !== 'number' || r.expires_at_ms > now))
+      .map(([run_id, r]) => ({
+        run_id,
+        repo: r.repo,
+        issue: r.issue,
+        actor: r.actor,
+        purpose: r.purpose ?? 'agent',
+        system: Boolean(r.system),
+        github_run_id: r.github_run_id,
+        started_at_ms: r.started_at_ms,
+        consumed_usd_cents: r.consumed_usd_cents ?? 0,
+        request_count: r.request_count ?? 0,
+      }))
+      .sort((x, y) => (y.started_at_ms ?? 0) - (x.started_at_ms ?? 0))
+      .slice(0, 12);
     return {
       found: Boolean(a),
       ...entry,
       tiers: a?.tiers ?? FLEET_TIERS,
       feed,
       patrons: [...projectPatrons, ...sponsorPatrons],
+      live_runs: liveRuns,
     };
   }
 
@@ -815,11 +851,27 @@ export interface Patron {
   amount_label?: string;
 }
 
+// A run that is executing RIGHT NOW for this project — the "follow along" surface. The GitHub Actions
+// run (public, live-streaming logs) is the real-time view; `github_run_id` + `repo` deep-link to it.
+export interface LiveRun {
+  run_id: string;
+  repo: string;
+  issue: number;
+  actor: string;
+  purpose: string;
+  system: boolean;
+  github_run_id?: string;
+  started_at_ms?: number;
+  consumed_usd_cents: number;
+  request_count: number;
+}
+
 export interface ProjectView extends DirectoryEntry {
   found: boolean;
   tiers: Tier[];
   feed: Flow[];
   patrons: Patron[];
+  live_runs: LiveRun[];
 }
 
 function upsertSponsor(list: Sponsor[], sponsor: Sponsor): void {

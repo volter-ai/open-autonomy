@@ -234,3 +234,42 @@ describe('platform: review hardening', () => {
     expect(v.balance_usd_cents).toBe(10000);
   });
 });
+
+describe('platform: live agents (follow along)', () => {
+  test('an active run surfaces on its project with spend + a live Actions link', async () => {
+    const l = ledger();
+    await l.mint('acme/widget', 10000);
+    await l.register({ ...claims(), github_run_id: '99887766' }, CONFIG); // run_1 → repo acme/widget, issue 7
+    await l.reserve('req-1', 120, CONFIG, 'run_1');
+    await l.consume('req-1', 90);
+
+    const v = await l.project('acme/widget');
+    expect(v.live_runs.length).toBe(1);
+    const run = v.live_runs[0];
+    expect(run.issue).toBe(7);
+    expect(run.actor).toBe('octocat');
+    expect(run.consumed_usd_cents).toBe(90);
+    expect(run.request_count).toBe(1);
+    expect(run.github_run_id).toBe('99887766');
+
+    const html = renderProject(v);
+    expect(html.includes('Live agents')).toBe(true);
+    expect(html.includes('1 running')).toBe(true);
+    expect(html.includes('https://github.com/acme/widget/actions/runs/99887766')).toBe(true);
+    expect(html.includes('https://github.com/acme/widget/issues/7')).toBe(true);
+    expect(html.includes('$0.90')).toBe(true);
+    expect(html.includes('http-equiv="refresh"')).toBe(true); // soft-refresh while live
+  });
+
+  test('a completed run drops off the live panel (empty state, no refresh)', async () => {
+    const l = ledger();
+    await l.mint('acme/widget', 10000);
+    await l.register(claims(), CONFIG);
+    await l.complete('run_1');
+    const v = await l.project('acme/widget');
+    expect(v.live_runs.length).toBe(0);
+    const html = renderProject(v);
+    expect(html.includes('No agents running right now')).toBe(true);
+    expect(html.includes('http-equiv="refresh"')).toBe(false);
+  });
+});

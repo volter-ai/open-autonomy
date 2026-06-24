@@ -233,6 +233,13 @@ ${refreshSeconds ? `<meta http-equiv="refresh" content="${refreshSeconds}">\n` :
   .rmeta{color:${C.muted};font-size:13px;margin-top:2px;}
   .rm-item.done .rtitle{color:${C.muted};font-weight:500;}
   .rm-item.done .rmeta{color:${C.faint};}
+  .rm-fold{margin-top:6px;}
+  .rm-fold>summary{cursor:pointer;list-style:none;display:flex;align-items:center;gap:8px;padding:11px 0 5px;font-weight:700;font-size:12px;text-transform:uppercase;letter-spacing:.08em;color:${C.faint};border-top:1px solid ${C.line};}
+  .rm-fold>summary::-webkit-details-marker{display:none;}
+  .rm-fold>summary::before{content:'▸';color:${C.muted};font-size:11px;transition:transform .15s ease;}
+  .rm-fold[open]>summary::before{transform:rotate(90deg);}
+  .rm-fold>summary:hover{color:${C.ink};}
+  .rm-fold .roadmap{margin-top:4px;}
   .release{margin-bottom:18px;}
   .release:last-child{margin-bottom:0;}
   .rel-head{font-weight:800;font-size:14px;color:${C.ink};margin-bottom:8px;letter-spacing:-.01em;}

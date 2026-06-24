@@ -153,49 +153,71 @@ export function renderRoadmapPanel(roadmapYml: string | undefined, repoUrl: stri
     <div class="rm-track"><div class="rm-fill" style="width:${pct}%"></div></div>
   </div>`;
 
-  const rank = (s: string): number => (s === 'active' ? 0 : s === 'planned' ? 1 : s === 'proposed' ? 2 : 3);
-  const phasesMap = new Map<string, RoadmapItem[]>();
-  for (const it of items) {
-    const p = it.phase || 'Upcoming';
-    if (!phasesMap.has(p)) phasesMap.set(p, []);
-    phasesMap.get(p)!.push(it);
-  }
-
-  const sortedPhases = Array.from(phasesMap.keys()).sort((a, b) => {
-    const na = parseInt(a, 10);
-    const nb = parseInt(b, 10);
-    if (!isNaN(na) && !isNaN(nb)) return na - nb;
-    return a.localeCompare(b);
-  });
-
-  let rows = '';
-  for (const p of sortedPhases) {
-    const phaseItems = phasesMap.get(p)!;
-    phaseItems.sort((a, b) => rank(a.status) - rank(b.status));
-
-    const titlePrefix = !isNaN(parseInt(p, 10)) ? 'Phase ' : '';
-    rows += `<li class="rm-phase-hdr"><div class="rm-phase-label">${titlePrefix}${esc(p)}</div></li>`;
-
-    rows += phaseItems.map((it) => {
-      const isLive = it.status === 'active' || it.status === 'done';
-      const meta = [it.priority ? esc(it.priority) : ''].filter(Boolean).join(' · ');
-      return `<li class="rm-item ${esc(it.status)}">
-        <div class="rm-node"></div>
-        <div class="rm-content">
-          <div class="rtitle">${esc(it.title)}</div>
-          ${meta ? `<div class="rmeta">${meta}</div>` : ''}
-        </div>
-      </li>`;
-    }).join('');
-  }
-
   const more = repoUrl ? `<a class="docmore" href="${esc(repoUrl)}/blob/HEAD/.open-autonomy/roadmap.yml">Full roadmap →</a>` : '';
+
+  // Now / Next / Later — the standard product-roadmap idiom. Instead of listing phase 1 downward (which
+  // buries the current work under everything that came "before" it on a roadmap that may never mark items
+  // done), the panel centers on the current steps: what's IN PROGRESS now, what's UP NEXT, then folds the
+  // LATER backlog and SHIPPED history into native <details> (no client JS). Each item keeps its phase as
+  // meta, so nothing is lost. Short roadmaps simply have empty/absent folds — same code path, no special-case.
+  const phaseNum = (i: RoadmapItem): number => {
+    const n = parseInt(i.phase ?? '', 10);
+    return isNaN(n) ? Number.MAX_SAFE_INTEGER : n;
+  };
+  const byPhase = (a: RoadmapItem, b: RoadmapItem): number => phaseNum(a) - phaseNum(b);
+
+  const inProgress = items.filter((i) => i.status !== 'planned' && i.status !== 'proposed' && i.status !== 'done').sort(byPhase);
+  const upcoming = items.filter((i) => i.status === 'planned' || i.status === 'proposed').sort(byPhase);
+  const shipped = items.filter((i) => i.status === 'done').sort(byPhase);
+
+  // Show the immediate next steps inline; if nothing is in progress (a not-yet-started project), surface a
+  // few more of the plan so the panel still says something.
+  const nextCount = inProgress.length ? 3 : 5;
+  const next = upcoming.slice(0, nextCount);
+  const later = upcoming.slice(next.length);
+
+  const sections: string[] = [];
+  if (inProgress.length) sections.push(roadmapSection('In progress', inProgress));
+  if (next.length) sections.push(roadmapSection('Up next', next));
+
+  const folds: string[] = [];
+  if (later.length) folds.push(roadmapFold(`${later.length} later`, later));
+  if (shipped.length) {
+    // Everything's shipped and nothing is in flight/planned → show it rather than hide the whole roadmap.
+    if (sections.length) folds.push(roadmapFold(`✓ ${shipped.length} shipped`, shipped));
+    else sections.push(roadmapSection('Shipped', shipped));
+  }
+
   return `<div class="panel roadmap-panel">
     <h3>Roadmap</h3>
     ${momentumHtml}
-    <ul class="roadmap">${rows}</ul>
+    <ul class="roadmap">${sections.join('')}</ul>
+    ${folds.join('')}
     ${more}
   </div>`;
+}
+
+// One labelled section ("In progress" / "Up next" / "Shipped") of the Now/Next/Later roadmap: a header
+// row followed by its items, each carrying its phase + priority as meta so phase context isn't lost.
+function roadmapSection(label: string, items: RoadmapItem[]): string {
+  return `<li class="rm-phase-hdr"><div class="rm-phase-label">${esc(label)}</div></li>` + items.map(roadmapItemRow).join('');
+}
+
+function roadmapItemRow(it: RoadmapItem): string {
+  const phase = it.phase ? (isNaN(parseInt(it.phase, 10)) ? esc(it.phase) : `Phase ${esc(it.phase)}`) : '';
+  const meta = [phase, it.priority ? esc(it.priority) : ''].filter(Boolean).join(' · ');
+  return `<li class="rm-item ${esc(it.status)}">
+    <div class="rm-node"></div>
+    <div class="rm-content">
+      <div class="rtitle">${esc(it.title)}</div>
+      ${meta ? `<div class="rmeta">${meta}</div>` : ''}
+    </div>
+  </li>`;
+}
+
+// A collapsed-by-default group (the Later backlog / Shipped history) — native <details>, no client JS.
+function roadmapFold(label: string, items: RoadmapItem[]): string {
+  return `<details class="rm-fold"><summary>${label}</summary><ul class="roadmap">${items.map(roadmapItemRow).join('')}</ul></details>`;
 }
 
 export function renderChangelogPanel(changelogMd: string | undefined, repoUrl: string | undefined): string {

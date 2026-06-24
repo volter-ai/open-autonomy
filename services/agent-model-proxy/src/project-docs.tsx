@@ -3,7 +3,8 @@
 // so they are testable in isolation: parse the raw doc text the repo ships, then render it into the
 // page's existing panel styles. The repo is the source of truth; the page is just a faithful window
 // onto what the project says it is and is doing.
-import { icon } from './icons.js';
+import { Icon } from './ui/Icon.js';
+import { render } from './ui/render.js';
 
 export interface RoadmapItem {
   id: string;
@@ -168,15 +169,20 @@ export function parseChangelog(md: string, maxSections = 2, maxLines = 6): Chang
 // ── Render (into the page's existing `.panel` styling) ──────────────────────────────────────────────
 // Each returns '' when the doc is absent, so the page simply omits the panel for a repo that ships none.
 
-export function renderCharterPanel(constitutionMd: string | undefined, repoUrl: string | undefined): string {
-  const excerpt = constitutionExcerpt(constitutionMd ?? '');
-  if (!excerpt) return '';
-  const more = repoUrl ? `<a class="docmore" href="${esc(repoUrl)}/blob/HEAD/docs/CONSTITUTION.md">Read the full charter →</a>` : '';
-  return `<div class="panel">
-    <h3>Charter</h3>
-    <div class="prose">${mdToSafeHtml(excerpt)}</div>
-    ${more}
-  </div>`;
+export function CharterPanel({ md, repoUrl }: { md?: string; repoUrl?: string }) {
+  const excerpt = constitutionExcerpt(md ?? '');
+  if (!excerpt) return null;
+  return (
+    <div class="panel">
+      <h3>Charter</h3>
+      <div class="prose" dangerouslySetInnerHTML={{ __html: mdToSafeHtml(excerpt) }} />
+      {repoUrl ? <a class="docmore" href={`${repoUrl}/blob/HEAD/docs/CONSTITUTION.md`}>Read the full charter →</a> : null}
+    </div>
+  );
+}
+
+export function renderCharterPanel(md: string | undefined, repoUrl: string | undefined): string {
+  return render(<CharterPanel md={md} repoUrl={repoUrl} />);
 }
 
 // State → CSS class (reuse the existing node colours): in_progress reads as "active", parked as "planned".
@@ -187,116 +193,114 @@ const STATE_CLASS: Record<RoadmapState, string> = {
   done: 'done',
 };
 
-export function renderRoadmapPanel(roadmapYml: string | undefined, repoUrl: string | undefined, statusJson?: string): string {
-  const items = parseRoadmap(roadmapYml ?? '');
-  if (!items.length) return '';
-  const counts = parseRoadmapStatus(statusJson);
+type Row = { item: RoadmapItem; state: RoadmapState; c: RoadmapCounts };
 
-  // Derive each item's execution state from its planning flag + child issues (two-layer model). The item
-  // carries its own rollup so a row can show "3/5 issues" without re-deriving.
-  type Row = { item: RoadmapItem; state: RoadmapState; c: RoadmapCounts };
-  const rows: Row[] = items.map((item) => ({ item, state: roadmapItemState(item, counts.get(item.id)), c: counts.get(item.id) ?? { total: 0, done: 0 } }));
-
-  const phaseNum = (i: RoadmapItem): number => {
-    const n = parseInt(i.phase ?? '', 10);
-    return isNaN(n) ? Number.MAX_SAFE_INTEGER : n;
-  };
-  const byPhase = (a: Row, b: Row): number => phaseNum(a.item) - phaseNum(b.item);
-  const of = (s: RoadmapState): Row[] => rows.filter((r) => r.state === s).sort(byPhase);
-
-  const inProgress = of('in_progress');
-  const parked = of('parked');
-  const proposed = of('proposed');
-  const done = of('done');
-
-  // Momentum: progress over the committed work (proposed candidates aren't committed yet, so they're excluded).
-  const committed = inProgress.length + parked.length + done.length;
-  const pct = committed > 0 ? Math.round((done.length / committed) * 100) : 0;
-  const momentumHtml = `<div class="rm-momentum">
-    <div class="rm-stats">
-      <span class="act"><b>${inProgress.length}</b> in progress</span>
-      <span><b>${parked.length}</b> queued</span>
-      <span><b>${done.length}</b> shipped</span>
-    </div>
-    <div class="rm-track"><div class="rm-fill" style="width:${pct}%"></div></div>
-  </div>`;
-
-  const more = repoUrl ? `<a class="docmore" href="${esc(repoUrl)}/blob/HEAD/.open-autonomy/roadmap.yml">Full roadmap →</a>` : '';
-
-  // Now / Next / Later — center on the current steps. IN PROGRESS leads (with a per-item issue tally), then a
-  // few UP NEXT from the parked backlog; the rest of the backlog, the proposed candidates, and the shipped
-  // history fold into native <details> (no client JS). If nothing is in progress, surface more of the queue.
-  const nextCount = inProgress.length ? 3 : 5;
-  const next = parked.slice(0, nextCount);
-  const laterParked = parked.slice(next.length);
-
-  const sections: string[] = [];
-  if (inProgress.length) sections.push(roadmapSection('In progress', inProgress, repoUrl));
-  if (next.length) sections.push(roadmapSection('Up next', next, repoUrl));
-  // Nothing committed yet (only proposals) → show the proposals rather than an empty panel.
-  if (!sections.length && proposed.length) sections.push(roadmapSection('Proposed', proposed, repoUrl));
-
-  const folds: string[] = [];
-  if (laterParked.length) folds.push(roadmapFold(`${laterParked.length} more queued`, laterParked, repoUrl));
-  if (sections.length && proposed.length) folds.push(roadmapFold(`${proposed.length} proposed`, proposed, repoUrl));
-  if (done.length) {
-    if (sections.length) folds.push(roadmapFold(`✓ ${done.length} shipped`, done, repoUrl));
-    else sections.push(roadmapSection('Shipped', done, repoUrl));
-  }
-
-  return `<div class="panel roadmap-panel">
-    <h3>Roadmap</h3>
-    ${momentumHtml}
-    <ul class="roadmap">${sections.join('')}</ul>
-    ${folds.join('')}
-    ${more}
-  </div>`;
-}
-
-// One labelled section ("In progress" / "Up next" / "Proposed" / "Shipped") — a header row then its items.
-function roadmapSection(label: string, rows: Array<{ item: RoadmapItem; state: RoadmapState; c: RoadmapCounts }>, repoUrl?: string): string {
-  return `<li class="rm-phase-hdr"><div class="rm-phase-label">${esc(label)}</div></li>` + rows.map((r) => roadmapItemRow(r, repoUrl)).join('');
-}
-
-function roadmapItemRow(row: { item: RoadmapItem; state: RoadmapState; c: RoadmapCounts }, repoUrl?: string): string {
+function RoadmapItemRow({ row, repoUrl }: { row: Row; repoUrl?: string }) {
   const { item: it, state, c } = row;
-  const phase = it.phase ? (isNaN(parseInt(it.phase, 10)) ? esc(it.phase) : `Phase ${esc(it.phase)}`) : '';
+  const phase = it.phase ? (isNaN(parseInt(it.phase, 10)) ? it.phase : `Phase ${it.phase}`) : '';
   // Surface the child-issue tally where it's meaningful: progress while in flight, the count once shipped.
   const tally = state === 'in_progress' && c.total > 0 ? `${c.done}/${c.total} issues`
     : state === 'done' && c.total > 0 ? `${c.total} issue${c.total === 1 ? '' : 's'}`
     : '';
-  const meta = [phase, it.priority ? esc(it.priority) : '', tally].filter(Boolean).join(' · ');
-  // Pop into GitHub: when an item has linked tracking issues, link to the label-filtered issue list so the
-  // roadmap item is one click from its real issues + PRs. (Parked/proposed items have none yet — no link.)
-  const ghIssues = repoUrl && c.total > 0
-    ? `<a class="rm-gh" href="${esc(repoUrl)}/issues?q=${encodeURIComponent(`label:roadmap:${it.id}`)}" title="View linked issues on GitHub">${icon('github')} ${c.total} issue${c.total === 1 ? '' : 's'}</a>`
-    : '';
-  return `<li class="rm-item ${STATE_CLASS[state]}">
-    <div class="rm-node"></div>
-    <div class="rm-content">
-      <div class="rtitle">${esc(it.title)}${ghIssues}</div>
-      ${meta ? `<div class="rmeta">${meta}</div>` : ''}
-    </div>
-  </li>`;
+  const meta = [phase, it.priority ?? '', tally].filter(Boolean).join(' · ');
+  return (
+    <li class={`rm-item ${STATE_CLASS[state]}`}>
+      <div class="rm-node" />
+      <div class="rm-content">
+        <div class="rtitle">
+          {it.title}
+          {repoUrl && c.total > 0
+            ? <a class="rm-gh" href={`${repoUrl}/issues?q=${encodeURIComponent(`label:roadmap:${it.id}`)}`} title="View linked issues on GitHub"><Icon name="github" /> {`${c.total} issue${c.total === 1 ? '' : 's'}`}</a>
+            : null}
+        </div>
+        {meta ? <div class="rmeta">{meta}</div> : null}
+      </div>
+    </li>
+  );
+}
+
+// One labelled section ("In progress" / "Up next" / "Proposed" / "Shipped") — a header row then its items.
+function RoadmapSection({ label, rows, repoUrl }: { label: string; rows: Row[]; repoUrl?: string }) {
+  return <>{[<li class="rm-phase-hdr"><div class="rm-phase-label">{label}</div></li>, ...rows.map((r) => <RoadmapItemRow row={r} repoUrl={repoUrl} />)]}</>;
 }
 
 // A collapsed-by-default group (overflow backlog / proposals / shipped history) — native <details>, no JS.
-function roadmapFold(label: string, rows: Array<{ item: RoadmapItem; state: RoadmapState; c: RoadmapCounts }>, repoUrl?: string): string {
-  return `<details class="rm-fold"><summary>${label}</summary><ul class="roadmap">${rows.map((r) => roadmapItemRow(r, repoUrl)).join('')}</ul></details>`;
+function RoadmapFold({ label, rows, repoUrl }: { label: string; rows: Row[]; repoUrl?: string }) {
+  return <details class="rm-fold"><summary>{label}</summary><ul class="roadmap">{rows.map((r) => <RoadmapItemRow row={r} repoUrl={repoUrl} />)}</ul></details>;
 }
 
-export function renderChangelogPanel(changelogMd: string | undefined, repoUrl: string | undefined): string {
-  const sections = parseChangelog(changelogMd ?? '');
-  if (!sections.length || sections.every((s) => !s.lines.length)) return '';
-  const blocks = sections.filter((s) => s.lines.length).map((s) => `
-    <div class="release">
-      <div class="rel-head">${esc(s.heading)}</div>
-      <ul class="changelog">${s.lines.map((l) => `<li>${esc(l)}</li>`).join('')}</ul>
-    </div>`).join('');
-  const more = repoUrl ? `<a class="docmore" href="${esc(repoUrl)}/blob/HEAD/CHANGELOG.md">Full changelog →</a>` : '';
-  return `<div class="panel">
-    <h3>What's shipped</h3>
-    ${blocks}
-    ${more}
-  </div>`;
+export function RoadmapPanel({ yml, repoUrl, statusJson }: { yml?: string; repoUrl?: string; statusJson?: string }) {
+  const items = parseRoadmap(yml ?? '');
+  if (!items.length) return null;
+  const counts = parseRoadmapStatus(statusJson);
+  // Derive each item's execution state from its planning flag + child issues (two-layer model).
+  const rows: Row[] = items.map((item) => ({ item, state: roadmapItemState(item, counts.get(item.id)), c: counts.get(item.id) ?? { total: 0, done: 0 } }));
+  const phaseNum = (i: RoadmapItem): number => { const n = parseInt(i.phase ?? '', 10); return isNaN(n) ? Number.MAX_SAFE_INTEGER : n; };
+  const byPhase = (a: Row, b: Row): number => phaseNum(a.item) - phaseNum(b.item);
+  const of = (s: RoadmapState): Row[] => rows.filter((r) => r.state === s).sort(byPhase);
+  const inProgress = of('in_progress');
+  const parked = of('parked');
+  const proposed = of('proposed');
+  const done = of('done');
+  const committed = inProgress.length + parked.length + done.length;
+  const pct = committed > 0 ? Math.round((done.length / committed) * 100) : 0;
+
+  // Now / Next / Later — center on the current steps. IN PROGRESS leads, then a few UP NEXT from the parked
+  // backlog; the rest of the backlog, the proposed candidates, and the shipped history fold into <details>.
+  const nextCount = inProgress.length ? 3 : 5;
+  const next = parked.slice(0, nextCount);
+  const laterParked = parked.slice(next.length);
+  const sections: Array<{ label: string; rows: Row[] }> = [];
+  if (inProgress.length) sections.push({ label: 'In progress', rows: inProgress });
+  if (next.length) sections.push({ label: 'Up next', rows: next });
+  if (!sections.length && proposed.length) sections.push({ label: 'Proposed', rows: proposed });
+  const folds: Array<{ label: string; rows: Row[] }> = [];
+  if (laterParked.length) folds.push({ label: `${laterParked.length} more queued`, rows: laterParked });
+  if (sections.length && proposed.length) folds.push({ label: `${proposed.length} proposed`, rows: proposed });
+  if (done.length) {
+    if (sections.length) folds.push({ label: `✓ ${done.length} shipped`, rows: done });
+    else sections.push({ label: 'Shipped', rows: done });
+  }
+
+  return (
+    <div class="panel roadmap-panel">
+      <h3>Roadmap</h3>
+      <div class="rm-momentum">
+        <div class="rm-stats">
+          <span class="act"><b>{inProgress.length}</b> in progress</span>
+          <span><b>{parked.length}</b> queued</span>
+          <span><b>{done.length}</b> shipped</span>
+        </div>
+        <div class="rm-track"><div class="rm-fill" style={`width:${pct}%`} /></div>
+      </div>
+      <ul class="roadmap">{sections.map((s) => <RoadmapSection label={s.label} rows={s.rows} repoUrl={repoUrl} />)}</ul>
+      {folds.map((f) => <RoadmapFold label={f.label} rows={f.rows} repoUrl={repoUrl} />)}
+      {repoUrl ? <a class="docmore" href={`${repoUrl}/blob/HEAD/.open-autonomy/roadmap.yml`}>Full roadmap →</a> : null}
+    </div>
+  );
+}
+
+export function renderRoadmapPanel(yml: string | undefined, repoUrl: string | undefined, statusJson?: string): string {
+  return render(<RoadmapPanel yml={yml} repoUrl={repoUrl} statusJson={statusJson} />);
+}
+
+export function ChangelogPanel({ md, repoUrl }: { md?: string; repoUrl?: string }) {
+  const withLines = parseChangelog(md ?? '').filter((s) => s.lines.length);
+  if (!withLines.length) return null;
+  return (
+    <div class="panel">
+      <h3>What's shipped</h3>
+      {withLines.map((s) => (
+        <div class="release">
+          <div class="rel-head">{s.heading}</div>
+          <ul class="changelog">{s.lines.map((l) => <li>{l}</li>)}</ul>
+        </div>
+      ))}
+      {repoUrl ? <a class="docmore" href={`${repoUrl}/blob/HEAD/CHANGELOG.md`}>Full changelog →</a> : null}
+    </div>
+  );
+}
+
+export function renderChangelogPanel(md: string | undefined, repoUrl: string | undefined): string {
+  return render(<ChangelogPanel md={md} repoUrl={repoUrl} />);
 }

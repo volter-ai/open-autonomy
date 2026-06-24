@@ -1,6 +1,6 @@
 import { raw } from 'hono/html';
 import type { DirectoryEntry, Flow, LiveRun, Patron, ProjectView } from './limit-ledger.js';
-import { renderCharterPanel, renderRoadmapPanel, renderChangelogPanel } from './project-docs.js';
+import { CharterPanel, RoadmapPanel, ChangelogPanel } from './project-docs.js';
 import { icon } from './icons.js';
 import { Icon } from './ui/Icon.js';
 import { render } from './ui/render.js';
@@ -30,12 +30,6 @@ const C = {
 // Brand mark (Gemini-designed): an open loop ending in an arrow — autonomy + forward motion.
 // Coral so it reads on both light and dark. Used in the nav and served as the favicon.
 export const LOGO_SVG = '<svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg"><path fill-rule="evenodd" clip-rule="evenodd" fill="#ff424d" d="M50 0C22.3858 0 0 22.3858 0 50C0 77.6142 22.3858 100 50 100C77.6142 100 100 77.6142 100 50C100 38.0426 95.539 27.0133 88.0381 18.6863L76.9881 30.056C81.8211 36.192 84.2105 44.0927 84.2105 50C84.2105 68.9431 68.9431 84.2105 50 84.2105C31.0569 84.2105 15.7895 68.9431 15.7895 50C15.7895 31.0569 31.0569 15.7895 50 15.7895C55.9073 15.7895 62.1927 18.1789 67.2243 22.564L78.6923 11.458C70.9867 4.30074 61.0266 0 50 0Z"/></svg>';
-
-export function escapeHtml(s: string): string {
-  return String(s).replace(/[<>&'"]/g, (c) => (
-    c === '<' ? '&lt;' : c === '>' ? '&gt;' : c === '&' ? '&amp;' : c === "'" ? '&#39;' : '&quot;'
-  ));
-}
 
 function usd(cents: number): string {
   return `$${(cents / 100).toFixed(2)}`;
@@ -77,28 +71,29 @@ function coverStyle(url: string | undefined, seed = ''): string {
   return `background:linear-gradient(135deg,hsl(${h} 48% 64%),hsl(${(h + 40) % 360} 52% 54%))`;
 }
 
-function avatar(url: string | undefined, size: number, cls = ''): string {
+function Avatar({ url, size, cls = '' }: { url?: string; size: number; cls?: string }) {
   const safe = safeUrl(url);
-  if (safe) return `<img class="avatar ${cls}" src="${safe}" width="${size}" height="${size}" alt="" loading="lazy" style="width:${size}px;height:${size}px">`;
-  return `<span class="avatar ph ${cls}" style="width:${size}px;height:${size}px"></span>`;
+  return safe
+    ? <img class={`avatar ${cls}`} src={safe} width={size} height={size} alt="" loading="lazy" style={`width:${size}px;height:${size}px`} />
+    : <span class={`avatar ph ${cls}`} style={`width:${size}px;height:${size}px`} />;
 }
 
 function goalLine(e: DirectoryEntry): { label: string; frac: number } {
   if (!e.funded || e.balance_usd_cents <= 0) return { label: 'Awaiting funding', frac: 0 };
-  const raw = e.runway_days !== null ? Math.max(0, Math.round(e.runway_days)) : 0;
-  const shown = raw > 9999 ? '9,999+' : raw.toLocaleString();
-  const label = raw >= e.goal_days ? `${shown} days funded · goal met` : `${shown} of ${e.goal_days} days funded`;
-  return { label, frac: Math.min(1, raw / Math.max(1, e.goal_days)) };
+  const days = e.runway_days !== null ? Math.max(0, Math.round(e.runway_days)) : 0;
+  const shown = days > 9999 ? '9,999+' : days.toLocaleString();
+  const label = days >= e.goal_days ? `${shown} days funded · goal met` : `${shown} of ${e.goal_days} days funded`;
+  return { label, frac: Math.min(1, days / Math.max(1, e.goal_days)) };
 }
 
-function progress(frac: number, color: string): string {
+function Progress({ frac, color }: { frac: number; color: string }) {
   const pct = Math.round(Math.max(0, Math.min(1, frac)) * 100);
-  return `<div class="track"><div class="fill" style="width:${pct}%;background:${color}"></div></div>`;
+  return <div class="track"><div class="fill" style={`width:${pct}%;background:${color}`} /></div>;
 }
 
-function statusDot(status: 'funded' | 'low' | 'unfunded'): string {
+function StatusDot({ status }: { status: 'funded' | 'low' | 'unfunded' }) {
   const s = STATUS[status];
-  return `<span class="status"><span class="dot" style="background:${s.color}"></span>${s.label}</span>`;
+  return <span class="status"><span class="dot" style={`background:${s.color}`} />{s.label}</span>;
 }
 
 const STYLES = `
@@ -358,13 +353,13 @@ function ProjectCard({ e }: { e: DirectoryEntry }) {
     <div class="card">
       <a href={href}><div class="cover" style={coverStyle(e.profile.cover_url, e.account)} /></a>
       <div class="cbody">
-        <div class="av">{raw(avatar(e.profile.avatar_url, 60, 'ring'))}</div>
+        <div class="av"><Avatar url={e.profile.avatar_url} size={60} cls="ring" /></div>
         <a href={href} class="pname">{nameOf(e.account)}</a>
         <div class="ptag">{e.profile.tagline ?? ''}</div>
         <div class="pmeta"><b>{e.patron_count}</b>{` patron${e.patron_count === 1 ? '' : 's'} · `}<b>{monthly}</b></div>
         <div class="cardfoot">
-          <div class="goalrow"><span>{g.label}</span>{raw(statusDot(e.status))}</div>
-          {raw(progress(g.frac, STATUS[e.status].color))}
+          <div class="goalrow"><span>{g.label}</span><StatusDot status={e.status} /></div>
+          <Progress frac={g.frac} color={STATUS[e.status].color} />
           <a class="btn block join" href={`https://github.com/sponsors/${ownerOf(e.account)}`}>Join</a>
         </div>
       </div>
@@ -400,9 +395,9 @@ export function renderExplore(entries: DirectoryEntry[]): string {
   );
 }
 
-function patronChip(p: Patron): string {
-  const inner = `${avatar(p.avatar_url, 26)}<span>${escapeHtml(p.name ?? p.login)}${p.kind === 'project' ? ' <span class="tag">project</span>' : ''}</span>`;
-  return p.url ? `<a class="patron" href="${escapeHtml(p.url)}">${inner}</a>` : `<span class="patron">${inner}</span>`;
+function PatronChip({ p }: { p: Patron }) {
+  const inner = <><Avatar url={p.avatar_url} size={26} /><span>{p.name ?? p.login}{p.kind === 'project' ? <span class="tag"> project</span> : null}</span></>;
+  return p.url ? <a class="patron" href={p.url}>{inner}</a> : <span class="patron">{inner}</span>;
 }
 
 // Map a run's `purpose` (the role the agent is playing) to a human label for the live panel.
@@ -634,30 +629,28 @@ function Project({ v, page }: { v: ProjectView; page: number }) {
   // The project's own identity, read from its repo (charter / roadmap / changelog). Each is '' when absent.
   // These panels are still string builders (in project-docs) — embedded via raw() until they migrate too.
   const repoUrl = v.account.includes('/') ? `https://github.com/${v.account}` : undefined;
-  const charter = renderCharterPanel(v.profile.charter_md, repoUrl);
-  const roadmap = renderRoadmapPanel(v.profile.roadmap_yml, repoUrl, v.profile.roadmap_status_json);
-  const shipped = renderChangelogPanel(v.profile.changelog_md, repoUrl);
-  const patrons = v.patrons.length ? `<div class="patrons">${v.patrons.map(patronChip).join('')}</div>` : `<p class="sub">No patrons yet — be the first.</p>`;
   return (
     <>
       <Nav />
       <div class="wrap">
         <div class="cover-hero" style={coverStyle(v.profile.cover_url, v.account)} />
         <div class="phead">
-          {raw(avatar(v.profile.avatar_url, 104, 'ring'))}
+          <Avatar url={v.profile.avatar_url} size={104} cls="ring" />
           <div class="htext">
             <h1>{nameOf(v.account)}</h1>
             <p class="tag">{v.profile.tagline ?? `${owner}/${nameOf(v.account)}`}</p>
-            <div class="metarow"><span><b>{v.patron_count}</b> patrons</span><span class="sep">|</span><span><b>{monthly}</b></span><span class="sep">|</span>{raw(statusDot(v.status))}</div>
+            <div class="metarow"><span><b>{v.patron_count}</b> patrons</span><span class="sep">|</span><span><b>{monthly}</b></span><span class="sep">|</span><StatusDot status={v.status} /></div>
           </div>
         </div>
         <div class="cols">
           <div>
-            {raw(charter)}{raw(roadmap)}{raw(shipped)}
+            <CharterPanel md={v.profile.charter_md} repoUrl={repoUrl} />
+            <RoadmapPanel yml={v.profile.roadmap_yml} repoUrl={repoUrl} statusJson={v.profile.roadmap_status_json} />
+            <ChangelogPanel md={v.profile.changelog_md} repoUrl={repoUrl} />
             <div class="panel">
               <h3>Goal</h3>
               <div class="goalrow" style="margin-bottom:2px"><span style={`font-size:15px;color:${C.body};font-weight:600`}>{g.label}</span></div>
-              {raw(progress(g.frac, color))}
+              <Progress frac={g.frac} color={color} />
               <p class="note">{`Keep ${v.goal_days} days of agent runway funded. Days remaining is a Bayesian estimate of daily spend.`}</p>
             </div>
             <Activity runs={v.recent_runs} feed={v.feed} page={page} now={now} />
@@ -671,7 +664,7 @@ function Project({ v, page }: { v: ProjectView; page: number }) {
                 <div class="item"><div class="v">{usd(v.balance_usd_cents)}</div><div class="l">balance</div></div>
               </div>
             </div>
-            <div class="panel"><h3>Patrons</h3>{raw(patrons)}</div>
+            <div class="panel"><h3>Patrons</h3>{v.patrons.length ? <div class="patrons">{v.patrons.map((p) => <PatronChip p={p} />)}</div> : <p class="sub">No patrons yet — be the first.</p>}</div>
           </div>
           <div class="side">
             <div class="panel">

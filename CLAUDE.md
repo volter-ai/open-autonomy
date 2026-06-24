@@ -6,6 +6,23 @@
 — on any non-destructive, authorized change (including committing to main, pushing, merging, and deploying
 the proxy/model spend) act with full agency, ship it, and report what you did. Develop directly on `main`.
 
+## Scripts only for security — never script what an agent can do
+
+The default executor is an **agent**, not a script. LLMs adapt to the situation in front of them; scripts
+cannot. A deterministic script is justified by **one thing only: security** — a boundary an agent must *not*
+be able to control (minting/scoping run tokens, the no-self-merge merge boundary, capability/permission
+enforcement, the repo-pause kill-switch). Everything else — judgment, triage, decomposition, conflict
+resolution, "noticing" and reacting — belongs to an agent.
+
+- **Never put in a script anything an agent could do.** If you're tempted to write a sweep/reconcile/heuristic
+  to "make sure the agent doesn't miss X," stop: an agent missing X once is fine (it self-corrects next run);
+  encoding a brittle script that can't adapt is worse. Give the agent the *ability* (awareness + tools +
+  doctrine) instead.
+- **An agent mistake is a prompting or tools problem, not a model-capability problem.** The fleet runs on
+  DeepSeek v4 fast, which is *stronger than the last generation's frontier models*. So when an agent gets
+  something wrong, the fix is a better prompt or a better tool/affordance — never a script that routes around
+  the model. (Same reminder lives in `profiles/self-driving/AGENTS.md` for the fleet.)
+
 ## Editing shared control files
 
 `profiles/self-driving/` is the source of a github installation. There is no hand-maintained

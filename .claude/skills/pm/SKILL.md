@@ -23,8 +23,11 @@ Understand the entire state before acting:
   `gh issue view <n> --json title,body,labels,comments,closedByPullRequestsReferences`. Read the **comment
   history** — your own prior notes, clarifications a human posted, the reviewer's feedback, how many times this
   issue has been attempted. The history is how you avoid repeating yourself and how you judge failures.
-- **Every agent PR + its checks.** `gh pr list --state open --json number,headRefName,labels,statusCheckRollup`
-  — note each PR's `ci` and `agent-review` result (success / failure / pending).
+- **Every agent PR + its checks AND its mergeability.** `gh pr list --state open --json
+  number,headRefName,labels,statusCheckRollup,mergeable,mergeStateStatus` — note each PR's `ci` and
+  `agent-review` result (success / failure / pending) **and** its `mergeStateStatus`. A PR can have every
+  check green yet `mergeStateStatus: DIRTY` (`mergeable: CONFLICTING`) — a merge conflict with `main` that
+  native auto-merge will never land. Green checks ≠ will-merge; always look at the merge state too.
 - **Every running and recent agent run + its session.** `gh run list --json
   databaseId,workflowName,status,conclusion,displayTitle` shows what is in-flight and what just finished.
   - **For a RUNNING run, read its LIVE session from the model proxy** — GitHub serves no in-progress logs
@@ -50,7 +53,15 @@ visible status comment saying what you decided and why:
     stating the exact failure to fix (give it the context).
   - already attempted ≥ `max_develop_attempts` (`.open-autonomy/autonomy.yml`, default 2), or the failure is
     unclear/risky/repeating → **stop and escalate**: comment the situation, label `human-required`. Never loop.
-- **Has an open PR still in flight** (checks pending, no failure) → leave it; review→merge happens on its own.
+- **Has an open PR with a MERGE CONFLICT** (`mergeStateStatus: DIRTY` / `mergeable: CONFLICTING`), even when
+  `ci` and `agent-review` are both green → it will NEVER auto-merge: the substrate cannot merge a conflict and
+  the `CHANGELOG.md merge=union` driver does not apply to GitHub's server-side merge. This is yours to resolve —
+  relaunch the developer to re-develop the change onto fresh `main`
+  (`gh workflow run developer.yml -f issue_number=<n>`, with a comment noting the PR is conflicting and must be
+  rebuilt on current `main`). Judge from history: if the issue is now obsolete/superseded, close it instead;
+  respect `max_develop_attempts` and never loop. A green-but-conflicting PR left alone is dead work — the loop
+  cannot land it without you.
+- **Has an open PR still in flight** (checks pending, no failure, not conflicting) → leave it; review→merge happens on its own.
 - **`needs-info` where a human has since replied** (a non-bot comment after your question) → re-triage it as fresh.
 - **`human-required`** → understand it; act only if the blocking condition is now resolved, else leave it
   (a deliberate decision to wait, not blindness).

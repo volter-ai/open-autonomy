@@ -104,6 +104,11 @@ npx open-autonomy compile simple-sdlc local .      # local-loop substrate
 # from a clone, a profile path also works: open-autonomy compile profiles/self-driving github ../my-repo
 ```
 
+**Closed-source / no GitHub?** Run the whole loop locally — see
+[`docs/LOCAL-QUICKSTART.md`](./docs/LOCAL-QUICKSTART.md) for the end-to-end step-by-step
+(termfleet + a logged-in Claude Code/Codex CLI, then `node scheduler/run.mjs`). No GitHub, no
+Actions, no hosted proxy.
+
 ## Operator commands
 
 Operator commands work only for maintainers (repo OWNER/MEMBER/COLLABORATOR); a comment from anyone

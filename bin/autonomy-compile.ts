@@ -43,6 +43,21 @@ const out = substrate === 'local' ? compileLocal(ir) : compileGithub(ir);
 if (outDir) {
   const written = materialize(out, outDir, (from) => readFileSync(join(profileDir, from), 'utf8'));
   console.log(`installed ${written.length} files into ${outDir}`);
+  if (substrate === 'local') {
+    // A local install isn't runnable until termfleet + a logged-in agent CLI are up, and the start
+    // command lives only here — print it so the user never has to read source to run the loop.
+    const cd = outDir === '.' ? '' : `cd ${outDir} && `;
+    console.log(
+      `\nNext steps (local loop):\n` +
+        `  1. Prereqs: Node 20+, tmux, and termfleet  ->  npm install -g termfleet\n` +
+        `  2. Sign in to your agent CLI: run \`claude\` then \`/login\`  (or \`codex login\`)\n` +
+        `  3. Start termfleet (console + a local provider):\n` +
+        `       termfleet console serve --name dev --port 7373 &\n` +
+        `       termfleet provider serve --kind virtual-tmux --prefix dev --count 1 --port 7402 &\n` +
+        `  4. Run the loop:  ${cd}node scheduler/run.mjs --once   (one tick)  |  node scheduler/run.mjs   (continuous)\n` +
+        `  Full guide: https://github.com/volter-ai/open-autonomy/blob/main/docs/LOCAL-QUICKSTART.md`,
+    );
+  }
 } else {
   console.log(compiledPaths(out).join('\n'));
 }

@@ -140,11 +140,21 @@ async function opRetryNoFailure(repo: string, n: number): Promise<OpResult> {
 
 // Develop an issue and wait for its agent PR to open (up to ~9 min). Returns the PR number or 0.
 async function developAndWaitForPr(repo: string, n: number): Promise<number> {
-  ghOk(['workflow', 'run', 'developer.yml', '-R', repo, '-f', `issue_number=${n}`]);
-  for (let i = 0; i < 18; i++) {
-    await sleep(30000);
-    const pr = gh(['pr', 'list', '-R', repo, '--head', `agent/issue-${n}`, '--json', 'number', '--jq', '.[0].number // empty']);
-    if (pr) return Number(pr);
+  // Dispatch the developer and wait for its PR. The job is gated on `vars.PUBLIC_AGENT_REPO_PAUSED != 'true'`,
+  // and GitHub's `vars` context can occasionally return a STALE value, skipping the job (observed: a dispatch
+  // skipped ~1.4h after the var was last set to false). A skipped run produces no PR ever, so detect it and
+  // re-dispatch once — a transient gate flake must not fail a develop scenario.
+  for (let attempt = 1; attempt <= 2; attempt++) {
+    ghOk(['workflow', 'run', 'developer.yml', '-R', repo, '-f', `issue_number=${n}`]);
+    await sleep(20000); // let the run register + the if: evaluate
+    const skipped = gh(['run', 'list', '-R', repo, '--workflow', 'developer.yml', '--event', 'workflow_dispatch', '--limit', '1', '--json', 'conclusion', '--jq', '.[0].conclusion']) === 'skipped';
+    if (skipped && attempt < 2) continue; // transient gate skip → re-dispatch
+    for (let i = 0; i < 17; i++) {
+      await sleep(30000);
+      const pr = gh(['pr', 'list', '-R', repo, '--head', `agent/issue-${n}`, '--json', 'number', '--jq', '.[0].number // empty']);
+      if (pr) return Number(pr);
+    }
+    break;
   }
   return 0;
 }

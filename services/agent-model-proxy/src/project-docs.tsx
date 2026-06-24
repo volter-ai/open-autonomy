@@ -20,10 +20,19 @@ export interface RoadmapItem {
   priority?: string;
 }
 
-// Child-issue rollup for one roadmap item (issues labelled `roadmap:<id>`), used to derive execution status.
+// One child issue of a roadmap item (number, title, closed) — the layer-2 execution unit beneath the intent.
+export interface IssueRef {
+  n: number;
+  t: string;
+  c: boolean;
+}
+
+// Child-issue rollup for one roadmap item (issues labelled `roadmap:<id>`), used to derive execution status
+// and to expand the item into its actual issues. `issues` is a bounded slice (the full tally lives in total/done).
 export interface RoadmapCounts {
   total: number;
   done: number;
+  issues?: IssueRef[];
 }
 
 export type RoadmapState = 'proposed' | 'parked' | 'in_progress' | 'done';
@@ -54,9 +63,12 @@ export function parseRoadmapStatus(json: string | undefined): Map<string, Roadma
   const map = new Map<string, RoadmapCounts>();
   if (!json) return map;
   try {
-    const parsed = JSON.parse(json) as { items?: Record<string, { total?: number; done?: number }> };
+    const parsed = JSON.parse(json) as { items?: Record<string, { total?: number; done?: number; issues?: Array<{ n?: number; t?: string; c?: boolean }> }> };
     for (const [id, c] of Object.entries(parsed.items ?? {})) {
-      map.set(id, { total: Math.max(0, Number(c.total) || 0), done: Math.max(0, Number(c.done) || 0) });
+      const issues = Array.isArray(c.issues)
+        ? c.issues.map((i) => ({ n: Number(i.n) || 0, t: String(i.t ?? ''), c: Boolean(i.c) })).filter((i) => i.n > 0)
+        : undefined;
+      map.set(id, { total: Math.max(0, Number(c.total) || 0), done: Math.max(0, Number(c.done) || 0), issues });
     }
   } catch {
     /* malformed cache — degrade to empty */
@@ -195,67 +207,94 @@ const STATE_CLASS: Record<RoadmapState, string> = {
 
 type Row = { item: RoadmapItem; state: RoadmapState; c: RoadmapCounts };
 
-// At most this many items per board column; the rest collapse into a "+N more →" link to the full roadmap.
-// Bounds the panel height: it can never grow past three short columns regardless of how big the backlog gets.
-const COL_CAP = 6;
+// How many child issues we list inside an expanded item before linking out to GitHub for the rest.
+const ISSUE_PREVIEW = 6;
 
-// One compact card. A whole item is a single short tile (title, a meta line, and — for in-flight work — a
-// thin issue-progress bar), not a tall timeline node. The GitHub mark links to the item's labelled issues.
-function RoadmapRow({ row, repoUrl }: { row: Row; repoUrl?: string }) {
-  const { item: it, state, c } = row;
-  const phase = it.phase ? (isNaN(parseInt(it.phase, 10)) ? it.phase : `P${it.phase}`) : '';
-  const tally = state === 'in_progress' && c.total > 0 ? `${c.done}/${c.total} issues`
-    : state === 'done' && c.total > 0 ? `${c.total} issue${c.total === 1 ? '' : 's'}`
-    : '';
-  const meta = [phase, it.priority ?? '', tally].filter(Boolean).join(' · ');
-  const frac = state === 'in_progress' && c.total > 0 ? Math.min(1, c.done / c.total) : 0;
-  const ghHref = repoUrl && c.total > 0 ? `${repoUrl}/issues?q=${encodeURIComponent(`label:roadmap:${it.id}`)}` : undefined;
-  return (
-    <li class={`rm-row ${STATE_CLASS[state]}`}>
-      <div class="rm-row-head">
-        <span class="t">{it.title}</span>
-        {ghHref ? <a class="rm-gh" href={ghHref} title="View linked issues on GitHub"><Icon name="github" /></a> : null}
-      </div>
-      {meta ? <div class="m">{meta}</div> : null}
-      {frac > 0 ? <div class="rm-rowtrack"><div class="rm-rowfill" style={`width:${Math.round(frac * 100)}%`} /></div> : null}
-    </li>
-  );
+// The status word shown on an item's right edge: in-flight items get their issue tally, others a plain label.
+function stateLabel(state: RoadmapState, c: RoadmapCounts): string {
+  if (state === 'in_progress') return c.total > 0 ? `${c.done}/${c.total}` : 'in progress';
+  if (state === 'done') return c.total > 0 ? `${c.total} done` : 'shipped';
+  if (state === 'proposed') return 'proposed';
+  return 'queued';
 }
 
-// One board column (Now / Next / Later). Always rendered so the three-lane shape is stable even when a lane
-// is empty (an honest "—" rather than a collapsing layout). Overflow past COL_CAP becomes a link, not scroll.
-function RoadmapColumn({ label, state, rows, repoUrl, roadmapUrl }: { label: string; state: RoadmapState; rows: Row[]; repoUrl?: string; roadmapUrl?: string }) {
-  const shown = rows.slice(0, COL_CAP);
-  const extra = rows.length - shown.length;
+// The child-issue list revealed when an item is expanded — layer 2 beneath the intent. Each issue links to
+// itself on GitHub (open ○ / closed ✓); the bounded slice ends in a "+N more on GitHub →" link to the rest.
+function IssueList({ row, repoUrl }: { row: Row; repoUrl?: string }) {
+  const issues = row.c.issues ?? [];
+  const shown = issues.slice(0, ISSUE_PREVIEW);
+  const moreHref = repoUrl ? `${repoUrl}/issues?q=${encodeURIComponent(`label:roadmap:${row.item.id}`)}` : undefined;
+  const remaining = row.c.total - shown.length;
   return (
-    <div class="rm-col">
-      <div class="rm-col-hdr"><span class={`rm-col-dot ${STATE_CLASS[state]}`} />{label}<span class="n">{rows.length}</span></div>
-      {rows.length
-        ? <ul class="rm-list">{shown.map((r) => <RoadmapRow row={r} repoUrl={repoUrl} />)}</ul>
-        : <p class="rm-empty">—</p>}
-      {extra > 0 && roadmapUrl ? <a class="rm-more" href={roadmapUrl}>{`+${extra} more →`}</a> : null}
+    <div class="rm-issues">
+      <ul>
+        {shown.map((is) => {
+          const label = <><span class={`rm-ic ${is.c ? 'closed' : 'open'}`}>{is.c ? '✓' : '○'}</span><span class="rm-inum">{`#${is.n}`}</span><span class="rm-it">{is.t}</span></>;
+          return <li>{repoUrl ? <a href={`${repoUrl}/issues/${is.n}`}>{label}</a> : <span>{label}</span>}</li>;
+        })}
+      </ul>
+      {remaining > 0 && moreHref ? <a class="rm-more" href={moreHref}>{`+${remaining} more on GitHub →`}</a> : null}
+      {shown.length === 0 && moreHref ? <a class="rm-more" href={moreHref}>{`View ${row.c.total} issue${row.c.total === 1 ? '' : 's'} on GitHub →`}</a> : null}
     </div>
   );
 }
 
-// Shipped history is genuinely archival, so it stays a collapsed <details> below the board (not a fourth lane).
-function RoadmapShipped({ rows, repoUrl }: { rows: Row[]; repoUrl?: string }) {
+// One roadmap item — an intent sitting ABOVE its issues. When it has been decomposed (has child issues), it
+// renders as a native <details> the reader can expand into those issues; the summary always carries the
+// derived progress (a thin bar + tally). Items not yet decomposed (parked/proposed) are flat, unexpandable
+// rows with a status word — there's nothing beneath them to open yet.
+function RoadmapEpic({ row, repoUrl }: { row: Row; repoUrl?: string }) {
+  const { item: it, state, c } = row;
+  const phase = it.phase ? (isNaN(parseInt(it.phase, 10)) ? it.phase : `P${it.phase}`) : '';
+  const frac = c.total > 0 ? Math.min(1, c.done / c.total) : 0;
+  const expandable = c.total > 0;
+  const head = (
+    <>
+      <span class="rm-caret" aria-hidden="true" />
+      <span class="rm-etitle">{it.title}</span>
+      {phase ? <span class="rm-ephase">{phase}</span> : null}
+      <span class="rm-estatus">{stateLabel(state, c)}</span>
+    </>
+  );
+  const bar = expandable ? <div class="rm-ebar"><div class="rm-efill" style={`width:${Math.round(frac * 100)}%`} /></div> : null;
+  if (!expandable) {
+    // Not yet decomposed — nothing to open beneath it; a flat row with its status word.
+    return <li class={`rm-epic flat ${STATE_CLASS[state]}`}><div class="rm-ehead">{head}{bar}</div></li>;
+  }
+  // The bar lives inside <summary> so it stays visible whether the item is collapsed or expanded.
   return (
-    <details class="rm-fold rm-shipped">
-      <summary>{`✓ ${rows.length} shipped`}</summary>
-      <ul class="rm-list">{rows.map((r) => <RoadmapRow row={r} repoUrl={repoUrl} />)}</ul>
-    </details>
+    <li class={`rm-epic ${STATE_CLASS[state]}`}>
+      <details open={state === 'in_progress'}>
+        <summary><div class="rm-ehead">{head}</div>{bar}</summary>
+        <IssueList row={row} repoUrl={repoUrl} />
+      </details>
+    </li>
   );
 }
 
-// A Now / Next / Later board — the idiomatic public-roadmap shape. Each lane is a bounded stack of compact
-// tiles, so the panel reads at a glance and never sprawls vertically: Now = in flight, Next = ratified queue,
-// Later = proposed candidates, with shipped work tucked into a fold beneath.
+// A labelled group of epics ("In progress" / "Up next" / "Proposed") — a small header then the item tree.
+function RoadmapGroup({ label, rows, repoUrl }: { label: string; rows: Row[]; repoUrl?: string }) {
+  return (
+    <div class="rm-group">
+      <div class="rm-group-hdr">{label}<span class="n">{rows.length}</span></div>
+      <ul class="rm-epics">{rows.map((r) => <RoadmapEpic row={r} repoUrl={repoUrl} />)}</ul>
+    </div>
+  );
+}
+
+// A collapsed-by-default group (proposed candidates / shipped history) — native <details>, no JS.
+function RoadmapFold({ label, rows, repoUrl }: { label: string; rows: Row[]; repoUrl?: string }) {
+  return <details class="rm-fold"><summary>{label}</summary><ul class="rm-epics">{rows.map((r) => <RoadmapEpic row={r} repoUrl={repoUrl} />)}</ul></details>;
+}
+
+// A Roadmap-above-Issues tree. Each item is an intent; the ones the planner has decomposed expand into their
+// actual child issues (layer 2). In-progress items lead (open by default); the ratified queue and proposed
+// candidates follow; shipped history folds away. Bounded by collapsing everything but the current work — the
+// panel reads as "what we're building and how far along," with the issues one click beneath each item.
 export function RoadmapPanel({ yml, repoUrl, statusJson }: { yml?: string; repoUrl?: string; statusJson?: string }) {
   const items = parseRoadmap(yml ?? '');
   if (!items.length) return null;
   const counts = parseRoadmapStatus(statusJson);
-  // Derive each item's execution state from its planning flag + child issues (two-layer model).
   const rows: Row[] = items.map((item) => ({ item, state: roadmapItemState(item, counts.get(item.id)), c: counts.get(item.id) ?? { total: 0, done: 0 } }));
   const phaseNum = (i: RoadmapItem): number => { const n = parseInt(i.phase ?? '', 10); return isNaN(n) ? Number.MAX_SAFE_INTEGER : n; };
   const byPhase = (a: Row, b: Row): number => phaseNum(a.item) - phaseNum(b.item);
@@ -267,6 +306,7 @@ export function RoadmapPanel({ yml, repoUrl, statusJson }: { yml?: string; repoU
   const committed = inProgress.length + parked.length + done.length;
   const pct = committed > 0 ? Math.round((done.length / committed) * 100) : 0;
   const roadmapUrl = repoUrl ? `${repoUrl}/blob/HEAD/.open-autonomy/roadmap.yml` : undefined;
+  const hasCommitted = inProgress.length > 0 || parked.length > 0;
 
   return (
     <div class="panel roadmap-panel">
@@ -279,12 +319,11 @@ export function RoadmapPanel({ yml, repoUrl, statusJson }: { yml?: string; repoU
         </div>
         <div class="rm-track"><div class="rm-fill" style={`width:${pct}%`} /></div>
       </div>
-      <div class="rm-board">
-        <RoadmapColumn label="Now" state="in_progress" rows={inProgress} repoUrl={repoUrl} roadmapUrl={roadmapUrl} />
-        <RoadmapColumn label="Next" state="parked" rows={parked} repoUrl={repoUrl} roadmapUrl={roadmapUrl} />
-        <RoadmapColumn label="Later" state="proposed" rows={proposed} repoUrl={repoUrl} roadmapUrl={roadmapUrl} />
-      </div>
-      {done.length ? <RoadmapShipped rows={done} repoUrl={repoUrl} /> : null}
+      {inProgress.length ? <RoadmapGroup label="In progress" rows={inProgress} repoUrl={repoUrl} /> : null}
+      {parked.length ? <RoadmapGroup label="Up next" rows={parked} repoUrl={repoUrl} /> : null}
+      {!hasCommitted && proposed.length ? <RoadmapGroup label="Proposed" rows={proposed} repoUrl={repoUrl} /> : null}
+      {hasCommitted && proposed.length ? <RoadmapFold label={`${proposed.length} proposed`} rows={proposed} repoUrl={repoUrl} /> : null}
+      {done.length ? <RoadmapFold label={`✓ ${done.length} shipped`} rows={done} repoUrl={repoUrl} /> : null}
       {roadmapUrl ? <a class="docmore" href={roadmapUrl}>Full roadmap →</a> : null}
     </div>
   );

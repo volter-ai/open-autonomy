@@ -260,9 +260,10 @@ describe('platform: recent activity (runs + funding)', () => {
     expect(html.includes('/p/acme%2Fwidget/runs/run_1')).toBe(true);
     expect(html.includes('data-run="run_1"')).toBe(true);
     expect(html.includes('id="run-drawer"')).toBe(true);
-    // Pops into GitHub: the run links to its Actions run, the issue to the issue.
-    expect(html.includes('https://github.com/acme/widget/actions/runs/99887766')).toBe(true);
+    // Pops into GitHub: the issue links to the issue. (The per-row GitHub Actions icon was removed — the
+    // Actions log lives in the session view, not cluttering each activity line.)
     expect(html.includes('https://github.com/acme/widget/issues/7')).toBe(true);
+    expect(html.includes('/actions/runs/99887766')).toBe(false);
     expect(html.includes('$0.90')).toBe(true);
   });
 

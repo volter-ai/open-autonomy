@@ -8,7 +8,7 @@ function item(o: Record<string, unknown>): string {
 function yml(items: Array<Record<string, unknown>>): string {
   return items.map(item).join('\n');
 }
-function status(map: Record<string, { total: number; done: number }>): string {
+function status(map: Record<string, { total: number; done: number; issues?: Array<{ n: number; t: string; c: boolean }> }>): string {
   return JSON.stringify({ items: map });
 }
 
@@ -48,48 +48,67 @@ describe('parseRoadmap / parseRoadmapStatus', () => {
     expect(parseRoadmapStatus(undefined).size).toBe(0);
     expect(parseRoadmapStatus('not json').size).toBe(0);
     const m = parseRoadmapStatus(status({ a: { total: 3, done: 1 } }));
-    expect(m.get('a')).toEqual({ total: 3, done: 1 });
+    expect(m.get('a')?.total).toBe(3);
+    expect(m.get('a')?.done).toBe(1);
+  });
+  test('parses the per-item child-issue list (number / title / closed)', () => {
+    const m = parseRoadmapStatus(status({ a: { total: 2, done: 1, issues: [{ n: 12, t: 'Do thing', c: true }, { n: 13, t: 'Other', c: false }] } }));
+    expect(m.get('a')?.issues).toEqual([{ n: 12, t: 'Do thing', c: true }, { n: 13, t: 'Other', c: false }]);
   });
 });
 
-describe('renderRoadmapPanel: Now / Next / Later board from derived state', () => {
-  test('three lanes, compact tiles, per-item progress, overflow link, shipped fold', () => {
+describe('renderRoadmapPanel: roadmap-above-issues tree', () => {
+  test('a decomposed item expands into its actual child issues; in-progress leads, shipped folds', () => {
     const items = [
       { id: 'now1', title: 'Now One', phase: '1', planned: true },
-      ...Array.from({ length: 8 }, (_, i) => ({ id: `park${i}`, title: `Park ${i}`, phase: `${i + 2}`, planned: false })),
-      { id: 'shipped1', title: 'Shipped One', phase: '20', planned: true },
+      { id: 'park1', title: 'Park One', phase: '2', planned: false },
+      { id: 'shipped1', title: 'Shipped One', phase: '6', planned: true },
     ];
-    const counts = status({ now1: { total: 5, done: 2 }, shipped1: { total: 3, done: 3 } });
+    const counts = status({
+      now1: { total: 9, done: 2, issues: [{ n: 128, t: 'Gate merges on verdict', c: true }, { n: 140, t: 'Reviewer requests changes', c: false }] },
+      shipped1: { total: 3, done: 3 },
+    });
     const html = renderRoadmapPanel(yml(items), 'https://github.com/acme/widget', counts);
 
-    // The board's three lanes.
-    expect(html.includes('>Now<')).toBe(true);
-    expect(html.includes('>Next<')).toBe(true);
-    expect(html.includes('>Later<')).toBe(true);
-    // In-flight tile shows its derived issue progress.
-    expect(html.includes('2/5 issues')).toBe(true);
-    // 8 parked, cap 6 → 2 overflow into a "+N more" link rather than scrolling the lane.
-    expect(html.includes('+2 more')).toBe(true);
-    // Shipped work is an archival fold, not a lane.
-    expect(html.includes('✓ 1 shipped')).toBe(true);
-    // An item with linked issues gets a "pop into GitHub" link to its label-filtered issue list.
+    // The item carries its derived rollup tally...
+    expect(html.includes('2/9')).toBe(true);
+    // ...and expands into its real child issues, each linking to itself on GitHub.
+    expect(html.includes('Gate merges on verdict')).toBe(true);
+    expect(html.includes('/issues/128')).toBe(true);
+    expect(html.includes('#140')).toBe(true);
+    // 9 total but only 2 issues in the synced slice → "+7 more on GitHub" link to the label-filtered list.
+    expect(html.includes('+7 more on GitHub')).toBe(true);
     expect(html.includes('/issues?q=label%3Aroadmap%3Anow1')).toBe(true);
-
-    // The board precedes the shipped fold; shipped items live inside it.
-    expect(html.indexOf('Now One')).toBeLessThan(html.indexOf('<details'));
-    expect(html.indexOf('Shipped One')).toBeGreaterThan(html.indexOf('<details'));
+    // Grouped: In progress leads, shipped is the archival fold below.
+    expect(html.includes('In progress')).toBe(true);
+    expect(html.includes('✓ 1 shipped')).toBe(true);
+    expect(html.indexOf('Now One')).toBeLessThan(html.indexOf('✓ 1 shipped'));
   });
 
-  test('only proposals (nothing committed) → Later lane carries them; panel still renders', () => {
+  test('an in-flight item with no synced issue slice still links out to GitHub', () => {
+    const items = [{ id: 'a', title: 'Epic A', planned: true }];
+    const html = renderRoadmapPanel(yml(items), 'https://github.com/acme/widget', status({ a: { total: 4, done: 1 } }));
+    expect(html.includes('1/4')).toBe(true);
+    expect(html.includes('View 4 issues on GitHub')).toBe(true);
+  });
+
+  test('a not-yet-decomposed item is a flat, unexpandable row (no <details>)', () => {
+    const items = [{ id: 'q', title: 'Queued Q', planned: false }];
+    const html = renderRoadmapPanel(yml(items), 'https://github.com/acme/widget');
+    expect(html.includes('Queued Q')).toBe(true);
+    expect(html.includes('rm-epic flat')).toBe(true);
+    expect(html.includes('queued')).toBe(true);
+    expect(html.includes('<details')).toBe(false);
+  });
+
+  test('only proposals (nothing committed) → shown as a Proposed group, not folded away', () => {
     const items = [
       { id: 'p1', title: 'Prop One', proposed: true },
       { id: 'p2', title: 'Prop Two', proposed: true },
     ];
     const html = renderRoadmapPanel(yml(items), undefined);
-    expect(html.includes('>Later<')).toBe(true);
+    expect(html.includes('Proposed')).toBe(true);
     expect(html.includes('Prop One')).toBe(true);
-    // Empty Now / Next lanes render an honest placeholder rather than collapsing the board.
-    expect(html.includes('rm-empty')).toBe(true);
   });
 
   test('momentum counts in-progress / queued / shipped (proposals excluded)', () => {
@@ -112,7 +131,7 @@ describe('renderRoadmapPanel: Now / Next / Later board from derived state', () =
       { id: 'c', title: 'Done C', status: 'done' },
     ];
     const html = renderRoadmapPanel(yml(items), undefined);
-    expect(html.includes('>Now<')).toBe(true);
+    expect(html.includes('In progress')).toBe(true);
     expect(html.includes('Active A')).toBe(true);
     expect(html.includes('✓ 1 shipped')).toBe(true);
   });

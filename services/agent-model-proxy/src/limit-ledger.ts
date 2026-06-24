@@ -576,7 +576,7 @@ export class LimitLedger implements DurableObject {
     if (!account) return { ok: false, error: 'invalid_account' };
     const a = this.ensureAcct(account);
     const p = (a.profile ??= {});
-    for (const k of ['tagline', 'avatar_url', 'cover_url', 'homepage', 'synced_at', 'tagline_override', 'cover_override', 'charter_md', 'roadmap_yml', 'changelog_md'] as const) {
+    for (const k of ['tagline', 'avatar_url', 'cover_url', 'homepage', 'synced_at', 'tagline_override', 'cover_override', 'charter_md', 'roadmap_yml', 'roadmap_status_json', 'changelog_md'] as const) {
       if (profile[k] !== undefined) p[k] = profile[k];
     }
     if (typeof goalDays === 'number' && goalDays > 0) a.goal_days = Math.floor(goalDays);
@@ -930,6 +930,7 @@ function displayProfile(a: Account | undefined): AccountProfile {
     synced_at: p.synced_at,
     charter_md: p.charter_md,
     roadmap_yml: p.roadmap_yml,
+    roadmap_status_json: p.roadmap_status_json,
     changelog_md: p.changelog_md,
   };
 }

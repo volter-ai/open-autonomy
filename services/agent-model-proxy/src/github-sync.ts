@@ -80,11 +80,15 @@ async function fetchRepoText(env: Env, account: string, path: string, maxBytes =
   }
 }
 
-// Roll up each roadmap item's child issues into {id → {total, done}} in ONE API call. Tracking issues all
-// carry `origin:roadmap-planner` and the parent link label `roadmap:<id>` (1 item → many issues). We count
+// Roll up each roadmap item's child issues in ONE API call → {id → {total, done, issues[]}}. Tracking issues
+// all carry `origin:roadmap-planner` and the parent link label `roadmap:<id>` (1 item → many issues). We bucket
 // every `roadmap:*` label seen; the page looks up by item id, so unrelated labels (e.g. a phase label) just
-// never match. This is the execution-status source the two-layer roadmap derives from — no status is stored
-// in roadmap.yml. Best-effort: returns undefined on any failure so the page falls back to parked/derived-empty.
+// never match. This is the two-layer roadmap's execution source — no status is stored in roadmap.yml: the
+// counts derive item state and the per-issue list lets the panel expand an item into its actual child issues.
+// We keep a bounded slice of issues per item (open first, so the actionable work shows); `total`/`done` still
+// reflect the FULL count, and the panel links to GitHub for the rest. Best-effort: undefined on any failure.
+const ROADMAP_ISSUES_PER_ITEM = 8;
+
 async function fetchRoadmapStatus(env: Env, account: string): Promise<string | undefined> {
   const base = env.GITHUB_API_BASE ?? 'https://api.github.com';
   try {
@@ -92,19 +96,27 @@ async function fetchRoadmapStatus(env: Env, account: string): Promise<string | u
       headers: { accept: 'application/vnd.github+json', 'user-agent': 'open-autonomy-funding' },
     });
     if (!res.ok) return undefined;
-    const issues = await res.json() as Array<{ state?: string; pull_request?: unknown; labels?: Array<{ name?: string }> }>;
-    const items: Record<string, { total: number; done: number }> = {};
+    const issues = await res.json() as Array<{ number?: number; title?: string; state?: string; pull_request?: unknown; labels?: Array<{ name?: string }> }>;
+    type Ref = { n: number; t: string; c: boolean }; // number, title, closed — short keys to keep the payload small
+    const items: Record<string, { total: number; done: number; issues: Ref[] }> = {};
     for (const issue of issues) {
       if (issue.pull_request) continue; // the issues endpoint also returns PRs — skip them
       const closed = issue.state === 'closed';
+      const ref: Ref = { n: issue.number ?? 0, t: (issue.title ?? '').slice(0, 140), c: closed };
       for (const l of issue.labels ?? []) {
         const name = l.name ?? '';
         if (!name.startsWith('roadmap:')) continue;
         const id = name.slice('roadmap:'.length);
-        const row = items[id] ?? (items[id] = { total: 0, done: 0 });
+        const row = items[id] ?? (items[id] = { total: 0, done: 0, issues: [] });
         row.total += 1;
         if (closed) row.done += 1;
+        row.issues.push(ref);
       }
+    }
+    // Open issues first (the actionable work), then closed; within each, lowest number first. Keep a bounded slice.
+    for (const row of Object.values(items)) {
+      row.issues.sort((a, b) => (Number(a.c) - Number(b.c)) || (a.n - b.n));
+      row.issues = row.issues.slice(0, ROADMAP_ISSUES_PER_ITEM);
     }
     return JSON.stringify({ items });
   } catch {

@@ -32,9 +32,14 @@ order the lot — is your judgment.
    reviewer's gate — leave it), decide its issues and create them with `gh issue create`, each carrying THREE
    labels: `origin:roadmap-planner` (so it's recognized as a tracking issue), the parent link `roadmap:<id>`
    (so it rolls up to its item — this 1→many link is how progress is derived), and `priority:`/`phase:`
-   (create a missing label first with `gh label create "<name>" --force`). Big item → several issues; a
-   one-line item → one. When an item is fully broken down, set `planned: true` on it in
-   `.open-autonomy/roadmap.yml`.
+   (create a missing label first with `gh label create "<name>" --force`).
+   **Prefer large, cohesive issues — DON'T over-split.** Default to ONE substantial issue per item that a
+   developer can carry end to end; over-fragmenting into many tiny issues causes more coordination, merge,
+   and integration problems than it solves. Create a SEPARATE issue only when an item bundles **genuinely
+   unrelated implementations** that a different change-set would touch (e.g. a backend record format *and* an
+   unrelated UI panel) — split by independence, not by checklist line. Give each issue a real, descriptive
+   title for the work itself (NOT a restatement of the item id). When an item is fully broken down, set
+   `planned: true` on it in `.open-autonomy/roadmap.yml`.
 3. **Keep it current.** Edit `.open-autonomy/roadmap.yml` to reflect reality: reorder by `phase`/priority,
    split an item that grew, merge duplicates, sharpen a `title`/`intent`. Reopen a tracking issue closed while
    its item still has open work. Never invent new strategy (that's the strategist) and never set execution

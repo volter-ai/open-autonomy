@@ -1,7 +1,8 @@
 # open-autonomy Runbook
 
 This is the source-checkout path for the issue-driven self-building agent. The
-full GitHub Actions and model-proxy architecture is in
+full GitHub Actions and model-proxy architecture is documented in
+`docs/ARCHITECTURE.md`.
 
 ## Local Checks
 

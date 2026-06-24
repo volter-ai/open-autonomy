@@ -615,96 +615,91 @@ function Drawer() {
   );
 }
 
-function runDrawer(): string {
-  return render(<Drawer />);
+function TierCard({ t, feat, owner }: { t: ProjectView['tiers'][number]; feat: boolean; owner: string }) {
+  return (
+    <div class={`tier${feat ? ' feat' : ''}`}>
+      {feat ? <span class="badge">Popular</span> : null}
+      <div class="th"><span class="tn">{t.name}</span><span class="tp">{usd0(t.usd_cents)} <span>/mo</span></span></div>
+      <ul>{t.perks.map((p) => <li>{p}</li>)}</ul>
+      <a class={`btn block ${feat ? '' : 'outline'}`} href={`https://github.com/sponsors/${owner}`}>Join</a>
+    </div>
+  );
 }
 
-export function renderProject(v: ProjectView, page = 0): string {
+function Project({ v, page }: { v: ProjectView; page: number }) {
   const owner = ownerOf(v.account);
   const color = STATUS[v.status].color;
   const g = goalLine(v);
   const monthly = v.monthly_usd_cents ? `${usd0(v.monthly_usd_cents)}/mo` : '$0/mo';
   const enc = encodeURIComponent(v.account);
-
-  const tiers = v.tiers.map((t, i) => {
-    const feat = i === 1;
-    return `<div class="tier${feat ? ' feat' : ''}">
-      ${feat ? '<span class="badge">Popular</span>' : ''}
-      <div class="th"><span class="tn">${escapeHtml(t.name)}</span><span class="tp">${usd0(t.usd_cents)} <span>/mo</span></span></div>
-      <ul>${t.perks.map((p) => `<li>${escapeHtml(p)}</li>`).join('')}</ul>
-      <a class="btn block ${feat ? '' : 'outline'}" href="https://github.com/sponsors/${escapeHtml(owner)}">Join</a>
-    </div>`;
-  }).join('\n');
-
-  const patrons = v.patrons.length ? `<div class="patrons">${v.patrons.map(patronChip).join('')}</div>` : `<p class="sub">No patrons yet — be the first.</p>`;
-
-  // The project's own identity, read from its repo: what it's for (charter), where it's going (roadmap),
-  // and what it has shipped (changelog). Each renders to '' when the repo ships no such doc.
+  const now = Date.now();
+  // The project's own identity, read from its repo (charter / roadmap / changelog). Each is '' when absent.
+  // These panels are still string builders (in project-docs) — embedded via raw() until they migrate too.
   const repoUrl = v.account.includes('/') ? `https://github.com/${v.account}` : undefined;
   const charter = renderCharterPanel(v.profile.charter_md, repoUrl);
   const roadmap = renderRoadmapPanel(v.profile.roadmap_yml, repoUrl, v.profile.roadmap_status_json);
   const shipped = renderChangelogPanel(v.profile.changelog_md, repoUrl);
-  const now = Date.now();
-  // One unified, paginated activity feed: recent runs (running + finished, with when + status + a live
-  // session drawer) interleaved with funding events — replaces the old separate Live agents + feed panels.
-  const activity = renderActivity(v.recent_runs, v.feed, page, now);
-
-  const body = `${nav()}<div class="wrap">
-    <div class="cover-hero" style="${coverStyle(v.profile.cover_url, v.account)}"></div>
-    <div class="phead">
-      ${avatar(v.profile.avatar_url, 104, 'ring')}
-      <div class="htext">
-        <h1>${escapeHtml(nameOf(v.account))}</h1>
-        <p class="tag">${escapeHtml(v.profile.tagline ?? `${owner}/${nameOf(v.account)}`)}</p>
-        <div class="metarow"><span><b>${v.patron_count}</b> patrons</span><span class="sep">|</span><span><b>${monthly}</b></span><span class="sep">|</span>${statusDot(v.status)}</div>
-      </div>
-    </div>
-    <div class="cols">
-      <div>
-        ${charter}
-        ${roadmap}
-        ${shipped}
-        <div class="panel">
-          <h3>Goal</h3>
-          <div class="goalrow" style="margin-bottom:2px"><span style="font-size:15px;color:${C.body};font-weight:600">${escapeHtml(g.label)}</span></div>
-          ${progress(g.frac, color)}
-          <p class="note">Keep ${v.goal_days} days of agent runway funded. Days remaining is a Bayesian estimate of daily spend.</p>
-        </div>
-        ${activity}
-        <div class="panel">
-          <h3>Funding</h3>
-          <img src="/v1/accounts/${enc}/runway.svg" width="460" height="116" style="max-width:100%;border-radius:12px;border:1px solid ${C.line}" alt="funding runway">
-          <div class="ledger">
-            <div class="item"><div class="v">${usd(v.granted_in_usd_cents)}</div><div class="l">received</div></div>
-            ${v.granted_out_usd_cents > 0 ? `<div class="item"><div class="v">${usd(v.granted_out_usd_cents)}</div><div class="l">funded onward</div></div>` : ''}
-            <div class="item"><div class="v">${usd(v.consumed_usd_cents)}</div><div class="l">spent</div></div>
-            <div class="item"><div class="v">${usd(v.balance_usd_cents)}</div><div class="l">balance</div></div>
+  const patrons = v.patrons.length ? `<div class="patrons">${v.patrons.map(patronChip).join('')}</div>` : `<p class="sub">No patrons yet — be the first.</p>`;
+  return (
+    <>
+      <Nav />
+      <div class="wrap">
+        <div class="cover-hero" style={coverStyle(v.profile.cover_url, v.account)} />
+        <div class="phead">
+          {raw(avatar(v.profile.avatar_url, 104, 'ring'))}
+          <div class="htext">
+            <h1>{nameOf(v.account)}</h1>
+            <p class="tag">{v.profile.tagline ?? `${owner}/${nameOf(v.account)}`}</p>
+            <div class="metarow"><span><b>{v.patron_count}</b> patrons</span><span class="sep">|</span><span><b>{monthly}</b></span><span class="sep">|</span>{raw(statusDot(v.status))}</div>
           </div>
         </div>
-        <div class="panel">
-          <h3>Patrons</h3>
-          ${patrons}
+        <div class="cols">
+          <div>
+            {raw(charter)}{raw(roadmap)}{raw(shipped)}
+            <div class="panel">
+              <h3>Goal</h3>
+              <div class="goalrow" style="margin-bottom:2px"><span style={`font-size:15px;color:${C.body};font-weight:600`}>{g.label}</span></div>
+              {raw(progress(g.frac, color))}
+              <p class="note">{`Keep ${v.goal_days} days of agent runway funded. Days remaining is a Bayesian estimate of daily spend.`}</p>
+            </div>
+            <Activity runs={v.recent_runs} feed={v.feed} page={page} now={now} />
+            <div class="panel">
+              <h3>Funding</h3>
+              <img src={`/v1/accounts/${enc}/runway.svg`} width="460" height="116" style={`max-width:100%;border-radius:12px;border:1px solid ${C.line}`} alt="funding runway" />
+              <div class="ledger">
+                <div class="item"><div class="v">{usd(v.granted_in_usd_cents)}</div><div class="l">received</div></div>
+                {v.granted_out_usd_cents > 0 ? <div class="item"><div class="v">{usd(v.granted_out_usd_cents)}</div><div class="l">funded onward</div></div> : null}
+                <div class="item"><div class="v">{usd(v.consumed_usd_cents)}</div><div class="l">spent</div></div>
+                <div class="item"><div class="v">{usd(v.balance_usd_cents)}</div><div class="l">balance</div></div>
+              </div>
+            </div>
+            <div class="panel"><h3>Patrons</h3>{raw(patrons)}</div>
+          </div>
+          <div class="side">
+            <div class="panel">
+              <h3>Become a patron</h3>
+              {v.tiers.map((t, i) => <TierCard t={t} feat={i === 1} owner={owner} />)}
+            </div>
+            <div class="panel">
+              <h3>Have a sponsor coupon?</h3>
+              <form class="coupon" method="post" action={`/p/${enc}/redeem`}>
+                <input name="code" placeholder="SPON-XXXX-XXXX-XXXX" autocomplete="off" />
+                <button class="btn" type="submit">Redeem</button>
+              </form>
+              <p class="note">Funds this project's real token + CI costs. At $0, the agents stop.</p>
+            </div>
+          </div>
         </div>
       </div>
-      <div class="side">
-        <div class="panel">
-          <h3>Become a patron</h3>
-          ${tiers}
-        </div>
-        <div class="panel">
-          <h3>Have a sponsor coupon?</h3>
-          <form class="coupon" method="POST" action="/p/${enc}/redeem">
-            <input name="code" placeholder="SPON-XXXX-XXXX-XXXX" autocomplete="off">
-            <button class="btn" type="submit">Redeem</button>
-          </form>
-          <p class="note">Funds this project's real token + CI costs. At $0, the agents stop.</p>
-        </div>
-      </div>
-    </div>
-  </div>${v.recent_runs.some((r) => r.active) ? runDrawer() : ''}`;
-  // No page-level auto-refresh: the live surface is now the drawer, which polls session.json without a full
-  // reload (a meta-refresh would close an open drawer). The panel itself refreshes on navigation.
-  return shell(`${nameOf(v.account)} · open-autonomy`, body);
+      {v.recent_runs.some((r) => r.active) ? <Drawer /> : null}
+    </>
+  );
+}
+
+// No page-level auto-refresh: the live surface is the drawer (polls session.json; a meta-refresh would close
+// an open drawer). The panel refreshes on navigation.
+export function renderProject(v: ProjectView, page = 0): string {
+  return render(<Shell title={`${nameOf(v.account)} · open-autonomy`}><Project v={v} page={page} /></Shell>);
 }
 
 export function renderRedeemResult(account: string, ok: boolean, message: string): string {

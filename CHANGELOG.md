@@ -6,6 +6,10 @@
 
 - Fixed a dangling sentence in `docs/OSS_AGENT_RUNBOOK.md` — the incomplete "is in" fragment now correctly references `docs/ARCHITECTURE.md`.
 
+### Changed
+
+- PM now routes existing open agent PRs to review instead of starting duplicate developer work. When the PM sweep finds an issue with an open PR, it explicitly dispatches the reviewer (or comments green status) rather than launching a new developer run. The "still in flight" case now actively dispatches review rather than passively waiting.
+
 ### Cutover
 
 - Cut over to the **credentialed-skill agent model**: each agent is a single

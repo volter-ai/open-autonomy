@@ -123,8 +123,10 @@ jobs:
           [ -n "$armed" ] || echo "auto-merge enable failed after retries (non-fatal)"
           head_sha="$(git rev-parse HEAD)"
           pr_number="$(gh pr view "$branch" --json number --jq .number 2>/dev/null || echo "")"
-          gh workflow run ci.yml --ref "$branch" -f sha="$head_sha" -f pr="$pr_number" || echo "ci dispatch failed (non-fatal)"
-          gh workflow run strategy_reviewer.yml -f issue_number="$pr_number" || echo "review dispatch failed (non-fatal)"
+          ci_ok=; for i in 1 2 3 4 5 6; do gh workflow run ci.yml --ref "$branch" -f sha="$head_sha" -f pr="$pr_number" && { ci_ok=1; break; } || sleep 4; done
+          [ -n "$ci_ok" ] || echo "ci dispatch failed after retries (non-fatal)"
+          rv_ok=; for i in 1 2 3 4 5 6; do gh workflow run strategy_reviewer.yml -f issue_number="$pr_number" && { rv_ok=1; break; } || sleep 4; done
+          [ -n "$rv_ok" ] || echo "review dispatch failed after retries (non-fatal)"
       - name: Save the agent run result (durable transcript artifact)
         if: always()
         uses: actions/upload-artifact@v4

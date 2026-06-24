@@ -304,16 +304,25 @@ function wrapperYml(name: string, agent: IRAgent): string {
     `          armed=; for i in 1 2 3 4 5 6; do gh pr merge "$branch" --squash --auto && { armed=1; break; } || sleep 4; done`,
     `          [ -n "$armed" ] || echo "auto-merge enable failed after retries (non-fatal)"`,
     // Bot-opened PRs don't fire pull_request CI (GITHUB_TOKEN anti-recursion); workflow_dispatch is exempt,
-    // so dispatch ci.yml on the PR head to post the required `ci` status that gates auto-merge.
+    // so dispatch ci.yml on the PR head to post the required `ci` status that gates auto-merge. RETRY: this is a
+    // required check — if the dispatch fails (the just-pushed branch isn't visible to the API yet, a transient
+    // API error), the `ci` status never posts and the PR can NEVER merge. Same fire-and-forget trap as the
+    // auto-merge arm above; retry until it lands.
     `          head_sha="$(git rev-parse HEAD)"`,
     `          pr_number="$(gh pr view "$branch" --json number --jq .number 2>/dev/null || echo "")"`,
-    `          gh workflow run ci.yml --ref "$branch" -f sha="$head_sha" -f pr="$pr_number" || echo "ci dispatch failed (non-fatal)"`,
+    `          ci_ok=; for i in 1 2 3 4 5 6; do gh workflow run ci.yml --ref "$branch" -f sha="$head_sha" -f pr="$pr_number" && { ci_ok=1; break; } || sleep 4; done`,
+    `          [ -n "$ci_ok" ] || echo "ci dispatch failed after retries (non-fatal)"`,
     // Trigger review DETERMINISTICALLY — the same anti-recursion that blocks pull_request CI blocks the
     // reviewer's auto-trigger on a bot PR, so the proposer requests its independent review here (wiring, not
     // a judgment), exactly as it dispatches ci. The reviewer (agent.review) then judges + posts agent-review.
     // No model/PM step in the routing path. (The merge boundary holds: the proposer can dispatch but not bless.)
+    // RETRY for the same reason as ci: agent-review is a required check; a swallowed dispatch leaves the PR
+    // permanently unmergeable.
     ...(agent.review
-      ? [`          gh workflow run ${agent.review}.yml -f issue_number="$pr_number" || echo "review dispatch failed (non-fatal)"`]
+      ? [
+          `          rv_ok=; for i in 1 2 3 4 5 6; do gh workflow run ${agent.review}.yml -f issue_number="$pr_number" && { rv_ok=1; break; } || sleep 4; done`,
+          `          [ -n "$rv_ok" ] || echo "review dispatch failed after retries (non-fatal)"`,
+        ]
       : []),
   ];
   return [

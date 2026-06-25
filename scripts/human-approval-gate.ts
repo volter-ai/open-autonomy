@@ -29,6 +29,20 @@ const gh = (args: string[]): string => {
 // Maintainer roles whose Approve counts (same trust set the control plane uses).
 const MAINTAINER = new Set(['OWNER', 'MEMBER', 'COLLABORATOR']);
 
+// Who to ENGAGE when a PR parks in human-required scope: the logins in the repo's maintainers variable
+// (policy.box.human.maintainers_var → PUBLIC_AGENT_MAINTAINERS), passed in as $MAINTAINERS. Falls back to the
+// repo owner. github-native engage (assign + request-review) routes the ask to them so GitHub notifies them
+// out-of-band — this is the gh runner's OWN human realization (each substrate owns its engage).
+function maintainerLogins(): string[] {
+  const fromVar = (process.env.MAINTAINERS ?? '')
+    .split(/[\s,]+/)
+    .map((s) => s.trim().replace(/^@/, ''))
+    .filter(Boolean);
+  if (fromVar.length) return fromVar;
+  const owner = (repo ?? '').split('/')[0];
+  return owner ? [owner] : []; // best-effort fallback; if the owner is an org login the gh call simply no-ops
+}
+
 // human-required scope — MIRRORS `.open-autonomy/autonomy.yml` risk.human_required_paths (keep in sync). A PR
 // in scope needs a maintainer Approve; everything else auto-passes. `.open-autonomy/history/**` (proposer
 // transcripts) is informational and never counts as scope.
@@ -80,12 +94,29 @@ const description = !scoped
 gh(['api', '-X', 'POST', `repos/${repo}/statuses/${headSha}`, '-f', `state=${state}`, '-f', 'context=human-approval', '-f', `description=${description}`]);
 process.stdout.write(`human-approval: #${pr} scoped=${scoped} approved=${approved} → ${state} (${headSha.slice(0, 7)})\n`);
 
-// Engage (in-band): on a scoped PR awaiting approval, leave ONE visible note so it isn't silent. Idempotent via
-// a hidden marker so re-runs (each push/review) don't spam. (Out-of-band notify is the separate health monitor.)
+// Engage the maintainer on a scoped PR awaiting approval — the gh runner's github-native human realization.
 if (scoped && !approved) {
+  // 1) Out-of-band reach: assign + request review from the maintainer(s) so GitHub notifies them (their
+  //    notifications/email) and the PR shows in their `assignee:@me` / review-requested worklist. Idempotent —
+  //    only add whoever is missing, so re-runs on each push/review don't re-notify.
+  const who = maintainerLogins();
+  if (who.length) {
+    const pv = JSON.parse(gh(['pr', 'view', pr, '-R', repo, '--json', 'assignees,reviewRequests']) || '{}') as {
+      assignees?: { login?: string }[];
+      reviewRequests?: { login?: string }[];
+    };
+    const assigned = new Set((pv.assignees ?? []).map((a) => a.login).filter(Boolean));
+    const requested = new Set((pv.reviewRequests ?? []).map((r) => r.login).filter(Boolean));
+    const toAssign = who.filter((u) => !assigned.has(u));
+    const toReview = who.filter((u) => !requested.has(u));
+    if (toAssign.length) gh(['pr', 'edit', pr, '-R', repo, '--add-assignee', toAssign.join(',')]);
+    if (toReview.length) gh(['pr', 'edit', pr, '-R', repo, '--add-reviewer', toReview.join(',')]);
+  }
+  // 2) In-band note: ONE visible explanation so the ask isn't silent. Idempotent via a hidden marker.
   const marker = '<!-- human-approval-gate -->';
   const existing = gh(['pr', 'view', pr, '-R', repo, '--json', 'comments']) || '{}';
   if (!existing.includes(marker)) {
-    gh(['pr', 'comment', pr, '-R', repo, '--body', `${marker}\n⏳ **Maintainer approval required.** This PR touches human-required scope, so beyond \`ci\` + \`agent-review\` it needs a maintainer **Approve** on the current commit before it can merge. Re-approve after any new push (the gate is per-commit).`]);
+    const cc = who.length ? ` ${who.map((u) => `@${u}`).join(' ')}` : '';
+    gh(['pr', 'comment', pr, '-R', repo, '--body', `${marker}\n⏳ **Maintainer approval required.**${cc} This PR touches human-required scope, so beyond \`ci\` + \`agent-review\` it needs a maintainer **Approve** on the current commit before it can merge. Re-approve after any new push (the gate is per-commit).`]);
   }
 }

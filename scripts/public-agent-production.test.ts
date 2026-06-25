@@ -150,6 +150,13 @@ describe('public agent production readiness', () => {
     expect(gate).toContain("'human-required'");
     expect(gate).toContain('commit_id === headSha'); // per-SHA: an Approve counts only on the current head
     expect(gate).toContain('MAINTAINER'); // only OWNER/MEMBER/COLLABORATOR approvals count
+    // github-native ENGAGE: a parked scoped PR is routed to the maintainer(s) out-of-band (assign +
+    // request-review → GitHub notifies them), not left silent. The workflow supplies who via $MAINTAINERS.
+    expect(gate).toContain('--add-assignee');
+    expect(gate).toContain('--add-reviewer');
+    expect(gate).toContain('MAINTAINERS'); // the engage targets come from the repo's maintainers variable
+    expect(wf).toContain('MAINTAINERS: ${{ vars.PUBLIC_AGENT_MAINTAINERS }}');
+    expect(wf).toContain('pull-requests: write'); // needed to assign + request review
     // Reconciliation: the reviewer no longer dead-ends sensitive PRs — it reviews on merits and lets the
     // human-approval gate supply the human sign-off.
     const reviewer = readFileSync(new URL('../.codex/skills/reviewer/SKILL.md', import.meta.url), 'utf8');

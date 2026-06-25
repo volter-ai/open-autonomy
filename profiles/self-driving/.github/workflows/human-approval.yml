@@ -47,4 +47,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           GITHUB_REPOSITORY: ${{ github.repository }}
           PR_NUMBER: ${{ github.event.pull_request.number || github.event.inputs.pr }}
+          # Who to engage when a PR parks in human-required scope (assign + request-review → GitHub notifies
+          # them). Comma/space-separated GitHub logins; falls back to the repo owner when unset.
+          MAINTAINERS: ${{ vars.PUBLIC_AGENT_MAINTAINERS }}
         run: bun scripts/human-approval-gate.ts

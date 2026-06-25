@@ -159,7 +159,8 @@ policy:
       - docs/CONSTITUTION.md
       - .codex/skills/**
       - .claude/skills/**
-      - services/**/wrangler.toml
+      - services/**
+      - "**/bun.lock"
     human_required_topics:
       - auth
       - secrets

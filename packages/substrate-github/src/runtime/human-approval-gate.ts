@@ -56,7 +56,9 @@ function isSensitivePath(f: string): boolean {
     f.startsWith('.codex/skills/') ||
     f.startsWith('.claude/skills/') ||
     f.startsWith('profiles/self-driving/skills/') ||
-    f.endsWith('wrangler.toml')
+    f.startsWith('services/') || // the model proxy: auth/admin, OIDC/HMAC, spend caps, the funding ledger, provider keys
+    f === 'bun.lock' ||
+    f.endsWith('/bun.lock') // a dependency-graph change (dependency-trust) — the whole lockfile, not just wrangler.toml
   );
 }
 

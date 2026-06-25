@@ -140,7 +140,8 @@ policy:
         - docs/CONSTITUTION.md
         - .codex/skills/**
         - .claude/skills/**
-        - services/**/wrangler.toml
+        - services/**            # the model proxy in full (auth/admin, OIDC/HMAC, spend caps, ledger, provider keys) — not just wrangler.toml
+        - "**/bun.lock"          # any dependency-graph change is human-reviewed (dependency-trust)
       human_required_topics: [auth, secrets, billing, deployment, destructive data migration, dependency trust]
     merge:
       require_ci: true

@@ -207,7 +207,7 @@ function launchConcurrencyLines(name: string, _agent: IRAgent): string[] {
 // subject, runs the skill, and acts directly (a generic effect step turns a working-tree change into an
 // auto-merging PR; non-proposing agents post their verdict/comment via gh in-skill). No credential-less
 // job, no bundle, no publisher — the merge boundary is the capability/permission split (docs/SPEC.md#capabilities).
-function wrapperYml(name: string, agent: IRAgent): string {
+function wrapperYml(name: string, agent: IRAgent, isControlPrimary = false): string {
   const caps = agent.capabilities ?? [];
   // Only a code:propose agent gets the effect step (push branch + open auto-merging PR). A non-proposer
   // (reviewer/pm/planner) has contents:read, so a stray tracked-file write would make the effect's
@@ -342,6 +342,9 @@ function wrapperYml(name: string, agent: IRAgent): string {
     `    env:`,
     `      GH_TOKEN: \${{ github.token }}`,
     `      CONTROL_WORKFLOW: ${name}.yml`,
+    // Issue-level verbs (decide/answer) must act ONCE, but every agent has a control job — mark exactly one as
+    // the primary so those verbs run there only (the per-workflow verbs cancel/status/retry still run on all).
+    ...(isControlPrimary ? [`      ISSUE_CONTROL_PRIMARY: "1"`] : []),
     `    steps:`,
     `      - uses: actions/checkout@v4`,
     `      - run: node .github/agent-control.mjs`,
@@ -470,9 +473,12 @@ export function compileGithub(ir: AutonomyIR): CompileOutput {
   // Every agent generates its workflow, named for the agent (substrate-derived — no profile-pinned
   // filename). The proxy's OIDC trust is repo-based (any workflow under .github/workflows/), so names are
   // the substrate's to choose.
+  // The issue-level control primary: the first non-human agent. Its control job (and only its) handles the
+  // once-per-issue verbs (decide/answer), so they don't fire N times across every agent's control job.
+  const controlPrimary = Object.entries(ir.agents).find(([, a]) => !isHuman(a))?.[0];
   for (const [name, agent] of Object.entries(ir.agents)) {
     if (isHuman(agent)) continue; // a human actor is declared in the manifest, not realized as a github job
-    generated[`.github/workflows/${name}.yml`] = wrapperYml(name, agent); // every agent is a skill
+    generated[`.github/workflows/${name}.yml`] = wrapperYml(name, agent, name === controlPrimary); // every agent is a skill
   }
   // Agents carry the operator control plane, so emit its handler.
   if (Object.values(ir.agents).some((a) => !isHuman(a))) {

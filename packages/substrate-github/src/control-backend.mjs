@@ -66,6 +66,12 @@ if (verb === 'cancel') {
     sh(`gh issue comment ${issue} --repo ${repo} --body ${q('No failed infrastructure run was found to retry (/agent retry).')}`);
   }
 } else if (verb === 'decide' || verb === 'answer') {
+  // Issue-level resolution must happen ONCE, but every agent workflow runs a control job — so only the
+  // designated primary control job acts; the rest no-op. (Eliminates the duplicate-comment race.)
+  if (process.env.ISSUE_CONTROL_PRIMARY !== '1') {
+    console.log(`/agent ${verb}: not the primary control job — skipping (handled once by the primary)`);
+    process.exit(0);
+  }
   // The human seam's `out` (docs/SPEC.md#handoffs): a maintainer RESOLVES a parked human-required/needs-info
   // item — records the typed decision/answer (receiver confirmation, on the record) and CLEARS the human
   // block so the PM re-triages it as resumable. This is the authorized act that drives Runner.update→done for

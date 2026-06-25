@@ -21,6 +21,7 @@ jobs:
     env:
       GH_TOKEN: ${{ github.token }}
       CONTROL_WORKFLOW: developer.yml
+      ISSUE_CONTROL_PRIMARY: "1"
     steps:
       - uses: actions/checkout@v4
       - run: node .github/agent-control.mjs

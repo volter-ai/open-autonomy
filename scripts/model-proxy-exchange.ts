@@ -8,7 +8,7 @@ interface Options {
 
 function usage(): never {
   throw new Error(`Usage:
-  MODEL_PROXY_URL=... ACTIONS_ID_TOKEN_REQUEST_URL=... ACTIONS_ID_TOKEN_REQUEST_TOKEN=... bun scripts/model-proxy-exchange.ts --run-id run_... [--audience volter-agent-model-proxy]`);
+  MODEL_PROXY_OIDC_AUDIENCE=<proxy-audience> MODEL_PROXY_URL=... ACTIONS_ID_TOKEN_REQUEST_URL=... ACTIONS_ID_TOKEN_REQUEST_TOKEN=... bun scripts/model-proxy-exchange.ts --run-id run_... [--audience <proxy-audience>]`);
 }
 
 function parseArgs(argv: string[]): Options {
@@ -18,10 +18,11 @@ function parseArgs(argv: string[]): Options {
   };
   const runId = value('--run-id');
   if (!runId) usage();
-  return {
-    runId,
-    audience: value('--audience') ?? process.env.MODEL_PROXY_OIDC_AUDIENCE ?? 'volter-agent-model-proxy',
-  };
+  // The OIDC audience is deployment config the install sets (from policy.box.github via the emitted
+  // workflow's MODEL_PROXY_OIDC_AUDIENCE) — the domain-free runtime carries no org identity, so it is required.
+  const audience = value('--audience') ?? process.env.MODEL_PROXY_OIDC_AUDIENCE;
+  if (!audience) usage();
+  return { runId, audience };
 }
 
 async function main(): Promise<void> {

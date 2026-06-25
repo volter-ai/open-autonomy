@@ -77,7 +77,8 @@ async function main(): Promise<void> {
   // Mint the run via the workflow's GitHub OIDC identity — NO stored admin secret. The proxy derives
   // repo/actor/run from the OIDC token and gates on its trusted-repo allow-list. (Admin run-minting is an
   // operator/treasury op on the proxy itself, never an in-cell agent's; that's why it isn't here.)
-  const audience = process.env.MODEL_PROXY_OIDC_AUDIENCE ?? 'volter-agent-model-proxy';
+  const audience = process.env.MODEL_PROXY_OIDC_AUDIENCE; // deployment config (policy.box.github) — no org default
+  if (!audience) throw new Error('MODEL_PROXY_OIDC_AUDIENCE is required (the install sets it from policy.box.github)');
   const oidc = await getOidcToken(audience);
   const res = await fetch(new URL('/v1/runs/mint', proxyUrl), {
     method: 'POST',

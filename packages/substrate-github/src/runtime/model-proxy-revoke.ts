@@ -26,8 +26,13 @@ async function main(): Promise<void> {
     process.stderr.write('revoke: missing --run-id or MODEL_PROXY_URL; skipping\n');
     return;
   }
+  const audience = process.env.MODEL_PROXY_OIDC_AUDIENCE; // deployment config (policy.box.github) — no org default
+  if (!audience) {
+    process.stderr.write('revoke: missing MODEL_PROXY_OIDC_AUDIENCE; relying on run expiry\n');
+    return;
+  }
   try {
-    const oidc = await getOidcToken(process.env.MODEL_PROXY_OIDC_AUDIENCE ?? 'volter-agent-model-proxy');
+    const oidc = await getOidcToken(audience);
     if (!oidc) {
       process.stderr.write('revoke: no OIDC token available; relying on run expiry\n');
       return;

@@ -66,7 +66,7 @@ jobs:
           if [ -z "$ref" ]; then echo "no subject.ref forwarded by the trigger"; exit 1; fi
           gh api "repos/${{ github.repository }}/issues/$ref" --jq '{number,title,body,user:{login:.user.login},labels:[.labels[].name]}' > .agent-run/issue.json
       - name: Mint bounded model token
-        run: bun scripts/model-proxy-mint.ts --run-id "ir-reviewer-${{ github.run_id }}" --models "${{ vars.PUBLIC_AGENT_MODEL || 'deepseek/deepseek-v4-flash' }}" --max-usd-cents "${{ vars.PUBLIC_AGENT_MAX_USD_CENTS || '200' }}" --max-requests "${{ vars.PUBLIC_AGENT_MAX_REQUESTS || '60' }}" --issue .agent-run/issue.json
+        run: bun scripts/model-proxy-mint.ts --run-id "ir-reviewer-${{ github.run_id }}" --models "${{ vars.PUBLIC_AGENT_MODEL || 'deepseek/deepseek-v4-flash' }}" --max-usd-cents "${{ vars.PUBLIC_AGENT_MAX_USD_CENTS || '200' }}" --max-requests "${{ vars.PUBLIC_AGENT_MAX_REQUESTS || '250' }}" --issue .agent-run/issue.json
   reviewer:
     needs: setup
     runs-on: ubuntu-latest

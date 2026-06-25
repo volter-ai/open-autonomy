@@ -355,7 +355,12 @@ function wrapperYml(name: string, agent: IRAgent): string {
     `      - run: bun install --frozen-lockfile`,
     ...buildIssue,
     `      - name: Mint bounded model token`,
-    `        run: bun scripts/model-proxy-mint.ts --run-id "${RID}" --models "\${{ vars.PUBLIC_AGENT_MODEL || 'deepseek/deepseek-v4-flash' }}" --max-usd-cents "\${{ vars.PUBLIC_AGENT_MAX_USD_CENTS || '200' }}" --max-requests "\${{ vars.PUBLIC_AGENT_MAX_REQUESTS || '60' }}" --issue .agent-run/issue.json`,
+    // --max-requests is a runaway-loop guard, NOT the cost bound (--max-usd-cents is). 60 was too low for the
+    // orchestrator: the PM reviews the WHOLE board (every issue + PR + run session) and routinely needs >60
+    // model calls, so it would hit the cap mid-sweep, the proxy would reject the next call, and the CLI would
+    // exit non-zero — the run reported "failure" even though its work (triage, routing, reaping) succeeded.
+    // Raise to 250 so the $ cap is what actually bounds a run; a runaway is still stopped by --max-usd-cents.
+    `        run: bun scripts/model-proxy-mint.ts --run-id "${RID}" --models "\${{ vars.PUBLIC_AGENT_MODEL || 'deepseek/deepseek-v4-flash' }}" --max-usd-cents "\${{ vars.PUBLIC_AGENT_MAX_USD_CENTS || '200' }}" --max-requests "\${{ vars.PUBLIC_AGENT_MAX_REQUESTS || '250' }}" --issue .agent-run/issue.json`,
     // The agent job is CREDENTIALED — its token is scoped to its capabilities (docs/CAPABILITIES.md). It
     // reads its subject, runs the skill, and acts directly; the only thing it can never do is merge (no
     // statuses:write on a proposer; no contents:write on a reviewer), enforced by the permission split.

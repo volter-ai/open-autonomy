@@ -39,8 +39,9 @@ bun bin/autonomy-compile.ts profiles/hello github /tmp/hello-gh
   WIP); the three workers are **`dispatch`** agents — the PM reads the ztrack board, decides from each
   issue's state (a property it reads, not a trigger), and **launches** the matching worker through the
   Runner (`bun scripts/runner.ts launch develop --ref <id>`), delivering the work item as `$ZTRACK_ISSUE`.
-  `cron` + `agent:launch` are the two portable primitives, so it runs identically on `local` and `github`
-  with no substrate task-state machinery (`docs/RUNNER.md`). Its agents use `ztrack` for tooling.
+  Targets **`local` only** — it is PR-free (review = the reviewer's verdict over commit-evidence), and
+  github's merge boundary requires an auto-merging PR + `agent-review` it doesn't provide; the GitHub
+  PR-based SDLC is `simple-gh-sdlc`'s job. Its agents use `ztrack` for tooling.
 
 Every profile in this directory is smoke-checked by `check:profiles` (parses + compiles to each
 declared target). A profile's agents pick their own **tooling** (`ztrack`, or `gh` + `npm`); the core

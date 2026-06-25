@@ -19,8 +19,11 @@ bun scripts/runner.ts launch develop --ref <issue-id>
 ```
 
 The work item rides in as `--ref` and the worker reads it as `$ZTRACK_ISSUE` (its `subject.ref` param).
-This is fully substrate-agnostic — `cron` + `agent:launch` are the two portable primitives, so the same
-loop runs on local and github with no substrate task-state machinery (`docs/RUNNER.md`).
+The dispatch model is substrate-agnostic (`cron` + `agent:launch`), but this profile targets **`local`
+only**: it is **PR-free** — review is the reviewer's verdict over commit-evidence, not a pull request.
+The github substrate lands a `code:propose` change as an auto-merging PR gated by an independent
+`agent-review` status (a boundary this profile doesn't provide), so a PR-free process can't merge there.
+The GitHub PR-based SDLC is `simple-gh-sdlc`'s job.
 
 The agents use [`ztrack`](https://github.com/volter-ai/ztrack) for tooling (issues, checks, evidence);
 the shared `standards/` are read by every skill.
@@ -29,5 +32,4 @@ the shared `standards/` are read by every skill.
 
 ```bash
 bun bin/autonomy-compile.ts profiles/simple-sdlc local
-bun bin/autonomy-compile.ts profiles/simple-sdlc github /tmp/simple-sdlc-gh
 ```

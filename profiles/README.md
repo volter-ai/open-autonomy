@@ -42,6 +42,11 @@ bun bin/autonomy-compile.ts profiles/hello github /tmp/hello-gh
   Targets **`local` only** — it is PR-free (review = the reviewer's verdict over commit-evidence), and
   github's merge boundary requires an auto-merging PR + `agent-review` it doesn't provide; the GitHub
   PR-based SDLC is `simple-gh-sdlc`'s job. Its agents use `ztrack` for tooling.
+- **`simple-gh-sdlc/`** — the **github** counterpart of simple-sdlc (pm / draft / develop / reviewer).
+  Same ztrack-tracked dispatch loop, but the merge boundary is GitHub's: `develop` (`code:propose`) lands
+  its change as an auto-merging PR gated by an independent `reviewer` (`code:review` → `agent-review`) —
+  the permission split, native auto-merge, done = merged PR (self-driving's merge model on a generic
+  ztrack SDLC). Targets `github`; uses the ztrack `simple-gh-sdlc` preset.
 
 Every profile in this directory is smoke-checked by `check:profiles` (parses + compiles to each
 declared target). A profile's agents pick their own **tooling** (`ztrack`, or `gh` + `npm`); the core

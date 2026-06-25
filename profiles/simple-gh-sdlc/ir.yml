@@ -1,0 +1,75 @@
+# simple-gh-sdlc — the GitHub PR-based counterpart of simple-sdlc. Same ztrack-tracked dispatch loop
+# (a cron PM that reads the board and launches workers via agent:launch), but the merge boundary is
+# GitHub's: the developer's change lands as an auto-merging PR gated by an independent `agent-review`
+# status (the code:review / code:propose permission split), not the local reviewer's verdict. Uses the
+# ztrack `simple-gh-sdlc` preset (PR at in-review, merged PR for done). One unit: an agent = behavior +
+# capabilities + triggers(+params) (+ review edge). See docs/AUTONOMY-IR.md, docs/RUNNER.md.
+schema: autonomy.ir.v1
+targets: [github]
+
+agents:
+  # The only dispatcher. Sweeps the ztrack board on a tick, enforces WIP, and LAUNCHES the next eligible
+  # worker (draft/develop) through the Runner. Review happens on the PR, not by a launched worker.
+  pm:
+    behavior: pm
+    capabilities: [tasks:converse, agent:launch, agent:list]
+    triggers:
+      - cron: "*/15 * * * *"
+
+  # Turns an untriaged request into a verifiable Ready issue (sources + 1-3 ACs + evidence scaffold).
+  draft:
+    behavior: draft
+    capabilities: [tasks:author, tasks:converse]
+    triggers:
+      - dispatch: true
+        params: { ZTRACK_ISSUE: subject.ref }
+
+  # Implements one Ready issue with evidence and pushes its branch; the substrate opens an auto-merging
+  # PR. Its proposals are reviewed by `reviewer` — the substrate triggers that review when the PR opens
+  # (the merge boundary; no PM/model routing). Holds code:propose, never code:review.
+  develop:
+    behavior: develop
+    capabilities: [code:propose, tasks:converse]
+    review: reviewer
+    triggers:
+      - dispatch: true
+        params: { ZTRACK_ISSUE: subject.ref }
+
+  # The independent GitHub reviewer: verifies the developer's PR (ztrack green + every passed AC backed by
+  # cited evidence + no unapproved human-required path) and posts the `agent-review` status (code:review =
+  # statuses:write). Holds NO contents:write, so it cannot merge; native auto-merge lands the PR once
+  # `ci` + `agent-review` are both green (docs/CAPABILITIES.md — the merge boundary).
+  reviewer:
+    behavior: reviewer
+    capabilities: [code:review, tasks:converse]
+    triggers:
+      - event: issue_comment
+        config: { types: [created] }
+        params:
+          TARGET_REF: subject.ref
+          SUBJECT_TEXT: subject.text
+          ACTOR_ROLE: subject.actorRole
+      - event: pull_request_target
+        config: { types: [opened, synchronize, reopened, ready_for_review] }
+    timeout: 20
+
+policy:
+  maxConcurrent: 2   # the WIP ceiling: at most one in-progress + one in-review at a time
+  box:
+    wip:
+      maxInProgress: 1
+      maxInReview: 1
+    risk:
+      human_required_paths:
+        - .github/workflows/**
+        - .codex/skills/**
+        - .claude/skills/**
+        - profiles/**/skills/**
+        - .volter/tracker/validation/**
+      human_required_topics: [auth, secrets, billing, deployment, destructive data migration, dependency trust]
+
+# The shared standards every skill reads (carried verbatim into the installation).
+resources:
+  - standards/workflow.md
+  - standards/issue-and-evidence.md
+  - standards/risk-and-review.md

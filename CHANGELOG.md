@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.1.5
+
+### Added
+
+- **`simple-gh-sdlc` profile** — the GitHub PR-based counterpart of `simple-sdlc`: same ztrack-tracked
+  dispatch loop (cron PM launches `develop`), but the merge boundary is GitHub's — `develop`
+  (`code:propose`) lands its change as an auto-merging PR gated by an independent `reviewer`
+  (`code:review` → `agent-review`); `ci` + `agent-review` green → native auto-merge (done = merged PR).
+  Uses the ztrack `simple-gh-sdlc` preset. Compile-verified coherent (the self-driving merge bar).
+
+### Changed
+
+- `simple-sdlc` is `targets: [local]` (it's PR-free; github's merge boundary needs the PR model — that's
+  `simple-gh-sdlc`'s job).
+
 ## 0.1.4
 
 ### Changed

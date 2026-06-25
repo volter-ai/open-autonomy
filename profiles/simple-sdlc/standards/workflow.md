@@ -4,24 +4,29 @@ Read this from PM and Review skills.
 
 ## WIP
 
-- At most one issue in `In Progress`.
-- At most one issue in `In Review`.
+- At most one issue in `in-progress`.
+- At most one issue in `in-review`.
 - PM is the only dispatcher.
 - Develop and Review agents handle one issue and stop.
-- `ztrack:reviewing` means a review worker already claimed an `In Review` issue.
+- `ztrack:reviewing` means a review worker already claimed an `in-review` issue.
 - If no review worker exists, scheduled recovery may clear stale `ztrack:reviewing`.
 - If no develop worker exists and the git worktree is clean, scheduled recovery
-  may move stale `In Progress` work back to `Ready`.
+  may move stale `in-progress` work back to `ready`.
 
 ## States
 
+The lifecycle states are exactly those of the `simple-sdlc` ztrack preset (lowercase):
+
 | State | Meaning |
 |---|---|
-| `Ready` | issue can be implemented |
-| `In Progress` | develop agent is working |
-| `In Review` | implementation claims are ready to verify |
-| `Done` | all ACs are passed and ztrack is green |
-| `Canceled` | no longer active |
+| `draft` | not yet ready to work |
+| `ready` | issue can be implemented |
+| `in-progress` | develop agent is working |
+| `in-review` | implementation claims are ready to verify |
+| `done` | all ACs are passed and ztrack is green |
+
+There is no canceled state in this preset — to drop work, delete the issue
+(`ztrack issue delete <id>`).
 
 ## Gates
 

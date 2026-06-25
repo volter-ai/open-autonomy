@@ -20,9 +20,9 @@ Read:
    only to get prettier reporter output.
 4. Apply `risk-and-review.md`. If the change touches a human-required path or
    topic without explicit approval, move the issue back with
-   `ztrack issue edit <issue> --remove-label ztrack:reviewing --state "In Progress"`
+   `ztrack issue edit <issue> --remove-label ztrack:reviewing --state "in-progress"`
    and leave `OUTCOME: changes-requested human-required`.
-5. If any claim does not hold, move the issue back with `ztrack issue edit <issue> --remove-label ztrack:reviewing --state "In Progress"` and leave requested changes.
-6. If all claims hold, approve with `ztrack issue edit <issue> --remove-label ztrack:reviewing --state Done`, then run `ztrack check` again.
+5. If any claim does not hold, move the issue back with `ztrack issue edit <issue> --remove-label ztrack:reviewing --state "in-progress"` and leave requested changes.
+6. If all claims hold, approve with `ztrack issue edit <issue> --remove-label ztrack:reviewing --state done`, then run `ztrack check` again.
 
 End with `OUTCOME: merged` or `OUTCOME: changes-requested`.

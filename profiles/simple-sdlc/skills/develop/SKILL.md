@@ -27,9 +27,9 @@ Read:
    ids/`acVersion`; `ztrack check` names the exact command in its fix hint. A
    checked/passed AC with no evidence fails `check` — never fabricate one.
 6. Leave unsupported ACs unchecked.
-7. Move the issue to `In Review` only when `ztrack check` is green and no
-   other issue is already `In Review`: `ztrack issue edit <issue> --state "In Review"`.
-   If another issue is in review, leave this issue `In Progress` and end with
+7. Move the issue to `in-review` only when `ztrack check` is green and no
+   other issue is already `in-review`: `ztrack issue edit <issue> --state "in-review"`.
+   If another issue is in review, leave this issue `in-progress` and end with
    `OUTCOME: blocked review-capacity`.
 
 End with `OUTCOME: ready-for-review` or `OUTCOME: blocked <reason>`.

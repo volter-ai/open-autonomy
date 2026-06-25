@@ -32,11 +32,11 @@ This is the only way to start a worker. It works identically on every substrate
 3. Respect WIP from `workflow.md`.
 4. Dispatch exactly one agent per tick, in this order. The state is a PROPERTY
    of the issue you READ to decide what to launch — not a trigger.
-   - If an issue is `In Review` and does not have label `ztrack:reviewing`,
+   - If an issue is `in-review` and does not have label `ztrack:reviewing`,
      claim it with `ztrack issue edit <id> --add-label "ztrack:reviewing"`, then
      launch the reviewer: `bun scripts/runner.ts launch review --ref <id>`.
-   - Else if no issue is `In Review`, WIP allows develop, and an issue is
-     `Ready`, claim it with `ztrack issue edit <id> --state "In Progress"`, then
+   - Else if no issue is `in-review`, WIP allows develop, and an issue is
+     `ready`, claim it with `ztrack issue edit <id> --state "in-progress"`, then
      launch the developer: `bun scripts/runner.ts launch develop --ref <id>`.
    - Else stop without dispatch.
 5. After dispatch, run `ztrack check --json`. Do not wait for the launched agent to finish.

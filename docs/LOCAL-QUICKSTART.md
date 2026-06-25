@@ -119,15 +119,17 @@ The `hello` greeter self-fires on cron and needs no input. A real loop needs a b
 `simple-sdlc` agents read work from a local **ztrack** tracker on disk (no GitHub):
 
 ```bash
-npm install -g ztrack        # the tracker simple-sdlc's agents use
-ztrack init                  # create a tracker in this repo
-ztrack issue create          # add a work item (repeat for each task)
+npm install -g ztrack                      # the tracker simple-sdlc's agents use
+ztrack init --preset simple-sdlc           # the PR-free dev preset (the `default`); no remote needed
+ztrack issue create                        # add a work item (repeat for each task)
 ```
 
-On its next tick the PM sweeps the ztrack board, enforces WIP limits, and routes each task through
-`open → ready → in-review → done`, launching the matching worker (draft/develop/review) for each
-transition. The work item reaches each worker as `$ZTRACK_ISSUE`. You add and inspect work entirely
-through `ztrack` — `ztrack issue view <id>`, `ztrack check` — never through GitHub.
+The `simple-sdlc` ztrack preset is **PR-free**: an issue is `done` once every AC is passed with
+commit-evidence and the reviewer approves — no pull request, so it works on a private repo with no
+remote. On its next tick the PM sweeps the ztrack board, enforces WIP, and **launches** the matching
+worker (draft/develop/review) for the next eligible issue, moving it `draft → ready → in-progress →
+in-review → done`. The work item reaches each worker as `$ZTRACK_ISSUE`. You add and inspect work
+entirely through `ztrack` — `ztrack issue view <id>`, `ztrack check` — never through GitHub.
 
 > Using a different tracker? `simple-sdlc`'s agents are just skills that call `ztrack`. To use your
 > own tooling, fork the profile (`profiles/simple-sdlc/skills/*`) and point the agents at your CLI,

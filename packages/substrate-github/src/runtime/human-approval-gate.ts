@@ -99,6 +99,7 @@ function eventReview(): Review | undefined {
 let approved = false;
 if (scoped) {
   const er = eventReview();
+  process.stderr.write(`human-approval: DEBUG event=${process.env.GITHUB_EVENT_NAME} headSha=${headSha} er=${JSON.stringify(er)}\n`);
   if (er && qualifies(er)) approved = true; // primary: the review carried by this event
   if (!approved) {
     // Backstop for the synchronize / re-dispatch paths (no event.review). The GITHUB_TOKEN sometimes returns

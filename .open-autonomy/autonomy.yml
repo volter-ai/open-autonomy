@@ -8,8 +8,6 @@ documents:
     - .github/workflows/codeql.yml
     - .github/workflows/deploy.yml
     - .github/workflows/open-autonomy-preflight.yml
-    - .github/dependabot.yml
-    - .github/zizmor.yml
     - .gitattributes
     - .gitignore
     - .open-autonomy/review-rubric.yml

@@ -4,6 +4,8 @@ name: human-approval
 # (agent-review) is always required separately; this adds the human sign-off for sensitive changes. Deterministic
 # (a security boundary), not a model decision. Re-evaluated on PR changes and on review submit/dismiss.
 on:
+  # zizmor: ignore[dangerous-triggers] — pull_request_target is required for the write token; the gate
+  # reads PR metadata via the API and checks out BASE (trusted main), never PR head. Documented + reviewed.
   pull_request_target:
     types: [opened, synchronize, reopened, ready_for_review, labeled, unlabeled]
   pull_request_review:

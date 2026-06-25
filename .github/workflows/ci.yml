@@ -32,20 +32,19 @@ jobs:
         with:
           bun-version: 1.3.10
       - run: bun install --frozen-lockfile
-      # GitHub Actions static analysis (pinned). Gates High findings only; the baseline of
-      # reviewed-safe findings is in .github/zizmor.yml. Runs BEFORE check so a failure skips
-      # check, and the status step below (keyed on check.outcome) posts ci=failure.
-      - name: Lint workflows (zizmor)
-        run: pipx run zizmor==1.26.1 --offline --min-severity high .github/workflows/
+      # Workflow static analysis is the substrate-emitted security.yml (zizmor), not a per-profile step.
       - id: check
         run: bun run check
       - name: Post ci commit status
         if: ${{ always() && github.event_name == 'workflow_dispatch' && github.event.inputs.sha }}
+        # Untrusted/dispatch inputs flow through env (not ${{ }} in run) — no template injection.
         env:
           GH_TOKEN: ${{ github.token }}
+          SHA: ${{ github.event.inputs.sha }}
+          OUTCOME: ${{ steps.check.outcome }}
         run: |
-          state=success; [ "${{ steps.check.outcome }}" = "success" ] || state=failure
-          gh api repos/${{ github.repository }}/statuses/${{ github.event.inputs.sha }} \
+          state=success; [ "$OUTCOME" = "success" ] || state=failure
+          gh api "repos/$GITHUB_REPOSITORY/statuses/$SHA" \
             -f state="$state" -f context="ci" \
-            -f target_url="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" \
+            -f target_url="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" \
             -f description="CI $state"

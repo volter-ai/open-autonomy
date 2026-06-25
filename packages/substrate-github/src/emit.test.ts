@@ -20,10 +20,32 @@ function irWith(triggers: Trigger[], kind?: 'agent' | 'human'): AutonomyIR {
 }
 
 function workflows(out: { generated: Record<string, string> }): string[] {
+  // Agent-workflow realization only — exclude the substrate-emitted infra workflow (the universal
+  // security baseline), which is not an agent job.
   return Object.entries(out.generated)
-    .filter(([p]) => p.startsWith('.github/workflows/'))
+    .filter(([p]) => p.startsWith('.github/workflows/') && p !== '.github/workflows/security.yml')
     .map(([, c]) => c);
 }
+
+describe('compileGithub — substrate-universal security baseline', () => {
+  // The substrate secures the surface it creates: it emits a security workflow + dependabot + a zizmor
+  // baseline, and injects the supply-chain runner — into EVERY github install, not per-profile.
+  test('emits the security workflow, dependabot, supply-chain runner, and a zizmor baseline scoped to the emitted agent workflows', () => {
+    const out = compileGithub(irWith([{ cron: '0 0 * * *' }]));
+    expect(out.generated['.github/workflows/security.yml']).toContain('scripts/check-supply-chain.ts');
+    expect(out.generated['.github/workflows/security.yml']).toContain('zizmor');
+    expect(out.generated['.github/dependabot.yml']).toContain('package-ecosystem: github-actions');
+    expect(out.generated['scripts/check-supply-chain.ts']).toBeDefined();
+    // the zizmor baseline whitelists exactly the agent workflow this compile emitted (maintainer.yml)
+    expect(out.generated['.github/zizmor.yml']).toContain('maintainer.yml');
+  });
+
+  test('a human-only install still carries the baseline, with no agent workflow to whitelist', () => {
+    const out = compileGithub(irWith([{ dispatch: true }], 'human'));
+    expect(out.generated['.github/workflows/security.yml']).toBeDefined();
+    expect(out.generated['.github/zizmor.yml']).not.toContain('maintainer.yml');
+  });
+});
 
 describe('compileGithub — dispatch trigger realization', () => {
   // A dispatch trigger is invoked on demand through the Runner — every workflow already exposes

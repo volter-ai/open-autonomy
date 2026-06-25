@@ -1,8 +1,7 @@
 version: 2
 updates:
-  # Keep the SHA-pinned GitHub Actions current — Dependabot bumps the pin AND the trailing version
-  # comment. PRs land in .github/workflows/** (a human_required_path), so each is human-reviewed
-  # (dependency-trust) before merge — exactly the gate we want for an action-supply-chain change.
+  # Keep the SHA-pinned GitHub Actions the substrate emits current — Dependabot bumps the pin AND the
+  # trailing version comment. PRs land in .github/workflows/** (human-required), so each is reviewed.
   - package-ecosystem: github-actions
     directory: /
     schedule:

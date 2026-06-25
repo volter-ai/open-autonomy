@@ -26,6 +26,67 @@ for (const f of readdirSync(RUNTIME_DIR)) {
 
 const CONTROL_VERBS = ['cancel', 'pause', 'resume', 'status', 'retry'];
 
+// ── Substrate-universal security baseline (emitted into every github install) ─────────────────────────
+// The substrate secures the surface IT creates: the workflows it emits (zizmor), its own action supply
+// chain (dependabot), and the dependency lockfile every install carries (check-supply-chain, a runtime
+// script). App/code-level security (CodeQL, deploy gates, sensitive paths) stays in the profile.
+const DEPENDABOT_YML = `version: 2
+updates:
+  # Keep the SHA-pinned GitHub Actions the substrate emits current — Dependabot bumps the pin AND the
+  # trailing version comment. PRs land in .github/workflows/** (human-required), so each is reviewed.
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: "hardening(ci)"
+`;
+
+const SECURITY_WORKFLOW = `name: Security
+# Emitted by substrate-github — the security net every install carries. Scans the workflows the engine
+# emits (zizmor) and the dependency lockfiles (integrity + audit) on push to main, PRs, and weekly. A
+# bot-authored agent PR does not fire pull_request (GITHUB_TOKEN anti-recursion), so this net catches on
+# merge-to-main + schedule; a profile may ALSO wire these into its own dispatched per-PR gate.
+on:
+  push:
+    branches: [main]
+  pull_request:
+  schedule:
+    - cron: "27 3 * * 1"
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  security:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+      - run: bun install --frozen-lockfile || bun install
+      - name: Supply-chain (lockfile integrity + bun audit)
+        run: bun scripts/check-supply-chain.ts
+      - name: Workflow static analysis (zizmor)
+        run: pipx run zizmor==1.26.1 --offline --min-severity high .github/workflows/
+`;
+
+// Generated per install: baseline the guarded patterns in the engine's OWN emitted agent workflows
+// (pull_request_target gated by author_association; github.run_id/token expansions). A NEW high finding of
+// any other class still fails. Profile-owned workflows carry inline \`# zizmor: ignore\` where they need it.
+function zizmorConfig(agentWorkflows: string[]): string {
+  const ignores = agentWorkflows.map((w) => `      - ${w}`).join('\n');
+  return `# Emitted by substrate-github. Baselines the guarded patterns in the agent workflows the engine
+# emits (pull_request_target gated by an author_association allowlist; github.run_id/token expansions —
+# all GitHub-controlled, not attacker input). A NEW high finding of any other class still fails the gate.
+rules:
+  dangerous-triggers:
+    ignore:
+${ignores}
+  template-injection:
+    ignore:
+${ignores}
+`;
+}
+
 // Authorization for the comment surface. issue_comment / pull_request_target fire for ANY user (incl.
 // drive-by commenters and fork PRs), so the control plane and any comment-launch MUST be gated on a
 // maintainer (author_association), and a pull_request_target agent run MUST be gated on a same-repo PR
@@ -489,6 +550,16 @@ export function compileGithub(ir: AutonomyIR): CompileOutput {
   }
   // The substrate injects its runtime backend.
   Object.assign(generated, RUNTIME);
+
+  // Substrate-universal security baseline: scan the emitted workflows + the install's lockfiles + keep the
+  // emitted action pins fresh. The supply-chain runner ships in RUNTIME above. The zizmor baseline is scoped
+  // to the agent workflows this compile emitted (their guarded patterns are the engine's, not the app's).
+  const agentWorkflows = Object.entries(ir.agents)
+    .filter(([, a]) => !isHuman(a))
+    .map(([name]) => `${name}.yml`);
+  generated['.github/workflows/security.yml'] = SECURITY_WORKFLOW;
+  generated['.github/dependabot.yml'] = DEPENDABOT_YML;
+  generated['.github/zizmor.yml'] = zizmorConfig(agentWorkflows);
 
   const copies: Array<{ from: string; to: string }> = [];
   for (const agent of Object.values(ir.agents)) {

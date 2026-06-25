@@ -109,11 +109,6 @@ function eventReview(): Review | undefined {
 let approved = false;
 if (scoped) {
   const er = eventReview();
-  if (er) {
-    const login = er.user?.login ?? '';
-    const perm = login ? gh(['api', `repos/${repo}/collaborators/${login}/permission`, '--jq', '.permission']) : '';
-    process.stderr.write(`human-approval: DEBUG event=${process.env.GITHUB_EVENT_NAME} login=${login} assoc=${er.author_association} perm=${perm || '(empty)'} state=${er.state} commit=${(er.commit_id ?? '').slice(0, 7)} head=${headSha.slice(0, 7)}\n`);
-  }
   if (er && qualifies(er)) approved = true; // primary: the review carried by this event
   if (!approved) {
     // Backstop for the synchronize / re-dispatch paths (no event.review). The GITHUB_TOKEN sometimes returns

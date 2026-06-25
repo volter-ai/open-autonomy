@@ -146,7 +146,6 @@ items:
   - id: actor-model-human-handoffs
     phase: 15
     priority: high
-    proposed: true
     title: Actor Model And Explicit Human Handoffs
     proof_gate: human-approve-merges-live
     acceptance:

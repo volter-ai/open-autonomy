@@ -24,10 +24,13 @@ Read:
    `ztrack ac patch <issue> <ac> --json '{"checked":true,"status":"passed","evidence":[{"id":"ev1","commit":"<sha>","acVersion":1}],"proof":{"explanation":"…","evidenceRefs":["ev1"]}}'`.
    For an artifact, `ztrack evidence add <file>` (prints `image=<path>`), commit it,
    add `"image":"<path>"` to the entry. Use `ztrack issue view <issue>` for the AC
-   ids/`acVersion`; `ztrack check` names the exact command in its fix hint. A
-   checked/passed AC with no evidence fails `check` — never fabricate one.
-6. Leave unsupported ACs unchecked.
-7. When `ztrack check` is green, move the issue to `in-review`
+   ids/`acVersion`; `ztrack check "$ZTRACK_ISSUE"` names the exact command in its fix
+   hint. A checked/passed AC with no evidence fails `check` — never fabricate one.
+6. Leave unsupported ACs unchecked. If a claim can't be satisfied, take an **honest
+   escape** — never fake green: leave the AC pending and end `OUTCOME: blocked <reason>`;
+   descope the AC; or `ztrack waiver sign "$ZTRACK_ISSUE" --code <code> --reason "…"`.
+7. When **`ztrack check "$ZTRACK_ISSUE"`** (scope to your issue — a whole-tracker check
+   can be red for an unrelated issue) is green, move the issue to `in-review`
    (`ztrack issue edit <issue> --state "in-review"`) and commit your work on the
    branch. The **substrate opens the auto-merging PR** for your branch and the
    independent `reviewer` is triggered on it — you do not open the PR, request

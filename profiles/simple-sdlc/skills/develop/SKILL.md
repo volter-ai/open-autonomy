@@ -24,10 +24,15 @@ Read:
    `ztrack ac patch <issue> <ac> --json '{"checked":true,"status":"passed","evidence":[{"id":"ev1","commit":"<sha>","acVersion":1}],"proof":{"explanation":"…","evidenceRefs":["ev1"]}}'`.
    For an artifact, `ztrack evidence add <file>` (prints `image=<path>`), commit it,
    add `"image":"<path>"` to the entry. Use `ztrack issue view <issue>` for the AC
-   ids/`acVersion`; `ztrack check` names the exact command in its fix hint. A
-   checked/passed AC with no evidence fails `check` — never fabricate one.
-6. Leave unsupported ACs unchecked.
-7. Move the issue to `in-review` only when `ztrack check` is green and no
+   ids/`acVersion`; `ztrack check "$ZTRACK_ISSUE"` names the exact command in its fix
+   hint. A checked/passed AC with no evidence fails `check` — never fabricate one.
+6. Leave unsupported ACs unchecked. If a claim genuinely can't be satisfied, take an
+   **honest escape** — never fake green to finish: leave the AC pending and end
+   `OUTCOME: blocked <reason>` (the PM re-dispatches); descope the AC; or, for a
+   finding an authority knowingly accepts, `ztrack waiver sign "$ZTRACK_ISSUE" --code
+   <code> [--ac <acId>] --reason "…"`.
+7. Move the issue to `in-review` only when **`ztrack check "$ZTRACK_ISSUE"`** (scope to
+   YOUR issue — a whole-tracker check can be red for an unrelated issue) is green and no
    other issue is already `in-review`: `ztrack issue edit <issue> --state "in-review"`.
    If another issue is in review, leave this issue `in-progress` and end with
    `OUTCOME: blocked review-capacity`.

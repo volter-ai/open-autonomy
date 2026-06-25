@@ -30,5 +30,8 @@ There is no canceled state in this preset — to drop work, delete the issue
 
 ## Gates
 
-Run `ztrack check` before every handoff. Review cannot start on a red issue.
-Done is only allowed when all ACs pass with evidence.
+Run `ztrack check "$ZTRACK_ISSUE"` (scope to your own issue — a whole-tracker
+`ztrack check` can be red for an *unrelated* issue and would wrongly block you) before
+every handoff. Review cannot start on a red issue. Done is only allowed when all of the
+issue's ACs pass with evidence. (The PM may run a whole-tracker `ztrack check` for board
+awareness; per-issue workers always scope to `$ZTRACK_ISSUE`.)

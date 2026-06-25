@@ -1,5 +1,28 @@
 # Changelog
 
+## 0.1.3
+
+### Changed
+
+- **IR: replaced the `task:` trigger with `dispatch`** (breaking). A task is a work *item* whose
+  lifecycle state is a property the orchestrator reads — not a trigger the substrate watches. The two
+  portable trigger kinds are now `cron` (time) and `dispatch` (on-demand via the Runner / `agent:launch`);
+  `event` stays the substrate-native escape hatch. The agent-facing `scripts/runner.ts` is now a uniform
+  CLI (`bun scripts/runner.ts launch <agent> --ref <work-item>`) so an orchestrator dispatches workers the
+  same way on every substrate.
+- **`simple-sdlc` runs PR-free on local.** Its workers are `dispatch` agents the PM launches; it uses
+  ztrack's `simple-sdlc` preset (commit+proof evidence, verdict-based done, no PR/remote). Skills aligned
+  to ztrack 0.30's lowercase states and current `ac patch` evidence API.
+
+### Added
+
+- **Local / closed-source onboarding**: `docs/LOCAL-QUICKSTART.md`, a README front-door fork (GitHub vs
+  fully-local), and a next-steps print after `open-autonomy compile <profile> local`.
+
+### Fixed
+
+- License field corrected to `Apache-2.0` (matches `LICENSE` + README).
+
 ## Unreleased
 
 ### Fixed

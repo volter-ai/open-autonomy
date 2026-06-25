@@ -77,7 +77,10 @@ const scoped = labels.includes('human-required') || files.some(isSensitivePath);
 // A qualifying sign-off: APPROVED, by a maintainer, on the CURRENT head (per-SHA re-earn via commit_id).
 type Review = { state?: string; author_association?: string; commit_id?: string };
 const qualifies = (r: Review): boolean =>
-  r.state === 'APPROVED' && MAINTAINER.has(r.author_association ?? '') && r.commit_id === headSha;
+  // The REST reviews API returns state UPPERCASE ('APPROVED'); the pull_request_review event payload returns
+  // it LOWERCASE ('approved'). Normalize so the payload path (the one that actually works under GITHUB_TOKEN)
+  // matches.
+  (r.state ?? '').toUpperCase() === 'APPROVED' && MAINTAINER.has(r.author_association ?? '') && r.commit_id === headSha;
 
 // The review that fired a `pull_request_review` event is in the event payload. Use it FIRST: it's
 // authoritative, immune to the reviews-API read returning empty under GITHUB_TOKEN, and free of the

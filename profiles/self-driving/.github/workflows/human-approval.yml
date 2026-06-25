@@ -1,0 +1,42 @@
+name: human-approval
+# The ADDITIONAL human-review gate. Posts a `human-approval` commit status: auto-success for routine agent PRs,
+# success only on a maintainer Approve (current head SHA) for PRs in human-required scope. AI review
+# (agent-review) is always required separately; this adds the human sign-off for sensitive changes. Deterministic
+# (a security boundary), not a model decision. Re-evaluated on PR changes and on review submit/dismiss.
+on:
+  pull_request_target:
+    types: [opened, synchronize, reopened, ready_for_review, labeled, unlabeled]
+  pull_request_review:
+    types: [submitted, dismissed, edited]
+
+# Least privilege: post the status, comment the engage note, read the repo. No contents:write — it cannot merge.
+permissions:
+  contents: read
+  statuses: write
+  pull-requests: write
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+
+concurrency:
+  group: human-approval-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  human-approval:
+    runs-on: ubuntu-latest
+    steps:
+      # Check out the BASE (trusted main) for the gate script — NEVER the PR head. The gate reads PR metadata
+      # via the API only; no untrusted PR code is executed.
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.10
+      - name: Evaluate human-approval gate
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: bun scripts/human-approval-gate.ts

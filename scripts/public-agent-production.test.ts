@@ -132,6 +132,31 @@ describe('public agent production readiness', () => {
     expect(skill).toContain('human-required'); // escalates rather than looping
   });
 
+  test('human-approval is an additional, deterministic gate (maintainer Approve for sensitive PRs)', () => {
+    const wf = workflow('human-approval.yml');
+    // Deterministic gate, not an agent: posts the human-approval status via the gate script.
+    expect(wf).toContain('bun scripts/human-approval-gate.ts');
+    // Re-evaluated on PR changes AND on review submit/dismiss (per-SHA re-earn).
+    expect(wf).toContain('pull_request_review');
+    expect(wf).toContain('synchronize');
+    // Least privilege: can post the status + comment, but CANNOT merge (no contents:write).
+    expect(wf).toContain('statuses: write');
+    expect(wf).not.toContain('contents: write');
+    // It checks out the BASE (default branch), never the PR head — no untrusted code execution.
+    expect(wf).toContain('ref: ${{ github.event.repository.default_branch }}');
+    // The gate script exists and scopes by sensitive paths + the human-required label.
+    const gate = readFileSync(new URL('../scripts/human-approval-gate.ts', import.meta.url), 'utf8');
+    expect(gate).toContain("context=human-approval");
+    expect(gate).toContain("'human-required'");
+    expect(gate).toContain('commit_id === headSha'); // per-SHA: an Approve counts only on the current head
+    expect(gate).toContain('MAINTAINER'); // only OWNER/MEMBER/COLLABORATOR approvals count
+    // Reconciliation: the reviewer no longer dead-ends sensitive PRs — it reviews on merits and lets the
+    // human-approval gate supply the human sign-off.
+    const reviewer = readFileSync(new URL('../.codex/skills/reviewer/SKILL.md', import.meta.url), 'utf8');
+    expect(reviewer).toContain('human-approval');
+    expect(reviewer).toContain('review its code on the merits');
+  });
+
   test('reviewer holds code:review (statuses:write) and cannot merge (no contents:write)', () => {
     // The reviewer posts the agent-review verdict status; it has no contents:write, so it cannot merge.
     // GitHub native auto-merge lands the PR once ci + agent-review are green (the permission-split boundary).

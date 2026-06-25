@@ -35,17 +35,25 @@ The PR number is in the `TARGET_REF` environment variable.
      strategist proposal — the strategy reviewer handles it; exit without posting a status.
 2. Judge correctness, security, regression, and test-coverage risk. Decide: **pass** (low-risk,
    safe to land) or **fail** (needs another developer attempt or a human).
-   - **Maintainer hold / approval-required:** if the PR **or its linked issue** carries any block label
-     (`do-not-merge`, `human-required`, `agent-blocked`, `agent-maintainer-hold`, `hold`,
-     `agent-develop-only`), post `agent-review` = **failure** regardless of code quality, and comment that an
-     explicit maintainer approval is required (for `agent-develop-only`) or that a hold is in place.
-     Native auto-merge ignores labels, so blessing it would let it land; the hold/approval-gate must stop the
-     merge until a maintainer clears the label.
+   - **Explicit HOLD** (a deliberate "stop"): if the PR or its linked issue carries `do-not-merge`,
+     `agent-blocked`, `agent-maintainer-hold`, or `hold`, post `agent-review` = **failure** regardless of code
+     quality and comment that a hold is in place (native auto-merge ignores labels, so failing the status is
+     what stops the merge until a maintainer clears it).
+   - **Human-required / sensitive scope is NOT your stop — there is a separate gate for it.** A PR touching
+     sensitive scope (workflows, `autonomy.yml`, the constitution, skills, `wrangler.toml`) or carrying the
+     `human-required` / `agent-develop-only` label is gated by the deterministic **`human-approval`** required
+     check (a maintainer Approve on the current head) — that is what supplies the human sign-off. So do NOT
+     auto-fail such a PR just because it is sensitive: **review its code on the merits** and pass if it is sound.
+     It still cannot merge without the maintainer Approve (ci + agent-review + human-approval are all required).
+     You still fail for genuine quality/security/regression problems or anything you cannot confidently review.
 3. **Post the verdict** to the head SHA (`SHA` = the headRefOid above), into the repo `GITHUB_REPOSITORY`:
    - Pass, low risk: `gh api -X POST "repos/$GITHUB_REPOSITORY/statuses/$SHA" -f state=success -f context=agent-review -f description="<short reason>"`
-   - Fail, or human-required (workflow/secret/auth/billing changes, broad/unclear rewrites, high
-     risk, or anything you can't confidently review): `... -f state=failure -f context=agent-review ...`,
-     and for human-required also `gh pr edit "$TARGET_REF" --add-label human-required`.
+   - Fail (genuine quality/security/regression problems, broad/unclear rewrites you cannot confidently
+     review): `... -f state=failure -f context=agent-review ...`.
+   - **Needs a human but the code is sound** (e.g. it's sensitive and you want a maintainer's eyes, or you
+     can't fully judge the risk): pass `agent-review` on the code's merits AND `gh pr edit "$TARGET_REF"
+     --add-label human-required` — that invokes the `human-approval` gate so a maintainer Approve is required
+     before merge, instead of dead-ending the PR on a permanent failure.
 4. Comment the verdict + actionable findings: `gh pr comment "$TARGET_REF" --body "Agent review: <pass|fail> (<risk>). <summary>"`.
 
 ## Constraints

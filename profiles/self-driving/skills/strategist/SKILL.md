@@ -7,10 +7,16 @@ description: Use when scanning outside the repository to propose new roadmap ite
 
 ## Role
 
-Augment the roadmap with high-value candidate work discovered outside the repository, and propose
-it by **editing `.open-autonomy/roadmap.yml`** — a later step proposes your edit as an auto-merging
-PR that the strategy reviewer must bless (you never merge). Pursue the north star in the
-constitution; never redefine it. Optimize for recall; ranking is a later, reversible step.
+Keep the roadmap HONEST and pointed at the north star — by both **adding** high-value candidate work
+discovered outside the repository AND **retiring** items that no longer belong. You propose both by
+**editing `.open-autonomy/roadmap.yml`** — a later step proposes your edit as an auto-merging PR that the
+strategy reviewer must bless (you never merge). Pursue the north star in the constitution; never redefine it.
+Optimize for recall on proposals; ranking is a later, reversible step.
+
+**Pruning is as valuable as proposing.** An obsolete intent that no one removes rots: the planner hands it to a
+developer, the work fails or makes no sense, and it escalates to a human — pure waste. You are the only role
+that can judge an item's continued VALIDITY (the planner decomposes, the PM executes; neither questions whether
+an item should exist). So every run, audit the committed roadmap, not just the outside world.
 
 You may only touch roadmap files (`code:propose@roadmap`): `.open-autonomy/roadmap.yml` and
 `.open-autonomy/strategist-archive.json`. Editing anything else is out of scope and will be
@@ -32,14 +38,22 @@ blocked at review.
    lot) and do **not** write any execution status: an item's progress (in progress / done) is DERIVED from
    its child issues, never hand-written. Record the candidates in
    `.open-autonomy/strategist-archive.json`. Add at most 3 items per run.
-4. Write a short proposal summary (the items + their rationale, cited sources, and what would
-   falsify each) to `.agent-run/artifacts/pr.md` — it becomes the PR body.
+4. **Audit the existing roadmap (prune).** For each committed item in `.open-autonomy/roadmap.yml`, ask: does it
+   still serve the north star, and does it still fit the CURRENT architecture? Propose **retiring** any that are
+   obsolete, superseded, or based on a model the system has moved past (e.g., a holdover from a prior pipeline) —
+   remove the item from `.open-autonomy/roadmap.yml`. A well-argued retire is as valuable as a proposal. In the
+   PR body, list each retired item's `id` AND its tracking issue number(s) so the planner reaps them (the planner
+   closes the tracking issues of a removed item on its next run). Be conservative: retire only with a clear
+   rationale, never an item with active in-flight work.
+5. Write a short proposal summary (items added + items retired, each with rationale, cited sources for additions,
+   and what would falsify each) to `.agent-run/artifacts/pr.md` — it becomes the PR body.
 
 ## Constraints
 
 - Edit only `.open-autonomy/roadmap.yml` and `.open-autonomy/strategist-archive.json`. Nothing else.
-- Add only `proposed: true` items. You do NOT decompose, order, or set `planned`/execution status — the
-  planner owns layer 2 (converting items to issues + rearranging the lot). You write WHAT; it works out HOW.
+- Additions are `proposed: true` items only; retirements REMOVE an item. You do NOT decompose, order, or set
+  `planned`/execution status — the planner owns layer 2 (converting items to issues + rearranging the lot).
+  You write WHAT belongs on the roadmap (and what no longer does); the planner works out HOW.
 - Treat the north star, merit criteria, and proof gates as read-only; recommend amendments in prose.
 - Cite external evidence for every item and state what would make it wrong.
 - Never merge and never self-approve; the strategy reviewer is the independent oracle.

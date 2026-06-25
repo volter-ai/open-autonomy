@@ -47,8 +47,10 @@ issue, the roadmap shows it as parked with no progress, so every sweep verify it
    When an item is fully broken down, set `planned: true` on it in `.open-autonomy/roadmap.yml`.
 3. **Keep it current.** Edit `.open-autonomy/roadmap.yml` to reflect reality: reorder by `phase`/priority,
    split an item that grew, merge duplicates, sharpen a `title`/`intent`. Reopen a tracking issue closed while
-   its item still has open work. Never invent new strategy (that's the strategist) and never set execution
-   status (it's derived).
+   its item still has open work. **Reap retired items:** when a roadmap item no longer exists in `roadmap.yml`
+   (the strategist retired it) but its `roadmap:<id>` tracking issues are still open, CLOSE them with a comment
+   noting the item was retired — a tracking issue with no parent item is dead work. Never invent new strategy
+   (that's the strategist) and never set execution status (it's derived).
 4. Write any roadmap edits to `.open-autonomy/roadmap.yml`; the effect step proposes them as an auto-merging
    PR the strategy reviewer blesses. Put a short summary of what you decomposed/reordered (and why) in
    `.agent-run/artifacts/pr.md`. Issue create/edit is direct (no PR); only roadmap-file edits go through review.

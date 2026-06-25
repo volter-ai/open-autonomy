@@ -67,6 +67,7 @@ jobs:
       PUBLIC_AGENT_MODEL: ${{ vars.PUBLIC_AGENT_MODEL || 'deepseek/deepseek-v4-flash' }}
       PUBLIC_AGENT_CITED_VERSION: ${{ vars.PUBLIC_AGENT_CLAUDE_CODE_VERSION }}
       GH_TOKEN: ${{ github.token }}
+      MAINTAINERS: ${{ vars.PUBLIC_AGENT_MAINTAINERS }}
     steps:
       - name: Lock down egress (block token exfiltration from untrusted-derived work)
         uses: step-security/harden-runner@v2

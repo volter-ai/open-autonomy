@@ -107,9 +107,9 @@ engage is **github-native** (assignment + @mention → GitHub notifies them out-
 
 **Who to engage:**
 - **`human-required`** (a maintainer decision/approval) → the **maintainer(s)**: the logins in the
-  `PUBLIC_AGENT_MAINTAINERS` repo variable (read it with
-  `gh api repos/$GITHUB_REPOSITORY/actions/variables/PUBLIC_AGENT_MAINTAINERS --jq .value` if available);
-  fall back to the repo owner, or a maintainer (OWNER/MEMBER/COLLABORATOR) who has already commented.
+  `$MAINTAINERS` env var (the `PUBLIC_AGENT_MAINTAINERS` repo variable, injected into your job —
+  comma/space-separated). If it's empty, fall back to the repo owner, or a maintainer
+  (OWNER/MEMBER/COLLABORATOR) who has already commented.
 - **`needs-info`** (a clarification only the asker can give) → the **issue author** (the requester).
 
 **Engage** — idempotent, do it once (don't re-notify every sweep):

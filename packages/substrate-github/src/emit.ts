@@ -384,6 +384,9 @@ function wrapperYml(name: string, agent: IRAgent, isControlPrimary = false): str
     `      PUBLIC_AGENT_MODEL: \${{ vars.PUBLIC_AGENT_MODEL || 'deepseek/deepseek-v4-flash' }}`,
     `      PUBLIC_AGENT_CITED_VERSION: \${{ vars.PUBLIC_AGENT_CLAUDE_CODE_VERSION }}`,
     `      GH_TOKEN: \${{ github.token }}`,
+    // Who the org engages for the human seam — so a skill (e.g. the PM, Step 2c) can assign/@mention the
+    // maintainer without an Actions-variables API read the job token may not have. Empty → fall back to owner.
+    `      MAINTAINERS: \${{ vars.PUBLIC_AGENT_MAINTAINERS }}`,
     ...triggerParamsEnv(agent),
     `    steps:`,
     ...HARDEN_RUNNER,

@@ -5,17 +5,10 @@ import { sessionTurnsFromBody } from './session-capture.js';
 import { reserveBudget } from './spend.js';
 import type { Env, Provider, RunClaims, UsageEvent } from './types.js';
 
-const ANTHROPIC_URL = 'https://api.anthropic.com/v1/messages';
+// Single upstream: every model on the Anthropic Messages wire settles through OpenRouter (it speaks it).
 const OPENROUTER_URL = 'https://openrouter.ai/api/v1/messages';
 const DEFAULT_VERSION = '2023-06-01';
 const MAX_OUTPUT_TOKENS = 4096;
-
-// Providers that speak the Anthropic Messages wire and therefore share this handler. Each maps to its
-// upstream endpoint, the auth header it expects, and the env key holding its first-party credential.
-const ANTHROPIC_WIRE: Record<'anthropic' | 'openrouter', { url: string; authHeader: string; envKey: 'ANTHROPIC_API_KEY' | 'OPENROUTER_API_KEY' }> = {
-  anthropic: { url: ANTHROPIC_URL, authHeader: 'x-api-key', envKey: 'ANTHROPIC_API_KEY' },
-  openrouter: { url: OPENROUTER_URL, authHeader: 'authorization', envKey: 'OPENROUTER_API_KEY' },
-};
 
 export async function handleAnthropic(req: Request, env: Env, claims: RunClaims, ctx: ExecutionContext): Promise<Response> {
   if (req.method !== 'POST') return methodNotAllowed();
@@ -28,27 +21,16 @@ export async function handleAnthropic(req: Request, env: Env, claims: RunClaims,
   const model = typeof body.model === 'string' ? body.model : '';
   if (!claims.models.includes(model)) return error('model_not_allowed', 403);
 
-  // Pick the Anthropic-wire provider. An explicit price-table entry wins; otherwise an OpenRouter-style
-  // "vendor/slug" id (e.g. deepseek/deepseek-v4-flash) routes to OpenRouter and a bare id is first-party
-  // Anthropic. OpenRouter reports the real cost, so it needs NO table entry — that is the whole point.
+  // Single provider: every model settles through OpenRouter — prepaid, so the loaded credit balance is the
+  // hard ceiling on all spend. A bare Anthropic id is mapped to its OpenRouter "vendor/slug"; a slug id
+  // passes through. OpenRouter reports the real cost, so an unpriced model reserves at a conservative ceiling.
   const priced = priceTable(env.MODEL_PRICES_JSON)[model];
   if (priced && priced.provider === 'openai') return error('model_price_not_configured', 403);
-  const provider: 'anthropic' | 'openrouter' = priced?.provider === 'openrouter' ? 'openrouter'
-    : priced?.provider === 'anthropic' ? 'anthropic'
-    : model.includes('/') ? 'openrouter'
-    : 'anthropic';
-
-  // Reservation basis (held BEFORE the call): the explicit price if we have one, else a conservative
-  // OpenRouter ceiling. A first-party Anthropic model with no price can't be metered (no cost report).
-  let price: ModelPrice | null = priced ?? null;
-  if (!price) {
-    if (provider === 'openrouter') price = openrouterReservePrice(Number(env.OPENROUTER_RESERVE_USD_PER_MTOK ?? 30));
-    else return error('model_price_not_configured', 403);
-  }
-
-  const route = ANTHROPIC_WIRE[provider];
-  const apiKey = env[route.envKey];
+  const provider = 'openrouter' as const;
+  const price: ModelPrice = priced ?? openrouterReservePrice(Number(env.OPENROUTER_RESERVE_USD_PER_MTOK ?? 30));
+  const apiKey = env.OPENROUTER_API_KEY;
   if (!apiKey) return error('provider_not_configured', 503);
+  if (!model.includes('/')) body.model = `anthropic/${model}`;
 
   const requestedMax = typeof body.max_tokens === 'number' ? body.max_tokens : MAX_OUTPUT_TOKENS;
   body.max_tokens = Math.max(1, Math.min(requestedMax, MAX_OUTPUT_TOKENS));
@@ -61,11 +43,11 @@ export async function handleAnthropic(req: Request, env: Env, claims: RunClaims,
 
   let upstream: Response;
   try {
-    upstream = await fetch(route.url, {
+    upstream = await fetch(OPENROUTER_URL, {
       method: 'POST',
       headers: {
         'content-type': 'application/json',
-        [route.authHeader]: route.authHeader === 'authorization' ? `Bearer ${apiKey}` : apiKey,
+        authorization: `Bearer ${apiKey}`,
         'anthropic-version': req.headers.get('anthropic-version') ?? DEFAULT_VERSION,
         ...(req.headers.get('anthropic-beta') ? { 'anthropic-beta': req.headers.get('anthropic-beta')! } : {}),
       },

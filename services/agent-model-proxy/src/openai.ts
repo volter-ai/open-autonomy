@@ -4,10 +4,7 @@ import { estimateInputTokensFromBody, openrouterReservePrice, priceTable, settle
 import { reserveBudget } from './spend.js';
 import type { Env, Provider, RunClaims, UsageEvent } from './types.js';
 
-const OPENAI_BASE = 'https://api.openai.com';
-// OpenRouter also speaks the OpenAI chat/completions wire, so openrouter-provider models route here too
-// (the agent loop's proxyTurn uses this wire). Same vendor/slug convention + reported-cost settle as the
-// Anthropic handler.
+// Single upstream: every model settles through OpenRouter (it speaks the OpenAI chat/completions wire).
 const OPENROUTER_BASE = 'https://openrouter.ai/api';
 const MAX_OUTPUT_TOKENS = 4096;
 
@@ -28,22 +25,17 @@ export async function handleOpenAI(
   const model = typeof body.model === 'string' ? body.model : '';
   if (!claims.models.includes(model)) return error('model_not_allowed', 403);
 
-  // Pick the provider for this OpenAI-wire request: an explicit table entry wins; otherwise an
-  // OpenRouter-style "vendor/slug" id routes to OpenRouter (no table entry needed — it reports real
-  // cost) and a bare id is first-party OpenAI. Anthropic-priced models don't belong on this wire.
+  // Single provider: every model settles through OpenRouter — prepaid, so the loaded credit balance is the
+  // hard ceiling on all spend (the one limit a compromised proxy can't raise). A bare OpenAI id is mapped to
+  // its OpenRouter "vendor/slug"; an id that already carries a slug passes through. OpenRouter reports the
+  // real cost, so an unpriced model reserves at a conservative ceiling and settles on the reported amount.
   const priced = priceTable(env.MODEL_PRICES_JSON)[model];
   if (priced && priced.provider === 'anthropic') return error('model_price_not_configured', 403);
-  const provider: 'openai' | 'openrouter' = priced?.provider === 'openrouter' ? 'openrouter'
-    : priced?.provider === 'openai' ? 'openai'
-    : model.includes('/') ? 'openrouter'
-    : 'openai';
-  let price: ModelPrice | null = priced ?? null;
-  if (!price) {
-    if (provider === 'openrouter') price = openrouterReservePrice(Number(env.OPENROUTER_RESERVE_USD_PER_MTOK ?? 30));
-    else return error('model_price_not_configured', 403);
-  }
-  const apiKey = provider === 'openrouter' ? env.OPENROUTER_API_KEY : env.OPENAI_API_KEY;
+  const provider = 'openrouter' as const;
+  const price: ModelPrice = priced ?? openrouterReservePrice(Number(env.OPENROUTER_RESERVE_USD_PER_MTOK ?? 30));
+  const apiKey = env.OPENROUTER_API_KEY;
   if (!apiKey) return error('provider_not_configured', 503);
+  if (!model.includes('/')) body.model = `openai/${model}`;
 
   const outputTokens = clampOpenAiOutputTokens(body, route);
   if (route === '/v1/chat/completions' && body.stream === true) {
@@ -58,7 +50,7 @@ export async function handleOpenAI(
 
   let upstream: Response;
   try {
-    upstream = await fetch(`${provider === 'openrouter' ? OPENROUTER_BASE : OPENAI_BASE}${route}`, {
+    upstream = await fetch(`${OPENROUTER_BASE}${route}`, {
       method: 'POST',
       headers: {
         authorization: `Bearer ${apiKey}`,

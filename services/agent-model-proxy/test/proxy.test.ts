@@ -141,7 +141,7 @@ describe('agent model proxy', () => {
     const minted = await mint(env, ['claude-sonnet-4-6'], 25, 5);
 
     globalThis.fetch = (async (input: RequestInfo | URL) => {
-      expect(String(input)).toBe('https://api.anthropic.com/v1/messages');
+      expect(String(input)).toBe('https://openrouter.ai/api/v1/messages');
       return new Response(JSON.stringify({
         id: 'msg_1',
         usage: { input_tokens: 1000, output_tokens: 1000 },
@@ -163,7 +163,7 @@ describe('agent model proxy', () => {
     });
     expect(status.request_count).toBe(1);
     expect(status.consumed_usd_cents).toBeGreaterThan(0);
-    expect(status.recent_events[0].provider).toBe('anthropic');
+    expect(status.recent_events[0].provider).toBe('openrouter');
   });
 
   test('is universal: a stock SDK hits native /v1/messages with x-api-key', async () => {
@@ -171,7 +171,7 @@ describe('agent model proxy', () => {
     const minted = await mint(env, ['claude-sonnet-4-6'], 25, 5);
 
     globalThis.fetch = (async (input: RequestInfo | URL) => {
-      expect(String(input)).toBe('https://api.anthropic.com/v1/messages');
+      expect(String(input)).toBe('https://openrouter.ai/api/v1/messages');
       return new Response(JSON.stringify({ id: 'msg_1', usage: { input_tokens: 1000, output_tokens: 1000 } }), {
         headers: { 'content-type': 'application/json' },
       });
@@ -239,7 +239,7 @@ describe('agent model proxy', () => {
     const minted = await mint(env, ['gpt-4o-mini'], 25, 5);
 
     globalThis.fetch = (async (input: RequestInfo | URL) => {
-      expect(String(input)).toBe('https://api.openai.com/v1/chat/completions');
+      expect(String(input)).toBe('https://openrouter.ai/api/v1/chat/completions');
       return new Response(JSON.stringify({ id: 'cmpl_1', usage: { prompt_tokens: 1000, completion_tokens: 1000 } }), {
         headers: { 'content-type': 'application/json' },
       });
@@ -1051,8 +1051,6 @@ function testEnv(overrides: Partial<Env> = {}): Env {
     GITHUB_SPONSORS_WEBHOOK_SECRET: 'whsecret',
     DEFAULT_FUNDING_ACCOUNT: 'volter/twin',
     DEFAULT_SPONSOR_ACCOUNT: 'volter/twin',
-    ANTHROPIC_API_KEY: 'anthropic-key',
-    OPENAI_API_KEY: 'openai-key',
     OPENROUTER_API_KEY: 'openrouter-key',
     DEFAULT_MAX_USD_CENTS: '500',
     DEFAULT_MAX_REQUESTS: '200',

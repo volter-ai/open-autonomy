@@ -89,20 +89,25 @@ Authorization: Bearer $MODEL_PROXY_TOKEN
 ```bash
 bunx wrangler secret put AGENT_PROXY_ADMIN_TOKEN
 bunx wrangler secret put AGENT_PROXY_HMAC_SECRET
-bunx wrangler secret put ANTHROPIC_API_KEY
-bunx wrangler secret put OPENAI_API_KEY
-bunx wrangler secret put OPENROUTER_API_KEY   # reaches non-first-party models (e.g. DeepSeek)
+bunx wrangler secret put OPENROUTER_API_KEY        # the ONLY provider key — all model spend routes here
+bunx wrangler secret put GITHUB_SPONSORS_WEBHOOK_SECRET
 ```
 
-The `openrouter` provider reaches models over OpenRouter, which speaks **both**
-wires — so it shares the proxy's native routes on each side: the Anthropic
+**Single provider.** Every model settles through OpenRouter — it speaks **both**
+wires, so the proxy shares its native routes on each side: the Anthropic
 `/v1/messages` (→ OpenRouter `/api/v1/messages`) and the OpenAI
-`/v1/chat/completions` (→ OpenRouter `/api/v1/chat/completions`). Any `vendor/slug`
-model id (e.g. `deepseek/deepseek-v4-flash`) routes to OpenRouter on whichever wire
-the caller used, with **no price-table entry** — OpenRouter reports the real cost
-and the proxy settles against it, reserving `OPENROUTER_RESERVE_USD_PER_MTOK`
-(default 30) up front and truing it down. Add a table entry only to tighten that
-reservation.
+`/v1/chat/completions` (→ OpenRouter `/api/v1/chat/completions`). A `vendor/slug`
+id (e.g. `deepseek/deepseek-v4-flash`) passes through; a bare id is mapped to its
+vendor slug (`gpt-4o` → `openai/gpt-4o`, `claude-sonnet-4-6` →
+`anthropic/claude-sonnet-4-6`). OpenRouter reports the real cost and the proxy
+settles against it, reserving `OPENROUTER_RESERVE_USD_PER_MTOK` (default 30) up
+front and truing it down; a price-table entry only tightens the reservation.
+
+Routing everything through one **prepaid** provider is deliberate: the loaded
+OpenRouter credit balance is the hard ceiling on all model spend — the one limit a
+compromised proxy can't raise (it lives at OpenRouter, not in the worker). There is
+no first-party `OPENAI_API_KEY`/`ANTHROPIC_API_KEY` anymore; delete them from the
+Cloudflare secrets if previously set.
 
 `MODEL_PRICES_JSON` should be set for production so model pricing can be
 updated without code changes. Shape:

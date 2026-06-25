@@ -19,8 +19,10 @@ A funnel where each layer fails differently, plus a containment backstop outside
   integrity-verified by `check:security`; egress is locked to npm + Cloudflare so the deploy token can't be
   exfiltrated. The token is scoped to Workers-edit on this one worker, so a leak can only redeploy it.
 - **Containment backstop (the only control outside the loop — agents are funded *by* the proxy they edit):**
-  hard provider-side spend caps + instant Cloudflare rollback bound the worst case to "a few dollars + a
-  revert."
+  the proxy routes 100% through OpenRouter, which is **prepaid** — the loaded credit balance is a hard
+  ceiling the proxy can't raise (it lives at OpenRouter, not the worker). Worst-case loss from *any*
+  compromise (leaked key, malicious deploy, rogue session, forged sponsorship) is the loaded credits, plus
+  instant Cloudflare rollback. `OPENROUTER_API_KEY` is the only provider secret.
 
 The only GitHub secret the system needs is the Cloudflare deploy token. Everything else is keyless.
 
@@ -66,8 +68,11 @@ De-risked ahead of the first deploy so it isn't a guess:
 ## Flip to safe (the go-live checklist — only when ready)
 
 1. **Resolve the approver-credential question above.**
-2. **Set hard provider-side spend caps** (OpenAI + OpenRouter dashboards). Check current monthly spend
-   first and set the cap safely above it — the proxy is serving the live fleet, so a too-low cap breaks it.
+2. **Bound the money at OpenRouter** (the proxy now routes 100% through it — single prepaid provider). Keep
+   the loaded credit balance deliberately small and refill as the fleet burns it — that balance *is* the
+   blast radius for the whole system. Set a per-key spend limit on the worker's `OPENROUTER_API_KEY` so even
+   full key exfil is bounded below the balance. (Check current burn first so you don't starve the live
+   fleet; delete the now-unused `OPENAI_API_KEY` Cloudflare secret while you're there.)
 3. **Mint a scoped Cloudflare API token:** dashboard → My Profile → API Tokens → Create → "Edit Cloudflare
    Workers" template, narrowed to this account (`0ed031cc83dad4ad191efba7076074d0`) and ideally just the
    `volter-agent-model-proxy` worker. Nothing else.

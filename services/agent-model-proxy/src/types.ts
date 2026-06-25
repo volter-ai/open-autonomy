@@ -5,8 +5,6 @@ export type Provider = 'anthropic' | 'openai' | 'openrouter';
 export interface Env {
   AGENT_PROXY_ADMIN_TOKEN: string;
   AGENT_PROXY_HMAC_SECRET: string;
-  ANTHROPIC_API_KEY?: string;
-  OPENAI_API_KEY?: string;
   OPENROUTER_API_KEY?: string;
   DEFAULT_MAX_USD_CENTS?: string;
   DEFAULT_MAX_REQUESTS?: string;

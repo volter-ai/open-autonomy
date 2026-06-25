@@ -18,7 +18,6 @@
     ".github/ISSUE_TEMPLATE/public_agent_session.yml",
     ".github/agent-control.mjs",
     ".github/dependabot.yml",
-    ".github/deploy-gate.yml",
     ".github/workflows/ci.yml",
     ".github/workflows/codeql.yml",
     ".github/workflows/deploy.yml",

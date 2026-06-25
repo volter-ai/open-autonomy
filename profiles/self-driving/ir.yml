@@ -179,7 +179,6 @@ resources:
   - .github/workflows/security.yml
   - .github/workflows/codeql.yml
   - .github/workflows/deploy.yml
-  - .github/deploy-gate.yml
   - .github/workflows/open-autonomy-preflight.yml
   - .github/dependabot.yml
   - .gitattributes

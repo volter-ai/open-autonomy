@@ -30,13 +30,15 @@ The only GitHub secret the system needs is the Cloudflare deploy token. Everythi
 
 - `.github/workflows/deploy.yml` — tag-triggered, egress-locked, pinned wrangler, `environment: production`
   (a code-host resource carried by the profile — see `docs/CODE_HOST_RESOURCES.md`).
-- **The gate is a resource; provisioning is reproducible, not hand-set.** The gate is declared in
-  `.github/deploy-gate.yml` (a code-host resource carried *with* `deploy.yml` — the deployment defines its
-  own gate; it is NOT in the opaque `policy.box`). `bun scripts/provision-deploy.ts` reads that resource and
-  idempotently reconciles GitHub to match: the `production` environment (required reviewer from
-  `PUBLIC_AGENT_MAINTAINERS`, `can_admins_bypass=false`), the `deploy-v*` tag deployment policy, the
-  `deploy-tags-admin-only` ruleset, and `CLOUDFLARE_ACCOUNT_ID`. It refuses a gate with no reviewer (no agent
-  deploys). Re-run any time. The Cloudflare **secret** is never touched (set by a human).
+- **The gate IS the workflow; provisioning is reproducible, not hand-set.** `deploy.yml` already declares its
+  own gate — `environment: production` (the job runs in the gated environment) and `on: push: tags: deploy-v*`
+  (only the promotion tag fires). It is NOT in the opaque `policy.box`. `bun scripts/provision-deploy.ts` reads
+  the workflow, extracts the environment + promotion tag, and idempotently reconciles the two things GitHub
+  can't express in a repo file: the `production` environment's required REVIEWER (from
+  `PUBLIC_AGENT_MAINTAINERS`, `can_admins_bypass=false`) and the admin-only `deploy-tags-admin-only` ruleset —
+  plus the `deploy-v*` tag deployment policy. It refuses to provision if the workflow declares no environment
+  or no tag (no agent deploys an ungated workflow). Re-run any time. The Cloudflare **secret** is never touched
+  (set by a human; the script reports which `secrets.*`/`vars.*` the workflow references and whether they're set).
 - GitHub secret-scanning + push-protection — enabled.
 - Supply-chain + workflow gates in CI (`check:security`, zizmor, CodeQL, Dependabot).
 

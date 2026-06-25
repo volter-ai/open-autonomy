@@ -45,6 +45,16 @@ describe('compileGithub — substrate-universal security baseline', () => {
     expect(out.generated['.github/workflows/security.yml']).toBeDefined();
     expect(out.generated['.github/zizmor.yml']).not.toContain('maintainer.yml');
   });
+
+  test('materializes human-required scope as DATA: substrate defaults ∪ profile policy, nothing hardcoded', () => {
+    const base = irWith([{ cron: '0 0 * * *' }]);
+    const withPolicy: AutonomyIR = { ...base, policy: { box: { risk: { human_required_paths: ['custom/sensitive/**'] } } } };
+    const paths = JSON.parse(compileGithub(withPolicy).generated['.open-autonomy/human-required-paths.json']) as string[];
+    expect(paths).toContain('.github/workflows/**'); // substrate default (the engine emits workflows)
+    expect(paths).toContain('**/bun.lock'); // substrate default (CI executes deps)
+    expect(paths).toContain('custom/sensitive/**'); // the profile's own path, unioned in
+    expect(paths).not.toContain('services/**'); // not hardcoded — present only if a profile declares it
+  });
 });
 
 describe('compileGithub — dispatch trigger realization', () => {

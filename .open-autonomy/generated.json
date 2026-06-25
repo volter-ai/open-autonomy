@@ -34,6 +34,7 @@
     ".gitignore",
     ".open-autonomy/autonomy.yml",
     ".open-autonomy/generated.json",
+    ".open-autonomy/human-required-paths.json",
     ".open-autonomy/review-rubric.yml",
     ".open-autonomy/roadmap.yml",
     ".open-autonomy/strategist-sources.json",

@@ -1,0 +1,8 @@
+[
+  ".github/workflows/**",
+  ".open-autonomy/autonomy.yml",
+  ".codex/skills/**",
+  ".claude/skills/**",
+  "**/bun.lock",
+  "docs/CONSTITUTION.md"
+]

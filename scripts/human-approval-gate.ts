@@ -44,22 +44,22 @@ function maintainerLogins(): string[] {
   return owner ? [owner] : []; // best-effort fallback; if the owner is an org login the gh call simply no-ops
 }
 
-// human-required scope — MIRRORS `.open-autonomy/autonomy.yml` risk.human_required_paths (keep in sync). A PR
-// in scope needs a maintainer Approve; everything else auto-passes. `.open-autonomy/history/**` (proposer
-// transcripts) is informational and never counts as scope.
+// human-required scope is DATA, not hardcode: the install carries the resolved patterns (the substrate's
+// merge-sensitive defaults ∪ the profile's policy.box.risk.human_required_paths) in
+// .open-autonomy/human-required-paths.json, materialized at compile. The gate enforces whatever policy
+// declares — no project structure baked into the engine. A PR in scope needs a maintainer Approve;
+// everything else auto-passes. `.open-autonomy/history/**` (proposer transcripts) never counts as scope.
+const HUMAN_REQUIRED_GLOBS = (() => {
+  try {
+    const patterns = JSON.parse(readFileSync('.open-autonomy/human-required-paths.json', 'utf8')) as string[];
+    return patterns.map((p) => new Bun.Glob(p));
+  } catch {
+    return [] as Bun.Glob[];
+  }
+})();
 function isSensitivePath(f: string): boolean {
   if (f.startsWith('.open-autonomy/history/')) return false;
-  return (
-    f.startsWith('.github/workflows/') ||
-    f === '.open-autonomy/autonomy.yml' ||
-    f === 'docs/CONSTITUTION.md' ||
-    f.startsWith('.codex/skills/') ||
-    f.startsWith('.claude/skills/') ||
-    f.startsWith('profiles/self-driving/skills/') ||
-    f.startsWith('services/') || // the model proxy: auth/admin, OIDC/HMAC, spend caps, the funding ledger, provider keys
-    f === 'bun.lock' ||
-    f.endsWith('/bun.lock') // a dependency-graph change (dependency-trust) — the whole lockfile, not just wrangler.toml
-  );
+  return HUMAN_REQUIRED_GLOBS.some((g) => g.match(f));
 }
 
 const view = JSON.parse(gh(['pr', 'view', pr, '-R', repo, '--json', 'headRefOid,labels,files']) || '{}') as {

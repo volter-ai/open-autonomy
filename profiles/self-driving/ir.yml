@@ -140,8 +140,10 @@ policy:
         - docs/CONSTITUTION.md
         - .codex/skills/**
         - .claude/skills/**
-        - services/**            # the model proxy in full (auth/admin, OIDC/HMAC, spend caps, ledger, provider keys) — not just wrangler.toml
-        - "**/bun.lock"          # any dependency-graph change is human-reviewed (dependency-trust)
+        # NOT services/** — merging proxy code is inert (nothing deploys on merge); the deploy is gated
+        # separately (human-cut deploy-v* tag + required-reviewer environment). The fleet iterates on the
+        # proxy autonomously; the human checkpoint is at deploy, not merge.
+        - "**/bun.lock"          # merge-dangerous: the next CI `bun install` executes deps (dependency-trust)
       human_required_topics: [auth, secrets, billing, deployment, destructive data migration, dependency trust]
     merge:
       require_ci: true

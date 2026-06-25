@@ -158,7 +158,6 @@ policy:
       - docs/CONSTITUTION.md
       - .codex/skills/**
       - .claude/skills/**
-      - services/**
       - "**/bun.lock"
     human_required_topics:
       - auth

@@ -101,27 +101,6 @@ function ensureWorktree(branch: string, worktree: string): void {
   }
 }
 
-// Merge the issue's branch into trunk (local, no PR) and tear down its worktree. Called by the PM AFTER
-// review approves — the local analogue of github's native auto-merge (gated by the reviewer's verdict).
-// No agent runs this; it is deterministic substrate code, so the "no agent may merge" boundary holds.
-function integrate(ref: string): number {
-  const branch = branchOf(ref);
-  const worktree = worktreeOf(ref);
-  if (git(['rev-parse', '--verify', '--quiet', branch]).status !== 0) {
-    console.error(`integrate: no branch ${branch} to merge`);
-    return 1;
-  }
-  const m = git(['merge', '--no-ff', '-m', `integrate ${branch}`, branch]);
-  if (m.status !== 0) {
-    console.error(`integrate: merge of ${branch} into trunk failed:\n${m.stderr || m.stdout}`);
-    return 1;
-  }
-  if (existsSync(worktree)) git(['worktree', 'remove', '--force', worktree]);
-  git(['branch', '-D', branch]);
-  console.log(JSON.stringify({ integrated: branch }));
-  return 0;
-}
-
 /** Launch an agent with forwarded params (agent:launch). */
 export async function launch(agent: string, params: LaunchParams = {}): Promise<void> {
   const { skill: behavior = '', params: declared = {} } = manifestAgent(agent);
@@ -183,18 +162,8 @@ function parseFlags(args: string[]): LaunchParams {
 
 export async function runCli(argv: string[]): Promise<number> {
   const [cmd, agent, ...rest] = argv;
-  // `integrate` takes no agent — it merges a work item's branch into trunk after review approved.
-  if (cmd === 'integrate') {
-    const flags = parseFlags(argv.slice(1));
-    const ref = String(flags.ref ?? '');
-    if (!ref) {
-      console.error('usage: runner.ts integrate --ref <work-item>');
-      return 2;
-    }
-    return integrate(ref);
-  }
   if (!cmd || !agent || agent.startsWith('--')) {
-    console.error('usage: runner.ts <launch|list|integrate> <agent> [--ref <work-item>] [--key value ...]');
+    console.error('usage: runner.ts <launch|list> <agent> [--ref <work-item>] [--key value ...]');
     return 2;
   }
   if (cmd === 'launch') {

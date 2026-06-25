@@ -20,6 +20,7 @@
     ".github/dependabot.yml",
     ".github/workflows/ci.yml",
     ".github/workflows/codeql.yml",
+    ".github/workflows/deploy.yml",
     ".github/workflows/developer.yml",
     ".github/workflows/human-approval.yml",
     ".github/workflows/open-autonomy-preflight.yml",

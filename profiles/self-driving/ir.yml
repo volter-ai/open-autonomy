@@ -100,6 +100,20 @@ agents:
         config: { types: [opened, synchronize, reopened] }
     timeout: 20
 
+  # Maintainer: the declared human consumer of the human seam (docs/SPEC.md#handoffs). `kind: human` — a
+  # person, not an agent: github emits NO job for it (it is declared in the manifest, realized by routing
+  # work to a person). `human_required` stops being a bare risk flag and becomes the state that ENGAGES this
+  # actor. The github realization of "engage a human" is github-native (the gh runner owns its own engage):
+  # assign + request-review/@mention → GitHub notifies the person (out-of-band, via their GitHub
+  # notifications/email), escalate on SLA, and resume on the authorized resolution (a native Approve that the
+  # human-approval gate verifies, or `/agent decide`). It blesses (code:review) and converses; it never merges.
+  maintainer:
+    kind: human
+    behavior: maintainer
+    capabilities: [tasks:converse, code:review]
+    triggers:
+      - dispatch: true
+
 policy:
   maxConcurrent: 5
   box:
@@ -110,6 +124,15 @@ policy:
       max_review_retries: 2
       stale_needs_info_minutes: 10080
       require_visible_pm_status: true
+    human:
+      # The declared `maintainer` consumer's engage config (docs/SPEC.md#handoffs). When a task enters
+      # human-required scope the org ENGAGES the maintainer github-natively (assign + request-review/@mention
+      # → GitHub notifies them), ESCALATES if unacknowledged past the SLA, and RESUMES on the authorized
+      # resolution. `maintainers_var` names the repo variable (comma-separated GitHub logins) that supplies
+      # who to engage; if unset, the substrate falls back to the repo owner.
+      maintainers_var: PUBLIC_AGENT_MAINTAINERS
+      sla_minutes: 1440            # re-notify/escalate a human-required item still waiting after this long
+      decision_types: [approve, decide, answer, inform]
     risk:
       human_required_paths:
         - .github/workflows/**

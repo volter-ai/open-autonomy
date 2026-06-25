@@ -12,9 +12,11 @@ export function ingestAutonomy(m: OAManifest): AutonomyIR {
     for (const [key, val] of Object.entries(a.triggers ?? {})) {
       if (val === false || val == null) continue;
       if (key === 'schedule' && typeof val === 'string') triggers.push({ cron: val });
+      else if (key === 'dispatch' && val === true) triggers.push({ dispatch: true });
       else triggers.push({ event: key, ...(val && typeof val === 'object' ? { config: val as Record<string, unknown> } : {}) });
     }
     agents[name] = {
+      ...(a.kind === 'human' ? { kind: 'human' as const } : {}),
       behavior: skillRef.split('/').pop() ?? skillRef,
       capabilities: a.capabilities ?? [],
       triggers,

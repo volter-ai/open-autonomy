@@ -125,6 +125,14 @@ agents:
     capabilities:
       - code:review
       - tasks:converse
+  maintainer:
+    kind: human
+    skill: maintainer
+    triggers:
+      dispatch: true
+    capabilities:
+      - tasks:converse
+      - code:review
 policy:
   autonomy:
     max_open_agent_prs: 5
@@ -133,6 +141,14 @@ policy:
     max_review_retries: 2
     stale_needs_info_minutes: 10080
     require_visible_pm_status: true
+  human:
+    maintainers_var: PUBLIC_AGENT_MAINTAINERS
+    sla_minutes: 1440
+    decision_types:
+      - approve
+      - decide
+      - answer
+      - inform
   risk:
     human_required_paths:
       - .github/workflows/**

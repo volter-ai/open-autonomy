@@ -26,3 +26,34 @@ describe('emitAutonomy — policy box', () => {
     expect(emitAutonomy(irWithBox({})).policy).toEqual({});
   });
 });
+
+describe('emitAutonomy — a kind:human actor', () => {
+  const irWithMaintainer = (): AutonomyIR => ({
+    schema: 'autonomy.ir.v1',
+    targets: ['github'],
+    agents: {
+      maintainer: {
+        kind: 'human',
+        behavior: 'maintainer',
+        capabilities: ['tasks:converse', 'code:review'],
+        triggers: [{ dispatch: true }],
+      },
+    },
+    policy: { box: {} },
+    resources: [],
+  });
+
+  test('serializes kind:human with no workflowFile (no launchable job) and the dispatch trigger', () => {
+    const m = emitAutonomy(irWithMaintainer());
+    const a = m.agents?.maintainer;
+    expect(a?.kind).toBe('human');
+    expect(a?.workflowFile).toBeUndefined(); // a human has no job to launch
+    expect(a?.triggers).toEqual({ dispatch: true }); // dispatch must survive — it's the human's only launch signal
+    expect(a?.skill).toBe('maintainer');
+  });
+
+  test('does not index a human behavior as an installed skill', () => {
+    const m = emitAutonomy(irWithMaintainer());
+    expect(m.skills?.maintainer).toBeUndefined(); // the substrate copies no skill file for a person
+  });
+});

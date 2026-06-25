@@ -27,8 +27,14 @@ bun scripts/runner.ts launch review  --ref <id> --branch agent/issue-<id>
 ```
 
 `launch` is the only way to start a worker (never call `termfleet`/`gh` or
-inline an agent). The branch's existence IS the WIP claim — a worktree for an
-issue means it's in flight, so you never double-dispatch it.
+inline an agent). A branch marks an issue as **claimed** (WIP), but a branch does
+**not** by itself mean a worker is running right now: when a reviewer requests
+changes it sends the issue back to `in-progress` and **ends**, leaving the branch
+behind with no live worker. So to decide whether work is actually in flight, read
+the running sessions with `bun scripts/runner.ts list develop` / `list review` —
+never infer "a developer is in flight" from the branch alone. An `in-progress`
+issue whose branch exists but has **no** running `develop` session is **rework**
+that a reviewer sent back, and you must re-dispatch develop into that same branch.
 
 The tracker is a **shared board** (one central view across every worktree), so
 `ztrack issue list`/`view` here on trunk show each worker's live state even
@@ -47,14 +53,22 @@ worktrees by hand.
      git merge --no-ff -m "integrate <id>" agent/issue-<id>
      git worktree remove --force .worktrees/agent-issue-<id> ; git branch -d agent/issue-<id>
      ```
-     (A merge conflict is a human-required block — stop with `OUTCOME: blocked merge-conflict <id>`.)
+     (If the merge reports a conflict, it is a human-required block: immediately
+     `git merge --abort` so trunk stays clean, leave the branch/worktree intact for a
+     human to resolve, and stop with `OUTCOME: blocked merge-conflict <id>`. Never
+     hand-resolve a conflict or force-land it.)
    - **Review**: else if an issue is `in-review` and lacks label `ztrack:reviewing`,
      claim it (`ztrack issue edit <id> --add-label "ztrack:reviewing"`) and launch
      the reviewer **into the issue's worktree**:
      `bun scripts/runner.ts launch review --ref <id> --branch agent/issue-<id>`.
-   - **Develop**: else if no issue is `in-review`, WIP allows it, and an issue is
-     `ready` with **no** `agent/issue-<id>` branch yet, launch the developer (this
-     creates the worktree): `bun scripts/runner.ts launch develop --ref <id> --branch agent/issue-<id>`.
+   - **Develop**: else if no issue is `in-review`, WIP allows it, and (checking
+     `bun scripts/runner.ts list develop` — there is no `develop` already running)
+     an issue needs a developer — either:
+       - a `ready` issue with **no** `agent/issue-<id>` branch yet (fresh work), or
+       - an `in-progress` issue whose `agent/issue-<id>` branch **exists** but has no
+         running `develop` session (**rework** a reviewer sent back) —
+     launch the developer: `bun scripts/runner.ts launch develop --ref <id> --branch
+     agent/issue-<id>` (creates the worktree for fresh work, reuses it for rework).
    - Else stop without action.
 4. After acting, `ztrack check --json`. Do not wait for a launched worker to finish.
 

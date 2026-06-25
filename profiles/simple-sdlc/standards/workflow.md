@@ -16,12 +16,16 @@ Read this from PM and Review skills.
 ## WIP
 
 - At most one issue in `in-progress`, at most one in `in-review`.
-- WIP is read from the in-flight `agent/issue-<id>` worktrees/branches (`git worktree list`).
+- WIP (≤1 in-progress, ≤1 in-review) is counted from the `agent/issue-<id>`
+  branches (`git worktree list`). A branch is a WIP **claim**, but it is not proof a
+  worker is running — to know that, check `runner.ts list develop`/`list review`.
 - PM is the only dispatcher and the only integrator.
 - Develop and Review agents handle one issue and stop.
 - `ztrack:reviewing` means a review worker already claimed an `in-review` issue.
-- Scheduled recovery may clear a stale `ztrack:reviewing`, or move stale `in-progress`
-  work (a clean, abandoned worktree) back to `ready` and drop the worktree.
+- **Rework:** when a reviewer requests changes it sends the issue back to `in-progress`
+  and ends — the branch stays but no worker runs. The PM re-dispatches `develop` into
+  that same branch (it is NOT abandoned). Only a genuinely broken/unrecoverable worktree
+  (no rework feedback, worker dead, nothing salvageable) is reset to `ready` + dropped.
 
 ## States
 

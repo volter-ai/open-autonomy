@@ -86,7 +86,7 @@ describe('public agent production readiness', () => {
     // captured) AND echo the transcript into the run log — so no agent call's result is ever lost.
     for (const wf of ['developer.yml', 'reviewer.yml', 'pm.yml', 'planner.yml', 'strategist.yml', 'strategy_reviewer.yml']) {
       const text = workflow(wf);
-      expect(text).toContain('actions/upload-artifact@v4');
+      expect(text).toContain('actions/upload-artifact@'); // SHA-pinned; assert the action, not the ref
       expect(text).toContain('path: .agent-run/');
       expect(text).toContain('agent transcript');
     }

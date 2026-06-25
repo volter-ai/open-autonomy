@@ -32,6 +32,11 @@ jobs:
         with:
           bun-version: 1.3.10
       - run: bun install --frozen-lockfile
+      # GitHub Actions static analysis (pinned). Gates High findings only; the baseline of
+      # reviewed-safe findings is in .github/zizmor.yml. Runs BEFORE check so a failure skips
+      # check, and the status step below (keyed on check.outcome) posts ci=failure.
+      - name: Lint workflows (zizmor)
+        run: pipx run zizmor==1.26.1 --offline --min-severity high .github/workflows/
       - id: check
         run: bun run check
       - name: Post ci commit status

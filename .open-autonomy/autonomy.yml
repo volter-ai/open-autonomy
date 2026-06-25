@@ -6,6 +6,7 @@ documents:
     - .github/workflows/ci.yml
     - .github/workflows/human-approval.yml
     - .github/workflows/open-autonomy-preflight.yml
+    - .github/zizmor.yml
     - .gitattributes
     - .gitignore
     - .open-autonomy/review-rubric.yml

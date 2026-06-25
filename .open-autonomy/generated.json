@@ -26,6 +26,7 @@
     ".github/workflows/reviewer.yml",
     ".github/workflows/strategist.yml",
     ".github/workflows/strategy_reviewer.yml",
+    ".github/zizmor.yml",
     ".gitignore",
     ".open-autonomy/autonomy.yml",
     ".open-autonomy/generated.json",

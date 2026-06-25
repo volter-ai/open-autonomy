@@ -1,0 +1,31 @@
+# zizmor (GitHub Actions static analysis) gate config.
+# The CI step runs `zizmor --min-severity high`, so only High findings gate; the baselined
+# audits below are the ones we've manually reviewed as safe/intentional. A NEW High finding of
+# any other class (cache-poisoning, secret leak via head checkout, bot-conditions, …) still fails.
+# Workflow files are also a human_required_path, so any change here is human-reviewed regardless —
+# that is the backstop for the one class we baseline (template-injection).
+rules:
+  dangerous-triggers:
+    # The agent event model is built on pull_request_target, deliberately guarded by an
+    # author_association allowlist (OWNER/MEMBER/COLLABORATOR) + head-repo check in each `if:`.
+    # Architectural and reviewed — not a finding to chase.
+    ignore:
+      - developer.yml
+      - reviewer.yml
+      - planner.yml
+      - pm.yml
+      - strategist.yml
+      - strategy_reviewer.yml
+      # The human-approval gate reads PR metadata via the API and checks out BASE (trusted main),
+      # never the PR head — documented inline. pull_request_target is required to get a write token.
+      - human-approval.yml
+  template-injection:
+    # The only High expansions are GitHub-controlled, non-attacker values: github.run_id (the run
+    # token embedded in RID), github.token (in env:), and workflow_dispatch inputs.sha (requires
+    # actions:write to trigger). None are attacker-influenced. A real (issue-content) injection is
+    # additionally caught by human review, since workflows are a human_required_path.
+    ignore:
+      - developer.yml
+      - planner.yml
+      - strategist.yml
+      - ci.yml

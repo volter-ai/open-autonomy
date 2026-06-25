@@ -1,34 +1,24 @@
-// Org health monitor — detect when an autonomy loop has gone DARK and surface it out-of-band.
+// Org health monitor — DETECT and SURFACE when an autonomy loop has gone dark (#66).
 //
-// The human seam (docs/SPEC.md#handoffs) reaches a maintainer when an agent hits its authority limit — but
-// only while the fleet is RUNNING. If the loop itself stops (cron wedged, repo paused, proxy trust broken,
-// every run failing), nothing escalates: the org goes dark silently. The proxy is the right watcher because
-// it is external to the fleet (survives a GitHub/Actions outage) and already sees every run's activity.
+// The proxy is the right watcher: it is external to the fleet (survives a GitHub/Actions outage) and already
+// sees every run. It stamps each org's `last_activity_ms` on run register, so silence past a threshold means
+// the loop isn't sweeping. Three bands keep it from crying wolf:
+//   healthy : age ≤ silence
+//   down    : silence < age ≤ dead   — was active, has now gone quiet
+//   dormant : age > dead             — long idle / retired; not an outage
 //
-// Signal: the proxy stamps each account's `last_activity_ms` when a run registers. Silence past a threshold =
-// the loop is not sweeping. Three bands keep it from crying wolf:
-//   healthy : age ≤ silence            — running normally
-//   down    : silence < age ≤ dead     — was active, has now gone quiet → ALERT (push, out-of-band)
-//   dormant : age > dead               — long idle / retired; not an outage, never alert
-// Dedup: alert once on the healthy→down transition, then re-alert at most every `renotifyMs`; send one
-// recovery notice on down→healthy. This is the pure decision core — the DO supplies state, the worker sends.
+// This is purely the detect-and-surface signal (read by GET /health). It does NOT notify: reaching a human
+// is the substrate runner's `engage` avenue (the HumanRunner realization — assign/@mention on github), an
+// implementation detail of the runner, not of this watcher.
 
 export interface OrgActivity {
   account: string;
   last_activity_ms: number;
 }
 
-// Per-account alert bookkeeping the DO persists across ticks (the dedup memory).
-export interface HealthAlert {
-  down: boolean; // currently in the alerting (down) band
-  since_ms: number; // when the current band began
-  last_notified_ms?: number; // when we last pushed an alert for this account
-}
-
 export interface HealthOpts {
   silenceMs: number; // quiet longer than this → down
   deadMs: number; // quiet longer than this → dormant (not an outage)
-  renotifyMs: number; // while down, re-alert at most this often
   nowMs: number;
 }
 
@@ -42,16 +32,8 @@ export interface HealthVerdict {
   last_activity_ms: number;
 }
 
-export interface HealthNotice {
-  account: string;
-  kind: 'down' | 'recovered';
-  age_minutes: number;
-}
-
 export interface HealthResult {
   verdicts: HealthVerdict[];
-  nextAlerts: Record<string, HealthAlert>;
-  notices: HealthNotice[];
   monitored: number; // accounts considered (healthy or down — excludes dormant)
   down: number; // currently in the down band
 }
@@ -62,50 +44,17 @@ function band(ageMs: number, o: HealthOpts): HealthBand {
   return 'dormant';
 }
 
-/**
- * Pure health evaluation. `mark` distinguishes the scheduled sweep (mark=true → updates dedup state and emits
- * notices to push) from a read-only query (mark=false → verdicts only, no state change, no notices).
- */
-export function evaluateHealth(
-  orgs: OrgActivity[],
-  prevAlerts: Record<string, HealthAlert>,
-  opts: HealthOpts,
-  mark: boolean,
-): HealthResult {
+/** Pure classifier: bucket each org by how long it's been silent. Read-only — no state, no side effects. */
+export function classifyHealth(orgs: OrgActivity[], opts: HealthOpts): HealthResult {
   const verdicts: HealthVerdict[] = [];
-  const nextAlerts: Record<string, HealthAlert> = { ...prevAlerts };
-  const notices: HealthNotice[] = [];
   let monitored = 0;
   let down = 0;
-
   for (const org of orgs) {
     const ageMs = Math.max(0, opts.nowMs - org.last_activity_ms);
     const b = band(ageMs, opts);
-    const ageMinutes = Math.round(ageMs / 60_000);
-    verdicts.push({ account: org.account, band: b, age_ms: ageMs, age_minutes: ageMinutes, last_activity_ms: org.last_activity_ms });
+    verdicts.push({ account: org.account, band: b, age_ms: ageMs, age_minutes: Math.round(ageMs / 60_000), last_activity_ms: org.last_activity_ms });
     if (b !== 'dormant') monitored++;
     if (b === 'down') down++;
-
-    if (!mark) continue;
-
-    const prev = prevAlerts[org.account];
-    if (b === 'down') {
-      const wasDown = prev?.down === true;
-      const renotifyDue = wasDown && opts.nowMs - (prev?.last_notified_ms ?? 0) >= opts.renotifyMs;
-      if (!wasDown || renotifyDue) {
-        notices.push({ account: org.account, kind: 'down', age_minutes: ageMinutes });
-        nextAlerts[org.account] = { down: true, since_ms: wasDown ? (prev?.since_ms ?? opts.nowMs) : opts.nowMs, last_notified_ms: opts.nowMs };
-      } else {
-        nextAlerts[org.account] = { down: true, since_ms: prev?.since_ms ?? opts.nowMs, last_notified_ms: prev?.last_notified_ms };
-      }
-    } else if (b === 'healthy') {
-      if (prev?.down) notices.push({ account: org.account, kind: 'recovered', age_minutes: ageMinutes });
-      delete nextAlerts[org.account]; // back to normal — forget the alert state
-    } else {
-      // dormant: not an outage. Drop any stale alert state so a retired org doesn't re-alert.
-      delete nextAlerts[org.account];
-    }
   }
-
-  return { verdicts, nextAlerts, notices, monitored, down };
+  return { verdicts, monitored, down };
 }

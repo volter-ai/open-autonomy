@@ -46,6 +46,23 @@ approve only from GitHub mobile / a separate device, or use a second maintainer 
 account whose token never touches the fleet machine. If the local fleet sessions are trusted, the current
 setup is acceptable — but that is the real trust boundary, so make it a conscious choice.
 
+## Endpoints + token scope (pre-verified — no key needed)
+
+De-risked ahead of the first deploy so it isn't a guess:
+
+- **Egress is correct as written.** For this worker (plain Worker + a Durable Object SQLite migration +
+  a cron trigger; no R2/KV/containers/assets/tunnel), `wrangler deploy` only needs
+  `api.cloudflare.com/client/v4` — already on the allowlist. Verified against the hostnames wrangler
+  embeds; the rest (r2/dash/registry/blog/try/devtools) are for features this deploy doesn't use.
+  `sparrow.cloudflare.com` is telemetry — disabled via `WRANGLER_SEND_METRICS=false` and non-fatal if
+  blocked. Do **not** widen the allowlist; if the first deploy logs a blocked host, it's almost certainly
+  telemetry and the deploy still succeeds.
+- **Token scope:** the deploy does script-upload + DO migration + cron trigger + the `workers.dev`
+  subdomain — all under **Account › Workers Scripts : Edit** (plus **Account Settings : Read** for account
+  resolution). Use the dashboard's **"Edit Cloudflare Workers"** template (it's the correct superset) rather
+  than hand-picking a single permission and risking a missing one. Scope it to this account and, if offered,
+  the `volter-agent-model-proxy` worker only.
+
 ## Flip to safe (the go-live checklist — only when ready)
 
 1. **Resolve the approver-credential question above.**

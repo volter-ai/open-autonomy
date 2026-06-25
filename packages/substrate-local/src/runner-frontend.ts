@@ -47,37 +47,21 @@ function manifestAgent(agent: string): ManifestAgent {
   return m.agents?.[agent] ?? {};
 }
 
-// --- worktree isolation (local analogue of github's per-job fresh checkout + `agent/issue-${ref}`) ---
-// A work-item-scoped, CODE-producing agent (code:propose / code:review with a subject.ref) runs in its
-// own git worktree on a branch named for the ref — so concurrent workers don't share a tree, ztrack
-// `check`/`loop` auto-scope off the branch name, and review's verdict can gate a real merge. Everything
-// else (the cron PM, the metadata-only drafter) runs on the trunk checkout. The DECISION is read from the
-// compiled manifest (capabilities + the subject.ref param); the backend session-launcher decides nothing.
-const ISOLATING_CAPS = new Set(['code:propose', 'code:review']);
-function refParamOf(declared: Record<string, string>): string | undefined {
-  return Object.entries(declared).find(([, src]) => src === 'subject.ref')?.[0];
-}
-const slugOf = (ref: string): string => ref.replace(/[^0-9A-Za-z._-]/g, '-');
-const branchOf = (ref: string): string => `agent/issue-${slugOf(ref)}`;
-const worktreeOf = (ref: string): string => resolve('.worktrees', `issue-${slugOf(ref)}`);
-
-function isolationFor(agent: string, params: LaunchParams): { branch: string; worktree: string } | null {
-  const { params: declared = {}, capabilities = [] } = manifestAgent(agent);
-  const rp = refParamOf(declared);
-  const ref = rp ? String(params[rp] ?? '') : '';
-  if (!ref) return null; // no work item (e.g. the cron PM) → trunk
-  if (!capabilities.some((c) => ISOLATING_CAPS.has(c.split('@')[0] ?? c))) return null; // not a code agent → trunk
-  return { branch: branchOf(ref), worktree: worktreeOf(ref) };
-}
+// --- worktree isolation (local analogue of github's per-job fresh checkout) ---
+// The PM ASSIGNS a branch and hands the SAME `--branch` to develop and review, so they share one isolated
+// worktree; the runner just EXECUTES the branch it's given — it derives nothing and decides nothing. A
+// launch with no `--branch` (the cron PM, the drafter) runs on the trunk checkout. The PM names the branch
+// with the issue id (e.g. `agent/issue-<id>`) so ztrack check/loop auto-scope off the branch inside it.
+const worktreePathFor = (branch: string): string => resolve('.worktrees', branch.replace(/[^0-9A-Za-z._-]/g, '-'));
 
 function git(args: string[], cwd?: string): { status: number | null; stdout: string; stderr: string } {
   const r = spawnSync('git', args, { encoding: 'utf8', ...(cwd ? { cwd } : {}) });
   return { status: r.status, stdout: r.stdout ?? '', stderr: r.stderr ?? '' };
 }
 
-// Create (or reuse) the issue's worktree+branch from trunk HEAD. Idempotent: develop creates it, review
-// joins the same one. node_modules is gitignored (lives only in the main checkout), so a fresh worktree
-// has none — symlink it so the repo-pinned ztrack/preset-kit + agent CLIs resolve inside the worktree.
+// Create (or reuse) the worktree for the PM-assigned branch, from trunk HEAD. Idempotent: develop creates
+// it, review (same `--branch`) joins it. node_modules is gitignored (lives only in the main checkout), so a
+// fresh worktree has none — symlink it so the repo-pinned ztrack/preset-kit + agent CLIs resolve inside it.
 function ensureWorktree(branch: string, worktree: string): void {
   if (existsSync(worktree)) return;
   try {
@@ -118,18 +102,20 @@ export async function launch(agent: string, params: LaunchParams = {}): Promise<
   }
 
   // Skill agent: a termfleet session via the launch adapter (forwards params verbatim).
-  // A code agent scoped to a work item runs in that issue's worktree (created/reused here); the session's
-  // cwd is the worktree, so the backend launches there and ztrack auto-scopes off the branch name.
-  const iso = isolationFor(agent, params);
-  if (iso) ensureWorktree(iso.branch, iso.worktree);
-  const names = Object.keys(params);
+  // `--branch` (PM-assigned) is a runner-control param, not an agent param: if present, the session runs in
+  // that branch's worktree (created/reused here), so the backend launches there and ztrack auto-scopes off
+  // the branch name. It is NOT forwarded into the agent's env.
+  const branch = typeof params.branch === 'string' && params.branch ? params.branch : '';
+  const worktree = branch ? worktreePathFor(branch) : '';
+  if (branch) ensureWorktree(branch, worktree);
+  const names = Object.keys(params).filter((k) => k !== 'branch');
   const env: Record<string, string> = {
     ...(process.env as Record<string, string>),
     AUTONOMY_AGENT: agent,
     AUTONOMY_FORWARD: [process.env.AUTONOMY_FORWARD, ...names].filter(Boolean).join(','),
     ...Object.fromEntries(names.map((k) => [k, String(params[k])])),
   };
-  spawnSync('node', [join(scriptsDir, 'run-agent.mjs')], { stdio: 'inherit', env, ...(iso ? { cwd: iso.worktree } : {}) });
+  spawnSync('node', [join(scriptsDir, 'run-agent.mjs')], { stdio: 'inherit', env, ...(worktree ? { cwd: worktree } : {}) });
 }
 
 /** List an agent's running sessions (agent:list) via the local runner backend. */

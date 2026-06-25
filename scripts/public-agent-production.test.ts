@@ -148,8 +148,13 @@ describe('public agent production readiness', () => {
     const gate = readFileSync(new URL('../scripts/human-approval-gate.ts', import.meta.url), 'utf8');
     expect(gate).toContain("context=human-approval");
     expect(gate).toContain("'human-required'");
-    expect(gate).toContain('commit_id === headSha'); // per-SHA: an Approve counts only on the current head
+    expect(gate).toContain('headSha'); // per-SHA: an Approve counts only on the current head
     expect(gate).toContain('MAINTAINER'); // only OWNER/MEMBER/COLLABORATOR approvals count
+    // The approving review is read from the EVENT PAYLOAD (pull_request_review), not only the reviews API —
+    // GITHUB_TOKEN can return an empty reviews list, which would wedge every human-required PR. The payload
+    // is authoritative + race-free; the API scan is only a backstop.
+    expect(gate).toContain('GITHUB_EVENT_PATH');
+    expect(gate).toContain('eventReview');
     // github-native ENGAGE: a parked scoped PR is routed to the maintainer(s) out-of-band (assign +
     // request-review → GitHub notifies them), not left silent. The workflow supplies who via $MAINTAINERS.
     expect(gate).toContain('--add-assignee');

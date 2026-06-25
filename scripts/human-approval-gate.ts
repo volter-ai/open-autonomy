@@ -10,6 +10,7 @@
 // The status flipping to `success` completes `completion: 'maintainer Approve on current SHA'`. Re-earned per
 // SHA: an Approve counts only if its commit_id == the current head, so a new push re-opens the gate.
 import { execFileSync } from 'node:child_process';
+import { readFileSync } from 'node:fs';
 
 const repo = process.env.GITHUB_REPOSITORY;
 const pr = process.env.PR_NUMBER;
@@ -73,15 +74,42 @@ const labels = (view.labels ?? []).map((l) => l.name);
 const files = (view.files ?? []).map((f) => f.path);
 const scoped = labels.includes('human-required') || files.some(isSensitivePath);
 
-// For a scoped PR, look for a maintainer Approve on the CURRENT head (per-SHA re-earn via commit_id).
+// A qualifying sign-off: APPROVED, by a maintainer, on the CURRENT head (per-SHA re-earn via commit_id).
+type Review = { state?: string; author_association?: string; commit_id?: string };
+const qualifies = (r: Review): boolean =>
+  r.state === 'APPROVED' && MAINTAINER.has(r.author_association ?? '') && r.commit_id === headSha;
+
+// The review that fired a `pull_request_review` event is in the event payload. Use it FIRST: it's
+// authoritative, immune to the reviews-API read returning empty under GITHUB_TOKEN, and free of the
+// review-just-submitted eventual-consistency lag. (This is the path a human Approve takes.)
+function eventReview(): Review | undefined {
+  const p = process.env.GITHUB_EVENT_PATH;
+  if (!p) return undefined;
+  try {
+    return (JSON.parse(readFileSync(p, 'utf8')) as { review?: Review }).review;
+  } catch {
+    return undefined;
+  }
+}
+
+// For a scoped PR, look for a maintainer Approve on the current head.
 let approved = false;
 if (scoped) {
-  const reviews = JSON.parse(gh(['api', `repos/${repo}/pulls/${pr}/reviews`, '--paginate']) || '[]') as {
-    state?: string;
-    author_association?: string;
-    commit_id?: string;
-  }[];
-  approved = reviews.some((r) => r.state === 'APPROVED' && MAINTAINER.has(r.author_association ?? '') && r.commit_id === headSha);
+  const er = eventReview();
+  if (er && qualifies(er)) approved = true; // primary: the review carried by this event
+  if (!approved) {
+    // Backstop for the synchronize / re-dispatch paths (no event.review). The GITHUB_TOKEN sometimes returns
+    // an empty reviews list, so this can only ADD an approval, never the sole gate — and we never silently
+    // mis-parse it.
+    const raw = gh(['api', `repos/${repo}/pulls/${pr}/reviews`, '--paginate']);
+    if (raw) {
+      try {
+        approved = (JSON.parse(raw) as Review[]).some(qualifies);
+      } catch (e) {
+        process.stderr.write(`human-approval: could not parse reviews list (${e instanceof Error ? e.message : String(e)})\n`);
+      }
+    }
+  }
 }
 
 const state = !scoped || approved ? 'success' : 'pending';

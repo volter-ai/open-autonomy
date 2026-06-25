@@ -44,6 +44,7 @@ HEALTH_DEAD_MINUTES = "10080"
 [triggers]
 crons = ["0 6 1 * *"]
 
+# Durable Objects: RUNS = the per-run budget ledger; LIMITS = the global spend/run-slot ledger.
 [[durable_objects.bindings]]
 name = "RUNS"
 class_name = "RunBudget"

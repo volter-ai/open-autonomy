@@ -144,6 +144,13 @@ policy:
     model: deepseek/deepseek-v4-flash
     bot_name: volter-agent
     bot_email: volter-agent@users.noreply.github.com
+  deploy:
+    environment: production
+    tag: deploy-v*
+    reviewers_var: PUBLIC_AGENT_MAINTAINERS
+    secret: CLOUDFLARE_API_TOKEN
+    vars:
+      CLOUDFLARE_ACCOUNT_ID: 0ed031cc83dad4ad191efba7076074d0
   autonomy:
     max_open_agent_prs: 5
     max_develop_attempts: 2

@@ -28,10 +28,13 @@ The only GitHub secret the system needs is the Cloudflare deploy token. Everythi
 
 ## What is already built + live
 
-- `.github/workflows/deploy.yml` — tag-triggered, egress-locked, pinned wrangler, `environment: production`.
-- `production` environment — required reviewer (`yueranyuan`), `deploy-v*` tag-only policy, no admin bypass.
-- `deploy-tags-admin-only` ruleset — only admins create `deploy-v*` tags.
-- `CLOUDFLARE_ACCOUNT_ID` repo variable — set.
+- `.github/workflows/deploy.yml` — tag-triggered, egress-locked, pinned wrangler, `environment: production`
+  (a code-host resource carried by the profile — see `docs/CODE_HOST_RESOURCES.md`).
+- **The github-side provisioning is reproducible, not hand-set.** It's declared in `policy.box.deploy`
+  (profile `ir.yml`) and applied idempotently by `bun scripts/provision-deploy.ts`: the `production`
+  environment (required reviewer from `PUBLIC_AGENT_MAINTAINERS`, `can_admins_bypass=false`), the
+  `deploy-v*` tag deployment policy, the `deploy-tags-admin-only` ruleset, and `CLOUDFLARE_ACCOUNT_ID`.
+  Re-run any time; it reconciles. The Cloudflare **secret** is never touched by it (set by a human).
 - GitHub secret-scanning + push-protection — enabled.
 - Supply-chain + workflow gates in CI (`check:security`, zizmor, CodeQL, Dependabot).
 

@@ -126,6 +126,16 @@ policy:
       model: deepseek/deepseek-v4-flash                            # PUBLIC_AGENT_MODEL fallback
       bot_name: volter-agent                                       # git author for agent-proposed commits
       bot_email: volter-agent@users.noreply.github.com
+    # The deploy boundary's github-side provisioning (scripts/provision-deploy.ts reads this; idempotent).
+    # Declares the gated environment + the admin-only promotion tag + who approves. The secret it needs
+    # (CLOUDFLARE_API_TOKEN) is NEVER here — a human sets it; this carries the name + non-secret vars only.
+    deploy:
+      environment: production
+      tag: deploy-v*                          # promotion tag: ruleset restricts creation to admins
+      reviewers_var: PUBLIC_AGENT_MAINTAINERS  # logins → resolved to the required-reviewer user ids
+      secret: CLOUDFLARE_API_TOKEN             # name only (set out-of-band by a human)
+      vars:                                    # non-secret config vars the script ensures are set
+        CLOUDFLARE_ACCOUNT_ID: "0ed031cc83dad4ad191efba7076074d0"
     autonomy:
       max_open_agent_prs: 5
       max_develop_attempts: 2

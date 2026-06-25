@@ -57,11 +57,51 @@ export class TermfleetRunner {
   async get(id) {
     return (await this.list()).find((s) => s.id === id);
   }
-  async list() {
+  // termfleet's process-tree lifecycle joined to the window list. A window points at a session via
+  // `lifecycle.currentSessionId`; the session carries the real activity `state` (+ attention `signal`).
+  async #view() {
     const client = await this.#client();
-    const snapshot = await client.snapshot();
-    // id = the terminalId termfleet owns; agent = the label we launched it under (the window name).
-    return snapshot.windows.filter((w) => !!w.terminalId).map((w) => ({ id: w.terminalId, agent: w.name, status: 'running' }));
+    const [life, snapshot] = await Promise.all([client.lifecycle(), client.snapshot()]);
+    const byId = new Map((life.sessions || []).map((s) => [s.sessionId, s]));
+    return { client, snapshot, byId };
+  }
+  async list() {
+    const { snapshot, byId } = await this.#view();
+    // id = the terminalId termfleet owns; agent = the window name we launched it under; status reflects
+    // termfleet's real per-session activity (running | background | idle | awaiting-human).
+    return snapshot.windows.filter((w) => !!w.terminalId).map((w) => sessionOf(w, byId));
+  }
+  // Close this install's OWN agent sessions that have been IDLE (termfleet `session_waiting`, no attention
+  // signal) for >= idleMs — the local analogue of an ephemeral job ending when its work is done. Scope is
+  // the `agents` name set (a human's own terminal or another loop's session is never touched). `since` is
+  // the caller's persistent Map(sessionId -> firstIdleAtMs): a session that resumes work, is taken over
+  // (signal `asking`), or errors is dropped from it and never reaped. Reaps via closeWindow (proven path).
+  async reapIdle({ idleMs = 60000, agents, since = new Map(), now = Date.now() } = {}) {
+    const { client, snapshot, byId } = await this.#view();
+    const seen = new Set();
+    const reaped = [];
+    for (const w of snapshot.windows) {
+      if (agents && agents.size && !agents.has(w.name)) continue;
+      const sid = w.lifecycle?.currentSessionId;
+      const s = sid ? byId.get(sid) : undefined;
+      if (!s) continue;
+      seen.add(sid);
+      const idle = s.state === 'session_waiting' && !s.signal;
+      if (!idle) {
+        since.delete(sid);
+        continue;
+      }
+      if (!since.has(sid)) since.set(sid, now);
+      if (now - since.get(sid) >= idleMs) {
+        const ack = await client.closeWindow(w.id).catch(() => null);
+        if (ack && ack.ok !== false) {
+          reaped.push({ id: w.terminalId, agent: w.name, sessionId: sid });
+          since.delete(sid);
+        }
+      }
+    }
+    for (const sid of [...since.keys()]) if (!seen.has(sid)) since.delete(sid);
+    return reaped;
   }
   async update(id, patch) {
     if (patch.status === 'cancelled') return this.cancel(id);
@@ -75,6 +115,22 @@ export class TermfleetRunner {
     const ack = await client.closeWindow(window.id);
     return ack.ok !== false;
   }
+}
+
+// Map a window + its lifecycle session into a Session, surfacing termfleet's real activity. The contract
+// status vocab is running|paused|cancelled|done|failed, so: running/background -> running, idle
+// (session_waiting, no signal) -> done, attention `asking` -> paused, `errored` -> failed; a note carries
+// the finer distinction. No session yet (just launched) reads as running.
+function sessionOf(w, byId) {
+  const s = w.lifecycle?.currentSessionId ? byId.get(w.lifecycle.currentSessionId) : undefined;
+  const base = { id: w.terminalId, agent: w.name };
+  if (!s) return { ...base, status: 'running' };
+  const ref = s.sessionId;
+  if (s.state === 'session_running') return { ...base, status: 'running', ref };
+  if (s.state === 'session_stopped_background_running') return { ...base, status: 'running', ref, note: 'background work running' };
+  if (s.signal === 'asking') return { ...base, status: 'paused', ref, note: 'awaiting human input' };
+  if (s.signal === 'errored') return { ...base, status: 'failed', ref, note: 'errored, awaiting human' };
+  return { ...base, status: 'done', ref, note: 'idle (turn complete)' };
 }
 
 function parseParams(args) {

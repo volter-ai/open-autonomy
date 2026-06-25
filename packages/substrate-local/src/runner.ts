@@ -10,6 +10,25 @@ import { resolveDefaultProvider } from '@termfleet/core/local-providers.js';
 import { RUNNER_DEFAULTS } from './runner-config';
 
 type Harness = 'claude' | 'codex' | 'gemini';
+// Derived from the SDK so we never re-declare termfleet's shapes: a lifecycle session and a window.
+type LifeSession = Awaited<ReturnType<ProviderClient['lifecycle']>>['sessions'][number];
+type Win = Awaited<ReturnType<ProviderClient['snapshot']>>['windows'][number];
+
+// Map a window + its lifecycle session into a Session, surfacing termfleet's real activity. The contract
+// status vocab is running|paused|cancelled|done|failed, so: running/background -> running, idle
+// (session_waiting, no signal) -> done, attention `asking` -> paused, `errored` -> failed; a note carries
+// the finer distinction. No session yet (just launched) reads as running.
+function sessionOf(w: Win, byId: Map<string, LifeSession>): Session {
+  const s = w.lifecycle?.currentSessionId ? byId.get(w.lifecycle.currentSessionId) : undefined;
+  const base = { id: w.terminalId!, agent: w.name };
+  if (!s) return { ...base, status: 'running' };
+  const ref = s.sessionId;
+  if (s.state === 'session_running') return { ...base, status: 'running', ref };
+  if (s.state === 'session_stopped_background_running') return { ...base, status: 'running', ref, note: 'background work running' };
+  if (s.signal === 'asking') return { ...base, status: 'paused', ref, note: 'awaiting human input' };
+  if (s.signal === 'errored') return { ...base, status: 'failed', ref, note: 'errored, awaiting human' };
+  return { ...base, status: 'done', ref, note: 'idle (turn complete)' };
+}
 
 export class TermfleetRunner implements Runner {
   private harness = (process.env.TERMFLEET_AGENT || RUNNER_DEFAULTS.harness) as Harness; // which coding CLI termfleet runs
@@ -56,13 +75,51 @@ export class TermfleetRunner implements Runner {
   async get(id: string): Promise<Session | undefined> {
     return (await this.list()).find((s) => s.id === id);
   }
-  async list(): Promise<Session[]> {
+  // termfleet's process-tree lifecycle joined to the window list. A window points at a session via
+  // `lifecycle.currentSessionId`; the session carries the real activity `state` (+ attention `signal`).
+  private async view(): Promise<{ client: ProviderClient; snapshot: Awaited<ReturnType<ProviderClient['snapshot']>>; byId: Map<string, LifeSession> }> {
     const client = await this.client();
-    const snapshot = await client.snapshot();
-    // id = the terminalId termfleet owns; agent = the label we launched it under (the window name).
-    return snapshot.windows
-      .filter((w) => !!w.terminalId)
-      .map((w) => ({ id: w.terminalId!, agent: w.name, status: 'running' as const }));
+    const [life, snapshot] = await Promise.all([client.lifecycle(), client.snapshot()]);
+    const byId = new Map((life.sessions || []).map((s) => [s.sessionId, s] as const));
+    return { client, snapshot, byId };
+  }
+  async list(): Promise<Session[]> {
+    const { snapshot, byId } = await this.view();
+    // id = the terminalId termfleet owns; agent = the window name; status = termfleet's real activity.
+    return snapshot.windows.filter((w) => !!w.terminalId).map((w) => sessionOf(w, byId));
+  }
+  // Close this install's OWN agent sessions IDLE (termfleet `session_waiting`, no attention signal) for
+  // >= idleMs — the local analogue of an ephemeral job ending when its work is done. Scope is the `agents`
+  // name set (a human's own terminal / another loop's session is never touched). `since` is the caller's
+  // persistent Map(sessionId -> firstIdleAtMs): a session that resumes, is taken over (`asking`), or
+  // errors is dropped and never reaped. Reaps via closeWindow (the proven cancel path).
+  async reapIdle(opts: { idleMs?: number; agents?: Set<string>; since?: Map<string, number>; now?: number } = {}): Promise<Array<{ id: string; agent: string; sessionId: string }>> {
+    const { idleMs = 60000, agents, since = new Map<string, number>(), now = Date.now() } = opts;
+    const { client, snapshot, byId } = await this.view();
+    const seen = new Set<string>();
+    const reaped: Array<{ id: string; agent: string; sessionId: string }> = [];
+    for (const w of snapshot.windows) {
+      if (agents && agents.size && !agents.has(w.name)) continue;
+      const sid = w.lifecycle?.currentSessionId ?? undefined;
+      const s = sid ? byId.get(sid) : undefined;
+      if (!sid || !s) continue;
+      seen.add(sid);
+      const idle = s.state === 'session_waiting' && !s.signal;
+      if (!idle) {
+        since.delete(sid);
+        continue;
+      }
+      if (!since.has(sid)) since.set(sid, now);
+      if (now - (since.get(sid) as number) >= idleMs) {
+        const ack = await client.closeWindow(w.id).catch(() => null);
+        if (ack && ack.ok !== false) {
+          reaped.push({ id: w.terminalId!, agent: w.name, sessionId: sid });
+          since.delete(sid);
+        }
+      }
+    }
+    for (const sid of [...since.keys()]) if (!seen.has(sid)) since.delete(sid);
+    return reaped;
   }
   async update(id: string, patch: { status?: SessionStatus }): Promise<boolean> {
     if (patch.status === 'cancelled') return this.cancel(id);

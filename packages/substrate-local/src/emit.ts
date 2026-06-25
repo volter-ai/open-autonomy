@@ -40,21 +40,72 @@ export function cronToSeconds(cron: string): number {
   return m ? Number(m[1]) * 60 : 900;
 }
 
-// The loop driver: fires the schedule's commands every interval (or once with --once).
+// The loop driver: fires the schedule's commands every interval, and (continuous mode) reaps idle agent
+// sessions so finished cron ticks don't pile up. A cron tick is ephemeral by design — each fires a FRESH
+// agent that re-reads state; this is the local analogue of a github job, which terminates when done.
+// Locally nothing closes the interactive termfleet window, so the loop reaps it: a session that has been
+// IDLE (termfleet `session_waiting`, no attention signal) for AUTONOMY_IDLE_REAP_MS is closed. A session
+// still working (running / background-running), one a human took over, or one asking/errored is never
+// reaped — keeping the "take over at any time" guarantee. `--once` fires a single tick and exits (no reap).
 const LOOP_DRIVER = `#!/usr/bin/env node
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 const SCHEDULE = process.env.AUTONOMY_SCHEDULE || 'scheduler/schedule.json';
 const args = process.argv.slice(2);
 const schedule = JSON.parse(readFileSync(SCHEDULE, 'utf8'));
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-do {
+const fireTick = () => {
   for (const command of schedule.scripts) {
     spawnSync(command, { shell: true, stdio: 'inherit', env: Object.assign({}, schedule.env, process.env) });
   }
-  if (args.includes('--once')) break;
-  await sleep(Number(schedule.intervalSeconds) * 1000);
-} while (true);
+};
+
+if (args.includes('--once')) {
+  fireTick();
+  process.exit(0);
+}
+
+// Continuous mode: a fast heartbeat that fires ticks on the schedule interval and reaps idle sessions in
+// between. The runner (termfleet SDK) does the reaping; we keep the persistent idle-since map here.
+const here = dirname(fileURLToPath(import.meta.url));
+const IDLE_REAP_MS = Number(process.env.AUTONOMY_IDLE_REAP_MS ?? 60000);
+const POLL_MS = Math.max(1000, Number(process.env.AUTONOMY_REAP_POLL_MS ?? 20000));
+const intervalMs = Number(schedule.intervalSeconds) * 1000;
+// This install's OWN agents = the per-harness launch prompts (one .txt per skill agent). Reaping is
+// scoped to these window names so a human's own terminal / another loop is never touched.
+const harness = process.env.TERMFLEET_AGENT || 'claude';
+let agents = new Set();
+try {
+  agents = new Set(
+    readdirSync(join(here, '..', 'scripts', 'prompts', harness)).filter((f) => f.endsWith('.txt')).map((f) => f.slice(0, -4)),
+  );
+} catch {}
+let runner = null;
+try {
+  ({ runner } = await import(join(here, '..', 'scripts', 'autonomy-runner.mjs')).then((m) => ({ runner: new m.TermfleetRunner() })));
+} catch (e) {
+  console.error('[loop] reaping disabled (runner unavailable):', e?.message ?? e);
+}
+const idleSince = new Map();
+let lastTick = 0;
+while (true) {
+  const now = Date.now();
+  if (now - lastTick >= intervalMs) {
+    fireTick();
+    lastTick = Date.now();
+  }
+  if (runner) {
+    try {
+      const reaped = await runner.reapIdle({ idleMs: IDLE_REAP_MS, agents, since: idleSince });
+      for (const r of reaped) console.log(\`[loop] reaped idle \${r.agent} (\${r.id})\`);
+    } catch (e) {
+      console.error('[loop] reap error:', e?.message ?? e);
+    }
+  }
+  await sleep(POLL_MS);
+}
 `;
 
 // run-agent: the launch adapter the local runner drives. Reads AUTONOMY_AGENT + forwards the env names

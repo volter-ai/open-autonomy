@@ -40,6 +40,7 @@ HEALTH_SILENCE_MINUTES = "180"
 HEALTH_DEAD_MINUTES = "10080"
 
 # Monthly sponsorship accrual (credits active recurring sponsors into the pool; idempotent per month).
+# (The org health monitor is pull-only via GET /health — there is no sweep cron; only the monthly accrual runs here.)
 [triggers]
 crons = ["0 6 1 * *"]
 

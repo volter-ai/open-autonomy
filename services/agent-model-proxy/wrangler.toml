@@ -33,10 +33,17 @@ DEFAULT_FUNDING_ACCOUNT = "volter-ai/open-autonomy"
 DEFAULT_SPONSOR_ACCOUNT = "volter-ai/open-autonomy"
 GITHUB_OIDC_AUDIENCE = "volter-agent-model-proxy"
 GITHUB_OIDC_ALLOWED_WORKFLOW = "volter-ai/open-autonomy/.github/workflows/public-agent.yml@,volter-ai/open-autonomy-testbed/.github/workflows/public-agent.yml@,volter-ai/open-autonomy-self-driving-testbed/.github/workflows/public-agent.yml@,volter-test-fixtures/*"
+# Org health monitor: an org silent past SILENCE is "down" (alert); past DEAD it's "dormant" (ignored).
+# Re-alert at most every RENOTIFY. The push channel is Resend — set RESEND_API_KEY + HEALTH_ALERT_EMAIL as
+# SECRETS (wrangler secret put) to enable email; without them the monitor still detects + serves GET /health.
+HEALTH_SILENCE_MINUTES = "180"
+HEALTH_DEAD_MINUTES = "10080"
+HEALTH_RENOTIFY_MINUTES = "720"
 
-# Monthly sponsorship accrual (credits active recurring sponsors into the pool; idempotent per month).
+# [triggers] crons: the monthly one (0 6 1 * *) accrues sponsorships; the hourly one runs the health sweep.
+# The scheduled() handler dispatches by event.cron (see src/index.ts MONTHLY_CRON).
 [triggers]
-crons = ["0 6 1 * *"]
+crons = ["0 6 1 * *", "0 * * * *"]
 
 [[durable_objects.bindings]]
 name = "RUNS"

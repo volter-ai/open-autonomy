@@ -1,5 +1,6 @@
 import { estimateRunway } from './burn-estimate.js';
 import { json } from './errors.js';
+import { evaluateHealth, type HealthAlert, type HealthOpts, type HealthResult } from './health.js';
 import type { RunClaims } from './types.js';
 
 // How many days of runway a project aims to keep funded (the goal bar) unless it overrides it.
@@ -61,12 +62,18 @@ interface LedgerState {
   // Per-source grant count for the day (resets at rollover) — a runaway backstop on autonomous
   // project→project redistribution.
   grants_by_from_day: Record<string, number>;
+  // Health monitor dedup memory: per-account alert state (down-band + last-notified) so the scheduled
+  // sweep alerts once per outage and re-pings at most every renotify window. See src/health.ts.
+  health_alerts: Record<string, HealthAlert>;
 }
 
 export interface Account {
   granted_in_usd_cents: number;
   granted_out_usd_cents: number;
   consumed_usd_cents: number;
+  // When this org last registered a run — the health monitor's silence signal. Set on register(), so it
+  // survives the bounded `runs` cache being reaped (see src/health.ts).
+  last_activity_ms?: number;
   // Per-account daily spend (capped trailing window) used to derive a burn rate and runway.
   daily_spend: Record<string, number>;
   // Sponsors attributed to this account for display (set by mint/grant/coupon with a sponsor).
@@ -201,6 +208,7 @@ export class LimitLedger implements DurableObject {
     if (op === 'directory') return json({ ok: true, entries: this.directory() });
     if (op === 'project') return json(this.projectView(String(body.account)));
     if (op === 'grant_surplus') return json(await this.grantSurplus(String(body.from), String(body.to), Number(body.amount_usd_cents)));
+    if (op === 'health') return json(await this.health(body.opts as HealthOpts, Boolean(body.mark)));
     if (op === 'status') return json(this.snapshot());
     if (op === 'reap') return json(await this.reapAdmin());
     if (op === 'reap_repo') return json(await this.reapRepo(String(body.repo)));
@@ -433,6 +441,8 @@ export class LimitLedger implements DurableObject {
       consumed_usd_cents: 0,
       request_count: 0,
     };
+    // Stamp the org's last activity — the health monitor's silence signal (survives run-cache reaping).
+    this.ensureAcct(claims.repo).last_activity_ms = Date.now();
     await this.save();
     return { ok: true };
   }
@@ -682,6 +692,21 @@ export class LimitLedger implements DurableObject {
     };
   }
 
+  // Health monitor: classify every org that has ever run by how long it's been silent, and (when `mark`)
+  // emit dedup'd down/recovered notices the worker pushes out-of-band. Read-only when mark=false (the
+  // GET /health query); the scheduled sweep calls it with mark=true. The decision core is src/health.ts.
+  private async health(opts: HealthOpts, mark: boolean): Promise<{ ok: true } & HealthResult> {
+    const orgs = Object.entries(this.state.accounts)
+      .filter(([, a]) => typeof a.last_activity_ms === 'number')
+      .map(([account, a]) => ({ account, last_activity_ms: a.last_activity_ms as number }));
+    const result = evaluateHealth(orgs, this.state.health_alerts, opts, mark);
+    if (mark) {
+      this.state.health_alerts = result.nextAlerts;
+      await this.save();
+    }
+    return { ok: true, ...result };
+  }
+
   // Autonomous project→project redistribution. A project may grant only the SURPLUS above its own
   // funding goal (floor = goal_days × burn), so it can never strand its own runway; a per-day count
   // caps runaway loops. Identity (that `from` is the caller's own repo) is enforced upstream by OIDC.
@@ -748,6 +773,7 @@ export class LimitLedger implements DurableObject {
     this.state.coupons ??= {};
     this.state.flows ??= [];
     this.state.grants_by_from_day ??= {};
+    this.state.health_alerts ??= {};
   }
 
   private gcReservations(): void {
@@ -989,6 +1015,7 @@ function emptyState(): LedgerState {
     coupons: {},
     flows: [],
     grants_by_from_day: {},
+    health_alerts: {},
   };
 }
 
@@ -1116,6 +1143,10 @@ export class LimitLedgerClient {
 
   status() {
     return this.rpc<unknown>('status');
+  }
+
+  health(opts: HealthOpts, mark: boolean) {
+    return this.rpc<{ ok: true } & HealthResult>('health', { opts, mark });
   }
 
   reap() {

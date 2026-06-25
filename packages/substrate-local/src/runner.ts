@@ -51,6 +51,10 @@ export class TermfleetRunner implements Runner {
       ),
       ...params,
     };
+    // Put the repo's local node_modules/.bin first so the agent reaches repo-pinned CLIs (e.g. a `-D`
+    // ztrack) — exactly what `npm run`/`bun run` do, without the substrate naming any tool. cwd is the
+    // repo (createAgentWindow runs the session there), so this is where its node_modules lives.
+    exported.PATH = `${process.cwd()}/node_modules/.bin:${exported.PATH ?? process.env.PATH ?? ''}`;
     const setupCommand = Object.entries(exported)
       .map(([k, v]) => `export ${k}=${JSON.stringify(v ?? '')}`)
       .join('; ');

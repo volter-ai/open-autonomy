@@ -1,6 +1,7 @@
 import { handleAnthropic } from './anthropic.js';
-import { limitsFromEnv } from './config.js';
+import { healthOptsFromEnv, limitsFromEnv } from './config.js';
 import { error, json, methodNotAllowed, parseJson } from './errors.js';
+import { sendHealthEmail } from './notify.js';
 import { verifyGitHubOidcToken } from './github-oidc.js';
 import { isStale, syncAllStale, syncProfile } from './github-sync.js';
 import { LimitLedger, LimitLedgerClient, type Moderation, type Sponsor, type Tier, type AccountProfile } from './limit-ledger.js';
@@ -24,25 +25,60 @@ export default {
     }
   },
 
-  // Monthly cron (see [triggers] in wrangler.toml): mint the sponsor account with its active recurring
-  // sponsorships. Idempotent on the YYYY-MM key. This is the recurring-funding path GitHub's webhook
-  // can't provide (no per-renewal event).
+  // Cron handlers (see [triggers] in wrangler.toml), dispatched by which schedule fired:
+  //  - MONTHLY: mint the sponsor account with its active recurring sponsorships (idempotent on YYYY-MM) +
+  //    refresh public project metadata. The recurring-funding path GitHub's webhook can't provide.
+  //  - otherwise (the frequent health cron): sweep org health and PUSH out-of-band when a loop goes dark.
   async scheduled(event: ScheduledController, env: Env): Promise<void> {
-    const key = new Date(event.scheduledTime).toISOString().slice(0, 7); // YYYY-MM (UTC)
-    const account = sponsorAccount(env);
-    const result = await new LimitLedgerClient(env.LIMITS).accrue(account, key);
-    console.log('[agent-model-proxy] monthly accrue', account, key, JSON.stringify(result));
-    // Refresh every public project's GitHub-synced display metadata.
-    const synced = await syncAllStale(env);
-    console.log('[agent-model-proxy] profile sync', synced);
+    if (event.cron === MONTHLY_CRON) {
+      const key = new Date(event.scheduledTime).toISOString().slice(0, 7); // YYYY-MM (UTC)
+      const account = sponsorAccount(env);
+      const result = await new LimitLedgerClient(env.LIMITS).accrue(account, key);
+      console.log('[agent-model-proxy] monthly accrue', account, key, JSON.stringify(result));
+      const synced = await syncAllStale(env);
+      console.log('[agent-model-proxy] profile sync', synced);
+      return;
+    }
+    await runHealthSweep(env);
   },
 } satisfies ExportedHandler<Env>;
+
+// The monthly funding cron (must match wrangler.toml [triggers]); every other cron is the health sweep.
+const MONTHLY_CRON = '0 6 1 * *';
+
+// Detect orgs that have gone dark and push an out-of-band alert (email). The detection + dedup live in the
+// ledger DO (src/health.ts); here we just deliver the notices it emits. With no channel configured, the
+// detection still runs (and GET /health still serves) — the push is the only part that needs Resend.
+async function runHealthSweep(env: Env): Promise<void> {
+  const res = await new LimitLedgerClient(env.LIMITS).health(healthOptsFromEnv(env, Date.now()), true);
+  console.log('[agent-model-proxy] health sweep', JSON.stringify({ monitored: res.monitored, down: res.down, notices: res.notices.length }));
+  for (const n of res.notices) {
+    const subject =
+      n.kind === 'down'
+        ? `⚠️ open-autonomy: ${n.account} may be down (silent ${n.age_minutes}m)`
+        : `✅ open-autonomy: ${n.account} recovered`;
+    const text =
+      n.kind === 'down'
+        ? `The autonomy loop for ${n.account} has registered no agent run in ${n.age_minutes} minutes — it may be down (cron wedged, repo paused, proxy trust broken, or every run failing).\n\nCheck: https://github.com/${n.account}/actions\n\n— open-autonomy org health monitor (proxy-side). Tune via HEALTH_SILENCE_MINUTES.`
+        : `${n.account} is registering agent runs again after an outage. — open-autonomy health monitor.`;
+    const r = await sendHealthEmail(env, subject, text);
+    if (!r.sent) console.log('[agent-model-proxy] health notice not pushed', n.account, n.kind, r.reason);
+  }
+}
 
 async function route(req: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
   const url = new URL(req.url);
   const path = url.pathname;
 
-  if (path === '/healthz') return new Response('ok');
+  if (path === '/healthz') return new Response('ok'); // the WORKER's own liveness
+  // Org-fleet health (read-only): aggregate counts only (no per-repo detail), so an EXTERNAL uptime check can
+  // watch the watcher. `ok:false` when any monitored org is in the down band. The scheduled cron does the push.
+  if (path === '/health') {
+    if (req.method !== 'GET') return methodNotAllowed();
+    const res = await new LimitLedgerClient(env.LIMITS).health(healthOptsFromEnv(env, Date.now()), false);
+    const worst = res.verdicts.filter((v) => v.band !== 'dormant').reduce((m, v) => Math.max(m, v.age_minutes), 0);
+    return json({ ok: res.down === 0, monitored: res.monitored, down: res.down, worst_age_minutes: worst });
+  }
   if (path === '/favicon.svg') return new Response(LOGO_SVG, { headers: { 'content-type': 'image/svg+xml; charset=utf-8', 'cache-control': 'max-age=86400' } });
   if (path === '/favicon.ico') return new Response(null, { status: 204 });
 

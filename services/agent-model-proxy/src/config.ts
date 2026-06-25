@@ -1,5 +1,17 @@
+import type { HealthOpts } from './health.js';
 import type { LimitConfig } from './limit-ledger.js';
 import type { Env } from './types.js';
+
+/** Health thresholds from env (minutes → ms). Defaults: down after 3h silent, dormant after 7d, re-alert /12h. */
+export function healthOptsFromEnv(env: Env, nowMs: number): HealthOpts {
+  const min = (v: string | undefined, d: number) => (Number(v) > 0 ? Number(v) : d) * 60_000;
+  return {
+    silenceMs: min(env.HEALTH_SILENCE_MINUTES, 180),
+    deadMs: min(env.HEALTH_DEAD_MINUTES, 7 * 24 * 60),
+    renotifyMs: min(env.HEALTH_RENOTIFY_MINUTES, 12 * 60),
+    nowMs,
+  };
+}
 
 export function limitsFromEnv(env: Env): LimitConfig {
   return {

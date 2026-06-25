@@ -35,6 +35,15 @@ export interface Env {
   GITHUB_OIDC_OPENID_CONFIGURATION_URL?: string;
   GITHUB_OIDC_JWKS_URL?: string;
   GITHUB_API_BASE?: string;
+  // Health monitor: how long an org may be silent before it's "down" (alert) vs "dormant" (ignore), and the
+  // re-alert interval. Push channel (Resend) — unset → the monitor still detects + serves GET /health, it
+  // just can't email out-of-band.
+  HEALTH_SILENCE_MINUTES?: string;
+  HEALTH_DEAD_MINUTES?: string;
+  HEALTH_RENOTIFY_MINUTES?: string;
+  RESEND_API_KEY?: string;
+  HEALTH_ALERT_EMAIL?: string;
+  HEALTH_ALERT_FROM?: string;
   RUNS: DurableObjectNamespace;
   LIMITS: DurableObjectNamespace;
 }

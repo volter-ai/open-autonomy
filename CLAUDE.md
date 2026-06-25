@@ -46,10 +46,10 @@ fast (stronger than last-gen frontier), so fix the prompt/tool, never route arou
 | Doc | Owns (authoritative for) |
 |---|---|
 | `docs/SPEC.md` | **The standard** (`autonomy.ir.v1`) — the one spec doc. Six sections: the IR (actor unit, four slots, four catalogs, conformance); **Capabilities** + **the merge boundary** (code:propose vs code:review; no agent merges); **Trigger params** (`subject.ref`, …); **Task lifecycle** (open→ready→…→done; "done is verified, not presumed"); **The Runner** (launch/list/get/update/cancel + the human realization); **Handoffs** (choreography over `tasks`, the typed seam, the human seam + its 4 affordances, simulators, the planned `maintainer` `kind:human` migration). Link sections by anchor, e.g. `docs/SPEC.md#capabilities`. |
-| `docs/ARCHITECTURE.md` | The master map + the doc index. Start here for orientation. |
+| `docs/ARCHITECTURE.md` | The master map + the doc index + the **canonical vocabulary** glossary + source-repo layout (absorbed PROJECT-LAYOUT). Start here for orientation. |
 | `docs/VISION.md` | Mission, merit criteria, the three pieces (Standards/Bench/Dogfood), horizons **H1–H5**. |
 | `docs/CONSTITUTION.md` | North star + the 7 operating rules (human-owned; amended, never auto-edited). |
-| `docs/PROJECT.md` / `docs/PROJECT-LAYOUT.md` | Charter; canonical vocabulary + repo layout. |
+| `docs/PROJECT.md` | Charter (the mission-as-charter; shipped to installs). |
 | `docs/ROADMAP.md` | Tactical phases + proof gates (vs VISION = strategy). |
 | `docs/standards/*.md` | code / docs / tests / security standards agents must follow. |
 | `docs/LIVE_TESTING_STRATEGY.md`, `docs/PROOF_LEDGER.md` | How the live testbed proves features; the proof ledger. |

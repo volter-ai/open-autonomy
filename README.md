@@ -35,7 +35,7 @@ no single agent holds both `code:review` (statuses:write — blesses) and `code:
 `agent-review` are both green. The agent gets bounded model access (no raw keys) and can never merge.
 
 Read [`docs/SPEC.md`](./docs/SPEC.md) for the full model and conformance contract, and
-[`docs/PROJECT-LAYOUT.md`](./docs/PROJECT-LAYOUT.md) for the vocabulary and layout.
+[`docs/ARCHITECTURE.md`](./docs/ARCHITECTURE.md) for the vocabulary and layout.
 
 ## Run it on your repo
 
@@ -107,9 +107,8 @@ loop with a scheduler loop + a termfleet runner instead of GitHub Actions.
 - `profiles/` — profiles (recipes) that compile to any substrate: `hello` (minimal) and
   `self-driving` (open-autonomy's own self-driving setup; the single source of every github installation).
 
-Docs: [`ARCHITECTURE.md`](./docs/ARCHITECTURE.md) (the github app's design + trust boundaries),
+Docs: [`ARCHITECTURE.md`](./docs/ARCHITECTURE.md) (the github app's design + trust boundaries + canonical vocabulary + layout),
 [`SPEC.md`](./docs/SPEC.md) (the substrate-agnostic model + the four catalogs),
-[`PROJECT-LAYOUT.md`](./docs/PROJECT-LAYOUT.md) (vocabulary + layout),
 [`ROADMAP.md`](./docs/ROADMAP.md).
 
 ## Develop on open-autonomy itself

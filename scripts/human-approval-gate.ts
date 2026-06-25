@@ -74,13 +74,23 @@ const labels = (view.labels ?? []).map((l) => l.name);
 const files = (view.files ?? []).map((f) => f.path);
 const scoped = labels.includes('human-required') || files.some(isSensitivePath);
 
-// A qualifying sign-off: APPROVED, by a maintainer, on the CURRENT head (per-SHA re-earn via commit_id).
-type Review = { state?: string; author_association?: string; commit_id?: string };
-const qualifies = (r: Review): boolean =>
-  // The REST reviews API returns state UPPERCASE ('APPROVED'); the pull_request_review event payload returns
-  // it LOWERCASE ('approved'). Normalize so the payload path (the one that actually works under GITHUB_TOKEN)
-  // matches.
-  (r.state ?? '').toUpperCase() === 'APPROVED' && MAINTAINER.has(r.author_association ?? '') && r.commit_id === headSha;
+// Does this login have maintainer (write+) permission on the repo? `author_association` is NOT reliable for
+// this: under the workflow's GitHub App token an org member's review shows as CONTRIBUTOR (a PAT sees MEMBER),
+// so we verify the reviewer's ACTUAL repo permission instead.
+function isMaintainer(login: string): boolean {
+  if (!login) return false;
+  const perm = gh(['api', `repos/${repo}/collaborators/${login}/permission`, '--jq', '.permission']);
+  return perm === 'admin' || perm === 'write' || perm === 'maintain';
+}
+
+// A qualifying sign-off: APPROVED, by a maintainer, on the CURRENT head (per-SHA re-earn via commit_id). The
+// reviews API returns state UPPERCASE ('APPROVED'); the pull_request_review event payload returns it lowercase
+// ('approved') — normalize. Maintainership is by repo permission, with author_association as a fast path.
+type Review = { state?: string; author_association?: string; commit_id?: string; user?: { login?: string } };
+const qualifies = (r: Review): boolean => {
+  if ((r.state ?? '').toUpperCase() !== 'APPROVED' || r.commit_id !== headSha) return false;
+  return MAINTAINER.has(r.author_association ?? '') || isMaintainer(r.user?.login ?? '');
+};
 
 // The review that fired a `pull_request_review` event is in the event payload. Use it FIRST: it's
 // authoritative, immune to the reviews-API read returning empty under GITHUB_TOKEN, and free of the
@@ -99,7 +109,11 @@ function eventReview(): Review | undefined {
 let approved = false;
 if (scoped) {
   const er = eventReview();
-  process.stderr.write(`human-approval: DEBUG event=${process.env.GITHUB_EVENT_NAME} headSha=${headSha} er=${JSON.stringify(er)}\n`);
+  if (er) {
+    const login = er.user?.login ?? '';
+    const perm = login ? gh(['api', `repos/${repo}/collaborators/${login}/permission`, '--jq', '.permission']) : '';
+    process.stderr.write(`human-approval: DEBUG event=${process.env.GITHUB_EVENT_NAME} login=${login} assoc=${er.author_association} perm=${perm || '(empty)'} state=${er.state} commit=${(er.commit_id ?? '').slice(0, 7)} head=${headSha.slice(0, 7)}\n`);
+  }
   if (er && qualifies(er)) approved = true; // primary: the review carried by this event
   if (!approved) {
     // Backstop for the synchronize / re-dispatch paths (no event.review). The GITHUB_TOKEN sometimes returns

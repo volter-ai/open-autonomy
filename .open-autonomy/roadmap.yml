@@ -222,3 +222,72 @@ items:
       - The number of steps/files a new adopter must touch to go from clone to first autonomous PR is measured and published.
       - Irreducible complexity is distinguished from accidental complexity in the scoring; the goal is reducing the latter.
       - Measured by a testbed run that scaffolds a fresh repo and completes one end-to-end cycle.
+  - id: agent-level-evidence-gates
+    priority: medium
+    proposed: true
+    title: Agent-Level Evidence Gates For Reviewer Verifiability
+    intent: >
+      OA's proof_gate model stops at the roadmap-item level. The reviewer has no
+      structured evidence per agent action (tool call, decision, rationale) that
+      independently verifies the action was justified. OpenHands is exploring
+      exactly this gap (issue #14857: reviewer-facing evidence gates). Extending
+      proof to individual agent actions makes the reviewer's job tractable and
+      serves the constitution's "proof" merit criterion at action granularity.
+    proof_gate: action-evidence-replay
+    acceptance:
+      - Each high-impact agent action (shell command, file write, PR merge, credential access)
+        emits a structured trace artifact showing: action type, triggering task context, checked
+        evidence or input fields, decision (ALLOW/BLOCK/ESCALATE), and replayable decision record.
+      - The reviewer can inspect the evidence artifact independently (not relying on agent-run logs)
+        and verify that the action was justified before the fact, not just after.
+      - A testbed fixture replays a recorded trajectory and asserts that every high-impact action
+        has a companion evidence artifact with the required fields.
+      - Proven by a live testbed run where the reviewer uses evidence artifacts to accept or reject
+        an agent action; run IDs recorded in the ledger.
+  - id: trajectory-export-standard
+    priority: low
+    proposed: true
+    title: Standardized Agent Trajectory Export For Bench And Replay
+    intent: >
+      OA emits decision records per agent run, but they are workflow-specific JSON
+      with no standardized schema for replay, bench scoring, or cross-run analysis.
+      SWE-agent is adding explicit trajectory hooks for remote environments (issue
+      #1310). A standard trajectory format — time-ordered sequence of state, action,
+      observation triples — would unlock bench-autonomy-ratio (process metrics from
+      real runs), quality-benchmark-gate (output quality scoring against benchmarks),
+      and strategist pattern mining from historical runs.
+    proof_gate: trajectory-roundtrip
+    acceptance:
+      - Every agent run emits a standardized trajectory artifact: a time-ordered sequence
+        of (state, action, observation) triples with consistent schema across all roles
+        (developer, reviewer, PM, planner).
+      - The trajectory can be replayed deterministically through a testbed fixture to reproduce
+        the agent's behavior (within model output variance).
+      - Cross-run trajectory analysis (e.g., "find all runs where the developer issued a git push")
+        is possible by querying the standardized format without per-run schema knowledge.
+      - Proven by a testbed run that exports a trajectory and replays it through the fixture;
+        run IDs in the ledger.
+  - id: self-improving-prompt-evolution
+    priority: low
+    proposed: true
+    title: Self-Improving Prompt Evolution For Loop Roles
+    intent: >
+      The constitution's method calls for absorbing the best ideas from the field.
+      DGM's core innovation is automatically evolving agent prompts through mutation
+      and selection — treating prompts as evolvable artifacts, not hand-maintained
+      constants. Google AlphaEvolve extends this to evolutionary search over agent
+      capabilities. OA currently hand-crafts every prompt per role. Adding an automated
+      prompt evolution capability — seeded from DGM's evolutionary loop — would let
+      prompt quality improve autonomously against bench scores, directly serving the
+      "find the best system" constitutional goal and feeding into quality-benchmark-gate.
+    proof_gate: prompt-evolution-smoke
+    acceptance:
+      - A prompt evolution loop exists that takes a current role prompt, generates mutations
+        (variations of instruction, context format, or tool-use guidance), runs each variant
+        through the bench or a testbed fixture, and selects the best-performing variant.
+      - The loop can run autonomously within a bounded budget (configurable max_runs, max_cost)
+        and does not modify the production prompt without a human ratify step.
+      - Evolution candidates are recorded in the strategist archive or a companion ledger for
+        traceability.
+      - Proven by a testbed run that evolves one role prompt through at least 3 generations and
+        demonstrates score improvement against a deterministic fixture; run IDs in the ledger.

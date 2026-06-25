@@ -55,6 +55,33 @@
       "status": "proposed",
       "rationale": "Competitor gap: SWE-agent migration to mini-SWE-agent (100-line Python). Analogous field: DGM issue #31 unreachable CLI modes. Portability merit criterion blocked by surface area.",
       "falsified_by": "Usability surveys show adopters don't find the substrate complex, or simplification doesn't reduce onboarding time."
+    },
+    {
+      "id": "agent-level-evidence-gates",
+      "title": "Agent-Level Evidence Gates For Reviewer Verifiability",
+      "proposed_in": "strategist-run-2026-06-25",
+      "pr_number": null,
+      "status": "proposed",
+      "rationale": "Competitor gap: OpenHands issue #14857 explores reviewer-facing evidence gates per agent action. OA's proof_gate model stops at roadmap-item level; reviewer has no structured evidence per action to independently verify it was justified. Serves proof merit criterion at finer granularity.",
+      "falsified_by": "Reviewers do not actually inspect per-action evidence artifacts in practice, OR the cost of emitting structured evidence per action exceeds the verification benefit."
+    },
+    {
+      "id": "trajectory-export-standard",
+      "title": "Standardized Agent Trajectory Export For Bench And Replay",
+      "proposed_in": "strategist-run-2026-06-25",
+      "pr_number": null,
+      "status": "proposed",
+      "rationale": "Competitor gap: SWE-agent #1310 adds explicit trajectory hooks for remote environments. OA decision records are workflow-specific JSON with no standardized replay schema. A standard trajectory format unlocks bench, replay, quality scoring, and pattern mining — directly serving bench-autonomy-ratio and quality-benchmark-gate.",
+      "falsified_by": "Existing decision records already support replay and cross-run analysis without standardization; trajectory schema effort does not unlock new capability."
+    },
+    {
+      "id": "self-improving-prompt-evolution",
+      "title": "Self-Improving Prompt Evolution For Loop Roles",
+      "proposed_in": "strategist-run-2026-06-25",
+      "pr_number": null,
+      "status": "proposed",
+      "rationale": "Analogous field: DGM's core innovation (evolving agent prompts through mutation/selection), plus Google AlphaEvolve (evolutionary search over agent capabilities). OA hand-crafts every prompt per role; automated prompt evolution treats prompts as evolvable artifacts improving autonomously against bench scores. Serves the constitution's method of absorbing best ideas from the field and feeds quality-benchmark-gate.",
+      "falsified_by": "Automated prompt mutation does not produce reliably better prompts than hand-crafting, OR bench variance is too high to distinguish improved variants from noise."
     }
   ]
 }

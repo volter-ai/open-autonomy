@@ -62,13 +62,32 @@ function git(args: string[], cwd?: string): { status: number | null; stdout: str
 // Create (or reuse) the worktree for the PM-assigned branch, from trunk HEAD. Idempotent: develop creates
 // it, review (same `--branch`) joins it. node_modules is gitignored (lives only in the main checkout), so a
 // fresh worktree has none — symlink it so the repo-pinned ztrack/preset-kit + agent CLIs resolve inside it.
+// Ignore the Runner-created paths via the repo's COMMON `.git/info/exclude`, not `.gitignore`. info/exclude
+// is shared by every worktree and is never committed, so it reliably covers a worktree's `node_modules`
+// symlink regardless of what `.gitignore` that worktree's branch has checked out. (Appending to the main
+// checkout's working-copy `.gitignore` does NOT reach a worktree, which sees its branch's committed version.)
+// `node_modules` carries no trailing slash on purpose — a `node_modules/` dir pattern does NOT match the
+// symlink the Runner creates, which would otherwise be staged by a worker's `git add -A` and merged onto trunk.
+function ensureRunnerPathsIgnored(): void {
+  const commonDir = git(['rev-parse', '--git-common-dir']).stdout.trim();
+  if (!commonDir) return;
+  const excludePath = join(resolve(commonDir), 'info', 'exclude');
+  let present: string[] = [];
+  try {
+    present = readFileSync(excludePath, 'utf8').split('\n');
+  } catch {
+    /* no exclude file yet — created below */
+  }
+  const missing = ['.worktrees/', 'node_modules'].filter((e) => !present.includes(e));
+  if (missing.length) {
+    mkdirSync(dirname(excludePath), { recursive: true });
+    appendFileSync(excludePath, `${missing.join('\n')}\n`);
+  }
+}
+
 function ensureWorktree(branch: string, worktree: string): void {
   if (existsSync(worktree)) return;
-  try {
-    if (!readFileSync('.gitignore', 'utf8').split('\n').includes('.worktrees/')) appendFileSync('.gitignore', '.worktrees/\n');
-  } catch {
-    appendFileSync('.gitignore', '.worktrees/\n');
-  }
+  ensureRunnerPathsIgnored();
   mkdirSync(dirname(worktree), { recursive: true });
   const branchExists = git(['rev-parse', '--verify', '--quiet', branch]).status === 0;
   const add = branchExists ? ['worktree', 'add', worktree, branch] : ['worktree', 'add', '-b', branch, worktree, 'HEAD'];

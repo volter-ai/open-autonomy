@@ -97,6 +97,12 @@ Use issue comments for day-to-day controls:
   issue and revokes matching active proxy runs visible in `/admin/limits/status`.
 - `/agent retry` reruns failed jobs from the latest failed infrastructure run for
   the issue. It does not create a new `/agent develop` command.
+- `/agent decide <decision>` / `/agent answer <answer>` resolve a human-blocked
+  item (`human-required` / `needs-info`): they record the maintainer's typed
+  decision/answer on the issue and clear the human-blocking labels so the PM
+  re-triages and resumes the work. Maintainer-gated (OWNER/MEMBER/COLLABORATOR);
+  this is the github realization of the human seam's `out` (resume on a recorded,
+  authorized decision).
 
 Use `Model Proxy Admin` with `status`, `run-status`, or `revoke` when you need
 repository-wide proxy saturation details or a manual run-id revoke.

@@ -36,7 +36,7 @@
     "build": "bun scripts/build-cli.ts",
     "prepublishOnly": "bun run build",
     "check:autonomy": "bunx tsc -p tsconfig.json",
-    "check:core": "bun test packages/core/src/*.test.ts",
+    "check:core": "bun test packages/*/src/*.test.ts",
     "conformance": "bun bin/autonomy-conformance.ts",
     "check:compile": "bun bin/check-compile.ts",
     "check:profiles": "bun bin/check-profiles.ts",

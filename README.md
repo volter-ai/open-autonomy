@@ -160,6 +160,8 @@ else is ignored. To launch an agent by comment, name it: `/agent <agent>` (the w
 - `/agent status` — show issue agent state.
 - `/agent retry` — rerun failed infrastructure jobs without a fresh develop pass.
 - `/agent cancel` — cancel active workflow runs and revoke active proxy runs.
+- `/agent decide <decision>` / `/agent answer <answer>` — resolve a `human-required` / `needs-info` item:
+  records your decision/answer and clears the block so the PM re-triages and resumes (the human seam's `out`).
 
 ## Security
 

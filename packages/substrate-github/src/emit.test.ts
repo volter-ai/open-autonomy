@@ -45,11 +45,25 @@ describe('compileGithub — kind: human is declared, not job-realized', () => {
     expect(workflows(compileGithub(irWith([{ dispatch: true }], 'human'))).length).toBe(0);
   });
 
-  test('but the human actor IS declared in the manifest (visible labor)', () => {
-    const out = compileGithub(irWith([{ dispatch: true }], 'human'));
-    expect(out.generated['.open-autonomy/autonomy.yml']).toContain('maintainer');
+  test('but the human actor IS declared in the manifest (kind:human, no job to launch)', () => {
+    const manifest = compileGithub(irWith([{ dispatch: true }], 'human')).generated['.open-autonomy/autonomy.yml'] ?? '';
+    expect(manifest).toContain('maintainer');
+    expect(manifest).toContain('kind: human');
+    expect(manifest).not.toContain('maintainer.yml'); // a person has no launchable workflow
   });
 
-  // Still genuinely unbuilt (the behavioral tier — needs a recorded real run, then a calibrated simulator):
-  test.todo('the human seam blocks, escalates on SLA, and resumes on a recorded/redeemed decision', () => {});
+  // The human seam RESUMES on a recorded maintainer decision — the seam's `out` (docs/SPEC.md#handoffs). The
+  // operator control plane gains `/agent decide|answer`: it records the typed resolution and clears the human
+  // block so the PM re-triages. (Deterministic + maintainer-gated; this is the testable tier.)
+  test('the operator control plane resumes the human seam via /agent decide (clears the block)', () => {
+    const control = compileGithub(irWith([{ dispatch: true }])).generated['.github/agent-control.mjs'] ?? '';
+    expect(control).toContain('decide|answer'); // recognized control verbs
+    expect(control).toContain("'human-required'"); // the block it lifts
+    expect(control).toContain('--remove-label'); // resolution clears the human-blocking labels
+  });
+
+  // The remaining affordance — ESCALATE on SLA — is the BEHAVIORAL tier (PM doctrine, Step 2c: re-ping the
+  // engaged maintainer past policy.box.human.sla_minutes). It is judgment, not a frozen template, so it is
+  // proven by a live run + a calibrated simulator, never a unit test.
+  test.todo('the human seam escalates on SLA (behavioral — PM Step 2c; live-proven, not unit-tested)', () => {});
 });

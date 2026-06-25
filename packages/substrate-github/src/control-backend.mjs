@@ -7,6 +7,8 @@
 //   retry  -> gh workflow run            (Runner.launch)
 //   pause  -> add the agent-paused label (Runner.update status=paused; the agent job honors it)
 //   resume -> remove the agent-paused label (Runner.update status=running)
+//   decide -> record a maintainer DECISION + clear the human block (the human seam's `out`; Runner.update done)
+//   answer -> record a maintainer ANSWER to a needs-info ask + clear the block (same seam, answer flavor)
 // On local this isn't emitted at all — the runner CLI (`autonomy cancel|update|get|list`) IS the
 // control surface, so the operator already has it directly.
 import { readFileSync } from 'node:fs';
@@ -15,7 +17,7 @@ import { execSync } from 'node:child_process';
 const ev = JSON.parse(readFileSync(process.env.GITHUB_EVENT_PATH, 'utf8'));
 const body = (ev.comment?.body || '').trim();
 const issue = ev.issue?.number;
-const m = /^\/agent\s+(cancel|pause|resume|status|retry)\b/.exec(body);
+const m = /^\/agent\s+(cancel|pause|resume|status|retry|decide|answer)\b/.exec(body);
 if (!m || !issue) {
   console.log('no /agent control command in this event');
   process.exit(0);
@@ -62,6 +64,32 @@ if (verb === 'cancel') {
     sh(`gh issue comment ${issue} --repo ${repo} --body ${q('Retrying: relaunched after a failed run (/agent retry).')}`);
   } else {
     sh(`gh issue comment ${issue} --repo ${repo} --body ${q('No failed infrastructure run was found to retry (/agent retry).')}`);
+  }
+} else if (verb === 'decide' || verb === 'answer') {
+  // The human seam's `out` (docs/SPEC.md#handoffs): a maintainer RESOLVES a parked human-required/needs-info
+  // item — records the typed decision/answer (receiver confirmation, on the record) and CLEARS the human
+  // block so the PM re-triages it as resumable. This is the authorized act that drives Runner.update→done for
+  // the human realization; the workflow gates it to maintainers (author_association), so it cannot be spoofed.
+  const text = body.replace(/^\/agent\s+(?:decide|answer)\s*/i, '').trim();
+  const decider = ev.comment?.user?.login || 'maintainer';
+  // Each agent workflow runs its own control job, so this fires N times for one comment — dedup the recorded
+  // note via a marker keyed on the SOURCE comment id so only one is posted. (Label removal is idempotent.)
+  const marker = `<!-- agent-${verb}:${ev.comment?.id ?? 'x'} -->`;
+  let already = '';
+  try {
+    already = out(`gh issue view ${issue} --repo ${repo} --json comments --jq '.comments[].body'`);
+  } catch {
+    already = '';
+  }
+  if (!already.includes(marker)) {
+    const word = verb === 'decide' ? 'decision' : 'answer';
+    sh(
+      `gh issue comment ${issue} --repo ${repo} --body ${q(`${marker}\n✅ **Maintainer ${word}** by @${decider} (\`/agent ${verb}\`):\n\n${text || '(see the command comment above)'}\n\n_Recorded — clearing the human block so the PM re-triages and resumes._`)}`,
+    );
+  }
+  // Clear the human-blocking labels — the authorized resolution lifts the block. Idempotent (|| true).
+  for (const label of ['human-required', 'needs-info', 'agent-blocked']) {
+    sh(`gh issue edit ${issue} --repo ${repo} --remove-label ${label} 2>/dev/null || true`);
   }
 }
 console.log(`handled /agent ${verb}`);

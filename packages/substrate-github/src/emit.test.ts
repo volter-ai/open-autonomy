@@ -46,14 +46,14 @@ describe('compileGithub — substrate-universal security baseline', () => {
     expect(out.generated['.github/zizmor.yml']).not.toContain('maintainer.yml');
   });
 
-  test('materializes human-required scope as DATA: substrate defaults ∪ profile policy, nothing hardcoded', () => {
+  test('materializes the profile human-required scope VERBATIM — the engine carries policy, never authors it', () => {
     const base = irWith([{ cron: '0 0 * * *' }]);
-    const withPolicy: AutonomyIR = { ...base, policy: { box: { risk: { human_required_paths: ['custom/sensitive/**'] } } } };
+    const declared = ['.github/workflows/**', 'custom/sensitive/**'];
+    const withPolicy: AutonomyIR = { ...base, policy: { box: { risk: { human_required_paths: declared } } } };
     const paths = JSON.parse(compileGithub(withPolicy).generated['.open-autonomy/human-required-paths.json']) as string[];
-    expect(paths).toContain('.github/workflows/**'); // substrate default (the engine emits workflows)
-    expect(paths).toContain('**/bun.lock'); // substrate default (CI executes deps)
-    expect(paths).toContain('custom/sensitive/**'); // the profile's own path, unioned in
-    expect(paths).not.toContain('services/**'); // not hardcoded — present only if a profile declares it
+    expect(paths).toEqual(declared); // exactly what policy declares, in order — no engine-injected paths
+    // a profile that declares nothing gets nothing: no substrate defaults baked into the engine
+    expect(JSON.parse(compileGithub(base).generated['.open-autonomy/human-required-paths.json'])).toEqual([]);
   });
 });
 

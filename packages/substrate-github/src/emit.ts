@@ -87,19 +87,6 @@ ${ignores}
 `;
 }
 
-// The substrate-universal human-required paths: the surface the engine itself emits/relies on, where
-// MERGING has immediate privileged effect in every github install (CI execution on the next run, agent
-// behavior, the manifest, dependency execution). NOT project structure — substrate invariants. The profile
-// UNIONs its own app-specific paths via policy.box.risk.human_required_paths; the gate enforces the
-// resolved list and hardcodes nothing.
-const HUMAN_REQUIRED_DEFAULTS = [
-  '.github/workflows/**',        // merging changes what runs in CI on the next run (secret-exfil surface)
-  '.open-autonomy/autonomy.yml', // the compiled org manifest
-  '.codex/skills/**',            // merging changes agent behavior immediately
-  '.claude/skills/**',
-  '**/bun.lock',                 // the next CI `bun install` executes deps (dependency-trust)
-];
-
 // Authorization for the comment surface. issue_comment / pull_request_target fire for ANY user (incl.
 // drive-by commenters and fork PRs), so the control plane and any comment-launch MUST be gated on a
 // maintainer (author_association), and a pull_request_target agent run MUST be gated on a same-repo PR
@@ -574,11 +561,12 @@ export function compileGithub(ir: AutonomyIR): CompileOutput {
   generated['.github/dependabot.yml'] = DEPENDABOT_YML;
   generated['.github/zizmor.yml'] = zizmorConfig(agentWorkflows);
 
-  // Human-required scope as DATA the gate reads (the substrate defaults ∪ the profile's declared paths) —
-  // so the engine enforces whatever policy declares without baking any project structure into the gate.
+  // Materialize the profile's human-required scope verbatim for the gate to read. The substrate CARRIES
+  // policy, it does not author or augment it (the IR contract: policy.box is carried verbatim, never
+  // interpreted). No paths baked into the engine — a profile declares what merging must gate (its
+  // workflows, manifest, skills, lockfile, …) in policy.box.risk.human_required_paths.
   const risk = (ir.policy.box.risk ?? {}) as { human_required_paths?: string[] };
-  const humanRequired = [...new Set([...HUMAN_REQUIRED_DEFAULTS, ...(risk.human_required_paths ?? [])])];
-  generated['.open-autonomy/human-required-paths.json'] = JSON.stringify(humanRequired, null, 2) + '\n';
+  generated['.open-autonomy/human-required-paths.json'] = JSON.stringify(risk.human_required_paths ?? [], null, 2) + '\n';
 
   const copies: Array<{ from: string; to: string }> = [];
   for (const agent of Object.values(ir.agents)) {

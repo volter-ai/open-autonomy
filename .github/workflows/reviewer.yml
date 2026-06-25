@@ -124,5 +124,8 @@ jobs:
           include-hidden-files: true
           retention-days: 30
           if-no-files-found: ignore
-      - run: bun scripts/model-proxy-revoke.ts --run-id "ir-reviewer-${{ github.run_id }}" || true
+      - name: Release the run slot (revoke minted token)
         if: always()
+        run: |
+          for i in 1 2 3 4 5; do bun scripts/model-proxy-revoke.ts --run-id "ir-reviewer-${{ github.run_id }}" && exit 0 || sleep 3; done
+          echo "::warning::run-slot revoke failed after retries for ir-reviewer-${{ github.run_id }}; slot will auto-reap at token TTL"

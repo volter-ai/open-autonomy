@@ -425,8 +425,15 @@ function wrapperYml(name: string, agent: IRAgent): string {
     `          include-hidden-files: true`,
     `          retention-days: 30`,
     `          if-no-files-found: ignore`,
-    `      - run: bun scripts/model-proxy-revoke.ts --run-id "${RID}" || true`,
+    // Release the run slot — RETRY, don't silently swallow. revoke is if:always() in the SAME job as mint, so a
+    // post-mint step failure still reaches it; but a single `|| true` let a transient revoke failure leak the
+    // slot silently (it only self-heals at token TTL ~2h, and slots are a scarce shared cap). Retry, and if it
+    // still fails, surface it loudly — but stay non-fatal (the run's real work succeeded; TTL is the backstop).
+    `      - name: Release the run slot (revoke minted token)`,
     `        if: always()`,
+    `        run: |`,
+    `          for i in 1 2 3 4 5; do bun scripts/model-proxy-revoke.ts --run-id "${RID}" && exit 0 || sleep 3; done`,
+    `          echo "::warning::run-slot revoke failed after retries for ${RID}; slot will auto-reap at token TTL"`,
     ``,
   ].join('\n');
 }

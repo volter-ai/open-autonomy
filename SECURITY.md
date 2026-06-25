@@ -31,7 +31,7 @@ Include: the affected component, reproduction steps, impact, and any proof-of-co
 
 ## Trust model
 
-The intended trust boundaries are documented in `docs/CAPABILITIES.md` (agents act with
+The intended trust boundaries are documented in `docs/SPEC.md#capabilities` (agents act with
 capability-scoped tokens; the merge boundary is the `code:review`/`code:propose` split + native
 auto-merge — no agent can merge) and the proxy's abuse/spend model in
 `services/agent-model-proxy/README.md`. Reports that violate those boundaries are especially valuable.

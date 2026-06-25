@@ -134,7 +134,7 @@ machine) or `human` (a person) — **intrinsic and declared, not a substrate cho
 human task on every substrate). Within `kind: agent`, *execution* stays the substrate's choice (a `.ts`
 behavior runs deterministically; a prose skill model-interpreted); `kind: human` is realized by routing to
 a person, plus the affordances people need (worklist + escalation + durable pause + structured payload —
-see `docs/HANDOFFS.md`).
+see `docs/SPEC.md#handoffs`).
 
 | | `kind: agent` | `kind: human` |
 |---|---|---|
@@ -144,7 +144,7 @@ see `docs/HANDOFFS.md`).
 A human is a first-class **peer**, not a new noun and not "a kind of agent" — same four slots, different
 kind. This makes the org's **true labor model visible**: today humans appear only as *negative space* (a
 `human_required` path, a review nobody declared, a maintainer-run upgrade). Declaring them is what makes
-measurement possible. (See `docs/AUTONOMY-IR.md` for the actor/kind axis and `docs/HANDOFFS.md` for how
+measurement possible. (See `docs/SPEC.md#the-ir` for the actor/kind axis and `docs/SPEC.md#handoffs` for how
 handoffs reach a human.)
 
 **Seams — the typed handoff, and the org's dependency graph.** Every point where one participant hands to
@@ -206,7 +206,7 @@ the bench points, on its own, at what to automate next.
 **human simulators** — the profile is unchanged; the bench supplies a simulator realization for each
 `kind: human` actor (a deterministic fixture for reproducible tests; a latency/decision *distribution* for
 the twin; model-roleplay for rich scenarios), calibrated from real human-seam measurements. The seam's
-typed payload + identity-decoupled redeem handle are what make this possible (`docs/HANDOFFS.md`). Without
+typed payload + identity-decoupled redeem handle are what make this possible (`docs/SPEC.md#handoffs`). Without
 it, no realistic org (autonomy ratio < 100%) can be benched at all — so human simulation is a precondition
 for Bench, not a convenience.
 

@@ -15,7 +15,7 @@ disposable issues before expanding autonomy. The self-driving-repo-on-github is
 the proof, not the definition.
 
 See `docs/VISION.md` for the category and direction, `docs/CONSTITUTION.md` for the
-north star and merit criteria, and `docs/AUTONOMY-IR.md` for the spec.
+north star and merit criteria, and `docs/SPEC.md#the-ir` for the spec.
 
 Agent PRs are submitted for review automatically by the proposer (deterministic agent
 routing), not by the PM.

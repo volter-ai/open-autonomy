@@ -1,6 +1,6 @@
 # Open Autonomy, expressed in its own IR — the profile that compiles to OA's live installation.
 # One unit (substrate-free): an agent = behavior(skill) + capabilities + triggers(+params) + timeout?.
-# See docs/AUTONOMY-IR.md + docs/CAPABILITIES.md. Every agent is a SKILL (prose) run as a single
+# See docs/SPEC.md#the-ir + docs/SPEC.md#capabilities. Every agent is a SKILL (prose) run as a single
 # CREDENTIALED job whose token is scoped to its capabilities; the agent acts directly. Guards =
 # capabilities + budget. The merge boundary is the code:review (statuses:write) / code:propose
 # (contents:write) permission split + native auto-merge — no agent holds both, none can land unreviewed code.
@@ -37,7 +37,7 @@ agents:
 
   # Reviewer: a skill agent that reviews an agent PR and posts its verdict as the `agent-review` status
   # (code:review = statuses:write). It holds NO contents:write, so it cannot merge; GitHub auto-merge lands
-  # the PR once `ci` + `agent-review` are both green (docs/CAPABILITIES.md, the merge boundary). The PR
+  # the PR once `ci` + `agent-review` are both green (docs/SPEC.md#capabilities, the merge boundary). The PR
   # number arrives as TARGET_REF; the skill fetches the diff + CI itself via gh.
   reviewer:
     behavior: reviewer

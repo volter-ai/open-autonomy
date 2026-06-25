@@ -45,13 +45,8 @@ fast (stronger than last-gen frontier), so fix the prompt/tool, never route arou
 
 | Doc | Owns (authoritative for) |
 |---|---|
+| `docs/SPEC.md` | **The standard** (`autonomy.ir.v1`) — the one spec doc. Six sections: the IR (actor unit, four slots, four catalogs, conformance); **Capabilities** + **the merge boundary** (code:propose vs code:review; no agent merges); **Trigger params** (`subject.ref`, …); **Task lifecycle** (open→ready→…→done; "done is verified, not presumed"); **The Runner** (launch/list/get/update/cancel + the human realization); **Handoffs** (choreography over `tasks`, the typed seam, the human seam + its 4 affordances, simulators, the planned `maintainer` `kind:human` migration). Link sections by anchor, e.g. `docs/SPEC.md#capabilities`. |
 | `docs/ARCHITECTURE.md` | The master map + the doc index. Start here for orientation. |
-| `docs/AUTONOMY-IR.md` | **The IR standard** (`autonomy.ir.v1`): the actor unit, the four slots, the four catalogs. |
-| `docs/CAPABILITIES.md` | The capability vocabulary + **the merge boundary** (code:propose vs code:review; no agent merges). |
-| `docs/HANDOFFS.md` | **Choreography over `tasks`**, the typed seam, the **human seam + its 4 affordances**, simulators, and the planned `maintainer` `kind:human` migration. |
-| `docs/TASK-LIFECYCLE.md` | The task state vocabulary the orchestrator reads (open→ready→working→in-review→input-required/blocked→done/rejected). "done is verified, not presumed." |
-| `docs/RUNNER.md` | The Runner contract (launch/list/get/update/cancel); the human realization. |
-| `docs/TRIGGER-PARAMS.md` | The portable trigger-param sources (`subject.ref`, `subject.actor`, …). |
 | `docs/VISION.md` | Mission, merit criteria, the three pieces (Standards/Bench/Dogfood), horizons **H1–H5**. |
 | `docs/CONSTITUTION.md` | North star + the 7 operating rules (human-owned; amended, never auto-edited). |
 | `docs/PROJECT.md` / `docs/PROJECT-LAYOUT.md` | Charter; canonical vocabulary + repo layout. |
@@ -59,10 +54,9 @@ fast (stronger than last-gen frontier), so fix the prompt/tool, never route arou
 | `docs/standards/*.md` | code / docs / tests / security standards agents must follow. |
 | `docs/LIVE_TESTING_STRATEGY.md`, `docs/PROOF_LEDGER.md` | How the live testbed proves features; the proof ledger. |
 
-> Cross-deps: `AUTONOMY-IR` → the four catalogs (CAPABILITIES, TRIGGER-PARAMS, TASK-LIFECYCLE); `HANDOFFS` →
-> TASK-LIFECYCLE + RUNNER; `CONSTITUTION`/`VISION` anchor everything. (There are ~18 docs — this table is the
-> index so you never have to guess which one to open. Consolidating them into fewer core docs is a known
-> follow-up.)
+> `SPEC.md` is the consolidation of the former AUTONOMY-IR / CAPABILITIES / TRIGGER-PARAMS / TASK-LIFECYCLE /
+> RUNNER / HANDOFFS docs (one tightly-coupled spec: the IR + its four catalogs + the seam/runner). The table
+> is the index so you never have to guess which doc to open. `CONSTITUTION`/`VISION` anchor everything.
 
 ### `packages/` — the engine (substrate-neutral core + substrate compilers)
 
@@ -124,13 +118,13 @@ why human simulation is a precondition for Bench.
 
 - **Unit = an actor** with `kind: agent | human` and four slots: behavior, capabilities, triggers, config.
   `kind` is **declared in the profile**; *realization* (script / model / real person / simulator) is the
-  substrate's choice. (`AUTONOMY-IR.md`, `HANDOFFS.md`)
+  substrate's choice. (`SPEC.md#the-ir`, `SPEC.md#handoffs`)
 - **Handoffs = choreography over `tasks`.** Actors don't call each other; they change a task's state and the
-  next actor's trigger fires. `agent:launch` (the Runner) is the direct-dispatch escape hatch. (`HANDOFFS.md`)
+  next actor's trigger fires. `agent:launch` (the Runner) is the direct-dispatch escape hatch. (`SPEC.md#handoffs`)
 - **Triggers:** `cron` + `dispatch` are portable; `event:` is the substrate-native escape hatch.
 - **Capabilities → the merge boundary:** `code:propose` (contents:write — push/PR) and `code:review`
   (statuses:write — post `agent-review`) are **never on one agent**; no agent gets `code:merge`. Native
-  auto-merge lands a PR once required checks pass. (`CAPABILITIES.md`)
+  auto-merge lands a PR once required checks pass. (`SPEC.md#capabilities`)
 - **Substrates** realize the same IR differently (GitHub = events+workflows, no Runner loop; local =
   scheduler+runners). Realization is the substrate's job; the profile is substrate-agnostic.
 
@@ -195,7 +189,7 @@ while local stays green.
 - **Built:** the IR + actor model (core); `HumanRunner` (core, driven by the *local* substrate); the merge
   boundary; the two-layer roadmap + strategist audit/retire + planner reap; the `human-approval` gate
   (github realization of the human *review* handoff, enforced).
-- **Designed but NOT built (per `HANDOFFS.md`, ~H1):** the full human seam — a declared `maintainer`
+- **Designed but NOT built (per `SPEC.md#handoffs`, ~H1):** the full human seam — a declared `maintainer`
   `kind:human` actor the PM `dispatch`es on `human-required`, with the 4 affordances (durable pause/redeem,
   worklist, **escalation/notify**, typed `in/decision/out` payload + receiver confirmation). On github,
   `kind:human` is **declared-only** (no job, no Runner loop); the `emit.test.ts` `test.todo` names exactly the

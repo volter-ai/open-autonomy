@@ -35,7 +35,7 @@ policy.
 ## Agents and Gates
 
 The agent roles, the capability model, and the merge boundary are canonical in
-`docs/ARCHITECTURE.md` and `docs/CAPABILITIES.md`. In brief: every agent is a credentialed skill that
+`docs/ARCHITECTURE.md` and `docs/SPEC.md#capabilities`. In brief: every agent is a credentialed skill that
 acts directly with a token scoped to its capabilities; no agent can merge — `code:review`
 (statuses:write, bless) and `code:propose` (contents:write, push) are never held by one agent, and
 GitHub native auto-merge lands a PR once `ci` + `agent-review` are green. There is no dispatcher,

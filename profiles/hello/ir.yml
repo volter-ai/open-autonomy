@@ -1,7 +1,7 @@
 # A minimal runnable profile (the canonical `autonomy.ir.v1` format). Compile it onto a substrate:
 #   bun bin/autonomy-compile.ts profiles/hello local        # dry run: list the local installation
 #   bun bin/autonomy-compile.ts profiles/hello github /tmp/hello-gh   # materialize a github installation
-# One unit: an agent = behavior + capabilities + triggers(+params) + config. See docs/AUTONOMY-IR.md.
+# One unit: an agent = behavior + capabilities + triggers(+params) + config. See docs/SPEC.md#the-ir.
 schema: autonomy.ir.v1
 targets: [local, github]
 agents:

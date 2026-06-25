@@ -1,7 +1,7 @@
 // Emit autonomy.ir.v1 → an open-autonomy manifest + the github installation. The IR is the standard;
 // this is github's (partial) implementation. One unit: an agent — a prose skill realized as ONE
 // credentialed job whose token is scoped to its capabilities; the agent acts directly. There is no
-// mediated/credential-less wrapper and no script-as-job path — one realization. See docs/AUTONOMY-IR.md.
+// mediated/credential-less wrapper and no script-as-job path — one realization. See docs/SPEC.md#the-ir.
 import { readFileSync, readdirSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -30,7 +30,7 @@ const CONTROL_VERBS = ['cancel', 'pause', 'resume', 'status', 'retry'];
 // drive-by commenters and fork PRs), so the control plane and any comment-launch MUST be gated on a
 // maintainer (author_association), and a pull_request_target agent run MUST be gated on a same-repo PR
 // or a maintainer author — otherwise a plain comment launches the credentialed agent and a fork PR
-// reaches the bless/mint job. (docs/CAPABILITIES.md — the merge boundary; the operator control plane.)
+// reaches the bless/mint job. (docs/SPEC.md#capabilities — the merge boundary; the operator control plane.)
 const MAINTAINER_ROLES = `fromJSON('["OWNER","MEMBER","COLLABORATOR"]')`;
 const COMMENT_MAINTAINER = `contains(${MAINTAINER_ROLES}, github.event.comment.author_association)`;
 const PR_TRUSTED = `(github.event.pull_request.head.repo.full_name == github.repository || contains(${MAINTAINER_ROLES}, github.event.pull_request.author_association))`;
@@ -102,7 +102,7 @@ function eventLines(event: string, config?: Record<string, unknown>): string[] {
   return lines;
 }
 
-// The documented trigger-param SOURCE contract (docs/TRIGGER-PARAMS.md) → github resolution. The core
+// The documented trigger-param SOURCE contract (docs/SPEC.md#trigger-params) → github resolution. The core
 // only wires the opaque param name; the substrate resolves each documented source from its firing context.
 const TRIGGER_SOURCE_GH: Record<string, string> = {
   'subject.ref': "${{ github.event.issue.number || github.event.inputs.issue_number || github.event.pull_request.number }}",
@@ -156,14 +156,14 @@ function onLines(agent: IRAgent): string[] {
   return lines;
 }
 
-// Realize an agent's capabilities (docs/CAPABILITIES.md) as a GitHub job `permissions:` block. Pure
+// Realize an agent's capabilities (docs/SPEC.md#capabilities) as a GitHub job `permissions:` block. Pure
 // authority → github's permission model; another substrate maps it differently or ignores it.
 function capsToPermissions(caps: string[]): string {
   // The agent job's LEAST-PRIVILEGE token: baseline is checkout (contents:read) + OIDC for the model token
-  // (id-token:write); each capability widens it (docs/CAPABILITIES.md). The merge boundary is the split:
+  // (id-token:write); each capability widens it (docs/SPEC.md#capabilities). The merge boundary is the split:
   // code:propose can push/PR/queue-auto-merge/dispatch-CI but never gets statuses:write (can't self-certify
   // a review); code:review gets statuses:write but never contents:write (can't merge). No agent gets both.
-  // Baseline OBSERVATION (docs/CAPABILITIES.md: reads are ambient, not a granted capability): checkout
+  // Baseline OBSERVATION (docs/SPEC.md#capabilities: reads are ambient, not a granted capability): checkout
   // (contents:read), read the work item whether issue or PR (issues+pull-requests:read), and OIDC for the
   // model token (id-token:write). Capabilities below widen WRITE authority.
   const p: Record<string, string> = { contents: 'read', issues: 'read', 'pull-requests': 'read', 'id-token': 'write' };
@@ -206,7 +206,7 @@ function launchConcurrencyLines(name: string, _agent: IRAgent): string[] {
 // A skill (model) agent: a single CREDENTIALED job whose token is scoped to its capabilities. It reads its
 // subject, runs the skill, and acts directly (a generic effect step turns a working-tree change into an
 // auto-merging PR; non-proposing agents post their verdict/comment via gh in-skill). No credential-less
-// job, no bundle, no publisher — the merge boundary is the capability/permission split (docs/CAPABILITIES.md).
+// job, no bundle, no publisher — the merge boundary is the capability/permission split (docs/SPEC.md#capabilities).
 function wrapperYml(name: string, agent: IRAgent): string {
   const caps = agent.capabilities ?? [];
   // Only a code:propose agent gets the effect step (push branch + open auto-merging PR). A non-proposer
@@ -246,7 +246,7 @@ function wrapperYml(name: string, agent: IRAgent): string {
       ];
   // The generic EFFECT step: the agent acts directly in its own credentialed job. If the skill changed the
   // working tree (a code:propose agent), push it as an auto-merging PR — GitHub lands it once `ci` +
-  // `agent-review` are green (docs/CAPABILITIES.md, the merge boundary). A non-proposing agent (reviewer:
+  // `agent-review` are green (docs/SPEC.md#capabilities, the merge boundary). A non-proposing agent (reviewer:
   // posts agent-review via gh; pm/planner: comment/label via gh) changes no files, so this no-ops. There is
   // no bundle and no publisher — the agent's own token (scoped to its capabilities) does the work.
   const effect = [
@@ -367,7 +367,7 @@ function wrapperYml(name: string, agent: IRAgent): string {
     // exit non-zero — the run reported "failure" even though its work (triage, routing, reaping) succeeded.
     // Raise to 250 so the $ cap is what actually bounds a run; a runaway is still stopped by --max-usd-cents.
     `        run: bun scripts/model-proxy-mint.ts --run-id "${RID}" --models "\${{ vars.PUBLIC_AGENT_MODEL || 'deepseek/deepseek-v4-flash' }}" --max-usd-cents "\${{ vars.PUBLIC_AGENT_MAX_USD_CENTS || '200' }}" --max-requests "\${{ vars.PUBLIC_AGENT_MAX_REQUESTS || '250' }}" --issue .agent-run/issue.json`,
-    // The agent job is CREDENTIALED — its token is scoped to its capabilities (docs/CAPABILITIES.md). It
+    // The agent job is CREDENTIALED — its token is scoped to its capabilities (docs/SPEC.md#capabilities). It
     // reads its subject, runs the skill, and acts directly; the only thing it can never do is merge (no
     // statuses:write on a proposer; no contents:write on a reviewer), enforced by the permission split.
     `  ${name}:`,

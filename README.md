@@ -34,7 +34,7 @@ no single agent holds both `code:review` (statuses:write — blesses) and `code:
 — pushes), so none can both write code and bless it. GitHub native auto-merge lands a PR once `ci` +
 `agent-review` are both green. The agent gets bounded model access (no raw keys) and can never merge.
 
-Read [`docs/AUTONOMY-IR.md`](./docs/AUTONOMY-IR.md) for the full model and conformance contract, and
+Read [`docs/SPEC.md`](./docs/SPEC.md) for the full model and conformance contract, and
 [`docs/PROJECT-LAYOUT.md`](./docs/PROJECT-LAYOUT.md) for the vocabulary and layout.
 
 ## Run it on your repo
@@ -108,7 +108,7 @@ loop with a scheduler loop + a termfleet runner instead of GitHub Actions.
   `self-driving` (open-autonomy's own self-driving setup; the single source of every github installation).
 
 Docs: [`ARCHITECTURE.md`](./docs/ARCHITECTURE.md) (the github app's design + trust boundaries),
-[`AUTONOMY-IR.md`](./docs/AUTONOMY-IR.md) (the substrate-agnostic model),
+[`SPEC.md`](./docs/SPEC.md) (the substrate-agnostic model + the four catalogs),
 [`PROJECT-LAYOUT.md`](./docs/PROJECT-LAYOUT.md) (vocabulary + layout),
 [`ROADMAP.md`](./docs/ROADMAP.md).
 

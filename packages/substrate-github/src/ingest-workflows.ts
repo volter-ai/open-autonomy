@@ -1,4 +1,4 @@
-// github ingest: a manifest → agents (docs/AUTONOMY-IR.md). There is no `raw` — the IR is a standard,
+// github ingest: a manifest → agents (docs/SPEC.md#the-ir). There is no `raw` — the IR is a standard,
 // not an escape hatch. Hand-authored workflow files that correspond to an agent are regenerated; any
 // that don't (repo CI, substrate infra) are repo-owned files, recorded as resources, never carried IR.
 import type { AutonomyIR } from '@open-autonomy/core';

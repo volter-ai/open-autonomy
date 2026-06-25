@@ -1,13 +1,13 @@
-// autonomy.ir.v1 — the substrate-agnostic standard. See docs/AUTONOMY-IR.md.
+// autonomy.ir.v1 — the substrate-agnostic standard. See docs/SPEC.md#the-ir.
 // One unit: an agent = behavior + capabilities + triggers(+params) (+ optional timeout/result/kind). There
 // is NO per-agent config box. The core only validates spec-validity and WIRES; it never interprets what a
 // capability does or where a trigger param is sourced — that is each substrate's (partial) implementation.
 
 // A trigger fires an agent and forwards `params` to it (the Runner contract's opaque LaunchParams).
 // `params` maps an opaque param NAME (the profile's choice; the core never interprets it) to a
-// documented SOURCE the substrate resolves from its firing context (docs/TRIGGER-PARAMS.md — e.g.
+// documented SOURCE the substrate resolves from its firing context (docs/SPEC.md#trigger-params — e.g.
 // `subject.ref`, `subject.actor`, `trigger.kind`). The two PORTABLE trigger kinds are `cron` (time) and
-// `dispatch` (on-demand via the Runner — docs/RUNNER.md); `event` is the substrate-native escape hatch,
+// `dispatch` (on-demand via the Runner — docs/SPEC.md#the-runner); `event` is the substrate-native escape hatch,
 // carried verbatim and fired where the substrate supports it.
 export type Trigger =
   | { cron: string; params?: Record<string, string> }
@@ -15,7 +15,7 @@ export type Trigger =
   // the `event` escape hatch, not an opaque IR box; the core carries it verbatim and never interprets it.
   | { event: string; config?: Record<string, unknown>; params?: Record<string, string> }
   // `dispatch` fires when another actor LAUNCHES this one through the Runner (the `agent:launch` axis —
-  // docs/RUNNER.md). It is NOT autonomous: it carries no schedule/event, only the params the launcher
+  // docs/SPEC.md#the-runner). It is NOT autonomous: it carries no schedule/event, only the params the launcher
   // forwards. This is how a worker is invoked by the orchestrator (the PM) on demand. There is no `task:`
   // trigger — a task is a work ITEM whose lifecycle state is a property the orchestrator READS when
   // deciding what to dispatch, never a trigger the substrate must watch.
@@ -30,7 +30,7 @@ export type ActorKind = 'agent' | 'human';
 // realization, not IR fields. (The map key is still `agents` while the rename to `actors` is mid-migration.)
 export interface IRAgent {
   behavior: string; // what it does — a SKILL folder (prose), relative to the profile root
-  capabilities: string[]; // its authority (docs/CAPABILITIES.md); pure authority, no trust
+  capabilities: string[]; // its authority (docs/SPEC.md#capabilities); pure authority, no trust
   triggers: Trigger[]; // when it fires + the params it forwards (≥1; only cron is interpreted)
   kind?: ActorKind; // the role; default `agent`. `human` → realized by routing to a person (or a simulator in test).
   timeout?: number; // a run-time bound (minutes); an agnostic resource limit the substrate realizes
@@ -94,14 +94,14 @@ export function validateIR(ir: AutonomyIR): string[] {
     if (!a.behavior) errors.push(`agent ${name}: missing behavior`);
     if (!Array.isArray(a.capabilities)) errors.push(`agent ${name}: capabilities must be an array`);
     // code:merge is gate-only: merge is the one irreversible, default-branch act, never granted to an
-    // agent (docs/CAPABILITIES.md — the merge boundary). The base (before any @scope) must not be code:merge.
+    // agent (docs/SPEC.md#capabilities — the merge boundary). The base (before any @scope) must not be code:merge.
     const capBases = (a.capabilities ?? []).filter((c): c is string => typeof c === 'string').map((c) => c.split('@')[0]);
     for (const cap of capBases)
       if (cap === 'code:merge')
         errors.push(`agent ${name}: code:merge is gate-only — no agent may merge`);
     // The merge boundary itself: bless (code:review = statuses:write) and propose (code:propose =
     // contents:write) are deliberately split so no single agent can write code AND certify it. Enforce it
-    // here, not by convention (docs/CAPABILITIES.md — the merge boundary).
+    // here, not by convention (docs/SPEC.md#capabilities — the merge boundary).
     if (capBases.includes('code:review') && capBases.includes('code:propose'))
       errors.push(`agent ${name}: merge boundary — no agent may hold both code:review and code:propose`);
     if (!a.triggers || a.triggers.length === 0) errors.push(`agent ${name}: needs at least one trigger`);

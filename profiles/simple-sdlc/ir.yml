@@ -8,8 +8,8 @@
 # reads the ztrack board on its tick and LAUNCHES the matching worker through the Runner (`agent:launch`),
 # forwarding the work item as `--ref` (the worker reads it as $ZTRACK_ISSUE via its `subject.ref` param).
 # This is fully substrate-agnostic: cron + agent:launch are the two portable primitives — there is no
-# `task:` trigger and no substrate task-state watching (docs/RUNNER.md). One unit: an agent = behavior +
-# capabilities + triggers(+params). See docs/AUTONOMY-IR.md.
+# `task:` trigger and no substrate task-state watching (docs/SPEC.md#the-runner). One unit: an agent = behavior +
+# capabilities + triggers(+params). See docs/SPEC.md#the-ir.
 schema: autonomy.ir.v1
 # LOCAL only: simple-sdlc is PR-free (review = the reviewer's verdict over commit-evidence, no pull
 # request). The github substrate realizes `code:propose` as an auto-merging PR gated by an independent

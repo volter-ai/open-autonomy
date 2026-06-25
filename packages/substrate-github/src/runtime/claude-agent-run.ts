@@ -3,7 +3,7 @@
 // runs Claude Code against the bounded model proxy. The agent acts DIRECTLY with its own scoped token —
 // if it changes the working tree, the wrapper's effect step proposes it as an auto-merging PR; if its job
 // is to review/comment/label, the skill does that itself via gh. There is no bundle and no result schema:
-// the agent's actions ARE its output (docs/CAPABILITIES.md). This script only sets up the model + prompt.
+// the agent's actions ARE its output (docs/SPEC.md#capabilities). This script only sets up the model + prompt.
 import { spawnSync } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';

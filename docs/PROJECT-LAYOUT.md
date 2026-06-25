@@ -9,7 +9,7 @@ not the product — it is one substrate among peers; local is another. Same prof
 
 | term | definition |
 |---|---|
-| **IR** (`autonomy.ir.v1`) | the **standard** a profile is written in: `agents` + `policy` + `resources`. An **agent** = `behavior · capabilities · triggers(+params) · config`. There is no `workflow`/`launch`/`run`/`raw` — see `docs/AUTONOMY-IR.md`. |
+| **IR** (`autonomy.ir.v1`) | the **standard** a profile is written in: `agents` + `policy` + `resources`. An **agent** = `behavior · capabilities · triggers(+params) · config`. There is no `workflow`/`launch`/`run`/`raw` — see `docs/SPEC.md#the-ir`. |
 | **agent** | the one unit: behavior (what it does) + capabilities (authority) + triggers (when + params) + config (opaque misc). |
 | **behavior** | what an agent does — instructions/spec; the substrate runs it (deterministic, or model-interpreted — its choice). |
 | **profile** | a substrate-agnostic **recipe**: a composition of agents + policy + resources. Lives in `profiles/`. |

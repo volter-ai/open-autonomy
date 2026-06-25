@@ -3,7 +3,7 @@
 # GitHub's: the developer's change lands as an auto-merging PR gated by an independent `agent-review`
 # status (the code:review / code:propose permission split), not the local reviewer's verdict. Uses the
 # ztrack `simple-gh-sdlc` preset (PR at in-review, merged PR for done). One unit: an agent = behavior +
-# capabilities + triggers(+params) (+ review edge). See docs/AUTONOMY-IR.md, docs/RUNNER.md.
+# capabilities + triggers(+params) (+ review edge). See docs/SPEC.md#the-ir, docs/SPEC.md#the-runner.
 schema: autonomy.ir.v1
 targets: [github]
 
@@ -38,7 +38,7 @@ agents:
   # The independent GitHub reviewer: verifies the developer's PR (ztrack green + every passed AC backed by
   # cited evidence + no unapproved human-required path) and posts the `agent-review` status (code:review =
   # statuses:write). Holds NO contents:write, so it cannot merge; native auto-merge lands the PR once
-  # `ci` + `agent-review` are both green (docs/CAPABILITIES.md — the merge boundary).
+  # `ci` + `agent-review` are both green (docs/SPEC.md#capabilities — the merge boundary).
   reviewer:
     behavior: reviewer
     capabilities: [code:review, tasks:converse]

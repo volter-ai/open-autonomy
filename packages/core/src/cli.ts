@@ -18,7 +18,7 @@ function parseParams(args: string[]): LaunchParams {
   return params;
 }
 
-export function runCli(runner: Runner, argv: string[]): number {
+export async function runCli(runner: Runner, argv: string[]): Promise<number> {
   const [cmd, ...rest] = argv;
   const opt = (name: string): string | undefined => {
     const i = rest.indexOf(name);
@@ -31,17 +31,17 @@ export function runCli(runner: Runner, argv: string[]): number {
       console.error('usage: autonomy launch <agent> [--key value ...]');
       return 2;
     }
-    console.log(JSON.stringify(runner.launch(agent, parseParams(rest.slice(1)))));
+    console.log(JSON.stringify(await runner.launch(agent, parseParams(rest.slice(1)))));
     return 0;
   }
   if (cmd === 'get') {
-    const session = runner.get(rest[0] ?? '');
+    const session = await runner.get(rest[0] ?? '');
     if (!session) return 1;
     console.log(JSON.stringify(session));
     return 0;
   }
   if (cmd === 'list') {
-    console.log(JSON.stringify(runner.list()));
+    console.log(JSON.stringify(await runner.list()));
     return 0;
   }
   if (cmd === 'update') {
@@ -51,7 +51,7 @@ export function runCli(runner: Runner, argv: string[]): number {
       console.error('usage: autonomy update <id> --status <running|paused|cancelled|done|failed>');
       return 2;
     }
-    return runner.update(id, { status }) ? 0 : 1;
+    return (await runner.update(id, { status })) ? 0 : 1;
   }
   if (cmd === 'cancel') {
     const id = rest[0];
@@ -59,7 +59,7 @@ export function runCli(runner: Runner, argv: string[]): number {
       console.error('usage: autonomy cancel <id>');
       return 2;
     }
-    return runner.cancel(id) ? 0 : 1;
+    return (await runner.cancel(id)) ? 0 : 1;
   }
   console.error('usage: autonomy <launch|get|list|update|cancel>');
   return 2;

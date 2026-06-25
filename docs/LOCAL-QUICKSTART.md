@@ -27,7 +27,7 @@ Install these once, on the machine that will run the loop:
 |---|---|---|
 | **Node.js 20+** | runs the CLI, the loop driver, and termfleet | nodejs.org / your version manager |
 | **tmux** | termfleet's local provider runs sessions in tmux | `brew install tmux` (macOS) / your package manager |
-| **termfleet** | the local runner — launches each agent as a terminal session | `npm install -g termfleet` |
+| **termfleet** | the local runner drives it through its **SDK** (a `node_modules` dependency, not a PATH binary) | in your repo: `npm install termfleet` (then `npx termfleet …` runs its console/provider CLI) |
 | **A coding agent CLI, logged in** | the agent's model access | Claude Code (default) **or** Codex — see next step |
 | **bun** (for `simple-sdlc`) | the orchestrator dispatches workers via `bun scripts/runner.ts launch …` | `curl -fsSL https://bun.sh/install \| bash` — not needed for the `hello` demo (Node-only) |
 
@@ -49,20 +49,21 @@ local subscription/key is what's billed.
 
 ## 2. Start termfleet (console + a local provider)
 
-The local runner talks to a termfleet **console** + **provider** running on your machine. Start both
-once (they stay up in the background); the open-autonomy runner auto-discovers them — no URL config
-needed.
+The local runner (the termfleet SDK's `ProviderClient`) talks to a termfleet **console** + **provider**
+running on your machine. Start both once (they stay up in the background); the open-autonomy runner
+auto-discovers them via the SDK's `resolveDefaultProvider` — no URL config needed (set
+`TERMFLEET_PROVIDER_URL` only to pin a specific one).
 
 ```bash
-termfleet console serve --name dev --port 7373 &
-termfleet provider serve --kind virtual-tmux --prefix dev --count 1 --port 7402 &
+npx termfleet console serve --name dev --port 7373 &
+npx termfleet provider serve --kind virtual-tmux --prefix dev --count 1 --port 7402 &
 ```
 
 Sanity-check that a session can launch (this is the same call the loop makes):
 
 ```bash
-termfleet claude new --prompt "say hello"
-termfleet sessions recent --live
+npx termfleet claude new --prompt "say hello"
+npx termfleet sessions recent --live
 ```
 
 If that prints a session, termfleet + your agent CLI are wired correctly. Open
@@ -155,8 +156,8 @@ The local substrate runs the same agent loop, but a few controls in the README a
 
 ## Troubleshooting
 
-- **`termfleet returned no terminalId …`** — the console/provider (step 2) aren't running, or your
-  agent CLI isn't installed/logged in (step 1). Re-run the `termfleet claude new --prompt "hi"`
+- **`createAgentWindow returned no terminalId …`** — the console/provider (step 2) aren't running, or your
+  agent CLI isn't installed/logged in (step 1). Re-run the `npx termfleet claude new --prompt "hi"`
   sanity check in isolation.
 - **The loop does nothing each tick (`simple-sdlc`)** — there's no eligible work. Confirm
   `ztrack issue view` shows items and that they're in a state the PM can advance.

@@ -24,12 +24,14 @@ export interface Session {
 // substrate may give one meaning (e.g. "issue"), but the autonomy system never knows what they are.
 export type LaunchParams = Record<string, string>;
 
+// The contract is ASYNC: a backend runner may talk to a remote provider over the network (e.g. the
+// termfleet SDK's ProviderClient). File-backed reference runners simply return resolved promises.
 export interface Runner {
-  launch(agent: string, params?: LaunchParams): Session; // C
-  get(id: string): Session | undefined; // R (one)
-  list(): Session[]; // R (running)
-  update(id: string, patch: { status?: SessionStatus }): boolean; // U
-  cancel(id: string): boolean; // D
+  launch(agent: string, params?: LaunchParams): Promise<Session>; // C
+  get(id: string): Promise<Session | undefined>; // R (one)
+  list(): Promise<Session[]>; // R (running)
+  update(id: string, patch: { status?: SessionStatus }): Promise<boolean>; // U
+  cancel(id: string): Promise<boolean>; // D
 }
 
 // Reference runner: records running agents to a state file and invokes a pluggable launch command.
@@ -47,7 +49,7 @@ export class ExecRunner implements Runner {
     mkdirSync(dirname(this.statePath), { recursive: true });
     writeFileSync(this.statePath, JSON.stringify(sessions, null, 2));
   }
-  launch(agent: string, params: LaunchParams = {}): Session {
+  async launch(agent: string, params: LaunchParams = {}): Promise<Session> {
     const session: Session = {
       id: `${agent}-${this.now()}`,
       agent,
@@ -61,13 +63,13 @@ export class ExecRunner implements Runner {
     }
     return session;
   }
-  get(id: string): Session | undefined {
+  async get(id: string): Promise<Session | undefined> {
     return this.read().find((s) => s.id === id);
   }
-  list(): Session[] {
+  async list(): Promise<Session[]> {
     return this.read().filter((s) => s.status === 'running');
   }
-  update(id: string, patch: { status?: SessionStatus }): boolean {
+  async update(id: string, patch: { status?: SessionStatus }): Promise<boolean> {
     const sessions = this.read();
     const target = sessions.find((s) => s.id === id);
     if (!target) return false;
@@ -75,7 +77,7 @@ export class ExecRunner implements Runner {
     this.write(sessions);
     return true;
   }
-  cancel(id: string): boolean {
+  async cancel(id: string): Promise<boolean> {
     return this.update(id, { status: 'cancelled' });
   }
 }
@@ -102,7 +104,7 @@ export class HumanRunner implements Runner {
     mkdirSync(dirname(this.statePath), { recursive: true });
     writeFileSync(this.statePath, JSON.stringify(sessions, null, 2));
   }
-  launch(agent: string, params: LaunchParams = {}): Session {
+  async launch(agent: string, params: LaunchParams = {}): Promise<Session> {
     const session: Session = {
       id: `${agent}-${this.now()}`,
       agent, // the human actor (a class/address); opaque to the runner
@@ -117,14 +119,14 @@ export class HumanRunner implements Runner {
     this.engage?.(session); // black-box delivery; no-op runner skips it (pure bookkeeping)
     return session;
   }
-  get(id: string): Session | undefined {
+  async get(id: string): Promise<Session | undefined> {
     return this.read().find((s) => s.id === id);
   }
-  list(): Session[] {
+  async list(): Promise<Session[]> {
     return this.read().filter((s) => s.status === 'running');
   }
   // The only path to terminal: an external authorized resolution (the verified act) — never the runner itself.
-  update(id: string, patch: { status?: SessionStatus }): boolean {
+  async update(id: string, patch: { status?: SessionStatus }): Promise<boolean> {
     const sessions = this.read();
     const target = sessions.find((s) => s.id === id);
     if (!target) return false;
@@ -132,7 +134,7 @@ export class HumanRunner implements Runner {
     this.write(sessions);
     return true;
   }
-  cancel(id: string): boolean {
+  async cancel(id: string): Promise<boolean> {
     return this.update(id, { status: 'cancelled' }); // retract the ask
   }
 }

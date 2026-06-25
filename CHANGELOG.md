@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.1.4
+
+### Changed
+
+- **The Runner contract is now async** (`launch`/`get`/`list`/`update`/`cancel` return `Promise`s) —
+  enabling backend runners that talk to a provider over the network. `ExecRunner`, `HumanRunner`,
+  `GithubRunner`, the conformance battery, and the `autonomy` CLI updated accordingly.
+- **The local `TermfleetRunner` drives termfleet through its SDK** (`termfleet` / `@termfleet/core`),
+  not a `termfleet` binary on PATH: `ProviderClient.createAgentWindow`/`snapshot`/`closeWindow`, with
+  provider auto-discovery via `resolveDefaultProvider`. Replaces the brittle `spawnSync` + stdout-`JSON.parse`
+  path with a typed, version-pinned `node_modules` dependency. Local installs now `npm install termfleet`
+  (and run its console/provider via `npx termfleet`); see `docs/LOCAL-QUICKSTART.md`.
+
 ## 0.1.3
 
 ### Changed

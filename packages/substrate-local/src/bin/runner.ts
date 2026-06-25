@@ -4,4 +4,4 @@
 import { runCli } from '@open-autonomy/core';
 import { TermfleetRunner } from '../runner';
 
-process.exit(runCli(new TermfleetRunner(), process.argv.slice(2)));
+process.exit(await runCli(new TermfleetRunner(), process.argv.slice(2)));

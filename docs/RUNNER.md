@@ -15,12 +15,14 @@ person directly — it calls `run` / `list` / `stop` and the Runner realizes the
 
 ## The interface (`packages/core/src/runner.ts`)
 
+All verbs are **async** (return `Promise`s) — a backend may talk to a provider over the network:
+
 ```
-launch(agent, params?) -> Session     # C — start/engage an action; returns a Session
-get(id)                -> Session?     # R — one
-list()                 -> Session[]    # R — in-flight
-update(id, {status})   -> boolean      # U — apply a status transition
-cancel(id)             -> boolean      # D — stop / retract
+launch(agent, params?) -> Promise<Session>     # C — start/engage an action; returns a Session
+get(id)                -> Promise<Session?>     # R — one
+list()                 -> Promise<Session[]>    # R — in-flight
+update(id, {status})   -> Promise<boolean>      # U — apply a status transition
+cancel(id)             -> Promise<boolean>      # D — stop / retract
 ```
 
 `Session = { id, agent, status, ref?, params? }`; `params` is opaque pass-through (the runner never
@@ -36,7 +38,7 @@ may end `cancelled` or `failed`, never silently `done`.
 | realization | launch | list | update / cancel | watch |
 |---|---|---|---|---|
 | **agent × github** | `gh workflow run` (workflow_dispatch) | `gh run list` | `gh run cancel` | run logs |
-| **agent × local** | termfleet session | termfleet list | termfleet kill | tail |
+| **agent × local** | termfleet SDK `createAgentWindow` | `snapshot().windows` | `closeWindow` | tail |
 | **human × any** | **engage** (record the action; an optional black-box backend notifies a person) | **in-flight asks** | `update` = apply the verified resolution / `cancel` = retract | **— none —** |
 
 The orchestrator calls the same verbs regardless of kind; the actor's `kind` selects the realization (and,

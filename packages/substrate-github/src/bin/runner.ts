@@ -4,4 +4,4 @@
 import { runCli } from '@open-autonomy/core';
 import { GithubRunner } from '../runner';
 
-process.exit(runCli(new GithubRunner(), process.argv.slice(2)));
+process.exit(await runCli(new GithubRunner(), process.argv.slice(2)));

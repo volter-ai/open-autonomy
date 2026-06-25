@@ -30,11 +30,11 @@ export async function runConformance(
 
   try {
     // CORE — launch returns a running session
-    s1 = runner.launch(agent, params);
+    s1 = await runner.launch(agent, params);
     core['launch → running session with an id'] = !!(s1 && s1.id && s1.agent === agent && s1.status === 'running');
 
     // CORE — the id is RECEIVED, not invented: two launches of the same agent get distinct ids
-    s2 = runner.launch(agent, params);
+    s2 = await runner.launch(agent, params);
     core['session ids distinct per launch (id received, not invented)'] = !!(s1?.id && s2?.id && s1.id !== s2.id);
 
     // CORE — opaque params are passed through verbatim (recorded on the returned session)
@@ -43,12 +43,12 @@ export async function runConformance(
     if (settle) await sleep(settle);
 
     // CORE — list shows the running sessions
-    const listed = runner.list();
+    const listed = await runner.list();
     core['list shows launched sessions'] = !!(s1 && s2 && listed.some((x) => x.id === s1!.id) && listed.some((x) => x.id === s2!.id));
 
     // EXPANDED — get(id)
     try {
-      const g = s1 ? runner.get(s1.id) : undefined;
+      const g = s1 ? await runner.get(s1.id) : undefined;
       expanded['get(id)'] = g && g.id === s1?.id ? 'supported' : 'unsupported';
     } catch {
       expanded['get(id)'] = 'unsupported';
@@ -56,17 +56,17 @@ export async function runConformance(
 
     // EXPANDED — update(status) (pause/resume); "supported" only if it actually returns true
     try {
-      expanded['update(status)'] = s1 && runner.update(s1.id, { status: 'paused' }) ? 'supported' : 'unsupported';
+      expanded['update(status)'] = s1 && (await runner.update(s1.id, { status: 'paused' })) ? 'supported' : 'unsupported';
     } catch {
       expanded['update(status)'] = 'unsupported';
     }
 
     // CORE — cancel returns true and removes the session from the running set
-    const c1 = s1 ? runner.cancel(s1.id) : false;
-    const c2 = s2 ? runner.cancel(s2.id) : false;
+    const c1 = s1 ? await runner.cancel(s1.id) : false;
+    const c2 = s2 ? await runner.cancel(s2.id) : false;
     core['cancel → true'] = !!(c1 && c2);
     if (settle) await sleep(settle);
-    const after = runner.list();
+    const after = await runner.list();
     core['cancel removes from list'] = !!(s1 && s2 && !after.some((x) => x.id === s1!.id) && !after.some((x) => x.id === s2!.id));
 
     // EXPANDED — enforcement features are not probeable through the base contract (no cap-setter etc.);
@@ -78,7 +78,7 @@ export async function runConformance(
   } finally {
     // best-effort cleanup: cancel any probe sessions we may have leaked
     try {
-      for (const s of runner.list()) if (s.agent === agent) runner.cancel(s.id);
+      for (const s of await runner.list()) if (s.agent === agent) await runner.cancel(s.id);
     } catch {
       /* ignore */
     }

@@ -7,7 +7,7 @@ import type { Runner, Session, SessionStatus, LaunchParams } from '@open-autonom
 export class GithubRunner implements Runner {
   private repoFlag = process.env.GITHUB_REPOSITORY ? `--repo ${process.env.GITHUB_REPOSITORY}` : '';
 
-  launch(agent: string, params: LaunchParams = {}): Session {
+  async launch(agent: string, params: LaunchParams = {}): Promise<Session> {
     const fields = Object.entries(params)
       .map(([k, v]) => `--field ${k}=${JSON.stringify(v)}`)
       .join(' ');
@@ -20,7 +20,7 @@ export class GithubRunner implements Runner {
     const id = r.status ? undefined : r.stdout.trim() || undefined;
     return { id: id ?? agent, agent, status: 'running', ...(Object.keys(params).length ? { params } : {}) };
   }
-  get(id: string): Session | undefined {
+  async get(id: string): Promise<Session | undefined> {
     const r = spawnSync(`gh run view ${id} ${this.repoFlag} --json databaseId,workflowName,status`, {
       shell: true,
       encoding: 'utf8',
@@ -29,7 +29,7 @@ export class GithubRunner implements Runner {
     const w = JSON.parse(r.stdout) as { databaseId: number; workflowName: string; status: string };
     return { id: String(w.databaseId), agent: w.workflowName, status: w.status === 'completed' ? 'done' : 'running' };
   }
-  list(): Session[] {
+  async list(): Promise<Session[]> {
     const r = spawnSync(
       `gh run list ${this.repoFlag} --json databaseId,workflowName,status --jq "[.[]|select(.status==\\"in_progress\\" or .status==\\"queued\\")]"`,
       { shell: true, encoding: 'utf8' },
@@ -41,10 +41,11 @@ export class GithubRunner implements Runner {
       status: 'running' as const,
     }));
   }
-  update(id: string, patch: { status?: SessionStatus }): boolean {
-    return patch.status === 'cancelled' ? this.cancel(id) : true;
+  async update(id: string, patch: { status?: SessionStatus }): Promise<boolean> {
+    if (patch.status === 'cancelled') return this.cancel(id);
+    return true;
   }
-  cancel(id: string): boolean {
+  async cancel(id: string): Promise<boolean> {
     return !spawnSync(`gh run cancel ${id} ${this.repoFlag}`, { shell: true, stdio: 'inherit' }).status;
   }
 }

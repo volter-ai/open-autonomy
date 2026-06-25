@@ -5,4 +5,4 @@ import { runCli } from '../cli';
 import { ExecRunner } from '../runner';
 
 const runner = new ExecRunner(process.env.AUTONOMY_STATE || '.autonomy/sessions.json', process.env.AUTONOMY_LAUNCH_CMD);
-process.exit(runCli(runner, process.argv.slice(2)));
+process.exit(await runCli(runner, process.argv.slice(2)));

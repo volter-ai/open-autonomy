@@ -1,104 +1,79 @@
 #!/usr/bin/env node
-// The autonomy runner (substrate primitive), vendored into this profile.
-// Its entire knowledge is: agents, running agents, and their lifecycle. It knows nothing about
-// what an agent does or what it works on — no "issues", no states like "ready"/"in progress",
-// no domain at all. That lives entirely in the agents (skills) and the profile's scripts.
+// The autonomy runner (substrate primitive), vendored into this profile. Drives termfleet through its
+// SDK (the `termfleet` npm package), not a `termfleet` binary on PATH. Its entire knowledge is: agents,
+// running agents, and their lifecycle. It knows nothing about what an agent does or works on — no
+// "issues", no states. That lives entirely in the agents (skills) and the profile's scripts.
 //
-// This is a plain-JS port of open-autonomy's packages/core/src/runner.ts (TermfleetRunner) +
-// packages/core/src/cli.ts. Keep the two in sync; this file is the local-loop runner backend.
+// This is a plain-JS port of @open-autonomy/substrate-local's runner.ts (TermfleetRunner) + the core CLI.
+// Keep the two in sync. The install must have `termfleet` (+ `@termfleet/core`) in node_modules.
 //
 //   launch <agent> [--k v ...]  ·  get <id>  ·  list  ·  update <id> --status <s>  ·  cancel <id>
 //
 // `launch` accepts arbitrary --key value params and passes them through verbatim; the system never
 // interprets them (a profile gives them meaning, e.g. a ztrack-using profile declares ZTRACK_ISSUE).
-import { spawnSync } from 'node:child_process';
-import { existsSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
+import { ProviderClient, providerRefFromUrl } from 'termfleet';
+import { resolveDefaultProvider } from '@termfleet/core/local-providers.js';
 import { RUNNER_DEFAULTS } from './runner-defaults.mjs';
 
-// Real local backend: drives termfleet. The window name IS the agent; the system never encodes
-// anything else into it. Defaults come from the substrate-owned RUNNER_DEFAULTS; TERMFLEET_* override.
+// Real local backend: drives termfleet via its ProviderClient SDK. The window name IS the agent; the
+// system never encodes anything else into it. Defaults come from RUNNER_DEFAULTS; TERMFLEET_* override.
 export class TermfleetRunner {
-  cli = process.env.TERMFLEET_CLI || RUNNER_DEFAULTS.cli;
-  model = process.env.TERMFLEET_AGENT || RUNNER_DEFAULTS.harness; // claude|codex — the model, not our agent
-  // No hardcoded provider URL: with TERMFLEET_PROVIDER_URL unset we pass NO --url
-  // and let termfleet resolve a provider itself (env -> `termfleet use` context ->
-  // live local auto-discovery). The old baked-in default is the crutch that drifted.
-  url = process.env.TERMFLEET_PROVIDER_URL;
-  get urlArg() {
-    return this.url ? `--url ${JSON.stringify(this.url)}` : '';
+  harness = process.env.TERMFLEET_AGENT || RUNNER_DEFAULTS.harness; // claude|codex|gemini — the coding CLI, not our agent
+  #clientPromise;
+  #client() {
+    return (this.#clientPromise ??= resolveDefaultProvider({ url: process.env.TERMFLEET_PROVIDER_URL }).then(
+      (p) => new ProviderClient(providerRefFromUrl(p.baseUrl)),
+    ));
   }
 
-  launch(agent, params = {}) {
-    // Re-export orchestration context so the agent's own nested `autonomy launch ...` reaches this
-    // provider, plus the opaque params verbatim (a profile may read e.g. $ZTRACK_ISSUE; the system doesn't).
+  async launch(agent, params = {}) {
+    const client = await this.#client();
+    // Re-export orchestration context so a nested `autonomy launch ...` reaches this provider, plus the
+    // opaque params verbatim (a profile may read e.g. $ZTRACK_ISSUE; the system doesn't).
     const exported = {
-      ...Object.fromEntries(
-        Object.entries(process.env).filter(([k]) => /^(TERMFLEET_.*|AUTONOMY.*|PATH)$/.test(k)),
-      ),
+      ...Object.fromEntries(Object.entries(process.env).filter(([k]) => /^(TERMFLEET_.*|AUTONOMY.*|PATH)$/.test(k))),
       ...params,
     };
-    const setup = Object.entries(exported)
+    const setupCommand = Object.entries(exported)
       .map(([k, v]) => `export ${k}=${JSON.stringify(v ?? '')}`)
       .join('; ');
     const promptDir = process.env.AUTONOMY_PROMPT_DIR;
     const promptFile = promptDir ? `${promptDir}/${agent}.txt` : '';
-    const promptArg =
-      promptFile && existsSync(promptFile)
-        ? `--prompt-file ${JSON.stringify(promptFile)}`
-        : `--prompt ${JSON.stringify(agent)}`;
-    // --name is only a LABEL (which agent). The session IDENTITY is whatever termfleet assigns and
-    // RETURNS (terminalId) — the runner RECEIVES it and never invents one, so repeat launches of the
-    // same agent get distinct ids instead of colliding.
-    const r = spawnSync(
-      `${this.cli} ${this.model} new -y ${this.urlArg} --name ${JSON.stringify(agent)} --cwd ${JSON.stringify(process.cwd())} ${promptArg} --setup-command ${JSON.stringify(setup)}`,
-      { shell: true, encoding: 'utf8' },
-    );
-    let created = {};
-    try {
-      created = JSON.parse(r.stdout);
-    } catch {
-      /* non-JSON */
-    }
-    if (!created.terminalId) {
-      throw new Error(`termfleet returned no terminalId for agent "${agent}": ${r.stdout || r.stderr}`);
+    const prompt = promptFile && existsSync(promptFile) ? readFileSync(promptFile, 'utf8') : agent;
+    const ack = await client.createAgentWindow({ agent: this.harness, name: agent, cwd: process.cwd(), prompt, setupCommand });
+    const terminalId = ack.result?.terminalId;
+    if (!terminalId) {
+      throw new Error(`termfleet createAgentWindow returned no terminalId for agent "${agent}": ${ack.error ?? '(no error)'}`);
     }
     return {
-      id: created.terminalId,
+      id: terminalId,
       agent,
       status: 'running',
-      ...(created.agentSessionId ? { ref: created.agentSessionId } : {}),
+      ...(ack.result?.agentSessionId ? { ref: ack.result.agentSessionId } : {}),
       ...(Object.keys(params).length ? { params } : {}),
     };
   }
-  get(id) {
-    return this.list().find((s) => s.id === id);
+  async get(id) {
+    return (await this.list()).find((s) => s.id === id);
   }
-  list() {
-    const r = spawnSync(`${this.cli} ${this.model} list ${this.urlArg}`, {
-      shell: true,
-      encoding: 'utf8',
-    });
-    if (r.status || !r.stdout.trim()) return [];
+  async list() {
+    const client = await this.#client();
+    const snapshot = await client.snapshot();
     // id = the terminalId termfleet owns; agent = the label we launched it under (the window name).
-    return JSON.parse(r.stdout).map((w) => ({ id: w.terminalId, agent: w.name, status: 'running' }));
+    return snapshot.windows.filter((w) => !!w.terminalId).map((w) => ({ id: w.terminalId, agent: w.name, status: 'running' }));
   }
-  update(id, patch) {
-    return patch.status === 'cancelled' ? this.cancel(id) : true;
+  async update(id, patch) {
+    if (patch.status === 'cancelled') return this.cancel(id);
+    return true;
   }
-  cancel(id) {
-    // id is the terminalId; resolve it to termfleet's numeric window id, then kill that one window.
-    const r = spawnSync(`${this.cli} ${this.model} list ${this.urlArg}`, { shell: true, encoding: 'utf8' });
-    let windowId;
-    try {
-      windowId = JSON.parse(r.stdout).find((w) => w.terminalId === id)?.id;
-    } catch {
-      /* ignore */
-    }
-    if (windowId === undefined) return false;
-    return !spawnSync(`${this.cli} ${this.model} kill ${this.urlArg} --id ${windowId}`, {
-      shell: true,
-      stdio: 'inherit',
-    }).status;
+  async cancel(id) {
+    const client = await this.#client();
+    const snapshot = await client.snapshot();
+    const window = snapshot.windows.find((w) => w.terminalId === id);
+    if (!window) return false;
+    const ack = await client.closeWindow(window.id);
+    return ack.ok !== false;
   }
 }
 
@@ -115,7 +90,7 @@ function parseParams(args) {
   return params;
 }
 
-export function runCli(runner, argv) {
+export async function runCli(runner, argv) {
   const [cmd, ...rest] = argv;
   const opt = (name) => {
     const i = rest.indexOf(name);
@@ -128,17 +103,17 @@ export function runCli(runner, argv) {
       console.error('usage: autonomy launch <agent> [--key value ...]');
       return 2;
     }
-    console.log(JSON.stringify(runner.launch(agent, parseParams(rest.slice(1)))));
+    console.log(JSON.stringify(await runner.launch(agent, parseParams(rest.slice(1)))));
     return 0;
   }
   if (cmd === 'get') {
-    const session = runner.get(rest[0] ?? '');
+    const session = await runner.get(rest[0] ?? '');
     if (!session) return 1;
     console.log(JSON.stringify(session));
     return 0;
   }
   if (cmd === 'list') {
-    console.log(JSON.stringify(runner.list()));
+    console.log(JSON.stringify(await runner.list()));
     return 0;
   }
   if (cmd === 'update') {
@@ -148,7 +123,7 @@ export function runCli(runner, argv) {
       console.error('usage: autonomy update <id> --status <running|paused|cancelled|done|failed>');
       return 2;
     }
-    return runner.update(id, { status }) ? 0 : 1;
+    return (await runner.update(id, { status })) ? 0 : 1;
   }
   if (cmd === 'cancel') {
     const id = rest[0];
@@ -156,7 +131,7 @@ export function runCli(runner, argv) {
       console.error('usage: autonomy cancel <id>');
       return 2;
     }
-    return runner.cancel(id) ? 0 : 1;
+    return (await runner.cancel(id)) ? 0 : 1;
   }
   console.error('usage: autonomy <launch|get|list|update|cancel>');
   return 2;
@@ -164,5 +139,5 @@ export function runCli(runner, argv) {
 
 // Entrypoint: the local-loop substrate runner is termfleet. One concrete runner, no selection switch.
 if (import.meta.url === `file://${process.argv[1]}`) {
-  process.exit(runCli(new TermfleetRunner(), process.argv.slice(2)));
+  process.exit(await runCli(new TermfleetRunner(), process.argv.slice(2)));
 }

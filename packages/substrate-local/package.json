@@ -10,6 +10,8 @@
   "dependencies": {
     "@open-autonomy/core": "workspace:*",
     "@open-autonomy/substrate-github": "workspace:*",
+    "@termfleet/core": "^0.2.0",
+    "termfleet": "^0.1.5",
     "yaml": "^2.9.0"
   }
 }

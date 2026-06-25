@@ -96,8 +96,9 @@ policy section of `autonomy.yml` and workflow code enforce limits.
 | --- | --- | --- |
 | `README.md` | Product overview and quickstart | humans |
 | `docs/ARCHITECTURE.md` | Master map of the system | humans, agents needing orientation |
+| `docs/SPEC.md` | The standard (`autonomy.ir.v1`): actor model + the four catalogs + Runner + handoffs | humans, agents, substrate authors |
 | `docs/OSS_AGENT_RUNBOOK.md` | Local checks, live smoke tests, operator commands | maintainers/operators |
-| `docs/PUBLIC_AGENT_PRODUCTION_ROLLOUT.md` | Enablement checklist for a target repo | maintainers |
+| `docs/OPERATIONS.md` | Operating OA: local quickstart, GitHub production rollout, release process | maintainers/operators |
 | `docs/ROADMAP.md` | Continuous roadmap, proof gates, and expanded product direction | planner/maintainers |
 | `bench/README.md` | Live-eval harness: workloads, graders, running a cell | bench operators |
 | `bench/workload/self-driving-conformance/` | Live conformance scenario catalog (coverage-graded) | bench operators, roadmap audit |

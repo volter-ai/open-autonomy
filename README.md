@@ -53,7 +53,7 @@ cd my-repo
 npx open-autonomy compile self-driving github .
 ```
 
-Then wire it up with [`docs/PUBLIC_AGENT_PRODUCTION_ROLLOUT.md`](./docs/PUBLIC_AGENT_PRODUCTION_ROLLOUT.md)
+Then wire it up with [`docs/OPERATIONS.md`](./docs/OPERATIONS.md#github-production-rollout)
 (repo variables/secrets, the model proxy, branch protection).
 
 ### Local — closed-source, on your machine
@@ -70,7 +70,7 @@ node scheduler/run.mjs                           # after termfleet + CLI sign-in
 ```
 
 Full step-by-step (termfleet console/provider, agent sign-in, feeding the loop work) →
-[**`docs/LOCAL-QUICKSTART.md`**](./docs/LOCAL-QUICKSTART.md).
+[**`docs/OPERATIONS.md`**](./docs/OPERATIONS.md#local-quickstart).
 
 > `self-driving` (open-autonomy's own recipe) is GitHub-only; on local use `simple-sdlc`, `hello`,
 > or your own profile dir. See [the CLI](#the-open-autonomy-cli) for all verbs and options.
@@ -141,15 +141,15 @@ or `bun bin/open-autonomy.ts <verb>`. The published bundle is produced by `bun r
 
 To adopt open-autonomy into your own repo, compile a profile into it — see
 [**Run it on your repo**](#run-it-on-your-repo) for the GitHub vs local fork and the follow-up guides
-([`PUBLIC_AGENT_PRODUCTION_ROLLOUT.md`](./docs/PUBLIC_AGENT_PRODUCTION_ROLLOUT.md) for GitHub,
-[`LOCAL-QUICKSTART.md`](./docs/LOCAL-QUICKSTART.md) for local). From a clone, a profile *path* also
+([`OPERATIONS.md`](./docs/OPERATIONS.md#github-production-rollout) for GitHub,
+[`OPERATIONS.md`](./docs/OPERATIONS.md#local-quickstart) for local). From a clone, a profile *path* also
 works: `open-autonomy compile profiles/self-driving github ../my-repo`.
 
 ## Operator commands
 
 These are the **GitHub substrate's** control plane (issue comments). Running local? You steer the
 fleet with termfleet directly and the tracker board instead — see
-[`docs/LOCAL-QUICKSTART.md`](./docs/LOCAL-QUICKSTART.md).
+[`docs/OPERATIONS.md`](./docs/OPERATIONS.md#local-quickstart).
 
 Operator commands work only for maintainers (repo OWNER/MEMBER/COLLABORATOR); a comment from anyone
 else is ignored. To launch an agent by comment, name it: `/agent <agent>` (the workflow name).

@@ -1,4 +1,20 @@
-# Local quickstart — run the loop on your own machine
+# Operating Open Autonomy
+
+> **The operator/maintainer how-to doc.** Three sections, consolidated from the former
+> LOCAL-QUICKSTART, PUBLIC_AGENT_PRODUCTION_ROLLOUT, and RELEASE docs:
+>
+> 1. [Local quickstart](#local-quickstart) — run the loop on your own machine (the **local** substrate; no GitHub).
+> 2. [GitHub production rollout](#github-production-rollout) — the checklist before enabling OA on a repo.
+> 3. [Release process](#release-process) — cutting a versioned Open Autonomy release.
+>
+> Related: how OA *proves itself* lives in `docs/LIVE_TESTING_STRATEGY.md` + `docs/PROOF_LEDGER.md`;
+> the field runbook is `docs/OSS_AGENT_RUNBOOK.md`; the model + substrate design is `docs/SPEC.md`.
+
+---
+
+## Local quickstart
+
+Run the loop on your own machine.
 
 This is the step-by-step for adopting open-autonomy on the **local** substrate: the autonomous
 loop runs on *your* machine against a repo on disk, with **no GitHub, no GitHub Actions, and no
@@ -17,9 +33,7 @@ How local differs from the GitHub substrate:
 If you just want to *see the loop fire* with zero tracker setup, use the `hello` profile (a single
 cron agent). For a real software-delivery loop (PM → draft → develop → review), use `simple-sdlc`.
 
----
-
-## 1. Prerequisites
+### 1. Prerequisites
 
 Install these once, on the machine that will run the loop:
 
@@ -31,7 +45,7 @@ Install these once, on the machine that will run the loop:
 | **A coding agent CLI, logged in** | the agent's model access | Claude Code (default) **or** Codex — see next step |
 | **bun** (for `simple-sdlc`) | the orchestrator dispatches workers via `bun scripts/runner.ts launch …` | `curl -fsSL https://bun.sh/install \| bash` — not needed for the `hello` demo (Node-only) |
 
-### Sign in to your coding agent
+#### Sign in to your coding agent
 
 The loop launches **Claude Code** by default. termfleet drives whatever CLI you point it at, and
 that CLI must already be **installed on PATH and signed in** — the launch fails after ~45s against a
@@ -45,9 +59,7 @@ missing or logged-out CLI. So sign in *first*:
 There is no separate "open-autonomy login" — the agent uses your coding CLI's own session, so your
 local subscription/key is what's billed.
 
----
-
-## 2. Start termfleet (console + a local provider)
+### 2. Start termfleet (console + a local provider)
 
 The local runner (the termfleet SDK's `ProviderClient`) talks to a termfleet **console** + **provider**
 running on your machine. Start both once (they stay up in the background); the open-autonomy runner
@@ -72,9 +84,7 @@ If that prints a session, termfleet + your agent CLI are wired correctly. Open
 > termfleet is loopback-only by default and makes no outbound requests unless you configure a
 > registry — fine for a single closed-source machine. See termfleet's `SECURITY.md` before exposing it.
 
----
-
-## 3. Compile a profile into your repo
+### 3. Compile a profile into your repo
 
 From inside the repo you want the loop to maintain:
 
@@ -93,9 +103,7 @@ agent skills under `.claude/skills/` and `.codex/skills/`. No clone of this repo
 `npx open-autonomy …` runs the published CLI. (`self-driving` is GitHub-only; on local use `hello`
 or `simple-sdlc`, or your own profile dir.)
 
----
-
-## 4. Run the loop
+### 4. Run the loop
 
 ```bash
 node scheduler/run.mjs --once   # fire one tick, then exit — use this to verify end-to-end
@@ -112,17 +120,17 @@ TERMFLEET_AGENT=codex node scheduler/run.mjs
 With the `hello` profile, the first `--once` tick launches a `greeter` session — you'll see it in
 `termfleet sessions recent --live` and the console. That confirms the whole local path works.
 
----
-
-## 5. Give the loop work (`simple-sdlc`)
+### 5. Give the loop work (`simple-sdlc`)
 
 The `hello` greeter self-fires on cron and needs no input. A real loop needs a backlog. The
 `simple-sdlc` agents read work from a local **ztrack** tracker on disk (no GitHub):
 
 ```bash
-npm install -g ztrack                      # the tracker simple-sdlc's agents use
-ztrack init --preset simple-sdlc           # the PR-free dev preset (the `default`); no remote needed
-ztrack issue create                        # add a work item (repeat for each task)
+npm install -D ztrack                       # a PROJECT dep, not -g: the installed validation preset
+                                            # `import`s `ztrack/preset-kit`, so it must resolve from the
+                                            # repo — a global/npx install fails `ztrack check`.
+npx ztrack init --preset simple-sdlc        # the PR-free dev preset (the `default`); no remote needed
+npx ztrack issue create                     # add a work item (repeat for each task)
 ```
 
 The `simple-sdlc` ztrack preset is **PR-free**: an issue is `done` once every AC is passed with
@@ -136,9 +144,7 @@ entirely through `ztrack` — `ztrack issue view <id>`, `ztrack check` — never
 > own tooling, fork the profile (`profiles/simple-sdlc/skills/*`) and point the agents at your CLI,
 > then compile your profile dir: `npx open-autonomy compile ./my-profile local .`.
 
----
-
-## What's GitHub-only (not available locally)
+### What's GitHub-only (not available locally)
 
 The local substrate runs the same agent loop, but a few controls in the README are GitHub-specific:
 
@@ -152,9 +158,7 @@ The local substrate runs the same agent loop, but a few controls in the README a
   Locally there is no auto-merge; the `review` agent gates a change in the tracker, and you decide
   what to do with the agent's branch/commits.
 
----
-
-## Troubleshooting
+### Troubleshooting
 
 - **`createAgentWindow returned no terminalId …`** — the console/provider (step 2) aren't running, or your
   agent CLI isn't installed/logged in (step 1). Re-run the `npx termfleet claude new --prompt "hi"`
@@ -165,3 +169,133 @@ The local substrate runs the same agent loop, but a few controls in the README a
   `claude`.
 - **Pin a specific provider** — if auto-discovery picks the wrong one, set `TERMFLEET_PROVIDER_URL`
   to your provider's URL before running the loop.
+
+---
+
+## GitHub production rollout
+
+Use this checklist before enabling open-autonomy on a repository.
+
+### Required Configuration
+
+Repository variables:
+
+- `MODEL_PROXY_URL`
+- `MODEL_PROXY_OIDC_AUDIENCE`
+- `PUBLIC_AGENT_MODELS`
+- `PUBLIC_AGENT_MODEL`
+- `PUBLIC_AGENT_TRIAGE_MODEL`
+- `PUBLIC_AGENT_PM_MODEL`
+- `PUBLIC_AGENT_REVIEW_MODEL`
+- `PUBLIC_AGENT_MAX_USD_CENTS`
+- `PUBLIC_AGENT_TRIAGE_MAX_USD_CENTS`
+- `PUBLIC_AGENT_PM_MAX_USD_CENTS`
+- `PUBLIC_AGENT_REVIEW_MAX_USD_CENTS`
+- `PUBLIC_AGENT_MAX_REQUESTS`
+- `PUBLIC_AGENT_MAX_DEVELOP_ATTEMPTS`
+- `PUBLIC_AGENT_MAX_OPEN_AGENT_PRS`
+- `PUBLIC_AGENT_STALE_NEEDS_INFO_MINUTES`
+- `PUBLIC_AGENT_PM_LIMIT`
+- `PUBLIC_AGENT_ALLOWED_PATHS`
+- `PUBLIC_AGENT_REPO_PAUSED`
+
+Repository secrets:
+
+- none required for model access: in-cell agents mint and exchange bounded
+  per-run model tokens via GitHub OIDC; no admin token lives in the repo.
+- `PUBLIC_AGENT_TRIGGER_TOKEN` if PM-triggered comments must use a token with
+  enough permissions to trigger follow-on workflows.
+
+Model proxy deployment:
+
+- Set provider API keys and model names.
+- Set `MODEL_PRICES_JSON`.
+- Choose production limits for global active runs, per-repo active runs,
+  per-actor active runs, per-run spend, per-run request count, and daily spend.
+- Verify `GET /admin/limits/status` responds (operator-run, with the admin
+  token from the operator's local `.env`; there is no in-repo admin workflow).
+
+GitHub repository:
+
+- Branch protection requires ci + agent-review; native auto-merge lands reviewed PRs (no agent merges).
+- Required CI check name matches `ci`.
+- Actions artifact retention is long enough for operator audits.
+- Workflow permissions stay capability-separated; do not use `write-all`.
+- Workflows set `FORCE_JAVASCRIPT_ACTIONS_TO_NODE24=true`.
+
+### First Public Rollout Policy
+
+Start with a narrow allowed surface:
+
+- trusted maintainers only for manual `/agent developer`
+- PM sweep limit of 1-3 issues
+- conservative `PUBLIC_AGENT_ALLOWED_PATHS`
+- low per-run spend caps
+- `PUBLIC_AGENT_REPO_PAUSED=false` only during supervised windows
+
+Escalate to humans for security issues, broad architecture changes, unclear
+requirements, repeated failures, merge conflicts, missing CI, stale CI, and
+reviewer high-risk verdicts.
+
+### Operator Drills
+
+Before opening broader access, verify these in the target repo:
+
+- `/agent pause` applies `agent-paused`.
+- `/agent developer` on a paused issue stops before model minting.
+- `/agent status` reports labels, open PR, active workflow runs, and active proxy
+  runs.
+- `/agent resume` clears `agent-paused`.
+- `/agent retry` reports no infrastructure retry when no failed run exists, or
+  reruns failed jobs without posting a fresh `/agent developer`.
+- `/agent cancel` cancels active public-agent workflow runs and revokes active
+  proxy runs for the issue.
+- `Model Proxy Admin` `status` shows active-run saturation and daily counters.
+
+### Private Trial Evidence
+
+These live trial runs are the baseline acceptance evidence as of
+2026-06-16:
+
+- Phase 5 review/merge hardening: run `27632534829` merged PR #67 for issue #66.
+- Phase 6 evidence quality: run `27632884925` merged PR #69 for issue #68, with
+  `run-receipt.json` and `transcript.md` promoted into
+  `agent-sessions/run_966fe8ea-2e22-4752-89dd-25db8fcd0e82/`.
+- Phase 7 operator controls: issue #70 live-tested `/agent pause`, a paused
+  `/agent developer` policy block before model minting, `/agent status`, and
+  `/agent resume`.
+- Push CI for operator controls: run `27633520672`.
+- Push CI for production rollout checks: run `27633852289`.
+
+### Go/No-Go
+
+Go only when all of these are true:
+
+- `bun run check` passes locally and in GitHub Actions.
+- A fresh low-risk issue completes end to end.
+- A paused issue does not dispatch new work.
+- PM sweep on stale backlog launches no duplicate work.
+- Proxy saturation causes skip/backpressure, not workflow failure.
+- Risky or unclear issues produce human-required escalation instead of a PR.
+
+---
+
+## Release process
+
+Open Autonomy releases are versioned by `VERSION` and
+`.open-autonomy/version.json`.
+
+Release checklist:
+
+1. Update `VERSION`, `.open-autonomy/version.json`, and `CHANGELOG.md`.
+2. Run `bun run check`.
+3. Run planner and preflight workflows on `main`.
+4. Compile into a clean directory (`bun bin/open-autonomy.ts compile profiles/self-driving github <dir>`)
+   and run its `bun run check`.
+5. Verify the committed release evidence in [`docs/PROOF_LEDGER.md`](./PROOF_LEDGER.md).
+6. Tag the release as `vX.Y.Z`.
+7. Record migration notes for template changes in the changelog.
+
+Generated or upgraded repositories should keep their local
+`.open-autonomy/version.json` so runs can record the Open Autonomy version and
+profile used for each session.

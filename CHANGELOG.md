@@ -26,7 +26,7 @@
   not a `termfleet` binary on PATH: `ProviderClient.createAgentWindow`/`snapshot`/`closeWindow`, with
   provider auto-discovery via `resolveDefaultProvider`. Replaces the brittle `spawnSync` + stdout-`JSON.parse`
   path with a typed, version-pinned `node_modules` dependency. Local installs now `npm install termfleet`
-  (and run its console/provider via `npx termfleet`); see `docs/LOCAL-QUICKSTART.md`.
+  (and run its console/provider via `npx termfleet`); see `docs/OPERATIONS.md#local-quickstart`.
 
 ## 0.1.3
 
@@ -44,7 +44,7 @@
 
 ### Added
 
-- **Local / closed-source onboarding**: `docs/LOCAL-QUICKSTART.md`, a README front-door fork (GitHub vs
+- **Local / closed-source onboarding**: `docs/OPERATIONS.md#local-quickstart`, a README front-door fork (GitHub vs
   fully-local), and a next-steps print after `open-autonomy compile <profile> local`.
 
 ### Fixed

@@ -17,4 +17,4 @@ model run less reliable than the gate being tested.
 | `scaffold-install-check` | `open-autonomy compile profiles/self-driving github <target>`, fleet preflight runs `27649190745` and `27649190743` | done |
 | `quality-review-repair` | `.codex/skills/pm/SKILL.md` (PM feeds the reviewer's findings to a re-dispatched developer, or escalates — PM-directed, not an auto-repair loop), `.codex/skills/reviewer/SKILL.md` | done |
 | `governance-maintainer-hold` | `docs/SPEC.md`, `.codex/skills/reviewer/SKILL.md` (block labels + the merge boundary) | done |
-| `release-dogfood` | `VERSION`, `.open-autonomy/version.json`, `CHANGELOG.md`, `docs/RELEASE.md`, manifest version tests, and the committed release checklist in `docs/RELEASE.md` | done |
+| `release-dogfood` | `VERSION`, `.open-autonomy/version.json`, `CHANGELOG.md`, `docs/OPERATIONS.md`, manifest version tests, and the committed release checklist in `docs/OPERATIONS.md` | done |

@@ -320,6 +320,12 @@ function wrapperYml(name: string, agent: IRAgent): string {
           `          [ -n "$rv_ok" ] || echo "review dispatch failed after retries (non-fatal)"`,
         ]
       : []),
+    // Dispatch the human-approval gate for the SAME anti-recursion reason: a bot-opened PR won't fire
+    // human-approval's pull_request_target, so the proposer kicks it to post the initial status (auto-success
+    // for routine PRs; pending until a maintainer Approves for human-required scope). Re-evaluation on a human
+    // Approve fires natively (a human action isn't anti-recursed). Retry — it's a required check once enforced.
+    `          ha_ok=; for i in 1 2 3 4 5 6; do gh workflow run human-approval.yml -f pr="$pr_number" && { ha_ok=1; break; } || sleep 4; done`,
+    `          [ -n "$ha_ok" ] || echo "human-approval dispatch failed after retries (non-fatal)"`,
   ];
   return [
     `name: ${name}`,

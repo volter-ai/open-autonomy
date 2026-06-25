@@ -8,6 +8,14 @@ on:
     types: [opened, synchronize, reopened, ready_for_review, labeled, unlabeled]
   pull_request_review:
     types: [submitted, dismissed, edited]
+  # Bot-opened PRs don't fire pull_request_target (GITHUB_TOKEN anti-recursion), so the proposer effect
+  # dispatches this explicitly — same as it dispatches ci + agent-review — to post the initial status.
+  workflow_dispatch:
+    inputs:
+      pr:
+        description: "PR number to evaluate"
+        required: true
+        type: string
 
 # Least privilege: post the status, comment the engage note, read the repo. No contents:write — it cannot merge.
 permissions:
@@ -38,5 +46,5 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           GITHUB_REPOSITORY: ${{ github.repository }}
-          PR_NUMBER: ${{ github.event.pull_request.number }}
+          PR_NUMBER: ${{ github.event.pull_request.number || github.event.inputs.pr }}
         run: bun scripts/human-approval-gate.ts

@@ -55,14 +55,14 @@ decided and why:
     Comment visible status that the PR is in good shape.
   - **PR has failed checks** or **has a merge conflict** → route to the appropriate case below (failure / conflict).
 - **Fresh + clear, scoped, actionable** (confirmed no open PR for this issue) → launch the developer: `gh workflow run developer.yml -f issue_number=<n>`.
-- **Fresh + underspecified** → comment the specific questions; label `needs-info`.
-- **Out of scope / risky** (auth, secrets, workflow edits, billing, destructive data) → comment why; label `human-required`.
+- **Fresh + underspecified** → comment the specific questions; label `needs-info`; **engage the requester** (Step 2c).
+- **Out of scope / risky** (auth, secrets, workflow edits, billing, destructive data) → comment why; label `human-required`; **engage the maintainer** (Step 2c).
 - **Has an open PR that FAILED** (`ci` failure or `agent-review` failure) → read the failure from the session
   and the PR/issue comments, then JUDGE from history:
   - a clear, addressable failure you have **not** already retried → relaunch the developer with a comment
     stating the exact failure to fix (give it the context).
   - already attempted ≥ `max_develop_attempts` (`.open-autonomy/autonomy.yml`, default 2), or the failure is
-    unclear/risky/repeating → **stop and escalate**: comment the situation, label `human-required`. Never loop.
+    unclear/risky/repeating → **stop and escalate**: comment the situation, label `human-required`, **engage the maintainer** (Step 2c). Never loop.
 - **Has an open PR with a MERGE CONFLICT** (`mergeStateStatus: DIRTY` / `mergeable: CONFLICTING`), even when
   `ci` and `agent-review` are both green → it will NEVER auto-merge: the substrate cannot merge a conflict and
   the `CHANGELOG.md merge=union` driver does not apply to GitHub's server-side merge. This is yours to resolve —
@@ -77,8 +77,10 @@ decided and why:
   already green, leave it (auto-merge lands it once ci is also green). Comment visible status that review was
   triggered.
 - **`needs-info` where a human has since replied** (a non-bot comment after your question) → re-triage it as fresh.
-- **`human-required`** → understand it; act only if the blocking condition is now resolved, else leave it
-  (a deliberate decision to wait, not blindness).
+- **`human-required`** → understand it; if the blocking condition is now resolved (e.g. a maintainer
+  Approved, or `/agent decide`/`/agent answer` recorded a decision), act on it. Otherwise it is correctly
+  parked on a person — but parked is not done, and silence is failure: keep it engaged and **escalate on the
+  SLA** (Step 2c). Never auto-resolve it yourself; never loop developers on it.
 - **A stuck or runaway run** (far past expected duration, or duplicate concurrent runs for one issue) → read
   its live session first (above); if it's looping on the same failing action or clearly off-track, cancel it
   via the runner (`gh run cancel <id>`) and comment why. If it's making real progress, let it finish.
@@ -95,6 +97,37 @@ Step 2 iterates **open issues** — but a PR can outlive its issue. Walk the ope
   does NOT let you merge (that needs contents:write, which you never have), so the merge boundary is intact.
 - **An open agent PR with no linked issue at all** that is stale/superseded → judge from history; close it the
   same way if it's clearly dead, else leave a status comment.
+
+## Step 2c — engage the human seam (never let a human-blocked item go dark)
+
+A `human-required` / `needs-info` / `agent-blocked` item is **not done** — it is parked on a *person*, and the
+org must reach that person and *keep* reaching them, or it silently stalls. You are the github realization of
+the `maintainer` `kind:human` actor's orchestration (docs/SPEC.md#handoffs): you engage and escalate; the
+engage is **github-native** (assignment + @mention → GitHub notifies them out-of-band).
+
+**Who to engage:**
+- **`human-required`** (a maintainer decision/approval) → the **maintainer(s)**: the logins in the
+  `PUBLIC_AGENT_MAINTAINERS` repo variable (read it with
+  `gh api repos/$GITHUB_REPOSITORY/actions/variables/PUBLIC_AGENT_MAINTAINERS --jq .value` if available);
+  fall back to the repo owner, or a maintainer (OWNER/MEMBER/COLLABORATOR) who has already commented.
+- **`needs-info`** (a clarification only the asker can give) → the **issue author** (the requester).
+
+**Engage** — idempotent, do it once (don't re-notify every sweep):
+- assign the item to that person: `gh issue edit <n> --add-assignee <login>` (skip if already assigned).
+- in your status comment, **@mention** them with the specific ask — the exact question (`needs-info`) or the
+  decision/approval needed (`human-required`), and how to resolve it (a maintainer Approve on the PR, or
+  `/agent decide <…>` / `/agent answer <…>` on the issue).
+- For a scoped **PR**, the `human-approval` gate already assigns + requests the maintainer's review — don't
+  double up; just confirm it's engaged.
+
+**Escalate** — the SLA re-ping is what actually stops the org going dark:
+- read `policy.box.human.sla_minutes` from `.open-autonomy/autonomy.yml` (default 1440 = 24h).
+- if the item has been waiting on the human longer than the SLA with **no human reply since your last
+  engage** (compare comment timestamps), post a **fresh** escalation comment re-pinging them
+  (`@<login> — still blocked after <hours>h; this needs your <decision/answer/approval> to proceed`).
+  Re-ping at most once per SLA window, never every sweep.
+- a human item resumes **only** on the authorized human act (a maintainer Approve, or `/agent decide` /
+  `/agent answer`) — never on a timer, and never by you deciding on their behalf.
 
 ## Step 3 — capacity (judgment, not a blindfold)
 

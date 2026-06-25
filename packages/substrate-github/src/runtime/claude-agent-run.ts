@@ -11,7 +11,7 @@ import { join, resolve } from 'node:path';
 import { runClaudeAgent } from './agent.js';
 import { renderTranscript, redactSensitive } from './transcript.js';
 
-type Options = { issue?: string; context?: string; model: string; skill?: string };
+type Options = { issue?: string; context?: string; model: string; skill?: string; runId?: string };
 
 const root = resolve(import.meta.dir, '..');
 
@@ -32,7 +32,24 @@ function parseArgs(argv: string[]): Options {
     context: argValue(argv, '--context') ?? process.env.OSS_AGENT_CONTEXT_PATH,
     model: argValue(argv, '--model') ?? process.env.PUBLIC_AGENT_MODEL ?? 'deepseek/deepseek-v4-flash',
     skill: argValue(argv, '--skill') ?? process.env.OSS_AGENT_SKILL_PATH,
+    runId: argValue(argv, '--run-id'),
   };
+}
+
+// The PROVIDER-SETTLED cost of this run, read from the proxy ledger (authoritative). Best-effort: the
+// transcript falls back to the CLI's (wrong-for-proxied-models) estimate if this can't be fetched.
+async function fetchSettledCostUsd(proxyUrl: string, token: string, runId?: string): Promise<number | undefined> {
+  if (!runId) return undefined;
+  try {
+    const res = await fetch(`${proxyUrl.replace(/\/$/, '')}/v1/runs/${encodeURIComponent(runId)}/session`, {
+      headers: { authorization: `Bearer ${token}` },
+    });
+    if (!res.ok) return undefined;
+    const j = await res.json() as { consumed_usd_cents?: number };
+    return typeof j.consumed_usd_cents === 'number' ? j.consumed_usd_cents / 100 : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 function readIssue(issuePath: string): { number?: number; title?: string; body?: string } {
@@ -112,10 +129,11 @@ async function main(): Promise<void> {
   // Best-effort: a rendering bug must NEVER turn a successful agent run into a failure (this is the last step
   // before we propagate the real exit code). WHERE this lands is the substrate's call — on github the effect
   // step copies it into the merged PR's `.open-autonomy/history/`.
+  const settledCostUsd = await fetchSettledCostUsd(proxyUrl, proxyToken, options.runId);
   try {
     const issue = issuePath ? readIssue(issuePath) : {};
     const subject = `#${issue.number ?? '—'}${issue.title ? ` · ${issue.title}` : ''}`;
-    writeFileSync(join(artifactsDir, 'transcript.md'), renderTranscript({ events: result.events ?? [], subject, model: options.model, stdout: result.stdout, stderr: result.stderr, exitCode: result.exitCode }));
+    writeFileSync(join(artifactsDir, 'transcript.md'), renderTranscript({ events: result.events ?? [], subject, model: options.model, stdout: result.stdout, stderr: result.stderr, exitCode: result.exitCode, settledCostUsd }));
   } catch (e) {
     writeFileSync(join(artifactsDir, 'transcript.md'), `# Agent run transcript\n\n_(transcript render failed: ${e instanceof Error ? e.message : String(e)})_\n\n${redactSensitive((result.stdout ?? '').trim())}\n`);
   }

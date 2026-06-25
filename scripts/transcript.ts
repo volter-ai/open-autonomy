@@ -86,9 +86,16 @@ export function renderSteps(events: AgentEvent[]): string {
 }
 
 /** Assemble the full transcript document from a run's events + metadata. Substrate-neutral. */
-export function renderTranscript(opts: { events: AgentEvent[]; subject?: string; model: string; stdout: string; stderr: string; exitCode: number }): string {
+export function renderTranscript(opts: { events: AgentEvent[]; subject?: string; model: string; stdout: string; stderr: string; exitCode: number; settledCostUsd?: number }): string {
   const resultEvent = opts.events.find((e) => e.type === 'result') ?? {};
-  const cost = typeof resultEvent.total_cost_usd === 'number' ? `$${resultEvent.total_cost_usd.toFixed(4)}` : 'n/a';
+  // Cost: the PROXY-settled charge is authoritative. The Claude Code CLI's `total_cost_usd` prices tokens with
+  // its built-in Anthropic table and has NO idea a proxied model (e.g. deepseek/* via OpenRouter) is cheap — it
+  // over-estimates by ~40×, so only show it labelled as an estimate when the real settled cost is unavailable.
+  const cost = typeof opts.settledCostUsd === 'number'
+    ? `$${opts.settledCostUsd.toFixed(4)} (provider-settled)`
+    : typeof resultEvent.total_cost_usd === 'number'
+      ? `~$${resultEvent.total_cost_usd.toFixed(4)} (CLI estimate — NOT settled; mis-prices proxied models)`
+      : 'n/a';
   const turns = typeof resultEvent.num_turns === 'number' ? resultEvent.num_turns : opts.events.filter((e) => e.type === 'assistant').length;
   const steps = renderSteps(opts.events);
   return [

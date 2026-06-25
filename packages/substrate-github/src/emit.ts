@@ -407,7 +407,7 @@ function wrapperYml(name: string, agent: IRAgent): string {
     `          OSS_AGENT_TASK_DIR: .agent-run`,
     `          OSS_AGENT_ISSUE_PATH: .agent-run/issue.json`,
     `        run: |`,
-    `          bun scripts/claude-agent-run.ts --skill ${skillPath}; rc=$?; bun scripts/agent-visual-verify.ts || true; echo "::group::agent transcript (${RID})"; cat .agent-run/artifacts/transcript.md 2>/dev/null || true; echo "::endgroup::"; exit $rc`,
+    `          bun scripts/claude-agent-run.ts --skill ${skillPath} --run-id "${RID}"; rc=$?; bun scripts/agent-visual-verify.ts || true; echo "::group::agent transcript (${RID})"; cat .agent-run/artifacts/transcript.md 2>/dev/null || true; echo "::endgroup::"; exit $rc`,
     ...(proposes ? effect : []),
     // Persist the call result as a durable per-run artifact: claude-agent-run writes .agent-run/artifacts/
     // transcript.md (the model's final message + stderr, secret-redacted) plus pr.md and the subject it

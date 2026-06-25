@@ -114,7 +114,7 @@ jobs:
           OSS_AGENT_TASK_DIR: .agent-run
           OSS_AGENT_ISSUE_PATH: .agent-run/issue.json
         run: |
-          bun scripts/claude-agent-run.ts --skill .codex/skills/reviewer/SKILL.md; rc=$?; bun scripts/agent-visual-verify.ts || true; echo "::group::agent transcript (ir-reviewer-${{ github.run_id }})"; cat .agent-run/artifacts/transcript.md 2>/dev/null || true; echo "::endgroup::"; exit $rc
+          bun scripts/claude-agent-run.ts --skill .codex/skills/reviewer/SKILL.md --run-id "ir-reviewer-${{ github.run_id }}"; rc=$?; bun scripts/agent-visual-verify.ts || true; echo "::group::agent transcript (ir-reviewer-${{ github.run_id }})"; cat .agent-run/artifacts/transcript.md 2>/dev/null || true; echo "::endgroup::"; exit $rc
       - name: Save the agent run result (durable transcript artifact)
         if: always()
         uses: actions/upload-artifact@v4

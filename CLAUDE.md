@@ -52,7 +52,9 @@ fast (stronger than last-gen frontier), so fix the prompt/tool, never route arou
 | `docs/PROJECT.md` | Charter (the mission-as-charter; shipped to installs). |
 | `docs/ROADMAP.md` | Tactical phases + proof gates (vs VISION = strategy). |
 | `docs/standards/*.md` | code / docs / tests / security standards agents must follow. |
-| `docs/LIVE_TESTING_STRATEGY.md`, `docs/PROOF_LEDGER.md` | How the live testbed proves features; the proof ledger. |
+| `docs/OPERATIONS.md` | Operating OA: local quickstart · GitHub production rollout · release process (absorbed LOCAL-QUICKSTART / PUBLIC_AGENT_PRODUCTION_ROLLOUT / RELEASE). |
+| `docs/OSS_AGENT_RUNBOOK.md` | Field runbook: local checks, live smoke tests, operator commands. |
+| `docs/LIVE_TESTING_STRATEGY.md`, `docs/PROOF_LEDGER.md` | How the live testbed proves features (eval doctrine); the machine-parsed proof ledger (`check:proof`). |
 
 > `SPEC.md` is the consolidation of the former AUTONOMY-IR / CAPABILITIES / TRIGGER-PARAMS / TASK-LIFECYCLE /
 > RUNNER / HANDOFFS docs (one tightly-coupled spec: the IR + its four catalogs + the seam/runner). The table

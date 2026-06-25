@@ -6,38 +6,42 @@ Read this from every simple-sdlc skill.
 
 - Work ztrack validates has `type:case` or `type:bug`.
 - Non-canceled issues have an assignee.
-- Bodies cite source markers such as `[1]`.
-- Bodies include `## Acceptance Criteria`, `## Sources`, and `## Evidence`.
+- Bodies include `## Acceptance Criteria`; each checked AC carries its evidence inline (below).
 
 ## Acceptance Criteria
 
-ACs must be observable, testable, and small enough to prove with a commit and an
-evidence row. Do not use subjective ACs like "code is clean".
+ACs must be observable, testable, and small enough to prove with a real commit.
+Do not use subjective ACs like "code is clean".
 
 ## Checked AC Evidence
 
-A checked AC must cite:
+Evidence is **commit + proof** at its core (an image/artifact is optional). A
+checked AC carries its evidence as **inline sub-bullets** pinned to a real git
+commit. A checked AC with **no** evidence fails `check` (`checked_ac_no_evidence`).
 
-- a real git commit;
-- at least one evidence id such as `[E1]`;
-- a matching evidence row under `## Evidence`.
-
-Example:
+Current grammar (what `ztrack check` verifies — let the tooling write it, don't hand-author):
 
 ```markdown
-- [x] dev/01 status: passed API returns 409 for insufficient stock. commit: abc1234 [E1]
-
-## Evidence
-
-- [E1] type: pr ac: dev/01 repo: example/app number: 12 head: main justification: Test covers insufficient stock branch.
+- [x] dev/01 v1 API returns 409 for insufficient stock
+  - status: passed
+  - evidence ev1: commit=abc1234 acv=1
+  - proof: "test covers the insufficient-stock branch" -> ev1
 ```
 
-For local-backend work with no PR, use truthful test evidence:
+Mark an AC passed with the patch command (ztrack is self-documenting — run
+`ztrack issue view <issue>` to see the AC ids/shape, and `ztrack check` names the
+exact command in its fix hint):
 
 ```bash
-ztrack evidence add <issue> --type test --ac dev/01 --head <commit> --justification "<test/check that passed>"
-ztrack ac check <issue> dev/01 --commit <commit> --evidence E1
+# optional artifact: stage it as evidence; this prints `image=<path>` to cite, then commit it
+ztrack evidence add ./screenshot.png
+
+# mark the AC passed, pinned to the implementation commit
+ztrack ac patch <issue> dev/01 --json '{"checked":true,"status":"passed"}'
 ```
 
-Never invent commits, PR numbers, screenshots, videos, source text, or approvals.
-If evidence does not exist, leave the AC pending.
+Then commit and run `ztrack check`: it verifies the cited commit exists (and,
+when relevance is required, that it touches the AC's declared paths).
+
+Never invent commits, images, source text, or approvals. If evidence does not
+exist, leave the AC pending (unchecked).

@@ -1,0 +1,13 @@
+# The deploy gate — the github-side realization of the "no agent deploys" boundary (docs/SPEC.md).
+# A code-host RESOURCE carried by the profile, co-located with .github/workflows/deploy.yml: together they
+# ARE the deployment (the workflow does the deploy; this declares the gate that makes it human-promoted).
+# NOT engine output, and NOT governance policy — it does not belong in policy.box (which the core carries
+# blind). scripts/provision-deploy.ts reads THIS file and reconciles the GitHub API to match, idempotently.
+# The secret is NAMED here but never set by the script — a human sets the value; the deploy is inert until then.
+environment: production
+tag: deploy-v*                            # promotion tag; the ruleset restricts its creation to admins
+reviewers_var: PUBLIC_AGENT_MAINTAINERS    # logins → resolved to the required-reviewer user ids
+ruleset: deploy-tags-admin-only            # tag-creation ruleset name (admins-only bypass)
+secret: CLOUDFLARE_API_TOKEN               # name only — set out-of-band by a human
+vars:                                      # non-secret config vars the gate ensures are set
+  CLOUDFLARE_ACCOUNT_ID: "0ed031cc83dad4ad191efba7076074d0"

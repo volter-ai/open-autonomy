@@ -30,11 +30,13 @@ The only GitHub secret the system needs is the Cloudflare deploy token. Everythi
 
 - `.github/workflows/deploy.yml` — tag-triggered, egress-locked, pinned wrangler, `environment: production`
   (a code-host resource carried by the profile — see `docs/CODE_HOST_RESOURCES.md`).
-- **The github-side provisioning is reproducible, not hand-set.** It's declared in `policy.box.deploy`
-  (profile `ir.yml`) and applied idempotently by `bun scripts/provision-deploy.ts`: the `production`
-  environment (required reviewer from `PUBLIC_AGENT_MAINTAINERS`, `can_admins_bypass=false`), the
-  `deploy-v*` tag deployment policy, the `deploy-tags-admin-only` ruleset, and `CLOUDFLARE_ACCOUNT_ID`.
-  Re-run any time; it reconciles. The Cloudflare **secret** is never touched by it (set by a human).
+- **The gate is a resource; provisioning is reproducible, not hand-set.** The gate is declared in
+  `.github/deploy-gate.yml` (a code-host resource carried *with* `deploy.yml` — the deployment defines its
+  own gate; it is NOT in the opaque `policy.box`). `bun scripts/provision-deploy.ts` reads that resource and
+  idempotently reconciles GitHub to match: the `production` environment (required reviewer from
+  `PUBLIC_AGENT_MAINTAINERS`, `can_admins_bypass=false`), the `deploy-v*` tag deployment policy, the
+  `deploy-tags-admin-only` ruleset, and `CLOUDFLARE_ACCOUNT_ID`. It refuses a gate with no reviewer (no agent
+  deploys). Re-run any time. The Cloudflare **secret** is never touched (set by a human).
 - GitHub secret-scanning + push-protection — enabled.
 - Supply-chain + workflow gates in CI (`check:security`, zizmor, CodeQL, Dependabot).
 

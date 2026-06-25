@@ -14,9 +14,15 @@ interface DeployConfig {
   environment: string;
   tag: string;
   reviewers_var?: string;
+  ruleset?: string;
   secret?: string;
   vars?: Record<string, string>;
 }
+
+// The gate is a code-host RESOURCE co-located with the deploy workflow (docs/CODE_HOST_RESOURCES.md) — the
+// deployment defines its own gate. This script is a generic applier: it reads the resource and reconciles
+// GitHub to match. It is NOT in policy.box (the core carries that blind); the deploy resource carries it.
+const GATE_PATH = '.github/deploy-gate.yml';
 
 const dryRun = process.argv.includes('--dry-run');
 const gh = (args: string[], input?: string): string =>
@@ -26,15 +32,21 @@ const tryJson = <T>(args: string[], fallback: T): T => {
   try { return ghJson<T>(args); } catch { return fallback; }
 };
 
-// emitAutonomy carries the policy box verbatim as the manifest's `policy` (the box keys become policy's
-// direct children), so policy.box.deploy in the profile surfaces here as policy.deploy.
-const manifest = parse(readFileSync('.open-autonomy/autonomy.yml', 'utf8')) as
-  { policy?: { deploy?: DeployConfig } };
-const deploy = manifest.policy?.deploy;
-if (!deploy) { console.log('no policy.box.deploy — nothing to provision.'); process.exit(0); }
+let deploy: DeployConfig;
+try {
+  deploy = parse(readFileSync(GATE_PATH, 'utf8')) as DeployConfig;
+} catch {
+  console.log(`no ${GATE_PATH} — this install declares no deploy gate; nothing to provision.`);
+  process.exit(0);
+}
 
 const repo = gh(['repo', 'view', '--json', 'nameWithOwner', '-q', '.nameWithOwner']).trim();
 const { environment: env, tag } = deploy;
+// The boundary check lives HERE — in the layer that interprets the deploy resource (not the core, which is
+// blind to deploy). A production deploy with no required reviewer is an unreviewed deploy: refuse it.
+if (!deploy.reviewers_var) {
+  throw new Error(`${GATE_PATH}: a deploy gate must declare reviewers_var (no agent deploys — the gate needs a human reviewer)`);
+}
 const log: string[] = [];
 const act = (label: string, fn: () => void): void => {
   if (dryRun) { log.push(`[dry-run] ${label}`); return; }
@@ -71,15 +83,16 @@ act(`deployment policy: tag "${tag}" may deploy to ${env}`, () => {
 });
 
 // 4. the ruleset: only admins may create the deploy tag (idempotent by name) — the front-line of "no agent deploys"
-act(`ruleset "deploy-tags-admin-only" (create/update/delete of ${tag} tags = admins only)`, () => {
+const rulesetName = deploy.ruleset ?? 'deploy-tags-admin-only';
+act(`ruleset "${rulesetName}" (create/update/delete of ${tag} tags = admins only)`, () => {
   const body = JSON.stringify({
-    name: 'deploy-tags-admin-only', target: 'tag', enforcement: 'active',
+    name: rulesetName, target: 'tag', enforcement: 'active',
     bypass_actors: [{ actor_type: 'RepositoryRole', actor_id: 5, bypass_mode: 'always' }], // RepositoryRole 5 = admin
     conditions: { ref_name: { include: [`refs/tags/${tag}`], exclude: [] } },
     rules: [{ type: 'creation' }, { type: 'update' }, { type: 'deletion' }],
   });
   const existing = ghJson<Array<{ id: number; name: string }>>([`repos/${repo}/rulesets`])
-    .find((r) => r.name === 'deploy-tags-admin-only');
+    .find((r) => r.name === rulesetName);
   if (existing) gh(['api', '-X', 'PUT', `repos/${repo}/rulesets/${existing.id}`, '--input', '-'], body);
   else gh(['api', '-X', 'POST', `repos/${repo}/rulesets`, '--input', '-'], body);
 });

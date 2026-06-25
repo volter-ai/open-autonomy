@@ -191,9 +191,17 @@ while local stays green.
 - **Built:** the IR + actor model (core); `HumanRunner` (core, driven by the *local* substrate); the merge
   boundary; the two-layer roadmap + strategist audit/retire + planner reap; the `human-approval` gate
   (github realization of the human *review* handoff, enforced).
-- **Designed but NOT built (per `SPEC.md#handoffs`, ~H1):** the full human seam — a declared `maintainer`
-  `kind:human` actor the PM `dispatch`es on `human-required`, with the 4 affordances (durable pause/redeem,
-  worklist, **escalation/notify**, typed `in/decision/out` payload + receiver confirmation). On github,
-  `kind:human` is **declared-only** (no job, no Runner loop); the `emit.test.ts` `test.todo` names exactly the
-  unbuilt "block → escalate → resume" seam. Out-of-band escalation/notify is the missing piece (the org can go
-  dark silently — roadmap `operator-observability`/health-monitor).
+- **Built (the human seam, H1 — github realization, live-proven):** `human_required` is now a **declared
+  consumer**, not a bare flag — a `maintainer` `kind:human` actor (`profiles/self-driving/ir.yml` +
+  `skills/maintainer/SKILL.md`; declared in the manifest, no job emitted). The github *engage* is
+  github-native (the gh runner owns its engage): the `human-approval` gate **assigns + requests-review** from
+  the maintainer(s) (`PUBLIC_AGENT_MAINTAINERS`, fallback owner) → GitHub notifies them out-of-band; the PM
+  (Step 2c) **engages + escalates** human-required/needs-info/blocked items on the SLA
+  (`policy.box.human.sla_minutes`); and the seam **resumes** on the authorized `out` — a maintainer Approve,
+  or `/agent decide|answer` (control plane; runs once via the `ISSUE_CONTROL_PRIMARY` control job). The manifest
+  serializes `kind: human` (no `workflowFile`) and round-trips the `dispatch` trigger.
+- **Still designed / NOT built:** the **distributional/model-roleplay human simulators** + the calibrated twin
+  (H3/H4) and the **producing-side typed seam graph** (H4). The behavioral **escalate-on-SLA** is PM doctrine
+  (proven live, not unit-tested — `emit.test.ts` keeps it as the one human-seam `test.todo`). A standalone
+  **health monitor** (detect when the org/PM itself is down, so escalation can't depend on the PM) is the
+  separate `operator-observability` gap (issues #66/#67).

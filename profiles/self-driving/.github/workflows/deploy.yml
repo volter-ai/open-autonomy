@@ -43,10 +43,10 @@ jobs:
       - name: Install proxy deps (frozen)
         working-directory: services/agent-model-proxy
         run: bun install --frozen-lockfile
-      - name: Deploy (wrangler, pinned)
+      - name: Deploy (wrangler — pinned in the lockfile, integrity-verified by check:security)
         working-directory: services/agent-model-proxy
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
           WRANGLER_SEND_METRICS: "false"
-        run: bunx wrangler@4.104.0 deploy
+        run: bun run deploy # resolves the local pinned wrangler@4.104.0 from the frozen install above

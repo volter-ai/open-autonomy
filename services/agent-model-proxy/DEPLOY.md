@@ -45,8 +45,13 @@ session holding that token.
 
 To make the human gate robust against that, the approver credential must live **off this machine** — e.g.
 approve only from GitHub mobile / a separate device, or use a second maintainer / a dedicated approver
-account whose token never touches the fleet machine. If the local fleet sessions are trusted, the current
-setup is acceptable — but that is the real trust boundary, so make it a conscious choice.
+account whose token never touches the fleet machine.
+
+**But note the consequence is bounded.** Even if a rogue local session self-deploys a malicious worker, its
+worst case is capped by the same OpenRouter ceiling that bounds everything else: the worker can only spend up
+to the `claude-code-deepseek` key's **$500/month** limit + the loaded prepaid balance, and the deploy is
+instantly Cloudflare-rollback-able. So this is **optional hardening, not a go-live blocker** — the money is
+bounded regardless of who approves. Off-machine approval is the clean upgrade if/when you want it.
 
 ## Endpoints + token scope (pre-verified — no key needed)
 
@@ -67,12 +72,13 @@ De-risked ahead of the first deploy so it isn't a guess:
 
 ## Flip to safe (the go-live checklist — only when ready)
 
-1. **Resolve the approver-credential question above.**
-2. **Bound the money at OpenRouter** (the proxy now routes 100% through it — single prepaid provider). Keep
-   the loaded credit balance deliberately small and refill as the fleet burns it — that balance *is* the
-   blast radius for the whole system. Set a per-key spend limit on the worker's `OPENROUTER_API_KEY` so even
-   full key exfil is bounded below the balance. (Check current burn first so you don't starve the live
-   fleet; delete the now-unused `OPENAI_API_KEY` Cloudflare secret while you're there.)
+1. **Money bound — DECIDED.** The proxy routes 100% through OpenRouter (prepaid). The worker's key
+   `claude-code-deepseek` carries a **$500/month** per-key limit (accepted as the blast-radius bound), and
+   the loaded prepaid balance is the master ceiling. Optional later: lower the per-key limit toward real burn
+   (~$50–100/mo) for a tighter external cap; delete the now-unused `OPENAI_API_KEY` Cloudflare secret.
+2. **(Optional hardening) Off-machine approver** — see the precondition above. Not a blocker: a rogue local
+   self-deploy is already capped by the $500/mo + prepaid ceiling and is rollback-able. Do it when you want
+   the human gate robust against a local session, not before first deploy.
 3. **Mint a scoped Cloudflare API token:** dashboard → My Profile → API Tokens → Create → "Edit Cloudflare
    Workers" template, narrowed to this account (`0ed031cc83dad4ad191efba7076074d0`) and ideally just the
    `volter-agent-model-proxy` worker. Nothing else.

@@ -19,12 +19,13 @@ Read:
 3. Run project tests/checks. If a relevant check exits 0, accept it as passing;
    do not rerun only to get prettier reporter output.
 4. Commit the implementation.
-5. For each genuinely satisfied AC, mark it passed pinned to that commit:
-   `ztrack ac patch <issue> <ac> --json '{"checked":true,"status":"passed"}'`.
-   Evidence is commit + proof; if an AC needs an artifact, `ztrack evidence add <file>`
-   (it prints `image=<path>`), commit it, then cite it. Run `ztrack issue view <issue>`
-   to see the AC ids/shape; `ztrack check` names the exact `ac patch` command in its
-   fix hint. A checked AC with no evidence fails `check` — never fabricate one.
+5. For each genuinely satisfied AC, mark it passed **with evidence + proof in one
+   patch** (the commit SHA is the evidence) — see `standards/issue-and-evidence.md`:
+   `ztrack ac patch <issue> <ac> --json '{"checked":true,"status":"passed","evidence":[{"id":"ev1","commit":"<sha>","acVersion":1}],"proof":{"explanation":"…","evidenceRefs":["ev1"]}}'`.
+   For an artifact, `ztrack evidence add <file>` (prints `image=<path>`), commit it,
+   add `"image":"<path>"` to the entry. Use `ztrack issue view <issue>` for the AC
+   ids/`acVersion`; `ztrack check` names the exact command in its fix hint. A
+   checked/passed AC with no evidence fails `check` — never fabricate one.
 6. Leave unsupported ACs unchecked.
 7. Move the issue to `In Review` only when `ztrack check` is green and no
    other issue is already `In Review`: `ztrack issue edit <issue> --state "In Review"`.

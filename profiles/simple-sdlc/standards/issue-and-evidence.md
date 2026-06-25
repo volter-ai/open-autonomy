@@ -28,20 +28,30 @@ Current grammar (what `ztrack check` verifies — let the tooling write it, don'
   - proof: "test covers the insufficient-stock branch" -> ev1
 ```
 
-Mark an AC passed with the patch command (ztrack is self-documenting — run
-`ztrack issue view <issue>` to see the AC ids/shape, and `ztrack check` names the
-exact command in its fix hint):
+Mark an AC passed **with its evidence + proof in one patch** — a checked/passed
+AC with no evidence fails `check` (`passed_ac_missing_evidence`). ztrack is
+self-documenting: run `ztrack issue view <issue>` for the AC ids/`acVersion`, and
+`ztrack check` names this exact command (with values filled in) in its fix hint.
 
 ```bash
-# optional artifact: stage it as evidence; this prints `image=<path>` to cite, then commit it
+# do the work and COMMIT first — the commit SHA is the evidence
+git commit -m "…"                       # -> <sha>
+
+# (optional) stage an artifact; `evidence add` prints image=<path>; commit it and
+# add "image":"<path>" to the evidence entry below
 ztrack evidence add ./screenshot.png
 
-# mark the AC passed, pinned to the implementation commit
-ztrack ac patch <issue> dev/01 --json '{"checked":true,"status":"passed"}'
+ztrack ac patch <issue> dev/01 --json '{
+  "checked": true,
+  "status": "passed",
+  "evidence": [{ "id": "ev1", "commit": "<sha>", "acVersion": 1 }],
+  "proof": { "explanation": "ev1 shows the AC holds", "evidenceRefs": ["ev1"] }
+}'
 ```
 
-Then commit and run `ztrack check`: it verifies the cited commit exists (and,
-when relevance is required, that it touches the AC's declared paths).
+Then run `ztrack check`: it verifies each cited commit exists (and, when relevance
+is required, that it touches the AC's declared paths), and that every passed AC's
+proof references real evidence.
 
 Never invent commits, images, source text, or approvals. If evidence does not
 exist, leave the AC pending (unchecked).

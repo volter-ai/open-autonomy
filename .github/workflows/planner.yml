@@ -24,7 +24,7 @@ jobs:
       GH_TOKEN: ${{ github.token }}
       CONTROL_WORKFLOW: planner.yml
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
       - run: node .github/agent-control.mjs
   setup:
     if: vars.PUBLIC_AGENT_REPO_PAUSED != 'true' && ((github.event_name != 'issue_comment' && github.event_name != 'pull_request_target' && github.event_name != 'issues') || (github.event_name == 'issues' && github.event.action == 'labeled') || (github.event_name == 'pull_request_target' && (github.event.pull_request.head.repo.full_name == github.repository || contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.pull_request.author_association))) || (github.event_name == 'issue_comment' && startsWith(github.event.comment.body, '/agent planner') && contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.comment.author_association)))
@@ -36,7 +36,7 @@ jobs:
       MODEL_PROXY_OIDC_AUDIENCE: ${{ vars.MODEL_PROXY_OIDC_AUDIENCE || 'volter-agent-model-proxy' }}
     steps:
       - name: Lock down egress (block token exfiltration from untrusted-derived work)
-        uses: step-security/harden-runner@v2
+        uses: step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411 # v2.19.4
         with:
           egress-policy: block
           allowed-endpoints: >
@@ -47,8 +47,8 @@ jobs:
             release-assets.githubusercontent.com:443
             registry.npmjs.org:443
             ${{ vars.PUBLIC_AGENT_PROXY_HOST || 'volter-agent-model-proxy.aaron-0ed.workers.dev' }}:443
-      - uses: actions/checkout@v4
-      - uses: oven-sh/setup-bun@v2
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
       - run: bun install --frozen-lockfile
       - name: Provide subject (autonomous — no work item)
         run: |
@@ -70,7 +70,7 @@ jobs:
       MAINTAINERS: ${{ vars.PUBLIC_AGENT_MAINTAINERS }}
     steps:
       - name: Lock down egress (block token exfiltration from untrusted-derived work)
-        uses: step-security/harden-runner@v2
+        uses: step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411 # v2.19.4
         with:
           egress-policy: block
           allowed-endpoints: >
@@ -81,8 +81,8 @@ jobs:
             release-assets.githubusercontent.com:443
             registry.npmjs.org:443
             ${{ vars.PUBLIC_AGENT_PROXY_HOST || 'volter-agent-model-proxy.aaron-0ed.workers.dev' }}:443
-      - uses: actions/checkout@v4
-      - uses: oven-sh/setup-bun@v2
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
       - run: bun install --frozen-lockfile
       - name: install Claude Code CLI
         run: npm install -g "@anthropic-ai/claude-code@${PUBLIC_AGENT_CITED_VERSION:-latest}" && claude --version
@@ -140,7 +140,7 @@ jobs:
           [ -n "$ha_ok" ] || echo "human-approval dispatch failed after retries (non-fatal)"
       - name: Save the agent run result (durable transcript artifact)
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: agent-run-planner
           path: .agent-run/

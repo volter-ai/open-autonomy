@@ -77,7 +77,7 @@ const DISPATCH_INPUTS = [
 // control plane; we only list app-level egress.
 const HARDEN_RUNNER = [
   '      - name: Lock down egress (block token exfiltration from untrusted-derived work)',
-  '        uses: step-security/harden-runner@v2',
+  '        uses: step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411 # v2.19.4',
   '        with:',
   '          egress-policy: block',
   '          allowed-endpoints: >',
@@ -346,7 +346,7 @@ function wrapperYml(name: string, agent: IRAgent, isControlPrimary = false): str
     // the primary so those verbs run there only (the per-workflow verbs cancel/status/retry still run on all).
     ...(isControlPrimary ? [`      ISSUE_CONTROL_PRIMARY: "1"`] : []),
     `    steps:`,
-    `      - uses: actions/checkout@v4`,
+    `      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1`,
     `      - run: node .github/agent-control.mjs`,
     `  setup:`,
     `    if: ${agentRunIf(name)}`,
@@ -359,8 +359,8 @@ function wrapperYml(name: string, agent: IRAgent, isControlPrimary = false): str
     ...triggerParamsEnv(agent),
     `    steps:`,
     ...HARDEN_RUNNER,
-    `      - uses: actions/checkout@v4`,
-    `      - uses: oven-sh/setup-bun@v2`,
+    `      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1`,
+    `      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0`,
     `      - run: bun install --frozen-lockfile`,
     ...buildIssue,
     `      - name: Mint bounded model token`,
@@ -390,8 +390,8 @@ function wrapperYml(name: string, agent: IRAgent, isControlPrimary = false): str
     ...triggerParamsEnv(agent),
     `    steps:`,
     ...HARDEN_RUNNER,
-    `      - uses: actions/checkout@v4`,
-    `      - uses: oven-sh/setup-bun@v2`,
+    `      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1`,
+    `      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0`,
     `      - run: bun install --frozen-lockfile`,
     `      - name: install Claude Code CLI`,
     `        run: npm install -g "@anthropic-ai/claude-code@\${PUBLIC_AGENT_CITED_VERSION:-latest}" && claude --version`,
@@ -427,7 +427,7 @@ function wrapperYml(name: string, agent: IRAgent, isControlPrimary = false): str
     // runs are captured too) so every agent call's result is recoverable from the run, not lost.
     `      - name: Save the agent run result (durable transcript artifact)`,
     `        if: always()`,
-    `        uses: actions/upload-artifact@v4`,
+    `        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2`,
     `        with:`,
     `          name: agent-run-${name}`,
     `          path: .agent-run/`,

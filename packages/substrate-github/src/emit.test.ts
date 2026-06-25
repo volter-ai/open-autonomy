@@ -40,6 +40,22 @@ describe('compileGithub — substrate-universal security baseline', () => {
     expect(out.generated['.github/zizmor.yml']).toContain('maintainer.yml');
   });
 
+  test('engine bakes in NO org identity — proxy host / OIDC audience / model / bot come from policy.box.github', () => {
+    const base = irWith([{ cron: '0 0 * * *' }]); // no policy.box.github
+    const bare = compileGithub(base).generated['.github/workflows/maintainer.yml'];
+    expect(bare).not.toContain('volter'); // nothing org-specific leaks from the engine
+    expect(bare).toContain('${{ vars.PUBLIC_AGENT_PROXY_HOST }}'); // bare var, no fallback, when undeclared
+
+    const configured: AutonomyIR = {
+      ...base,
+      policy: { box: { github: { proxy_host: 'acme-proxy.example.dev', oidc_audience: 'acme-aud', model: 'x/y' } } },
+    };
+    const wf = compileGithub(configured).generated['.github/workflows/maintainer.yml'];
+    expect(wf).toContain("${{ vars.PUBLIC_AGENT_PROXY_HOST || 'acme-proxy.example.dev' }}"); // profile value is the fallback
+    expect(wf).toContain("${{ vars.MODEL_PROXY_OIDC_AUDIENCE || 'acme-aud' }}");
+    expect(wf).toContain("${{ vars.PUBLIC_AGENT_MODEL || 'x/y' }}");
+  });
+
   test('a human-only install still carries the baseline, with no agent workflow to whitelist', () => {
     const out = compileGithub(irWith([{ dispatch: true }], 'human'));
     expect(out.generated['.github/workflows/security.yml']).toBeDefined();

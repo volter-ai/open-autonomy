@@ -136,20 +136,39 @@ const DISPATCH_INPUTS = [
 // shipped to an attacker host even if read. The proxy host defaults to the live deployment and is
 // overridable per-install via the PUBLIC_AGENT_PROXY_HOST var. harden-runner auto-allows the Actions
 // control plane; we only list app-level egress.
-const HARDEN_RUNNER = [
-  '      - name: Lock down egress (block token exfiltration from untrusted-derived work)',
-  '        uses: step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411 # v2.19.4',
-  '        with:',
-  '          egress-policy: block',
-  '          allowed-endpoints: >',
-  '            api.github.com:443',
-  '            github.com:443',
-  '            codeload.github.com:443',
-  '            objects.githubusercontent.com:443',
-  '            release-assets.githubusercontent.com:443',
-  '            registry.npmjs.org:443',
-  "            ${{ vars.PUBLIC_AGENT_PROXY_HOST || 'volter-agent-model-proxy.aaron-0ed.workers.dev' }}:443",
-];
+// Per-install github config the PROFILE declares in policy.box.github (the substrate reads policy; the core
+// carries it verbatim). The engine bakes in NO org identity — a profile supplies its proxy host, OIDC
+// audience, model, and bot git identity, which the emitted workflow uses as the `vars.*` fallback. A profile
+// that declares none emits a bare `vars.*` (the install must set the variable); bot identity falls back to a
+// generic open-autonomy default (a substrate default, not org identity).
+interface GithubBox {
+  proxy_host?: string;
+  oidc_audience?: string;
+  model?: string;
+  bot_name?: string;
+  bot_email?: string;
+}
+const githubBox = (ir: AutonomyIR): GithubBox => (ir.policy.box.github ?? {}) as GithubBox;
+// `${{ vars.NAME || 'fallback' }}` when the profile declares a fallback, else a bare `${{ vars.NAME }}`.
+const varOr = (name: string, fallback?: string): string =>
+  fallback ? `\${{ vars.${name} || '${fallback}' }}` : `\${{ vars.${name} }}`;
+
+function hardenRunner(gh: GithubBox): string[] {
+  return [
+    '      - name: Lock down egress (block token exfiltration from untrusted-derived work)',
+    '        uses: step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411 # v2.19.4',
+    '        with:',
+    '          egress-policy: block',
+    '          allowed-endpoints: >',
+    '            api.github.com:443',
+    '            github.com:443',
+    '            codeload.github.com:443',
+    '            objects.githubusercontent.com:443',
+    '            release-assets.githubusercontent.com:443',
+    '            registry.npmjs.org:443',
+    `            ${varOr('PUBLIC_AGENT_PROXY_HOST', gh.proxy_host)}:443`,
+  ];
+}
 
 // Render a carried (non-cron) event trigger as github `on:` YAML; its config (issues `types`, …) is
 // carried verbatim block-style (scalar | string[]).
@@ -268,7 +287,7 @@ function launchConcurrencyLines(name: string, _agent: IRAgent): string[] {
 // subject, runs the skill, and acts directly (a generic effect step turns a working-tree change into an
 // auto-merging PR; non-proposing agents post their verdict/comment via gh in-skill). No credential-less
 // job, no bundle, no publisher — the merge boundary is the capability/permission split (docs/SPEC.md#capabilities).
-function wrapperYml(name: string, agent: IRAgent, isControlPrimary = false): string {
+function wrapperYml(name: string, agent: IRAgent, gh: GithubBox, isControlPrimary = false): string {
   const caps = agent.capabilities ?? [];
   // Only a code:propose agent gets the effect step (push branch + open auto-merging PR). A non-proposer
   // (reviewer/pm/planner) has contents:read, so a stray tracked-file write would make the effect's
@@ -318,8 +337,8 @@ function wrapperYml(name: string, agent: IRAgent, isControlPrimary = false): str
     `          set -euo pipefail`,
     `          if [ -z "$(git status --porcelain)" ]; then echo "no working-tree changes; nothing to propose"; exit 0; fi`,
     `          branch="${branchExpr}"`,
-    `          git config user.name volter-agent`,
-    `          git config user.email volter-agent@users.noreply.github.com`,
+    `          git config user.name "${gh.bot_name ?? 'open-autonomy-agent'}"`,
+    `          git config user.email "${gh.bot_email ?? 'open-autonomy-agent@users.noreply.github.com'}"`,
     `          git config core.filemode false`,
     `          git checkout -b "$branch"`,
     // Persist this run's processed transcript AND its visual evidence INTO the proposal so they ride into the
@@ -416,10 +435,10 @@ function wrapperYml(name: string, agent: IRAgent, isControlPrimary = false): str
     `    env:`,
     `      GH_TOKEN: \${{ github.token }}`,
     `      MODEL_PROXY_URL: \${{ vars.MODEL_PROXY_URL }}`,
-    `      MODEL_PROXY_OIDC_AUDIENCE: \${{ vars.MODEL_PROXY_OIDC_AUDIENCE || 'volter-agent-model-proxy' }}`,
+    `      MODEL_PROXY_OIDC_AUDIENCE: ${varOr('MODEL_PROXY_OIDC_AUDIENCE', gh.oidc_audience)}`,
     ...triggerParamsEnv(agent),
     `    steps:`,
-    ...HARDEN_RUNNER,
+    ...hardenRunner(gh),
     `      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1`,
     `      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0`,
     `      - run: bun install --frozen-lockfile`,
@@ -430,7 +449,7 @@ function wrapperYml(name: string, agent: IRAgent, isControlPrimary = false): str
     // model calls, so it would hit the cap mid-sweep, the proxy would reject the next call, and the CLI would
     // exit non-zero — the run reported "failure" even though its work (triage, routing, reaping) succeeded.
     // Raise to 250 so the $ cap is what actually bounds a run; a runaway is still stopped by --max-usd-cents.
-    `        run: bun scripts/model-proxy-mint.ts --run-id "${RID}" --models "\${{ vars.PUBLIC_AGENT_MODEL || 'deepseek/deepseek-v4-flash' }}" --max-usd-cents "\${{ vars.PUBLIC_AGENT_MAX_USD_CENTS || '200' }}" --max-requests "\${{ vars.PUBLIC_AGENT_MAX_REQUESTS || '250' }}" --issue .agent-run/issue.json`,
+    `        run: bun scripts/model-proxy-mint.ts --run-id "${RID}" --models "${varOr('PUBLIC_AGENT_MODEL', gh.model)}" --max-usd-cents "\${{ vars.PUBLIC_AGENT_MAX_USD_CENTS || '200' }}" --max-requests "\${{ vars.PUBLIC_AGENT_MAX_REQUESTS || '250' }}" --issue .agent-run/issue.json`,
     // The agent job is CREDENTIALED — its token is scoped to its capabilities (docs/SPEC.md#capabilities). It
     // reads its subject, runs the skill, and acts directly; the only thing it can never do is merge (no
     // statuses:write on a proposer; no contents:write on a reviewer), enforced by the permission split.
@@ -441,8 +460,8 @@ function wrapperYml(name: string, agent: IRAgent, isControlPrimary = false): str
     `    permissions: ${capsToPermissions(caps)}`,
     `    env:`,
     `      MODEL_PROXY_URL: \${{ vars.MODEL_PROXY_URL }}`,
-    `      MODEL_PROXY_OIDC_AUDIENCE: \${{ vars.MODEL_PROXY_OIDC_AUDIENCE || 'volter-agent-model-proxy' }}`,
-    `      PUBLIC_AGENT_MODEL: \${{ vars.PUBLIC_AGENT_MODEL || 'deepseek/deepseek-v4-flash' }}`,
+    `      MODEL_PROXY_OIDC_AUDIENCE: ${varOr('MODEL_PROXY_OIDC_AUDIENCE', gh.oidc_audience)}`,
+    `      PUBLIC_AGENT_MODEL: ${varOr('PUBLIC_AGENT_MODEL', gh.model)}`,
     `      PUBLIC_AGENT_CITED_VERSION: \${{ vars.PUBLIC_AGENT_CLAUDE_CODE_VERSION }}`,
     `      GH_TOKEN: \${{ github.token }}`,
     // Who the org engages for the human seam — so a skill (e.g. the PM, Step 2c) can assign/@mention the
@@ -450,7 +469,7 @@ function wrapperYml(name: string, agent: IRAgent, isControlPrimary = false): str
     `      MAINTAINERS: \${{ vars.PUBLIC_AGENT_MAINTAINERS }}`,
     ...triggerParamsEnv(agent),
     `    steps:`,
-    ...HARDEN_RUNNER,
+    ...hardenRunner(gh),
     `      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1`,
     `      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0`,
     `      - run: bun install --frozen-lockfile`,
@@ -542,7 +561,7 @@ export function compileGithub(ir: AutonomyIR): CompileOutput {
   const controlPrimary = Object.entries(ir.agents).find(([, a]) => !isHuman(a))?.[0];
   for (const [name, agent] of Object.entries(ir.agents)) {
     if (isHuman(agent)) continue; // a human actor is declared in the manifest, not realized as a github job
-    generated[`.github/workflows/${name}.yml`] = wrapperYml(name, agent, name === controlPrimary); // every agent is a skill
+    generated[`.github/workflows/${name}.yml`] = wrapperYml(name, agent, githubBox(ir), name === controlPrimary); // every agent is a skill
   }
   // Agents carry the operator control plane, so emit its handler.
   if (Object.values(ir.agents).some((a) => !isHuman(a))) {

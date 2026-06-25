@@ -117,6 +117,15 @@ agents:
 policy:
   maxConcurrent: 5
   box:
+    # github-substrate config (read by substrate-github/emit.ts; the engine bakes in no org identity). Each
+    # value is the emitted `vars.*` fallback, so the install works without setting variables. Another org
+    # using open-autonomy declares its own here — nothing volter-specific lives in the engine.
+    github:
+      proxy_host: volter-agent-model-proxy.aaron-0ed.workers.dev   # PUBLIC_AGENT_PROXY_HOST fallback (egress allowlist)
+      oidc_audience: volter-agent-model-proxy                      # MODEL_PROXY_OIDC_AUDIENCE fallback
+      model: deepseek/deepseek-v4-flash                            # PUBLIC_AGENT_MODEL fallback
+      bot_name: volter-agent                                       # git author for agent-proposed commits
+      bot_email: volter-agent@users.noreply.github.com
     autonomy:
       max_open_agent_prs: 5
       max_develop_attempts: 2

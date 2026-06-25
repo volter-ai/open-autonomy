@@ -105,8 +105,8 @@ jobs:
           set -euo pipefail
           if [ -z "$(git status --porcelain)" ]; then echo "no working-tree changes; nothing to propose"; exit 0; fi
           branch="agent/ir-strategist-${{ github.run_id }}"
-          git config user.name volter-agent
-          git config user.email volter-agent@users.noreply.github.com
+          git config user.name "volter-agent"
+          git config user.email "volter-agent@users.noreply.github.com"
           git config core.filemode false
           git checkout -b "$branch"
           ref_slug=autonomous

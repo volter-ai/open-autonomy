@@ -136,6 +136,12 @@ agents:
       - tasks:converse
       - code:review
 policy:
+  github:
+    proxy_host: volter-agent-model-proxy.aaron-0ed.workers.dev
+    oidc_audience: volter-agent-model-proxy
+    model: deepseek/deepseek-v4-flash
+    bot_name: volter-agent
+    bot_email: volter-agent@users.noreply.github.com
   autonomy:
     max_open_agent_prs: 5
     max_develop_attempts: 2

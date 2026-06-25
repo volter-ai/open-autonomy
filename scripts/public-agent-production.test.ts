@@ -122,7 +122,8 @@ describe('public agent production readiness', () => {
     const pmJob = text.slice(text.indexOf('  pm:'));
     expect(pmJob).toContain('actions: write'); // agent:launch — dispatch the developer
     expect(pmJob).toContain('issues: write'); // tasks:author/converse
-    expect(pmJob).not.toContain('contents: write'); // pm changes no code
+    expect(pmJob).toContain('pull-requests: write'); // tasks:author — close stale/duplicate/zombie PRs (NOT merge)
+    expect(pmJob).not.toContain('contents: write'); // pm changes no code → cannot merge (the boundary holds)
     // The pm skill is the orchestrator: full situational awareness (every issue + the runner) + capacity +
     // escalation doctrine. (Repo-pause is now a deterministic substrate kill-switch, not a PM-model check.)
     const skill = readFileSync(new URL('../.codex/skills/pm/SKILL.md', import.meta.url), 'utf8');

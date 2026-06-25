@@ -172,7 +172,11 @@ function capsToPermissions(caps: string[]): string {
     const c = rawC.split('@')[0]; // strip an optional @scope (e.g. code:propose@roadmap)
     if (c === 'code:propose') { p.contents = 'write'; p['pull-requests'] = 'write'; p.actions = 'write'; }
     else if (c === 'code:review') p.statuses = 'write'; // bless-a-merge: post the agent-review status
-    else if (c === 'tasks:author' || c === 'tasks:converse') p.issues = 'write';
+    // tasks:author manages the work board — create/edit issues AND close stale/duplicate/zombie PRs (a PR whose
+    // issue already closed). pull-requests:write enables close/comment/route but NOT merge (merging writes to the
+    // protected branch → needs contents:write, which this never grants) — so the no-self-merge boundary holds.
+    else if (c === 'tasks:author') { p.issues = 'write'; p['pull-requests'] = 'write'; }
+    else if (c === 'tasks:converse') p.issues = 'write'; // comment only
     else if (c === 'agent:launch' || c === 'agent:cancel') p.actions = 'write';
     else if (c === 'agent:list') grant('actions', 'read');
   }

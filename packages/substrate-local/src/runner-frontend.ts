@@ -18,9 +18,9 @@
 //
 // Emitted verbatim by compileLocal as scripts/runner.ts so an agent's `import './runner.js'` resolves.
 import { spawnSync } from 'node:child_process';
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readFileSync, appendFileSync, mkdirSync, symlinkSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { dirname, join } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 
 export interface LaunchParams {
   [key: string]: string | number;
@@ -38,12 +38,88 @@ const isScript = (behavior: string): boolean => /\.(ts|mjs|js)$/.test(behavior);
 interface ManifestAgent {
   skill?: string;
   params?: Record<string, string>;
+  capabilities?: string[];
 }
 function manifestAgent(agent: string): ManifestAgent {
   const path = '.open-autonomy/autonomy.yml';
   if (!existsSync(path)) return {};
   const m = Bun.YAML.parse(readFileSync(path, 'utf8')) as { agents?: Record<string, ManifestAgent> };
   return m.agents?.[agent] ?? {};
+}
+
+// --- worktree isolation (local analogue of github's per-job fresh checkout + `agent/issue-${ref}`) ---
+// A work-item-scoped, CODE-producing agent (code:propose / code:review with a subject.ref) runs in its
+// own git worktree on a branch named for the ref — so concurrent workers don't share a tree, ztrack
+// `check`/`loop` auto-scope off the branch name, and review's verdict can gate a real merge. Everything
+// else (the cron PM, the metadata-only drafter) runs on the trunk checkout. The DECISION is read from the
+// compiled manifest (capabilities + the subject.ref param); the backend session-launcher decides nothing.
+const ISOLATING_CAPS = new Set(['code:propose', 'code:review']);
+function refParamOf(declared: Record<string, string>): string | undefined {
+  return Object.entries(declared).find(([, src]) => src === 'subject.ref')?.[0];
+}
+const slugOf = (ref: string): string => ref.replace(/[^0-9A-Za-z._-]/g, '-');
+const branchOf = (ref: string): string => `agent/issue-${slugOf(ref)}`;
+const worktreeOf = (ref: string): string => resolve('.worktrees', `issue-${slugOf(ref)}`);
+
+function isolationFor(agent: string, params: LaunchParams): { branch: string; worktree: string } | null {
+  const { params: declared = {}, capabilities = [] } = manifestAgent(agent);
+  const rp = refParamOf(declared);
+  const ref = rp ? String(params[rp] ?? '') : '';
+  if (!ref) return null; // no work item (e.g. the cron PM) → trunk
+  if (!capabilities.some((c) => ISOLATING_CAPS.has(c.split('@')[0] ?? c))) return null; // not a code agent → trunk
+  return { branch: branchOf(ref), worktree: worktreeOf(ref) };
+}
+
+function git(args: string[], cwd?: string): { status: number | null; stdout: string; stderr: string } {
+  const r = spawnSync('git', args, { encoding: 'utf8', ...(cwd ? { cwd } : {}) });
+  return { status: r.status, stdout: r.stdout ?? '', stderr: r.stderr ?? '' };
+}
+
+// Create (or reuse) the issue's worktree+branch from trunk HEAD. Idempotent: develop creates it, review
+// joins the same one. node_modules is gitignored (lives only in the main checkout), so a fresh worktree
+// has none — symlink it so the repo-pinned ztrack/preset-kit + agent CLIs resolve inside the worktree.
+function ensureWorktree(branch: string, worktree: string): void {
+  if (existsSync(worktree)) return;
+  try {
+    if (!readFileSync('.gitignore', 'utf8').split('\n').includes('.worktrees/')) appendFileSync('.gitignore', '.worktrees/\n');
+  } catch {
+    appendFileSync('.gitignore', '.worktrees/\n');
+  }
+  mkdirSync(dirname(worktree), { recursive: true });
+  const branchExists = git(['rev-parse', '--verify', '--quiet', branch]).status === 0;
+  const add = branchExists ? ['worktree', 'add', worktree, branch] : ['worktree', 'add', '-b', branch, worktree, 'HEAD'];
+  const r = git(add);
+  if (r.status !== 0) throw new Error(`git worktree add failed for ${branch}: ${r.stderr || r.stdout}`);
+  const mainNodeModules = resolve('node_modules');
+  const linkPath = join(worktree, 'node_modules');
+  if (existsSync(mainNodeModules) && !existsSync(linkPath)) {
+    try {
+      symlinkSync(mainNodeModules, linkPath, 'dir');
+    } catch {
+      /* best-effort: a missing symlink just means the worktree falls back to global tools */
+    }
+  }
+}
+
+// Merge the issue's branch into trunk (local, no PR) and tear down its worktree. Called by the PM AFTER
+// review approves — the local analogue of github's native auto-merge (gated by the reviewer's verdict).
+// No agent runs this; it is deterministic substrate code, so the "no agent may merge" boundary holds.
+function integrate(ref: string): number {
+  const branch = branchOf(ref);
+  const worktree = worktreeOf(ref);
+  if (git(['rev-parse', '--verify', '--quiet', branch]).status !== 0) {
+    console.error(`integrate: no branch ${branch} to merge`);
+    return 1;
+  }
+  const m = git(['merge', '--no-ff', '-m', `integrate ${branch}`, branch]);
+  if (m.status !== 0) {
+    console.error(`integrate: merge of ${branch} into trunk failed:\n${m.stderr || m.stdout}`);
+    return 1;
+  }
+  if (existsSync(worktree)) git(['worktree', 'remove', '--force', worktree]);
+  git(['branch', '-D', branch]);
+  console.log(JSON.stringify({ integrated: branch }));
+  return 0;
 }
 
 /** Launch an agent with forwarded params (agent:launch). */
@@ -63,6 +139,10 @@ export async function launch(agent: string, params: LaunchParams = {}): Promise<
   }
 
   // Skill agent: a termfleet session via the launch adapter (forwards params verbatim).
+  // A code agent scoped to a work item runs in that issue's worktree (created/reused here); the session's
+  // cwd is the worktree, so the backend launches there and ztrack auto-scopes off the branch name.
+  const iso = isolationFor(agent, params);
+  if (iso) ensureWorktree(iso.branch, iso.worktree);
   const names = Object.keys(params);
   const env: Record<string, string> = {
     ...(process.env as Record<string, string>),
@@ -70,7 +150,7 @@ export async function launch(agent: string, params: LaunchParams = {}): Promise<
     AUTONOMY_FORWARD: [process.env.AUTONOMY_FORWARD, ...names].filter(Boolean).join(','),
     ...Object.fromEntries(names.map((k) => [k, String(params[k])])),
   };
-  spawnSync('node', [join(scriptsDir, 'run-agent.mjs')], { stdio: 'inherit', env });
+  spawnSync('node', [join(scriptsDir, 'run-agent.mjs')], { stdio: 'inherit', env, ...(iso ? { cwd: iso.worktree } : {}) });
 }
 
 /** List an agent's running sessions (agent:list) via the local runner backend. */
@@ -103,8 +183,18 @@ function parseFlags(args: string[]): LaunchParams {
 
 export async function runCli(argv: string[]): Promise<number> {
   const [cmd, agent, ...rest] = argv;
+  // `integrate` takes no agent — it merges a work item's branch into trunk after review approved.
+  if (cmd === 'integrate') {
+    const flags = parseFlags(argv.slice(1));
+    const ref = String(flags.ref ?? '');
+    if (!ref) {
+      console.error('usage: runner.ts integrate --ref <work-item>');
+      return 2;
+    }
+    return integrate(ref);
+  }
   if (!cmd || !agent || agent.startsWith('--')) {
-    console.error('usage: runner.ts <launch|list> <agent> [--ref <work-item>] [--key value ...]');
+    console.error('usage: runner.ts <launch|list|integrate> <agent> [--ref <work-item>] [--key value ...]');
     return 2;
   }
   if (cmd === 'launch') {

@@ -162,7 +162,9 @@ resources:
   - .github/ISSUE_TEMPLATE/public_agent_session.yml
   - .github/workflows/ci.yml
   - .github/workflows/human-approval.yml
+  - .github/workflows/codeql.yml
   - .github/workflows/open-autonomy-preflight.yml
+  - .github/dependabot.yml
   - .github/zizmor.yml
   - .gitattributes
   - .gitignore

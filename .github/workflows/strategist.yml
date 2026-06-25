@@ -133,6 +133,7 @@ jobs:
         with:
           name: agent-run-strategist
           path: .agent-run/
+          include-hidden-files: true
           retention-days: 30
           if-no-files-found: ignore
       - run: bun scripts/model-proxy-revoke.ts --run-id "ir-strategist-${{ github.run_id }}" || true

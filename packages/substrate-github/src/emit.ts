@@ -419,6 +419,10 @@ function wrapperYml(name: string, agent: IRAgent): string {
     `        with:`,
     `          name: agent-run-${name}`,
     `          path: .agent-run/`,
+    // .agent-run/ is a DOT-dir, and upload-artifact@v4 excludes hidden files by default — without this the
+    // upload silently finds "no files" and every run (esp. PM/reviewer, which have no other persistence, and
+    // ANY failed run) loses its transcript, making agent failures undiagnosable. Include hidden files.
+    `          include-hidden-files: true`,
     `          retention-days: 30`,
     `          if-no-files-found: ignore`,
     `      - run: bun scripts/model-proxy-revoke.ts --run-id "${RID}" || true`,

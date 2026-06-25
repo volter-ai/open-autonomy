@@ -111,6 +111,7 @@ jobs:
         with:
           name: agent-run-pm
           path: .agent-run/
+          include-hidden-files: true
           retention-days: 30
           if-no-files-found: ignore
       - run: bun scripts/model-proxy-revoke.ts --run-id "ir-pm-${{ github.run_id }}" || true

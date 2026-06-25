@@ -39,8 +39,13 @@ Open Autonomy has a source side and a target side.
 - Source side: this repository contains the reusable implementation, examples,
   model proxy, the `bench/` live-eval harness, and the `profiles/` recipes (compiled into installations).
 - Target side: a repository that has installed Open Autonomy contains the
-  generated workflows, scripts, repo-local skills, and `.open-autonomy/*`
-  control files.
+  **generated** per-agent workflows + the injected runtime scripts (what the engine
+  *derives* from the IR), the **code-host CI workflows carried as resources** (`ci`,
+  `security`, `deploy`, … — copied verbatim, like the standards docs; not generated),
+  the repo-local skills, and `.open-autonomy/*` control files. (Generated vs resource:
+  the agent **runner** workflows are derived per-agent; the code-**host** CI/security/
+  deploy workflows are resources, constant across runners — see
+  `docs/CODE_HOST_RESOURCES.md`.)
 - Meta side: this repository is also a target, so the source implementation is
   maintained by the same loop it ships.
 
@@ -214,6 +219,14 @@ docs/
     docs.md
     tests.md
     security.md
+.github/
+  workflows/
+    developer.yml … strategy_reviewer.yml      # GENERATED per agent (runner substrate)
+    ci.yml  human-approval.yml  security.yml    # code-host RESOURCES (carried, like docs/standards)
+    codeql.yml  deploy.yml  open-autonomy-preflight.yml
+  zizmor.yml                                    # GENERATED (derived: the agent-workflow baseline)
+  dependabot.yml                                # code-host RESOURCE
+  agent-control.mjs                             # GENERATED (operator control plane)
 ```
 
 - `AGENTS.md`: short always-loaded guidance shared across coding agents.
@@ -226,6 +239,10 @@ docs/
   gates.
 - `review-rubric.yml`: structured reviewer criteria.
 - `docs/standards/*`: scoped implementation guidance.
+- `.github/`: the per-agent workflows, `zizmor.yml`, and `agent-control.mjs` are **generated** by the runner
+  substrate (derived from the IR); the `ci`/`human-approval`/`security`/`codeql`/`deploy`/`preflight`
+  workflows and `dependabot.yml` are **code-host resources** carried by the profile (constant across runners
+  — see `docs/CODE_HOST_RESOURCES.md`).
 
 ## Evidence And State
 

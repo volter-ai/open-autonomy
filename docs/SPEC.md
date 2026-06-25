@@ -173,6 +173,18 @@ On **local** the two are separate (the loop fires; termfleet runs). On **github*
 (Actions `on:` fires; the Actions job runs). An agent never sees the trigger executor — from its seat
 there is only the runner and the box.
 
+**Substrate config lives in the box, not the engine.** A substrate reads its installation config from
+`policy.box.<substrate>` (e.g. `policy.box.github`: the model-proxy host, OIDC audience, model, bot git
+identity). The engine bakes in **no** org identity — a profile supplies these and the compiler emits them as
+the install's `vars.*` defaults. Likewise `policy.box.risk.human_required_paths` is materialized **verbatim**
+for the human-approval gate to enforce: the substrate *carries* policy, it never authors or augments it.
+
+**Runner vs code host.** The substrate is the agent *runner* — where the fleet executes — and it is
+orthogonal to the **code host** (github: where the repo lives and `ci` / `security` / `deploy` run). A
+local-substrate org still has a github code host, so those CI/security/deploy workflows are **code-host
+resources** carried by the profile (constant across runners, like the standards docs); only the per-agent
+workflows are *generated* by the runner substrate. See `docs/CODE_HOST_RESOURCES.md`.
+
 #### The Runner contract
 
 The runner knows only **agents and their lifecycle** — no work, issues, or domain. `launch` carries
@@ -345,6 +357,25 @@ statuses are green. Consequences:
 
 `code:review` (bless) and the merge (perform) are deliberately separated; no agent holds both. That split —
 not a dedicated app or a trusted gate job — *is* the merge boundary.
+
+#### The deploy boundary — the merge boundary's sibling, at the production edge
+
+Merge guards what reaches `main`; **deploy** guards what reaches *production*, and the same principle holds
+one step out: **no agent deploys.** Deploy is not an agent job and not a capability any agent holds — it is a
+human-promoted, gated effect realized by the **code host** (github CI), independent of which substrate runs
+the agents (a local-substrate org still deploys via its github repo — deploy is a code-host concern, not a
+runner one). The realization:
+
+- deploy fires only on a **human-cut promotion tag** (e.g. `deploy-v*`), restricted by repo ruleset to admins
+  — the fleet's `contents: write` cannot create it;
+- the deploy job runs in a **required-reviewer environment** (a maintainer approves each deployment;
+  admin-bypass off);
+- the deploy *workflow itself is a code-host resource* carried by the profile (like `ci.yml` — not engine
+  output, see `docs/CODE_HOST_RESOURCES.md`), and the worst case is bounded **outside** the trust loop
+  (provider-side spend caps + instant rollback), since the agents are funded by what they could deploy.
+
+So merge and deploy are the two production boundaries: an agent may propose code and an agent may bless a
+review, but **no agent lands on `main` and no agent ships to production** — each requires the human/native gate.
 
 ### The agent lifecycle (what replaced prepare / interpret)
 

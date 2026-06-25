@@ -27,17 +27,18 @@ function workflows(out: { generated: Record<string, string> }): string[] {
     .map(([, c]) => c);
 }
 
-describe('compileGithub — substrate-universal security baseline', () => {
-  // The substrate secures the surface it creates: it emits a security workflow + dependabot + a zizmor
-  // baseline, and injects the supply-chain runner — into EVERY github install, not per-profile.
-  test('emits the security workflow, dependabot, supply-chain runner, and a zizmor baseline scoped to the emitted agent workflows', () => {
+describe('compileGithub — derived security data vs code-host resources', () => {
+  // The engine emits only what it DERIVES: the agent workflows + security DATA materializations (the zizmor
+  // baseline + the supply-chain runtime). The security.yml workflow + dependabot config that consume them
+  // are code-host RESOURCES carried by the profile (like the standards docs) — never engine output.
+  test('emits the zizmor baseline + supply-chain runtime; security.yml + dependabot are resources, not emitted', () => {
     const out = compileGithub(irWith([{ cron: '0 0 * * *' }]));
-    expect(out.generated['.github/workflows/security.yml']).toContain('scripts/check-supply-chain.ts');
-    expect(out.generated['.github/workflows/security.yml']).toContain('zizmor');
-    expect(out.generated['.github/dependabot.yml']).toContain('package-ecosystem: github-actions');
-    expect(out.generated['scripts/check-supply-chain.ts']).toBeDefined();
-    // the zizmor baseline whitelists exactly the agent workflow this compile emitted (maintainer.yml)
-    expect(out.generated['.github/zizmor.yml']).toContain('maintainer.yml');
+    // derived data the engine materializes:
+    expect(out.generated['.github/zizmor.yml']).toContain('maintainer.yml'); // baseline = the emitted agent workflow
+    expect(out.generated['scripts/check-supply-chain.ts']).toBeDefined();    // supply-chain runtime is injected
+    // code-host CI workflows are RESOURCES (carried by the profile), NOT engine output:
+    expect(out.generated['.github/workflows/security.yml']).toBeUndefined();
+    expect(out.generated['.github/dependabot.yml']).toBeUndefined();
   });
 
   test('engine bakes in NO org identity — proxy host / OIDC audience / model / bot come from policy.box.github', () => {
@@ -56,9 +57,9 @@ describe('compileGithub — substrate-universal security baseline', () => {
     expect(wf).toContain("${{ vars.PUBLIC_AGENT_MODEL || 'x/y' }}");
   });
 
-  test('a human-only install still carries the baseline, with no agent workflow to whitelist', () => {
+  test('a human-only install emits an empty zizmor baseline (no agent workflow to whitelist)', () => {
     const out = compileGithub(irWith([{ dispatch: true }], 'human'));
-    expect(out.generated['.github/workflows/security.yml']).toBeDefined();
+    expect(out.generated['.github/zizmor.yml']).toBeDefined();
     expect(out.generated['.github/zizmor.yml']).not.toContain('maintainer.yml');
   });
 

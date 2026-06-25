@@ -170,6 +170,32 @@ export function compileLocal(ir: AutonomyIR, opts: { runner?: RunnerName } = {})
   // runtime imports this instead of re-hardcoding literals; TERMFLEET_* env vars override at runtime.
   generated['scripts/runner-defaults.mjs'] = runnerDefaultsModule();
 
+  // The ztrack loop gate: a Claude Code Stop hook that holds an agent's turn until its armed issue passes
+  // `ztrack check` (the idiomatic `ztrack loop` flow — develop arms it, the hook enforces drive-to-green).
+  // ztrack ships the armed-only script (dormant unless a loop is armed, so pm/review are unaffected). The
+  // `if [ -f … ]` guard makes it self-disabling when ztrack isn't installed (e.g. a non-ztrack profile) or
+  // not yet — a missing script must NOT make the Stop hook exit non-zero (which would block every turn).
+  // Committed so per-issue worktrees (checked out from HEAD) inherit it; node_modules is symlinked in.
+  generated['.claude/settings.json'] = `${JSON.stringify(
+    {
+      hooks: {
+        Stop: [
+          {
+            hooks: [
+              {
+                type: 'command',
+                command:
+                  'if [ -f node_modules/ztrack/plugins/ztrack-gate/hooks/stop-loop.sh ]; then bash node_modules/ztrack/plugins/ztrack-gate/hooks/stop-loop.sh; fi',
+              },
+            ],
+          },
+        ],
+      },
+    },
+    null,
+    2,
+  )}\n`;
+
   // The local driver: a loop that fires each cron agent on an interval (github used `on: schedule`).
   // Each runs its own behavior via bun, exactly as its github job runs `bun <behavior>`.
   const cronAgents = Object.entries(ir.agents).filter(([, a]) => cronOf(a));

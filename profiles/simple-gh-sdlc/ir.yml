@@ -70,6 +70,8 @@ policy:
 
 # The shared standards every skill reads (carried verbatim into the installation).
 resources:
+  - .github/workflows/security.yml
+  - .github/dependabot.yml
   - standards/workflow.md
   - standards/issue-and-evidence.md
   - standards/risk-and-review.md

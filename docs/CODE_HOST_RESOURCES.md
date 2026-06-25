@@ -1,83 +1,59 @@
-# Code-host resources — separating the runner from the CI host (design)
+# Code-host resources — what the engine emits vs what the profile carries
 
-> Status: proposal. Reached through the deploy-design discussion (2026-06-25). The trigger was: "deploy is
-> the same on every substrate → it's not substrate (substrate = runners) → it's a resource script → it's a
-> github CI script → just install the github workflow as a resource."
+> Reached through the deploy-design discussion (2026-06-25). The chain: deploy is the same on every
+> substrate → it's not substrate (substrate = runners) → it's a resource → a github CI script installed
+> as a resource → **and resources are part of the IR, like the standards docs.**
 
-## The conflation
+## The principle
 
-`compileGithub` is two compilers wearing one coat:
+`compileGithub` was doing two jobs. Separate them by what *generates* the file:
 
-1. **github as agent *runner*** — emits the per-agent workflows (`developer.yml`, …) + the agent-execution
-   runtime (`claude-agent-run.ts`, `model-proxy-*`). These are **derived from `ir.agents`** and exist *only
-   when the fleet runs on github*. Swap to the local substrate and they vanish (termfleet runs the agents).
-   This is the **substrate**. It varies.
-2. **github as code *host* + CI** — `ci`, `security`, the gates, `deploy`. These are **static github CI
-   scripts** that exist whenever the **repo lives on github**, independent of where agents run. A
-   local-substrate org still has them. They are **constant**.
+- **Emit** — only what the engine **derives from the IR**:
+  - the agent-runner workflows (`developer.yml`, … — derived from `ir.agents`; vanish on the local substrate)
+  - security **DATA** materializations: `.github/zizmor.yml` (the guarded agent-workflow names) and
+    `.open-autonomy/human-required-paths.json` (`policy.box.risk.human_required_paths`). Not authored logic —
+    the IR projected into a runtime-readable form.
+- **Resource** — every github **CI *workflow***, carried verbatim by the profile, **exactly like
+  `docs/standards/*.md`**: `ci`, `human-approval`, `security`, `dependabot`, `codeql`, `deploy`, `preflight`.
+  Resources are an essential part of the IR; a github-CI workflow is one.
 
-Today #2 is split awkwardly: some are hand-written **profile resources** (`ci`/`human-approval`/`codeql`/
-`deploy`/`preflight`), some are **emitted** by the runner compiler (`security.yml`), and their logic scripts
-(`human-approval-gate.ts`, `check-supply-chain.ts`) are injected as **agent-runtime** even though they have
-nothing to do with running agents. For the dogfood it works only because runner and code-host are the same
-github. A **local-substrate org with a github repo breaks it**: who emits its `ci`/`deploy`? Not its (local)
-runner.
+The earlier mistake (twice): treating "shared" as "engine-owned." Shared resources are still **resources**
+(IR layer). Sharing across profiles is a future concern (a base/standard resource set) — with only a
+handful of profiles, each carries its own copy, the same way each carries its own standards docs today.
 
-## The four categories of install content
+## What's a code-host resource, and why it's not substrate
 
-| Category | What | Source | Varies by runner? |
-|---|---|---|---|
-| **Agent-runner** | per-agent workflows, `agent-control.mjs`, agent-execution runtime | emitted/injected by the substrate from `ir.agents` | **yes** |
-| **Standard code-host resources** (NEW) | the github CI workflows + their gate scripts | shared, installed into every github-hosted install | no |
-| **Profile config** | the org-specific bits the resources read | profile (`policy.box.*`, vars) | no |
-| **Derived data** | values materialized from the IR | emitted (already) | — |
+The agent **runner** (github events | local termfleet) is where the fleet executes. The code **host**
+(github) is where the repo lives and CI/deploy run. They're orthogonal: a local-substrate org still has a
+github repo with `ci`/`security`/`deploy`. So these workflows are **constant across runners** — code-host
+resources, carried by the profile, independent of which substrate runs the agents.
 
-Deploy is a **standard code-host resource** (the workflow) + **profile config** (the target). The only
-IR-level fact is the **boundary invariant: no agent deploys** — the deploy sibling of "no agent merges."
+Deploy is one of them. The only IR-level fact about deploy beyond the resource itself is the **boundary
+invariant: no agent deploys** (the sibling of "no agent merges"), realized by the admin-only tag + the
+required-reviewer environment.
 
-## File-by-file mapping
+## Where each file lives (current, after the split)
 
-**Stay EMITTED (agent-runner — derived from `ir.agents`):**
-- `developer/pm/planner/reviewer/strategist/strategy_reviewer.yml`
-- `.github/agent-control.mjs`
-- agent-execution runtime: `claude-agent-run.ts`, `agent.ts`, `transcript.ts`, `agent-visual-verify.ts`,
-  `model-proxy-mint/exchange/revoke.ts`, `runner.ts`
-- Derived data: `.open-autonomy/human-required-paths.json`, `.github/zizmor.yml` (baseline from agent names)
+**Emitted (derived from the IR):**
+- `developer/pm/planner/reviewer/strategist/strategy_reviewer.yml`, `.github/agent-control.mjs`
+- agent-runtime scripts: `claude-agent-run.ts`, `model-proxy-*`, `runner.ts`, `transcript.ts`, …
+- `.github/zizmor.yml`, `.open-autonomy/human-required-paths.json` (derived data)
 
-**Become STANDARD CODE-HOST RESOURCES (shared, installed regardless of runner):**
-- workflows: `ci.yml`, `security.yml`, `human-approval.yml`, `codeql.yml`*, `open-autonomy-preflight.yml`,
-  `dependabot.yml`
-- gate scripts (recategorized from agent-runtime): `human-approval-gate.ts`, `check-supply-chain.ts`
-- `deploy.yml` — as a **target-typed template** (e.g. cloudflare-worker) + profile config
+**Profile resources (carried, IR layer):**
+- `ci.yml`, `human-approval.yml`, `security.yml`, `dependabot.yml`, `codeql.yml`, `deploy.yml`,
+  `open-autonomy-preflight.yml` — the github CI scaffolding, per github-targeting profile
 
-**Per-org bits → CONFIG the resources read at runtime (not baked per profile):**
-- maintainers (`PUBLIC_AGENT_MAINTAINERS`), the deploy target (`policy.box.deploy`), proxy host/model/etc.
-  (`policy.box.github`, already done)
+**Done in this pass:** `security.yml` + `dependabot.yml` moved from engine emission → resources across the
+three github profiles (`self-driving`, `hello`, `simple-gh-sdlc`); `zizmor.yml` + `human-required-paths.json`
+stay as derived data; the engine now emits only agent workflows + that derived data. Deploy was already a
+resource, so the original question ("first-class IR vs profile?") is answered: **it's a resource.**
 
-\* `codeql` is app-*code* scanning, so it may be **profile-opt-in** rather than a universal default.
+## Open / deferred
 
-## Borderline (decide during impl)
-
-- `reconcile-merged-issues.ts`, `rearm-auto-merge.ts` — deterministic merge-boundary mechanics invoked *in*
-  the agent effect step. Code-host logic, but runner-triggered. Lean: leave as agent-runner for now.
-- `.github/zizmor.yml` baseline is derived from agent names. Either keep it emitted (a derived-data
-  exception) or have `security.yml` discover the agent workflows at runtime so it can be fully static.
-
-## Implementation slices
-
-0. **Establish the category.** Add a `codeHostResources()` set to the engine (shared workflow+script files),
-   installed into every github install — sibling to `runtimeFiles()`, but for code-host CI, not agent-runtime.
-1. **Migrate `human-approval`** (workflow + `human-approval-gate.ts`) into it. Already thin → lowest risk;
-   proves the pattern. Drop the profile-resource copies.
-2. **Migrate `ci` + `security` + `check-supply-chain.ts`.** Make `security.yml` a static resource.
-3. **Deploy as a code-host resource** (cloudflare-worker template) + `policy.box.deploy` config + the
-   provisioning. ← the original goal, now a clean member of the set.
-4. **`codeql` + `preflight`.** Empty out `profiles/self-driving/.github/` — the profile carries zero github YAML.
-
-Throughout: enforce the boundary invariant (no agent deploys) in conformance; per-org values stay in config.
-
-## The end state
-
-`profiles/self-driving/.github/` is empty. The profile is pure declaration. The engine installs: the
-agent-runner workflows it *derives*, and the standard code-host CI it *ships* — with deploy as one resource
-in that set, configured by the profile, gated by the one IR invariant.
+- The gate **scripts** `human-approval-gate.ts` and `check-supply-chain.ts` are still injected as *runtime*
+  (agent-substrate). They're code-host logic, not agent execution — arguably resources too. Left as runtime
+  for now (they work; the WORKFLOWS were the live issue). Revisit if it causes friction.
+- A **base/standard resource set** so github profiles don't each copy `security.yml`/`dependabot.yml`.
+  Deferred — not worth it at the current profile count.
+- The deploy **provisioning** (environment + ruleset) is still imperative `gh api`. Making it a reproducible
+  setup step is the remaining deploy work (separate from this layering fix).

@@ -12,4 +12,6 @@ agents:
       - { cron: "*/30 * * * *" } # autonomous (no subject.ref) — fires on a schedule
 policy:
   box: {}
-resources: []
+resources:
+  - .github/workflows/security.yml
+  - .github/dependabot.yml

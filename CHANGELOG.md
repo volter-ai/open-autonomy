@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.2.4
+
+### Fixed
+- **self-driving now compiles to a local install.** `compileLocal` didn't map the `.gitignore` resource to its
+  on-disk `gitignore` source (npm strips files named `.gitignore` from published packages; `compileGithub`
+  already did this), so self-driving — the only profile carrying `.gitignore` — failed to materialize to a
+  local runner (a half-written install + a swallowed stack trace). self-driving also now declares `local` in
+  its `targets`, so `check:profiles` compiles it to local and catches this class of drift.
+
+Proven: **self-driving runs hands-off on a local runner end to end** — the reworked PM dispatches the developer
+through the seam, the developer isolates on its worktree branch, the reviewer posts `agent-review` with
+`GITHUB_REPOSITORY` **unset** (code-host-blind), native auto-merge lands a single PR (no duplicate), and
+`merge.yml`'s reconcile closes the issue. The `human-approval` gate auto-passes routine PRs and correctly
+demands a maintainer Approve for human-required scope.
+
 ## 0.2.3
 
 ### Changed

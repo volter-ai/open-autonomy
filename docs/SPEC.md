@@ -210,6 +210,14 @@ The `agent:*` capability axis **is** this contract — an agent with `agent:laun
 operator always holds the full contract over a running agent (the control plane). Full detail in
 [§The Runner](#the-runner).
 
+**Isolation is requested explicitly, and the runner stays code-host-blind.** A worker that produces an
+isolated change is launched with a `--branch <name>` runner-control param; the runner runs it in that branch's
+own workspace (a local runner: a git worktree; a gh-actions runner: the job's fresh checkout, which makes
+`--branch` a no-op). No `--branch` ⇒ the trunk workspace. The runner derives this from neither a capability nor
+the work item — the caller (the PM) names the branch — and it injects **no** code-host identity: an agent that
+needs its repo or PR resolves them through its own code-host tool (e.g. `gh api repos/{owner}/{repo}/…`, which
+`gh` fills from the remote). So the runner never names a code host, on any substrate.
+
 ### What is NOT an agent
 
 Not everything in an installation is an IR agent. Three kinds sit outside the standard:

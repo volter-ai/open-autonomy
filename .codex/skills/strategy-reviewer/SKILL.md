@@ -46,8 +46,9 @@ The PR number is in the `TARGET_REF` environment variable.
      item, no hand-written execution status, ids stay coherent, edits (decomposition/`planned`/ordering/
      wording) are consistent with the constitution and the items already ratified. Pass if consistent; fail
      with a specific reason otherwise. Do not apply the merit rubric to an operational edit.
-4. **Post the verdict** to the head SHA (`SHA` = headRefOid) in `GITHUB_REPOSITORY`:
-   - Pass: `gh api -X POST "repos/$GITHUB_REPOSITORY/statuses/$SHA" -f state=success -f context=agent-review -f description="<reason>"`
+4. **Post the verdict** to the head SHA (`SHA` = headRefOid), to the repo (`gh` fills `{owner}/{repo}` from the
+   remote — works on GitHub Actions and a local runner alike; no `GITHUB_REPOSITORY` needed):
+   - Pass: `gh api -X POST "repos/{owner}/{repo}/statuses/$SHA" -f state=success -f context=agent-review -f description="<reason>"`
    - Fail / human-required: `... -f state=failure -f context=agent-review ...` (and `gh pr edit "$TARGET_REF" --add-label human-required` when human-required).
 5. Comment the verdict + findings: `gh pr comment "$TARGET_REF" --body "Strategy review: <pass|fail>. <summary>"`.
 

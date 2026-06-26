@@ -233,7 +233,8 @@ export async function launch(agent: string, params: LaunchParams = {}): Promise<
           // (local -> a termfleet reviewer session). github instead carries REVIEW_WORKFLOW; both resolve to
           // "launch the reviewer for this PR", the substrate-correct realization of develop's `review:` edge.
           REVIEW_AGENT: review,
-          ...(process.env.GITHUB_REPOSITORY ? { GITHUB_REPOSITORY: process.env.GITHUB_REPOSITORY } : {}),
+          // The runner injects no repo identity: the effect resolves its own repo from the remote
+          // (gh `{owner}/{repo}`), keeping the runner code-host-blind.
         },
       });
     } else {

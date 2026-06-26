@@ -45,6 +45,24 @@ describe('the post-session effect is gated on EXPLICIT signals, never a capabili
     expect(rt).not.toMatch(/agent\/issue-\$\{[^}]*ref/i); // no `agent/issue-${ref}` auto-derivation in the runner
   });
 
+  test('the runner stays CODE-HOST-BLIND — it injects no GITHUB_REPOSITORY identity', () => {
+    const out = compileLocal(ghLocalIr);
+    // the agent/effect resolves its own repo (gh {owner}/{repo}); the runner never injects the repo identity
+    expect(out.generated['scripts/runner.ts']).not.toContain('GITHUB_REPOSITORY');
+    expect(out.generated['scripts/autonomy-runner.mjs']).not.toContain('GITHUB_REPOSITORY');
+  });
+
+  test('the uniform seam exposes cancel on both substrates (agent:cancel)', () => {
+    expect(compileLocal(ghLocalIr).generated['scripts/runner.ts']).toContain("cmd === 'cancel'"); // local seam
+  });
+
+  test('cron agents are single-instance (AUTONOMY_SINGLETON) so PM ticks do not pile up', () => {
+    const out = compileLocal(ghLocalIr);
+    expect(out.generated['scripts/run-agent.mjs']).toContain('AUTONOMY_SINGLETON'); // the skip-if-busy guard
+    const schedule = JSON.parse(out.generated['scheduler/schedule.json']) as { scripts: string[] };
+    expect(schedule.scripts.some((s) => s.includes('AUTONOMY_SINGLETON=1'))).toBe(true); // the PM tick sets it
+  });
+
   test('the old propose-sweep poller is GONE — no worktree-scanning reconciler is emitted or scheduled', () => {
     const out = compileLocal(ghLocalIr);
     expect(out.generated['scripts/propose-sweep.ts']).toBeUndefined(); // the leaky reconciler is not shipped

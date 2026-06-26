@@ -13,7 +13,7 @@
 //   AGENT_BOT_NAME   / AGENT_BOT_EMAIL   git author identity for the agent-proposed commit
 //   REVIEW_WORKFLOW  the reviewer's workflow to dispatch on github (empty if no review edge / non-github runner)
 //   REVIEW_AGENT     the reviewer AGENT to launch via the runner seam (a local runner's review-edge realization)
-//   GH_TOKEN, GITHUB_REPOSITORY, GITHUB_RUN_ID
+//   GH_TOKEN, GITHUB_RUN_ID  (the repo is resolved from the remote via gh's {owner}/{repo} placeholders)
 import { execFileSync } from 'node:child_process';
 
 const env = process.env;
@@ -81,8 +81,9 @@ if (isNumericRef) commitArgs.push('-m', `Closes #${ref}`);
 sh('git', commitArgs);
 sh('git', ['push', '--force', 'origin', branch]);
 
-const repo = env.GITHUB_REPOSITORY || '';
-const base = sh('gh', ['api', `repos/${repo}`, '--jq', '.default_branch'], { allowFail: true }) || 'main';
+// Resolve the repo through gh's `{owner}/{repo}` placeholders (filled from the remote) — works ambiently on
+// GitHub Actions AND a local runner, so this effect needs no injected GITHUB_REPOSITORY.
+const base = sh('gh', ['api', 'repos/{owner}/{repo}', '--jq', '.default_branch'], { allowFail: true }) || 'main';
 let body = sh('bash', ['-c', 'cat .agent-run/artifacts/pr.md 2>/dev/null || true'], { allowFail: true }) || `Automated agent change (${rid}).`;
 if (isNumericRef) body = `Closes #${ref}\n\n${body}`;
 if (!ok('gh', ['pr', 'create', '--base', base, '--head', branch, '--title', `Agent: ${rid}`, '--body', body])) {

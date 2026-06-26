@@ -24,7 +24,10 @@ never open the PR, request review, or merge.
    and `gh issue view "$ZTRACK_ISSUE" --json body --jq .body > issue.md` (the ACs are in
    `issue.md`). Implement **only** its ACs. Stop with `OUTCOME: blocked human-required`
    if it needs a human-required path/topic from `risk-and-review.md`.
-3. Start your branch so your commits are the PR: `git checkout -b "agent/issue-$ZTRACK_ISSUE"`.
+3. Make sure your commits land on `agent/issue-$ZTRACK_ISSUE` so they become the PR. The runner may already
+   have placed you on it (a local runner gives you an isolated worktree already on that branch); create it only
+   if needed — don't fail if you're already there:
+   `git checkout -b "agent/issue-$ZTRACK_ISSUE" 2>/dev/null || git checkout "agent/issue-$ZTRACK_ISSUE"`.
 4. Implement. Run the project's tests/checks; accept a check that exits 0.
 5. **Commit your implementation** — this commit's SHA is the evidence:
    `git add -A && git commit -m "feat: <what> (#$ZTRACK_ISSUE)"`. Capture `sha="$(git rev-parse HEAD)"`.

@@ -77,8 +77,9 @@ The PR number is in the `TARGET_REF` environment variable.
      auto-fail such a PR just because it is sensitive: **review its code on the merits** and pass if it is sound.
      It still cannot merge without the maintainer Approve (ci + agent-review + human-approval are all required).
      You still fail for genuine quality/security/regression problems or anything you cannot confidently review.
-3. **Post the verdict** to the head SHA (`SHA` = the headRefOid above), into the repo `GITHUB_REPOSITORY`:
-   - Pass, low risk: `gh api -X POST "repos/$GITHUB_REPOSITORY/statuses/$SHA" -f state=success -f context=agent-review -f description="<short reason>"`
+3. **Post the verdict** to the head SHA (`SHA` = the headRefOid above), to the repo (`gh` fills `{owner}/{repo}`
+   from the remote — works on GitHub Actions and a local runner alike; no `GITHUB_REPOSITORY` needed):
+   - Pass, low risk: `gh api -X POST "repos/{owner}/{repo}/statuses/$SHA" -f state=success -f context=agent-review -f description="<short reason>"`
    - Fail (genuine quality/security/regression problems, broad/unclear rewrites you cannot confidently
      review): `... -f state=failure -f context=agent-review ...`.
    - **Needs a human but the code is sound** (e.g. it's sensitive and you want a maintainer's eyes, or you

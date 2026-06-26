@@ -31,6 +31,10 @@ export class TermfleetRunner {
     const client = await this.#client();
     // Re-export orchestration context so a nested `autonomy launch ...` reaches this provider, plus the
     // opaque params verbatim (a profile may read e.g. $ZTRACK_ISSUE; the system doesn't).
+    // Re-export orchestration context so a nested `autonomy launch ...` reaches this provider, plus the
+    // opaque params verbatim (a profile may read e.g. $ZTRACK_ISSUE; the system doesn't). The runner stays
+    // CODE-HOST-BLIND: it injects no github/repo identity — a code-host agent resolves its own repo through
+    // its own tool (e.g. `gh api repos/{owner}/{repo}/…`, which `gh` fills from the remote).
     const exported = {
       ...Object.fromEntries(Object.entries(process.env).filter(([k]) => /^(TERMFLEET_.*|AUTONOMY.*|PATH)$/.test(k))),
       ...params,

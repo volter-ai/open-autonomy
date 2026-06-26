@@ -1,5 +1,48 @@
 # Changelog
 
+## 0.2.0
+
+### Added
+- **Architecture-invariants immune system.** A per-project `.open-autonomy/architecture-invariants.yml`
+  (human-owned: seed-once, drift-exempt, in `human_required_paths`) declares the design boundaries the
+  autonomy loop must not erode. The reviewer ENFORCES them via a fastidious `architecture` rubric criterion —
+  enumerate every applicable invariant (don't sample), emit a per-invariant `[id] PASS/FAIL — file:line`
+  checkoff. An accidental VIOLATION → fail (rework); an AMENDMENT / an edit to the file / genuine ambiguity →
+  human-required. **"No agent re-architects"** joins "no agent merges" and "no agent deploys" as the third
+  production boundary: the loop builds *within* the architecture but cannot change it autonomously (only a
+  human ratifies an invariant; the reviewer may propose one). Adoptable by any repo — ships a blank template
+  the adopter ratifies.
+
+### Changed
+- **The local runner now genuinely mirrors github's job lifecycle** (completing the runner ⟂ code-host
+  separation). The propose effect is an agent-owned script (`agent-propose.ts`), not runner emit; the code
+  host (`codeHost: github | local-git`) is a first-class IR signal orthogonal to the runner (`targets`); and
+  a **local-runner + github-code-host install is now autonomous end to end**:
+  - **Isolation is the runner's job.** A `code:propose` agent is auto-isolated in a derived `agent/issue-<ref>`
+    worktree (github isolates via the job's fresh checkout; local via the worktree), so the PM stays
+    substrate-agnostic — it just `launch develop --ref N`, never assigning isolation.
+  - **The propose effect runs on session completion**, via a per-session lifecycle hook: launch records a
+    marker keyed by the session's terminalId, and the loop runs the effect in that worktree once the session
+    finishes and is reaped — the local twin of github's post-skill job step. This **replaces the old
+    propose-sweep poller**, which scanned `.worktrees` and reconstructed SDLC state inside the runner (a
+    methodology leak the immune system would now fail).
+  - **The `review:` edge is realized through the runner seam.** After opening the PR, the proposer launches
+    the reviewer the same way the PM launches any worker (`runner.ts launch <reviewer> --ref <pr>`): on a
+    local runner a termfleet reviewer session that reads the PR and posts the `agent-review` status; on
+    github, the existing workflow dispatch (unchanged).
+
+### Fixed
+- **Local launches no longer lose the terminalId.** `createAgentWindow` blocks until the launched agent's
+  first response (cold-start + setup), but the backend passed no ack timeout, so the SDK default fired while
+  the window was already created server-side — the launch errored and the terminalId never returned (so no
+  effect marker, so a finished proposer never proposed). It is now given a real `createTimeoutMs` (default
+  120s, `TERMFLEET_CREATE_TIMEOUT_MS` overrides), with the outer spawn cap raised to match.
+
+Proven live, end to end, through the shipped scheduler (headless termfleet provider + a disposable github
+repo): a PM-style `launch develop --ref N` → auto-isolated worktree + recorded marker → session completion →
+`scheduler/run.mjs` reconcile runs `agent-propose` in the worktree → PR opened on github → reviewer launched
+via the runner seam.
+
 ## 0.1.8
 
 ### Changed

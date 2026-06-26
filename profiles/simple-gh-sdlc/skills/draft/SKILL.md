@@ -21,7 +21,9 @@ label. Never open a new issue — drafting *transitions* the request, keeping it
 2. Read the raw request: `gh issue view "$ZTRACK_ISSUE" --json title,body,comments`.
 3. Compose `issue.md` (start from `ztrack issue scaffold --title "<title>" > issue.md`): a
    source-grounded summary and 1-3 ACs that are each observable and provable by a commit.
-   Leave the ACs **unchecked** — develop adds the evidence later; do not pre-create evidence.
+   Put an `Assignee: <login>` line at the very top (the assignee the GitHub issue will carry —
+   `ztrack check` on a body file reads it from there). Leave the ACs **unchecked** — develop
+   adds the evidence later; do not pre-create evidence.
 4. Validate the shape: `ztrack check issue.md` (it must parse + accept the ACs).
 5. Update the GitHub issue **in place** and mark it ready:
    - `gh issue edit "$ZTRACK_ISSUE" --body-file issue.md` (refine the title with `--title "<refined>"` if vague),

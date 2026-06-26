@@ -6,6 +6,7 @@
 # (contents:write) permission split + native auto-merge — no agent holds both, none can land unreviewed code.
 schema: autonomy.ir.v1
 targets: [gh-actions]
+codeHost: github
 
 agents:
   # Developer: edits code in its credentialed sandbox; the effect step proposes its change as an

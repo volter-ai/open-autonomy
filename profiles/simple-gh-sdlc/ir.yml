@@ -6,6 +6,7 @@
 # capabilities + triggers(+params) (+ review edge). See docs/SPEC.md#the-ir, docs/SPEC.md#the-runner.
 schema: autonomy.ir.v1
 targets: [gh-actions]
+codeHost: github
 
 agents:
   # The only dispatcher. Sweeps the ztrack board on a tick, enforces WIP, and LAUNCHES the next eligible

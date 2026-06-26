@@ -16,6 +16,7 @@ schema: autonomy.ir.v1
 # `agent-review` status — a boundary this profile doesn't provide — so a PR-free process can't land on
 # github. The GitHub PR-based SDLC is `simple-gh-sdlc`'s job (its preset + a github reviewer edge).
 targets: [local]
+codeHost: local-git
 
 agents:
   # The only dispatcher. Sweeps the board on a tick, enforces WIP (≤1 in-progress, ≤1 in-review), and

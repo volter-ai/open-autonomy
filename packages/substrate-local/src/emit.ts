@@ -208,8 +208,13 @@ export function compileLocal(ir: AutonomyIR, opts: { runner?: RunnerName } = {})
       copies.push({ from: `skills/${agent.behavior}/SKILL.md`, to: `.claude/skills/${agent.behavior}/SKILL.md` });
     }
   }
+  // Carry the profile's resources. `.github/` workflows (ci/merge/security/…) are CODE-HOST resources: drop
+  // them only for a local-git code host; KEEP them when the code host is github, because they run on github
+  // Actions (the code host) regardless of where the agents RUN — a local-runner + github-code-host install
+  // still needs them pushed to its github repo. (Runner ⟂ code host — docs/CODE_HOST_RESOURCES.md.)
+  const keepCodeHostWorkflows = ir.codeHost === 'github';
   for (const r of ir.resources) {
-    if (!r.startsWith('.github/')) copies.push({ from: r, to: r });
+    if (keepCodeHostWorkflows || !r.startsWith('.github/')) copies.push({ from: r, to: r });
   }
   return withGeneratedManifest({ generated, copies });
 }

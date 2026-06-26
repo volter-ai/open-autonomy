@@ -69,6 +69,11 @@ export interface IRPolicy {
 export interface AutonomyIR {
   schema: 'autonomy.ir.v1';
   targets: string[];
+  // The code host: WHERE code/work/integration lives (PRs+auto-merge vs worktree+PM-merge). ORTHOGONAL to
+  // `targets` (the agent runner) — a `local` runner can drive a `github` code host. It's a profile methodology
+  // choice (simple-gh-sdlc = github; simple-sdlc = local-git), realized by the agent's own tools (gh/git), not
+  // the runner. Default `local-git` when omitted. See docs/CODE_HOST_RESOURCES.md.
+  codeHost?: 'github' | 'local-git';
   agents: Record<string, IRAgent>;
   policy: IRPolicy;
   resources: string[];

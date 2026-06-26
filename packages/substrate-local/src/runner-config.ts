@@ -9,7 +9,13 @@ export const RUNNER_DEFAULTS = {
   // (TERMFLEET_PROVIDER_URL -> `termfleet use` context -> live local auto-discovery).
   // A baked-in port was the crutch that drifted to a dead provider; the runner
   // passes --url only when TERMFLEET_PROVIDER_URL is explicitly set.
-  launchTimeoutMs: 45000,
+  //
+  // createAgentWindow BLOCKS until the launched agent's first response (claude cold-start + the setup
+  // command), so its socket ack needs a generous timeout — the SDK default is far too short and the window
+  // gets created server-side while the client times out, losing the terminalId (and so the post-session
+  // effect marker). createTimeoutMs is that ack budget; launchTimeoutMs (the outer spawn cap) must exceed it.
+  createTimeoutMs: 120000,
+  launchTimeoutMs: 150000,
 } as const;
 
 // Emitted into installs so the vendored JS runtime (plain .mjs, no TS/bundler) can import the same

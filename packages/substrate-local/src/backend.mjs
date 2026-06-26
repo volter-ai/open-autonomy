@@ -45,7 +45,14 @@ export class TermfleetRunner {
     const promptDir = process.env.AUTONOMY_PROMPT_DIR;
     const promptFile = promptDir ? `${promptDir}/${agent}.txt` : '';
     const prompt = promptFile && existsSync(promptFile) ? readFileSync(promptFile, 'utf8') : agent;
-    const ack = await client.createAgentWindow({ agent: this.harness, name: agent, cwd: process.cwd(), prompt, setupCommand });
+    // createAgentWindow blocks until the agent's first response; give its socket ack a generous timeout
+    // (TERMFLEET_CREATE_TIMEOUT_MS overrides) so a real claude cold-start doesn't time out the launch and
+    // lose the terminalId — the join key the post-session effect marker + the reaper depend on.
+    const createTimeoutMs = Number(process.env.TERMFLEET_CREATE_TIMEOUT_MS || RUNNER_DEFAULTS.createTimeoutMs);
+    const ack = await client.createAgentWindow(
+      { agent: this.harness, name: agent, cwd: process.cwd(), prompt, setupCommand, createTimeoutMs },
+      { timeoutMs: createTimeoutMs },
+    );
     const terminalId = ack.result?.terminalId;
     if (!terminalId) {
       throw new Error(`termfleet createAgentWindow returned no terminalId for agent "${agent}": ${ack.error ?? '(no error)'}`);

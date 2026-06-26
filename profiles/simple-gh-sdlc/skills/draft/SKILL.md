@@ -1,6 +1,6 @@
 ---
 name: draft
-description: Draft verifiable ztrack simple-gh-sdlc issues from requests; use when converting unshaped work into Ready issues with sources and acceptance criteria.
+description: Draft verifiable ztrack simple-gh-sdlc issues from requests; use when converting an unshaped GitHub issue into a Ready issue with acceptance criteria.
 ---
 
 # ztrack simple-gh-sdlc Draft
@@ -9,24 +9,25 @@ Read:
 
 - `standards/issue-and-evidence.md`
 
-You shape the EXISTING request issue named in `$ZTRACK_ISSUE` into a verifiable
-Ready issue **in place** — same issue id. Never create a new issue and never
-delete the original: drafting *transitions* a request to Ready, it does not
-replace it (a new id breaks cross-references and the board's history).
+Your work item is a **GitHub issue number** in `$ZTRACK_ISSUE`. You shape that
+existing issue **in place** into a verifiable Ready work item: rewrite its body into
+ztrack form (summary + acceptance criteria) and mark it ready with the **`ready`**
+label. Never open a new issue — drafting *transitions* the request, keeping its number
+(which is its identity and PR cross-reference).
 
 ## Procedure
 
-1. Read the work item: `echo "$ZTRACK_ISSUE"` — stop if missing/empty. It is an
-   issue **id**, not a file.
-2. Read the raw request: `ztrack issue view "$ZTRACK_ISSUE"`.
-3. Compose `body.md` (start from `ztrack issue scaffold --title "<title>" > body.md`):
-   a source-grounded summary and 1-3 ACs that are each observable and provable by
-   a commit. Leave the ACs unchecked — evidence is added later (inline per AC) by
-   develop; do not pre-create an evidence section.
-4. Update the issue **in place** (keep its id), refining the title if needed:
-   `ztrack issue edit "$ZTRACK_ISSUE" --body-file body.md --state ready --assignee me`
-   (add `--title "<refined>"` if the original title was vague). Do **not** run
-   `ztrack issue create`.
-5. Run `ztrack check "$ZTRACK_ISSUE"`.
+1. `echo "$ZTRACK_ISSUE"` — stop if missing/empty. It is a GitHub issue **number**.
+2. Read the raw request: `gh issue view "$ZTRACK_ISSUE" --json title,body,comments`.
+3. Compose `issue.md` (start from `ztrack issue scaffold --title "<title>" > issue.md`): a
+   source-grounded summary and 1-3 ACs that are each observable and provable by a commit.
+   Leave the ACs **unchecked** — develop adds the evidence later; do not pre-create evidence.
+4. Validate the shape: `ztrack check issue.md` (it must parse + accept the ACs).
+5. Update the GitHub issue **in place** and mark it ready:
+   - `gh issue edit "$ZTRACK_ISSUE" --body-file issue.md` (refine the title with `--title "<refined>"` if vague),
+   - `gh issue edit "$ZTRACK_ISSUE" --add-label ready` (the PM dispatches develop on `ready` issues),
+   - assign it: `gh issue edit "$ZTRACK_ISSUE" --add-assignee @me` (or the requesting maintainer).
+6. If the request is too vague to shape into provable ACs, do NOT mark it ready: comment the
+   specific questions and add the `needs-info` label instead.
 
-End with `OUTCOME: drafted` or `OUTCOME: blocked <reason>`.
+End with `OUTCOME: drafted` (issue is `ready` + has ACs) or `OUTCOME: blocked <reason>`.

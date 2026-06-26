@@ -10,33 +10,44 @@ Read:
 - `standards/issue-and-evidence.md`
 - `standards/risk-and-review.md`
 
+Your work item is a **GitHub issue number** in `$ZTRACK_ISSUE`. Its acceptance
+criteria live in the issue **body** (ztrack markdown). You implement the ACs,
+**commit your work on `agent/issue-$ZTRACK_ISSUE`**, and record evidence back into
+the issue body. The substrate opens the auto-merging PR for your committed branch;
+the independent `reviewer` gates it (`ci` + `agent-review` → native auto-merge). You
+never open the PR, request review, or merge.
+
 ## Procedure
 
-1. Read the environment variable with `echo "$ZTRACK_ISSUE"`; stop if it is missing. `ZTRACK_ISSUE` is not a file.
-2. View only that assigned issue and implement only its ACs.
-   Stop with `OUTCOME: blocked human-required` if the issue requires a
-   human-required path or topic from `risk-and-review.md`.
-3. Run project tests/checks. If a relevant check exits 0, accept it as passing;
-   do not rerun only to get prettier reporter output.
-4. Commit the implementation.
-5. For each genuinely satisfied AC, mark it passed **with evidence + proof in one
-   patch** (the commit SHA is the evidence) — see `standards/issue-and-evidence.md`:
-   `ztrack ac patch <issue> <ac> --json '{"checked":true,"status":"passed","evidence":[{"id":"ev1","commit":"<sha>","acVersion":1}],"proof":{"explanation":"…","evidenceRefs":["ev1"]}}'`.
-   For an artifact, `ztrack evidence add <file>` (prints `image=<path>`), commit it,
-   add `"image":"<path>"` to the entry. Use `ztrack issue view <issue>` for the AC
-   ids/`acVersion`; `ztrack check "$ZTRACK_ISSUE"` names the exact command in its fix
-   hint. A checked/passed AC with no evidence fails `check` — never fabricate one.
-6. Leave unsupported ACs unchecked. If a claim can't be satisfied, take an **honest
-   escape** — never fake green: leave the AC pending and end `OUTCOME: blocked <reason>`;
-   descope the AC; or `ztrack waiver sign "$ZTRACK_ISSUE" --code <code> --reason "…"`.
-7. When **`ztrack check "$ZTRACK_ISSUE"`** (scope to your issue — a whole-tracker check
-   can be red for an unrelated issue) is green, move the issue to `in-review`
-   (`ztrack issue edit <issue> --state "in-review"`) and commit your work on the
-   branch. The **substrate opens the auto-merging PR** for your branch and the
-   independent `reviewer` is triggered on it — you do not open the PR, request
-   review, or merge. If another issue is already `in-review` (WIP), leave this one
-   `in-progress` and end with `OUTCOME: blocked review-capacity`.
+1. `echo "$ZTRACK_ISSUE"` — stop if missing/empty. It is a GitHub issue **number**.
+2. Read the issue: `gh issue view "$ZTRACK_ISSUE" --json number,title,body,labels > /tmp/issue.json`
+   and `gh issue view "$ZTRACK_ISSUE" --json body --jq .body > issue.md` (the ACs are in
+   `issue.md`). Implement **only** its ACs. Stop with `OUTCOME: blocked human-required`
+   if it needs a human-required path/topic from `risk-and-review.md`.
+3. Start your branch so your commits are the PR: `git checkout -b "agent/issue-$ZTRACK_ISSUE"`.
+4. Implement. Run the project's tests/checks; accept a check that exits 0.
+5. **Commit your implementation** — this commit's SHA is the evidence:
+   `git add -A && git commit -m "feat: <what> (#$ZTRACK_ISSUE)"`. Capture `sha="$(git rev-parse HEAD)"`.
+6. Record evidence **in `issue.md`** for each genuinely satisfied AC — check the box,
+   set `status: passed`, cite the commit + a proof (see `standards/issue-and-evidence.md`):
+   ```
+   - [x] dev/01 v1 <text>
+     - status: passed
+     - evidence ev1: commit=<sha> acv=1
+     - proof: "how the commit shows this AC is met" -> ev1
+   ```
+   For an artifact, commit the file and add `image=<path>` to the evidence line. A
+   checked/passed AC with no real evidence fails `check` — never fabricate one.
+7. **Gate locally:** `ztrack check issue.md` (it validates the AC structure and that the
+   cited commits exist — your commit from step 5 does). Iterate until it is green.
+8. Push the updated ACs/evidence onto the GitHub issue so the reviewer + history see it:
+   `gh issue edit "$ZTRACK_ISSUE" --body-file issue.md`. If you committed `issue.md`/artifacts
+   into the repo, that's fine; the evidence of record is the issue body.
+9. Stop. The substrate pushes `agent/issue-$ZTRACK_ISSUE` and opens the auto-merging PR
+   (`Closes #$ZTRACK_ISSUE`) and triggers the reviewer — do not open the PR or merge.
 
-End with `OUTCOME: ready-for-review` (branch pushed; PR will open for review) or
-`OUTCOME: blocked <reason>`. Never merge — the merge boundary is `ci` + the
-reviewer's `agent-review`, landed by native auto-merge.
+Honest escape (never fake green): leave the AC unchecked and end `OUTCOME: blocked <reason>`,
+descope it, or `ztrack waiver sign issue.md --code <code> --reason "…"` (then re-push the body).
+
+End with `OUTCOME: ready-for-review` (branch committed; PR will open) or `OUTCOME: blocked <reason>`.
+Never merge — the boundary is `ci` + the reviewer's `agent-review`, landed by native auto-merge.

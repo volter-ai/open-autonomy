@@ -298,12 +298,15 @@ function wrapperYml(name: string, agent: IRAgent, gh: GithubBox, isControlPrimar
     `          GH_TOKEN: \${{ github.token }}`,
     `        run: |`,
     `          set -euo pipefail`,
-    `          if [ -z "$(git status --porcelain)" ]; then echo "no working-tree changes; nothing to propose"; exit 0; fi`,
     `          branch="${branchExpr}"`,
+    // A proposer either leaves uncommitted changes (we commit the tree below) OR has already committed onto
+    // its own \`agent/issue-<n>\` branch (e.g. to cite the commit SHA as evidence — the ztrack SDLC). Propose
+    // if EITHER is true; bail only when the tree is clean AND no such branch exists (nothing to land).
+    `          if [ -z "$(git status --porcelain)" ] && ! git rev-parse --verify "$branch" >/dev/null 2>&1; then echo "no changes and no agent branch; nothing to propose"; exit 0; fi`,
     `          git config user.name "${gh.bot_name ?? 'open-autonomy-agent'}"`,
     `          git config user.email "${gh.bot_email ?? 'open-autonomy-agent@users.noreply.github.com'}"`,
     `          git config core.filemode false`,
-    `          git checkout -b "$branch"`,
+    `          git checkout "$branch" 2>/dev/null || git checkout -b "$branch"`,
     // Persist this run's processed transcript AND its visual evidence INTO the proposal so they ride into the
     // PR and become part of PERMANENT history only if the PR merges (non-merged proposals never land them).
     // Each run gets its own folder (transcript.md + any harvested screenshots) so the evidence travels with the
@@ -325,9 +328,9 @@ function wrapperYml(name: string, agent: IRAgent, gh: GithubBox, isControlPrimar
     ...(refParam
       ? [
           `          ref="\${${refParam}}"`,
-          `          if printf '%s' "$ref" | grep -qE '^[0-9]+$'; then git commit -m "agent: ${RID}" -m "Closes #$ref"; else git commit -m "agent: ${RID}"; fi`,
+          `          if printf '%s' "$ref" | grep -qE '^[0-9]+$'; then git commit --allow-empty -m "agent: ${RID}" -m "Closes #$ref"; else git commit --allow-empty -m "agent: ${RID}"; fi`,
         ]
-      : [`          git commit -m "agent: ${RID}"`]),
+      : [`          git commit --allow-empty -m "agent: ${RID}"`]),
     `          git push --force origin "$branch"`,
     `          base="\${{ github.event.repository.default_branch }}"`,
     `          body="$(cat .agent-run/artifacts/pr.md 2>/dev/null || echo "Automated agent change (${RID}).")"`,

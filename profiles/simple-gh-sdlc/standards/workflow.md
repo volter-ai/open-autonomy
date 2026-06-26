@@ -2,35 +2,36 @@
 
 Read this from the PM and Reviewer skills.
 
+## The board is GitHub
+
+Work items are **GitHub issues** (identified by number). State is **GitHub-native** —
+durable across stateless runs — not a local ztrack store. ztrack is the acceptance
+**gate** on each issue's content (the ACs + evidence in its body), not the board.
+
+| State | How it is represented on GitHub |
+|---|---|
+| `draft` | open issue, **no** `ready` label (a raw request not yet shaped) |
+| `ready` | open issue with the **`ready`** label + acceptance criteria in its body |
+| in progress | a `develop` run is in flight (`runner.ts list develop`) — no separate marker needed |
+| in review | an **open PR** on branch `agent/issue-<n>` (the substrate triggers the `reviewer` on it) |
+| `done` | the **PR merged** (issue auto-closes via `Closes #<n>`) |
+| parked | the `needs-info` or `human-required` label (waiting on a human) |
+
 ## WIP
 
-- At most one issue in `in-progress`.
-- At most one issue in `in-review`.
-- PM is the only dispatcher — it launches `develop` (and `draft` on request); it does NOT dispatch review.
-- The developer handles one issue and stops; the substrate opens its auto-merging PR.
-- **Review is on the PR**: when the PR opens, the substrate triggers the independent `reviewer`, which
-  posts the `agent-review` status. `ci` + `agent-review` green → native auto-merge lands it (done = merged PR).
-- `ztrack:reviewing` marks an `in-review` issue whose PR the reviewer has claimed.
-- If a develop run died and the worktree/branch is clean, scheduled recovery may move stale
-  `in-progress` work back to `ready`.
-
-## States
-
-The lifecycle states are exactly those of the `simple-gh-sdlc` ztrack preset (lowercase): an `in-review`
-issue must cite its `PR:`, and `done` requires that PR merged.
-
-| State | Meaning |
-|---|---|
-| `draft` | not yet ready to work |
-| `ready` | issue can be implemented |
-| `in-progress` | develop agent is working |
-| `in-review` | a PR is open and under `agent-review` |
-| `done` | the PR merged (all ACs passed with evidence, ztrack green) |
-
-There is no canceled state in this preset — to drop work, delete the issue
-(`ztrack issue delete <id>`).
+- **At most one develop in flight.** The PM reads `runner.ts list develop` + the open agent PRs and does
+  not launch a second developer while one is running or an issue already has an open PR.
+- PM is the only dispatcher — it launches `develop` (and `draft` on request) **by issue number**; it does
+  NOT dispatch review.
+- The developer handles one issue, commits on `agent/issue-<n>`, and stops; the substrate opens the
+  auto-merging PR (`Closes #<n>`) and triggers the independent `reviewer`.
+- **Review is on the PR**: the `reviewer` posts the `agent-review` status. `ci` + `agent-review` green →
+  native auto-merge lands it (done = merged PR). Never an agent merge.
+- **Rework**: a `changes-requested` review leaves the PR open with the failure noted; the PM re-launches
+  develop for that issue's number (respecting `max_develop_attempts`; never loop).
 
 ## Gates
 
-Run `ztrack check` before every handoff. Review cannot pass on a red issue or an unmerged-but-claimed PR.
-Done is only allowed once the PR is merged with all ACs passed-with-evidence.
+`develop` and `reviewer` run `ztrack check` against the issue body (`gh issue view <n> --json body --jq .body
+> issue.md; ztrack check issue.md`) before every handoff. The reviewer cannot pass a red issue. Done is only
+reached when the PR merges with all ACs passed-with-evidence and `ci` + `agent-review` both green.

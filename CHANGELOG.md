@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.1.8
+
+### Changed
+- **The github-Actions runner-substrate is renamed `github` → `gh-actions`.** The substrate is the agent
+  *runner*; naming it `github` collided with the github *code host* (repo, PRs, CI, merge, deploy) and
+  conflated two orthogonal axes (a `local` runner can drive a github code host). `targets: [gh-actions]` and
+  `policy.box.gh-actions` are canonical; **`github` is accepted as a back-compat alias** (normalized on
+  parse), so existing profiles/installs keep working. Code-host `github` references (`github.token`,
+  `.github/`, the repo, deploy) are unchanged. Docs (ARCHITECTURE, SPEC) updated to define substrate = runner,
+  distinct from the code host. Internal package/symbol names (`substrate-github`, `compileGithub`) unchanged.
+
 ## 0.1.7
 
 ### Changed

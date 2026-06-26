@@ -74,6 +74,40 @@ describe('compileGithub — derived security data vs code-host resources', () =>
   });
 });
 
+describe('compileGithub — merge is a code-host resource, not engine output', () => {
+  // The integration boundary (the sibling of deploy's "no agent deploys"): arming native auto-merge +
+  // reconciling merged issues is NOT actor output, so the engine does not bake it into the agent workflows.
+  // It lives in the merge.yml code-host resource (carried by the profile). The proposer only DISPATCHES it —
+  // exactly as it dispatches ci/agent-review — and the tasks:author PM no longer carries reconcile/re-arm.
+  const propIR: AutonomyIR = {
+    schema: 'autonomy.ir.v1',
+    targets: ['github'],
+    agents: {
+      developer: { behavior: 'develop', capabilities: ['code:propose'], triggers: [{ dispatch: true }], review: 'reviewer' },
+      reviewer: { behavior: 'review', capabilities: ['code:review'], triggers: [{ dispatch: true }] },
+      pm: { behavior: 'pm', capabilities: ['tasks:author'], triggers: [{ cron: '0 * * * *' }] },
+    },
+    policy: { box: {} },
+    resources: [],
+  };
+
+  test('the engine never emits merge.yml — it is carried by the profile as a resource', () => {
+    expect(compileGithub(propIR).generated['.github/workflows/merge.yml']).toBeUndefined();
+  });
+
+  test('a code:propose agent DISPATCHES merge.yml and never arms auto-merge inline', () => {
+    const wf = compileGithub(propIR).generated['.github/workflows/developer.yml'] ?? '';
+    expect(wf).toContain('gh workflow run merge.yml'); // arming is delegated to the code-host resource
+    expect(wf).not.toContain('gh pr merge'); // no inline arm in the actor's job — that's integration, not output
+  });
+
+  test('a tasks:author agent no longer runs reconcile/re-arm — those move to the merge.yml schedule', () => {
+    const wf = compileGithub(propIR).generated['.github/workflows/pm.yml'] ?? '';
+    expect(wf).not.toContain('reconcile-merged-issues.ts');
+    expect(wf).not.toContain('rearm-auto-merge.ts');
+  });
+});
+
 describe('compileGithub — dispatch trigger realization', () => {
   // A dispatch trigger is invoked on demand through the Runner — every workflow already exposes
   // workflow_dispatch, so a dispatch trigger adds NO extra `on:` event (no issues:labeled label-watching).

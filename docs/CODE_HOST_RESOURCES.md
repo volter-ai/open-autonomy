@@ -3,6 +3,12 @@
 > Reached through the deploy-design discussion (2026-06-25). The chain: deploy is the same on every
 > substrate → it's not substrate (substrate = runners) → it's a resource → a github CI script installed
 > as a resource → **and resources are part of the IR, like the standards docs.**
+>
+> Extended to **merge** (2026-06-26) via the same chain: substrate = the actor runner (which box, how it's
+> wrapped, the scoped token) — *nothing else*. A merge is neither an agent run nor a human run; it's a
+> deterministic code-host event. So it's not substrate either — it's a resource, exactly like deploy. The
+> only substrate fingerprint is *negative*: it scopes the agent so no agent can merge, and offers a human
+> runner the profile may decline to route the merge through (this one does → the server auto-merges).
 
 ## The principle
 
@@ -14,8 +20,8 @@
     `.open-autonomy/human-required-paths.json` (`policy.box.risk.human_required_paths`). Not authored logic —
     the IR projected into a runtime-readable form.
 - **Resource** — every github **CI *workflow***, carried verbatim by the profile, **exactly like
-  `docs/standards/*.md`**: `ci`, `human-approval`, `security`, `dependabot`, `codeql`, `deploy`, `preflight`.
-  Resources are an essential part of the IR; a github-CI workflow is one.
+  `docs/standards/*.md`**: `ci`, `merge`, `human-approval`, `security`, `dependabot`, `codeql`, `deploy`,
+  `preflight`. Resources are an essential part of the IR; a github-CI workflow is one.
 
 The earlier mistake (twice): treating "shared" as "engine-owned." Shared resources are still **resources**
 (IR layer). Sharing across profiles is a future concern (a base/standard resource set) — with only a
@@ -32,26 +38,51 @@ Deploy is one of them. The only IR-level fact about deploy beyond the resource i
 invariant: no agent deploys** (the sibling of "no agent merges"), realized by the admin-only tag + the
 required-reviewer environment.
 
+Merge is its sibling. The IR-level fact is the **boundary invariant: no agent merges** — but note where that
+boundary actually lives: **branch protection** (`ci` + `agent-review` required server-side, no bypass), NOT
+the absence of a permission. The `merge.yml` resource *arms* native auto-merge on open agent PRs and
+*reconciles* issues whose PR merged. Enabling auto-merge needs push access, so it holds **contents:write**
+(+ pull-requests:write to manage the PR, issues:write to reconcile) — yet it still cannot land a red or
+unreviewed PR, because branch protection refuses the merge regardless of the token. (A permission-only story —
+"merge.yml has no contents:write so it can't merge" — is wrong twice: it *can't even arm* auto-merge without
+push access, and contents:write wouldn't let it bypass the required checks anyway.) A bot-opened PR fires no
+`pull_request` event (GITHUB_TOKEN anti-recursion), so the proposer **dispatches** `merge.yml` right after
+opening its PR — exactly as it dispatches `ci`/`agent-review` — and `merge.yml`'s schedule re-runs as the
+deterministic backstop. The arm/close logic used to be inline (the proposer's effect step armed — it already
+held contents:write via `code:propose`; the tasks:author PM reconciled+re-armed), which was integration
+leaking into the agent runners; it's now a resource, decoupled from any agent run.
+
 ## Where each file lives (current, after the split)
 
 **Emitted (derived from the IR):**
 - `developer/pm/planner/reviewer/strategist/strategy_reviewer.yml`, `.github/agent-control.mjs`
-- agent-runtime scripts: `claude-agent-run.ts`, `model-proxy-*`, `runner.ts`, `transcript.ts`, …
+  - a `code:propose` agent's workflow materializes the actor's output (push the branch + open the PR) and
+    then *dispatches* the code-host resources it can't fire itself (`ci`, `agent-review`, `human-approval`,
+    `merge`) — it no longer arms auto-merge inline.
+- agent-runtime scripts: `claude-agent-run.ts`, `model-proxy-*`, `runner.ts`, `transcript.ts`,
+  `rearm-auto-merge.ts`, `reconcile-merged-issues.ts`, … (the merge scripts are runtime, called by `merge.yml`)
 - `.github/zizmor.yml`, `.open-autonomy/human-required-paths.json` (derived data)
 
 **Profile resources (carried, IR layer):**
-- `ci.yml`, `human-approval.yml`, `security.yml`, `dependabot.yml`, `codeql.yml`, `deploy.yml`,
+- `ci.yml`, `merge.yml`, `human-approval.yml`, `security.yml`, `dependabot.yml`, `codeql.yml`, `deploy.yml`,
   `open-autonomy-preflight.yml` — the github CI scaffolding, per github-targeting profile
 
-**Done in this pass:** `security.yml` + `dependabot.yml` moved from engine emission → resources across the
+**Done (2026-06-25):** `security.yml` + `dependabot.yml` moved from engine emission → resources across the
 three github profiles (`self-driving`, `hello`, `simple-gh-sdlc`); `zizmor.yml` + `human-required-paths.json`
-stay as derived data; the engine now emits only agent workflows + that derived data. Deploy was already a
-resource, so the original question ("first-class IR vs profile?") is answered: **it's a resource.**
+stay as derived data. Deploy was already a resource, so the original question ("first-class IR vs profile?")
+is answered: **it's a resource.**
+
+**Done (2026-06-26):** `merge.yml` extracted — the proposer's inline auto-merge arm and the tasks:author PM's
+reconcile+re-arm steps left the emitted agent workflows and became the `merge.yml` code-host resource (carried
+by the proposer-bearing github profiles `self-driving` + `simple-gh-sdlc`). The proposer now dispatches
+`merge.yml`; its schedule is the backstop. The engine emits only actor runners + the proposer's thin
+"materialize output + kick resources" effect.
 
 ## Open / deferred
 
-- The gate **scripts** `human-approval-gate.ts` and `check-supply-chain.ts` are still injected as *runtime*
-  (agent-substrate). They're code-host logic, not agent execution — arguably resources too. Left as runtime
+- The gate **scripts** `human-approval-gate.ts` / `check-supply-chain.ts` and the merge **scripts**
+  `rearm-auto-merge.ts` / `reconcile-merged-issues.ts` are still injected as *runtime* (agent-substrate).
+  They're code-host logic, not agent execution — arguably resources too, like their workflows. Left as runtime
   for now (they work; the WORKFLOWS were the live issue). Revisit if it causes friction.
 - A **base/standard resource set** so github profiles don't each copy `security.yml`/`dependabot.yml`.
   Deferred — not worth it at the current profile count.

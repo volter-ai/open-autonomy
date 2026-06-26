@@ -2,9 +2,9 @@
 // Deterministic reconcile: close every open issue whose linked PR has MERGED. GitHub's `Closes #n` keyword
 // does not auto-close on bot-enabled auto-merge (see docs), and the bot merge fires no event to hook, so the
 // close must happen on a periodic sweep — but it is mechanical WIRING, not a judgment, so it runs as a
-// deterministic step (not in the PM model skill, which a model can skip). Emitted for tasks:author agents
-// (the periodic issue-managers); idempotent, so running it on every sweep is safe. Needs issues:write +
-// GH_TOKEN, which a tasks:author agent's job already holds.
+// deterministic step (not in the PM model skill, which a model can skip). Run by the merge.yml code-host
+// resource (dispatch + schedule), decoupled from any agent run; idempotent, so running it on every sweep is
+// safe. Needs issues:write + GH_TOKEN, which the merge.yml job holds.
 import { execFileSync } from 'node:child_process';
 
 const repo = process.env.GITHUB_REPOSITORY;

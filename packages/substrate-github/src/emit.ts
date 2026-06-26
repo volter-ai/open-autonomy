@@ -256,10 +256,9 @@ function wrapperYml(name: string, agent: IRAgent, gh: GithubBox, isControlPrimar
   // (reviewer/pm/planner) has contents:read, so a stray tracked-file write would make the effect's
   // `git push` 403 and fail the job after the verdict was posted — tie the step to the capability.
   const proposes = caps.some((c) => typeof c === 'string' && c.split('@')[0] === 'code:propose');
-  // A tasks:author agent (the periodic issue-manager: pm/planner) runs a deterministic reconcile before its
-  // model step — close issues whose linked PR merged. Mechanical wiring (not judgment), so it must not depend
-  // on the model remembering to do it; symmetric to `effect` for code:propose. Idempotent.
-  const reconciles = caps.some((c) => typeof c === 'string' && c.split('@')[0] === 'tasks:author');
+  // Closing merged-issue + re-arming auto-merge are NOT done here: they're integration, not actor output, so
+  // they live in the merge.yml code-host resource (its schedule sweeps deterministically, decoupled from any
+  // agent run — docs/CODE_HOST_RESOURCES.md). The agent job emits only the actor's own work + its proposal.
   // (No deterministic roadmap reconcile: creating tracking issues from planned roadmap items is the PLANNER's
   // own job, not a script. The model is strong enough to own it — a missed issue self-corrects next run — and
   // scripting an agent's work just because "a model might skip it" is the wrong instinct. See AGENTS.md.)
@@ -338,13 +337,15 @@ function wrapperYml(name: string, agent: IRAgent, gh: GithubBox, isControlPrimar
       ? [`          if printf '%s' "$ref" | grep -qE '^[0-9]+$'; then body="$(printf 'Closes #%s\\n\\n%s' "$ref" "$body")"; fi`]
       : []),
     `          gh pr create --base "$base" --head "$branch" --title "Agent: ${RID}" --body "$body" || gh pr view "$branch" >/dev/null`,
-    // Arm native auto-merge — and RETRY. Right after 'pr create' GitHub still reports mergeable=UNKNOWN for a
-    // moment, so a single --auto often fails; with the failure swallowed, the PR's checks then go green but
-    // nothing ever merges it (no agent holds contents:write to re-arm, and the PM is forbidden to merge), so it
-    // sits green-but-stuck forever. Retry until it sticks. This cannot bypass review: branch protection still
-    // requires ci + agent-review server-side, so --auto only lands the PR once those are green.
-    `          armed=; for i in 1 2 3 4 5 6; do gh pr merge "$branch" --squash --auto && { armed=1; break; } || sleep 4; done`,
-    `          [ -n "$armed" ] || echo "auto-merge enable failed after retries (non-fatal)"`,
+    // Arm native auto-merge by DISPATCHING the merge.yml code-host resource — the proposer never arms inline.
+    // Arming/closing is integration, not actor output (docs/CODE_HOST_RESOURCES.md): merge.yml carries it as a
+    // resource that holds pull-requests:write but no contents:write, so even it cannot merge — GitHub lands the
+    // PR only once branch protection (ci + agent-review) is green. A bot PR fires no pull_request event
+    // (GITHUB_TOKEN anti-recursion), so the proposer kicks merge.yml here exactly as it dispatches ci/review;
+    // merge.yml's own schedule re-runs as the deterministic backstop if this dispatch misses. RETRY for the
+    // same reason as ci: a swallowed dispatch could leave a green PR unarmed and stuck.
+    `          mg_ok=; for i in 1 2 3 4 5 6; do gh workflow run merge.yml && { mg_ok=1; break; } || sleep 4; done`,
+    `          [ -n "$mg_ok" ] || echo "merge dispatch failed after retries (non-fatal)"`,
     // Bot-opened PRs don't fire pull_request CI (GITHUB_TOKEN anti-recursion); workflow_dispatch is exempt,
     // so dispatch ci.yml on the PR head to post the required `ci` status that gates auto-merge. RETRY: this is a
     // required check — if the dispatch fails (the just-pushed branch isn't visible to the API yet, a transient
@@ -444,22 +445,6 @@ function wrapperYml(name: string, agent: IRAgent, gh: GithubBox, isControlPrimar
     ...buildIssue,
     `      - name: Exchange OIDC for the bounded token`,
     `        run: bun scripts/model-proxy-exchange.ts --run-id "${RID}" --audience "$MODEL_PROXY_OIDC_AUDIENCE"`,
-    ...(reconciles
-      ? [
-          `      - name: Reconcile (deterministic — close issues whose PR merged)`,
-          `        env:`,
-          `          GH_TOKEN: \${{ github.token }}`,
-          `        run: bun scripts/reconcile-merged-issues.ts || true`,
-          // Re-arm native auto-merge on any agent PR missing it. The proposer arms it once at create time, but
-          // that call can fail transiently and nothing else re-arms (no agent holds contents:write; the PM may
-          // not merge) — so without this backstop a green PR can sit unmerged forever. Mechanical wiring, not
-          // judgment: it cannot bypass review (branch protection still requires ci + agent-review server-side).
-          `      - name: Re-arm auto-merge (deterministic — recover green PRs the proposer failed to arm)`,
-          `        env:`,
-          `          GH_TOKEN: \${{ github.token }}`,
-          `        run: bun scripts/rearm-auto-merge.ts || true`,
-        ]
-      : []),
     `      - name: Run agent (Claude Code + skill)`,
     `        env:`,
     `          OSS_AGENT_TASK_DIR: .agent-run`,

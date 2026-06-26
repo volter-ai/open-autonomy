@@ -23,6 +23,7 @@
     ".github/workflows/deploy.yml",
     ".github/workflows/developer.yml",
     ".github/workflows/human-approval.yml",
+    ".github/workflows/merge.yml",
     ".github/workflows/open-autonomy-preflight.yml",
     ".github/workflows/planner.yml",
     ".github/workflows/pm.yml",

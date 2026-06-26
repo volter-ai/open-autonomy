@@ -92,14 +92,6 @@ jobs:
           printf '{"number":0,"title":"pm","body":""}\n' > .agent-run/issue.json
       - name: Exchange OIDC for the bounded token
         run: bun scripts/model-proxy-exchange.ts --run-id "ir-pm-${{ github.run_id }}" --audience "$MODEL_PROXY_OIDC_AUDIENCE"
-      - name: Reconcile (deterministic — close issues whose PR merged)
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: bun scripts/reconcile-merged-issues.ts || true
-      - name: Re-arm auto-merge (deterministic — recover green PRs the proposer failed to arm)
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: bun scripts/rearm-auto-merge.ts || true
       - name: Run agent (Claude Code + skill)
         env:
           OSS_AGENT_TASK_DIR: .agent-run

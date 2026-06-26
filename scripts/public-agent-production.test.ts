@@ -68,15 +68,16 @@ describe('public agent production readiness', () => {
     expect(pm).not.toContain('Route open agent PRs to review');
   });
 
-  test('mechanical sweep ops are deterministic, not PM-model steps (reconcile + repo-pause)', () => {
-    // Closing a merged-PR issue and honoring repo-pause are mechanical wiring — they must not depend on the
-    // model. A tasks:author agent runs a deterministic reconcile step; every agent job is gated on the
-    // repo-pause variable kill-switch. Encoded as a check (the bench found these stalling as model steps).
-    const pm = workflow('pm.yml');
-    expect(pm).toContain('reconcile-merged-issues.ts');
-    expect(pm).toContain("vars.PUBLIC_AGENT_REPO_PAUSED != 'true'");
+  test('mechanical sweep ops are deterministic (merge.yml resource), not PM-model steps; repo-pause gate', () => {
+    // Closing a merged-PR issue + re-arming auto-merge are mechanical wiring — they must not depend on the
+    // model. They are NOT inside any agent run: they live in the merge.yml code-host RESOURCE (its schedule
+    // sweeps deterministically — docs/CODE_HOST_RESOURCES.md), so no agent workflow carries reconcile/re-arm.
+    // Repo-pause is the per-agent kill-switch. Encoded as a check (the bench found these stalling as model steps).
+    expect(workflow('merge.yml')).toContain('reconcile-merged-issues.ts');
+    expect(workflow('merge.yml')).toContain('rearm-auto-merge.ts');
+    expect(workflow('pm.yml')).not.toContain('reconcile-merged-issues.ts'); // moved out of the agent run
+    expect(workflow('pm.yml')).toContain("vars.PUBLIC_AGENT_REPO_PAUSED != 'true'");
     expect(workflow('developer.yml')).toContain("vars.PUBLIC_AGENT_REPO_PAUSED != 'true'");
-    // a non-tasks:author agent does NOT reconcile (capability-gated, like effect on code:propose)
     expect(workflow('reviewer.yml')).not.toContain('reconcile-merged-issues.ts');
   });
 
@@ -108,8 +109,10 @@ describe('public agent production readiness', () => {
     // developer = code:propose + tasks:converse → contents/pull-requests/actions/issues:write + id-token.
     expect(text).toContain('pull-requests: write');
     expect(text).toContain('contents: write');
-    // It acts directly: the generic effect step pushes its change and queues native auto-merge.
-    expect(text).toContain('gh pr merge "$branch" --squash --auto');
+    // It acts directly: the effect step pushes its change + opens the PR, then DISPATCHES the merge.yml
+    // code-host resource to arm auto-merge (arming is integration, not actor output — it is never inline).
+    expect(text).toContain('gh workflow run merge.yml');
+    expect(text).not.toContain('gh pr merge'); // no inline arm in the agent job
     // The credential-less + bundle + publisher model is gone.
     expect(text).not.toContain('persist-credentials: false');
     expect(text).not.toContain('github-agent-publish.ts');
@@ -185,10 +188,10 @@ describe('public agent production readiness', () => {
   test('planner owns layer 2: creates issues + proposes roadmap edits (blessed by strategy_reviewer)', () => {
     const text = workflow('planner.yml');
     expect(text).toContain('bun scripts/claude-agent-run.ts --skill .codex/skills/planner/SKILL.md');
-    // Close-on-merge stays a deterministic step (bot auto-merge fires no event for `Closes #n`). But creating
-    // tracking issues from planned roadmap items is the PLANNER's job, NOT a script — so there is no
-    // roadmap-reconcile step; an agent owns its own work (scripts are for security boundaries only).
-    expect(text).toContain('scripts/reconcile-merged-issues.ts');
+    // Close-on-merge is deterministic wiring (bot auto-merge fires no event for `Closes #n`), but it is NOT an
+    // agent step — it lives in the merge.yml code-host resource. And creating tracking issues from planned
+    // roadmap items is the PLANNER's own job, NOT a script — so the agent run carries no reconcile of any kind.
+    expect(text).not.toContain('scripts/reconcile-merged-issues.ts');
     expect(text).not.toContain('scripts/reconcile-roadmap-issues.ts');
     const plJob = text.slice(text.indexOf('  planner:'));
     expect(plJob).toContain('issues: write'); // tasks:author — creates/edits issues directly

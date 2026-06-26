@@ -112,12 +112,12 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          if [ -z "$(git status --porcelain)" ]; then echo "no working-tree changes; nothing to propose"; exit 0; fi
           branch="agent/issue-${ISSUE_REF}"
+          if [ -z "$(git status --porcelain)" ] && ! git rev-parse --verify "$branch" >/dev/null 2>&1; then echo "no changes and no agent branch; nothing to propose"; exit 0; fi
           git config user.name "volter-agent"
           git config user.email "volter-agent@users.noreply.github.com"
           git config core.filemode false
-          git checkout -b "$branch"
+          git checkout "$branch" 2>/dev/null || git checkout -b "$branch"
           ref_slug="$(printf '%s' "${ISSUE_REF}" | tr -cd '0-9A-Za-z._-' | cut -c1-40)"; [ -z "$ref_slug" ] && ref_slug=item
           run_dir=".open-autonomy/history/developer/${ref_slug}-run-${{ github.run_id }}"
           mkdir -p "$run_dir"
@@ -125,7 +125,7 @@ jobs:
           cp -f .agent-run/artifacts/screenshot-* "$run_dir/" 2>/dev/null || true
           git add -A
           ref="${ISSUE_REF}"
-          if printf '%s' "$ref" | grep -qE '^[0-9]+$'; then git commit -m "agent: ir-developer-${{ github.run_id }}" -m "Closes #$ref"; else git commit -m "agent: ir-developer-${{ github.run_id }}"; fi
+          if printf '%s' "$ref" | grep -qE '^[0-9]+$'; then git commit --allow-empty -m "agent: ir-developer-${{ github.run_id }}" -m "Closes #$ref"; else git commit --allow-empty -m "agent: ir-developer-${{ github.run_id }}"; fi
           git push --force origin "$branch"
           base="${{ github.event.repository.default_branch }}"
           body="$(cat .agent-run/artifacts/pr.md 2>/dev/null || echo "Automated agent change (ir-developer-${{ github.run_id }}).")"

@@ -111,7 +111,16 @@ interface GithubBox {
   bot_name?: string;
   bot_email?: string;
 }
-const githubBox = (ir: AutonomyIR): GithubBox => (ir.policy.box.github ?? {}) as GithubBox;
+// The box ALWAYS has a model endpoint (docs/SPEC.md#the-box), so the substrate supplies a DEFAULT model when
+// the profile names none — a profile that omits it (e.g. a generic SDLC preset) still runs instead of dying
+// at mint with `--models ""`. This is a capability default, NOT org identity: it's overridable by the profile
+// (policy.box.github.model) and, at runtime, by `vars.PUBLIC_AGENT_MODEL`. proxy_host/oidc_audience are NOT
+// defaulted here — those are real infra identity (a specific proxy URL/audience) and stay profile/install config.
+const DEFAULT_GITHUB_MODEL = 'deepseek/deepseek-v4-flash';
+const githubBox = (ir: AutonomyIR): GithubBox => {
+  const box = (ir.policy.box.github ?? {}) as GithubBox;
+  return { ...box, model: box.model ?? DEFAULT_GITHUB_MODEL };
+};
 // `${{ vars.NAME || 'fallback' }}` when the profile declares a fallback, else a bare `${{ vars.NAME }}`.
 const varOr = (name: string, fallback?: string): string =>
   fallback ? `\${{ vars.${name} || '${fallback}' }}` : `\${{ vars.${name} }}`;

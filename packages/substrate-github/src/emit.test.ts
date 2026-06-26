@@ -41,11 +41,15 @@ describe('compileGithub — derived security data vs code-host resources', () =>
     expect(out.generated['.github/dependabot.yml']).toBeUndefined();
   });
 
-  test('engine bakes in NO org identity — proxy host / OIDC audience / model / bot come from policy.box.github', () => {
+  test('engine bakes in NO org IDENTITY (proxy/audience/bot) — but DOES default the model (a box capability)', () => {
     const base = irWith([{ cron: '0 0 * * *' }]); // no policy.box.github
     const bare = compileGithub(base).generated['.github/workflows/maintainer.yml'];
-    expect(bare).not.toContain('volter'); // nothing org-specific leaks from the engine
-    expect(bare).toContain('${{ vars.PUBLIC_AGENT_PROXY_HOST }}'); // bare var, no fallback, when undeclared
+    expect(bare).not.toContain('volter'); // no org IDENTITY (proxy host / audience / bot) leaks from the engine
+    expect(bare).toContain('${{ vars.PUBLIC_AGENT_PROXY_HOST }}'); // proxy host: bare var, no fallback (infra identity)
+    expect(bare).toContain('${{ vars.MODEL_PROXY_OIDC_AUDIENCE }}'); // audience: bare var, no fallback (infra identity)
+    // The box ALWAYS has a model endpoint (SPEC), so the substrate supplies a DEFAULT model even when the
+    // profile names none — a capability default (overridable by the var), NOT org identity.
+    expect(bare).toContain("${{ vars.PUBLIC_AGENT_MODEL || 'deepseek/deepseek-v4-flash' }}");
 
     const configured: AutonomyIR = {
       ...base,

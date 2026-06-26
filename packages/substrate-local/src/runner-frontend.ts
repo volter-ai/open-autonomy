@@ -106,12 +106,7 @@ function ensureWorktree(branch: string, worktree: string): void {
 
 /** Launch an agent with forwarded params (agent:launch). */
 export async function launch(agent: string, params: LaunchParams = {}): Promise<void> {
-  const { skill: behavior = '', params: declared = {}, capabilities = [] } = manifestAgent(agent);
-  // A code:propose agent's PROPOSE effect (push + open PR + arm) is the agent's own action, run on the local
-  // runner as a Stop hook (the runner-independent seam — there is no post-skill job step in a termfleet
-  // window). Flag it here so the hook fires only for a proposer; the github runner uses the job step instead
-  // (the hook self-skips when GITHUB_ACTIONS is set). docs/CODE_HOST_RESOURCES.md — methodology, not runner.
-  const isProposer = capabilities.some((c) => typeof c === 'string' && c.split('@')[0] === 'code:propose');
+  const { skill: behavior = '', params: declared = {} } = manifestAgent(agent);
 
   if (behavior && isScript(behavior)) {
     // Deterministic agent: run its script via bun. Resolve its declared trigger params from the launch
@@ -136,7 +131,6 @@ export async function launch(agent: string, params: LaunchParams = {}): Promise<
   const env: Record<string, string> = {
     ...(process.env as Record<string, string>),
     AUTONOMY_AGENT: agent,
-    ...(isProposer ? { AUTONOMY_PROPOSER: '1' } : {}),
     AUTONOMY_FORWARD: [process.env.AUTONOMY_FORWARD, ...names].filter(Boolean).join(','),
     ...Object.fromEntries(names.map((k) => [k, String(params[k])])),
   };

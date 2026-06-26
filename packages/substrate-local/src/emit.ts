@@ -33,6 +33,9 @@ const here = dirname(fileURLToPath(import.meta.url));
 // verbatim from their single sources beside this compiler so generated and dev-time never drift.
 const RUNNER_BACKEND = readFileSync(join(here, 'backend.mjs'), 'utf8');
 const RUNNER_FRONTEND = readFileSync(join(here, 'runner-frontend.ts'), 'utf8');
+// The github-code-host propose backstop (the local runner running a finished proposer's effect — the
+// counterpart of the github runner's post-skill job step). Emitted + scheduled only when codeHost=github.
+const PROPOSE_SWEEP = readFileSync(join(here, 'propose-sweep.ts'), 'utf8');
 
 // Inverse of secondsToCron for the simple every-N-minutes cron form the local loop honors.
 export function cronToSeconds(cron: string): number {
@@ -180,18 +183,17 @@ export function compileLocal(ir: AutonomyIR, opts: { runner?: RunnerName } = {})
   const cronAgents = Object.entries(ir.agents).filter(([, a]) => cronOf(a));
   const intervalSeconds = cronAgents[0] ? cronToSeconds(cronOf(cronAgents[0][1]) as string) : 900;
   generated['scheduler/run.mjs'] = LOOP_DRIVER;
-  generated['scheduler/schedule.json'] = `${JSON.stringify(
-    {
-      intervalSeconds,
-      env: {},
-      // A script agent runs its behavior via bun; a prose-skill agent is launched through the runner.
-      scripts: cronAgents.map(([role, a]) =>
-        isScript(a.behavior) ? `bun ${a.behavior}` : `AUTONOMY_AGENT=${role} node scripts/run-agent.mjs`,
-      ),
-    },
-    null,
-    2,
-  )}\n`;
+  // A script agent runs its behavior via bun; a prose-skill agent is launched through the runner.
+  const scheduleScripts = cronAgents.map(([role, a]) =>
+    isScript(a.behavior) ? `bun ${a.behavior}` : `AUTONOMY_AGENT=${role} node scripts/run-agent.mjs`,
+  );
+  // On a github code host, the local runner runs each finished proposer's effect deterministically each tick
+  // (the local counterpart of github's post-skill job step); a local-git code host has no PRs (the PM merges).
+  if (ir.codeHost === 'github') {
+    generated['scripts/propose-sweep.ts'] = PROPOSE_SWEEP;
+    scheduleScripts.push('bun scripts/propose-sweep.ts');
+  }
+  generated['scheduler/schedule.json'] = `${JSON.stringify({ intervalSeconds, env: {}, scripts: scheduleScripts }, null, 2)}\n`;
   Object.assign(generated, promptFiles(ir));
 
   // Copies: skill behaviors + the profile's resources at the repo root, so the agents' cwd-relative gh +

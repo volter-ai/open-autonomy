@@ -8,6 +8,14 @@
             "command": "if [ -f node_modules/ztrack/plugins/ztrack-gate/hooks/stop-loop.sh ]; then bash node_modules/ztrack/plugins/ztrack-gate/hooks/stop-loop.sh; fi"
           }
         ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "if [ -z \"${GITHUB_ACTIONS:-}\" ] && [ -n \"${AUTONOMY_PROPOSER:-}\" ] && { [ ! -f node_modules/ztrack/plugins/ztrack-gate/hooks/stop-loop.sh ] || bash node_modules/ztrack/plugins/ztrack-gate/hooks/stop-loop.sh >/dev/null 2>&1; }; then bun scripts/agent-propose.ts || true; fi"
+          }
+        ]
       }
     ]
   }

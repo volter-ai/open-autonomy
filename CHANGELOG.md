@@ -1,5 +1,23 @@
 # Changelog
 
+## 0.1.6
+
+### Fixed
+
+- **`simple-gh-sdlc` now actually runs end-to-end.** The 0.1.5 profile was compile-verified but had never
+  run live; a real deploy found three ztrack↔substrate bugs that blocked the loop. Reworked it onto
+  `self-driving`'s proven GitHub-native pattern: work items are **GitHub issues by number**, state is
+  GitHub-native (a `ready` label + open-PR = in-review + merged = done), and ztrack is the **acceptance
+  gate on the issue body** (`gh issue view <n> --json body --jq .body > issue.md; ztrack check issue.md`),
+  not the board. `develop` commits + cites its own SHA on `agent/issue-<n>`; the `reviewer` posts the
+  `agent-review` commit status itself (it holds `statuses:write`). The shared `substrate-github` propose
+  step is now additive — it pushes an already-committed agent branch (and `--allow-empty` for the `Closes`
+  commit) — backward compatible with `self-driving`'s commit-the-tree flow. Proven live: ready issue →
+  PM → develop → PR → `ci` + `agent-review` → native auto-merge → reconcile-close.
+- **`simple-sdlc` (local) rework + conflict handling.** The PM now re-dispatches a review-rejected
+  in-progress issue (it checks `runner.ts list develop` for a live worker rather than assuming a branch
+  means one), and aborts a merge conflict cleanly (`git merge --abort` → blocked human-required).
+
 ## 0.1.5
 
 ### Added

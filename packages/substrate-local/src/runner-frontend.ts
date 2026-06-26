@@ -39,6 +39,7 @@ interface ManifestAgent {
   skill?: string;
   params?: Record<string, string>;
   capabilities?: string[];
+  review?: string; // the reviewer agent that judges this proposer's PRs (the merge-boundary review edge)
 }
 
 // --- post-session effects: the LOCAL mirror of github's post-skill job step --------------------------------
@@ -53,6 +54,25 @@ interface ManifestAgent {
 // propose-sweep poller (which scanned worktrees + reconstructed state — a methodology leak).
 const EFFECTS_DIR = '.open-autonomy/runner-state/effects';
 const holdsPropose = (caps: string[]): boolean => caps.some((c) => String(c).split('@')[0] === 'code:propose');
+
+// The runner's per-work-item ISOLATION branch (github isolates via a fresh job checkout; local via a
+// worktree). An explicit PM-assigned `--branch` always wins. Otherwise a code:propose agent is isolated per
+// work-item: derive `agent/issue-<ref>` from the forwarded ref — the SAME branch agent-propose will push, so
+// the PM stays substrate-agnostic (`launch develop --ref N`, never assigning isolation). Empty string => run
+// on trunk: a non-proposing agent (pm/draft/reviewer — the reviewer reads the PR from the code host), or a
+// proposer launched without a numeric ref.
+export function isolationBranch(opts: {
+  capabilities: string[];
+  declared: Record<string, string>;
+  params: LaunchParams;
+  explicitBranch?: string;
+}): string {
+  if (opts.explicitBranch) return opts.explicitBranch;
+  if (!holdsPropose(opts.capabilities)) return '';
+  const refParam = Object.entries(opts.declared).find(([, src]) => src === 'subject.ref')?.[0];
+  const refVal = refParam ? String(opts.params[refParam] ?? '') : '';
+  return /^\d+$/.test(refVal) ? `agent/issue-${refVal}` : '';
+}
 // autonomy-runner prints the launched session as JSON ({ id: terminalId, agent, ... }) on its last output line.
 export function terminalIdFromLaunch(stdout: string): string {
   for (const line of stdout.trim().split('\n').reverse()) {
@@ -143,7 +163,7 @@ function ensureWorktree(branch: string, worktree: string): void {
 
 /** Launch an agent with forwarded params (agent:launch). */
 export async function launch(agent: string, params: LaunchParams = {}): Promise<void> {
-  const { skill: behavior = '', params: declared = {}, capabilities = [] } = manifestAgent(agent);
+  const { skill: behavior = '', params: declared = {}, capabilities = [], review = '' } = manifestAgent(agent);
 
   if (behavior && isScript(behavior)) {
     // Deterministic agent: run its script via bun. Resolve its declared trigger params from the launch
@@ -157,11 +177,11 @@ export async function launch(agent: string, params: LaunchParams = {}): Promise<
     return;
   }
 
-  // Skill agent: a termfleet session via the launch adapter (forwards params verbatim).
-  // `--branch` (PM-assigned) is a runner-control param, not an agent param: if present, the session runs in
-  // that branch's worktree (created/reused here), so the backend launches there and ztrack auto-scopes off
-  // the branch name. It is NOT forwarded into the agent's env.
-  const branch = typeof params.branch === 'string' && params.branch ? params.branch : '';
+  // Skill agent: a termfleet session via the launch adapter (forwards params verbatim). ISOLATION is the
+  // runner's job — resolve the worktree branch (explicit PM `--branch`, else the derived per-work-item branch
+  // for a code:propose agent). It is a runner-control concern, never forwarded to the agent.
+  const explicitBranch = typeof params.branch === 'string' && params.branch ? params.branch : '';
+  const branch = isolationBranch({ capabilities, declared, params, explicitBranch });
   const worktree = branch ? worktreePathFor(branch) : '';
   if (branch) ensureWorktree(branch, worktree);
   const names = Object.keys(params).filter((k) => k !== 'branch');
@@ -194,7 +214,10 @@ export async function launch(agent: string, params: LaunchParams = {}): Promise<
           AGENT_NAME: agent,
           AGENT_BOT_NAME: process.env.AGENT_BOT_NAME ?? 'open-autonomy-agent',
           AGENT_BOT_EMAIL: process.env.AGENT_BOT_EMAIL ?? 'open-autonomy-agent@users.noreply.github.com',
-          REVIEW_WORKFLOW: process.env.PROPOSE_REVIEW_WORKFLOW ?? '',
+          // the review edge, realized through the RUNNER seam: agent-propose launches this agent for the PR
+          // (local -> a termfleet reviewer session). github instead carries REVIEW_WORKFLOW; both resolve to
+          // "launch the reviewer for this PR", the substrate-correct realization of develop's `review:` edge.
+          REVIEW_AGENT: review,
           ...(process.env.GITHUB_REPOSITORY ? { GITHUB_REPOSITORY: process.env.GITHUB_REPOSITORY } : {}),
         },
       });

@@ -10,7 +10,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { compileLocal } from './emit';
-import { terminalIdFromLaunch } from './runner-frontend';
+import { isolationBranch, terminalIdFromLaunch } from './runner-frontend';
 import type { AutonomyIR } from '@open-autonomy/core';
 
 const ghLocalIr: AutonomyIR = {
@@ -39,6 +39,35 @@ describe('runner.ts records the propose effect, never re-bakes methodology (subs
     expect(out.generated['scripts/propose-sweep.ts']).toBeUndefined(); // the leaky reconciler is not shipped
     const schedule = JSON.parse(out.generated['scheduler/schedule.json']) as { scripts: string[] };
     expect(schedule.scripts.some((s) => s.includes('propose-sweep'))).toBe(false); // nor scheduled
+  });
+});
+
+describe('isolationBranch — the runner isolates a code:propose agent per work-item (Blocker 1)', () => {
+  const declared = { ZTRACK_ISSUE: 'subject.ref' }; // develop's subject.ref param
+  const proposer = ['code:propose', 'tasks:converse'];
+
+  test('derives agent/issue-<ref> for a code:propose agent from the forwarded ref (PM passes no --branch)', () => {
+    expect(isolationBranch({ capabilities: proposer, declared, params: { ZTRACK_ISSUE: '7' } })).toBe('agent/issue-7');
+  });
+  test('an explicit PM-assigned --branch always wins', () => {
+    expect(isolationBranch({ capabilities: proposer, declared, params: { ZTRACK_ISSUE: '7' }, explicitBranch: 'agent/issue-9' })).toBe('agent/issue-9');
+  });
+  test('a non-proposing agent (reviewer/draft/pm) gets NO worktree — it runs on trunk', () => {
+    expect(isolationBranch({ capabilities: ['code:review'], declared: { TARGET_REF: 'subject.ref' }, params: { TARGET_REF: '42' } })).toBe('');
+  });
+  test('a proposer launched without a numeric ref runs on trunk (no spurious worktree)', () => {
+    expect(isolationBranch({ capabilities: proposer, declared, params: {} })).toBe('');
+  });
+});
+
+describe('the review edge is realized through the runner seam (Blocker 2)', () => {
+  test('local runner.ts records REVIEW_AGENT in the marker; agent-propose launches it via the runner', () => {
+    const out = compileLocal(ghLocalIr);
+    expect(out.generated['scripts/runner.ts']).toContain('REVIEW_AGENT: review'); // the develop agent's review edge
+    const propose = out.generated['scripts/agent-propose.ts'];
+    expect(propose).toContain('REVIEW_AGENT'); // agent-propose reads the review agent
+    expect(propose).toMatch(/runner\.ts['"],\s*['"]launch['"],\s*reviewAgent/); // and launches it via the runner seam
+    expect(propose).toContain('if (reviewWorkflow)'); // github's workflow dispatch is preserved (proven path untouched)
   });
 });
 

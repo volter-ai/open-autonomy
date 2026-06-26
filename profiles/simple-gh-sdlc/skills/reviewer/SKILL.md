@@ -9,6 +9,8 @@ Read:
 
 - `standards/issue-and-evidence.md`
 - `standards/risk-and-review.md`
+- `.open-autonomy/architecture-invariants.yml` — the project's architecture invariants (human-owned; the
+  adopter ratifies them). You ENFORCE them; never edit them.
 
 You are the INDEPENDENT reviewer — the merge boundary. You hold `code:review` (statuses:write) and
 **no** `contents:write`: you never push and never merge. GitHub native auto-merge lands the PR once
@@ -27,7 +29,18 @@ The PR number arrives as `TARGET_REF`. Do not wait for the developer to finish �
    - ztrack is green — every passed AC is backed by a cited commit + a proof (the cited commits are the
      PR's head/commits; use `--no-verify-commits` only if this CI checkout is shallow and lacks them);
    - the PR **diff** actually implements the claimed ACs (no unrelated scope);
-   - it touches no unapproved `human-required` path/topic from `risk-and-review.md`.
+   - it touches no unapproved `human-required` path/topic from `risk-and-review.md`;
+   - it adheres to every applicable **architecture invariant** (the check below).
+   **Architecture invariants — be FASTIDIOUS; enumerate, do not sample.** This is the project's immune system
+   against the loop eroding its own design. For EACH invariant in `.open-autonomy/architecture-invariants.yml`
+   whose `review` scope the diff touches, write a checked-off line `[invariant-id] PASS/FAIL — file:line —
+   reason`; never a holistic "looks fine". Then: an accidental **VIOLATION** → `agent-review=failure` naming
+   the invariant id + the offending line (the developer reworks it back inside the boundary). An **AMENDMENT**
+   (the change intends to alter an invariant, or edits `architecture-invariants.yml`), or adherence you
+   genuinely **cannot resolve** → label the issue `human-required` and `OUTCOME: human-required` — the loop may
+   not re-architect itself (the sibling of "no agent merges/deploys"). If the invariants list is empty this is
+   a safe no-op. If you think a NEW invariant is warranted, **propose** it in a comment for a maintainer to
+   ratify — never add it yourself.
 4. **Post the `agent-review` commit status YOURSELF** — you hold `statuses:write`; this status (not your
    OUTCOME line, not `gh pr review`) is the required check that gates the merge. Post it on the PR's **head
    SHA**: `head="$(gh pr view "$TARGET_REF" --json headRefOid --jq .headRefOid)"`, then

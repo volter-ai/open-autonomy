@@ -71,6 +71,7 @@ policy:
 
 # The shared standards every skill reads (carried verbatim into the installation).
 resources:
+  - .open-autonomy/architecture-invariants.yml
   - .claude/settings.json
   - .github/workflows/merge.yml
   - .github/workflows/security.yml

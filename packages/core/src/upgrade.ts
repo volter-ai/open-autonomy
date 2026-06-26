@@ -24,6 +24,8 @@ export const INSTALL_OWNED_PATHS = [
   'AGENTS.md',
   '.open-autonomy/roadmap.yml',
   '.open-autonomy/strategist-sources.json',
+  '.open-autonomy/architecture-invariants.yml', // the architectural measuring stick — human-owned, ratified
+  //   per-install; seed-once, never overwritten by upgrade (like the constitution + roadmap).
   'docs/CONSTITUTION.md',
   'docs/PROJECT.md',
   'docs/ROADMAP.md',

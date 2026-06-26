@@ -5,7 +5,10 @@
 # capabilities + budget. The merge boundary is the code:review (statuses:write) / code:propose
 # (contents:write) permission split + native auto-merge — no agent holds both, none can land unreviewed code.
 schema: autonomy.ir.v1
-targets: [gh-actions]
+# Runs on gh-actions (its production home) AND a local runner — the PM dispatches through the substrate-
+# agnostic Runner seam, so the same profile drives github Actions or a local termfleet loop over a github
+# code host. Declaring both keeps `check:profiles` compiling self-driving to local too (catching drift).
+targets: [gh-actions, local]
 codeHost: github
 
 agents:

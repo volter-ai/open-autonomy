@@ -254,7 +254,11 @@ export function compileLocal(ir: AutonomyIR, opts: { runner?: RunnerName } = {})
   // still needs them pushed to its github repo. (Runner ⟂ code host — docs/CODE_HOST_RESOURCES.md.)
   const keepCodeHostWorkflows = ir.codeHost === 'github';
   for (const r of ir.resources) {
-    if (keepCodeHostWorkflows || !r.startsWith('.github/')) copies.push({ from: r, to: r });
+    // npm strips files literally named `.gitignore` from a published package, so a profile ships that
+    // resource's content under the name `gitignore` (no dot) and we emit it back to `.gitignore` — same
+    // mapping compileGithub applies. Without this, a profile that carries `.gitignore` (e.g. self-driving)
+    // fails to compile to a local install.
+    if (keepCodeHostWorkflows || !r.startsWith('.github/')) copies.push({ from: r === '.gitignore' ? 'gitignore' : r, to: r });
   }
   return withGeneratedManifest({ generated, copies });
 }

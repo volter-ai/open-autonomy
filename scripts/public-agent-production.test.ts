@@ -59,10 +59,13 @@ describe('public agent production readiness', () => {
 
   test('PR review is triggered DETERMINISTICALLY by the proposer effect, not the PM model', () => {
     // The stall the bench found: PR-routing was a step in the PM's model skill, which a cheap model skips.
-    // Routing is mechanical wiring — the proposer's effect dispatches its independent reviewer when the PR
-    // opens (same path as the ci dispatch). Encoded as a check so routing never silently depends on a model.
-    expect(workflow('developer.yml')).toContain('gh workflow run reviewer.yml -f issue_number=');
-    expect(workflow('strategist.yml')).toContain('gh workflow run strategy_reviewer.yml -f issue_number=');
+    // Routing is mechanical wiring — the proposer's effect (the agent-owned scripts/agent-propose.ts)
+    // dispatches its independent reviewer when the PR opens. The workflow passes the reviewer to the effect via
+    // REVIEW_WORKFLOW; the script does the deterministic dispatch. Encoded so routing never depends on a model.
+    expect(workflow('developer.yml')).toContain('REVIEW_WORKFLOW: reviewer.yml');
+    expect(workflow('developer.yml')).toContain('bun scripts/agent-propose.ts');
+    expect(workflow('strategist.yml')).toContain('REVIEW_WORKFLOW: strategy_reviewer.yml');
+    expect(script('agent-propose.ts')).toContain('REVIEW_WORKFLOW'); // the effect dispatches the review
     // The PM no longer carries a PR-routing step (it owns triage + capacity + close, all judgments/sweeps).
     const pm = readFileSync(new URL('../.codex/skills/pm/SKILL.md', import.meta.url), 'utf8');
     expect(pm).not.toContain('Route open agent PRs to review');
@@ -109,10 +112,11 @@ describe('public agent production readiness', () => {
     // developer = code:propose + tasks:converse → contents/pull-requests/actions/issues:write + id-token.
     expect(text).toContain('pull-requests: write');
     expect(text).toContain('contents: write');
-    // It acts directly: the effect step pushes its change + opens the PR, then DISPATCHES the merge.yml
-    // code-host resource to arm auto-merge (arming is integration, not actor output — it is never inline).
-    expect(text).toContain('gh workflow run merge.yml');
+    // It acts directly via its agent-owned, runner-independent effect script (push + open PR + arm via the
+    // merge.yml resource). The runner only invokes the script; the propose logic isn't inline methodology.
+    expect(text).toContain('bun scripts/agent-propose.ts');
     expect(text).not.toContain('gh pr merge'); // no inline arm in the agent job
+    expect(script('agent-propose.ts')).toContain('merge.yml'); // the effect arms auto-merge via the resource
     // The credential-less + bundle + publisher model is gone.
     expect(text).not.toContain('persist-credentials: false');
     expect(text).not.toContain('github-agent-publish.ts');

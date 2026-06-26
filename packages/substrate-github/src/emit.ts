@@ -297,93 +297,20 @@ function wrapperYml(name: string, agent: IRAgent, gh: GithubBox, isControlPrimar
         `          mkdir -p .agent-run`,
         `          printf '{"number":0,"title":${JSON.stringify(name)},"body":""}\\n' > .agent-run/issue.json`,
       ];
-  // The generic EFFECT step: the agent acts directly in its own credentialed job. If the skill changed the
-  // working tree (a code:propose agent), push it as an auto-merging PR — GitHub lands it once `ci` +
-  // `agent-review` are green (docs/SPEC.md#capabilities, the merge boundary). A non-proposing agent (reviewer:
-  // posts agent-review via gh; pm/planner: comment/label via gh) changes no files, so this no-ops. There is
-  // no bundle and no publisher — the agent's own token (scoped to its capabilities) does the work.
+  // The EFFECT step: a code:propose agent's propose ACTION — turn the working tree into an auto-merging PR.
+  // The logic is the agent-owned, runner-INDEPENDENT scripts/agent-propose.ts (git + gh, identical on any
+  // runner); the runner only supplies the credential + env and invokes it. Methodology lives with the agent,
+  // not the runner (docs/CODE_HOST_RESOURCES.md). ISSUE_REF/GITHUB_* are ambient in the job env. A non-proposer
+  // changes no files, so it never gets this step.
   const effect = [
     `      - name: Effect — propose the change as an auto-merging PR (if the tree changed)`,
     `        env:`,
-    `          GH_TOKEN: \${{ github.token }}`,
-    `        run: |`,
-    `          set -euo pipefail`,
-    `          branch="${branchExpr}"`,
-    // A proposer either leaves uncommitted changes (we commit the tree below) OR has already committed onto
-    // its own \`agent/issue-<n>\` branch (e.g. to cite the commit SHA as evidence — the ztrack SDLC). Propose
-    // if EITHER is true; bail only when the tree is clean AND no such branch exists (nothing to land).
-    `          if [ -z "$(git status --porcelain)" ] && ! git rev-parse --verify "$branch" >/dev/null 2>&1; then echo "no changes and no agent branch; nothing to propose"; exit 0; fi`,
-    `          git config user.name "${gh.bot_name ?? 'open-autonomy-agent'}"`,
-    `          git config user.email "${gh.bot_email ?? 'open-autonomy-agent@users.noreply.github.com'}"`,
-    `          git config core.filemode false`,
-    `          git checkout "$branch" 2>/dev/null || git checkout -b "$branch"`,
-    // Persist this run's processed transcript AND its visual evidence INTO the proposal so they ride into the
-    // PR and become part of PERMANENT history only if the PR merges (non-merged proposals never land them).
-    // Each run gets its own folder (transcript.md + any harvested screenshots) so the evidence travels with the
-    // record — screenshots would otherwise vanish with the 30-day Actions artifact. Only proposers reach this
-    // effect step, so only developer (develop runs) and strategist (strategy decisions) keep records — never
-    // the PM/reviewer/planner bookkeeping. `.agent-run/` stays gitignored; this copy is the durable record.
-    ...(refParam
-      ? [`          ref_slug="$(printf '%s' "\${${refParam}}" | tr -cd '0-9A-Za-z._-' | cut -c1-40)"; [ -z "$ref_slug" ] && ref_slug=item`]
-      : [`          ref_slug=autonomous`]),
-    `          run_dir=".open-autonomy/history/${name}/\${ref_slug}-run-\${{ github.run_id }}"`,
-    `          mkdir -p "$run_dir"`,
-    `          cp -f .agent-run/artifacts/transcript.md "$run_dir/transcript.md" 2>/dev/null || true`,
-    `          cp -f .agent-run/artifacts/screenshot-* "$run_dir/" 2>/dev/null || true`,
-    `          git add -A`,
-    // Link the PR to its issue so the merge auto-closes it. The closing keyword goes in the COMMIT message
-    // (squash-merge carries it into the merge commit — the reliable path; a PR-body keyword alone is dropped
-    // when the repo squashes from the commit message) AND the PR body. Only when the subject is an issue
-    // number (refParam present + numeric); roadmap/cron proposers have no issue to close.
-    ...(refParam
-      ? [
-          `          ref="\${${refParam}}"`,
-          `          if printf '%s' "$ref" | grep -qE '^[0-9]+$'; then git commit --allow-empty -m "agent: ${RID}" -m "Closes #$ref"; else git commit --allow-empty -m "agent: ${RID}"; fi`,
-        ]
-      : [`          git commit --allow-empty -m "agent: ${RID}"`]),
-    `          git push --force origin "$branch"`,
-    `          base="\${{ github.event.repository.default_branch }}"`,
-    `          body="$(cat .agent-run/artifacts/pr.md 2>/dev/null || echo "Automated agent change (${RID}).")"`,
-    ...(refParam
-      ? [`          if printf '%s' "$ref" | grep -qE '^[0-9]+$'; then body="$(printf 'Closes #%s\\n\\n%s' "$ref" "$body")"; fi`]
-      : []),
-    `          gh pr create --base "$base" --head "$branch" --title "Agent: ${RID}" --body "$body" || gh pr view "$branch" >/dev/null`,
-    // Arm native auto-merge by DISPATCHING the merge.yml code-host resource — the proposer never arms inline.
-    // Arming/closing is integration, not actor output (docs/CODE_HOST_RESOURCES.md): merge.yml carries it as a
-    // resource that holds pull-requests:write but no contents:write, so even it cannot merge — GitHub lands the
-    // PR only once branch protection (ci + agent-review) is green. A bot PR fires no pull_request event
-    // (GITHUB_TOKEN anti-recursion), so the proposer kicks merge.yml here exactly as it dispatches ci/review;
-    // merge.yml's own schedule re-runs as the deterministic backstop if this dispatch misses. RETRY for the
-    // same reason as ci: a swallowed dispatch could leave a green PR unarmed and stuck.
-    `          mg_ok=; for i in 1 2 3 4 5 6; do gh workflow run merge.yml && { mg_ok=1; break; } || sleep 4; done`,
-    `          [ -n "$mg_ok" ] || echo "merge dispatch failed after retries (non-fatal)"`,
-    // Bot-opened PRs don't fire pull_request CI (GITHUB_TOKEN anti-recursion); workflow_dispatch is exempt,
-    // so dispatch ci.yml on the PR head to post the required `ci` status that gates auto-merge. RETRY: this is a
-    // required check — if the dispatch fails (the just-pushed branch isn't visible to the API yet, a transient
-    // API error), the `ci` status never posts and the PR can NEVER merge. Same fire-and-forget trap as the
-    // auto-merge arm above; retry until it lands.
-    `          head_sha="$(git rev-parse HEAD)"`,
-    `          pr_number="$(gh pr view "$branch" --json number --jq .number 2>/dev/null || echo "")"`,
-    `          ci_ok=; for i in 1 2 3 4 5 6; do gh workflow run ci.yml --ref "$branch" -f sha="$head_sha" -f pr="$pr_number" && { ci_ok=1; break; } || sleep 4; done`,
-    `          [ -n "$ci_ok" ] || echo "ci dispatch failed after retries (non-fatal)"`,
-    // Trigger review DETERMINISTICALLY — the same anti-recursion that blocks pull_request CI blocks the
-    // reviewer's auto-trigger on a bot PR, so the proposer requests its independent review here (wiring, not
-    // a judgment), exactly as it dispatches ci. The reviewer (agent.review) then judges + posts agent-review.
-    // No model/PM step in the routing path. (The merge boundary holds: the proposer can dispatch but not bless.)
-    // RETRY for the same reason as ci: agent-review is a required check; a swallowed dispatch leaves the PR
-    // permanently unmergeable.
-    ...(agent.review
-      ? [
-          `          rv_ok=; for i in 1 2 3 4 5 6; do gh workflow run ${agent.review}.yml -f issue_number="$pr_number" && { rv_ok=1; break; } || sleep 4; done`,
-          `          [ -n "$rv_ok" ] || echo "review dispatch failed after retries (non-fatal)"`,
-        ]
-      : []),
-    // Dispatch the human-approval gate for the SAME anti-recursion reason: a bot-opened PR won't fire
-    // human-approval's pull_request_target, so the proposer kicks it to post the initial status (auto-success
-    // for routine PRs; pending until a maintainer Approves for human-required scope). Re-evaluation on a human
-    // Approve fires natively (a human action isn't anti-recursed). Retry — it's a required check once enforced.
-    `          ha_ok=; for i in 1 2 3 4 5 6; do gh workflow run human-approval.yml -f pr="$pr_number" && { ha_ok=1; break; } || sleep 4; done`,
-    `          [ -n "$ha_ok" ] || echo "human-approval dispatch failed after retries (non-fatal)"`,
+    `          GH_TOKEN: ${'${{ github.token }}'}`,
+    `          AGENT_NAME: ${name}`,
+    `          AGENT_BOT_NAME: ${gh.bot_name ?? 'open-autonomy-agent'}`,
+    `          AGENT_BOT_EMAIL: ${gh.bot_email ?? 'open-autonomy-agent@users.noreply.github.com'}`,
+    ...(agent.review ? [`          REVIEW_WORKFLOW: ${agent.review}.yml`] : []),
+    `        run: bun scripts/agent-propose.ts`,
   ];
   return [
     `name: ${name}`,

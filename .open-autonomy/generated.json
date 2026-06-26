@@ -55,6 +55,7 @@
     "docs/standards/security.md",
     "docs/standards/tests.md",
     "package.json",
+    "scripts/agent-propose.ts",
     "scripts/agent-visual-verify.ts",
     "scripts/agent.ts",
     "scripts/check-supply-chain.ts",

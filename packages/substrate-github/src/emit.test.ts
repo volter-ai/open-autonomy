@@ -99,10 +99,13 @@ describe('compileGithub — merge is a code-host resource, not engine output', (
     expect(compileGithub(propIR).generated['.github/workflows/merge.yml']).toBeUndefined();
   });
 
-  test('a code:propose agent DISPATCHES merge.yml and never arms auto-merge inline', () => {
-    const wf = compileGithub(propIR).generated['.github/workflows/developer.yml'] ?? '';
-    expect(wf).toContain('gh workflow run merge.yml'); // arming is delegated to the code-host resource
-    expect(wf).not.toContain('gh pr merge'); // no inline arm in the actor's job — that's integration, not output
+  test('a code:propose agent runs the agent-owned effect script; arming is delegated, never inline', () => {
+    const out = compileGithub(propIR);
+    const wf = out.generated['.github/workflows/developer.yml'] ?? '';
+    expect(wf).toContain('bun scripts/agent-propose.ts'); // the runner only invokes the agent-owned effect
+    expect(wf).not.toContain('gh pr merge'); // no inline arm in the actor's job — that's methodology, not runner
+    const script = out.generated['scripts/agent-propose.ts'] ?? '';
+    expect(script).toContain('merge.yml'); // the effect arms native auto-merge via the merge.yml resource
   });
 
   test('a tasks:author agent no longer runs reconcile/re-arm — those move to the merge.yml schedule', () => {

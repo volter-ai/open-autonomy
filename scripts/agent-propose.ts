@@ -51,6 +51,14 @@ const dispatch = (label: string, args: string[]): void => {
   process.stdout.write(`${label} dispatch failed after retries (non-fatal)\n`);
 };
 
+// Deterministic dedup backstop: if this branch ALREADY has a merged PR, the work has landed — never open a
+// duplicate. (A proposer can be relaunched in the lag between a PR merging and its `Closes #<n>` auto-closing
+// the issue; this guard stops the second run from opening a redundant PR for already-merged work.)
+if (isNumericRef && sh('gh', ['pr', 'list', '--head', branch, '--state', 'merged', '--json', 'number', '--jq', '.[0].number // empty'], { allowFail: true })) {
+  process.stdout.write(`branch ${branch} already has a merged PR; nothing to propose\n`);
+  process.exit(0);
+}
+
 // Propose only if the skill left changes OR already committed onto its own agent branch (the ztrack SDLC
 // cites the commit SHA as evidence). Bail when the tree is clean AND no such branch exists.
 const dirty = sh('git', ['status', '--porcelain'], { allowFail: true }).length > 0;

@@ -1,5 +1,29 @@
 # Changelog
 
+## 0.2.3
+
+### Changed
+- **The runner is strictly code-host-blind.** Reverted a `GITHUB_REPOSITORY` / `github.com` leak that had
+  crept into the runner (the backend's env filter + a remote parser in the frontend) — the runner injects no
+  repo identity. `agent-propose` and all reviewer skills now resolve their own repo via `gh`'s `{owner}/{repo}`
+  placeholders (filled from the remote), so they work on GitHub Actions and a local runner alike with nothing
+  injected. SPEC now documents explicit `--branch` isolation and the code-host-blind runner.
+
+### Fixed
+- **Local-runner edges.** The develop skill tolerates already being on its worktree branch
+  (`git checkout -b … || git checkout …`); cron agents are single-instance (a tick skips if one is already
+  actively in flight), so PM ticks no longer pile up.
+- **Both duplicate-PR races are now closed.** 0.2.2 closed the reap→propose window (a pending effect counts as
+  in-flight). A live hands-off run surfaced a SECOND window: a PR can merge minutes before its `Closes #<n>`
+  auto-closes the issue, and the PM relaunched the developer in that lag → a duplicate PR for already-merged
+  work. Closed two ways: (1) a **deterministic backstop** — `agent-propose` refuses to open a PR when the
+  branch already has a merged one; (2) the simple-gh-sdlc PM checks `gh pr list --head agent/issue-<n>
+  --state all` and does not relaunch when a merged PR exists.
+
+Proven live end to end (hands-off, with `GITHUB_REPOSITORY` **unset**): a ready issue → PM → develop on its
+worktree branch → the reviewer posts `agent-review` via `{owner}/{repo}` → native auto-merge → issue closed;
+the deterministic backstop then refused the duplicate when the PM relaunched in the close lag.
+
 ## 0.2.2
 
 ### Changed

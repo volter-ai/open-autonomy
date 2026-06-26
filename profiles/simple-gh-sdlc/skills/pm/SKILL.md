@@ -63,8 +63,14 @@ without you.
      number with a comment naming the failure, respecting `max_develop_attempts`
      (`.open-autonomy/autonomy.yml`); never loop. Do NOT open a second PR for an issue
      that already has one.
-   - **Issue is `ready` (label), open, no agent PR, and WIP allows** → launch the
-     developer: `bun scripts/runner.ts launch develop --ref <number> --branch agent/issue-<number>`.
+   - **Issue is `ready` (label), open, and WIP allows** → before launching, confirm `agent/issue-<number>`
+     has **no PR yet in ANY state**: `gh pr list --head "agent/issue-<number>" --state all --json number,state`.
+     - A **merged** PR exists → the work is already done; the issue is merely auto-closing (a brief GitHub
+       lag between merge and `Closes #<n>` taking effect). Do **NOT** relaunch — leave it; it will close.
+       Relaunching here opens a **duplicate** PR for work that already merged.
+     - An **open** PR exists → it's in review (handled by the open-PR case above), not fresh.
+     - **No** PR in any state → it's fresh: launch the developer:
+       `bun scripts/runner.ts launch develop --ref <number> --branch agent/issue-<number>`.
    - **Else** (no `ready` issue without a PR; or WIP full) → stop without dispatch.
 4. Leave a short status comment on the issue you acted on (`gh issue comment <n>`),
    saying what you decided and why. Do not wait for the launched agent to finish.

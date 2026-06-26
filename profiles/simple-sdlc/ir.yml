@@ -71,6 +71,7 @@ policy:
 
 # The shared standards every skill reads (carried verbatim into the installation).
 resources:
+  - .claude/settings.json
   - standards/workflow.md
   - standards/issue-and-evidence.md
   - standards/risk-and-review.md

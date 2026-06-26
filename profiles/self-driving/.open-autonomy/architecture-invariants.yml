@@ -1,0 +1,79 @@
+schema: open-autonomy.architecture-invariants.v1
+# The project's architectural immune system. These are the boundaries the autonomy loop must NOT erode while
+# maintaining the repo. They are part of the measuring stick, so — per docs/CONSTITUTION.md — they are
+# HUMAN-OWNED: the reviewer ENFORCES them on every change and may PROPOSE an amendment, but only a maintainer
+# ratifies a change to this file. Consequences the reviewer applies (see .open-autonomy/review-rubric.yml,
+# criterion `architecture`):
+#   - a change that VIOLATES an invariant (accidental) -> agent-review=failure (rework it back inside the line);
+#   - a change that AMENDS an invariant, or whose adherence is AMBIGUOUS -> human-required (a maintainer rules).
+# So the loop builds freely WITHIN the architecture and is structurally unable to silently re-architect it —
+# the sibling of "no agent merges / no agent deploys": no agent re-architects.
+#
+# A new install ships this file with project-specific invariants proposed from the codebase and ratified by
+# the maintainer; the set below is open-autonomy's own (the dogfood instance).
+invariants:
+  - id: substrate-is-runner-only
+    title: A substrate is the agent RUNNER, nothing more
+    statement: >
+      packages/substrate-* implement only launch + isolate + schedule + credential + lifecycle, over a box.
+      They are DOMAIN-FREE: they must not name a profile agent, nor embed SDLC/methodology — the tracker
+      (ztrack), drive-to-green, propose, review, merge, board, or "done" semantics. What an agent DOES is the
+      profile's/agent's; the runner only launches it and invokes its declared, agent-owned effect script.
+    violation: >
+      A file under packages/substrate-* hardcodes a profile-agent name (develop/reviewer/pm/draft/planner/
+      strategist), parses tracker state (e.g. ztrack ACs, `status: passed`/`pending`), or contains
+      merge/review/board/done logic beyond invoking an agent-owned script. (This is the bug that motivated
+      the file: a local propose-sweep that hardcoded `develop` and parsed ACs.)
+    review: For EACH changed file under packages/substrate-*, state Y/N "introduces methodology?" + the deciding line.
+    on_change: human-required
+
+  - id: ir-is-the-standard
+    title: The IR is the standard; substrates implement it; profiles are substrate-free
+    statement: >
+      packages/core is the substrate-agnostic standard and depends on NO substrate package. A profile
+      (profiles/*/ir.yml + its skills) declares agents/capabilities/triggers/policy and carries NO runner
+      mechanics (no workflows, jobs, termfleet/gh plumbing, permission blocks). Substrates translate the IR;
+      they never leak their shapes back into the IR.
+    violation: >
+      core imports a substrate; a profile's ir.yml/skill embeds a github/termfleet workflow or job or a
+      computed permission block; or a substrate writes substrate-specific config into the IR.
+    review: If core/* or any profiles/*/ir.yml or skill changed, verdict Y/N "leaks across the IR boundary?" with the line.
+    on_change: human-required
+
+  - id: code-host-orthogonal-to-runner
+    title: Code host is orthogonal to the runner
+    statement: >
+      The runner (gh-actions | termfleet/local) is independent of the code host (github | local-git). Runner
+      code must not assume a code host; code-host behavior (PRs, auto-merge, ci/merge/deploy workflows) is the
+      profile's, carried as resources, realized by the agent's own tools — not baked into the runner.
+    violation: A substrate assumes github (or local-git) for its agents; code-host mechanics emitted as runner logic.
+    review: Verdict Y/N "couples runner to a code host?" with evidence.
+    on_change: human-required
+
+  - id: no-agent-merge-deploy-rearchitect
+    title: No agent merges, deploys, or re-architects
+    statement: >
+      No agent holds `code:merge`; merge is native auto-merge gated by branch protection (ci + agent-review,
+      no bypass); deploy is human-promoted + a required-reviewer environment. The architectural extension:
+      changing an invariant in THIS file is itself human-required. The capability split (code:propose vs
+      code:review, never both) and validateIR's merge-boundary checks must remain intact.
+    violation: >
+      An agent is granted code:merge or both code:propose+code:review; a direct merge/deploy path that bypasses
+      the gate; a relaxation of branch protection or the validateIR boundary checks; or an autonomous edit to
+      this invariants file.
+    review: If capabilities, validateIR, branch-protection provisioning, or this file changed, verdict Y/N + line.
+    on_change: human-required
+
+  - id: proof-demonstrated-not-asserted
+    title: Proof is demonstrated through the shipped path, not asserted
+    statement: >
+      Per the constitution ("capabilities are demonstrated, not asserted" + "a design is not best until it runs
+      on us"), any claim that something "works"/"is autonomous"/"is proven" must be demonstrated through the
+      SHIPPED entrypoints (the real loop/scheduler/skills/install), not a bespoke harness that substitutes the
+      orchestration the install is supposed to do. A driver-assisted run is "component-proven", not "autonomous".
+    violation: >
+      A PR/issue/evidence claims autonomy or end-to-end proof, but the demonstration routed around the shipped
+      entrypoints (a hand-written driver supplied dispatch/orchestration the install should do). (This is the
+      overclaim that motivated the invariant.)
+    review: If the change claims it works/is proven, verdict Y/N "demonstrated via shipped path?" + how it was shown.
+    on_change: human-required

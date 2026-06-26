@@ -2,6 +2,7 @@
   ".github/workflows/**",
   ".open-autonomy/autonomy.yml",
   "docs/CONSTITUTION.md",
+  ".open-autonomy/architecture-invariants.yml",
   ".codex/skills/**",
   ".claude/skills/**",
   "**/bun.lock"

@@ -33,6 +33,7 @@
     ".github/workflows/strategy_reviewer.yml",
     ".github/zizmor.yml",
     ".gitignore",
+    ".open-autonomy/architecture-invariants.yml",
     ".open-autonomy/autonomy.yml",
     ".open-autonomy/generated.json",
     ".open-autonomy/human-required-paths.json",

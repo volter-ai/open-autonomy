@@ -20,6 +20,15 @@ criteria:
     title: OSS portability
     pass: Behavior works in a newly scaffolded repository with documented setup.
     fail: Behavior depends on private Volter-only code or uncommitted local state.
+  - id: architecture
+    title: Architecture invariants (the immune system)
+    # Enforce the project's declared architecture invariants. This criterion is FASTIDIOUS by construction:
+    # enumerate, do not sample. Read .open-autonomy/architecture-invariants.yml and, for EACH invariant whose
+    # `review` scope the diff touches, produce a checked-off verdict line with cited file:line evidence — never
+    # a holistic vibe. The invariants are human-owned (the optimizer may not move its own stick).
+    pass: Every applicable invariant is adhered to, each with a cited per-invariant verdict; none is violated or amended.
+    fail: A change accidentally VIOLATES an invariant — post failure naming the invariant id + the offending line (rework it back inside the boundary).
+    human_required: A change AMENDS an invariant (an intentional architecture change), edits architecture-invariants.yml, or its adherence is genuinely AMBIGUOUS — a maintainer rules; the loop may not re-architect itself. When you believe a NEW invariant is warranted, PROPOSE it (do not self-add) for maintainer ratification.
 verdicts:
   pass_low:
     requires:

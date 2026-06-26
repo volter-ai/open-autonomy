@@ -150,6 +150,7 @@ policy:
         - .github/workflows/**
         - .open-autonomy/autonomy.yml
         - docs/CONSTITUTION.md
+        - .open-autonomy/architecture-invariants.yml   # the measuring stick — amending it is human-owned (no agent re-architects)
         - .codex/skills/**
         - .claude/skills/**
         # NOT services/** — merging proxy code is inert (nothing deploys on merge); the deploy is gated
@@ -185,6 +186,7 @@ resources:
   - .github/dependabot.yml
   - .gitattributes
   - .gitignore
+  - .open-autonomy/architecture-invariants.yml
   - .open-autonomy/review-rubric.yml
   - .open-autonomy/roadmap.yml
   - .open-autonomy/strategist-sources.json

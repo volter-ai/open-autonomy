@@ -13,6 +13,7 @@ documents:
     - .github/dependabot.yml
     - .gitattributes
     - .gitignore
+    - .open-autonomy/architecture-invariants.yml
     - .open-autonomy/review-rubric.yml
     - .open-autonomy/roadmap.yml
     - .open-autonomy/strategist-sources.json
@@ -165,6 +166,7 @@ policy:
       - .github/workflows/**
       - .open-autonomy/autonomy.yml
       - docs/CONSTITUTION.md
+      - .open-autonomy/architecture-invariants.yml
       - .codex/skills/**
       - .claude/skills/**
       - "**/bun.lock"

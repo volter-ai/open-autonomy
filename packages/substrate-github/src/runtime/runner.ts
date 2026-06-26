@@ -74,8 +74,14 @@ function parseFlags(args: string[]): LaunchParams {
 export async function runCli(argv: string[]): Promise<number> {
   const [cmd, agent, ...rest] = argv;
   if (!cmd || !agent || agent.startsWith('--')) {
-    console.error('usage: runner.ts <launch|list> <agent> [--ref <work-item>] [--key value ...]');
+    console.error('usage: runner.ts <launch|list|cancel> <agent|id> [--ref <work-item>] [--key value ...]');
     return 2;
+  }
+  if (cmd === 'cancel') {
+    // `cancel <id>` — the positional is the run id (a github Actions run database id). github cancels a run
+    // through `gh run cancel`; the local seam cancels the termfleet session. Same agent-facing verb.
+    await $`gh run cancel ${agent}`.nothrow();
+    return 0;
   }
   if (cmd === 'launch') {
     const flags = parseFlags(rest);

@@ -1,5 +1,29 @@
 # Changelog
 
+## 0.2.2
+
+### Changed
+- **self-driving's PM dispatches through the Runner seam — it is no longer github-only.** The PM previously
+  called `gh workflow run developer.yml` / `gh run list` / `gh run cancel` directly (the last github-native
+  holdout), so it could not function on a local runner. Now it launches/lists/cancels via
+  `bun scripts/runner.ts launch|list|cancel`, passing `--branch agent/issue-<n>` to isolate the developer —
+  exactly like simple-gh-sdlc. Behavior on github is identical (the github seam turns `runner.ts launch
+  developer --ref n` into the same `gh workflow run developer.yml -f issue_number=n`); the live-session peek
+  via the model proxy stays as a github-box observability option. Proven live: self-driving compiled to a
+  local runner isolates its developer in a worktree on `--branch` and runs on trunk without it.
+
+### Fixed
+- **No more duplicate PR from the reap→propose race.** A finished proposer session whose propose effect has
+  not run yet now counts as in-flight: `agent:list` (the local runner) includes pending post-session effect
+  markers, deduped by id against live sessions. So a WIP/dedup caller (the PM) never relaunches the proposer
+  in the window between its session being reaped and its PR opening — which previously opened a second PR.
+  Proven live: after a developer session ends, `runner.ts list developer` still reports it (`status:
+  proposing`) until the PR opens.
+
+### Added
+- **`runner.ts cancel <id>`** on both substrates, completing the `agent:cancel` verb in the uniform seam:
+  github cancels the Actions run (`gh run cancel`), a local runner cancels the termfleet session.
+
 ## 0.2.1
 
 ### Changed

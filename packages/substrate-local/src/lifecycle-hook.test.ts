@@ -10,7 +10,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { compileLocal } from './emit';
-import { terminalIdFromLaunch } from './runner-frontend';
+import { mergeInFlight, terminalIdFromLaunch } from './runner-frontend';
 import { emitAutonomy } from '@open-autonomy/core';
 import type { AutonomyIR } from '@open-autonomy/core';
 
@@ -69,6 +69,32 @@ describe('the review edge is realized through the runner seam (Blocker 2)', () =
     expect(propose).toContain('REVIEW_AGENT'); // agent-propose reads the review agent
     expect(propose).toMatch(/runner\.ts['"],\s*['"]launch['"],\s*reviewAgent/); // and launches it via the runner seam
     expect(propose).toContain('if (reviewWorkflow)'); // github's workflow dispatch is preserved (proven path untouched)
+  });
+});
+
+describe('mergeInFlight — a finished-but-unproposed session stays in-flight (no duplicate PR)', () => {
+  const marker = (id: string, agent: string) => ({ id, agent, worktree: `/wt/${id}`, effect: 'scripts/agent-propose.ts', env: {} });
+
+  test('a live session and its own pending marker count as ONE in-flight unit (deduped by id)', () => {
+    const live = [{ id: 'dev-1', agent: 'develop', status: 'running' }];
+    const inflight = mergeInFlight(live, [marker('dev-1', 'develop')], 'develop');
+    expect(inflight).toHaveLength(1); // not double-counted
+    expect(inflight[0]!.id).toBe('dev-1');
+  });
+
+  test('after reap (no live session) a pending marker keeps the work in-flight — the race window', () => {
+    // the bug: between reap and propose, list() was empty -> PM relaunched develop -> a second PR.
+    const inflight = mergeInFlight([], [marker('dev-1', 'develop')], 'develop');
+    expect(inflight).toHaveLength(1); // WIP still sees develop in flight
+    expect(inflight[0]!.status).toBe('proposing');
+  });
+
+  test('once proposed (marker gone) the agent is no longer in-flight (the PR dedups from here)', () => {
+    expect(mergeInFlight([], [], 'develop')).toHaveLength(0);
+  });
+
+  test('another agent\'s pending marker does not count toward this agent', () => {
+    expect(mergeInFlight([], [marker('rev-1', 'reviewer')], 'develop')).toHaveLength(0);
   });
 });
 

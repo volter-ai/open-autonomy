@@ -18,7 +18,7 @@
 //
 // Emitted verbatim by compileLocal as scripts/runner.ts so an agent's `import './runner.js'` resolves.
 import { spawnSync } from 'node:child_process';
-import { existsSync, readFileSync, writeFileSync, appendFileSync, mkdirSync, symlinkSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync, writeFileSync, appendFileSync, mkdirSync, symlinkSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join, resolve } from 'node:path';
 
@@ -77,6 +77,26 @@ function recordPostSessionEffect(marker: EffectMarker): void {
   mkdirSync(EFFECTS_DIR, { recursive: true });
   const file = join(EFFECTS_DIR, `${marker.id.replace(/[^0-9A-Za-z._-]/g, '-')}.json`);
   writeFileSync(file, `${JSON.stringify(marker, null, 2)}\n`);
+}
+
+// Pending post-session effects for an agent = work whose session FINISHED but whose effect (the propose) has
+// not run yet — the window between a session being reaped and its PR being opened. `list` counts these as
+// in-flight so a WIP/dedup check (the PM's) does not relaunch the proposer in that gap and double-propose.
+function pendingEffects(agent: string): EffectMarker[] {
+  try {
+    return readdirSync(EFFECTS_DIR)
+      .filter((f) => f.endsWith('.json'))
+      .map((f) => {
+        try {
+          return JSON.parse(readFileSync(join(EFFECTS_DIR, f), 'utf8')) as EffectMarker;
+        } catch {
+          return null;
+        }
+      })
+      .filter((m): m is EffectMarker => !!m && m.agent === agent);
+  } catch {
+    return []; // no markers dir yet
+  }
 }
 function manifestAgent(agent: string): ManifestAgent {
   const path = '.open-autonomy/autonomy.yml';
@@ -224,7 +244,12 @@ export async function launch(agent: string, params: LaunchParams = {}): Promise<
   spawnSync('node', [join(scriptsDir, 'run-agent.mjs')], { stdio: 'inherit', env, ...(worktree ? { cwd: worktree } : {}) });
 }
 
-/** List an agent's running sessions (agent:list) via the local runner backend. */
+/** List an agent's in-flight work (agent:list): live termfleet sessions PLUS pending post-session effects
+ *  (a finished session whose propose has not run yet). Including the pending effects makes "in-flight" span
+ *  the whole launch→propose lifecycle, so a WIP/dedup caller never relaunches the proposer in the reap→propose
+ *  gap (which would open a duplicate PR). Deduped by id: while a session is live its marker.id == the session
+ *  id, so it counts once; once reaped, only the marker remains; once proposed, the marker is gone (the PR
+ *  exists, which the caller dedups on instead). */
 export async function list(agent: string, _limit = 50): Promise<RunInfo[]> {
   const r = spawnSync('node', [join(scriptsDir, 'autonomy-runner.mjs'), 'list'], { encoding: 'utf8' });
   let sessions: Array<{ id: string; agent: string; status: string }> = [];
@@ -233,9 +258,24 @@ export async function list(agent: string, _limit = 50): Promise<RunInfo[]> {
   } catch {
     /* no sessions / backend unavailable */
   }
-  return sessions
+  return mergeInFlight(sessions, pendingEffects(agent), agent);
+}
+
+/** Merge live sessions + pending effects into one in-flight list for `agent`, deduped by id (a live session
+ *  and its own pending marker are the same unit of work). Pure — the testable core of the race fix. */
+export function mergeInFlight(
+  sessions: Array<{ id: string; agent: string; status: string }>,
+  pending: EffectMarker[],
+  agent: string,
+): RunInfo[] {
+  const live = sessions
     .filter((s) => s.agent === agent)
     .map((s) => ({ id: s.id, status: s.status, conclusion: null, title: s.agent }));
+  const liveIds = new Set(live.map((s) => s.id));
+  const pend = pending
+    .filter((m) => m.agent === agent && !liveIds.has(m.id)) // session already counted; don't double-count
+    .map((m) => ({ id: m.id, status: 'proposing', conclusion: null, title: agent }));
+  return [...live, ...pend];
 }
 
 // --- the uniform agent-facing CLI (same surface as the github seam) ---
@@ -255,8 +295,13 @@ function parseFlags(args: string[]): LaunchParams {
 export async function runCli(argv: string[]): Promise<number> {
   const [cmd, agent, ...rest] = argv;
   if (!cmd || !agent || agent.startsWith('--')) {
-    console.error('usage: runner.ts <launch|list> <agent> [--ref <work-item>] [--key value ...]');
+    console.error('usage: runner.ts <launch|list|cancel> <agent|id> [--ref <work-item>] [--key value ...]');
     return 2;
+  }
+  if (cmd === 'cancel') {
+    // `cancel <id>` — the positional is the session id (not an agent). Delegate to the backend's cancel.
+    const r = spawnSync('node', [join(scriptsDir, 'autonomy-runner.mjs'), 'cancel', agent], { stdio: 'inherit' });
+    return r.status ?? 0;
   }
   if (cmd === 'launch') {
     const flags = parseFlags(rest);

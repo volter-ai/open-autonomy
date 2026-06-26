@@ -28,8 +28,10 @@ for (const d of readdirSync('.worktrees')) {
   const num = m[1];
   const wt = `.worktrees/${d}`;
   const branch = `agent/issue-${num}`;
-  // already proposed?
-  if (sh('gh', ['pr', 'list', '-R', repo, '--head', branch, '--json', 'number', '--jq', '.[0].number // empty'])) continue;
+  // already proposed? — check ALL states, not just open: once a branch has a PR (open OR already merged), never
+  // re-propose. (A merged PR closes, so an "open-only" check would re-propose a landed branch — the duplicate
+  // bug a sustained autonomous run surfaced.) A still-open PR is updated by develop pushing, not a new propose.
+  if (sh('gh', ['pr', 'list', '-R', repo, '--head', branch, '--state', 'all', '--json', 'number', '--jq', '.[0].number // empty'])) continue;
   // develop committed real work?
   const ahead = sh('git', ['-C', wt, 'rev-list', '--count', `origin/HEAD..${branch}`]) || sh('git', ['-C', wt, 'rev-list', '--count', `origin/main..${branch}`]);
   if (!ahead || ahead === '0') continue;

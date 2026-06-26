@@ -9,8 +9,8 @@ import { GithubRunner } from '@open-autonomy/substrate-github';
 function pickRunner(name: string): Runner {
   if (name === 'exec') return new ExecRunner(`/tmp/autonomy-conformance-${process.pid}.json`);
   if (name === 'termfleet') return new TermfleetRunner();
-  if (name === 'github') return new GithubRunner();
-  throw new Error(`unknown runner "${name}"; use exec|termfleet|github`);
+  if (name === 'gh-actions' || name === 'github') return new GithubRunner(); // 'github' = back-compat alias
+  throw new Error(`unknown runner "${name}"; use exec|termfleet|gh-actions`);
 }
 
 const name = process.argv[2] ?? 'exec';

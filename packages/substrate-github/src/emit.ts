@@ -118,7 +118,9 @@ interface GithubBox {
 // defaulted here — those are real infra identity (a specific proxy URL/audience) and stay profile/install config.
 const DEFAULT_GITHUB_MODEL = 'deepseek/deepseek-v4-flash';
 const githubBox = (ir: AutonomyIR): GithubBox => {
-  const box = (ir.policy.box.github ?? {}) as GithubBox;
+  // The runner's box config is keyed by the runner name `gh-actions` (parseIr normalizes the old `github`
+  // alias to it; the `?? .github` fallback covers IRs constructed without going through parseIr).
+  const box = (ir.policy.box['gh-actions'] ?? ir.policy.box.github ?? {}) as GithubBox;
   return { ...box, model: box.model ?? DEFAULT_GITHUB_MODEL };
 };
 // `${{ vars.NAME || 'fallback' }}` when the profile declares a fallback, else a bare `${{ vars.NAME }}`.

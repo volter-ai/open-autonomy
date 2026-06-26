@@ -5,7 +5,7 @@ import type { AutonomyIR, Trigger } from '@open-autonomy/core';
 function irWith(triggers: Trigger[], kind?: 'agent' | 'human'): AutonomyIR {
   return {
     schema: 'autonomy.ir.v1',
-    targets: ['github'],
+    targets: ['gh-actions'],
     agents: {
       maintainer: {
         behavior: 'humans/maintainer-review',
@@ -85,7 +85,7 @@ describe('compileGithub — merge is a code-host resource, not engine output', (
   // exactly as it dispatches ci/agent-review — and the tasks:author PM no longer carries reconcile/re-arm.
   const propIR: AutonomyIR = {
     schema: 'autonomy.ir.v1',
-    targets: ['github'],
+    targets: ['gh-actions'],
     agents: {
       developer: { behavior: 'develop', capabilities: ['code:propose'], triggers: [{ dispatch: true }], review: 'reviewer' },
       reviewer: { behavior: 'review', capabilities: ['code:review'], triggers: [{ dispatch: true }] },

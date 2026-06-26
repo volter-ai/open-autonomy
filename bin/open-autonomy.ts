@@ -4,8 +4,8 @@
 // shape: `open-autonomy <verb> …`) so adoption is one command, not "clone the
 // repo and learn three scripts".
 //
-//   open-autonomy compile <profileName|profileDir> <local|github> [outDir]
-//   open-autonomy conformance <exec|termfleet|github> [probeAgent]
+//   open-autonomy compile <profileName|profileDir> <local|gh-actions> [outDir]
+//   open-autonomy conformance <exec|termfleet|gh-actions> [probeAgent]
 //   open-autonomy upgrade --profile <dir> --target <dir> [--apply]
 //
 // Each subcommand reads process.argv.slice(2); we re-frame argv so the delegated
@@ -14,11 +14,11 @@ export {}; // make this a module so top-level await is allowed (delegation uses 
 
 const HELP = `open-autonomy <command> [args]
 
-  compile <profileName|profileDir> <local|github> [outDir]  compile a profile onto a substrate (dry run without outDir)
-  conformance <exec|termfleet|github> [probeAgent]          run the substrate conformance battery
-  upgrade --profile <dir> --target <dir> [--apply]          re-compile an installation in place (dry run without --apply)
+  compile <profileName|profileDir> <local|gh-actions> [outDir]  compile a profile onto a substrate (dry run without outDir)
+  conformance <exec|termfleet|gh-actions> [probeAgent]          run the substrate conformance battery
+  upgrade --profile <dir> --target <dir> [--apply]              re-compile an installation in place (dry run without --apply)
 
-Adopt into the current repo:  npx open-autonomy compile self-driving github .  (bundled profiles: self-driving, simple-sdlc, hello)
+Adopt into the current repo:  npx open-autonomy compile self-driving gh-actions .  (bundled profiles: self-driving, simple-sdlc, hello; "github" still accepted)
 
 Run a subcommand with no/invalid arguments to see its specific usage.`;
 

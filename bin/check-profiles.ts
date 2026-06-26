@@ -33,7 +33,7 @@ for (const name of profiles) {
   for (const target of ir.targets) {
     try {
       const out =
-        target === 'github' ? compileGithub(ir) : target === 'local' ? compileLocal(ir) : null;
+        target === 'gh-actions' ? compileGithub(ir) : target === 'local' ? compileLocal(ir) : null;
       if (!out) {
         errs.push(`${name}: unknown target "${target}"`);
         continue;
@@ -53,7 +53,7 @@ for (const name of profiles) {
       // record this github profile's declared verbatim resources for the cross-profile drift guard (below).
       // ONLY the IR's `resources:` list — those are code-host files carried as-is. Skill installs are also
       // `copies` but are per-profile BEHAVIOR (two profiles' `pm` skills legitimately differ), not standards.
-      if (target === 'github') {
+      if (target === 'gh-actions') {
         const declared = new Set(ir.resources);
         const carried = new Map<string, string>();
         for (const { from, to } of out.copies)

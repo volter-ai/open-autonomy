@@ -98,9 +98,11 @@ policy section of `autonomy.yml` and workflow code enforce limits.
 ## Vocabulary (canonical)
 
 open-autonomy is **one substrate-agnostic autonomy system**. You author a **profile** (a recipe) and
-**compile** it to a **substrate** (github, local, …) to get an **installation** you run. github is
-not the product — it is one substrate among peers; local is another. Same profile, run on GitHub
-*or* on a laptop.
+**compile** it to a **substrate** (`gh-actions`, `local`, …) to get an **installation** you run. A
+substrate is the **agent runner** — *where the agents execute* — and is **not** the code host: `gh-actions`
+(GitHub Actions) is one runner among peers; `local` (termfleet) is another. The runner is **orthogonal to the
+code host**: a `local`-runner org can still use a github repo (PRs, CI, deploy) — see `docs/CODE_HOST_RESOURCES.md`.
+(`github` is accepted as a back-compat alias for `gh-actions`, but it conflated runner with code host — don't use it.)
 
 | term | definition |
 |---|---|
@@ -108,7 +110,7 @@ not the product — it is one substrate among peers; local is another. Same prof
 | **agent** | the one unit: behavior (what it does) + capabilities (authority) + triggers (when + params) + config (opaque misc). |
 | **behavior** | what an agent does — instructions/spec; the substrate runs it (deterministic, or model-interpreted — its choice). |
 | **profile** | a substrate-agnostic **recipe**: a composition of agents + policy + resources. Lives in `profiles/`. |
-| **substrate** | a **partial implementation** of the IR standard = a **trigger executor** + a **runner**, over a **box**. `github` and `local` are peers; each realizes the subset it supports. |
+| **substrate** | a **partial implementation** of the IR standard = a **trigger executor** + a **runner**, over a **box** — i.e. *where/how agents run*, NOT the code host. `gh-actions` (GitHub Actions) and `local` (termfleet) are peers; each realizes the subset it supports. |
 | **trigger executor** | fires an agent when its triggers say so + forwards the declared params (cron core, events expanded); decides *when*. |
 | **runner** | runs agents + manages their lifecycle (`launch`/`list`/`cancel`…); does the *running*. |
 | **box** | the env an agent runs in (POSIX fs + shell + git + a model endpoint + the installed files); the runner provisions it. The model endpoint is always present. |

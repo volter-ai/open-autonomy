@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 // Compile a profile (an `autonomy.ir.v1` ir.yml) onto a substrate, producing an installation.
-//   bun bin/autonomy-compile.ts <profileName|profileDir> <local|github> [outDir]
+//   bun bin/autonomy-compile.ts <profileName|profileDir> <local|gh-actions> [outDir]  ("github" accepted as alias)
 // The first arg is either a BUNDLED profile name (e.g. `self-driving`, resolved to the profiles/ shipped
 // with this package) or a path to a profile dir of your own. With no outDir, prints the installation's file
 // list (a dry run). With outDir, materializes it.
@@ -35,9 +35,11 @@ function profileMentions(dir: string, token: string): boolean {
   return false;
 }
 
-const [profileArg, substrate, outDir] = process.argv.slice(2);
-if (!profileArg || (substrate !== 'local' && substrate !== 'github')) {
-  console.error(`usage: autonomy-compile <profileName|profileDir> <local|github> [outDir]\n  bundled profiles: ${bundledProfileNames().join(', ') || '(none found)'}`);
+const [profileArg, substrateArg, outDir] = process.argv.slice(2);
+// `gh-actions` is the runner-substrate; accept `github` as a back-compat alias. `local` unchanged.
+const substrate = substrateArg === 'github' ? 'gh-actions' : substrateArg;
+if (!profileArg || (substrate !== 'local' && substrate !== 'gh-actions')) {
+  console.error(`usage: autonomy-compile <profileName|profileDir> <local|gh-actions> [outDir]\n  bundled profiles: ${bundledProfileNames().join(', ') || '(none found)'}`);
   process.exit(2);
 }
 

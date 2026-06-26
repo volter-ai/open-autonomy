@@ -140,5 +140,5 @@ export class HumanRunner implements Runner {
 }
 
 // The substrates we ship a runner for; a compiler may wire one of these.
-export const SUPPORTED_RUNNERS = ['exec', 'termfleet', 'github'] as const;
+export const SUPPORTED_RUNNERS = ['exec', 'termfleet', 'gh-actions'] as const;
 export type RunnerName = (typeof SUPPORTED_RUNNERS)[number];

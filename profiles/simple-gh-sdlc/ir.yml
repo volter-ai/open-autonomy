@@ -5,7 +5,7 @@
 # ztrack `simple-gh-sdlc` preset (PR at in-review, merged PR for done). One unit: an agent = behavior +
 # capabilities + triggers(+params) (+ review edge). See docs/SPEC.md#the-ir, docs/SPEC.md#the-runner.
 schema: autonomy.ir.v1
-targets: [github]
+targets: [gh-actions]
 
 agents:
   # The only dispatcher. Sweeps the ztrack board on a tick, enforces WIP, and LAUNCHES the next eligible

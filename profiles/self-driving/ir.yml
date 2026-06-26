@@ -5,7 +5,7 @@
 # capabilities + budget. The merge boundary is the code:review (statuses:write) / code:propose
 # (contents:write) permission split + native auto-merge — no agent holds both, none can land unreviewed code.
 schema: autonomy.ir.v1
-targets: [github]
+targets: [gh-actions]
 
 agents:
   # Developer: edits code in its credentialed sandbox; the effect step proposes its change as an
@@ -117,10 +117,10 @@ agents:
 policy:
   maxConcurrent: 5
   box:
-    # github-substrate config (read by substrate-github/emit.ts; the engine bakes in no org identity). Each
-    # value is the emitted `vars.*` fallback, so the install works without setting variables. Another org
-    # using open-autonomy declares its own here — nothing volter-specific lives in the engine.
-    github:
+    # gh-actions RUNNER config (read by substrate-github/emit.ts; the engine bakes in no org identity). The key
+    # is the runner name (gh-actions), NOT the github code host. Each value is the emitted `vars.*` fallback, so
+    # the install works without setting variables. Another org declares its own here — nothing volter in the engine.
+    gh-actions:
       proxy_host: volter-agent-model-proxy.aaron-0ed.workers.dev   # PUBLIC_AGENT_PROXY_HOST fallback (egress allowlist)
       oidc_audience: volter-agent-model-proxy                      # MODEL_PROXY_OIDC_AUDIENCE fallback
       model: deepseek/deepseek-v4-flash                            # PUBLIC_AGENT_MODEL fallback

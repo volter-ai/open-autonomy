@@ -3,7 +3,7 @@
 #   bun bin/autonomy-compile.ts profiles/hello github /tmp/hello-gh   # materialize a github installation
 # One unit: an agent = behavior + capabilities + triggers(+params) + config. See docs/SPEC.md#the-ir.
 schema: autonomy.ir.v1
-targets: [local, github]
+targets: [local, gh-actions]
 agents:
   greeter:
     behavior: greeter            # a prose skill → the substrate runs it via a model

@@ -139,7 +139,7 @@ agents:
       - tasks:converse
       - code:review
 policy:
-  github:
+  gh-actions:
     proxy_host: volter-agent-model-proxy.aaron-0ed.workers.dev
     oidc_audience: volter-agent-model-proxy
     model: deepseek/deepseek-v4-flash

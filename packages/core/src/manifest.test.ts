@@ -4,7 +4,7 @@ import type { AutonomyIR } from './ir';
 
 const irWithBox = (box: Record<string, unknown>): AutonomyIR => ({
   schema: 'autonomy.ir.v1',
-  targets: ['github'],
+  targets: ['gh-actions'],
   agents: {
     pm: { behavior: 'pm', capabilities: ['tasks:converse'], triggers: [{ cron: '* * * * *' }] },
   },
@@ -30,7 +30,7 @@ describe('emitAutonomy — policy box', () => {
 describe('emitAutonomy — a kind:human actor', () => {
   const irWithMaintainer = (): AutonomyIR => ({
     schema: 'autonomy.ir.v1',
-    targets: ['github'],
+    targets: ['gh-actions'],
     agents: {
       maintainer: {
         kind: 'human',

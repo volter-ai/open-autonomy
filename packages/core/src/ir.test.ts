@@ -1,5 +1,24 @@
 import { describe, expect, test } from 'bun:test';
 import { validateIR, irShape, type AutonomyIR, type IRAgent } from './ir';
+import { parseIr } from './ir-yaml';
+
+describe('parseIr — runner alias normalization (github → gh-actions)', () => {
+  // The runner-substrate is `gh-actions`; `github` (which conflated runner with code host) is accepted as a
+  // back-compat alias and normalized away on parse, so the rest of the engine only ever sees `gh-actions`.
+  test('normalizes the `github` target + policy.box.github key to gh-actions', () => {
+    const ir = parseIr([
+      'schema: autonomy.ir.v1',
+      'targets: [github]',
+      'agents:',
+      '  pm: { behavior: skills/pm, capabilities: [tasks:converse], triggers: [{ cron: "0 0 * * *" }] }',
+      'policy: { box: { github: { model: x/y } } }',
+      'resources: []',
+    ].join('\n'));
+    expect(ir.targets).toEqual(['gh-actions']);
+    expect((ir.policy.box as Record<string, unknown>)['gh-actions']).toEqual({ model: 'x/y' });
+    expect((ir.policy.box as Record<string, unknown>).github).toBeUndefined();
+  });
+});
 
 function agent(over: Partial<IRAgent> = {}): IRAgent {
   return {
@@ -11,7 +30,7 @@ function agent(over: Partial<IRAgent> = {}): IRAgent {
 }
 
 function ir(agents: Record<string, IRAgent>): AutonomyIR {
-  return { schema: 'autonomy.ir.v1', targets: ['github'], agents, policy: { box: {} }, resources: [] };
+  return { schema: 'autonomy.ir.v1', targets: ['gh-actions'], agents, policy: { box: {} }, resources: [] };
 }
 
 describe('validateIR — triggers', () => {

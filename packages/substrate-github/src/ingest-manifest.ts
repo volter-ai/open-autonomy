@@ -33,7 +33,7 @@ export function ingestAutonomy(m: OAManifest): AutonomyIR {
 
   return {
     schema: 'autonomy.ir.v1',
-    targets: ['github'],
+    targets: ['gh-actions'],
     agents,
     resources: collectDocPaths(m.documents),
     policy: { maxConcurrent, box: policyBox },

@@ -35,8 +35,10 @@
 ### The shape of the whole thing
 
 The IR is a **standard**. It concretely defines one unit (the *agent*) and three catalogs (capabilities,
-trigger-param sources, config keys). A **substrate** (github, local, …) is a **partial implementation**
-of that standard — it realizes the subset it supports, its own way. **Conformance** reports the support
+trigger-param sources, config keys). A **substrate** (`gh-actions`, `local`, …) — the agent **runner**, NOT
+the code host — is a **partial implementation** of that standard, realizing the subset it supports its own way.
+(`github` is a back-compat alias for `gh-actions`; it conflated the runner with the github code host — prefer
+`gh-actions`. Runner ⟂ code host: see §"Runner vs code host" and `docs/CODE_HOST_RESOURCES.md`.) **Conformance** reports the support
 matrix. It is exactly the relationship a web standard has to browsers: the spec is complete and concrete;
 each implementation supports part of it; a profile using a feature works to the degree its target
 supports it.
@@ -65,7 +67,7 @@ unchanged. The slots:
 
 ```yaml
 schema: autonomy.ir.v1
-targets: [github, local]
+targets: [gh-actions, local]
 
 actors:
   developer:                           # kind: agent (the default)
@@ -169,13 +171,13 @@ over
    installed files. The model endpoint is **always** part of the box (a deterministic agent simply never
    calls it) — there is no "does it get a model" knob.
 
-On **local** the two are separate (the loop fires; termfleet runs). On **github** one platform fills both
+On **local** the two are separate (the loop fires; termfleet runs). On **gh-actions** one platform fills both
 (Actions `on:` fires; the Actions job runs). An agent never sees the trigger executor — from its seat
 there is only the runner and the box.
 
 **Substrate config lives in the box, not the engine.** A substrate reads its installation config from
-`policy.box.<substrate>` (e.g. `policy.box.github`: the model-proxy host, OIDC audience, model, bot git
-identity). The engine bakes in **no** org identity — a profile supplies these and the compiler emits them as
+`policy.box.<substrate>` (e.g. `policy.box.gh-actions`: the model-proxy host, OIDC audience, model, bot git
+identity — keyed by the runner name, not the github code host). The engine bakes in **no** org identity — a profile supplies these and the compiler emits them as
 the install's `vars.*` defaults. Likewise `policy.box.risk.human_required_paths` is materialized **verbatim**
 for the human-approval gate to enforce: the substrate *carries* policy, it never authors or augments it.
 

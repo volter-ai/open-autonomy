@@ -32,19 +32,21 @@ const arg = (n: string, d = '') => {
 };
 const run = (cmd: string, args: string[]) => execFileSync(cmd, args, { stdio: 'inherit' });
 
-function compileTo(profile: string, substrate: string) {
+function compileTo(profile: string, substrateArg: string) {
+  const substrate = substrateArg === 'github' ? 'gh-actions' : substrateArg; // back-compat alias
   const ir = parseIr(readFileSync(join(PROFILES, profile, 'ir.yml'), 'utf8'));
   if (!ir.targets.includes(substrate as never)) throw new Error(`profile ${profile} does not target ${substrate}`);
-  return substrate === 'github' ? compileGithub(ir) : compileLocal(ir);
+  return substrate === 'gh-actions' ? compileGithub(ir) : compileLocal(ir);
 }
 
 // ---- LIVE: provision a disposable repo from (workload, profile) and seed the goal ----
 if (process.argv.includes('--live')) {
   const wl = arg('--workload');
   const profile = arg('--profile');
-  const substrate = arg('--substrate', 'github');
-  if (!wl || !profile) throw new Error('usage: --live --workload <name> --profile <name> [--substrate github]');
-  if (substrate !== 'github') throw new Error('live runs target github (disposable repos in ' + ORG + ')');
+  const substrateRaw = arg('--substrate', 'gh-actions');
+  const substrate = substrateRaw === 'github' ? 'gh-actions' : substrateRaw; // back-compat alias
+  if (!wl || !profile) throw new Error('usage: --live --workload <name> --profile <name> [--substrate gh-actions]');
+  if (substrate !== 'gh-actions') throw new Error('live runs target the gh-actions runner (disposable repos in ' + ORG + ')');
   const wdir = join(WL, wl);
   const meta = JSON.parse(readFileSync(join(wdir, 'workload.json'), 'utf8')) as {
     summary: string;

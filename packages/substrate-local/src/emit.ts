@@ -33,9 +33,11 @@ const here = dirname(fileURLToPath(import.meta.url));
 // verbatim from their single sources beside this compiler so generated and dev-time never drift.
 const RUNNER_BACKEND = readFileSync(join(here, 'backend.mjs'), 'utf8');
 const RUNNER_FRONTEND = readFileSync(join(here, 'runner-frontend.ts'), 'utf8');
-// The github-code-host propose backstop (the local runner running a finished proposer's effect — the
-// counterpart of the github runner's post-skill job step). Emitted + scheduled only when codeHost=github.
-const PROPOSE_SWEEP = readFileSync(join(here, 'propose-sweep.ts'), 'utf8');
+// NOTE: a github code host's propose effect (turning a finished proposer's worktree into a PR) is NOT a
+// scheduled script. It is a per-session LIFECYCLE effect: runner.ts records it at launch and the loop driver
+// runs it when that session finishes (reconcilePendingEffects above) — the local mirror of github's
+// post-skill job step. (This replaced the old propose-sweep poller, which scanned worktrees + reconstructed
+// SDLC state in the runner — a methodology leak. See the loop driver + runner-frontend's effect markers.)
 
 // Inverse of secondsToCron for the simple every-N-minutes cron form the local loop honors.
 export function cronToSeconds(cron: string): number {
@@ -51,7 +53,7 @@ export function cronToSeconds(cron: string): number {
 // still working (running / background-running), one a human took over, or one asking/errored is never
 // reaped — keeping the "take over at any time" guarantee. `--once` fires a single tick and exits (no reap).
 const LOOP_DRIVER = `#!/usr/bin/env node
-import { readFileSync, readdirSync } from 'node:fs';
+import { readFileSync, readdirSync, unlinkSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -91,6 +93,31 @@ try {
 } catch (e) {
   console.error('[loop] reaping disabled (runner unavailable):', e?.message ?? e);
 }
+
+// Post-session effects: the local mirror of github's post-skill job step. The runner's launch seam
+// (scripts/runner.ts) records a pending effect per code:propose session — keyed by terminalId — under
+// runner-state/effects. When that session is GONE from the runner's live list (finished + reaped), run its
+// recorded effect in its worktree and retire the marker. Domain-free: the loop runs "<effect> in <worktree>",
+// never any issue/tracker logic (it replaces the old propose-sweep, which scanned worktrees + reconstructed
+// SDLC state — a methodology leak). Crash-safe: a marker outlives a missed reap and is reconciled on a later
+// tick, and agent-propose is idempotent (it updates the same branch/PR); the marker is deleted once it runs.
+const EFFECTS_DIR = join(here, '..', '.open-autonomy', 'runner-state', 'effects');
+async function reconcilePendingEffects(runner) {
+  let files = [];
+  try { files = readdirSync(EFFECTS_DIR).filter((f) => f.endsWith('.json')); } catch { return; } // no markers dir yet
+  if (!files.length) return;
+  let live;
+  try { live = new Set((await runner.list()).map((s) => s.id)); } catch { return; } // liveness unknown -> wait a tick
+  for (const file of files) {
+    const path = join(EFFECTS_DIR, file);
+    let marker;
+    try { marker = JSON.parse(readFileSync(path, 'utf8')); } catch { try { unlinkSync(path); } catch {} continue; }
+    if (live.has(marker.id)) continue; // session still running -> its effect runs after it finishes
+    console.log(\`[loop] post-session effect: \${marker.agent} (\${marker.id}) -> \${marker.effect} in \${marker.worktree}\`);
+    spawnSync('bun', [marker.effect], { cwd: marker.worktree, stdio: 'inherit', env: Object.assign({}, process.env, marker.env) });
+    try { unlinkSync(path); } catch {}
+  }
+}
 const idleSince = new Map();
 let lastTick = 0;
 while (true) {
@@ -103,6 +130,7 @@ while (true) {
     try {
       const reaped = await runner.reapIdle({ idleMs: IDLE_REAP_MS, agents, since: idleSince });
       for (const r of reaped) console.log(\`[loop] reaped idle \${r.agent} (\${r.id})\`);
+      await reconcilePendingEffects(runner); // run finished proposers' effects (the post-skill step's local twin)
     } catch (e) {
       console.error('[loop] reap error:', e?.message ?? e);
     }
@@ -187,12 +215,9 @@ export function compileLocal(ir: AutonomyIR, opts: { runner?: RunnerName } = {})
   const scheduleScripts = cronAgents.map(([role, a]) =>
     isScript(a.behavior) ? `bun ${a.behavior}` : `AUTONOMY_AGENT=${role} node scripts/run-agent.mjs`,
   );
-  // On a github code host, the local runner runs each finished proposer's effect deterministically each tick
-  // (the local counterpart of github's post-skill job step); a local-git code host has no PRs (the PM merges).
-  if (ir.codeHost === 'github') {
-    generated['scripts/propose-sweep.ts'] = PROPOSE_SWEEP;
-    scheduleScripts.push('bun scripts/propose-sweep.ts');
-  }
+  // A github code host's propose effect is NOT scheduled here — it is a per-session lifecycle effect the loop
+  // driver runs when a proposer's session finishes (see LOOP_DRIVER's reconcilePendingEffects + runner.ts's
+  // effect markers), mirroring github's post-skill job step. A local-git code host has no PRs (the PM merges).
   generated['scheduler/schedule.json'] = `${JSON.stringify({ intervalSeconds, env: {}, scripts: scheduleScripts }, null, 2)}\n`;
   Object.assign(generated, promptFiles(ir));
 

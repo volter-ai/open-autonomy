@@ -18,7 +18,7 @@
 //
 // Emitted verbatim by compileLocal as scripts/runner.ts so an agent's `import './runner.js'` resolves.
 import { spawnSync } from 'node:child_process';
-import { existsSync, readFileSync, appendFileSync, mkdirSync, symlinkSync } from 'node:fs';
+import { existsSync, readFileSync, writeFileSync, appendFileSync, mkdirSync, symlinkSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join, resolve } from 'node:path';
 
@@ -39,6 +39,43 @@ interface ManifestAgent {
   skill?: string;
   params?: Record<string, string>;
   capabilities?: string[];
+}
+
+// --- post-session effects: the LOCAL mirror of github's post-skill job step --------------------------------
+// On github, a `code:propose` agent's job runs the propose effect (agent-propose) as a STEP after the skill
+// step — same job, same checkout. Locally the session runs ASYNCHRONOUSLY in a termfleet window, so the
+// launch process cannot run the effect; the loop's reaper is what observes the session finishing. So launch
+// RECORDS a pending effect (keyed by the session's terminalId — the join key the reaper reports back), and
+// the loop runs it once that session is gone (scheduler/run.mjs's reconcilePendingEffects). This is pure
+// lifecycle wiring: it records "run <effect> in <worktree>"; the effect (agent-propose) is the agent's OWN
+// code:propose realization. The runner never learns what the effect DOES — no issue/tracker/branch
+// methodology re-enters the runner (architecture invariant `substrate-is-runner-only`). Replaces the old
+// propose-sweep poller (which scanned worktrees + reconstructed state — a methodology leak).
+const EFFECTS_DIR = '.open-autonomy/runner-state/effects';
+const holdsPropose = (caps: string[]): boolean => caps.some((c) => String(c).split('@')[0] === 'code:propose');
+// autonomy-runner prints the launched session as JSON ({ id: terminalId, agent, ... }) on its last output line.
+export function terminalIdFromLaunch(stdout: string): string {
+  for (const line of stdout.trim().split('\n').reverse()) {
+    try {
+      const o = JSON.parse(line) as { id?: unknown };
+      if (o && typeof o.id === 'string') return o.id;
+    } catch {
+      /* not the JSON line */
+    }
+  }
+  return '';
+}
+interface EffectMarker {
+  id: string;
+  agent: string;
+  worktree: string;
+  effect: string;
+  env: Record<string, string>;
+}
+function recordPostSessionEffect(marker: EffectMarker): void {
+  mkdirSync(EFFECTS_DIR, { recursive: true });
+  const file = join(EFFECTS_DIR, `${marker.id.replace(/[^0-9A-Za-z._-]/g, '-')}.json`);
+  writeFileSync(file, `${JSON.stringify(marker, null, 2)}\n`);
 }
 function manifestAgent(agent: string): ManifestAgent {
   const path = '.open-autonomy/autonomy.yml';
@@ -78,7 +115,7 @@ function ensureRunnerPathsIgnored(): void {
   } catch {
     /* no exclude file yet — created below */
   }
-  const missing = ['.worktrees/', 'node_modules'].filter((e) => !present.includes(e));
+  const missing = ['.worktrees/', 'node_modules', '.open-autonomy/runner-state/'].filter((e) => !present.includes(e));
   if (missing.length) {
     mkdirSync(dirname(excludePath), { recursive: true });
     appendFileSync(excludePath, `${missing.join('\n')}\n`);
@@ -106,7 +143,7 @@ function ensureWorktree(branch: string, worktree: string): void {
 
 /** Launch an agent with forwarded params (agent:launch). */
 export async function launch(agent: string, params: LaunchParams = {}): Promise<void> {
-  const { skill: behavior = '', params: declared = {} } = manifestAgent(agent);
+  const { skill: behavior = '', params: declared = {}, capabilities = [] } = manifestAgent(agent);
 
   if (behavior && isScript(behavior)) {
     // Deterministic agent: run its script via bun. Resolve its declared trigger params from the launch
@@ -134,6 +171,38 @@ export async function launch(agent: string, params: LaunchParams = {}): Promise<
     AUTONOMY_FORWARD: [process.env.AUTONOMY_FORWARD, ...names].filter(Boolean).join(','),
     ...Object.fromEntries(names.map((k) => [k, String(params[k])])),
   };
+
+  // A code:propose agent working in a worktree gets a post-session effect recorded: when its session
+  // finishes, the loop turns that worktree into a PR (agent-propose) — the local mirror of github's
+  // post-skill propose step. Capture the launch output to learn the session's terminalId (the join key the
+  // reaper reports back); other launches (the PM, the drafter, any non-proposer) stay live (stdio inherit).
+  if (holdsPropose(capabilities) && worktree) {
+    const r = spawnSync('node', [join(scriptsDir, 'run-agent.mjs')], { encoding: 'utf8', env, cwd: worktree });
+    if (r.stdout) process.stdout.write(r.stdout);
+    if (r.stderr) process.stderr.write(r.stderr);
+    const id = terminalIdFromLaunch(r.stdout ?? '');
+    if (id) {
+      recordPostSessionEffect({
+        id,
+        agent,
+        worktree,
+        effect: 'scripts/agent-propose.ts', // the agent's code:propose realization (git + gh; runner-independent)
+        env: {
+          // ISSUE_REF derives from the worktree's branch so agent-propose checks out the SAME branch the
+          // worker committed onto (`agent/issue-<n>`); the rest mirror github's propose-step env.
+          ISSUE_REF: /agent\/issue-(\d+)/.exec(branch)?.[1] ?? '',
+          AGENT_NAME: agent,
+          AGENT_BOT_NAME: process.env.AGENT_BOT_NAME ?? 'open-autonomy-agent',
+          AGENT_BOT_EMAIL: process.env.AGENT_BOT_EMAIL ?? 'open-autonomy-agent@users.noreply.github.com',
+          REVIEW_WORKFLOW: process.env.PROPOSE_REVIEW_WORKFLOW ?? '',
+          ...(process.env.GITHUB_REPOSITORY ? { GITHUB_REPOSITORY: process.env.GITHUB_REPOSITORY } : {}),
+        },
+      });
+    } else {
+      console.error(`[runner] ${agent}: launched but no terminalId in output; post-session propose not recorded`);
+    }
+    return;
+  }
   spawnSync('node', [join(scriptsDir, 'run-agent.mjs')], { stdio: 'inherit', env, ...(worktree ? { cwd: worktree } : {}) });
 }
 

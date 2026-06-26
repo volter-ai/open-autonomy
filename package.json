@@ -1,6 +1,6 @@
 {
   "name": "open-autonomy",
-  "version": "0.1.6",
+  "version": "0.1.7",
   "description": "Compile an agent profile onto a substrate (GitHub Actions or a local termfleet loop) — the open-autonomy CLI.",
   "license": "Apache-2.0",
   "repository": {

@@ -1,5 +1,28 @@
 # Changelog
 
+## 0.1.7
+
+### Changed
+- **The merge is now a code-host resource, not agent-runner logic.** Arming native auto-merge and
+  reconciling merged-issue closes left the agent workflows (the proposer's inline arm; the tasks:author
+  PM/planner reconcile+re-arm) and became `merge.yml`, a carried resource on the proposer-bearing github
+  profiles (self-driving + simple-gh-sdlc). The proposer dispatches it (symmetric with ci/agent-review,
+  since a bot PR fires no `pull_request` event); a schedule is the deterministic backstop. This is the
+  sibling of deploy's "no agent deploys" — substrate = actor runner, the merge is the profile's. See
+  `docs/CODE_HOST_RESOURCES.md`. merge.yml holds `contents:write` (required to ENABLE auto-merge); the
+  merge gate is branch protection (ci + agent-review, no bypass), not the permission set.
+
+### Added
+- **The github substrate now defaults the box model.** When a profile names no `policy.box.github.model`
+  (e.g. the generic simple-gh-sdlc preset), the substrate supplies `deepseek/deepseek-v4-flash` instead of
+  compiling `--models ""` and failing at mint. A capability default — overridable by the profile or
+  `vars.PUBLIC_AGENT_MODEL`; `proxy_host`/`oidc_audience` remain profile/install config (no org identity in
+  the engine).
+
+### Verified
+- Proven live end-to-end on a disposable simple-gh-sdlc fixture: agent PRs armed zero-touch via the
+  dispatched `merge.yml`, auto-merged on green ci+agent-review, and reconcile closed every issue.
+
 ## 0.1.6
 
 ### Fixed

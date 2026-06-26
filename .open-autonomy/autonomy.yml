@@ -1,4 +1,5 @@
 schema: open-autonomy.autonomy.v1
+codeHost: github
 documents:
   resources:
     - .github/ISSUE_TEMPLATE/bug_report.yml

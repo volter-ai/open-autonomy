@@ -6,6 +6,11 @@ import { isScript, type AutonomyIR } from './ir.js';
 
 export interface OAManifest {
   schema?: string;
+  // The code host the IR targets (github = PRs + native auto-merge; local-git = the PM merges worktrees).
+  // It is orthogonal to the runner (`targets`), and the runner reads it to decide code-host effects — e.g. the
+  // local runner only runs the propose effect (open a PR) for a github code host. A first-class signal, not
+  // inferred from a capability.
+  codeHost?: 'github' | 'local-git';
   documents?: Record<string, unknown>;
   skills?: Record<string, string>;
   agents?: Record<
@@ -66,5 +71,12 @@ export function emitAutonomy(ir: AutonomyIR): OAManifest {
   }
   // Carry the policy box verbatim — it is opaque governance, not a fixed schema (see OAManifest.policy).
   const policy = (ir.policy.box ?? {}) as OAManifest['policy'];
-  return { schema: 'open-autonomy.autonomy.v1', documents: { resources: ir.resources }, skills, agents, policy };
+  return {
+    schema: 'open-autonomy.autonomy.v1',
+    ...(ir.codeHost ? { codeHost: ir.codeHost } : {}),
+    documents: { resources: ir.resources },
+    skills,
+    agents,
+    policy,
+  };
 }

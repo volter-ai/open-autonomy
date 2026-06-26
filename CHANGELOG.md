@@ -1,5 +1,28 @@
 # Changelog
 
+## 0.2.1
+
+### Changed
+- **Isolation is requested EXPLICITLY, not inferred from a capability.** The local runner no longer reads
+  `code:propose` to decide whether to isolate a launch (or to record its post-session propose effect). A
+  capability is a *permission*, and locally a fictional one — the box already trusts the agent with the
+  filesystem — so using it to gate behavior was particular and opaque ("does this fake permission mean
+  isolate?"). Now a caller ISOLATES a launch by naming a **`--branch`**: universal (any caller, any agent) and
+  explicit (it spells out exactly what it is). The PM passes `--branch agent/issue-<n>` for a worker that
+  should be isolated — matching what simple-sdlc already did — and the github runner ignores `--branch` (it
+  isolates via the job's fresh checkout), so the same launch stays substrate-agnostic. `code:propose` is gone
+  from the runner's behavior gating entirely (it remains the github capability → token permission). This
+  supersedes 0.2.0's capability-inferred auto-isolation.
+- **The post-session propose effect is gated on the code-host signal, not a capability.** `codeHost` is now
+  carried in the manifest (a first-class IR signal, orthogonal to the runner); the local runner records the
+  propose effect only for an isolated session (`--branch` named) on a `github` code host — where a finished
+  branch becomes a PR. A `local-git` code host has the PM merge worktrees, so no propose effect. Both gating
+  signals are explicit and declared, never inferred.
+
+Re-proven live: `launch develop --ref N --branch agent/issue-N` isolates the worktree and records the marker;
+the same launch WITHOUT `--branch` runs on trunk with no isolation and no marker (even though the agent
+"holds `code:propose`").
+
 ## 0.2.0
 
 ### Added

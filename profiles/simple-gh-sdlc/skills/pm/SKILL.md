@@ -35,15 +35,19 @@ This is an execution skill, not a status report. A tick is complete only after
 exactly one eligible dispatch happened, or after you verified none is eligible.
 
 You LAUNCH a worker through the Runner — the substrate-agnostic seam — passing the
-**GitHub issue number** as the work item:
+**GitHub issue number** as the work item, and a **`--branch`** that ISOLATES the work:
 
 ```
-bun scripts/runner.ts launch develop --ref <issue-number>
+bun scripts/runner.ts launch develop --ref <issue-number> --branch agent/issue-<issue-number>
 ```
 
-This dispatches the worker's workflow (it fetches issue `<issue-number>` as its
-subject). Never call `gh workflow run`/`termfleet` directly, and never inline an
-agent. You launch develop only; the PR is reviewed and merged without you.
+`--branch` requests isolation explicitly: a local runner runs develop in that branch's
+own worktree; the github runner isolates via its job checkout and ignores it (so the
+same launch is substrate-agnostic). Name the branch `agent/issue-<issue-number>` — the
+same branch the proposal lands on. This dispatches the worker (it fetches issue
+`<issue-number>` as its subject). Never call `gh workflow run`/`termfleet` directly,
+and never inline an agent. You launch develop only; the PR is reviewed and merged
+without you.
 
 1. **Gather GitHub state.**
    - Open issues: `gh issue list --state open --json number,title,labels,assignees`.
@@ -60,7 +64,7 @@ agent. You launch develop only; the PR is reviewed and merged without you.
      (`.open-autonomy/autonomy.yml`); never loop. Do NOT open a second PR for an issue
      that already has one.
    - **Issue is `ready` (label), open, no agent PR, and WIP allows** → launch the
-     developer: `bun scripts/runner.ts launch develop --ref <number>`.
+     developer: `bun scripts/runner.ts launch develop --ref <number> --branch agent/issue-<number>`.
    - **Else** (no `ready` issue without a PR; or WIP full) → stop without dispatch.
 4. Leave a short status comment on the issue you acted on (`gh issue comment <n>`),
    saying what you decided and why. Do not wait for the launched agent to finish.

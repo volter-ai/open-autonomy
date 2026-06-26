@@ -10,7 +10,8 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { compileLocal } from './emit';
-import { isolationBranch, terminalIdFromLaunch } from './runner-frontend';
+import { terminalIdFromLaunch } from './runner-frontend';
+import { emitAutonomy } from '@open-autonomy/core';
 import type { AutonomyIR } from '@open-autonomy/core';
 
 const ghLocalIr: AutonomyIR = {
@@ -25,13 +26,23 @@ const ghLocalIr: AutonomyIR = {
   resources: [],
 };
 
-describe('runner.ts records the propose effect, never re-bakes methodology (substrate-is-runner-only)', () => {
+describe('the post-session effect is gated on EXPLICIT signals, never a capability', () => {
   const rt = compileLocal(ghLocalIr).generated['scripts/runner.ts'];
 
-  test('the propose effect is the agent-owned script, gated on the code:propose CAPABILITY (no hardcoded agent/state)', () => {
+  test('gated on an isolated worktree + a github code host — no code:propose anywhere in the runner', () => {
     expect(rt).toContain('recordPostSessionEffect'); // launch records a per-session effect
-    expect(rt).toContain('holdsPropose(capabilities)'); // gated on capability read from the manifest
-    expect(rt).toContain("'scripts/agent-propose.ts'"); // the agent's own code:propose realization (git + gh)
+    expect(rt).toContain("manifestCodeHost() === 'github'"); // gated on the declared code-host signal
+    expect(rt).toContain("'scripts/agent-propose.ts'"); // the github code host's publish effect (git + gh)
+    // the capability is GONE from the runner's behavior gating (it was a fictional local permission):
+    expect(rt).not.toContain('code:propose');
+    expect(rt).not.toContain('holdsPropose');
+    expect(rt).not.toContain('isolationBranch');
+  });
+
+  test('isolation is requested EXPLICITLY by the caller naming --branch (no auto-derivation from a ref)', () => {
+    // a worktree is created only when params.branch is given; the runner derives no branch from the ref/capability
+    expect(rt).toContain('params.branch'); // the explicit isolation signal
+    expect(rt).not.toMatch(/agent\/issue-\$\{[^}]*ref/i); // no `agent/issue-${ref}` auto-derivation in the runner
   });
 
   test('the old propose-sweep poller is GONE — no worktree-scanning reconciler is emitted or scheduled', () => {
@@ -42,21 +53,11 @@ describe('runner.ts records the propose effect, never re-bakes methodology (subs
   });
 });
 
-describe('isolationBranch — the runner isolates a code:propose agent per work-item (Blocker 1)', () => {
-  const declared = { ZTRACK_ISSUE: 'subject.ref' }; // develop's subject.ref param
-  const proposer = ['code:propose', 'tasks:converse'];
-
-  test('derives agent/issue-<ref> for a code:propose agent from the forwarded ref (PM passes no --branch)', () => {
-    expect(isolationBranch({ capabilities: proposer, declared, params: { ZTRACK_ISSUE: '7' } })).toBe('agent/issue-7');
-  });
-  test('an explicit PM-assigned --branch always wins', () => {
-    expect(isolationBranch({ capabilities: proposer, declared, params: { ZTRACK_ISSUE: '7' }, explicitBranch: 'agent/issue-9' })).toBe('agent/issue-9');
-  });
-  test('a non-proposing agent (reviewer/draft/pm) gets NO worktree — it runs on trunk', () => {
-    expect(isolationBranch({ capabilities: ['code:review'], declared: { TARGET_REF: 'subject.ref' }, params: { TARGET_REF: '42' } })).toBe('');
-  });
-  test('a proposer launched without a numeric ref runs on trunk (no spurious worktree)', () => {
-    expect(isolationBranch({ capabilities: proposer, declared, params: {} })).toBe('');
+describe('the manifest carries codeHost — a first-class IR signal the runner reads (not a capability)', () => {
+  test('emitAutonomy serializes ir.codeHost; the local runner reads it to gate the propose effect', () => {
+    expect((emitAutonomy(ghLocalIr) as { codeHost?: string }).codeHost).toBe('github');
+    const localGit: AutonomyIR = { ...ghLocalIr, codeHost: 'local-git' };
+    expect((emitAutonomy(localGit) as { codeHost?: string }).codeHost).toBe('local-git');
   });
 });
 

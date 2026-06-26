@@ -43,36 +43,17 @@ interface ManifestAgent {
 }
 
 // --- post-session effects: the LOCAL mirror of github's post-skill job step --------------------------------
-// On github, a `code:propose` agent's job runs the propose effect (agent-propose) as a STEP after the skill
-// step — same job, same checkout. Locally the session runs ASYNCHRONOUSLY in a termfleet window, so the
-// launch process cannot run the effect; the loop's reaper is what observes the session finishing. So launch
-// RECORDS a pending effect (keyed by the session's terminalId — the join key the reaper reports back), and
-// the loop runs it once that session is gone (scheduler/run.mjs's reconcilePendingEffects). This is pure
-// lifecycle wiring: it records "run <effect> in <worktree>"; the effect (agent-propose) is the agent's OWN
-// code:propose realization. The runner never learns what the effect DOES — no issue/tracker/branch
-// methodology re-enters the runner (architecture invariant `substrate-is-runner-only`). Replaces the old
-// propose-sweep poller (which scanned worktrees + reconstructed state — a methodology leak).
+// On github, a proposer's job runs the propose effect (agent-propose) as a STEP after the skill step — same
+// job, same checkout. Locally the session runs ASYNCHRONOUSLY in a termfleet window, so the launch process
+// cannot run the effect; the loop's reaper observes the session finishing. So launch RECORDS a pending effect
+// (keyed by the session's terminalId — the join key the reaper reports back), and the loop runs it once that
+// session is gone (scheduler/run.mjs's reconcilePendingEffects). The effect is gated on two EXPLICIT, universal
+// signals — never on a capability: (1) the launch was ISOLATED (a `--branch` was named — see below), and (2)
+// the install targets a `github` CODE HOST (a declared IR signal; only there does a finished branch become a
+// PR — a local-git code host has the PM merge worktrees, no PR). The runner never learns what the effect DOES
+// — no issue/tracker/branch methodology re-enters it (architecture invariant `substrate-is-runner-only`).
 const EFFECTS_DIR = '.open-autonomy/runner-state/effects';
-const holdsPropose = (caps: string[]): boolean => caps.some((c) => String(c).split('@')[0] === 'code:propose');
 
-// The runner's per-work-item ISOLATION branch (github isolates via a fresh job checkout; local via a
-// worktree). An explicit PM-assigned `--branch` always wins. Otherwise a code:propose agent is isolated per
-// work-item: derive `agent/issue-<ref>` from the forwarded ref — the SAME branch agent-propose will push, so
-// the PM stays substrate-agnostic (`launch develop --ref N`, never assigning isolation). Empty string => run
-// on trunk: a non-proposing agent (pm/draft/reviewer — the reviewer reads the PR from the code host), or a
-// proposer launched without a numeric ref.
-export function isolationBranch(opts: {
-  capabilities: string[];
-  declared: Record<string, string>;
-  params: LaunchParams;
-  explicitBranch?: string;
-}): string {
-  if (opts.explicitBranch) return opts.explicitBranch;
-  if (!holdsPropose(opts.capabilities)) return '';
-  const refParam = Object.entries(opts.declared).find(([, src]) => src === 'subject.ref')?.[0];
-  const refVal = refParam ? String(opts.params[refParam] ?? '') : '';
-  return /^\d+$/.test(refVal) ? `agent/issue-${refVal}` : '';
-}
 // autonomy-runner prints the launched session as JSON ({ id: terminalId, agent, ... }) on its last output line.
 export function terminalIdFromLaunch(stdout: string): string {
   for (const line of stdout.trim().split('\n').reverse()) {
@@ -102,6 +83,16 @@ function manifestAgent(agent: string): ManifestAgent {
   if (!existsSync(path)) return {};
   const m = Bun.YAML.parse(readFileSync(path, 'utf8')) as { agents?: Record<string, ManifestAgent> };
   return m.agents?.[agent] ?? {};
+}
+
+// The code host this install targets (a first-class IR signal, carried in the manifest) — `github` means a
+// finished branch becomes a PR, so the runner runs the propose effect on completion; `local-git` means the PM
+// merges worktrees, so there is no propose effect. Read once per launch to gate the post-session effect.
+function manifestCodeHost(): string {
+  const path = '.open-autonomy/autonomy.yml';
+  if (!existsSync(path)) return '';
+  const m = Bun.YAML.parse(readFileSync(path, 'utf8')) as { codeHost?: string };
+  return m.codeHost ?? '';
 }
 
 // --- worktree isolation (local analogue of github's per-job fresh checkout) ---
@@ -163,7 +154,7 @@ function ensureWorktree(branch: string, worktree: string): void {
 
 /** Launch an agent with forwarded params (agent:launch). */
 export async function launch(agent: string, params: LaunchParams = {}): Promise<void> {
-  const { skill: behavior = '', params: declared = {}, capabilities = [], review = '' } = manifestAgent(agent);
+  const { skill: behavior = '', params: declared = {}, review = '' } = manifestAgent(agent);
 
   if (behavior && isScript(behavior)) {
     // Deterministic agent: run its script via bun. Resolve its declared trigger params from the launch
@@ -177,11 +168,13 @@ export async function launch(agent: string, params: LaunchParams = {}): Promise<
     return;
   }
 
-  // Skill agent: a termfleet session via the launch adapter (forwards params verbatim). ISOLATION is the
-  // runner's job — resolve the worktree branch (explicit PM `--branch`, else the derived per-work-item branch
-  // for a code:propose agent). It is a runner-control concern, never forwarded to the agent.
-  const explicitBranch = typeof params.branch === 'string' && params.branch ? params.branch : '';
-  const branch = isolationBranch({ capabilities, declared, params, explicitBranch });
+  // Skill agent: a termfleet session via the launch adapter (forwards params verbatim). ISOLATION is requested
+  // EXPLICITLY: the caller names a `--branch` and the runner runs the session in that branch's worktree
+  // (created/reused here). No `--branch` => run on the trunk checkout. The caller (the PM) decides who is
+  // isolated and spells it out; the runner derives nothing and reads no capability. `--branch` is a
+  // runner-control param, never forwarded to the agent. (github's runner isolates via the job checkout and
+  // ignores `--branch`, so the same PM launch is substrate-agnostic.)
+  const branch = typeof params.branch === 'string' && params.branch ? params.branch : '';
   const worktree = branch ? worktreePathFor(branch) : '';
   if (branch) ensureWorktree(branch, worktree);
   const names = Object.keys(params).filter((k) => k !== 'branch');
@@ -192,11 +185,13 @@ export async function launch(agent: string, params: LaunchParams = {}): Promise<
     ...Object.fromEntries(names.map((k) => [k, String(params[k])])),
   };
 
-  // A code:propose agent working in a worktree gets a post-session effect recorded: when its session
-  // finishes, the loop turns that worktree into a PR (agent-propose) — the local mirror of github's
-  // post-skill propose step. Capture the launch output to learn the session's terminalId (the join key the
-  // reaper reports back); other launches (the PM, the drafter, any non-proposer) stay live (stdio inherit).
-  if (holdsPropose(capabilities) && worktree) {
+  // An ISOLATED session on a github CODE HOST gets a post-session effect recorded: when the session finishes,
+  // the loop turns that worktree into a PR (agent-propose) — the local mirror of github's post-skill propose
+  // step. Gated on two explicit signals, never a capability: a worktree exists (a `--branch` was named) and
+  // the install's code host is `github` (where finished branches become PRs). Capture the launch output to
+  // learn the session's terminalId (the join key the reaper reports back); every other launch (the PM, the
+  // drafter, a local-git worker, the reviewer) stays live (stdio inherit).
+  if (worktree && manifestCodeHost() === 'github') {
     const r = spawnSync('node', [join(scriptsDir, 'run-agent.mjs')], { encoding: 'utf8', env, cwd: worktree });
     if (r.stdout) process.stdout.write(r.stdout);
     if (r.stderr) process.stderr.write(r.stderr);
@@ -206,7 +201,7 @@ export async function launch(agent: string, params: LaunchParams = {}): Promise<
         id,
         agent,
         worktree,
-        effect: 'scripts/agent-propose.ts', // the agent's code:propose realization (git + gh; runner-independent)
+        effect: 'scripts/agent-propose.ts', // the github code host's publish effect (git + gh; runner-independent)
         env: {
           // ISSUE_REF derives from the worktree's branch so agent-propose checks out the SAME branch the
           // worker committed onto (`agent/issue-<n>`); the rest mirror github's propose-step env.

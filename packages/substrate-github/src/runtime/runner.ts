@@ -84,6 +84,11 @@ export async function runCli(argv: string[]): Promise<number> {
       flags.issue_number = flags.ref;
       delete flags.ref;
     }
+    // `--branch` is a runner-control param: it requests ISOLATION (a worktree) on a local runner. github
+    // isolates via the job's fresh checkout, so it has no use for it — drop it rather than forward it as a
+    // bogus `-f branch=…` workflow input. The same PM launch (`launch develop --ref N --branch …`) is thus
+    // substrate-agnostic: the local runner honors `--branch`, the github runner ignores it.
+    delete flags.branch;
     await launch(agent, flags);
     return 0;
   }

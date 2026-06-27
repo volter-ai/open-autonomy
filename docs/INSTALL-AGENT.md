@@ -29,8 +29,12 @@ own logged-in `gh`/git credentials* — typically a repo **admin** token, unscop
 
 So on local, the things that *actually* protect the repo are, in order:
 
-1. **Your real CI in the gate** — agents can't make failing tests pass. This is the load-bearing control,
-   which is why **you must require a real CI check that runs on PRs** (not just `agent-review`).
+1. **Your real CI in the gate** — CI runs server-side on GitHub and the agents can't make failing tests
+   pass, so it's the load-bearing control; **require a real CI check that runs on PRs** (not just
+   `agent-review`). Caveat for full honesty: the shared token's `statuses:write` covers *any* context name,
+   so a single local token could also post a fake `<your-ci>=success` status — GitHub generally prefers the
+   real check-run, but the only *cryptographic* independence is scoped tokens (hosted) or a separate
+   reviewer identity. On a single token, CI + supervision are strong, not airtight.
 2. **`enforce_admins:true`** — so even the admin-identity agents go through the gate.
 3. **Your supervision** — watch the first runs; you can stop the loop any tick.
 4. **A trusted, private repo** — see the boundary on public repos below.
@@ -53,23 +57,30 @@ test -f package.json && echo "JS project" || echo "NO package.json — STOP (see
 # Package manager — use it for every install below (do NOT hardcode npm):
 ls bun.lock 2>/dev/null && echo bun; ls pnpm-lock.yaml 2>/dev/null && echo pnpm; ls package-lock.json 2>/dev/null && echo npm
 
-# Do you have admin? (branch protection requires it) and the plan (private+free can't use classic protection):
-gh api "repos/{owner}/{repo}" --jq '{admin: .permissions.admin, private: .private, plan: .owner.type}'
+# Do you have admin? (branch protection requires it). Is it private? (a private repo on a FREE plan can't use
+# classic branch protection — the Phase-3 PUT will 403; the install wires protection BEFORE auto-merge so that
+# failure stops safely). `.owner.type` is account type, not plan — probe the plan separately (may be null if
+# the token can't see it; treat unknown-private as "may fail, handle the 403"):
+gh api "repos/{owner}/{repo}" --jq '{admin: .permissions.admin, private: .private, owner: .owner.login}'
+gh api user --jq '.plan.name' 2>/dev/null   # or: gh api "orgs/<owner>" --jq '.plan.name' for an org repo
 
 # The default branch (the merge target — never hardcode `main`):
 gh repo view --json defaultBranchRef --jq .defaultBranchRef.name
 
-# THE CI CHECKS that gate PULL REQUESTS. Get them the RELIABLE way (a real PR's checks), with a fallback —
-# do NOT read the default-branch push commit (push-only / path-filtered checks appear there and DEADLOCK PRs):
-#   (a) best — observe a real PR (any state), its head check-runs are exactly what gates PRs:
-PR=$(gh pr list --state all --limit 1 --json number --jq '.[0].number')
+# THE CI CHECKS that gate PULL REQUESTS. This is the trickiest detect — getting it wrong DEADLOCKS every PR.
+# NEVER read the default-branch push commit, and NEVER trust a MERGED PR's head check-runs: a merged head
+# carries BOTH its pull_request run AND its push run, so push-only jobs (e.g. `if: github.event_name=='push'`
+# Deploy/Health-Check) contaminate the list. Two reliable sources:
+#   (a) best — an OPEN PR (head not yet on the default branch): its check-runs are exactly the PR gate:
+PR=$(gh pr list --state open --limit 1 --json number --jq '.[0].number')
 [ -n "$PR" ] && gh api "repos/{owner}/{repo}/commits/$(gh pr view $PR --json headRefOid --jq .headRefOid)/check-runs" \
   --jq '[.check_runs[].name] | unique'
-#   (b) no PR exists yet (common for a solo repo) — find workflows triggered `on: pull_request` and read
-#       their job/check names from the YAML; these are your CANDIDATE contexts (confirm at the ask, since
-#       without an actual PR run the exact check-run names are a best-guess):
-grep -rl 'pull_request' .github/workflows/ 2>/dev/null   # the workflows that run on PRs; read their job names
-#   STOP CONDITION: if neither a PR nor any `pull_request`-triggered workflow exists, there is NO PR CI.
+#   (b) no open PR — read the workflows triggered `on: pull_request` and take each job's check name (its
+#       `name:` if set, else the job id), EXCLUDING any job gated `if: github.event_name == 'push'/'release'`
+#       or behind a `paths:` filter (those never run on a normal PR). These are CANDIDATE contexts — confirm
+#       at ask #1, since without an actual PR run the exact names are a best-guess (matrix jobs add suffixes):
+grep -rl 'pull_request' .github/workflows/ 2>/dev/null   # then read each: drop push-only/path-filtered jobs
+#   STOP CONDITION: if neither an OPEN PR nor any `pull_request`-triggered workflow exists, there is NO PR CI.
 
 # Visibility + existing posture (affects the public-repo boundary + whether OA's dependabot/security add value):
 gh repo view --json visibility --jq .visibility
@@ -150,14 +161,17 @@ printf '\n# open-autonomy runtime\n.worktrees/\n.open-autonomy/runner-state/\n' 
 git add -A && git commit -m "chore: install open-autonomy (simple-gh-sdlc, local runner)"
 git push
 
-# 6. NOW wire the gate (Phase-2 #1). Fill contexts with your detected PR checks + agent-review —
-#    DO NOT leave the <...> placeholders literal: a literal context never reports and DEADLOCKS every PR.
-#    e.g. contexts: ["build","acceptance","agent-review"]
-gh repo edit <owner>/<repo> --enable-auto-merge
+# 6. NOW wire the gate (Phase-2 #1). Set BRANCH PROTECTION FIRST, verify it took, THEN enable auto-merge —
+#    so a failed protection PUT (e.g. private repo on a free plan: 403) never leaves auto-merge on WITHOUT a
+#    gate. Fill contexts with your detected PR checks + agent-review; DO NOT leave a <...> placeholder literal
+#    (a context that never reports DEADLOCKS every PR). e.g. contexts: ["build","acceptance","agent-review"]
 gh api -X PUT "repos/<owner>/<repo>/branches/<default-branch>/protection" --input - <<JSON
 { "required_status_checks": { "strict": false, "contexts": ["<pr-ci-check-1>", "agent-review"] },
   "enforce_admins": true, "required_pull_request_reviews": null, "restrictions": null }
 JSON
+# verify protection is in place (non-empty contexts) BEFORE enabling auto-merge — if this errors, STOP:
+gh api "repos/<owner>/<repo>/branches/<default-branch>/protection/required_status_checks/contexts" --jq '.'
+gh repo edit <owner>/<repo> --enable-auto-merge
 
 # 7. Start termfleet + sign in to the coding CLI BEFORE running the loop (verify a session can launch):
 npx termfleet console serve --name dev --port 7373 &
@@ -165,8 +179,9 @@ npx termfleet provider serve --kind virtual-tmux --prefix dev --count 1 --port 7
 #   claude → /login    then sanity-check:  npx termfleet claude new --prompt "say hi"
 ```
 
-Then author + file the **first issue** (Phase-2 #6). The body **must** have a top `Assignee: <login>` line
-and a `## Acceptance Criteria` block (the PM keys on the `ready` label; `ztrack check` validates the body):
+Then author + file the **first issue** (Phase-2 #6). The assignee comes from the `--assignee` flag (the
+stored column — the `Assignee:` body line below is human-readable but inert), and the body needs a
+`## Acceptance Criteria` block with at least one AC so `ztrack check` passes; the PM keys on the `ready` label:
 
 ```bash
 cat > issue.md <<'MD'
@@ -219,9 +234,10 @@ green. That is a proven install.
 - **`createAgentWindow returned no terminalId` / a launch times out** — termfleet console/provider aren't
   running or the coding CLI isn't signed in. Re-run `npx termfleet claude new --prompt hi` in isolation.
 - **A PR opens but never merges** — branch protection requires a check that isn't posted on PRs. Confirm
-  the required `contexts` are the **exact** check-run names that run on a *pull request* (re-read from a
-  merged PR), with no leftover `<...>` placeholder and no release-only (`publish`/`deploy`) or push-only
-  (`Deploy`, `Health Check`) or path-filtered check.
+  the required `contexts` are the **exact** check-run names that run on a *pull request* (re-read from *this
+  open PR's* check-runs — never a merged PR, whose head also carries push-run checks), with no leftover
+  `<...>` placeholder and no release-only (`publish`/`deploy`), push-only (`Deploy`, `Health Check`), or
+  path-filtered check.
 - **The loop does nothing each tick** — no eligible work: issue open + `ready` + assigned + `npx ztrack
   check` green on its body.
 - **Slow/flaky CI** — auto-merge *waits* for required checks; a 30-min suite means a 30-min verify loop, a

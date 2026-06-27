@@ -22,7 +22,8 @@ Installing OA is **two independent choices** — the runner is orthogonal to the
 - **Runner** — *where the agents execute*: **GitHub Actions** (hosted jobs) or **local** (your machine,
   via the termfleet SDK, using your own logged-in coding CLI).
 - **Code host** — *where the code lives and how a change lands*: **GitHub** (the agent opens a PR; `ci` +
-  an independent `agent-review` status gate **native auto-merge**) or **local-git** (a tracker board on
+  an `agent-review` status gate **native auto-merge** — that reviewer is independently *enforced* only on
+  the hosted/scoped-token runner; see the local safety note in step 5) or **local-git** (a tracker board on
   disk, PR-free — no GitHub at all).
 
 A profile declares which combinations it supports (`targets` × `codeHost`). The three setups people use:
@@ -60,8 +61,9 @@ directly**). This is the **local runner**. It works against **either code host**
   [ztrack](https://github.com/volter-ai/ztrack) board on disk, a change is `done` PR-free, **no GitHub at
   all**. The path for a private project you won't push.
 - **GitHub** (`simple-gh-sdlc`) — agents run on your machine, but a change lands as an **auto-merging PR
-  on GitHub** gated by `ci` + an independent `agent-review` status. The path for an open/team repo whose
-  agents you want on your own machine and model subscription.
+  on GitHub** gated by `ci` + an `agent-review` status (on local the agents share your token, so that
+  status is *not* an independent reviewer — your CI is the real gate; see step 5's safety note). The path
+  for a trusted repo whose agents you want on your own machine and model subscription.
 
 **Steps 1–4 (prereqs → termfleet → compile → run) are identical** for both; only **step 5 — how you feed
 work and how a change lands** — differs by code host. If you just want to *see the loop fire* with zero
@@ -195,14 +197,15 @@ Here the board is **GitHub issues** and a change lands as an **auto-merging PR**
 npm install -D ztrack    # or: bun add -d ztrack
 npx ztrack init --preset simple-gh-sdlc --sync github --repo <owner>/<repo>
 
-# b) require the gate in branch protection: YOUR real CI check(s) + the agent's `agent-review`,
-#    and enable native auto-merge. The contexts are the CI check-run NAMES that run on PULL REQUESTS
-#    (read them from a recent PR, NOT the default-branch push; exclude release-only checks).
-gh repo edit <owner>/<repo> --enable-auto-merge
+# b) require the gate in branch protection FIRST, then enable auto-merge (so a failed protection PUT —
+#    e.g. a private repo on a free plan — never leaves auto-merge on without a gate). The contexts are the
+#    CI check-run NAMES that run on PULL REQUESTS — read them from an OPEN PR (a MERGED PR's head also
+#    carries push-run checks), excluding release-only/push-only/path-filtered jobs.
 gh api -X PUT "repos/<owner>/<repo>/branches/<default-branch>/protection" --input - <<'JSON'
 { "required_status_checks": { "strict": false, "contexts": ["<pr-ci-check>", "agent-review"] },
   "enforce_admins": true, "required_pull_request_reviews": null, "restrictions": null }
 JSON
+gh repo edit <owner>/<repo> --enable-auto-merge   # only after protection above succeeded
 
 # c) add a Ready issue (open + `ready` label + assignee + ACs in the body), then sync
 npx ztrack issue create   # ... ; then: gh issue edit <n> --add-label ready
@@ -219,13 +222,14 @@ npx ztrack issue create   # ... ; then: gh issue edit <n> --add-label ready
 On its next tick the PM sweeps GitHub, and for a `ready` issue **launches the developer in an isolated
 worktree** (`runner.ts launch developer --ref <n> --branch agent/issue-<n>`). The developer commits, the
 runner opens the PR, the **reviewer** posts `agent-review`, and once **your CI (`ci`/`build`/…) + `agent-review`**
-are green, GitHub **native auto-merge** lands it. No agent ever merges — the merge boundary is branch
-protection, not the agents. **Require your real CI in branch protection**: with only `agent-review`
-required, you would be auto-merging on the reviewer's say-so alone.
+are green, GitHub **native auto-merge** lands it. With `enforce_admins:true` no agent bypasses the gate —
+but **your CI is the real boundary**: on a local runner the agents share your token, so the reviewer's
+`agent-review` is not independent of the proposer. **Require your real CI**; with only `agent-review`
+required you'd be auto-merging on the agents' own (same-token) say-so.
 
-> Identity: for the merge boundary to be real, the agents should act as a **bot identity** (a GitHub App
-> / dedicated account) distinct from the human maintainer — GitHub forbids a user approving their own PR,
-> so a single identity collapses the *agent proposes / human approves* boundary.
+> Identity: for a *technically enforced* independent reviewer, run on the hosted (scoped-token) substrate,
+> or give the reviewer a **separate bot identity** (a GitHub App / dedicated account) — on local under one
+> token, propose and review share the same credential, so `agent-review` self-blesses.
 
 > **Installing with an agent?** [`docs/INSTALL-AGENT.md`](./INSTALL-AGENT.md) is a guided playbook
 > addressed to the installing agent — detect the repo, ask the human only the judgment calls (the gate,

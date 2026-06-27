@@ -91,7 +91,7 @@ describe('the review edge is realized through the runner seam (Blocker 2)', () =
 });
 
 describe('mergeInFlight — a finished-but-unproposed session stays in-flight (no duplicate PR)', () => {
-  const marker = (id: string, agent: string) => ({ id, agent, worktree: `/wt/${id}`, effect: 'scripts/agent-propose.ts', env: {} });
+  const marker = (id: string, agent: string, ref = '') => ({ id, agent, ref, worktree: `/wt/${id}`, effect: 'scripts/agent-propose.ts', env: {} });
 
   test('a live session and its own pending marker count as ONE in-flight unit (deduped by id)', () => {
     const live = [{ id: 'dev-1', agent: 'develop', status: 'running' }];
@@ -113,6 +113,13 @@ describe('mergeInFlight — a finished-but-unproposed session stays in-flight (n
 
   test('another agent\'s pending marker does not count toward this agent', () => {
     expect(mergeInFlight([], [marker('rev-1', 'reviewer')], 'develop')).toHaveLength(0);
+  });
+
+  test('surfaces the per-issue ref (live or proposing) so a multi-developer PM dedups per issue', () => {
+    const live = mergeInFlight([{ id: 'dev-1', agent: 'develop', status: 'running' }], [marker('dev-1', 'develop', '7')], 'develop');
+    expect(live[0]!.ref).toBe('7'); // a live developer carries the issue it's isolated for
+    const proposing = mergeInFlight([], [marker('dev-2', 'develop', '9')], 'develop');
+    expect(proposing[0]!.ref).toBe('9'); // and so does a finished-but-unproposed one
   });
 });
 

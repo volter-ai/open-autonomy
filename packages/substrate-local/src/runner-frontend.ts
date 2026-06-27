@@ -30,6 +30,7 @@ export interface RunInfo {
   status: string;
   conclusion: string | null;
   title: string;
+  ref?: string; // the work-item this session is isolated for (the issue number) — lets a caller dedup per issue
 }
 
 const scriptsDir = dirname(fileURLToPath(import.meta.url));
@@ -69,6 +70,7 @@ export function terminalIdFromLaunch(stdout: string): string {
 interface EffectMarker {
   id: string;
   agent: string;
+  ref: string; // the work-item (issue number) this session is isolated for — surfaced in `list` for per-issue dedup
   worktree: string;
   effect: string;
   env: Record<string, string>;
@@ -220,6 +222,7 @@ export async function launch(agent: string, params: LaunchParams = {}): Promise<
       recordPostSessionEffect({
         id,
         agent,
+        ref: /agent\/issue-(\d+)/.exec(branch)?.[1] ?? '', // the issue this session is isolated for
         worktree,
         effect: 'scripts/agent-propose.ts', // the github code host's publish effect (git + gh; runner-independent)
         env: {
@@ -269,15 +272,18 @@ export function mergeInFlight(
   pending: EffectMarker[],
   agent: string,
 ): RunInfo[] {
+  const markerById = new Map(pending.filter((m) => m.agent === agent).map((m) => [m.id, m]));
   const live = sessions
     .filter((s) => s.agent === agent)
-    .map((s) => ({ id: s.id, status: s.status, conclusion: null, title: s.agent }));
+    .map((s) => ({ id: s.id, status: s.status, conclusion: null, title: s.agent, ...refOf(markerById.get(s.id)) }));
   const liveIds = new Set(live.map((s) => s.id));
-  const pend = pending
-    .filter((m) => m.agent === agent && !liveIds.has(m.id)) // session already counted; don't double-count
-    .map((m) => ({ id: m.id, status: 'proposing', conclusion: null, title: agent }));
+  const pend = [...markerById.values()]
+    .filter((m) => !liveIds.has(m.id)) // session already counted; don't double-count
+    .map((m) => ({ id: m.id, status: 'proposing', conclusion: null, title: agent, ...refOf(m) }));
   return [...live, ...pend];
 }
+// Surface the isolated session's work-item (issue) so a caller can dedup per issue, not just per agent.
+const refOf = (m?: EffectMarker): { ref?: string } => (m?.ref ? { ref: m.ref } : {});
 
 // --- the uniform agent-facing CLI (same surface as the github seam) ---
 function parseFlags(args: string[]): LaunchParams {

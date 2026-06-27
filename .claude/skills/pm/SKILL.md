@@ -30,10 +30,11 @@ Understand the entire state before acting:
   native auto-merge will never land. Green checks ≠ will-merge; always look at the merge state too.
 - **Every in-flight worker — through the Runner, the substrate-agnostic seam.** Ask the Runner what each
   worker has in flight: `bun scripts/runner.ts list developer` and `bun scripts/runner.ts list reviewer`
-  (JSON — each in-flight session's `id` + `status`). The Runner is the ONE dispatch/observe surface on every
-  substrate; do NOT use `gh run list` / `gh workflow run` directly (those exist only on the github runner).
-  A finished developer whose PR has not opened yet still shows as in-flight (`status: proposing`) — so this is
-  also your guard against launching a duplicate during that window.
+  (JSON — each in-flight session's `id` + `status` + the issue `ref` it is isolated for). The Runner is the ONE
+  dispatch/observe surface on every substrate; do NOT use `gh run list` / `gh workflow run` directly (those
+  exist only on the github runner). A finished developer whose PR has not opened yet still shows as in-flight
+  (`status: proposing`) with its issue `ref` — so this is your per-issue guard against launching a duplicate in
+  the window between a developer finishing and its PR opening.
   - **For a RUNNING worker, read its LIVE session to tell looping/stuck from deep-but-productive** — judge on
     what it is *doing*, not how long it has run. HOW you read the session is the box's concern: on the github
     box GitHub serves no in-progress logs, so fetch the rolling window from the model proxy with the worker's
@@ -58,7 +59,10 @@ decided and why:
   - **All checks green (ci + agent-review pass), no merge conflict** → leave it; auto-merge will land it.
     Comment visible status that the PR is in good shape.
   - **PR has failed checks** or **has a merge conflict** → route to the appropriate case below (failure / conflict).
-- **Fresh + clear, scoped, actionable** (confirmed no open PR for this issue) → launch the developer: `bun scripts/runner.ts launch developer --ref <n> --branch agent/issue-<n>`.
+- **Fresh + clear, scoped, actionable** (confirmed no open PR for this issue **and** no in-flight developer
+  already isolated for it — no `runner.ts list developer` entry whose `ref` is `<n>`, including a `proposing`
+  one) → launch the developer: `bun scripts/runner.ts launch developer --ref <n> --branch agent/issue-<n>`.
+  Never launch a second developer for an issue that already has one in flight.
 - **Fresh + underspecified** → comment the specific questions; label `needs-info`; **engage the requester** (Step 2c).
 - **Out of scope / risky** (auth, secrets, workflow edits, billing, destructive data) → comment why; label `human-required`; **engage the maintainer** (Step 2c).
 - **Has an open PR that FAILED** (`ci` failure or `agent-review` failure) → read the failure from the session

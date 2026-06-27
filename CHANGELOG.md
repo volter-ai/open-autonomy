@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.2.5
+
+### Fixed
+- **No second developer for an issue already in flight.** The local runner's `agent:list` now carries each
+  isolated session's work-item `ref` (the issue number), so a multi-developer PM (self-driving) dedups PER
+  ISSUE, not just per agent — it won't launch a second developer for an issue that already has one in flight,
+  including a finished-but-not-yet-proposed (`proposing`) one. This closes the launch-level duplicate the
+  deterministic PR backstop was masking (a self-driving hands-off run launched the developer twice; only one
+  PR resulted, but the second run was wasted).
+
+Also verified (no code change): the substrate-agnostic self-driving PM's github dispatch is byte-identical to
+before — `runner.ts launch developer --ref N --branch …` on the gh-actions seam emits exactly
+`gh workflow run developer.yml -f issue_number=N` (the `--branch` dropped) — so OA's production fleet on
+gh-actions is unaffected by the rework.
+
 ## 0.2.4
 
 ### Fixed

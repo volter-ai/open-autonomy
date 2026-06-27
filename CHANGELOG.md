@@ -1,5 +1,48 @@
 # Changelog
 
+## 0.3.0
+
+The **install model**: how an existing repo adopts open-autonomy, centered on the local-runner + GitHub
+code-host setup (agents on your machine, auto-merging PRs on GitHub). Hardened over a long adversarial
+subagent review.
+
+### Added
+- **`simple-gh-sdlc` now compiles to the `local` target** (declared `targets: [gh-actions, local]`) — run the
+  agents on your own machine via termfleet while changes land as auto-merging PRs on GitHub. `check:profiles`
+  now covers it, catching substrate drift.
+- **`docs/INSTALL-AGENT.md`** — a guided **preflight → detect → ask → execute → verify** install playbook
+  addressed to the installing agent: detect the repo (package manager, CI check names, admin/plan, the human
+  login), ask the human only the judgment/irreversible calls (the merge gate, identity, the first issue, the
+  uncapped-spend acknowledgment), run the overlay, and **prove the loop merges before declaring done**.
+- **README + `docs/OPERATIONS.md` reframed around runner ⟂ code host** — the runner (where agents execute)
+  is orthogonal to the code host (where code lives + how it merges). Three setups: hosted (Actions+GitHub),
+  local-agents→GitHub-PRs, and fully-local (local-git, PR-free). Replaces the old "local = no GitHub"
+  conflation; corrects the now-false "self-driving is GitHub-only" / "no auto-merge locally" claims.
+
+### Fixed
+- **Honest local merge boundary.** The `code:propose`/`code:review` scoped-token split is enforced only on
+  the **hosted** runner; on a local runner the agents share your own (admin) token, so the reviewer is not
+  independent and "no agent can merge" is not technically enforced. The docs now say so plainly: on local the
+  real controls are **your CI in the gate + `enforce_admins: true` + supervision + a trusted repo**. The
+  branch-protection payload sets `enforce_admins: true`; auto-merge is armed only **after** a supervised first
+  merge; the gate-wiring validates the required contexts (rejects unfilled placeholders and an
+  `agent-review`-only gate).
+- **`max_develop_attempts` is now actually enforced** (it was inert — referenced by the PM but read by
+  nothing). The `simple-gh-sdlc` PM gathers issue comment history and caps rework by counting a structured
+  `oa-rework:` marker, escalating to `human-required` at the cap instead of relaunching forever.
+- **`human_required_paths` now protects the complete OA harness** — every shipped script under `scripts/`
+  (including the privileged `reconcile-merged-issues.ts` / `rearm-auto-merge.ts` / `check-supply-chain.ts`
+  that `merge.yml`/`security.yml` execute) plus `scripts/prompts/**`, the skills, `scheduler/`, and
+  `.open-autonomy/` — so an in-scope issue can't auto-merge a rewrite of the machinery that runs the loop.
+  Scoped by filename so an adopter's own `scripts/` isn't blocked.
+- **`open-autonomy compile` next-steps** now print the correct Node floor (**22.18+**, for the `.mts` ztrack
+  preset) and a code-host-aware `ztrack init` (`--sync github --repo …` for a GitHub code host) instead of a
+  bare `ztrack init` that silently no-ops once `.volter/` exists.
+- Numerous install-guide correctness fixes from the review: portable harness staging (no `git add -A`, no
+  `*.lock*` glob that aborts under zsh), reliable GitHub issue-number capture, CI-check detection that reads
+  a PR's checks (not the default-branch push) and excludes push-only/path-filtered jobs, a Phase-0 preflight
+  (tools + `gh` admin scope), and a Teardown section.
+
 ## 0.2.5
 
 ### Fixed

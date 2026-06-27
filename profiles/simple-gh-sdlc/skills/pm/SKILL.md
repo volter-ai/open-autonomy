@@ -64,12 +64,15 @@ without you.
      reviewer on the PR). If a check **failed** or it has a **merge conflict**
      (`mergeStateStatus: DIRTY`), that's rework — but **ENFORCE THE CAP FIRST so a
      broken issue can't loop forever burning model spend**: read `max_develop_attempts`
-     from `.open-autonomy/autonomy.yml` (default **2**) and count your prior
-     develop-relaunch comments on this issue (from the comments you fetched in step 1).
-     - **attempts ≥ the cap**, or the failure is unclear/repeating → do **NOT** relaunch.
+     from `.open-autonomy/autonomy.yml` (default **2**) and count this issue's prior
+     **rework relaunches** — the comments you (the bot) left that contain the exact marker
+     line `oa-rework: <k>` (from the comments you fetched in step 1; count only your own,
+     and only that marker — NOT initial-launch or in-review status comments).
+     - **count ≥ the cap**, or the failure is unclear/repeating → do **NOT** relaunch.
        **Stop and escalate**: comment the situation and label the issue `human-required`.
      - **below the cap** with a clear, addressable failure → re-launch develop for that
-       issue's number with a comment naming the exact failure to fix.
+       issue's number, and in the comment include the marker line `oa-rework: <count+1>`
+       plus the exact failure to fix (the marker is how the next tick counts attempts).
      Never loop. Do NOT open a second PR for an issue that already has one.
    - **Issue is `ready` (label), open, and WIP allows** → before launching, confirm `agent/issue-<number>`
      has **no PR yet in ANY state**: `gh pr list --head "agent/issue-<number>" --state all --json number,state`.

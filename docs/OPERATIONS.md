@@ -197,22 +197,27 @@ Here the board is **GitHub issues** and a change lands as an **auto-merging PR**
 npm install -D ztrack    # or: bun add -d ztrack
 npx ztrack init --preset simple-gh-sdlc --sync github --repo <owner>/<repo>
 
-# b) require the gate in branch protection FIRST, then enable auto-merge (so a failed protection PUT —
-#    e.g. a private repo on a free plan — never leaves auto-merge on without a gate). The contexts are the
-#    CI check-run NAMES that run on PULL REQUESTS — read them from an OPEN PR (a MERGED PR's head also
-#    carries push-run checks), excluding release-only/push-only/path-filtered jobs.
+# b) require the gate in branch protection (NOT auto-merge yet — that comes after a supervised first merge,
+#    step d). The contexts are the CI check-run NAMES that run on PULL REQUESTS — read them from an OPEN PR (a
+#    MERGED PR's head also carries push-run checks), excluding release-only/push-only/path-filtered jobs.
 gh api -X PUT "repos/<owner>/<repo>/branches/<default-branch>/protection" --input - <<'JSON'
 { "required_status_checks": { "strict": false, "contexts": ["<pr-ci-check>", "agent-review"] },
   "enforce_admins": true, "required_pull_request_reviews": null, "restrictions": null }
 JSON
 # verify protection took (errors if it didn't — e.g. free private plan):
 gh api "repos/<owner>/<repo>/branches/<default-branch>/protection/required_status_checks/contexts" --jq '.'
-# Then WATCH the first agent PR merge under supervision (gate green → `gh pr merge <pr> --squash` yourself).
-# Only after that supervised first merge, arm native auto-merge for ongoing operation:
-gh repo edit <owner>/<repo> --enable-auto-merge
 
 # c) add a Ready issue (open + `ready` label + assignee + ACs in the body), then sync
 npx ztrack issue create   # ... ; then: gh issue edit <n> --add-label ready
+```
+
+Then run the loop and **watch the first PR merge under supervision** — once its gate is green, merge it
+yourself (`gh pr merge <pr> --squash`). **Only after that supervised first merge**, arm native auto-merge so
+later PRs land on their own:
+
+```bash
+# d) ongoing operation — arm auto-merge ONLY after you watched the first PR merge cleanly:
+gh repo edit <owner>/<repo> --enable-auto-merge
 ```
 
 > **You must have a CI check that runs on PRs.** If your repo has none, `contexts` would be just

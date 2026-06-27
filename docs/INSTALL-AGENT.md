@@ -338,8 +338,11 @@ Phase 4 proves *one* merge. For the loop to actually run a backlog over days, se
   minimum `nohup node scheduler/run.mjs >> ~/oa-loop.log 2>&1 &` inside a persistent `tmux`. Add a liveness
   check (is the process up?). The same goes for the termfleet console/provider.
 - **Feed the backlog.** The loop runs whatever is `ready` on the GitHub board. Add work the same way as the
-  first issue (`ztrack issue create … --state ready` → `ztrack sync github` → label `ready`), or just open a
-  GitHub issue and add the `ready` label. WIP is 1, so issues are worked one at a time, in order.
+  first issue (`ztrack issue create … --state ready` → `ztrack sync github` → label `ready`). A `ready` issue
+  **must already carry** a `## Acceptance Criteria` block and the top `Assignee: <login>` line — the PM never
+  drafts, so a bare `ready`-labeled issue with no ACs goes straight to develop and fails `ztrack check`
+  (churns to `human-required`). To hand the loop a raw request, leave it **unlabeled** and ask the PM to
+  `draft` it. WIP is 1, so issues are worked one at a time, in order.
 - **Observe + intervene on local (there is no `/agent` control plane locally).** The `/agent pause|retry|
   cancel` issue-comment commands work only on the GitHub-Actions runner. On local you steer with: the board
   (`gh issue list`, `gh pr list --json number,headRefName,statusCheckRollup,mergeStateStatus`), the live

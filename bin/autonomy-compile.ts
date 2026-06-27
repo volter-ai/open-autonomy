@@ -5,7 +5,7 @@
 // with this package) or a path to a profile dir of your own. With no outDir, prints the installation's file
 // list (a dry run). With outDir, materializes it.
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
-import { dirname, join } from 'node:path';
+import { basename, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseIr, compiledPaths, materialize } from '@open-autonomy/core';
 import { compileLocal } from '@open-autonomy/substrate-local';
@@ -61,14 +61,22 @@ if (outDir) {
     const cd = outDir === '.' ? '' : `cd ${outDir} && `;
     // The local runner drives termfleet through its SDK (a node_modules dep), so termfleet is installed
     // IN the repo and run via `npx termfleet`, not a global PATH binary.
+    // The ztrack preset is keyed by the profile name; the init form depends on the code host (a GitHub
+    // code host syncs to GitHub Issues, a local-git one is a board on disk). Show the RIGHT init — never a
+    // bare `ztrack init`, which is a silent no-op once `.volter/` exists and never applies `--sync`.
+    const presetName = basename(profileDir);
+    const trackerInit =
+      ir.codeHost === 'github'
+        ? `npx ztrack init --preset ${presetName} --sync github --repo <owner>/<repo>   (then: \`npx ztrack sync github\`)`
+        : `npx ztrack init --preset ${presetName}   (then add work: \`npx ztrack issue create\`)`;
     const tracker = profileMentions(profileDir, 'ztrack')
       ? `  4. Tracker: this profile's agents use ztrack — install it as a project dep (the validation\n` +
         `     preset \`import\`s it; a global install is NOT enough) and init it:\n` +
-        `       ${cd}npm install -D ztrack  &&  npx ztrack init   (then add work: \`npx ztrack issue create\`)\n`
+        `       ${cd}npm install -D ztrack  &&  ${trackerInit}\n`
       : '';
     console.log(
       `\nNext steps (local loop):\n` +
-        `  1. Prereqs: Node 20+, tmux. Add termfleet to this repo (the runner uses its SDK):\n` +
+        `  1. Prereqs: Node 22.18+ (the ztrack preset is .mts), tmux. Add termfleet to this repo (the runner uses its SDK):\n` +
         `       ${cd}npm install termfleet\n` +
         `  2. Sign in to your agent CLI: run \`claude\` then \`/login\`  (or \`codex login\`)\n` +
         `  3. Start termfleet (console + a local provider):\n` +

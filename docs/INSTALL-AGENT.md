@@ -90,8 +90,8 @@ ls bun.lock 2>/dev/null && echo bun; ls pnpm-lock.yaml 2>/dev/null && echo pnpm;
 gh api "repos/{owner}/{repo}" --jq '{admin: .permissions.admin, private: .private, owner: .owner.login}'
 gh api user --jq '.plan.name' 2>/dev/null   # or: gh api "orgs/<owner>" --jq '.plan.name' for an org repo
 
-# The HUMAN's login (the issue assignee). NOT the repo owner — on an ORG repo `owner` is the org, which is
-# not assignable; using it makes the first issue ineligible and the loop silently skips it forever:
+# The HUMAN's login (the issue assignee + the `Assignee:` body line the developer's loose-file `ztrack check`
+# reads). NOT the repo owner — on an ORG repo `owner` is the org, which is not an assignable user:
 gh api user --jq .login
 
 # The default branch (the merge target — never hardcode `main`):
@@ -202,6 +202,10 @@ git diff --cached --name-only | grep -qE '^(scripts/|\.open-autonomy/|\.claude/)
   || { echo "ABORT: harness not staged — did 'compile' run in this repo?"; exit 1; }
 git commit -m "chore: install open-autonomy (simple-gh-sdlc, local runner)"
 git push
+# The overlay commits OA's own bun-targeted TS (scripts/*.ts). If the repo's CI lints/typechecks/tests the
+# WHOLE tree, it may now go red on those files (Bun globals, different tsconfig) — and that same CI is your
+# required gate, so the first PR would deadlock. After the push, CONFIRM the default-branch CI is green; if
+# not, exclude `scripts/ scheduler/ .open-autonomy/` from the repo's lint/tsc/test config, or don't arm the gate.
 
 # 6. Set BRANCH PROTECTION (the gate). NOT auto-merge yet — that goes on in Phase 4 after you've watched one
 #    PR merge. Build the contexts in a SHELL VARIABLE and VALIDATE+PUT in ONE block, so a failed check aborts
@@ -230,12 +234,13 @@ curl -fsS http://127.0.0.1:7402/healthz >/dev/null 2>&1 || (npx termfleet provid
 #   claude → /login    then sanity-check:  npx termfleet claude new --prompt "say hi"
 ```
 
-Then author + file the **first issue** (Phase-2 #6). Use the human's login (detected in Phase 1, **not** the
-repo owner) for `--assignee`. Keep the top **`Assignee: <login>` body line** too: GitHub's stored assignee
-satisfies the board, but the developer later validates a *loose file* (`gh issue view --json body > issue.md;
-ztrack check issue.md`) that has no stored column and reads the owner from that body line — drop it and the
-developer's `ztrack check` fails `issue_missing_assignee`. The body also needs a `## Acceptance Criteria`
-block with at least one AC; the PM keys on the `ready` label:
+Then author + file the **first issue** (Phase-2 #6). The PM keys on the **`ready` label** (not the assignee),
+but the developer later validates a *loose file* — `gh issue view --json body --jq .body > issue.md; ztrack
+check issue.md` — which has no stored assignee column and reads the owner from a top **`Assignee: <login>`
+body line**. So that body line is load-bearing: drop it and the developer's `ztrack check` fails
+`issue_missing_assignee` even with perfect evidence. Use the human's login (detected in Phase 1, **not** the
+repo owner — an org isn't assignable) for both the body line and `--assignee`. The body also needs a
+`## Acceptance Criteria` block with at least one AC:
 
 ```bash
 cat > issue.md <<'MD'

@@ -178,16 +178,12 @@ the repo root. **Order matters: commit the harness first, wire the gate last.**
 # 1. Runner deps IN this repo (use the detected PM — do NOT npm-install into a bun/pnpm repo):
 npm install termfleet            # or: bun add termfleet
 npm install -D ztrack            # or: bun add -d ztrack    (a PROJECT dep so its preset resolves)
-#    LOCKFILE / CI Node version (this WILL break the first PR if skipped): adding deps with a different
-#    npm/Node than the repo's CI uses can rewrite package-lock.json so the repo's CI `npm ci` rejects it
-#    ("can only install when package.json and package-lock.json are in sync"). `npm run build` passes
-#    locally (it reuses node_modules) so it won't surface until CI. AFTER installing, verify with the EXACT
-#    CI command under the repo's CI Node version — read it from .github/workflows (`node-version:`) / .nvmrc
-#    / engines: e.g. `npm ci` locally, or `docker run --rm -v "$PWD":/app -w /app node:<ci-major> npm ci`.
-#    If it errors, regenerate the lock under that Node (`… node:<ci-major> npm install --package-lock-only`).
-#    node-pty: termfleet's local provider spawns PTYs via @homebridge/node-pty-prebuilt-multiarch, which has
-#    no prebuilt for newer Node (e.g. 23/24) → the provider crashes "Cannot find module '.../pty.node'".
-#    Fix once: `npm rebuild @homebridge/node-pty-prebuilt-multiarch` (needs Xcode CLT / build-essential).
+#    Then make the environment install-ready — `preflight` does this STRUCTURALLY so you never hit the
+#    install-time gotchas: it rebuilds termfleet's node-pty native module if this Node has no prebuilt (else
+#    the provider can't start), and verifies `npm ci` under the repo's *CI Node version* — regenerating
+#    package-lock.json if adding the deps desynced it (which `npm run build` won't catch locally, but the
+#    first agent PR's CI would). If it regenerates the lock, commit it (step 5 stages it).
+npx --yes open-autonomy preflight
 
 # 2. The overlay — additive; generates NO package.json/README/.gitignore over the repo (`--yes` so a cold
 #    box doesn't hang on npx's install prompt — open-autonomy isn't a local dep):
@@ -378,10 +374,9 @@ Phase 4 proves *one* merge. For the loop to actually run a backlog over days, se
   leaves behind).
 - **Updating the committed harness AFTER the gate is wired:** `enforce_admins:true` (correctly) blocks even
   an admin's direct push to the default branch (`GH006: N of N required status checks are expected`), so an
-  operator pushing a harness/skill update can't `git push` to `main`. Temporarily relax it, push, restore:
-  `gh api -X DELETE repos/<owner>/<repo>/branches/<default-branch>/protection/enforce_admins` → `git push` →
-  `gh api -X POST  …/enforce_admins`. (The gate is for *agent* changes; operator harness maintenance is the
-  one legitimate out-of-band push.)
+  operator pushing a harness/skill update can't `git push` to `main`. Use **`npx open-autonomy harness-push`**
+  — it relaxes `enforce_admins`, pushes, and **always restores the gate** (even if the push fails). (The gate
+  is for *agent* changes; operator harness maintenance is the one legitimate out-of-band push.)
 - **Interrupted between commit (step 5) and protection (step 6):** just re-run step 6 — the protection PUT is
   idempotent. The runtime is crash-safe (effect markers replay; `agent-propose` refuses a branch with a
   merged PR), so a restarted loop won't double-PR.

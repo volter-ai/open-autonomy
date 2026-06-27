@@ -15,6 +15,8 @@ export {}; // make this a module so top-level await is allowed (delegation uses 
 const HELP = `open-autonomy <command> [args]
 
   compile <profileName|profileDir> <local|gh-actions> [outDir]  compile a profile onto a substrate (dry run without outDir)
+  preflight                                                     make an adopter repo install-ready (node-pty rebuild + lockfile vs CI Node); run after installing the runner deps
+  harness-push [--repo o/r --branch b]                          push an OA harness/skill update past the enforce_admins gate (relax -> push -> restore)
   conformance <exec|termfleet|gh-actions> [probeAgent]          run the substrate conformance battery
   upgrade --profile <dir> --target <dir> [--apply]              re-compile an installation in place (dry run without --apply)
 
@@ -36,6 +38,12 @@ process.argv = [process.argv[0]!, process.argv[1]!, ...rest];
 switch (sub) {
   case 'compile':
     await import('./autonomy-compile.ts');
+    break;
+  case 'preflight':
+    await import('./preflight.ts');
+    break;
+  case 'harness-push':
+    await import('./harness-push.ts');
     break;
   case 'conformance':
     await import('./autonomy-conformance.ts');

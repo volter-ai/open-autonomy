@@ -76,8 +76,9 @@ if (outDir) {
       : '';
     console.log(
       `\nNext steps (local loop):\n` +
-        `  1. Prereqs: Node 22.18+ (the ztrack preset is .mts), tmux. Add termfleet to this repo (the runner uses its SDK):\n` +
-        `       ${cd}npm install termfleet\n` +
+        `  1. Prereqs: Node 22.18+ (the ztrack preset is .mts), tmux. Add termfleet to this repo (the runner uses its SDK),\n` +
+        `     then run preflight (rebuilds node-pty for this Node + verifies the lockfile against your CI's Node):\n` +
+        `       ${cd}npm install termfleet  &&  npx --yes open-autonomy preflight\n` +
         `  2. Sign in to your agent CLI: run \`claude\` then \`/login\`  (or \`codex login\`)\n` +
         `  3. Start termfleet (console + a local provider):\n` +
         `       npx termfleet console serve --name dev --port 7373 &\n` +

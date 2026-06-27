@@ -19,7 +19,10 @@ Evidence is **commit + proof** at its core (an image/artifact is optional). A
 checked AC carries its evidence as **inline sub-bullets** pinned to a real git
 commit. A checked AC with **no** evidence fails `check` (`checked_ac_no_evidence`).
 
-Current grammar (what `ztrack check` verifies — let the tooling write it, don't hand-author):
+Current grammar (what `ztrack check` verifies). In this GitHub-synced flow the issue is a **loose file**
+(`gh issue view --json body > issue.md`), not a local ztrack store, so you **edit `issue.md` by hand** —
+`ztrack ac patch` targets a stored tracker issue and does not apply here. Keep the top `Assignee:` line and
+the existing AC ids; just fill in the evidence sub-bullets:
 
 ```markdown
 - [x] dev/01 v1 API returns 409 for insufficient stock
@@ -28,30 +31,23 @@ Current grammar (what `ztrack check` verifies — let the tooling write it, don'
   - proof: "test covers the insufficient-stock branch" -> ev1
 ```
 
-Mark an AC passed **with its evidence + proof in one patch** — a checked/passed
-AC with no evidence fails `check` (`passed_ac_missing_evidence`). ztrack is
-self-documenting: run `ztrack issue view <issue>` for the AC ids/`acVersion`, and
-`ztrack check` names this exact command (with values filled in) in its fix hint.
+Mark an AC passed **with its evidence + proof together** — a checked/passed AC with no evidence fails
+`check` (`passed_ac_missing_evidence`). Commit first (the SHA is the evidence), then hand-edit the AC's
+sub-bullets in `issue.md`:
 
 ```bash
-# do the work and COMMIT first — the commit SHA is the evidence
-git commit -m "…"                       # -> <sha>
-
-# (optional) stage an artifact; `evidence add` prints image=<path>; commit it and
-# add "image":"<path>" to the evidence entry below
-ztrack evidence add ./screenshot.png
-
-ztrack ac patch <issue> dev/01 --json '{
-  "checked": true,
-  "status": "passed",
-  "evidence": [{ "id": "ev1", "commit": "<sha>", "acVersion": 1 }],
-  "proof": { "explanation": "ev1 shows the AC holds", "evidenceRefs": ["ev1"] }
-}'
+git commit -m "…"          # -> <sha>; then in issue.md, under the AC:
+#   - [x] dev/01 v1 <text>
+#     - status: passed
+#     - evidence ev1: commit=<sha> acv=1     # (optional) add image=<path> for a committed artifact
+#     - proof: "how the commit shows this AC is met" -> ev1
 ```
 
-Then run `ztrack check`: it verifies each cited commit exists (and, when relevance
-is required, that it touches the AC's declared paths), and that every passed AC's
-proof references real evidence.
+> `ztrack check`'s fix hints suggest `ztrack ac patch …` — that targets a **stored** tracker issue and does
+> NOT apply to this loose-file GitHub-synced flow; hand-edit `issue.md` as above instead.
+
+Then run `ztrack check issue.md`: it verifies each cited commit exists (and, when relevance is required, that
+it touches the AC's declared paths), and that every passed AC's proof references real evidence.
 
 Never invent commits, images, source text, or approvals. If evidence does not
 exist, leave the AC pending (unchecked).

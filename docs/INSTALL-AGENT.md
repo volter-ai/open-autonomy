@@ -1,10 +1,10 @@
 # Installing Open Autonomy — a guide for the installing agent
 
 > **You are an agent installing Open Autonomy (OA) onto someone's repo for them.** This is a *guided*
-> install: you do the work, but the human owns the judgment + irreversible calls. Follow the four phases —
-> **detect** (read the repo, don't ask), **ask** (only the judgment calls, with defaults), **execute**
-> (the deterministic overlay), **verify** (prove the loop merges before you call it done). Never enable
-> auto-merge without a real CI gate; never leave the first runs unattended.
+> install: you do the work, but the human owns the judgment + irreversible calls. Follow the phases —
+> **preflight** (tools + auth), then **detect** (read the repo, don't ask), **ask** (only the judgment calls,
+> with defaults), **execute** (the deterministic overlay), **verify** (prove the loop merges before you call
+> it done). Never enable auto-merge without a real CI gate; never leave the first runs unattended.
 >
 > This guide covers the **local runner + GitHub code host** setup (`simple-gh-sdlc` on `local`): the
 > agents run on the human's machine via termfleet, and a change lands as an **auto-merging PR on GitHub**.
@@ -48,10 +48,11 @@ bot identity. Be upfront with the human about this — do not claim "no agent ca
 ## Phase 0 — PREFLIGHT (tools + auth; stop if any fails)
 
 **Run the snippets under `bash`** (macOS defaults to zsh, where the heredocs/globs behave differently).
-Confirm the toolchain + auth before touching the repo — each is a hard requirement:
+Confirm the toolchain + auth before touching the repo (the tools below are required; `jq` is not):
 
 ```bash
-for t in bash node git gh curl tmux jq; do command -v "$t" >/dev/null || echo "MISSING: $t (optional: jq)"; done
+for t in bash node git gh curl tmux; do command -v "$t" >/dev/null || echo "MISSING (required): $t"; done
+command -v jq >/dev/null || echo "note: jq not found (optional — the guide avoids it)"
 node -e 'const[a,b]=process.versions.node.split(".").map(Number);process.exit(a>22||(a===22&&b>=18)?0:1)' \
   || echo "Node >= 22.18 required (the installed ztrack validation preset is .mts → needs TS type-stripping)"
 gh auth status || echo "gh not authenticated"
@@ -88,6 +89,10 @@ ls bun.lock 2>/dev/null && echo bun; ls pnpm-lock.yaml 2>/dev/null && echo pnpm;
 # the token can't see it; treat unknown-private as "may fail, handle the 403"):
 gh api "repos/{owner}/{repo}" --jq '{admin: .permissions.admin, private: .private, owner: .owner.login}'
 gh api user --jq '.plan.name' 2>/dev/null   # or: gh api "orgs/<owner>" --jq '.plan.name' for an org repo
+
+# The HUMAN's login (the issue assignee). NOT the repo owner — on an ORG repo `owner` is the org, which is
+# not assignable; using it makes the first issue ineligible and the loop silently skips it forever:
+gh api user --jq .login
 
 # The default branch (the merge target — never hardcode `main`):
 gh repo view --json defaultBranchRef --jq .defaultBranchRef.name
@@ -192,7 +197,9 @@ npx ztrack init --preset simple-gh-sdlc --sync github --repo <owner>/<repo>
 grep -q 'worktrees/' .gitignore || printf '\n# open-autonomy runtime\n.worktrees/\n.open-autonomy/runner-state/\n' >> .gitignore
 for p in .claude .codex .github scheduler scripts standards .open-autonomy .volter .gitignore \
          package.json package-lock.json pnpm-lock.yaml bun.lock yarn.lock; do [ -e "$p" ] && git add "$p"; done
-git diff --cached --quiet && { echo "ABORT: nothing staged — did 'compile' run in this repo?"; exit 1; }
+# HARD-STOP unless an actual harness path staged (a lone .gitignore change ≠ a real install — `compile` failed):
+git diff --cached --name-only | grep -qE '^(scripts/|\.open-autonomy/|\.claude/)' \
+  || { echo "ABORT: harness not staged — did 'compile' run in this repo?"; exit 1; }
 git commit -m "chore: install open-autonomy (simple-gh-sdlc, local runner)"
 git push
 
@@ -223,9 +230,12 @@ curl -fsS http://127.0.0.1:7402/healthz >/dev/null 2>&1 || (npx termfleet provid
 #   claude → /login    then sanity-check:  npx termfleet claude new --prompt "say hi"
 ```
 
-Then author + file the **first issue** (Phase-2 #6). The assignee comes from the `--assignee` flag (the
-stored column — the `Assignee:` body line below is human-readable but inert), and the body needs a
-`## Acceptance Criteria` block with at least one AC so `ztrack check` passes; the PM keys on the `ready` label:
+Then author + file the **first issue** (Phase-2 #6). Use the human's login (detected in Phase 1, **not** the
+repo owner) for `--assignee`. Keep the top **`Assignee: <login>` body line** too: GitHub's stored assignee
+satisfies the board, but the developer later validates a *loose file* (`gh issue view --json body > issue.md;
+ztrack check issue.md`) that has no stored column and reads the owner from that body line — drop it and the
+developer's `ztrack check` fails `issue_missing_assignee`. The body also needs a `## Acceptance Criteria`
+block with at least one AC; the PM keys on the `ready` label:
 
 ```bash
 cat > issue.md <<'MD'

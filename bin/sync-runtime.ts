@@ -25,7 +25,8 @@ const DEV_ONLY = new Set([
   'open-autonomy-proof-audit.ts', 'open-autonomy-proof-audit.test.ts',
   'provision-target-repo.ts', 'provision-target-repo.test.ts',
   // Deploy-boundary provisioning: reconciles the production environment + admin-only deploy-tag ruleset
-  // from policy.box.deploy. A maintainer command (admin gh token), run from the maintainer context.
+  // from the deploy workflow itself (.github/workflows/deploy.yml's environment + tag). A maintainer command
+  // (admin gh token), run from the maintainer context.
   'provision-deploy.ts',
   // Bench (dev/analysis): the one eval harness's graders — fitness measurement, not shipped.
   // Workloads + the runner live in bench/; these are the per-grader scripts under scripts/.

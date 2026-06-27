@@ -130,8 +130,9 @@ policy:
       model: deepseek/deepseek-v4-flash                            # PUBLIC_AGENT_MODEL fallback
       bot_name: volter-agent                                       # git author for agent-proposed commits
       bot_email: volter-agent@users.noreply.github.com
-    # NOTE: the deploy gate is NOT here. It's a code-host RESOURCE (.github/deploy-gate.yml, carried with
-    # deploy.yml) — the deployment defines its own gate; policy.box is opaque governance, not deploy config.
+    # NOTE: the deploy gate is NOT here. The deploy WORKFLOW (.github/workflows/deploy.yml) declares its own
+    # gate — `environment:` + `on: push: tags:` — so provision-deploy.ts derives it from there; policy.box is
+    # opaque governance, not deploy config.
     autonomy:
       max_open_agent_prs: 5
       max_develop_attempts: 2

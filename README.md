@@ -34,6 +34,8 @@ Each agent is a **credentialed job** whose token is scoped to its capabilities; 
 no single agent holds both `code:review` (statuses:write — blesses) and `code:propose` (contents:write
 — pushes), so none can both write code and bless it. GitHub native auto-merge lands a PR once `ci` +
 `agent-review` are both green. The agent gets bounded model access (no raw keys) and can never merge.
+(This scoped-token enforcement is the **hosted** substrate; on a local runner the agents share your token —
+your CI + supervision are the boundary. See [`OPERATIONS.md`](./docs/OPERATIONS.md#local-runner-quickstart).)
 
 Read [`docs/SPEC.md`](./docs/SPEC.md) for the full model and conformance contract, and
 [`docs/ARCHITECTURE.md`](./docs/ARCHITECTURE.md) for the vocabulary and layout.

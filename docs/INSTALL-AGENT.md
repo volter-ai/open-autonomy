@@ -45,6 +45,31 @@ bot identity. Be upfront with the human about this — do not claim "no agent ca
 
 ---
 
+## Phase 0 — PREFLIGHT (tools + auth; stop if any fails)
+
+**Run the snippets under `bash`** (macOS defaults to zsh, where the heredocs/globs behave differently).
+Confirm the toolchain + auth before touching the repo — each is a hard requirement:
+
+```bash
+for t in bash node git gh curl tmux jq; do command -v "$t" >/dev/null || echo "MISSING: $t (optional: jq)"; done
+node -e 'const[a,b]=process.versions.node.split(".").map(Number);process.exit(a>22||(a===22&&b>=18)?0:1)' \
+  || echo "Node >= 22.18 required (the installed ztrack validation preset is .mts → needs TS type-stripping)"
+gh auth status || echo "gh not authenticated"
+```
+
+- **`node` ≥ 22.18** — the `ztrack` preset this install commits is `.mts` (loaded via Node type-stripping);
+  older Node cannot load it. `git`, `gh`, `curl`, **`tmux`** (termfleet's local provider runs sessions in
+  tmux) must be on PATH. `jq` is optional (the guide avoids it).
+- **`gh` authenticated as an ADMIN of the repo** with `repo` scope — branch protection needs
+  `administration:write` and the agents post commit statuses; a logged-in-but-under-scoped token 403s the
+  same as a non-admin (see Phase-3 step 6).
+- **A coding CLI (Claude Code / Codex) installed and signed in** — the agents' model access (the loop
+  launches `claude` by default; `claude` then `/login`).
+- **npm registry reachable** — `npx open-autonomy|ztrack|termfleet` fetch from it (an air-gapped/proxied box
+  needs them pre-installed). The guide uses `npx --yes` so a cold box doesn't hang on an install prompt.
+
+---
+
 ## Phase 1 — DETECT (read the repo; do **not** ask)
 
 Run from the repo root and record every answer — they parameterize everything and several are **stop
@@ -149,8 +174,9 @@ the repo root. **Order matters: commit the harness first, wire the gate last.**
 npm install termfleet            # or: bun add termfleet
 npm install -D ztrack            # or: bun add -d ztrack    (a PROJECT dep so its preset resolves)
 
-# 2. The overlay — additive; generates NO package.json/README/.gitignore over the repo:
-npx open-autonomy compile simple-gh-sdlc local .
+# 2. The overlay — additive; generates NO package.json/README/.gitignore over the repo (`--yes` so a cold
+#    box doesn't hang on npx's install prompt — open-autonomy isn't a local dep):
+npx --yes open-autonomy compile simple-gh-sdlc local .
 
 # 3. The tracker, linked to GitHub Issues (writes .volter/ config, committed with the harness):
 npx ztrack init --preset simple-gh-sdlc --sync github --repo <owner>/<repo>
@@ -159,33 +185,41 @@ npx ztrack init --preset simple-gh-sdlc --sync github --repo <owner>/<repo>
 #    rm -f .github/dependabot.yml .github/workflows/security.yml
 
 # 5. Commit the harness (Phase-2 #3) to the STILL-UNPROTECTED branch. Keep runtime scratch out (guard the
-#    append so a re-run doesn't duplicate it). Stage the overlay paths EXPLICITLY — never `git add -A`, which
-#    would sweep in any unrelated/secret files dirty in the human's tree and push them to the default branch:
-grep -q '^.worktrees/$' .gitignore || printf '\n# open-autonomy runtime\n.worktrees/\n.open-autonomy/runner-state/\n' >> .gitignore
-git add .claude .codex .github scheduler scripts standards .open-autonomy .volter .gitignore package.json *.lock* 2>/dev/null
+#    append so a re-run doesn't duplicate it). Stage the overlay paths EXPLICITLY — never `git add -A` (it
+#    would sweep unrelated/secret files in the human's dirty tree onto the default branch) and never a glob
+#    like `*.lock*` (zsh aborts the whole `git add` on no-match; it also misses `package-lock.json`). Add only
+#    paths that exist, then HARD-STOP if nothing staged (a silent empty commit = a no-op install):
+grep -q 'worktrees/' .gitignore || printf '\n# open-autonomy runtime\n.worktrees/\n.open-autonomy/runner-state/\n' >> .gitignore
+for p in .claude .codex .github scheduler scripts standards .open-autonomy .volter .gitignore \
+         package.json package-lock.json pnpm-lock.yaml bun.lock yarn.lock; do [ -e "$p" ] && git add "$p"; done
+git diff --cached --quiet && { echo "ABORT: nothing staged — did 'compile' run in this repo?"; exit 1; }
 git commit -m "chore: install open-autonomy (simple-gh-sdlc, local runner)"
 git push
 
 # 6. Set BRANCH PROTECTION (the gate). NOT auto-merge yet — that goes on in Phase 4 after you've watched one
-#    PR merge. Build the contexts in a SHELL VARIABLE so you can VALIDATE them, never a literal heredoc: a
-#    literal "<pr-ci-check-1>" is a non-empty context that never reports and DEADLOCKS every PR, and a
-#    contexts of just ["agent-review"] is the forbidden no-CI gate (on local the reviewer self-blesses).
+#    PR merge. Build the contexts in a SHELL VARIABLE and VALIDATE+PUT in ONE block, so a failed check aborts
+#    BEFORE the PUT (run as one unit — don't split the validate and the PUT into separate shell calls): a
+#    literal "<pr-ci-check-1>" is a non-empty context that never reports and DEADLOCKS every PR; contexts of
+#    just ["agent-review"] is the forbidden no-CI gate (on local the reviewer self-blesses). Uses only
+#    tr/grep (no jq dependency).
 CHECKS='["build","acceptance","agent-review"]'   # <- your detected PR-CI check names + agent-review
-echo "$CHECKS" | grep -q '<' && { echo "ABORT: unfilled placeholder in contexts"; exit 1; }
-echo "$CHECKS" | jq -e 'map(select(. != "agent-review")) | length >= 1' >/dev/null \
-  || { echo "ABORT: no real CI check in the gate (agent-review alone is not a gate on local)"; exit 1; }
-gh api -X PUT "repos/<owner>/<repo>/branches/<default-branch>/protection" --input - <<JSON
+{
+  case "$CHECKS" in *'<'*) echo "ABORT: unfilled <...> placeholder in contexts"; exit 1;; esac
+  real=$(printf '%s' "$CHECKS" | tr -d '[]" ' | tr ',' '\n' | grep -vx 'agent-review' | grep -vx '')
+  [ -z "$real" ] && { echo "ABORT: no real CI check (agent-review alone is not a gate on local)"; exit 1; }
+  gh api -X PUT "repos/<owner>/<repo>/branches/<default-branch>/protection" --input - <<JSON
 { "required_status_checks": { "strict": false, "contexts": $CHECKS },
   "enforce_admins": true, "required_pull_request_reviews": null, "restrictions": null }
 JSON
-# confirm protection took (errors on a free private plan / non-admin → STOP and tell the human):
+}
+# confirm protection took (errors on a free private plan / non-admin / under-scoped token → STOP, tell human):
 gh api "repos/<owner>/<repo>/branches/<default-branch>/protection/required_status_checks/contexts" --jq '.'
 
 # 7. Start termfleet + sign in to the coding CLI BEFORE running the loop. Re-use a running console/provider if
 #    one is up (one provider is GLOBAL across repos) — a second `serve` on a bound port fails silently behind
 #    `&`. Check first; use a repo-unique --prefix/--port if you run your own:
-curl -fsS http://127.0.0.1:7373/ >/dev/null 2>&1 || npx termfleet console serve --name dev --port 7373 &
-npx termfleet provider serve --kind virtual-tmux --prefix dev --count 1 --port 7402 &   # skip if already serving
+curl -fsS http://127.0.0.1:7373/ >/dev/null 2>&1 || (npx termfleet console serve --name dev --port 7373 &)
+curl -fsS http://127.0.0.1:7402/healthz >/dev/null 2>&1 || (npx termfleet provider serve --kind virtual-tmux --prefix dev --count 1 --port 7402 &)
 #   claude → /login    then sanity-check:  npx termfleet claude new --prompt "say hi"
 ```
 
@@ -207,7 +241,8 @@ npx ztrack issue create --title "<first issue>" --body-file issue.md --state rea
 npx ztrack sync github                       # THIS creates the GitHub issue (ztrack create only made a local id)
 # capture the GITHUB issue number — `ztrack create` returned a ztrack id (ZT-1), NOT the GH number, and the
 # PM keys on the `ready` LABEL, so the issue MUST be labeled or the loop silently skips it forever:
-n=$(gh issue list -R <owner>/<repo> --state open --search "<first issue> in:title" --json number --jq '.[0].number')
+n=$(gh issue list -R <owner>/<repo> --state open --json number,title --jq '.[]|select(.title=="<first issue>")|.number' | head -1)
+[ -n "$n" ] || { echo "ABORT: could not resolve the GitHub issue number (sync may have failed)"; exit 1; }
 gh label create ready -R <owner>/<repo> --color 0e8a16 2>/dev/null
 gh issue edit "$n" -R <owner>/<repo> --add-label ready
 ```
@@ -263,7 +298,8 @@ proven *before* auto-merge went live. That is a proven install.
 ## Failure modes (what you'll actually hit)
 
 - **`createAgentWindow returned no terminalId` / a launch times out** — termfleet console/provider aren't
-  running or the coding CLI isn't signed in. Re-run `npx termfleet claude new --prompt hi` in isolation.
+  running, **`tmux` isn't installed** (the provider needs it), or the coding CLI isn't signed in. Re-run
+  `npx termfleet claude new --prompt hi` in isolation.
 - **A PR opens but never merges** — branch protection requires a check that isn't posted on PRs. Confirm
   the required `contexts` are the **exact** check-run names that run on a *pull request* (re-read from *this
   open PR's* check-runs — never a merged PR, whose head also carries push-run checks), with no leftover
@@ -321,7 +357,7 @@ There is no one-command uninstall; reverse what the install armed:
 # stop the loop + termfleet
 pkill -f scheduler/run.mjs ; pkill -f 'termfleet .* serve'
 # disarm the gate
-gh repo edit <owner>/<repo> --disable-auto-merge
+gh repo edit <owner>/<repo> --enable-auto-merge=false
 gh api -X DELETE "repos/<owner>/<repo>/branches/<default-branch>/protection"
 # remove the harness commit + runtime scratch
 git revert --no-edit <install-commit>   # or git rm the overlay paths; then push

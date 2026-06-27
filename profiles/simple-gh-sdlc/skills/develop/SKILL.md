@@ -24,6 +24,9 @@ never open the PR, request review, or merge.
    and `gh issue view "$ZTRACK_ISSUE" --json body --jq .body > issue.md` (the ACs are in
    `issue.md`). Implement **only** its ACs. Stop with `OUTCOME: blocked human-required`
    if it needs a human-required path/topic from `risk-and-review.md`.
+   **EDIT `issue.md` in place — never rebuild it from scratch.** A loose-file `ztrack check` reads the
+   `Assignee: <login>` line at the top of the body as the issue's owner; drop it and `check` fails
+   `issue_missing_assignee` even with perfect evidence. Preserve that line (and the existing AC ids) verbatim.
 3. Make sure your commits land on `agent/issue-$ZTRACK_ISSUE` so they become the PR. The runner may already
    have placed you on it (a local runner gives you an isolated worktree already on that branch); create it only
    if needed — don't fail if you're already there:

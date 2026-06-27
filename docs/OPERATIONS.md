@@ -75,7 +75,7 @@ Install these once, on the machine that will run the loop:
 
 | What | Why | Install |
 |---|---|---|
-| **Node.js 20+** | runs the CLI, the loop driver, and termfleet | nodejs.org / your version manager |
+| **Node.js 22.18+** | runs the CLI, the loop driver, and termfleet; the installed ztrack `.mts` preset needs TS type-stripping (Node ≥ 22.18) | nodejs.org / your version manager |
 | **tmux** | termfleet's local provider runs sessions in tmux | `brew install tmux` (macOS) / your package manager |
 | **termfleet** | the local runner drives it through its **SDK** (a `node_modules` dependency, not a PATH binary) | in your repo: `npm install termfleet` (then `npx termfleet …` runs its console/provider CLI) |
 | **A coding agent CLI, logged in** | the agent's model access | Claude Code (default) **or** Codex — see next step |
@@ -205,9 +205,11 @@ gh api -X PUT "repos/<owner>/<repo>/branches/<default-branch>/protection" --inpu
 { "required_status_checks": { "strict": false, "contexts": ["<pr-ci-check>", "agent-review"] },
   "enforce_admins": true, "required_pull_request_reviews": null, "restrictions": null }
 JSON
-# verify protection took (errors if it didn't — e.g. free private plan); only then enable auto-merge:
+# verify protection took (errors if it didn't — e.g. free private plan):
 gh api "repos/<owner>/<repo>/branches/<default-branch>/protection/required_status_checks/contexts" --jq '.'
-gh repo edit <owner>/<repo> --enable-auto-merge   # only after protection above succeeded
+# Then WATCH the first agent PR merge under supervision (gate green → `gh pr merge <pr> --squash` yourself).
+# Only after that supervised first merge, arm native auto-merge for ongoing operation:
+gh repo edit <owner>/<repo> --enable-auto-merge
 
 # c) add a Ready issue (open + `ready` label + assignee + ACs in the body), then sync
 npx ztrack issue create   # ... ; then: gh issue edit <n> --add-label ready
@@ -224,7 +226,8 @@ npx ztrack issue create   # ... ; then: gh issue edit <n> --add-label ready
 On its next tick the PM sweeps GitHub, and for a `ready` issue **launches the developer in an isolated
 worktree** (`runner.ts launch developer --ref <n> --branch agent/issue-<n>`). The developer commits, the
 runner opens the PR, the **reviewer** posts `agent-review`, and once **your CI (`ci`/`build`/…) + `agent-review`**
-are green, GitHub **native auto-merge** lands it. With `enforce_admins:true` no agent bypasses the gate —
+are green the PR is mergeable — **merge the first one yourself** to prove the gate, then arm auto-merge (above)
+so later PRs land via **native auto-merge**. With `enforce_admins:true` no agent bypasses the gate —
 but **your CI is the real boundary**: on a local runner the agents share your token, so the reviewer's
 `agent-review` is not independent of the proposer. **Require your real CI**; with only `agent-review`
 required you'd be auto-merging on the agents' own (same-token) say-so.

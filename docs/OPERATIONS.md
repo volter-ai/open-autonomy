@@ -1,37 +1,67 @@
 # Operating Open Autonomy
 
-> **The operator/maintainer how-to doc.** Three sections, consolidated from the former
-> LOCAL-QUICKSTART, PUBLIC_AGENT_PRODUCTION_ROLLOUT, and RELEASE docs:
+> **The operator/maintainer how-to doc.**
 >
-> 1. [Local quickstart](#local-quickstart) — run the loop on your own machine (the **local** substrate; no GitHub).
-> 2. [GitHub production rollout](#github-production-rollout) — the checklist before enabling OA on a repo.
-> 3. [Release process](#release-process) — cutting a versioned Open Autonomy release.
+> 1. [Install & operate](#install--operate) — the model: **runner ⟂ code host**, and the three setups.
+> 2. [Local-runner quickstart](#local-runner-quickstart) — run the agents on your own machine (against
+>    *either* code host: a local-git board, or auto-merging PRs on GitHub).
+> 3. [GitHub production rollout](#github-production-rollout) — the checklist before enabling OA on a repo
+>    with the **GitHub Actions** runner.
+> 4. [Release process](#release-process) — cutting a versioned Open Autonomy release.
 >
 > Related: how OA *proves itself* lives in `docs/LIVE_TESTING_STRATEGY.md` + `docs/PROOF_LEDGER.md`;
 > the field runbook is `docs/OSS_AGENT_RUNBOOK.md`; the model + substrate design is `docs/SPEC.md`.
 
 ---
 
-## Local quickstart
+## Install & operate
 
-Run the loop on your own machine.
+Installing OA is **two independent choices** — the runner is orthogonal to the code host (see
+`docs/SPEC.md` → *"Runner vs code host"*):
 
-This is the step-by-step for adopting open-autonomy on the **local** substrate: the autonomous
-loop runs on *your* machine against a repo on disk, with **no GitHub, no GitHub Actions, and no
-hosted model proxy**. This is the path for a **closed-source** project you don't want to push to
-GitHub.
+- **Runner** — *where the agents execute*: **GitHub Actions** (hosted jobs) or **local** (your machine,
+  via the termfleet SDK, using your own logged-in coding CLI).
+- **Code host** — *where the code lives and how a change lands*: **GitHub** (the agent opens a PR; `ci` +
+  an independent `agent-review` status gate **native auto-merge**) or **local-git** (a tracker board on
+  disk, PR-free — no GitHub at all).
 
-How local differs from the GitHub substrate:
+A profile declares which combinations it supports (`targets` × `codeHost`). The three setups people use:
 
-- Work runs in local terminal sessions (via [termfleet](https://github.com/volter-ai/termfleet)),
-  not GitHub Actions jobs.
-- Agents use **your own logged-in coding CLI** (Claude Code or Codex) for model access — there is
-  no bounded-token proxy and no sponsor budget. **You pay your model provider directly.**
-- Work items come from a **local tracker on disk** (e.g. [ztrack](https://github.com/volter-ai/ztrack)),
-  not GitHub issues.
+| Setup | Runner | Code host | Profile | Read |
+|---|---|---|---|---|
+| **Hosted** | GitHub Actions | GitHub | `self-driving` · `simple-gh-sdlc` | [GitHub production rollout](#github-production-rollout) |
+| **Local agents → GitHub PRs** | local | GitHub | `simple-gh-sdlc` | [Local-runner quickstart](#local-runner-quickstart) → *GitHub code host* |
+| **Fully local** | local | local-git | `simple-sdlc` (or `hello`) | [Local-runner quickstart](#local-runner-quickstart) → *local-git code host* |
 
-If you just want to *see the loop fire* with zero tracker setup, use the `hello` profile (a single
-cron agent). For a real software-delivery loop (PM → draft → develop → review), use `simple-sdlc`.
+The **runner steps are identical** for both local setups (prereqs → termfleet → compile → run the loop);
+only **how you feed it work and how a change lands** differ by code host. That split is exactly steps 1–4
+(shared) vs step 5 (per code host) below.
+
+> Installing onto an **existing** repo is an *overlay*: `simple-gh-sdlc` / `simple-sdlc` ship only
+> OA-specific files (`scripts/`, `.claude/skills/`, `scheduler/`, `.open-autonomy/`, `standards/`,
+> `.github/workflows/merge.yml`), so `compile … .` is purely additive — it does **not** generate a
+> `package.json`, `README`, or `.gitignore` over yours. You still merge the runner's deps into your repo
+> (`npm install termfleet`, `npm install -D ztrack`) — step 1 below.
+
+---
+
+## Local-runner quickstart
+
+Run the **agents on your own machine** — as local terminal sessions via
+[termfleet](https://github.com/volter-ai/termfleet), using *your own* logged-in coding CLI (Claude Code
+or Codex) for model access (no bounded-token proxy, no sponsor budget — **you pay your model provider
+directly**). This is the **local runner**. It works against **either code host**:
+
+- **local-git** (`simple-sdlc`) — fully closed-source: work comes from a local
+  [ztrack](https://github.com/volter-ai/ztrack) board on disk, a change is `done` PR-free, **no GitHub at
+  all**. The path for a private project you won't push.
+- **GitHub** (`simple-gh-sdlc`) — agents run on your machine, but a change lands as an **auto-merging PR
+  on GitHub** gated by `ci` + an independent `agent-review` status. The path for an open/team repo whose
+  agents you want on your own machine and model subscription.
+
+**Steps 1–4 (prereqs → termfleet → compile → run) are identical** for both; only **step 5 — how you feed
+work and how a change lands** — differs by code host. If you just want to *see the loop fire* with zero
+tracker setup, use the `hello` profile (a single cron agent).
 
 ### 1. Prerequisites
 
@@ -86,22 +116,27 @@ If that prints a session, termfleet + your agent CLI are wired correctly. Open
 
 ### 3. Compile a profile into your repo
 
-From inside the repo you want the loop to maintain:
+From inside the repo you want the loop to maintain — pick the profile for your **code host**:
 
 ```bash
-cd my-closed-source-repo
+cd my-repo
 
-# Option A — minimal demo: one cron "greeter" agent, no tracker needed.
+# Minimal demo: one cron "greeter" agent, no tracker, no code host.
 npx open-autonomy compile hello local .
 
-# Option B — a real four-agent SDLC loop (PM / draft / develop / review).
+# local-git code host — fully local, PR-free, no GitHub (the four-agent PM/draft/develop/review loop).
 npx open-autonomy compile simple-sdlc local .
+
+# GitHub code host — agents run locally, changes land as auto-merging PRs on GitHub.
+npx open-autonomy compile simple-gh-sdlc local .
 ```
 
-This lays down `scheduler/` (the loop driver + schedule), `scripts/` (the local runner), and the
-agent skills under `.claude/skills/` and `.codex/skills/`. No clone of this repo is required —
-`npx open-autonomy …` runs the published CLI. (`self-driving` is GitHub-only; on local use `hello`
-or `simple-sdlc`, or your own profile dir.)
+This is an **overlay**: it lays down `scheduler/` (the loop driver + schedule), `scripts/` (the local
+runner), the agent skills under `.claude/skills/` + `.codex/skills/`, `standards/`, and `.open-autonomy/`
+— and, for the GitHub code host, `.github/workflows/merge.yml` (the auto-merge reconcile). It generates
+**no** `package.json` / `README` / `.gitignore`, so it's safe to run over an existing repo. No clone of
+this repo is required — `npx open-autonomy …` runs the published CLI. (`self-driving` also compiles to
+`local`; `simple-sdlc` is local-git only.)
 
 ### 4. Run the loop
 
@@ -120,10 +155,14 @@ TERMFLEET_AGENT=codex node scheduler/run.mjs
 With the `hello` profile, the first `--once` tick launches a `greeter` session — you'll see it in
 `termfleet sessions recent --live` and the console. That confirms the whole local path works.
 
-### 5. Give the loop work (`simple-sdlc`)
+### 5. Give the loop work — by code host
 
-The `hello` greeter self-fires on cron and needs no input. A real loop needs a backlog. The
-`simple-sdlc` agents read work from a local **ztrack** tracker on disk (no GitHub):
+The `hello` greeter self-fires on cron and needs no input. A real loop needs a backlog. **How you feed
+work and how a change lands depends on the code host** you compiled in step 3.
+
+#### local-git code host (`simple-sdlc`) — PR-free, no GitHub
+
+The agents read work from a local **ztrack** board on disk:
 
 ```bash
 npm install -D ztrack                       # a PROJECT dep, not -g: the installed validation preset
@@ -133,30 +172,62 @@ npx ztrack init --preset simple-sdlc        # the PR-free dev preset (the `defau
 npx ztrack issue create                     # add a work item (repeat for each task)
 ```
 
-The `simple-sdlc` ztrack preset is **PR-free**: an issue is `done` once every AC is passed with
-commit-evidence and the reviewer approves — no pull request, so it works on a private repo with no
-remote. On its next tick the PM sweeps the ztrack board, enforces WIP, and **launches** the matching
-worker (draft/develop/review) for the next eligible issue, moving it `draft → ready → in-progress →
-in-review → done`. The work item reaches each worker as `$ZTRACK_ISSUE`. You add and inspect work
-entirely through `ztrack` — `ztrack issue view <id>`, `ztrack check` — never through GitHub.
+The `simple-sdlc` preset is **PR-free**: an issue is `done` once every AC is passed with commit-evidence
+and the reviewer approves — no pull request, so it works on a private repo with no remote. On its next
+tick the PM sweeps the board, enforces WIP, and **launches** the matching worker (draft/develop/review)
+for the next eligible issue, moving it `draft → ready → in-progress → in-review → done`. The work item
+reaches each worker as `$ZTRACK_ISSUE`. You add and inspect work entirely through `ztrack` — never GitHub.
 
-> Using a different tracker? `simple-sdlc`'s agents are just skills that call `ztrack`. To use your
-> own tooling, fork the profile (`profiles/simple-sdlc/skills/*`) and point the agents at your CLI,
-> then compile your profile dir: `npx open-autonomy compile ./my-profile local .`.
+> Using a different tracker? `simple-sdlc`'s agents are just skills that call `ztrack`. Fork the profile
+> (`profiles/simple-sdlc/skills/*`), point the agents at your CLI, then compile your profile dir.
 
-### What's GitHub-only (not available locally)
+#### GitHub code host (`simple-gh-sdlc`) — auto-merging PRs, agents on your machine
 
-The local substrate runs the same agent loop, but a few controls in the README are GitHub-specific:
+Here the board is **GitHub issues** and a change lands as an **auto-merging PR** — the same merge
+boundary as the hosted setup, just with the agents running on your machine. Wire the gate **once** (this
+is what makes auto-merge safe — never skip it):
 
-- **`/agent` operator commands** (pause/resume/status/retry/cancel via issue comments) are a GitHub
-  control plane. Locally you steer the fleet with termfleet directly — `termfleet sessions recent`,
-  `termfleet <agent> get|wait`, kill a session from the console — and by editing the tracker board.
-- **The bounded model-token proxy + sponsor budget** is GitHub-only. Locally there is no spend cap
-  from open-autonomy; your model provider bills you for whatever the agents consume. Watch
-  `termfleet sessions recent --live` and stop the loop (`Ctrl-C` / kill the agents) to bound spend.
-- **CI + independent reviewer status checks → native auto-merge** is the GitHub merge boundary.
-  Locally there is no auto-merge; the `review` agent gates a change in the tracker, and you decide
-  what to do with the agent's branch/commits.
+```bash
+# a) the tracker, linked to GitHub Issues (GitHub is the source of truth)
+npm install -D ztrack
+npx ztrack init --preset simple-gh-sdlc --sync github --repo <owner>/<repo>
+
+# b) require the gate in branch protection: YOUR real CI check(s) + the agent's `agent-review`,
+#    and enable native auto-merge. Use your CI's actual check NAME(s) (e.g. `ci`, or `build`+`test`).
+gh repo edit <owner>/<repo> --enable-auto-merge
+gh api -X PUT repos/<owner>/<repo>/branches/main/protection --input - <<'JSON'
+{ "required_status_checks": { "strict": false, "contexts": ["<your-ci-check>", "agent-review"] },
+  "enforce_admins": false, "required_pull_request_reviews": null, "restrictions": null }
+JSON
+
+# c) add a Ready issue (open + `ready` label + assignee + ACs in the body), then sync
+npx ztrack issue create   # ... ; then: gh issue edit <n> --add-label ready
+```
+
+On its next tick the PM sweeps GitHub, and for a `ready` issue **launches the developer in an isolated
+worktree** (`runner.ts launch developer --ref <n> --branch agent/issue-<n>`). The developer commits, the
+runner opens the PR, the **reviewer** posts `agent-review`, and once **your CI (`ci`/`build`/…) + `agent-review`**
+are green, GitHub **native auto-merge** lands it. No agent ever merges — the merge boundary is branch
+protection, not the agents. **Require your real CI in branch protection**: with only `agent-review`
+required, you would be auto-merging on the reviewer's say-so alone.
+
+> Identity: for the merge boundary to be real, the agents should act as a **bot identity** (a GitHub App
+> / dedicated account) distinct from the human maintainer — GitHub forbids a user approving their own PR,
+> so a single identity collapses the *agent proposes / human approves* boundary.
+
+### What depends on the code host vs the runner
+
+The agent loop is the same everywhere; a few controls vary by **axis** (runner ⟂ code host):
+
+- **Native auto-merge** is a **GitHub code-host** feature — available on a **local runner** too
+  (`simple-gh-sdlc local`), *not* a GitHub-Actions-only thing. A **local-git** code host (`simple-sdlc`)
+  has no PRs: the `review` agent gates the change on the tracker board and you take the agent's branch.
+- **`/agent` operator commands** (pause/resume/status/retry via issue comments) are a **GitHub
+  code-host** control plane. On a local-git board you steer with termfleet directly
+  (`termfleet sessions recent`, `termfleet <agent> get|wait`, kill from the console) and the board.
+- **The bounded model-token proxy + sponsor budget** is a **GitHub-Actions runner** feature. On the
+  **local runner** there is no spend cap from open-autonomy (either code host) — your model provider
+  bills you; watch `termfleet sessions recent --live` and stop the loop to bound spend.
 
 ### Troubleshooting
 

@@ -5,7 +5,10 @@
 # ztrack `simple-gh-sdlc` preset (PR at in-review, merged PR for done). One unit: an agent = behavior +
 # capabilities + triggers(+params) (+ review edge). See docs/SPEC.md#the-ir, docs/SPEC.md#the-runner.
 schema: autonomy.ir.v1
-targets: [gh-actions]
+# Runs on EITHER runner over a GitHub code host (runner ⟂ code host): `gh-actions` (agents run as Actions
+# jobs) or `local` (agents run on your machine via termfleet, still opening auto-merging PRs on GitHub).
+# Declaring both keeps `check:profiles` compiling simple-gh-sdlc to local too, catching substrate drift.
+targets: [gh-actions, local]
 codeHost: github
 
 agents:

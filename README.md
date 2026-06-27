@@ -39,41 +39,40 @@ Read [`docs/SPEC.md`](./docs/SPEC.md) for the full model and conformance contrac
 
 ## Run it on your repo
 
-Same profile, two substrates. Pick by **where you want the agents to run** — install with one
-`npx` command (no clone required):
+Two **independent** choices (a profile compiles to any valid combination — install with one `npx`
+command, no clone required):
 
-### GitHub Actions — public or team repos
+- **Runner** — *where agents execute*: **GitHub Actions** (hosted jobs) or **local** (your machine,
+  via [termfleet](https://github.com/volter-ai/termfleet), using your own logged-in Claude Code / Codex).
+- **Code host** — *where code lives and how it merges*: **GitHub** (the agent opens a PR; CI + an
+  independent reviewer gate **native auto-merge**) or **local-git** (a tracker on disk, PR-free — no GitHub).
 
-Agents run as GitHub Actions jobs; CI + an independent reviewer gate **native auto-merge**; you steer
-with `/agent` issue comments. Model access is bounded by a hosted token proxy. Best when your repo
-already lives on GitHub.
+The runner is orthogonal to the code host: you can run agents on your own machine and still land
+auto-merging PRs on GitHub. Three setups people actually use:
 
-```bash
-cd my-repo
-npx open-autonomy compile self-driving github .
-```
-
-Then wire it up with [`docs/OPERATIONS.md`](./docs/OPERATIONS.md#github-production-rollout)
-(repo variables/secrets, the model proxy, branch protection).
-
-### Local — closed-source, on your machine
-
-**No GitHub, no Actions, no hosted proxy.** Agents run as local terminal sessions via
-[termfleet](https://github.com/volter-ai/termfleet), using *your own* logged-in Claude Code (or
-Codex) CLI — so your model provider bills you directly. Work comes from a local tracker on disk, not
-GitHub issues. Best for a private/closed-source repo.
+| Setup | Runner | Code host | Profile | Best for |
+|---|---|---|---|---|
+| **Hosted** | GitHub Actions | GitHub | `self-driving` / `simple-gh-sdlc` | public/team repos — fully autonomous in the cloud, `/agent` issue-comment control, a bounded model-token proxy |
+| **Local agents, GitHub PRs** | local | GitHub | `simple-gh-sdlc` | run the agents on *your* machine/IP & your own model subscription, but still get PRs + native auto-merge on GitHub |
+| **Fully local** | local | local-git | `simple-sdlc` | closed-source — no GitHub at all; work comes from a local `ztrack` board, PR-free |
 
 ```bash
 cd my-repo
-npx open-autonomy compile simple-sdlc local .   # or `hello` for a zero-tracker demo
-node scheduler/run.mjs                           # after termfleet + CLI sign-in (see the guide)
+
+# Hosted (GitHub Actions runner, GitHub code host):
+npx open-autonomy compile self-driving gh-actions .   # then wire repo vars/secrets + branch protection
+
+# Local agents → GitHub PRs (local runner, GitHub code host):
+npx open-autonomy compile simple-gh-sdlc local .       # agents on your machine; PRs auto-merge on GitHub
+
+# Fully local (local runner, local-git code host):
+npx open-autonomy compile simple-sdlc local .          # no GitHub; or `hello` for a zero-tracker demo
 ```
 
-Full step-by-step (termfleet console/provider, agent sign-in, feeding the loop work) →
-[**`docs/OPERATIONS.md`**](./docs/OPERATIONS.md#local-quickstart).
-
-> `self-driving` (open-autonomy's own recipe) is GitHub-only; on local use `simple-sdlc`, `hello`,
-> or your own profile dir. See [the CLI](#the-open-autonomy-cli) for all verbs and options.
+Full step-by-step for every setup (termfleet console/provider, agent sign-in, the merge gate, feeding
+the loop work) → [**`docs/OPERATIONS.md`**](./docs/OPERATIONS.md#install--operate). `self-driving` and
+`simple-gh-sdlc` run on **either** runner; `simple-sdlc` is local-git (no code host). See
+[the CLI](#the-open-autonomy-cli) for all verbs and options.
 
 ## What it does (the GitHub substrate)
 
@@ -139,16 +138,16 @@ bun is not required to *use* it. From a clone (bun-native, runs TypeScript direc
 or `bun bin/open-autonomy.ts <verb>`. The published bundle is produced by `bun run build`.
 
 To adopt open-autonomy into your own repo, compile a profile into it — see
-[**Run it on your repo**](#run-it-on-your-repo) for the GitHub vs local fork and the follow-up guides
-([`OPERATIONS.md`](./docs/OPERATIONS.md#github-production-rollout) for GitHub,
-[`OPERATIONS.md`](./docs/OPERATIONS.md#local-quickstart) for local). From a clone, a profile *path* also
-works: `open-autonomy compile profiles/self-driving github ../my-repo`.
+[**Run it on your repo**](#run-it-on-your-repo) for the runner ⟂ code-host setups and the follow-up
+guides ([`OPERATIONS.md`](./docs/OPERATIONS.md#github-production-rollout) for the GitHub Actions runner,
+[`OPERATIONS.md`](./docs/OPERATIONS.md#local-runner-quickstart) for the local runner). From a clone, a
+profile *path* also works: `open-autonomy compile profiles/self-driving gh-actions ../my-repo`.
 
 ## Operator commands
 
-These are the **GitHub substrate's** control plane (issue comments). Running local? You steer the
-fleet with termfleet directly and the tracker board instead — see
-[`docs/OPERATIONS.md`](./docs/OPERATIONS.md#local-quickstart).
+These are the **GitHub code host's** control plane (issue comments). On a local-git board you steer the
+fleet with termfleet directly and the tracker instead — see
+[`docs/OPERATIONS.md`](./docs/OPERATIONS.md#local-runner-quickstart).
 
 Operator commands work only for maintainers (repo OWNER/MEMBER/COLLABORATOR); a comment from anyone
 else is ignored. To launch an agent by comment, name it: `/agent <agent>` (the workflow name).

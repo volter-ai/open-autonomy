@@ -187,26 +187,34 @@ reaches each worker as `$ZTRACK_ISSUE`. You add and inspect work entirely throug
 
 #### GitHub code host (`simple-gh-sdlc`) — auto-merging PRs, agents on your machine
 
-Here the board is **GitHub issues** and a change lands as an **auto-merging PR** — the same merge
-boundary as the hosted setup, just with the agents running on your machine. Wire the gate **once** (this
-is what makes auto-merge safe — never skip it):
+Here the board is **GitHub issues** and a change lands as an **auto-merging PR**. Wire the gate **once**
+(use your repo's package manager — `npm`/`bun`/`pnpm` — for the installs; examples show `npm`):
 
 ```bash
 # a) the tracker, linked to GitHub Issues (GitHub is the source of truth)
-npm install -D ztrack
+npm install -D ztrack    # or: bun add -d ztrack
 npx ztrack init --preset simple-gh-sdlc --sync github --repo <owner>/<repo>
 
 # b) require the gate in branch protection: YOUR real CI check(s) + the agent's `agent-review`,
-#    and enable native auto-merge. Use your CI's actual check NAME(s) (e.g. `ci`, or `build`+`test`).
+#    and enable native auto-merge. The contexts are the CI check-run NAMES that run on PULL REQUESTS
+#    (read them from a recent PR, NOT the default-branch push; exclude release-only checks).
 gh repo edit <owner>/<repo> --enable-auto-merge
-gh api -X PUT repos/<owner>/<repo>/branches/main/protection --input - <<'JSON'
-{ "required_status_checks": { "strict": false, "contexts": ["<your-ci-check>", "agent-review"] },
-  "enforce_admins": false, "required_pull_request_reviews": null, "restrictions": null }
+gh api -X PUT "repos/<owner>/<repo>/branches/<default-branch>/protection" --input - <<'JSON'
+{ "required_status_checks": { "strict": false, "contexts": ["<pr-ci-check>", "agent-review"] },
+  "enforce_admins": true, "required_pull_request_reviews": null, "restrictions": null }
 JSON
 
 # c) add a Ready issue (open + `ready` label + assignee + ACs in the body), then sync
 npx ztrack issue create   # ... ; then: gh issue edit <n> --add-label ready
 ```
+
+> **You must have a CI check that runs on PRs.** If your repo has none, `contexts` would be just
+> `["agent-review"]` — and on a local runner the agents share *your* token (no scoped split), so the
+> reviewer's `agent-review` is **not independent** of the proposer. With no real CI in the gate you would
+> be auto-merging agent-written code with no independent check at all. Add a real CI check first, or don't
+> enable auto-merge. `enforce_admins:true` is deliberate: it binds the gate even to the admin identity the
+> local agents run as (with it `false`, an agent could `gh pr merge --admin` / push to the branch and
+> bypass the gate). See the safety section in [`INSTALL-AGENT.md`](./INSTALL-AGENT.md#the-merge-boundary-and-what-it-does-not-give-you-on-local).
 
 On its next tick the PM sweeps GitHub, and for a `ready` issue **launches the developer in an isolated
 worktree** (`runner.ts launch developer --ref <n> --branch agent/issue-<n>`). The developer commits, the
@@ -369,7 +377,7 @@ Release checklist:
 1. Update `VERSION`, `.open-autonomy/version.json`, and `CHANGELOG.md`.
 2. Run `bun run check`.
 3. Run planner and preflight workflows on `main`.
-4. Compile into a clean directory (`bun bin/open-autonomy.ts compile profiles/self-driving github <dir>`)
+4. Compile into a clean directory (`bun bin/open-autonomy.ts compile profiles/self-driving gh-actions <dir>`)
    and run its `bun run check`.
 5. Verify the committed release evidence in [`docs/PROOF_LEDGER.md`](./PROOF_LEDGER.md).
 6. Tag the release as `vX.Y.Z`.

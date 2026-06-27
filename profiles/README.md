@@ -46,7 +46,8 @@ bun bin/autonomy-compile.ts profiles/hello github /tmp/hello-gh
   Same ztrack-tracked dispatch loop, but the merge boundary is GitHub's: `develop` (`code:propose`) lands
   its change as an auto-merging PR gated by an independent `reviewer` (`code:review` → `agent-review`) —
   the permission split, native auto-merge, done = merged PR (self-driving's merge model on a generic
-  ztrack SDLC). Targets `github`; uses the ztrack `simple-gh-sdlc` preset.
+  ztrack SDLC). Targets **`gh-actions` + `local`** (runner ⟂ code host — agents on Actions *or* your
+  machine, auto-merging PRs on GitHub either way); uses the ztrack `simple-gh-sdlc` preset.
 
 Every profile in this directory is smoke-checked by `check:profiles` (parses + compiles to each
 declared target). A profile's agents pick their own **tooling** (`ztrack`, or `gh` + `npm`); the core

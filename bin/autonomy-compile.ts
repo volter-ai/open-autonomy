@@ -76,7 +76,7 @@ if (outDir) {
         `       npx termfleet provider serve --kind virtual-tmux --prefix dev --count 1 --port 7402 &\n` +
         tracker +
         `  ${tracker ? 5 : 4}. Run the loop:  ${cd}node scheduler/run.mjs --once   (one tick)  |  node scheduler/run.mjs   (continuous)\n` +
-        `  Full guide: https://github.com/volter-ai/open-autonomy/blob/main/docs/OPERATIONS.md#local-quickstart`,
+        `  Full guide: https://github.com/volter-ai/open-autonomy/blob/main/docs/OPERATIONS.md#local-runner-quickstart`,
     );
   }
 } else {

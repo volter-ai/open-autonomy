@@ -18,7 +18,7 @@ const HELP = `open-autonomy <command> [args]
   conformance <exec|termfleet|gh-actions> [probeAgent]          run the substrate conformance battery
   upgrade --profile <dir> --target <dir> [--apply]              re-compile an installation in place (dry run without --apply)
 
-Adopt into the current repo:  npx open-autonomy compile self-driving gh-actions .  (bundled profiles: self-driving, simple-sdlc, hello; "github" still accepted)
+Adopt into the current repo:  npx open-autonomy compile self-driving gh-actions .  (bundled profiles: self-driving, simple-gh-sdlc, simple-sdlc, hello; "github" still accepted)
 
 Run a subcommand with no/invalid arguments to see its specific usage.`;
 

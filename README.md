@@ -9,9 +9,10 @@ gated, merged changes, produced by bounded AI agents under **deterministic guard
 It is **substrate-agnostic** — the same setup compiles onto **GitHub Actions** or onto a **local**
 machine loop. The repo also runs open-autonomy against itself (it's its own first user).
 
-**Want to run it on your own repo?** Jump to [**Run it on your repo**](#run-it-on-your-repo) — it
-forks into **GitHub Actions** (public/team repos) and **fully local** (closed-source, your machine,
-no GitHub). If you have a private codebase you won't push to GitHub, the local path is for you.
+**Want to run it on your own repo?** Jump to [**Run it on your repo**](#run-it-on-your-repo) — two
+independent axes (**runner**: GitHub Actions or your machine; **code host**: GitHub PRs+auto-merge or a
+local-git board), so three setups: fully hosted, **local agents → auto-merging GitHub PRs**, or fully
+local (closed-source, no GitHub).
 
 ## The model
 
@@ -131,12 +132,12 @@ bun run autonomy conformance exec   # check the Runner contract on the reference
 One command is the front door — `open-autonomy <verb>` (alias `oa`):
 
 ```bash
-open-autonomy compile <profileName|profileDir> <local|github> [outDir]   # compile a profile onto a substrate
+open-autonomy compile <profileName|profileDir> <local|gh-actions> [outDir]   # compile a profile onto a substrate ("github" still accepted)
 open-autonomy conformance <exec|termfleet|github>                        # run the substrate conformance battery
 open-autonomy upgrade --profile <dir> --target <dir> [--apply]           # re-compile an installation in place
 ```
 
-The first argument is a **bundled profile name** (`self-driving`, `simple-sdlc`, `hello` — shipped with the
+The first argument is a **bundled profile name** (`self-driving`, `simple-gh-sdlc`, `simple-sdlc`, `hello` — shipped with the
 package) or a path to your own profile dir. No clone required once published — `npx open-autonomy <verb>`
 (or `bunx open-autonomy <verb>`). The published package is a self-contained Node bundle, so plain Node works;
 bun is not required to *use* it. From a clone (bun-native, runs TypeScript directly): `bun run autonomy <verb>`

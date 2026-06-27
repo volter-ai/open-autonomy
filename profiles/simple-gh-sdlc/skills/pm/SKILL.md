@@ -54,15 +54,23 @@ without you.
    - Open agent PRs: `gh pr list --state open --json number,headRefName,labels,statusCheckRollup,mergeable,mergeStateStatus`
      (a PR's `agent/issue-<n>` branch ties it to issue `<n>`).
    - In-flight develop runs: `bun scripts/runner.ts list develop`.
+   - **For an issue you might rework** (its PR has a failed check or a conflict), read its **comment history**:
+     `gh issue view <n> --json comments`. Your own prior relaunch comments are the ONLY record of how many
+     times this issue has been attempted — without them you cannot honor the rework cap below.
 2. **Respect WIP** from `workflow.md` (at most one develop in flight).
 3. **Take exactly one action**, choosing the first eligible issue:
    - **Issue has an open agent PR** → it's in review. If its `agent-review` check is
      missing/pending and `ci` is not failing, leave it (the substrate triggers the
      reviewer on the PR). If a check **failed** or it has a **merge conflict**
-     (`mergeStateStatus: DIRTY`), that's rework — re-launch develop for that issue's
-     number with a comment naming the failure, respecting `max_develop_attempts`
-     (`.open-autonomy/autonomy.yml`); never loop. Do NOT open a second PR for an issue
-     that already has one.
+     (`mergeStateStatus: DIRTY`), that's rework — but **ENFORCE THE CAP FIRST so a
+     broken issue can't loop forever burning model spend**: read `max_develop_attempts`
+     from `.open-autonomy/autonomy.yml` (default **2**) and count your prior
+     develop-relaunch comments on this issue (from the comments you fetched in step 1).
+     - **attempts ≥ the cap**, or the failure is unclear/repeating → do **NOT** relaunch.
+       **Stop and escalate**: comment the situation and label the issue `human-required`.
+     - **below the cap** with a clear, addressable failure → re-launch develop for that
+       issue's number with a comment naming the exact failure to fix.
+     Never loop. Do NOT open a second PR for an issue that already has one.
    - **Issue is `ready` (label), open, and WIP allows** → before launching, confirm `agent/issue-<number>`
      has **no PR yet in ANY state**: `gh pr list --head "agent/issue-<number>" --state all --json number,state`.
      - A **merged** PR exists → the work is already done; the issue is merely auto-closing (a brief GitHub

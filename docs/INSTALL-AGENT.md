@@ -111,7 +111,8 @@ Ask as one batch, each with your recommended default. **If a Phase-1 stop condit
 it gates everything.**
 
 1. **The merge gate (safety-critical) — and what it does *not* enforce on local.** "Your `<default-branch>`
-   will require **`<pr-ci-checks>` + `agent-review`** with **`enforce_admins:true`** and native auto-merge.
+   will require **`<pr-ci-checks>` + `agent-review`** with **`enforce_admins:true`**; once you've watched one
+   PR merge under supervision, native auto-merge is armed so green PRs land without you.
    **No human review is required to merge** (`required_pull_request_reviews: null`), and on the local
    runner the agents share your token so `agent-review` is *not* an independent reviewer — your **CI is the
    real gate**. Confirm these are the right required checks, and that you accept CI-as-the-gate without a
@@ -157,26 +158,34 @@ npx ztrack init --preset simple-gh-sdlc --sync github --repo <owner>/<repo>
 # 4. (Phase-2 #4) if skipping OA's net-new CI surface:
 #    rm -f .github/dependabot.yml .github/workflows/security.yml
 
-# 5. Commit the harness (Phase-2 #3) to the STILL-UNPROTECTED branch. Keep runtime scratch out:
-printf '\n# open-autonomy runtime\n.worktrees/\n.open-autonomy/runner-state/\n' >> .gitignore
-git add -A && git commit -m "chore: install open-autonomy (simple-gh-sdlc, local runner)"
+# 5. Commit the harness (Phase-2 #3) to the STILL-UNPROTECTED branch. Keep runtime scratch out (guard the
+#    append so a re-run doesn't duplicate it). Stage the overlay paths EXPLICITLY — never `git add -A`, which
+#    would sweep in any unrelated/secret files dirty in the human's tree and push them to the default branch:
+grep -q '^.worktrees/$' .gitignore || printf '\n# open-autonomy runtime\n.worktrees/\n.open-autonomy/runner-state/\n' >> .gitignore
+git add .claude .codex .github scheduler scripts standards .open-autonomy .volter .gitignore package.json *.lock* 2>/dev/null
+git commit -m "chore: install open-autonomy (simple-gh-sdlc, local runner)"
 git push
 
-# 6. NOW wire the gate (Phase-2 #1). Set BRANCH PROTECTION FIRST, verify it took, THEN enable auto-merge —
-#    so a failed protection PUT (e.g. private repo on a free plan: 403) never leaves auto-merge on WITHOUT a
-#    gate. Fill contexts with your detected PR checks + agent-review; DO NOT leave a <...> placeholder literal
-#    (a context that never reports DEADLOCKS every PR). e.g. contexts: ["build","acceptance","agent-review"]
+# 6. Set BRANCH PROTECTION (the gate). NOT auto-merge yet — that goes on in Phase 4 after you've watched one
+#    PR merge. Build the contexts in a SHELL VARIABLE so you can VALIDATE them, never a literal heredoc: a
+#    literal "<pr-ci-check-1>" is a non-empty context that never reports and DEADLOCKS every PR, and a
+#    contexts of just ["agent-review"] is the forbidden no-CI gate (on local the reviewer self-blesses).
+CHECKS='["build","acceptance","agent-review"]'   # <- your detected PR-CI check names + agent-review
+echo "$CHECKS" | grep -q '<' && { echo "ABORT: unfilled placeholder in contexts"; exit 1; }
+echo "$CHECKS" | jq -e 'map(select(. != "agent-review")) | length >= 1' >/dev/null \
+  || { echo "ABORT: no real CI check in the gate (agent-review alone is not a gate on local)"; exit 1; }
 gh api -X PUT "repos/<owner>/<repo>/branches/<default-branch>/protection" --input - <<JSON
-{ "required_status_checks": { "strict": false, "contexts": ["<pr-ci-check-1>", "agent-review"] },
+{ "required_status_checks": { "strict": false, "contexts": $CHECKS },
   "enforce_admins": true, "required_pull_request_reviews": null, "restrictions": null }
 JSON
-# verify protection is in place (non-empty contexts) BEFORE enabling auto-merge — if this errors, STOP:
+# confirm protection took (errors on a free private plan / non-admin → STOP and tell the human):
 gh api "repos/<owner>/<repo>/branches/<default-branch>/protection/required_status_checks/contexts" --jq '.'
-gh repo edit <owner>/<repo> --enable-auto-merge
 
-# 7. Start termfleet + sign in to the coding CLI BEFORE running the loop (verify a session can launch):
-npx termfleet console serve --name dev --port 7373 &
-npx termfleet provider serve --kind virtual-tmux --prefix dev --count 1 --port 7402 &
+# 7. Start termfleet + sign in to the coding CLI BEFORE running the loop. Re-use a running console/provider if
+#    one is up (one provider is GLOBAL across repos) — a second `serve` on a bound port fails silently behind
+#    `&`. Check first; use a repo-unique --prefix/--port if you run your own:
+curl -fsS http://127.0.0.1:7373/ >/dev/null 2>&1 || npx termfleet console serve --name dev --port 7373 &
+npx termfleet provider serve --kind virtual-tmux --prefix dev --count 1 --port 7402 &   # skip if already serving
 #   claude → /login    then sanity-check:  npx termfleet claude new --prompt "say hi"
 ```
 
@@ -195,13 +204,17 @@ Assignee: <login>
   - status: pending
 MD
 npx ztrack issue create --title "<first issue>" --body-file issue.md --state ready --assignee <login>
-npx ztrack sync github
+npx ztrack sync github                       # THIS creates the GitHub issue (ztrack create only made a local id)
+# capture the GITHUB issue number — `ztrack create` returned a ztrack id (ZT-1), NOT the GH number, and the
+# PM keys on the `ready` LABEL, so the issue MUST be labeled or the loop silently skips it forever:
+n=$(gh issue list -R <owner>/<repo> --state open --search "<first issue> in:title" --json number --jq '.[0].number')
 gh label create ready -R <owner>/<repo> --color 0e8a16 2>/dev/null
-gh issue edit <n> -R <owner>/<repo> --add-label ready
+gh issue edit "$n" -R <owner>/<repo> --add-label ready
 ```
 
-> **Point of no return.** The gate is now live: the next green PR **auto-merges into `<default-branch>`
-> with no human approval**. Watch the first one to completion (Phase 4) before walking away.
+> **Note on the gate.** Branch protection is live, but **auto-merge is NOT enabled yet** — you turn it on in
+> Phase 4 *after* watching one PR merge under supervision. So nothing auto-merges into `<default-branch>`
+> until you've proven the gate end-to-end.
 
 ---
 
@@ -223,10 +236,27 @@ gh api repos/<owner>/<repo>/commits/agent/issue-<n>/status \
 npx termfleet sessions recent --live                                       # the live agent sessions
 ```
 
-**Done looks like:** PM → developer in an isolated worktree → committed on `agent/issue-<n>` → **one** PR
-→ `agent-review=success` → **your CI green** → native auto-merge landed it → the issue closed (a
-`merge.yml` reconcile closes it if the `Closes #n` keyword lags). One PR, merged, issue closed, your tests
-green. That is a proven install.
+The PR won't appear the instant the developer stops — on local it opens after the develop session goes idle
+and is reaped (tens of seconds to minutes), then the reviewer launches. (You'll also see benign
+`ci dispatch failed (non-fatal)` log lines: the proposer optimistically kicks a `ci.yml`/`human-approval.yml`
+that a `simple-gh-sdlc` install doesn't ship — harmless, because the PAT-opened PR fires *your own* CI.)
+
+**The supervised first merge (then arm auto-merge):** once the PR shows `agent-review=success` **and your
+CI green**, merge this first one **yourself** to prove the gate end-to-end:
+
+```bash
+gh pr merge <pr> -R <owner>/<repo> --squash    # the supervised first merge (gate must be green)
+```
+
+Confirm it landed and the issue closed (a `merge.yml` reconcile closes it if the `Closes #n` keyword lags).
+**Only now enable native auto-merge** for ongoing operation:
+
+```bash
+gh repo edit <owner>/<repo> --enable-auto-merge   # from here, green PRs land without you — see Durable operation
+```
+
+**Done looks like:** one PR, gated by your CI + `agent-review`, merged, issue closed, your tests green —
+proven *before* auto-merge went live. That is a proven install.
 
 ---
 
@@ -244,6 +274,60 @@ green. That is a proven install.
 - **Slow/flaky CI** — auto-merge *waits* for required checks; a 30-min suite means a 30-min verify loop, a
   flaky required check leaves PRs un-merged. Set expectations; don't poll at 20s on a slow suite.
 - **Spend** — no OA cap on local; watch `termfleet sessions recent --live`, stop the loop to bound it.
+
+---
+
+## Durable operation, observability & re-runs
+
+Phase 4 proves *one* merge. For the loop to actually run a backlog over days, set these up — otherwise the
+"install" is an ephemeral demo that dies when the terminal closes.
+
+- **Make the loop durable.** `node scheduler/run.mjs &` dies on terminal close / logout / reboot. Run it
+  under a supervisor that restarts it: a `launchd` plist (macOS) / `systemd --user` unit (Linux), or at
+  minimum `nohup node scheduler/run.mjs >> ~/oa-loop.log 2>&1 &` inside a persistent `tmux`. Add a liveness
+  check (is the process up?). The same goes for the termfleet console/provider.
+- **Feed the backlog.** The loop runs whatever is `ready` on the GitHub board. Add work the same way as the
+  first issue (`ztrack issue create … --state ready` → `ztrack sync github` → label `ready`), or just open a
+  GitHub issue and add the `ready` label. WIP is 1, so issues are worked one at a time, in order.
+- **Observe + intervene on local (there is no `/agent` control plane locally).** The `/agent pause|retry|
+  cancel` issue-comment commands work only on the GitHub-Actions runner. On local you steer with: the board
+  (`gh issue list`, `gh pr list --json number,headRefName,statusCheckRollup,mergeStateStatus`), the live
+  sessions (`npx termfleet sessions recent --live`), and the worktrees (`ls .worktrees/`). To pause one
+  issue, remove its `ready` label or add a hold label your PM honors; to stop everything, kill the loop
+  process. A wedged issue caps at `max_develop_attempts` (now set in the profile) → the PM escalates instead
+  of looping forever.
+- **Idle spend.** Even with an empty board the PM wakes every tick (`*/15` → ~96 sessions/day) and bills your
+  model provider. Widen `scheduler/schedule.json` `intervalSeconds` or stop the loop when the backlog is
+  drained.
+- **Housekeeping the loop does NOT do for you (yet):** merged-issue worktrees under `.worktrees/agent/issue-*`
+  are not auto-pruned — `git worktree prune && rm -rf .worktrees/agent-issue-*` periodically.
+
+### Re-running / repairing the install (it is only partly idempotent)
+
+- **`ztrack init` is a silent no-op if `.volter/` already exists** — it will NOT (re)apply `--sync github`.
+  Never run a bare `ztrack init` first (OA's compile next-steps hint shows one); if the GitHub link is
+  missing, fix `.volter/config` directly rather than re-running init.
+- **Re-running `compile` overwrites the harness files** (including `.claude/settings.json`) and **re-creates
+  the `dependabot.yml`/`security.yml` you deleted in step 4** — re-run that `rm` after any re-compile.
+- **Interrupted between commit (step 5) and protection (step 6):** just re-run step 6 — the protection PUT is
+  idempotent. The runtime is crash-safe (effect markers replay; `agent-propose` refuses a branch with a
+  merged PR), so a restarted loop won't double-PR.
+
+### Teardown (how the human backs OA out)
+
+There is no one-command uninstall; reverse what the install armed:
+
+```bash
+# stop the loop + termfleet
+pkill -f scheduler/run.mjs ; pkill -f 'termfleet .* serve'
+# disarm the gate
+gh repo edit <owner>/<repo> --disable-auto-merge
+gh api -X DELETE "repos/<owner>/<repo>/branches/<default-branch>/protection"
+# remove the harness commit + runtime scratch
+git revert --no-edit <install-commit>   # or git rm the overlay paths; then push
+git worktree prune ; rm -rf .worktrees .open-autonomy/runner-state
+# (optional) uninstall the deps: npm remove termfleet ztrack
+```
 
 ---
 

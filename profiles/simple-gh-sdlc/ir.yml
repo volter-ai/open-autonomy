@@ -63,13 +63,22 @@ policy:
     wip:
       maxInProgress: 1
       maxInReview: 1
+    autonomy:
+      max_develop_attempts: 2   # the PM caps rework at this; without it a stuck issue re-launches develop forever
     risk:
+      # The OA harness itself is human-required: an agent must never auto-merge a change to the runner, the
+      # loop driver, the skills, the standards, or the manifest — that would let the loop rewrite/brick its own
+      # installation through the same (single-token, self-blessing) gate that lands ordinary changes.
       human_required_paths:
         - .github/workflows/**
         - .codex/skills/**
         - .claude/skills/**
         - profiles/**/skills/**
         - .volter/tracker/validation/**
+        - scripts/**
+        - scheduler/**
+        - standards/**
+        - .open-autonomy/**
       human_required_topics: [auth, secrets, billing, deployment, destructive data migration, dependency trust]
 
 # The shared standards every skill reads (carried verbatim into the installation).

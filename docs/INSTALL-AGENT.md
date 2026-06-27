@@ -76,9 +76,10 @@ PR=$(gh pr list --state open --limit 1 --json number --jq '.[0].number')
 [ -n "$PR" ] && gh api "repos/{owner}/{repo}/commits/$(gh pr view $PR --json headRefOid --jq .headRefOid)/check-runs" \
   --jq '[.check_runs[].name] | unique'
 #   (b) no open PR — read the workflows triggered `on: pull_request` and take each job's check name (its
-#       `name:` if set, else the job id), EXCLUDING any job gated `if: github.event_name == 'push'/'release'`
-#       or behind a `paths:` filter (those never run on a normal PR). These are CANDIDATE contexts — confirm
-#       at ask #1, since without an actual PR run the exact names are a best-guess (matrix jobs add suffixes):
+#       `name:` if set, else the job id), EXCLUDING any job that may SKIP on a normal PR: gated `if:` on
+#       `github.event_name == 'push'/'release'`, on `vars.*`/`secrets.*`/an environment, or behind a
+#       `paths:` filter. These are CANDIDATE contexts — confirm at ask #1, since without an actual PR run
+#       the exact names are a best-guess (matrix jobs add `(value)` suffixes):
 grep -rl 'pull_request' .github/workflows/ 2>/dev/null   # then read each: drop push-only/path-filtered jobs
 #   STOP CONDITION: if neither an OPEN PR nor any `pull_request`-triggered workflow exists, there is NO PR CI.
 

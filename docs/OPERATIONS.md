@@ -205,6 +205,8 @@ gh api -X PUT "repos/<owner>/<repo>/branches/<default-branch>/protection" --inpu
 { "required_status_checks": { "strict": false, "contexts": ["<pr-ci-check>", "agent-review"] },
   "enforce_admins": true, "required_pull_request_reviews": null, "restrictions": null }
 JSON
+# verify protection took (errors if it didn't — e.g. free private plan); only then enable auto-merge:
+gh api "repos/<owner>/<repo>/branches/<default-branch>/protection/required_status_checks/contexts" --jq '.'
 gh repo edit <owner>/<repo> --enable-auto-merge   # only after protection above succeeded
 
 # c) add a Ready issue (open + `ready` label + assignee + ACs in the body), then sync

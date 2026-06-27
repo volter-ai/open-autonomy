@@ -46,7 +46,9 @@ command, no clone required):
 - **Runner** — *where agents execute*: **GitHub Actions** (hosted jobs) or **local** (your machine,
   via [termfleet](https://github.com/volter-ai/termfleet), using your own logged-in Claude Code / Codex).
 - **Code host** — *where code lives and how it merges*: **GitHub** (the agent opens a PR; CI + an
-  independent reviewer gate **native auto-merge**) or **local-git** (a tracker on disk, PR-free — no GitHub).
+  `agent-review` status gate **native auto-merge** — the reviewer is independently *enforced* on the hosted
+  runner; on a local runner the agents share your token, so your CI is the real gate) or **local-git** (a
+  tracker on disk, PR-free — no GitHub).
 
 The runner is orthogonal to the code host: you can run agents on your own machine and still land
 auto-merging PRs on GitHub. Three setups people actually use:
@@ -89,6 +91,9 @@ issue or PM sweep -> developer (a credentialed skill agent, bounded model token)
   -> GitHub native auto-merge lands it (no agent can merge), or human-required escalation
 ```
 
+(The scoped-token reviewer independence above is the **hosted** substrate; a local runner runs the same
+loop with the agents on your token — see [`OPERATIONS.md`](./docs/OPERATIONS.md#local-runner-quickstart).)
+
 Operators steer it with `/agent` issue comments (see Commands). The `local` substrate runs the same
 loop with a scheduler loop + a termfleet runner instead of GitHub Actions.
 
@@ -109,8 +114,9 @@ loop with a scheduler loop + a termfleet runner instead of GitHub Actions.
 
 **Recipes & demos:**
 
-- `profiles/` — profiles (recipes) that compile to any substrate: `hello` (minimal) and
-  `self-driving` (open-autonomy's own self-driving setup; the single source of every github installation).
+- `profiles/` — profiles (recipes) that compile to a runner × code host: `hello` (minimal),
+  `self-driving` (open-autonomy's own dogfood; gh-actions + local), `simple-gh-sdlc` (generic
+  GitHub-code-host SDLC; gh-actions + local), and `simple-sdlc` (fully-local, PR-free).
 
 Docs: [`ARCHITECTURE.md`](./docs/ARCHITECTURE.md) (the github app's design + trust boundaries + canonical vocabulary + layout),
 [`SPEC.md`](./docs/SPEC.md) (the substrate-agnostic model + the four catalogs),

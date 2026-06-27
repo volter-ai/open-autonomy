@@ -41,7 +41,11 @@ only **how you feed it work and how a change lands** differ by code host. That s
 > OA-specific files (`scripts/`, `.claude/skills/`, `scheduler/`, `.open-autonomy/`, `standards/`,
 > `.github/workflows/merge.yml`), so `compile … .` is purely additive — it does **not** generate a
 > `package.json`, `README`, or `.gitignore` over yours. You still merge the runner's deps into your repo
-> (`npm install termfleet`, `npm install -D ztrack`) — step 1 below.
+> (`npm install termfleet`, `npm install -D ztrack`) — step 1 below. The OA files are **committed** to the
+> repo (the agents run in git worktrees, which only see committed files — it's how OA maintains itself).
+>
+> **Letting an agent do the install?** Point it at [`docs/INSTALL-AGENT.md`](./INSTALL-AGENT.md) — a
+> guided detect → ask → execute → verify playbook addressed to the installing agent.
 
 ---
 
@@ -214,6 +218,10 @@ required, you would be auto-merging on the reviewer's say-so alone.
 > Identity: for the merge boundary to be real, the agents should act as a **bot identity** (a GitHub App
 > / dedicated account) distinct from the human maintainer — GitHub forbids a user approving their own PR,
 > so a single identity collapses the *agent proposes / human approves* boundary.
+
+> **Installing with an agent?** [`docs/INSTALL-AGENT.md`](./INSTALL-AGENT.md) is a guided playbook
+> addressed to the installing agent — detect the repo, ask the human only the judgment calls (the gate,
+> identity, the first issue), run this overlay, and **verify the loop merges before declaring done**.
 
 ### What depends on the code host vs the runner
 

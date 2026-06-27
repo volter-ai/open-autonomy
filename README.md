@@ -74,6 +74,11 @@ the loop work) → [**`docs/OPERATIONS.md`**](./docs/OPERATIONS.md#install--oper
 `simple-gh-sdlc` run on **either** runner; `simple-sdlc` is local-git (no code host). See
 [the CLI](#the-open-autonomy-cli) for all verbs and options.
 
+> **Installing with an agent?** Point it at
+> [**`docs/INSTALL-AGENT.md`**](./docs/INSTALL-AGENT.md) — a guided **detect → ask → execute → verify**
+> playbook: it reads your repo, asks you only the judgment calls (the merge gate, identity, the first
+> issue), runs the overlay, and proves the loop merges a PR before calling it done.
+
 ## What it does (the GitHub substrate)
 
 ```text

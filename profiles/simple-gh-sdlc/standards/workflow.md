@@ -29,7 +29,7 @@ durable across stateless runs — not a local ztrack store. ztrack is the accept
   native auto-merge lands it (done = merged PR). Never an agent merge.
 - **Rework**: a `changes-requested` review leaves the PR open with the failure noted; the PM re-launches
   develop for that issue's number. The PM **caps rework at `max_develop_attempts`** (`.open-autonomy/autonomy.yml`,
-  default **2**) by counting its own prior relaunch comments on the issue, and **escalates to `human-required`
+  default **2**) by counting its own prior `oa-rework:` marker comments on the issue, and **escalates to `human-required`
   at the cap** instead of relaunching — so a permanently-failing issue can't loop and burn spend. Never loop.
 
 ## Gates

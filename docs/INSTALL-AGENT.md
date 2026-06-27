@@ -349,7 +349,7 @@ Phase 4 proves *one* merge. For the loop to actually run a backlog over days, se
   sessions (`npx termfleet sessions recent --live`), and the worktrees (`ls .worktrees/`). To pause one
   issue, remove its `ready` label or add a hold label your PM honors; to stop everything, kill the loop
   process. The PM is instructed to cap rework at `max_develop_attempts` (default 2) — it counts its prior
-  relaunch comments on the issue and escalates to `human-required` at the cap — but that is **PM judgment,
+  `oa-rework:` marker comments on the issue and escalates to `human-required` at the cap — but that is **PM judgment,
   not a hard deterministic gate**, so watch a repeatedly-failing issue and stop the loop if it churns.
 - **Idle spend.** Even with an empty board the PM wakes every tick (`*/15` → ~96 sessions/day) and bills your
   model provider. Widen `scheduler/schedule.json` `intervalSeconds` or stop the loop when the backlog is

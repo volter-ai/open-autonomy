@@ -55,8 +55,8 @@ without you.
      (a PR's `agent/issue-<n>` branch ties it to issue `<n>`).
    - In-flight develop runs: `bun scripts/runner.ts list develop`.
    - **For an issue you might rework** (its PR has a failed check or a conflict), read its **comment history**:
-     `gh issue view <n> --json comments`. Your own prior relaunch comments are the ONLY record of how many
-     times this issue has been attempted — without them you cannot honor the rework cap below.
+     `gh issue view <n> --json comments`. Your own prior `oa-rework:` marker comments are the ONLY record of
+     how many times this issue has been reworked — without them you cannot honor the rework cap below.
 2. **Respect WIP** from `workflow.md` (at most one develop in flight).
 3. **Take exactly one action**, choosing the first eligible issue:
    - **Issue has an open agent PR** → it's in review. If its `agent-review` check is

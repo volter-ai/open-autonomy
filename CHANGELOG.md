@@ -1,5 +1,38 @@
 # Changelog
 
+## 0.3.1
+
+Hardening from the **first live autonomous installs** (simple-gh-sdlc on a local runner driving real
+volter-ai repos end-to-end): every fix below was surfaced by a real unsupervised develop → review → CI →
+auto-merge cycle and is verified by a clean auto-merge.
+
+### Fixed
+- **OA's own working files no longer leak into agent PRs.** The develop/reviewer/draft skills write the
+  loose issue/evidence file to a `mktemp` path **outside the repo** (never `issue.md` in the tree), and
+  develop **stages only its intended change by path** — never `git add -A`, which had swept the evidence file
+  and the tracker's `.volter/` sync-state churn into the PR. `agent-propose` likewise `git reset -- .volter`
+  before its marker commit. The reviewer gets a **deterministic out-of-scope reject** for any OA harness file
+  in the diff.
+- **Agent worktrees are based on the freshest `origin/<trunk>`, not stale local `HEAD`.** The local runner
+  runs on a persistent checkout that never pulls the agent PRs auto-merging on the remote, so new worktrees
+  built on outdated code and conflicted with what actually merged. Now `ensureWorktree` fetches and branches
+  from `origin/<trunk>` (HEAD fallback for a remoteless local-git repo).
+- **Develop leaves no background process.** A lingering shell kept the session "running" so the runner never
+  saw develop done and never opened the PR — the skill now runs checks in the foreground and backgrounds
+  nothing.
+- **`max_develop_attempts` is actually enforced** (the PM counts an `oa-rework:` marker and escalates at the
+  cap), and **`human_required_paths` covers the complete OA harness** (every shipped `scripts/` file +
+  `scripts/prompts/**`) so an in-scope issue can't auto-merge a rewrite of the loop's own machinery.
+
+### Added
+- **`open-autonomy preflight`** — run after installing the runner deps: rebuilds termfleet's `node-pty`
+  native module if this Node has no prebuilt, and verifies `npm ci` under the repo's **CI Node version** (via
+  `docker node:<major>`, non-destructively), regenerating `package-lock.json` if adding the deps desynced it
+  (a failure `npm run build` can't catch locally but the first agent PR's CI would).
+- **`open-autonomy harness-push`** — lands an operator harness/skill update past `enforce_admins:true` (which
+  correctly blocks even admins): relax → push → always restore the gate.
+- `INSTALL-AGENT.md` now calls these commands instead of asking the operator to remember the manual steps.
+
 ## 0.3.0
 
 The **install model**: how an existing repo adopts open-autonomy, centered on the local-runner + GitHub

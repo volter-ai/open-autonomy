@@ -1,0 +1,623 @@
+schema: open-autonomy.soc2-control-register.v1
+profile: soc2-baseline
+note: "Source of truth for the SOC2 control register. class: a=automatable+tracked in-repo, b=human-process tracked/visible in-repo, c=inherently external. status: enforced|tracked|external. Periodic currency derives `last` from compliance/evidence-ledger.yml (artifact timestamps), NOT self-report."
+
+criteria:
+  - id: CC1.1
+    family: CC1
+    statement: "Commitment to integrity & ethical values"
+    class: ["b"]
+    status: tracked
+    control_refs: ["compliance/policies/acceptable-use-policy.md", "compliance/policies/information-security-policy.md"]
+    owner_role: leadership
+    evidence: "policy-ack"
+    processes: ["policy-review-ack"]
+  - id: CC1.2
+    family: CC1
+    statement: "Board independence & oversight of internal control"
+    class: ["c"]
+    status: external
+    control_refs: []
+    owner_role: leadership
+    evidence: "management-review-record"
+    external_owner: "board / leadership"
+    external_reason: "no board in a small org; substituted by a recorded management review"
+  - id: CC1.3
+    family: CC1
+    statement: "Structures, reporting lines, authorities & responsibilities"
+    class: ["b"]
+    status: tracked
+    control_refs: ["compliance/policies/information-security-policy.md"]
+    owner_role: leadership
+    evidence: "org-roles-record"
+    processes: ["policy-review-ack"]
+  - id: CC1.4
+    family: CC1
+    statement: "Commitment to competence (attract/develop/retain)"
+    class: ["b"]
+    status: tracked
+    control_refs: ["compliance/policies/hr-security-policy.md"]
+    owner_role: hr
+    evidence: "training+background-records"
+    processes: ["security-training", "background-check"]
+  - id: CC1.5
+    family: CC1
+    statement: "Accountability for internal-control responsibilities"
+    class: ["b"]
+    status: tracked
+    control_refs: ["compliance/policies/hr-security-policy.md", "compliance/policies/information-security-policy.md"]
+    owner_role: leadership
+    evidence: "policy-ack"
+    processes: ["policy-review-ack"]
+  - id: CC2.1
+    family: CC2
+    statement: "Use relevant, quality information for internal control"
+    class: ["b"]
+    status: tracked
+    control_refs: ["compliance/policies/information-security-policy.md"]
+    owner_role: leadership
+    evidence: "evidence-ledger"
+    processes: ["management-review"]
+  - id: CC2.2
+    family: CC2
+    statement: "Internally communicate objectives & responsibilities"
+    class: ["b"]
+    status: tracked
+    control_refs: ["compliance/policies/information-security-policy.md"]
+    owner_role: hr
+    evidence: "training+ack-records"
+    processes: ["security-training", "policy-review-ack"]
+  - id: CC2.3
+    family: CC2
+    statement: "Externally communicate matters affecting internal control"
+    class: ["b"]
+    status: tracked
+    control_refs: ["SECURITY.md", "compliance/policies/privacy-policy.md"]
+    owner_role: leadership
+    evidence: "external-comms-record"
+    processes: ["policy-review-ack"]
+  - id: CC3.1
+    family: CC3
+    statement: "Specify objectives to enable risk identification"
+    class: ["b"]
+    status: tracked
+    control_refs: ["compliance/policies/risk-management-policy.md"]
+    owner_role: leadership
+    evidence: "risk-register"
+    processes: ["risk-assessment"]
+  - id: CC3.2
+    family: CC3
+    statement: "Identify & analyze risks"
+    class: ["b"]
+    status: tracked
+    control_refs: ["compliance/risk-register.md"]
+    owner_role: leadership
+    evidence: "risk-register"
+    processes: ["risk-assessment"]
+  - id: CC3.3
+    family: CC3
+    statement: "Consider potential for fraud"
+    class: ["b"]
+    status: tracked
+    control_refs: ["compliance/risk-register.md"]
+    owner_role: leadership
+    evidence: "risk-register(fraud)"
+    processes: ["risk-assessment"]
+  - id: CC3.4
+    family: CC3
+    statement: "Identify & assess change that impacts internal control"
+    class: ["b"]
+    status: tracked
+    control_refs: ["compliance/policies/risk-management-policy.md"]
+    owner_role: leadership
+    evidence: "risk-register"
+    processes: ["risk-assessment"]
+  - id: CC4.1
+    family: CC4
+    statement: "Perform ongoing/separate monitoring evaluations"
+    class: ["a", ",", "b"]
+    status: tracked
+    control_refs: [".github/workflows/evidence-collect.yml", ".github/workflows/heartbeat.yml"]
+    owner_role: maintainer
+    evidence: "evidence-ledger+mgmt-review"
+    processes: ["evidence-collection", "management-review"]
+  - id: CC4.2
+    family: CC4
+    statement: "Evaluate & communicate control deficiencies (incl. senior mgmt/board)"
+    class: ["a", ",", "b", ",", "c"]
+    status: tracked
+    control_refs: [".github/workflows/compliance-cadence.yml"]
+    owner_role: maintainer
+    evidence: "deficiency-issues"
+    processes: ["management-review"]
+    external_owner: "leadership/board (comms leg)"
+    external_reason: "deficiency identification is human/agent judgment; board communication is external \u2014 watchdog only surfaces overdue cadence"
+  - id: CC5.1
+    family: CC5
+    statement: "Select & develop control activities"
+    class: ["b"]
+    status: tracked
+    control_refs: ["compliance/control-register.md"]
+    owner_role: maintainer
+    evidence: "control-register"
+    processes: ["management-review"]
+  - id: CC5.2
+    family: CC5
+    statement: "Technology general controls"
+    class: ["a"]
+    status: enforced
+    control_refs: ["C1", "C2", "C5", "C7", "C8", "C11"]
+    owner_role: substrate
+    evidence: "ci-workflows"
+  - id: CC5.3
+    family: CC5
+    statement: "Deploy controls via policies & procedures"
+    class: ["b"]
+    status: tracked
+    control_refs: ["compliance/policies/"]
+    owner_role: leadership
+    evidence: "policy-ack"
+    processes: ["policy-review-ack"]
+  - id: CC6.1
+    family: CC6
+    statement: "Logical access security software/architecture"
+    class: ["a"]
+    status: enforced
+    control_refs: ["C1", "C15", "compliance/policies/access-control-policy.md"]
+    owner_role: substrate
+    evidence: "workflow-perms"
+  - id: CC6.2
+    family: CC6
+    statement: "Register/authorize/deprovision credentials"
+    class: ["a", ",", "b"]
+    status: tracked
+    control_refs: [".github/workflows/evidence-collect.yml", "compliance/policies/hr-security-policy.md"]
+    owner_role: maintainer
+    evidence: "collaborators-snapshot+offboarding"
+    processes: ["access-review", "hr-onboard-offboard"]
+  - id: CC6.3
+    family: CC6
+    statement: "RBAC / least-privilege / segregation of duties"
+    class: ["a"]
+    status: enforced
+    control_refs: ["C1", "C2"]
+    owner_role: substrate
+    evidence: "merge-boundary"
+  - id: CC6.4
+    family: CC6
+    statement: "Physical access to facilities/assets"
+    class: ["c"]
+    status: external
+    control_refs: []
+    owner_role: subprocessor
+    evidence: "-"
+    external_owner: "GitHub / Cloudflare"
+    external_reason: "data-center physical security inherited; covered by their SOC2"
+  - id: CC6.5
+    family: CC6
+    statement: "Secure disposal so data cannot be recovered"
+    class: ["a", ",", "b", ",", "c"]
+    status: tracked
+    control_refs: ["C14", "compliance/policies/data-classification-and-retention-policy.md"]
+    owner_role: maintainer
+    evidence: "retention-PRs"
+    processes: ["evidence-collection"]
+    external_owner: "subprocessor (media sanitization)"
+    external_reason: "C14 covers transcript retention; full media/backup sanitization is procedure + subprocessor"
+  - id: CC6.6
+    family: CC6
+    statement: "Protect against threats from outside the boundary"
+    class: ["a"]
+    status: enforced
+    control_refs: ["C3", "C12"]
+    owner_role: substrate
+    evidence: "egress-guard"
+  - id: CC6.7
+    family: CC6
+    statement: "Protect data in transmission/movement/removal"
+    class: ["a"]
+    status: enforced
+    control_refs: ["C15"]
+    owner_role: substrate
+    evidence: "https-egress"
+  - id: CC6.8
+    family: CC6
+    statement: "Prevent/detect unauthorized or malicious software"
+    class: ["a", ",", "c"]
+    status: tracked
+    control_refs: ["C7", "C8", "C11"]
+    owner_role: maintainer
+    evidence: "supply-chain-checks"
+    external_owner: "org IT / endpoint admin"
+    external_reason: "supply-chain/pinning shrink malicious-dep surface; endpoint anti-malware/EDR is external"
+  - id: CC7.1
+    family: CC7
+    statement: "Detect config changes & new vulnerabilities"
+    class: ["a", ",", "b"]
+    status: enforced
+    control_refs: ["C8", "C9", "C11", ".github/workflows/security.yml"]
+    owner_role: substrate
+    evidence: "scan-runs"
+    processes: ["pen-test"]
+  - id: CC7.2
+    family: CC7
+    statement: "Monitor for anomalies/security events"
+    class: ["a", ",", "c"]
+    status: tracked
+    control_refs: ["C16", "C17"]
+    owner_role: maintainer
+    evidence: "audit-snapshots"
+    external_owner: "org SecOps / SIEM"
+    external_reason: "weekly snapshot + liveness != real-time anomaly detection; SIEM is external"
+  - id: CC7.3
+    family: CC7
+    statement: "Evaluate security events to determine incidents"
+    class: ["b"]
+    status: tracked
+    control_refs: ["compliance/policies/incident-response-policy.md"]
+    owner_role: maintainer
+    evidence: "incident-records"
+    processes: ["ir-tabletop"]
+  - id: CC7.4
+    family: CC7
+    statement: "Respond to identified security incidents"
+    class: ["b"]
+    status: tracked
+    control_refs: ["compliance/policies/incident-response-policy.md", "SECURITY.md"]
+    owner_role: maintainer
+    evidence: "ir-tabletop-record"
+    processes: ["ir-tabletop"]
+  - id: CC7.5
+    family: CC7
+    statement: "Recover from identified security incidents"
+    class: ["b"]
+    status: tracked
+    control_refs: ["C20", "compliance/policies/business-continuity-dr-policy.md"]
+    owner_role: maintainer
+    evidence: "dr-test-record"
+    processes: ["dr-test"]
+  - id: CC8.1
+    family: CC8
+    statement: "Authorize/design/test/approve/implement changes"
+    class: ["a"]
+    status: enforced
+    control_refs: ["C2", "C4", "C5", "C6", "C7", "compliance/policies/change-management-policy.md"]
+    owner_role: substrate
+    evidence: "pr-history"
+    processes: ["change-mgmt-infra"]
+  - id: CC9.1
+    family: CC9
+    statement: "Mitigate business-disruption risk (BCP/DR, insurance)"
+    class: ["b", ",", "c"]
+    status: tracked
+    control_refs: ["C20", "compliance/policies/business-continuity-dr-policy.md"]
+    owner_role: leadership
+    evidence: "dr-test-record"
+    processes: ["dr-test"]
+    external_owner: "org/leadership (insurance)"
+    external_reason: "cyber-insurance is an external policy"
+  - id: CC9.2
+    family: CC9
+    statement: "Assess & manage vendor/business-partner risk"
+    class: ["b"]
+    status: tracked
+    control_refs: ["compliance/subprocessors.md", "compliance/policies/vendor-management-policy.md"]
+    owner_role: leadership
+    evidence: "vendor-assessments"
+    processes: ["vendor-reassessment"]
+  - id: A1.1
+    family: A1
+    statement: "Maintain/monitor/forecast processing capacity"
+    class: ["a", ",", "b"]
+    status: tracked
+    control_refs: ["C17"]
+    owner_role: maintainer
+    evidence: "capacity-record"
+    processes: ["management-review"]
+  - id: A1.2
+    family: A1
+    statement: "Environmental protections, backups, recovery infra"
+    class: ["a", ",", "b"]
+    status: tracked
+    control_refs: ["C16", "C20", "compliance/policies/business-continuity-dr-policy.md"]
+    owner_role: maintainer
+    evidence: "git-replicated-evidence"
+    processes: ["dr-test"]
+  - id: A1.3
+    family: A1
+    statement: "Test recovery/continuity procedures periodically"
+    class: ["b"]
+    status: tracked
+    control_refs: ["compliance/policies/business-continuity-dr-policy.md"]
+    owner_role: maintainer
+    evidence: "dr-test-record"
+    processes: ["dr-test"]
+  - id: C1.1
+    family: C1
+    statement: "Identify & retain confidential information"
+    class: ["a", ",", "b"]
+    status: enforced
+    control_refs: ["C14", "compliance/policies/data-classification-and-retention-policy.md"]
+    owner_role: maintainer
+    evidence: "classification+retention"
+    processes: ["evidence-collection"]
+  - id: C1.2
+    family: C1
+    statement: "Securely dispose of confidential information"
+    class: ["a"]
+    status: enforced
+    control_refs: ["C14"]
+    owner_role: maintainer
+    evidence: "retention-PRs"
+    processes: ["evidence-collection"]
+  - id: PI1.1
+    family: PI1
+    statement: "Communicate processing/spec definitions"
+    class: ["b"]
+    status: tracked
+    control_refs: ["compliance/policies/secure-sdlc-policy.md"]
+    owner_role: maintainer
+    evidence: "spec-records"
+    processes: ["policy-review-ack"]
+  - id: PI1.2
+    family: PI1
+    statement: "Input completeness & accuracy controls"
+    class: ["a"]
+    status: tracked
+    control_refs: [".github/workflows/ci.yml"]
+    owner_role: substrate
+    evidence: "ci-tests"
+  - id: PI1.3
+    family: PI1
+    statement: "Processing controls (only reviewed/passing/intended lands)"
+    class: ["a"]
+    status: enforced
+    control_refs: ["C2", "C4", "C5", "C7"]
+    owner_role: substrate
+    evidence: "merged-pr-history"
+  - id: PI1.4
+    family: PI1
+    statement: "Output completeness/accuracy/timeliness controls"
+    class: ["a"]
+    status: tracked
+    control_refs: [".github/workflows/ci.yml"]
+    owner_role: substrate
+    evidence: "build-reconciliation"
+  - id: PI1.5
+    family: PI1
+    statement: "Storage integrity controls"
+    class: ["a", ",", "b"]
+    status: tracked
+    control_refs: ["C14", "C16"]
+    owner_role: maintainer
+    evidence: "retention+evidence"
+    processes: ["evidence-collection"]
+  - id: P1.1
+    family: P
+    statement: "Provide & update privacy notice"
+    class: ["b"]
+    status: tracked
+    control_refs: ["compliance/policies/privacy-policy.md"]
+    owner_role: leadership
+    evidence: "privacy-policy+DSR"
+    processes: ["policy-review-ack"]
+  - id: P2.1
+    family: P
+    statement: "Communicate choices & obtain consent"
+    class: ["b"]
+    status: tracked
+    control_refs: ["compliance/policies/privacy-policy.md"]
+    owner_role: leadership
+    evidence: "privacy-policy+DSR"
+    processes: ["policy-review-ack"]
+  - id: P3.1
+    family: P
+    statement: "Collect PI consistent with objectives"
+    class: ["b"]
+    status: tracked
+    control_refs: ["compliance/policies/privacy-policy.md"]
+    owner_role: leadership
+    evidence: "privacy-policy+DSR"
+    processes: ["policy-review-ack"]
+  - id: P3.2
+    family: P
+    statement: "Explicit consent before collection"
+    class: ["b"]
+    status: tracked
+    control_refs: ["compliance/policies/privacy-policy.md"]
+    owner_role: leadership
+    evidence: "privacy-policy+DSR"
+    processes: ["policy-review-ack"]
+  - id: P4.1
+    family: P
+    statement: "Limit use to identified purposes"
+    class: ["b"]
+    status: tracked
+    control_refs: ["compliance/policies/privacy-policy.md"]
+    owner_role: leadership
+    evidence: "privacy-policy+DSR"
+    processes: ["policy-review-ack"]
+  - id: P4.2
+    family: P
+    statement: "Retain PI per objectives"
+    class: ["a", ",", "b"]
+    status: tracked
+    control_refs: ["C14", "compliance/policies/privacy-policy.md"]
+    owner_role: leadership
+    evidence: "privacy-policy+DSR"
+    processes: ["evidence-collection"]
+  - id: P4.3
+    family: P
+    statement: "Securely dispose of PI"
+    class: ["a", ",", "b"]
+    status: tracked
+    control_refs: ["C14", "compliance/policies/privacy-policy.md"]
+    owner_role: leadership
+    evidence: "privacy-policy+DSR"
+    processes: ["evidence-collection"]
+  - id: P5.1
+    family: P
+    statement: "Data-subject access + copies"
+    class: ["b"]
+    status: tracked
+    control_refs: ["compliance/policies/privacy-policy.md"]
+    owner_role: leadership
+    evidence: "privacy-policy+DSR"
+    processes: ["policy-review-ack"]
+  - id: P5.2
+    family: P
+    statement: "Correct/amend PI + propagate"
+    class: ["b"]
+    status: tracked
+    control_refs: ["compliance/policies/privacy-policy.md"]
+    owner_role: leadership
+    evidence: "privacy-policy+DSR"
+    processes: ["policy-review-ack"]
+  - id: P6.1
+    family: P
+    statement: "Disclose only with consent"
+    class: ["b"]
+    status: tracked
+    control_refs: ["compliance/policies/privacy-policy.md"]
+    owner_role: leadership
+    evidence: "privacy-policy+DSR"
+    processes: ["policy-review-ack"]
+  - id: P6.2
+    family: P
+    statement: "Record authorized disclosures"
+    class: ["b"]
+    status: tracked
+    control_refs: ["compliance/policies/privacy-policy.md"]
+    owner_role: leadership
+    evidence: "privacy-policy+DSR"
+    processes: ["policy-review-ack"]
+  - id: P6.3
+    family: P
+    statement: "Record unauthorized disclosures/breach"
+    class: ["b"]
+    status: tracked
+    control_refs: ["compliance/policies/privacy-policy.md"]
+    owner_role: leadership
+    evidence: "privacy-policy+DSR"
+    processes: ["policy-review-ack"]
+  - id: P6.4
+    family: P
+    statement: "Vendor privacy commitments + periodic assess"
+    class: ["b"]
+    status: tracked
+    control_refs: ["compliance/policies/vendor-management-policy.md", "compliance/policies/privacy-policy.md"]
+    owner_role: leadership
+    evidence: "privacy-policy+DSR"
+    processes: ["vendor-reassessment"]
+  - id: P6.5
+    family: P
+    statement: "Vendor breach-notification commitments"
+    class: ["b"]
+    status: tracked
+    control_refs: ["compliance/policies/vendor-management-policy.md", "compliance/policies/privacy-policy.md"]
+    owner_role: leadership
+    evidence: "privacy-policy+DSR"
+    processes: ["vendor-reassessment"]
+  - id: P6.6
+    family: P
+    statement: "Breach notification to subjects/regulators"
+    class: ["b"]
+    status: tracked
+    control_refs: ["compliance/policies/privacy-policy.md"]
+    owner_role: leadership
+    evidence: "privacy-policy+DSR"
+    processes: ["policy-review-ack"]
+  - id: P6.7
+    family: P
+    statement: "Accounting of PI held/disclosed"
+    class: ["b"]
+    status: tracked
+    control_refs: ["compliance/policies/privacy-policy.md"]
+    owner_role: leadership
+    evidence: "privacy-policy+DSR"
+    processes: ["policy-review-ack"]
+  - id: P7.1
+    family: P
+    statement: "Maintain accurate/complete PI"
+    class: ["b"]
+    status: tracked
+    control_refs: ["compliance/policies/privacy-policy.md"]
+    owner_role: leadership
+    evidence: "privacy-policy+DSR"
+    processes: ["policy-review-ack"]
+  - id: P8.1
+    family: P
+    statement: "Inquiries/complaints/disputes process"
+    class: ["b"]
+    status: tracked
+    control_refs: ["compliance/policies/privacy-policy.md"]
+    owner_role: leadership
+    evidence: "privacy-policy+DSR"
+    processes: ["policy-review-ack"]
+
+processes:
+  - id: access-review
+    name: "User access recertification"
+    cadence: quarterly
+    owner_role: maintainer
+    criteria: ["CC6.2", "CC6.3"]
+  - id: vendor-reassessment
+    name: "Vendor/subprocessor risk reassessment"
+    cadence: annual
+    owner_role: leadership
+    criteria: ["CC9.2", "P6.4", "P6.5"]
+  - id: hr-onboard-offboard
+    name: "Onboarding/offboarding (deprovision <=24h)"
+    cadence: per-event
+    owner_role: hr
+    criteria: ["CC6.2", "CC1.4"]
+  - id: security-training
+    name: "Security-awareness training"
+    cadence: annual
+    owner_role: hr
+    criteria: ["CC1.4", "CC2.2"]
+  - id: background-check
+    name: "Pre-employment background screening"
+    cadence: per-event
+    owner_role: hr
+    criteria: ["CC1.1", "CC1.4"]
+  - id: ir-tabletop
+    name: "Incident-response tabletop exercise"
+    cadence: annual
+    owner_role: maintainer
+    criteria: ["CC7.3", "CC7.4"]
+  - id: dr-test
+    name: "BCP/DR restore/failover test"
+    cadence: annual
+    owner_role: maintainer
+    criteria: ["A1.3", "CC7.5", "CC9.1"]
+  - id: change-mgmt-infra
+    name: "Change management beyond code (infra/emergency)"
+    cadence: per-change
+    owner_role: maintainer
+    criteria: ["CC8.1"]
+  - id: risk-assessment
+    name: "Enterprise risk assessment"
+    cadence: annual
+    owner_role: leadership
+    criteria: ["CC3.1", "CC3.2", "CC3.3", "CC3.4"]
+  - id: management-review
+    name: "Control monitoring + management review"
+    cadence: annual
+    owner_role: leadership
+    criteria: ["CC4.1", "CC4.2", "CC5.1"]
+  - id: policy-review-ack
+    name: "Policy review + employee acknowledgement"
+    cadence: annual
+    owner_role: leadership
+    criteria: ["CC1.1", "CC2.2", "CC5.3"]
+  - id: pen-test
+    name: "External penetration test"
+    cadence: annual
+    owner_role: maintainer
+    criteria: ["CC7.1"]
+  - id: evidence-collection
+    name: "Continuous control-evidence capture"
+    cadence: weekly
+    owner_role: maintainer
+    criteria: ["CC4.1", "C1.1"]

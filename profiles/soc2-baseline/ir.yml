@@ -164,13 +164,19 @@ resources:
   - .github/workflows/evidence-collect.yml  # C16 tamper-evident control-evidence snapshot → compliance-evidence branch
   - .github/workflows/retention.yml         # C14 transcript retention sweep (gated PR — deletions are reviewed)
   - .github/workflows/heartbeat.yml         # C17 fleet liveness watchdog (Availability)
+  - .github/workflows/compliance-cadence.yml # W4/W7/W11 cadence watchdog + watcher-of-the-watchdog
+  - .github/workflows/soc2-register-check.yml # W8 register drift + structural + currency gate in CI
   # --- SOC 2 policy + evidence tree (install-owned: seed-once, adopter-edited) ---
   - SECURITY.md
   - standards/compliance.md
   - scripts/egress-guard.sh        # C3/C15 no-account egress fallback (wired into the agent jobs on private repos)
+  - scripts/soc2-register.ts       # W1-W11 the VISIBLE control-register tool (render/verify/check/watchdog)
   - provision.json
   - compliance/README.md
   - compliance/control-matrix.md
+  - compliance/control-register.yml  # W1/W2 the 61-criterion register (source of truth)
+  - compliance/control-register.md   # W2 rendered auditor-facing pane (generated; drift-guarded)
+  - compliance/evidence-ledger.yml   # W6 per-interval Type-II evidence ledger (source of `last`)
   - compliance/risk-register.md
   - compliance/subprocessors.md
   - compliance/policies/information-security-policy.md

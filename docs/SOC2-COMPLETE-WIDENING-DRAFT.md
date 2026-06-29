@@ -1,9 +1,10 @@
 # soc2-baseline — COMPLETE-SOC2 widening (DRAFT spec + gap analysis)
 
-> STATUS: **DRAFT — pending maximality confirm.** Additive to the FROZEN 39-AC spec
-> (`docs/SOC2-BASELINE-OBJECTIVE-SPEC.json`); the 39 ACs stay valid. This widens scope from
-> *technical enforcement* to *complete SOC2* — the process/organizational controls + Type-II
-> evidence-over-time the 39 under-scoped. Nothing here is implemented yet (ORDER: spec → HOLD → build).
+> STATUS: **FROZEN + BUILT (maximality-confirmed).** Additive to the original 39-AC spec; W1–W11 are now
+> appended to `docs/SOC2-BASELINE-OBJECTIVE-SPEC.json` (50 ACs total; the 39 stay valid). Widens scope from
+> *technical enforcement* to *complete SOC2* — process/org controls + Type-II evidence-over-time. The tracking
+> system (control-register.yml/.md + evidence-ledger.yml + cadence watchdog + check:soc2-register +
+> watcher-of-the-watchdog) is implemented in `profiles/soc2-baseline/` and live-proven (see PROOF_LEDGER.md).
 
 ## 0. The reframing (default-skeptical answer)
 

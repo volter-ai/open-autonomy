@@ -1,0 +1,42 @@
+schema: open-autonomy.soc2-evidence-ledger.v1
+profile: soc2-baseline
+note: >-
+  Type-II evidence ledger. The cadence watchdog + check:soc2-register derive each periodic
+  control's `last` from the ARTIFACT timestamps here (not self-report). A periodic control is
+  OVERDUE when today > (latest artifact OR effective_from) + its cadence interval. Seed an
+  artifact each interval (commit the evidence pointer) to keep a control current; a missing
+  interval surfaces as overdue (the cardinal Type-II rule). effective_from is the install date
+  (grace: a fresh install is not overdue until its first interval elapses).
+processes_state:
+  - process: access-review          # quarterly
+    effective_from: 2026-06-29
+    artifacts: []
+  - process: vendor-reassessment    # annual
+    effective_from: 2026-06-29
+    artifacts: []
+  - process: security-training      # annual
+    effective_from: 2026-06-29
+    artifacts: []
+  - process: ir-tabletop            # annual
+    effective_from: 2026-06-29
+    artifacts: []
+  - process: dr-test                # annual
+    effective_from: 2026-06-29
+    artifacts: []
+  - process: risk-assessment        # annual
+    effective_from: 2026-06-29
+    artifacts: []
+  - process: management-review      # annual
+    effective_from: 2026-06-29
+    artifacts: []
+  - process: policy-review-ack      # annual
+    effective_from: 2026-06-29
+    artifacts: []
+  - process: pen-test               # annual
+    effective_from: 2026-06-29
+    artifacts: []
+  - process: evidence-collection    # weekly (also auto-appended by evidence-collect.yml)
+    effective_from: 2026-06-29
+    artifacts: []
+# per-event / per-change processes (hr-onboard-offboard, change-mgmt-infra, background-check)
+# are event-driven, not interval-gated; tracked in the register, not currency-gated here.

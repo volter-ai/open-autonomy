@@ -1,0 +1,28 @@
+name: soc2-register-check
+# W8 — the completeness + currency drift-guard, in the install's CI.
+# Fails the build if: control-register.md is out of sync with control-register.yml (drift), any of the 61
+# AICPA TSC criteria is unmapped / missing its class obligations (structural), or any periodic control's
+# latest ledger artifact is older than its cadence (currency). Runs on every PR/push that touches the
+# register, ledger, or the tool.
+on:
+  pull_request:
+    paths: ["compliance/control-register.yml", "compliance/control-register.md", "compliance/evidence-ledger.yml", "scripts/soc2-register.ts"]
+  push:
+    branches: [main]
+    paths: ["compliance/control-register.yml", "compliance/control-register.md", "compliance/evidence-ledger.yml", "scripts/soc2-register.ts"]
+  workflow_dispatch: {}
+permissions:
+  contents: read
+jobs:
+  soc2-register:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+      - uses: oven-sh/setup-bun@4bc047ad259df6fc24a6c9b0f9a0cb08cf17fbe5 # v2.0.2
+        with: { bun-version: latest }
+      - name: register drift guard (md == yaml)
+        run: |
+          bun add yaml@^2 >/dev/null 2>&1 || true
+          bun scripts/soc2-register.ts verify
+      - name: structural + currency gates (all 61 criteria mapped; no overdue ledger interval)
+        run: bun scripts/soc2-register.ts check

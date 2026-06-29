@@ -63,8 +63,13 @@ jobs:
           git config user.email "evidence@users.noreply.github.com"
           git fetch origin compliance-evidence 2>/dev/null && git checkout compliance-evidence || git checkout --orphan compliance-evidence
           # On a fresh orphan branch, clear the working tree of the checked-out main content first.
-          git ls-files | grep -v '^evidence/' | xargs -r rm -f 2>/dev/null || true
+          git ls-files | grep -v '^evidence/\|^LEDGER-INDEX.md$' | xargs -r rm -f 2>/dev/null || true
           mkdir -p "$dir" || true
-          git add -A evidence/
+          # W6: materialize the per-interval Type-II ledger index — one appended row per interval, on the
+          # unprotected evidence branch (no protected-main edit). The `evidence-collection` periodic control
+          # is auto-evidenced here; a missing weekly row is a visible Type-II gap.
+          if [ ! -f LEDGER-INDEX.md ]; then printf '# Type-II evidence ledger index (per-interval, auto-appended)\n\n| interval_end | process | snapshot |\n|---|---|---|\n' > LEDGER-INDEX.md; fi
+          printf '| %s | evidence-collection | evidence/%s/SUMMARY.md |\n' "$stamp" "$stamp" >> LEDGER-INDEX.md
+          git add -A evidence/ LEDGER-INDEX.md
           git commit -m "evidence: control snapshot ${stamp}" || { echo "no changes"; exit 0; }
           git push origin compliance-evidence

@@ -1,0 +1,63 @@
+name: compliance-cadence
+# W4/W7/W11 — the cadence WATCHDOG + watcher-of-the-watchdog.
+# Reads compliance/control-register.yml + compliance/evidence-ledger.yml; for every periodic control whose
+# latest LEDGER artifact is older than its cadence, opens/updates a `soc2-control-due` issue assigned to the
+# owner role (deficiency CADENCE is surfaced; deficiency JUDGMENT + senior-mgmt/board comms stay human/agent).
+# The `liveness` job is the watcher-of-the-watchdog: if THIS workflow or evidence-collect.yml has not had a
+# successful run within its interval, it opens a `soc2-watchdog-stale` issue so the watchdog can't die silently.
+on:
+  schedule:
+    - cron: "23 7 * * 1"   # weekly Monday — finer than any tracked cadence (weekly is the shortest)
+  workflow_dispatch:
+    inputs:
+      as_of: { description: "override 'today' (YYYY-MM-DD) for testing", required: false, type: string }
+permissions:
+  contents: read
+  issues: write
+  actions: read
+jobs:
+  watchdog:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+      - uses: oven-sh/setup-bun@4bc047ad259df6fc24a6c9b0f9a0cb08cf17fbe5 # v2.0.2
+        with: { bun-version: latest }
+      - name: cadence watchdog → open soc2-control-due issues
+        env: { GH_TOKEN: "${{ github.token }}", REPO: "${{ github.repository }}", AS_OF: "${{ github.event.inputs.as_of }}" }
+        run: |
+          bun add yaml@^2 >/dev/null 2>&1 || true
+          ASOF_ARG=""; [ -n "$AS_OF" ] && ASOF_ARG="--as-of $AS_OF"
+          bun scripts/soc2-register.ts watchdog --repo "$REPO" $ASOF_ARG
+  liveness:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+      - name: watcher-of-the-watchdog → flag a stalled cadence/evidence workflow (W11)
+        env: { GH_TOKEN: "${{ github.token }}", REPO: "${{ github.repository }}" }
+        run: |
+          set -euo pipefail
+          # max age (hours) before a periodic evidence/cadence workflow is considered stalled (weekly + slack)
+          MAX_HOURS=192
+          now=$(date -u +%s)
+          flag=""
+          for wf in evidence-collect.yml compliance-cadence.yml; do
+            last=$(gh api "repos/${REPO}/actions/workflows/${wf}/runs?status=success&per_page=1" --jq '.workflow_runs[0].updated_at // empty' 2>/dev/null || echo "")
+            if [ -z "$last" ]; then
+              # no successful run yet — only flag if the workflow file exists in the repo
+              if gh api "repos/${REPO}/actions/workflows" --jq '.workflows[].path' 2>/dev/null | grep -q "$wf"; then
+                flag="${flag}\n- ${wf}: no successful run on record"
+              fi
+              continue
+            fi
+            age=$(( (now - $(date -u -d "$last" +%s 2>/dev/null || date -u -j -f "%Y-%m-%dT%H:%M:%SZ" "$last" +%s)) / 3600 ))
+            [ "$age" -gt "$MAX_HOURS" ] && flag="${flag}\n- ${wf}: last success ${age}h ago (> ${MAX_HOURS}h)"
+          done
+          if [ -n "$flag" ]; then
+            title="[soc2-watchdog-stale] a compliance evidence/cadence workflow has stalled"
+            if ! gh issue list --repo "$REPO" --state open --label soc2-watchdog-stale --json title --jq '.[].title' | grep -qF "$title"; then
+              gh label create soc2-watchdog-stale --repo "$REPO" --color b60205 --description "The compliance cadence/evidence workflow itself has stalled" --force >/dev/null 2>&1 || true
+              printf "The watcher-of-the-watchdog (W11) detected a stalled compliance workflow:%b\n\nIf the cadence/evidence workflow stops running, periodic controls can lapse INVISIBLY. Re-enable / fix the schedule.\n" "$flag" | gh issue create --repo "$REPO" --title "$title" --body-file - --label soc2-watchdog-stale
+            fi
+          else
+            echo "watchdog liveness OK (evidence-collect + compliance-cadence within ${MAX_HOURS}h)"
+          fi

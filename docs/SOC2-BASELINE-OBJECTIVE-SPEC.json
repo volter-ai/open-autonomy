@@ -232,5 +232,71 @@
     "statement": "The profile honestly bounds its claim: it makes a repo Type-I-ready BY DESIGN (controls present + auditable) \u2014 it is NOT certification; the org program + the Type II observation window remain the adopter's, and GHAS-gated controls + the model proxy are explicitly out-of-repo.",
     "provenance": "compliance/control-matrix.md ceiling note + O8/O9; compliance/README.md 'honest ceiling'; profiles/soc2-baseline/README.md ceiling; docs/SOC2-BASELINE-PROFILE.md.",
     "acceptance_criterion": "The README + control-matrix state: default-ready not certified; org program (policy approval, access reviews, vendor DPAs, IR tabletop, MFA, platform, auditor) and the ~3\u201312 month Type II window are required and not ownable in code; GHAS-on-private (G3) and the proxy subprocessor are flagged. No control claims certification."
+  },
+  {
+    "id": "W1-tsc-universe",
+    "statement": "The control register enumerates ALL 61 AICPA TSC criteria (CC1.1-CC9.2, A1.1-A1.3, C1.1-C1.2, PI1.1-PI1.5, P1.1-P8.1).",
+    "provenance": "docs/SOC2-COMPLETE-WIDENING-DRAFT.md (maximality-confirmed widening; canonical AICPA 2017 TSC rev 2022; skeptic panel: completeness CONFIRMED + 7 classification refutations folded in)",
+    "acceptance_criterion": "compliance/control-register.yml has exactly 61 criterion rows; each has >=1 control_ref OR an explicit external owner; 0 unmapped; soc2-register check structural gate passes."
+  },
+  {
+    "id": "W2-visible-register",
+    "statement": "A single auditor-facing register renders every criterion with owner/status/evidence/cadence/next-due, generated from the YAML and drift-guarded.",
+    "provenance": "docs/SOC2-COMPLETE-WIDENING-DRAFT.md (maximality-confirmed widening; canonical AICPA 2017 TSC rev 2022; skeptic panel: completeness CONFIRMED + 7 classification refutations folded in)",
+    "acceptance_criterion": "control-register.md is generated from control-register.yml; md==yaml drift check passes; the rendered table shows owner_role, status, evidence pointer, cadence, last/next for all 61."
+  },
+  {
+    "id": "W3-class-a-automation",
+    "statement": "Every (a)-class control is automated + tracked; each names its workflow/check.",
+    "provenance": "docs/SOC2-COMPLETE-WIDENING-DRAFT.md (maximality-confirmed widening; canonical AICPA 2017 TSC rev 2022; skeptic panel: completeness CONFIRMED + 7 classification refutations folded in)",
+    "acceptance_criterion": "each class:a row in the register names an automation control_ref (workflow/check); cadence (a) controls are wired to the watchdog/evidence-collect."
+  },
+  {
+    "id": "W4-class-b-visible",
+    "statement": "Every (b)-class human-process control has an in-repo evidence home + cadence + an auto-opened tracking issue when due/overdue (never hidden).",
+    "provenance": "docs/SOC2-COMPLETE-WIDENING-DRAFT.md (maximality-confirmed widening; canonical AICPA 2017 TSC rev 2022; skeptic panel: completeness CONFIRMED + 7 classification refutations folded in)",
+    "acceptance_criterion": "LIVE: the cadence watchdog opens a real soc2-control-due issue (with owner assignment) for an overdue (b) control on a test repo; issue URL recorded."
+  },
+  {
+    "id": "W5-class-c-honesty",
+    "statement": "Every (c)-class control is enumerated as external with a NAMED owner and why-not-in-repo; never faked as automated.",
+    "provenance": "docs/SOC2-COMPLETE-WIDENING-DRAFT.md (maximality-confirmed widening; canonical AICPA 2017 TSC rev 2022; skeptic panel: completeness CONFIRMED + 7 classification refutations folded in)",
+    "acceptance_criterion": "register status:external rows each carry owner_role + reason; ceiling doc lists them; 0 silent omissions (incl. EDR, SIEM, cyber-insurance, Type-II window)."
+  },
+  {
+    "id": "W6-type-II-ledger",
+    "statement": "Per-periodic-control evidence is captured per interval; the LEDGER ARTIFACT timestamp is the source of `last`; a MISSING interval is surfaced.",
+    "provenance": "docs/SOC2-COMPLETE-WIDENING-DRAFT.md (maximality-confirmed widening; canonical AICPA 2017 TSC rev 2022; skeptic panel: completeness CONFIRMED + 7 classification refutations folded in)",
+    "acceptance_criterion": "evidence-ledger.yml records artifacts per (control,interval); the check derives last from the ledger (not self-report); LIVE: an interval with no/stale artifact shows overdue."
+  },
+  {
+    "id": "W7-deficiency-comms",
+    "statement": "Overdue cadence is surfaced + assigned to owners; deficiency identification/communication (CC4.2) is honestly marked (b)+(c), not claimed automated.",
+    "provenance": "docs/SOC2-COMPLETE-WIDENING-DRAFT.md (maximality-confirmed widening; canonical AICPA 2017 TSC rev 2022; skeptic panel: completeness CONFIRMED + 7 classification refutations folded in)",
+    "acceptance_criterion": "watchdog opens+assigns soc2-control-due issues; the CC4.2 register row shows the human/board legs as (b)/(c); the watchdog is documented as reminder-only, not the deficiency control."
+  },
+  {
+    "id": "W8-completeness-currency-guard",
+    "statement": "check:soc2-register has TWO gates: structural (no unmapped criterion / missing (a)-automation / missing (b)-cadence) AND currency (no periodic control's latest ledger artifact older than its cadence).",
+    "provenance": "docs/SOC2-COMPLETE-WIDENING-DRAFT.md (maximality-confirmed widening; canonical AICPA 2017 TSC rev 2022; skeptic panel: completeness CONFIRMED + 7 classification refutations folded in)",
+    "acceptance_criterion": "LIVE: the check FAILS (red) on a removed criterion and on a stale ledger artifact, and PASSES (green) when restored; wired into the install CI."
+  },
+  {
+    "id": "W9-process-cadence",
+    "statement": "Policy review+ack, training, risk assessment, pen test, vendor reassessment, access review, IR tabletop, DR test each have a register cadence + watchdog coverage.",
+    "provenance": "docs/SOC2-COMPLETE-WIDENING-DRAFT.md (maximality-confirmed widening; canonical AICPA 2017 TSC rev 2022; skeptic panel: completeness CONFIRMED + 7 classification refutations folded in)",
+    "acceptance_criterion": "each of the 13 process/Type-II families is present in the register with cadence.interval + owner_role and is watched."
+  },
+  {
+    "id": "W10-skeptic-complete",
+    "statement": " The BUILT artifacts (register, ledger, watchdog, checks) are confirmed by >=2 fresh independent skeptics to cover the full TSC with correct a/b/c classification and no hidden residual or faked automation.",
+    "provenance": "docs/SOC2-COMPLETE-WIDENING-DRAFT.md (maximality-confirmed widening; canonical AICPA 2017 TSC rev 2022; skeptic panel: completeness CONFIRMED + 7 classification refutations folded in)",
+    "acceptance_criterion": "committed skeptic verdicts against the built register/ledger/runs."
+  },
+  {
+    "id": "W11-watchdog-liveness",
+    "statement": "The cadence + evidence-collect workflows are themselves monitored; if either stalls, an issue opens (watcher-of-the-watchdog).",
+    "provenance": "docs/SOC2-COMPLETE-WIDENING-DRAFT.md (maximality-confirmed widening; canonical AICPA 2017 TSC rev 2022; skeptic panel: completeness CONFIRMED + 7 classification refutations folded in)",
+    "acceptance_criterion": "a meta-monitor asserts last-success freshness of compliance-cadence.yml and evidence-collect.yml; LIVE: a stale/disabled watchdog surfaces an issue or check failure."
   }
 ]

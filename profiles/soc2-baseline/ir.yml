@@ -59,6 +59,12 @@ agents:
 policy:
   maxConcurrent: 2   # the WIP ceiling: at most one in-progress + one in-review at a time
   box:
+    # gh-actions runner config. soc2-baseline declares the EXTRA blocking required-check gates the propose
+    # effect must dispatch on a bot PR (a bot PR fires no pull_request, so an undispatched required check would
+    # wedge — the proposer kicks each so its status posts on the head SHA). These make `supply-chain` + `codeql`
+    # blocking on the agent-PR path, not just on human PRs. model/proxy/bot fall back to the substrate defaults.
+    gh-actions:
+      propose_dispatch_checks: [supply-chain.yml, codeql-gate.yml]
     wip:
       maxInProgress: 1
       maxInReview: 1
@@ -125,7 +131,9 @@ resources:
   - standards/issue-and-evidence.md
   - standards/risk-and-review.md
   # --- SOC 2 control workflows (soc2-baseline-only; codeql + human-approval are byte-identical to self-driving) ---
-  - .github/workflows/codeql.yml            # C8  SAST (semantic static analysis → Security tab)
+  - .github/workflows/codeql.yml            # C8  SAST monitoring (semantic static analysis → Security tab)
+  - .github/workflows/codeql-gate.yml       # C8  SAST BLOCKING gate on bot PRs (dispatched; posts `codeql` status)
+  - .github/workflows/supply-chain.yml      # C7  supply-chain BLOCKING gate on bot PRs (dispatched; posts `supply-chain` status)
   - .github/workflows/human-approval.yml    # C4  deterministic per-head-SHA maintainer change gate
   - .github/workflows/dependency-review.yml # C9  PR-time dependency vulnerability review (GHAS)
   - .github/workflows/sbom.yml              # C10 CycloneDX SBOM on push + weekly

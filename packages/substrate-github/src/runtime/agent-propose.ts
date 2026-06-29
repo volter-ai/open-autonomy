@@ -124,3 +124,12 @@ else if (reviewAgent && prNumber) {
   }
 }
 dispatch('human-approval', ['human-approval.yml', '-f', `pr=${prNumber}`]);
+
+// Profile-declared EXTRA required-check workflows (e.g. soc2-baseline's `supply-chain` + `codeql` gates).
+// Exactly like ci/agent-review/human-approval: a bot-opened PR fires no pull_request event, so a required
+// check only posts on the head SHA if the proposer KICKS it here — otherwise that required check stays
+// unposted and native auto-merge never fires (the PR wedges). The list is empty for profiles that don't set
+// policy.box.gh-actions.propose_dispatch_checks, so this is a no-op everywhere except where it's declared.
+// Each gate workflow takes `sha` + `pr` inputs and posts a commit status named after its own check context.
+const extraChecks = (env.EXTRA_CHECK_WORKFLOWS ?? '').split(',').map((s) => s.trim()).filter(Boolean);
+for (const wf of extraChecks) dispatch(wf, [wf, '-f', `sha=${headSha}`, '-f', `pr=${prNumber}`]);

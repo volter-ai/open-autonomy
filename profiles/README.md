@@ -48,6 +48,15 @@ bun bin/autonomy-compile.ts profiles/hello github /tmp/hello-gh
   the permission split, native auto-merge, done = merged PR (self-driving's merge model on a generic
   ztrack SDLC). Targets **`gh-actions` + `local`** (runner ⟂ code host — agents on Actions *or* your
   machine, auto-merging PRs on GitHub either way); uses the ztrack `simple-gh-sdlc` preset.
+- **`soc2-baseline/`** — `simple-gh-sdlc` + a **deterministic SOC 2 control layer**. Same 4-agent PR loop,
+  but every install ships the SOC 2-relevant controls baked in as CI / config / branch-protection / policy
+  files (not agent behavior): the merge boundary + a per-head-SHA human-approval gate, `supply-chain` +
+  `codeql` as blocking required checks on bot PRs, GitHub-Verified signed commits (`required_signatures`),
+  SBOM, secret scanning, tamper-evident evidence collection, and a full install-owned policy set. TSC scope
+  **Security + Confidentiality + Availability + Processing Integrity**. The honest framing: it makes an
+  adopting repo **Type-I-ready by design — default-ready, not certified** (the org program + the Type II
+  observation window remain the adopter's to run). See `profiles/soc2-baseline/README.md` and
+  `docs/SOC2-BASELINE-PROFILE.md`.
 
 Every profile in this directory is smoke-checked by `check:profiles` (parses + compiles to each
 declared target). A profile's agents pick their own **tooling** (`ztrack`, or `gh` + `npm`); the core

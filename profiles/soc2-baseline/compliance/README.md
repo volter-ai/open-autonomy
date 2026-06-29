@@ -1,7 +1,7 @@
 # compliance/ — the SOC 2 program tree (install-owned)
 
-This tree is **seeded once** by the `simple-soc2` profile and then **owned by you** — upgrades never overwrite
-it (it is install-owned; see `docs/SIMPLE-SOC2-PROFILE.md` G2). The profile gives you working **templates and
+This tree is **seeded once** by the `soc2-baseline` profile and then **owned by you** — upgrades never overwrite
+it (it is install-owned; see `docs/SOC2-BASELINE-PROFILE.md` G2). The profile gives you working **templates and
 automated evidence collection**; you tailor the policies to your organization and operate the program.
 
 ## What's here

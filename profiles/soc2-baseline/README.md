@@ -1,4 +1,4 @@
-# simple-soc2
+# soc2-baseline
 
 `simple-gh-sdlc` **+ a deterministic SOC 2 control layer.** The same 4-agent GitHub PR loop
 (pm/draft/develop/reviewer) and the same merge boundary, but every install ships the SOC 2-relevant controls
@@ -6,7 +6,7 @@ baked in **as deterministic CI / config / branch-protection / policy files — n
 agents run the SDLC; the controls are enforced by the substrate and GitHub.
 
 The full design rationale, the control menu, and the honest can/can't split live in the Open Autonomy repo at
-[`docs/SIMPLE-SOC2-PROFILE.md`](../../docs/SIMPLE-SOC2-PROFILE.md). The per-control → TSC → enforcement →
+[`docs/SOC2-BASELINE-PROFILE.md`](../../docs/SOC2-BASELINE-PROFILE.md). The per-control → TSC → enforcement →
 evidence map ships in the install at [`compliance/control-matrix.md`](compliance/control-matrix.md).
 
 ## What it adds over simple-gh-sdlc
@@ -29,7 +29,7 @@ Same agents, same loop. The delta is a control layer:
 ## Compile
 
 ```bash
-bun bin/autonomy-compile.ts profiles/simple-soc2 github /tmp/simple-soc2
+bun bin/autonomy-compile.ts profiles/soc2-baseline github /tmp/soc2-baseline
 ```
 
 ## Provision (applies the SOC 2 branch protection)

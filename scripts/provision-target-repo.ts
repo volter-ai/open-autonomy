@@ -20,10 +20,10 @@ export interface ProvisionManifest {
     branch: string;
     required_checks: string[];
     // SOC 2-grade hardening knobs (all OPTIONAL — omitted ⇒ the original permissive defaults below, so
-    // existing manifests like bench/self-driving are unchanged). A profile like simple-soc2 ships these
+    // existing manifests like bench/self-driving are unchanged). A profile like soc2-baseline ships these
     // set, making branch protection PROFILE-DERIVED (resolves design-doc gap G1).
-    enforce_admins?: boolean; // default false (only human admins direct-push); simple-soc2 sets true
-    required_reviews?: number; // required_approving_review_count; default 0; simple-soc2 sets >=1
+    enforce_admins?: boolean; // default false (only human admins direct-push); soc2-baseline sets true
+    required_reviews?: number; // required_approving_review_count; default 0; soc2-baseline sets >=1
     require_code_owner_reviews?: boolean; // default false
     required_signatures?: boolean; // require signed commits; default false (see G3/C6 note in profile README)
   };
@@ -286,7 +286,7 @@ async function main(): Promise<void> {
         // gate a merge (e.g. `ci` + `agent-review`, or the SOC 2 set). By default 0 approvals — the
         // agent-review status is the gate (the reviewer can't post a PR approval), and a proposer can't
         // post agent-review (no statuses:write), so no agent can land unreviewed code. strict:false avoids
-        // the up-to-date-with-base deadlock. A hardened profile (simple-soc2) overrides enforce_admins +
+        // the up-to-date-with-base deadlock. A hardened profile (soc2-baseline) overrides enforce_admins +
         // required_reviews + required_signatures via the manifest (gap G1 — branch protection is profile-derived).
         required_status_checks: { strict: false, contexts: bp.required_checks },
         enforce_admins: bp.enforce_admins ?? false,
@@ -305,7 +305,7 @@ async function main(): Promise<void> {
       if (!result.ok) process.stderr.write(`branch protection not applied: ${result.out.trim()}\n`);
       // Signed commits live on a dedicated protection sub-resource (PUT/DELETE), not the body above.
       // Best-effort + non-fatal: requires every commit (incl. agent/bot commits) to be signature-verified,
-      // so only enable on a profile whose effect step signs (see simple-soc2 README C6 — v1 ships this OFF
+      // so only enable on a profile whose effect step signs (see soc2-baseline README C6 — v1 ships this OFF
       // and uses DCO as the compensating control until keyless commit signing is wired into the runtime).
       if (bp.required_signatures !== undefined) {
         const verb = bp.required_signatures ? 'PUT' : 'DELETE';

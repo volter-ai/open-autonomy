@@ -2,7 +2,7 @@
 
 > **Owner:** [OWNER] · **Reviewed:** [DATE] · **Cadence:** ≥ annually and on any new vendor (CC9).
 
-Pre-filled with the `simple-soc2` stack. For each: confirm the SOC 2 report, data shared, and risk rank.
+Pre-filled with the `soc2-baseline` stack. For each: confirm the SOC 2 report, data shared, and risk rank.
 Sign a DPA with each subprocessor that processes your data (see `policies/vendor-management-policy.md`).
 
 | Subprocessor | Role | Data it processes | SOC 2 report? | Risk | DPA |

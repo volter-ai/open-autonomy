@@ -1,6 +1,6 @@
 # Security Policy
 
-This repository runs an autonomous software-delivery fleet (Open Autonomy, `simple-soc2` profile) and ships
+This repository runs an autonomous software-delivery fleet (Open Autonomy, `soc2-baseline` profile) and ships
 a deterministic SOC 2 control layer. We take security seriously and welcome responsible disclosure.
 
 ## Reporting a vulnerability

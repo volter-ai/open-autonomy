@@ -1,8 +1,8 @@
-# Control matrix — simple-soc2
+# Control matrix — soc2-baseline
 
 The authoritative map of each control → the Trust Services Criteria it serves → how it's **enforced**
 (deterministic mechanism, not agent behavior) → where the **evidence** is. This is the document an auditor
-reads first. Control IDs (C1–C18) match `docs/SIMPLE-SOC2-PROFILE.md` in the Open Autonomy repo.
+reads first. Control IDs (C1–C18) match `docs/SOC2-BASELINE-PROFILE.md` in the Open Autonomy repo.
 
 TSC legend: **CC** = Security/Common Criteria (mandatory) · **C** = Confidentiality · **A** = Availability ·
 **PI** = Processing Integrity.

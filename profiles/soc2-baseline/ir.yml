@@ -1,8 +1,8 @@
-# simple-soc2 — simple-gh-sdlc + a DETERMINISTIC SOC 2 control layer. Same 4-agent PR loop
+# soc2-baseline — simple-gh-sdlc + a DETERMINISTIC SOC 2 control layer. Same 4-agent PR loop
 # (pm/draft/develop/reviewer) and the same merge boundary (code:propose ≠ code:review, native auto-merge),
 # but every install ships the SOC 2-relevant controls baked in as deterministic CI/config/branch-protection/
 # policy files — NOT as agent behavior. The agents run the SDLC; the controls are enforced by the substrate
-# and GitHub, so an adopter repo is "Type-I-ready by design". See docs/SIMPLE-SOC2-PROFILE.md for the full
+# and GitHub, so an adopter repo is "Type-I-ready by design". See docs/SOC2-BASELINE-PROFILE.md for the full
 # control map (C1–C18), the can/can't-be-a-default split, and the honest ceiling (Type II still needs the org
 # program + the observation window). One unit: an agent = behavior + capabilities + triggers(+params)(+review).
 schema: autonomy.ir.v1
@@ -64,7 +64,7 @@ policy:
       maxInReview: 1
     autonomy:
       max_develop_attempts: 2
-    # The human-seam engage config (docs/SPEC.md#handoffs). simple-soc2 ships the human-approval gate
+    # The human-seam engage config (docs/SPEC.md#handoffs). soc2-baseline ships the human-approval gate
     # (.github/workflows/human-approval.yml) as a required check, so a PR in human-required scope parks for a
     # maintainer's per-head-SHA Approve — the SOC 2 change-management control (CC8). `maintainers_var` names
     # the repo variable (comma-separated logins) of who to engage; falls back to the repo owner if unset.
@@ -111,9 +111,9 @@ policy:
 
 # Code-host + governance files carried verbatim into the installation. The first block is the SHARED SDLC
 # standard set (byte-identical to simple-gh-sdlc — check-profiles enforces it). The second block is the
-# simple-soc2-only deterministic compliance layer (workflows + policy/evidence tree). Security WORKFLOWS stay
+# soc2-baseline-only deterministic compliance layer (workflows + policy/evidence tree). Security WORKFLOWS stay
 # derived (upgrade re-pushes improvements); the compliance/ POLICY TREE is install-owned (seed-once — the
-# adopter edits it to their org; never clobbered on upgrade). See docs/SIMPLE-SOC2-PROFILE.md G2.
+# adopter edits it to their org; never clobbered on upgrade). See docs/SOC2-BASELINE-PROFILE.md G2.
 resources:
   # --- shared SDLC standard (identical to simple-gh-sdlc) ---
   - .open-autonomy/architecture-invariants.yml
@@ -124,7 +124,7 @@ resources:
   - standards/workflow.md
   - standards/issue-and-evidence.md
   - standards/risk-and-review.md
-  # --- SOC 2 control workflows (simple-soc2-only; codeql + human-approval are byte-identical to self-driving) ---
+  # --- SOC 2 control workflows (soc2-baseline-only; codeql + human-approval are byte-identical to self-driving) ---
   - .github/workflows/codeql.yml            # C8  SAST (semantic static analysis → Security tab)
   - .github/workflows/human-approval.yml    # C4  deterministic per-head-SHA maintainer change gate
   - .github/workflows/dependency-review.yml # C9  PR-time dependency vulnerability review (GHAS)

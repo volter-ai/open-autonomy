@@ -1,6 +1,6 @@
-# `simple-soc2` — Design Doc (PHASE 1: design only, nothing built)
+# `soc2-baseline` — Design Doc (PHASE 1: design only, nothing built)
 
-> **Goal.** A new OA profile, `simple-soc2`, so any self-driving repo that adopts it **ships SOC 2-relevant
+> **Goal.** A new OA profile, `soc2-baseline`, so any self-driving repo that adopts it **ships SOC 2-relevant
 > controls baked in by default** — as concrete, deterministic controls (CI workflows, branch protection,
 > config files, policy templates, evidence-collection crons), **never** "the agents will handle it."
 >
@@ -20,7 +20,7 @@
 An OA profile is a directory compiled onto a substrate by `compile(profile, substrate)`
 (`bin/autonomy-compile.ts`, `packages/substrate-github/src/emit.ts`). The canonical adopter-facing GitHub
 profile is **`profiles/simple-gh-sdlc`** — a 4-agent PR-based SDLC loop (pm/draft/develop/reviewer) with
-the merge boundary baked in. **`simple-soc2` is its SOC 2-hardened sibling**: same loop, plus a deterministic
+the merge boundary baked in. **`soc2-baseline` is its SOC 2-hardened sibling**: same loop, plus a deterministic
 compliance control layer.
 
 This matters because SOC 2 controls are *exactly* the case OA's own doctrine reserves for determinism.
@@ -34,7 +34,7 @@ doctrinally-correct shape. This is the through-line of every solution below.
 
 ## 2. The profile-mechanism menu — how a profile injects defaults into a target repo
 
-These are the **levers** `simple-soc2` can pull. Each is cited from source.
+These are the **levers** `soc2-baseline` can pull. Each is cited from source.
 
 | # | Mechanism | What it injects | How it works (citation) |
 |---|---|---|---|
@@ -64,7 +64,7 @@ Adopter repos **do not run** the `agent-model-proxy` — they call OA's hosted p
 (`scripts/model-proxy-mint.ts`, no secrets stored in the fleet repo). So every proxy-side control in
 `SOC2-READINESS.md` (§3.2 admin-token hardening, §3.3 ledger audit log, §3.5 HMAC rotation, §3.8 ledger
 backup/DR) is **out of the adopter repo's control entirely**. From the adopter's SOC 2 perspective the proxy
-is a **subprocessor**, exactly like GitHub or Cloudflare. `simple-soc2` therefore **cannot** bake those in;
+is a **subprocessor**, exactly like GitHub or Cloudflare. `soc2-baseline` therefore **cannot** bake those in;
 what it *can* do is **ship a subprocessor inventory that names the OA proxy** and point at OA's own
 attestation. (Which loops back to why `SOC2-READINESS.md` matters: OA must make the *proxy* compliant so
 adopters can rely on it.)
@@ -81,7 +81,7 @@ SBOM, secret redaction, the human-approval change gate, transcript retention, an
 
 ---
 
-## 4. The `simple-soc2` control checklist
+## 4. The `soc2-baseline` control checklist
 
 For each control: **TSC served**, **classification**, **candidate solutions with tradeoffs**. Classification
 legend:
@@ -108,7 +108,7 @@ document it as a control in the policy narrative. **Auditable as-is.**
 
 #### C4 — Deterministic human-approval change gate · CC8 (Change Mgmt) · **DEFAULT [harden]**
 The per-head-SHA maintainer gate (`human-approval-gate.ts`). **Gap:** `simple-gh-sdlc` ships the `risk` box
-but **not** `human-approval.yml` (only `self-driving` does). `simple-soc2` must add it as a resource and add
+but **not** `human-approval.yml` (only `self-driving` does). `soc2-baseline` must add it as a resource and add
 `human-approval` to required checks (C8).
 - **A.** Ship `human-approval.yml` + add `human-approval` to required checks → strongest, true human gate on sensitive paths. *Tradeoff: needs a maintainer to act; slows merges in scope.*
 - **B.** Keep auto-pass for routine PRs, gate only `human_required_paths`/topics (current self-driving behavior) → low friction. *Tradeoff: narrower coverage — fine for SOC 2 if scope is well-chosen.*
@@ -117,7 +117,7 @@ but **not** `human-approval.yml` (only `self-driving` does). `simple-soc2` must 
 #### C5 — Branch protection: required checks, no self-merge, enforce_admins · CC8 · **PROVISION [harden]**
 Today provisioning sets `enforce_admins:false`, `required_approving_review_count:0`, checks `["ci","agent-review"]`
 (`provision-target-repo.ts:269-278`).
-- **A.** Make the provision manifest **profile-derived** (gap G1): `simple-soc2` declares required checks =
+- **A.** Make the provision manifest **profile-derived** (gap G1): `soc2-baseline` declares required checks =
   `[ci, agent-review, human-approval, codeql, supply-chain]`, `enforce_admins:true`, `≥1` review. *Tradeoff:
   needs a small build to thread profile→manifest; highest assurance.*
 - **B.** Ship a documented `provision.soc2.json` the adopter passes manually. *Tradeoff: deterministic but a
@@ -207,7 +207,7 @@ All proxy-side. **Out of adopter-repo scope.** Document as subprocessor reliance
 The profile cannot *operate* these, but it can ship **editable, install-owned templates** + **evidence
 hooks** so the org work is "fill in the blanks + the cron collects proof," not "start from zero."
 
-| Item | TSC | Class | What `simple-soc2` ships |
+| Item | TSC | Class | What `soc2-baseline` ships |
 |---|---|---|---|
 | **O1 Security policies** | CC1–CC5 | SCAFFOLD | `compliance/policies/` template set (InfoSec, Access Control, Change Mgmt, Vendor Mgmt, Data Classification & Retention, Encryption, IR, BC/DR, SDLC, Risk) — install-owned, pre-mapped to the C-controls above. |
 | **O2 Risk assessment** | CC3 | SCAFFOLD | `compliance/risk-register.md` template + the cadence documented. |
@@ -225,7 +225,7 @@ hooks** so the org work is "fill in the blanks + the cron collects proof," not "
 
 ## 5. The honest ceiling — "Type-I-ready by design" vs the rest
 
-**What `simple-soc2` *can* deliver:**
+**What `soc2-baseline` *can* deliver:**
 - A repo whose **technical controls are present, deterministic, and auditable on day one** — least-privilege,
   segregation of duties, branch protection, supply-chain + SAST + SBOM, secret scanning, the human-approval
   change gate, secret redaction, retention.
@@ -245,7 +245,7 @@ appropriately as of a date, with far less prep than a cold start.
 3. **Subprocessor compliance** (§3a) — the OA model proxy's own SOC 2 posture is OA's job
    (`SOC2-READINESS.md`), surfaced here only as a vendor-management item the adopter must track.
 
-So the precise claim is: **`simple-soc2` makes the *technical-control design* Type-I-ready and the *org
+So the precise claim is: **`soc2-baseline` makes the *technical-control design* Type-I-ready and the *org
 program* materially easier — but Type II still requires the company to run the controls for the observation
 window.** Anyone who says a profile "makes you SOC 2 compliant" is wrong; this makes you *default-ready*.
 
@@ -253,7 +253,7 @@ window.** Anyone who says a profile "makes you SOC 2 compliant" is wrong; this m
 
 ## 6. Proposed composition (preview for the build phase — NOT built)
 
-`simple-soc2` = `simple-gh-sdlc` + the deterministic compliance layer. Sketch of the delta (to be decided in
+`soc2-baseline` = `simple-gh-sdlc` + the deterministic compliance layer. Sketch of the delta (to be decided in
 the build phase once solutions are picked):
 
 - **New resources (M1):** `.github/workflows/human-approval.yml` (C4), `codeql.yml` (C8), `sbom.yml` (C10),
@@ -292,4 +292,4 @@ the build phase once solutions are picked):
 
 *Phase 1 deliverable. Design only — no profile created, no functional code changed. Citations reflect repo
 state at authoring; re-verify line numbers before building. Next: pick the §7 decisions, then build
-`profiles/simple-soc2`.*
+`profiles/soc2-baseline`.*

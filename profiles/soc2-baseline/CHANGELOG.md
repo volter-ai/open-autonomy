@@ -2,6 +2,20 @@
 
 All notable changes to the `soc2-baseline` profile. Versions follow semver for the profile's control set.
 
+## 1.3.3 — doc-hygiene reconciliation (skeptic-verified evidence; no control change)
+
+No control behavior changed. An independent control-skeptic re-verified every row of
+`docs/PROOF_LEDGER.md` against live GitHub (run IDs, PR/status URLs, logs all matched) and found the
+technical-control evidence real and inspectable. The only remaining issue was stale prose in
+profile-metadata files now reconciled with the documented C6 constraint:
+- `provision.json` `$comment` no longer says required_signatures "does not wedge the loop" — it now states
+  the ruleset blocks native auto-merge so the merge is operator-performed (matches README C6).
+- `ir.yml` comments corrected: the dispatched blockers are `supply-chain` + `code-scan` (Semgrep) +
+  `secret-scan` (gitleaks) — *not* CodeQL; the C6 comment notes the ruleset→operator-merge constraint;
+  `codeql-gate.yml` relabeled a richer SAST layer (NOT in `required_checks`).
+- `CHANGELOG.md` 1.0.0 "Controls delivered" claims for C6 ("no merge wedge") and C8 ("CodeQL blocking
+  required check") carry **superseded** pointers to 1.3.0 rather than reading as current fact.
+
 ## 1.3.0 — C8 + C12 enforce NO-signup on PRIVATE repos (the GHAS rider is gone): 39/39 no-signup
 
 Ships two self-managed, zero-account, no-GHAS BLOCKING gates wired into the agent-PR path (propose_dispatch_checks
@@ -138,9 +152,12 @@ Integrity** (Privacy out of scope).
 - **C4** deterministic per-head-SHA human-approval change gate (`human-approval.yml`).
 - **C5** profile-derived branch protection (`provision.json`: `enforce_admins:true`, ≥1 review, required checks).
 - **C6** **GitHub-Verified signed commits** — keyless via the git/commits API + the job's `GITHUB_TOKEN`;
-  `required_signatures` enforced via repository ruleset. Live-proven end-to-end (no merge wedge).
+  `required_signatures` enforced via repository ruleset. *(Superseded — see 1.3.0: a required_signatures
+  ruleset blocks native auto-merge, so the final merge is operator-performed; signing itself is proven.)*
 - **C7** supply-chain integrity (lockfile + `bun audit`) — **blocking** required check on bot PRs.
-- **C8** SAST (CodeQL) — **blocking** required check on bot PRs (+ monitoring).
+- **C8** SAST — **blocking** required check on bot PRs. *(1.0.0 shipped CodeQL as the required gate;
+  superseded in 1.3.0 by `code-scan.yml` (Semgrep OSS) so C8 blocks no-signup on PRIVATE repos — CodeQL
+  stays as a richer monitoring layer where GHAS/public exists.)*
 - **C9** dependency vulnerability review · **C10** CycloneDX SBOM · **C11** Actions pinning + workflow SAST.
 - **C12** secret scanning + push protection (provisioned).
 - **C13** secret redaction in transcripts · **C14** transcript retention sweep (gated).

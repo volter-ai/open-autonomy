@@ -85,11 +85,15 @@ edits the `assertion` field** before approving, and the register check verifies 
   blind spots, so the verifier is NOT an independent control — it is the EA's second set of eyes that *raises
   the floor*. To make it meaningfully independent it SHOULD run a **different model/provider** than the
   drafter; if it can't, the correlation is disclosed and it stays a convenience check, not an assurance.
-- **I3 — Provenance never blurred; the human authors the assertion, and it's verified.** The trail labels
-  AI-drafted vs human-attested. The signed assertion is **committed or materially edited by the human** (not a
-  one-click of AI-written words), and the register check enforces **`assertion.author == approver`** — so AI
-  words can't launder into "human-attested." For world-acts the assertion must reference the independent
-  artifact-of-performance.
+- **I3 — Provenance never blurred; the human authors the assertion, and inconsistency is flagged.** The trail
+  labels AI-drafted vs human-attested. The signed assertion is **committed or materially edited by the human**
+  (not a one-click of AI-written words). The register check **flags (red)** any `human-attested` artifact that
+  omits `approver` or whose `assertion_author` ≠ `approver` — the maintainer sees that red `soc2-register-check`
+  before approving. **Honest scope (skeptic N1/N2):** this is a *consistency* check the maintainer reads, not a
+  hard merge-block, and `assertion_author`/`approver` are self-declared strings — the **hard enforcement** is
+  the maintainer's Approve on the human-required `compliance/**` path (the check reports; the human gate
+  blocks). Binding `approver` to the *actual GitHub approver identity* is a further hardening (tracked). For
+  world-acts the assertion must reference the independent artifact-of-performance.
 - **I4 — The decision metadata is the audit trail, with teeth.** time-to-decide + finding-count + provenance
   record the decision and what the EA surfaced; they are **not used to block** (no friction), but
   **time-to-decide is an admissible detective signal** — an auditor MAY treat a population of instant

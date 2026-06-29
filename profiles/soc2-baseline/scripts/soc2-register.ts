@@ -159,6 +159,9 @@ function structural(): string[] {
     if (a.source === 'human-attested') {
       if (!a.assertion) errs.push(`ledger ${st.process}@${a.interval_end}: human-attested artifact needs an \`assertion\``);
       if (!a.assertion_author) errs.push(`ledger ${st.process}@${a.interval_end}: human-attested artifact needs \`assertion_author\``);
+      // `approver` is REQUIRED for human-attested (N1 fix) so the author==approver binding can never be skipped
+      // by omitting approver.
+      if (!a.approver) errs.push(`ledger ${st.process}@${a.interval_end}: human-attested artifact needs \`approver\` (so the author==approver binding applies)`);
       if (a.assertion_author && a.approver && a.assertion_author !== a.approver) errs.push(`ledger ${st.process}@${a.interval_end}: assertion_author "${a.assertion_author}" != approver "${a.approver}" (W12.7 — assertion must be human-authored by the approver)`);
     }
     if (a.source && a.source !== 'ai-drafted' && a.source !== 'human-attested') errs.push(`ledger ${st.process}@${a.interval_end}: invalid source "${a.source}"`);

@@ -120,6 +120,11 @@ interface GithubBox {
   // lets branch protection require signed commits (C6). Unset ⇒ plain git commit (current behavior). Other
   // profiles don't set it, so this is a no-op everywhere except where declared.
   commit_signing?: string;
+  // Opt-in self-managed egress allowlist (scripts/egress-guard.sh) injected into the agent job. The
+  // no-account fallback for PRIVATE repos, where the free harden-runner block (Community = public only) can't
+  // enforce: it allowlists GitHub /meta ranges (keeps the runner alive) + the agent's hosts (model proxy via
+  // MODEL_PROXY_URL, npm, github CDNs) and default-DENYs the rest. Unset ⇒ not injected (no-op elsewhere).
+  private_egress_guard?: boolean;
 }
 // The box ALWAYS has a model endpoint (docs/SPEC.md#the-box), so the substrate supplies a DEFAULT model when
 // the profile names none — a profile that omits it (e.g. a generic SDLC preset) still runs instead of dying
@@ -156,6 +161,20 @@ function hardenRunner(gh: GithubBox): string[] {
     '            agent.api.stepsecurity.io:443',
     '            prod.app-api.stepsecurity.io:443',
     `            ${varOr('PUBLIC_AGENT_PROXY_HOST', gh.proxy_host)}:443`,
+  ];
+}
+
+// Opt-in self-managed egress allowlist for the credentialed jobs — the no-account fallback that ENFORCES on
+// PRIVATE repos (where harden-runner Community only audits). Runs the shipped scripts/egress-guard.sh, which
+// allowlists the GitHub /meta ranges + the agent's hosts (npm, github CDNs, and the proxy from MODEL_PROXY_URL)
+// and default-DENYs the rest. Empty unless the profile sets policy.box.gh-actions.private_egress_guard.
+function egressGuard(gh: GithubBox): string[] {
+  if (!gh.private_egress_guard) return [];
+  return [
+    '      - name: Self-managed egress allowlist (no-account fallback; ENFORCES on private repos)',
+    '        env:',
+    `          MODEL_PROXY_URL: ${varOr('MODEL_PROXY_URL', gh.proxy_host ? `https://${gh.proxy_host}` : undefined)}`,
+    '        run: bash scripts/egress-guard.sh',
   ];
 }
 
@@ -364,6 +383,7 @@ function wrapperYml(name: string, agent: IRAgent, gh: GithubBox, isControlPrimar
     `    steps:`,
     ...hardenRunner(gh),
     `      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1`,
+    ...egressGuard(gh),
     `      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0`,
     `      - run: bun install --frozen-lockfile`,
     ...buildIssue,
@@ -395,6 +415,7 @@ function wrapperYml(name: string, agent: IRAgent, gh: GithubBox, isControlPrimar
     `    steps:`,
     ...hardenRunner(gh),
     `      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1`,
+    ...egressGuard(gh),
     `      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0`,
     `      - run: bun install --frozen-lockfile`,
     `      - name: install Claude Code CLI`,

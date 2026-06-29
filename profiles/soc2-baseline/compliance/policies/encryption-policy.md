@@ -17,8 +17,7 @@ The `harden-runner` egress allowlist in the agent workflows; subprocessor encryp
 store configuration.
 
 ## Egress enforcement note
-The in-transit allowlist (C3/C15) is enforced by the **free** harden-runner `egress-policy: block` Action on
-**public** hosted runners — no StepSecurity account required (the shipped allowlist includes harden-runner's
-own agent endpoints so the block agent initializes). Verified live: on a public repo non-allowlisted egress is
-DENIED. On **private** repos the free tier does not block — StepSecurity Enterprise is required (public-free/
-private-paid boundary). [ORG] chooses public repos or budgets Enterprise for private.
+The in-transit allowlist (C3/C15) is enforced with **zero signup on both public and private repos**: PUBLIC
+repos use the free harden-runner `egress-policy: block` Action; PRIVATE repos use the shipped self-managed
+`scripts/egress-guard.sh` (iptables allowlist of GitHub /meta ranges + the agent's hosts, default-deny),
+wired into the agent jobs. Verified live: non-allowlisted egress is DENIED on a private repo with no account.

@@ -2,6 +2,17 @@
 
 All notable changes to the `soc2-baseline` profile. Versions follow semver for the profile's control set.
 
+## 1.2.0 — C3/C15 egress lockdown: NO-account enforcement on PRIVATE repos too (self-managed guard)
+
+Ships `scripts/egress-guard.sh` (profile resource) + wires it into the credentialed agent jobs via the new
+`policy.box.gh-actions.private_egress_guard` flag (emit.ts). It's the no-signup fallback for PRIVATE repos
+(where harden-runner Community only audits): an iptables/ipset allowlist of GitHub `/meta` ranges (keeps the
+Actions runner control-plane alive) + the agent's hosts (model proxy from MODEL_PROXY_URL, npm, github CDNs),
+default-DENY (v4+v6). Live-proven on the PRIVATE cell, no account: example.com DENIED (exit 7) while the
+proxy(200)/npm(200)/api.github(200)/codeload(301)/objects(404) egress stays reachable — the loop survives.
+Combined with the public-repo harden-runner fix (1.1.2), egress lockdown now enforces with ZERO signup on any
+repo. Zero blast radius (self-driving doesn't set the flag; dogfood 57/57). bun run check green.
+
 ## 1.1.2 — C3/C15 egress lockdown FIXED in-profile (no account); prior "needs the App" was wrong
 
 Re-investigation (per challenge) overturned 1.1.1's conclusion. Root cause of the fail-open: the shipped

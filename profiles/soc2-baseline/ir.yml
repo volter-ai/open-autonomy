@@ -70,6 +70,10 @@ policy:
       # without wedging. A plain `git commit` is unsigned; a PAT-created API commit is unsigned too — only
       # the Actions bot / a GitHub App identity gets GitHub's signature.
       commit_signing: verified-api
+      # No-account egress lockdown that ENFORCES on PRIVATE repos (the common adopter case) where the free
+      # harden-runner block only audits. Injects scripts/egress-guard.sh into the credentialed jobs — a
+      # self-managed iptables allowlist (GitHub /meta ranges + the agent's hosts) with default-deny.
+      private_egress_guard: true
     wip:
       maxInProgress: 1
       maxInReview: 1
@@ -157,6 +161,7 @@ resources:
   # --- SOC 2 policy + evidence tree (install-owned: seed-once, adopter-edited) ---
   - SECURITY.md
   - standards/compliance.md
+  - scripts/egress-guard.sh        # C3/C15 no-account egress fallback (wired into the agent jobs on private repos)
   - provision.json
   - compliance/README.md
   - compliance/control-matrix.md

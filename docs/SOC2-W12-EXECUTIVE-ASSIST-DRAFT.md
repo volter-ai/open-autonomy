@@ -138,12 +138,15 @@ playbooks are free.
 ## 8a. Install-runtime boundary (live-proof finding)
 
 The drafter/verifier **workflows trigger correctly** (proven live: a `soc2-control-due` label fired the
-drafter run), but a bare soc2-baseline **content scaffold** has no `package.json`/lockfile, so the agent
-job's `bun install` fails — the **autonomous funded agent** only runs where the install is a *runnable* OA
-repo (the dogfood/bench cells are; a fresh provision is not). This is an **install-packaging** boundary, not
-a W12-logic flaw: the human-seam + close + the W12.7 authorship gate are all proven live by executing the
-drafter's documented playbook with real data. Making a standalone install agent-runnable (ship a
-`package.json` + lockfile + the runtime deps) is a separate install-completeness item.
+drafter run). The **install-packaging** boundary is now **CLOSED** — soc2-baseline ships a runnable
+`package.json` + `bun.lock` (a `yaml` dep + tsc), so the agent job's `bun install --frozen-lockfile`
+**succeeds** (proven live: run `28404018306` passes install + installs the Claude Code CLI + reaches the model
+mint). The autonomous funded agent then needs the **model proxy** to authorize the mint, which is an
+**external** boundary: the proxy's `GITHUB_OIDC_ALLOWED_WORKFLOW` trusts the dogfood + the fixtures wildcard
+but not arbitrary test repos (`403 forbidden_workflow`), and a fresh fixtures-org repo currently `startup_fails`
+its workflows (org Actions minutes / a bench-harness cell step). Crossing it is an operator/infra action
+(add the repo owner to the proxy trust + deploy, or run on a provisioned fixtures cell) — **not** a W12-logic
+flaw. The human-seam + close + the W12.7 authorship gate are all proven live (docs §… / PROOF_LEDGER).
 
 ## 8. Honest limits
 

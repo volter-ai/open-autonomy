@@ -18,11 +18,11 @@ TSC legend: **CC** = Security/Common Criteria (mandatory) · **C** = Confidentia
 | C5 | Branch protection (required checks, no self-merge, enforce_admins) | CC8, **PI** | `provision.json` → `scripts/provision-target-repo.ts` (enforce_admins:true, ≥1 review) | `evidence/*/branch-protection.json` |
 | C6 | Signed commits | CC8 | **GitHub-Verified** agent commits via the git/commits API (job GITHUB_TOKEN signs; `commit_signing: verified-api`); `required_signatures` ON. DCO retained as defense-in-depth | commit `verification.verified=true`; branch-protection snapshot |
 | C7 | Supply-chain integrity | CC7, CC8, **PI** | `check-supply-chain.ts` (registry-only + sha + `bun audit`) — **BLOCKING required check** on bot PRs via dispatched `supply-chain.yml` + monitoring `security.yml` | required `supply-chain` status |
-| C8 | SAST (CodeQL) | CC7 | **BLOCKING required check** on bot PRs via dispatched `codeql-gate.yml` (posts `codeql` status) + monitoring `codeql.yml` (Security tab) | required `codeql` status; code-scanning alerts |
+| C8 | SAST (code scanning) | CC7 | **No-signup BLOCKING required check on bot PRs via `code-scan.yml` (Semgrep OSS — free, no account, no GHAS; posts `code-scan` status).** Enforces on PRIVATE repos. CodeQL (`codeql.yml`/`codeql-gate.yml`) stays as richer SAST where GHAS/public exists. | required `code-scan` status; Semgrep findings |
 | C9 | Dependency vulnerability review | CC7 | `dependency-review.yml` (PR-time, dependency-graph compare) + `dependabot.yml` | PR check runs; Dependabot PRs/alerts |
 | C10 | SBOM | CC7, C | `sbom.yml` (CycloneDX on push + weekly) | `sbom-<sha>` artifacts |
 | C11 | Actions hardening (pinning, workflow SAST) | CC7 | All actions SHA-pinned; `security.yml` runs zizmor; `dependabot.yml` bumps pins | Security workflow runs |
-| C12 | Secret scanning + push protection | CC6, C | `provision.json` `security` block → repo API (GHAS) | `evidence/*/repo-settings.json` |
+| C12 | Secret scanning | CC6, C | **No-signup BLOCKING required check on bot PRs via `secret-scan.yml` (gitleaks — free, no account, no GHAS; posts `secret-scan` status).** Enforces on PRIVATE repos. GitHub secret-scanning + push-protection also enabled via `provision.json` where free (public/GHAS). | required `secret-scan` status; gitleaks findings; repo-settings snapshot |
 | C13 | Secret redaction in transcripts | C | `scripts/transcript.ts` token-shape redaction | transcript files |
 | C14 | Data classification & transcript retention | C, CC6 | `retention.yml` (gated deletion PR) + data-classification policy | retention PRs; policy |
 | C15 | Encryption in transit / at rest | CC6, C | HTTPS-only egress allowlist (transit); GitHub/Cloudflare at-rest (inherited) | egress allowlist; subprocessor reports |

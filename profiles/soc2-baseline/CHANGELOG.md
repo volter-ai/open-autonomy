@@ -2,6 +2,19 @@
 
 All notable changes to the `soc2-baseline` profile. Versions follow semver for the profile's control set.
 
+## 1.3.0 — C8 + C12 enforce NO-signup on PRIVATE repos (the GHAS rider is gone): 39/39 no-signup
+
+Ships two self-managed, zero-account, no-GHAS BLOCKING gates wired into the agent-PR path (propose_dispatch_checks
++ provision.json required_checks), eliminating the last public-free/private-paid boundary:
+- C8 code-scan.yml — Semgrep OSS static analysis. Live-proven on a PRIVATE repo (no GHAS): a command-injection
+  PR → code-scan=failure (1 finding) → BLOCKED.
+- C12 secret-scan.yml — gitleaks. Live-proven on the same PRIVATE repo: a committed AWS secret → secret-scan=
+  failure → BLOCKED.
+required_checks is now [ci, agent-review, human-approval, supply-chain, code-scan, secret-scan]. CodeQL +
+GitHub secret-scanning remain as optional richer layers where GHAS/public exists. Updated the frozen spec's
+C8/C12 acceptance to the no-signup bar + control-matrix. With C3/C15 (egress-guard) already no-signup on
+private, a private adopter now gets 39/39 controls enforcing with ZERO signup. bun run check green; dogfood 57/57.
+
 ## 1.2.1 — skeptic-panel fixes: durable block-on-violation evidence + stale-policy fix
 
 A 2-agent default-REFUTED skeptic panel over the 39 frozen sub-objectives found real gaps (I had deleted the

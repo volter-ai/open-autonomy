@@ -64,7 +64,10 @@ policy:
     # wedge — the proposer kicks each so its status posts on the head SHA). These make `supply-chain` + `codeql`
     # blocking on the agent-PR path, not just on human PRs. model/proxy/bot fall back to the substrate defaults.
     gh-actions:
-      propose_dispatch_checks: [supply-chain.yml, codeql-gate.yml]
+      # No-signup BLOCKING gates dispatched on bot PRs. code-scan (Semgrep OSS) + secret-scan (gitleaks) are the
+      # zero-account, no-GHAS enforcers for C8/C12 — they work on PRIVATE repos where CodeQL/GitHub secret
+      # scanning would need GHAS. codeql-gate stays for richer SAST where GHAS/public is available.
+      propose_dispatch_checks: [supply-chain.yml, code-scan.yml, secret-scan.yml, codeql-gate.yml]
       # C6 — re-create the agent commit via GitHub's git/commits API so the job's GITHUB_TOKEN
       # (github-actions[bot]) signs it "Verified" (keyless). Lets provision.json require signed commits
       # without wedging. A plain `git commit` is unsigned; a PAT-created API commit is unsigned too — only
@@ -153,6 +156,8 @@ resources:
   - .github/workflows/codeql-gate.yml       # C8  SAST BLOCKING gate on bot PRs (dispatched; posts `codeql` status)
   - .github/workflows/supply-chain.yml      # C7  supply-chain BLOCKING gate on bot PRs (dispatched; posts `supply-chain` status)
   - .github/workflows/human-approval.yml    # C4  deterministic per-head-SHA maintainer change gate
+  - .github/workflows/code-scan.yml         # C8  no-signup SAST gate (Semgrep OSS) — enforces on private, no GHAS
+  - .github/workflows/secret-scan.yml       # C12 no-signup secret-scan gate (gitleaks) — enforces on private, no GHAS
   - .github/workflows/dependency-review.yml # C9  PR-time dependency vulnerability review (GHAS)
   - .github/workflows/sbom.yml              # C10 CycloneDX SBOM on push + weekly
   - .github/workflows/evidence-collect.yml  # C16 tamper-evident control-evidence snapshot → compliance-evidence branch

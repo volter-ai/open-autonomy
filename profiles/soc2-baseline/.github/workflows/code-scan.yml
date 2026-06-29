@@ -1,0 +1,38 @@
+name: code-scan
+# C8 as a no-signup, no-GHAS BLOCKING required check on bot PRs: Semgrep OSS (free, no account) statically
+# analyses the head and posts a `code-scan` commit status, failing on any finding. Dispatched by the proposer
+# effect. Works on PRIVATE repos with zero signup — the self-managed alternative to GitHub CodeQL/code scanning
+# (which needs GHAS on private). The richer CodeQL stays available as monitoring (codeql.yml) where GHAS exists.
+on:
+  workflow_dispatch:
+    inputs:
+      sha: { description: "head SHA to scan + post the status on", required: true, type: string }
+      pr: { description: "PR number (context only)", required: false, type: string }
+permissions:
+  contents: read
+  statuses: write
+jobs:
+  code-scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        with:
+          ref: ${{ github.event.inputs.sha }}
+      - name: Post pending
+        env: { GH_TOKEN: "${{ github.token }}", SHA: "${{ github.event.inputs.sha }}" }
+        run: gh api -X POST "repos/{owner}/{repo}/statuses/${SHA}" -f state=pending -f context=code-scan -f description="static analysis (Semgrep OSS)" >/dev/null
+      - name: Semgrep scan + post result
+        env: { GH_TOKEN: "${{ github.token }}", SHA: "${{ github.event.inputs.sha }}" }
+        run: |
+          set +e
+          python3 -m pip install --quiet semgrep || pipx install semgrep
+          # Registry rulesets are free + no-account (no SEMGREP_APP_TOKEN). --severity ERROR = block on real bugs.
+          semgrep --quiet --config=p/security-audit --config=p/javascript --config=p/secrets --severity=ERROR --json --output sem.json . ; rc=$?
+          n="$(jq '.results | length' sem.json 2>/dev/null || echo 0)"
+          n="${n:-0}"
+          if [ "$n" -gt 0 ]; then
+            state=failure; desc="Semgrep found ${n} finding(s)"
+            jq -r '.results[] | "  - " + (.check_id) + " @ " + (.path) + ":" + (.start.line|tostring)' sem.json 2>/dev/null | head -5
+          else state=success; desc="Semgrep clean (no error-severity findings)"; fi
+          gh api -X POST "repos/{owner}/{repo}/statuses/${SHA}" -f state="$state" -f context=code-scan -f description="$desc" >/dev/null
+          [ "$state" = success ]

@@ -64,7 +64,11 @@ function currency(proc: Proc, ledger: ReturnType<typeof loadLedger>, asOf?: stri
   // continuity: count distinct interval BUCKETS covered (not distinct dates — two artifacts in the same
   // bucket must not mask a different empty bucket), vs the number of buckets elapsed since effective_from.
   const elapsed = daysBetween(today(asOf), eff);
-  const expected = Math.max(0, Math.floor(elapsed / days));
+  // require coverage only of intervals that closed STRICTLY before today — `(elapsed-1)/days` — so the
+  // just-closed interval gets the same one-day boundary grace the recency check uses (today > due, strict).
+  // This keeps recency and continuity consistent at an exact `eff + N*days` boundary (no one-day-early flag);
+  // a genuinely skipped EARLIER interval closed long ago, so the grace never hides it.
+  const expected = Math.max(0, Math.floor((elapsed - 1) / days));
   // An artifact's `interval_end` date D is the CLOSE of the interval it evidences: interval k spans
   // (eff + k*days, eff + (k+1)*days], so D in that range evidences interval k = ceil((D-eff)/days) - 1.
   // (Using floor would push an end-dated artifact into the NEXT interval — leaving interval 0 perpetually

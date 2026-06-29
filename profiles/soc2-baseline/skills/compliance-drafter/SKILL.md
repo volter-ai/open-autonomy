@@ -70,6 +70,11 @@ on merge). Commit:
   when they edit the assertion and approve. The currency check rejects a human-attested artifact whose
   `assertion_author` ≠ `approver`, so a pre-signed draft would (correctly) fail.
 
+- **Re-render the register** after appending the artifact: run `bun scripts/soc2-register.ts render` and
+  commit the refreshed `compliance/control-register.md` in the SAME PR. The rendered register shows each
+  process's last-evidence/state, so an un-rendered ledger change trips the `soc2-register-check` drift gate.
+  (The executive, when they edit the `assertion`, re-renders too — a one-liner — before approving.)
+
 The PR body IS the **decision brief** (§4). The PR goes through the normal effect (dispatches `ci`,
 `agent-review`, `human-approval`); `compliance/**` is human-required, so a maintainer Approve is forced —
 that Approve is the executive's signature.

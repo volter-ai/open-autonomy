@@ -131,6 +131,16 @@ explicit degraded path ("no input → template, flagged un-evidenced"). The firs
 (e.g. access-review + policy-review-ack, the most data-available) and grow; the spec must not pretend the
 playbooks are free.
 
+## 8a. Install-runtime boundary (live-proof finding)
+
+The drafter/verifier **workflows trigger correctly** (proven live: a `soc2-control-due` label fired the
+drafter run), but a bare soc2-baseline **content scaffold** has no `package.json`/lockfile, so the agent
+job's `bun install` fails — the **autonomous funded agent** only runs where the install is a *runnable* OA
+repo (the dogfood/bench cells are; a fresh provision is not). This is an **install-packaging** boundary, not
+a W12-logic flaw: the human-seam + close + the W12.7 authorship gate are all proven live by executing the
+drafter's documented playbook with real data. Making a standalone install agent-runnable (ship a
+`package.json` + lockfile + the runtime deps) is a separate install-completeness item.
+
 ## 8. Honest limits
 
 - The executive's **understanding and signature are irreducible** — by design (the point).

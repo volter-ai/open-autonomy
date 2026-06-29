@@ -15,3 +15,5 @@ agent-sessions/
 
 # built CLI bundle (produced by prepublishOnly)
 dist/
+node_modules/
+.DS_Store

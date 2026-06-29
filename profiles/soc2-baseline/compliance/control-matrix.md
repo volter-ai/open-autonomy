@@ -2,7 +2,7 @@
 
 The authoritative map of each control → the Trust Services Criteria it serves → how it's **enforced**
 (deterministic mechanism, not agent behavior) → where the **evidence** is. This is the document an auditor
-reads first. Control IDs (C1–C18) match `docs/SOC2-BASELINE-PROFILE.md` in the Open Autonomy repo.
+reads first. Control IDs (C1–C20) match `docs/SOC2-BASELINE-PROFILE.md` in the Open Autonomy repo.
 
 TSC legend: **CC** = Security/Common Criteria (mandatory) · **C** = Confidentiality · **A** = Availability ·
 **PI** = Processing Integrity.
@@ -27,7 +27,8 @@ TSC legend: **CC** = Security/Common Criteria (mandatory) · **C** = Confidentia
 | C14 | Data classification & transcript retention | C, CC6 | `retention.yml` (gated deletion PR) + data-classification policy | retention PRs; policy |
 | C15 | Encryption in transit / at rest | CC6, C | HTTPS-only egress allowlist (transit); GitHub/Cloudflare at-rest (inherited) | egress allowlist; subprocessor reports |
 | C16 | Audit logging & tamper-evident evidence | CC7 | `evidence-collect.yml` → `compliance-evidence` branch (git-immutable) + git history + Actions logs | `compliance-evidence` branch |
-| C17 | Availability: liveness watchdog | **A** | `heartbeat.yml` (pm-decoupled liveness alert) | heartbeat run history; alert issues |
+| C17 | Availability: liveness watchdog (A1.1) | **A** | `heartbeat.yml` (pm-decoupled liveness alert) | heartbeat run history; alert issues |
+| C20 | Availability: business continuity & DR (A1.2/A1.3) | **A** | `business-continuity-dr-policy.md` (RTO/RPO + per-asset backup posture) + git-replicated `compliance-evidence` branch + tag-based rollback; restore test is org-operated | BC/DR policy; dated restore-test record |
 | C18 | Proxy controls (admin auth, rate limit, ledger backup) | CC6, CC7, A | **Subprocessor** (Open Autonomy model proxy) — not in this repo | `compliance/subprocessors.md` |
 | C19 | Privacy / PI handling + data-subject requests | **Privacy** | PI-minimizing posture (keep PI out of inputs) + DSR process + retention | `compliance/policies/privacy-policy.md`; DSR log |
 

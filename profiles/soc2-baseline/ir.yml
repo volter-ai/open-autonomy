@@ -3,7 +3,7 @@
 # but every install ships the SOC 2-relevant controls baked in as deterministic CI/config/branch-protection/
 # policy files — NOT as agent behavior. The agents run the SDLC; the controls are enforced by the substrate
 # and GitHub, so an adopter repo is "Type-I-ready by design". See docs/SOC2-BASELINE-PROFILE.md for the full
-# control map (C1–C18), the can/can't-be-a-default split, and the honest ceiling (Type II still needs the org
+# control map (C1–C20), the can/can't-be-a-default split, and the honest ceiling (Type II still needs the org
 # program + the observation window). One unit: an agent = behavior + capabilities + triggers(+params)(+review).
 schema: autonomy.ir.v1
 # Same runner ⟂ code host independence as simple-gh-sdlc: github code host, either runner.

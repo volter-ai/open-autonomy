@@ -65,9 +65,13 @@ function currency(proc: Proc, ledger: ReturnType<typeof loadLedger>, asOf?: stri
   // bucket must not mask a different empty bucket), vs the number of buckets elapsed since effective_from.
   const elapsed = daysBetween(today(asOf), eff);
   const expected = Math.max(0, Math.floor(elapsed / days));
-  // count only buckets for COMPLETED intervals [0, expected); an artifact in the current in-progress
-  // interval (bucket index == expected) must NOT pad coverage of a skipped earlier complete interval.
-  const buckets = new Set(arts.map((a) => Math.floor(daysBetween(new Date(a + 'T00:00:00Z'), eff) / days)).filter((b) => b >= 0 && b < expected));
+  // An artifact's `interval_end` date D is the CLOSE of the interval it evidences: interval k spans
+  // (eff + k*days, eff + (k+1)*days], so D in that range evidences interval k = ceil((D-eff)/days) - 1.
+  // (Using floor would push an end-dated artifact into the NEXT interval — leaving interval 0 perpetually
+  // "uncovered" and contradicting the recency check, which accepts interval_end dating.) Count only
+  // COMPLETED intervals [0, expected); an artifact in the current in-progress interval must not pad coverage.
+  const intervalOf = (d: string) => Math.ceil(daysBetween(new Date(d + 'T00:00:00Z'), eff) / days) - 1;
+  const buckets = new Set(arts.map(intervalOf).filter((b) => b >= 0 && b < expected));
   const missing = Math.max(0, expected - buckets.size);
   return { overdue: recencyOverdue || missing > 0, dueBy: due.toISOString().slice(0, 10), last: last.date, from: last.from, missing };
 }

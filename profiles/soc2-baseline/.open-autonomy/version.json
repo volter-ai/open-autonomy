@@ -1,6 +1,6 @@
 {
   "schema": "open-autonomy.version.v1",
-  "version": "1.0.3",
+  "version": "1.1.0",
   "profile": "soc2-baseline",
   "template": "soc2-baseline"
 }

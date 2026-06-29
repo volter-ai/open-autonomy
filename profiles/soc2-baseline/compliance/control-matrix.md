@@ -29,6 +29,7 @@ TSC legend: **CC** = Security/Common Criteria (mandatory) · **C** = Confidentia
 | C16 | Audit logging & tamper-evident evidence | CC7 | `evidence-collect.yml` → `compliance-evidence` branch (git-immutable) + git history + Actions logs | `compliance-evidence` branch |
 | C17 | Availability: liveness watchdog | **A** | `heartbeat.yml` (pm-decoupled liveness alert) | heartbeat run history; alert issues |
 | C18 | Proxy controls (admin auth, rate limit, ledger backup) | CC6, CC7, A | **Subprocessor** (Open Autonomy model proxy) — not in this repo | `compliance/subprocessors.md` |
+| C19 | Privacy / PI handling + data-subject requests | **Privacy** | PI-minimizing posture (keep PI out of inputs) + DSR process + retention | `compliance/policies/privacy-policy.md`; DSR log |
 
 ## Processing Integrity note (PI)
 

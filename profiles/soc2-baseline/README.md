@@ -44,10 +44,14 @@ committed, change-managed file, not an out-of-band console click. It is install-
 
 ## TSC scope
 
-**Security (CC) + Confidentiality + Availability + Processing Integrity.** Privacy is out of scope (this
-installation is not designed to process end-user PII; keep PII out of inputs — see the data-classification
-policy). Processing Integrity is delivered by the change pipeline: only reviewed, passing, intended code
-lands (C2/C4/C5/C7) — see the control matrix PI note.
+**Security (CC) + Confidentiality + Availability + Processing Integrity**, with **Privacy scaffolded**
+(`compliance/policies/privacy-policy.md` + a data-subject-request process). The v1 posture is
+**PI-minimizing** — this installation isn't designed to process end-user PI (keep PI out of inputs); adopters
+who do process PI extend the Privacy controls. Processing Integrity is delivered by the change pipeline: only
+reviewed, passing, intended code lands (C2/C4/C5/C7) — see the control matrix PI note.
+
+New adopters: start with [`compliance/ONBOARDING.md`](compliance/ONBOARDING.md) (compile → provision → fund →
+operate, with the `ci`/GHAS/signing gotchas called out).
 
 ## C8/C7 — CodeQL + supply-chain are now BLOCKING required checks on bot PRs ✅
 

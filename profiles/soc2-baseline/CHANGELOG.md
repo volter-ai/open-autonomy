@@ -2,6 +2,14 @@
 
 All notable changes to the `soc2-baseline` profile. Versions follow semver for the profile's control set.
 
+## 1.1.0 — Privacy TSC scaffolded + adopter onboarding guide
+
+- **Privacy TSC**: added `compliance/policies/privacy-policy.md` (notice/choice/collection/use/retention/
+  access/disclosure + a data-subject-request process). Scope is now Sec + Conf + Avail + PI **+ Privacy
+  (scaffolded)**; v1 posture stays PI-minimizing. Control matrix C19 added.
+- **Onboarding**: added `compliance/ONBOARDING.md` — compile → provision → fund → operate, with the `ci`
+  (adopter-provided), GHAS-on-private (G3), and required-signatures-merge (finding #6) gotchas called out.
+
 ## 1.0.3 — Tier B full-loop live proof (keystone) + 2 fixes
 
 Ran the funded full agent loop on a disposable cell (pm → draft → develop → gates → Verified squash-merge,

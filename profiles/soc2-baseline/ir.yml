@@ -93,7 +93,16 @@ policy:
         - .github/workflows/**
         - .codex/skills/**
         - .claude/skills/**
-        - .open-autonomy/**
+        # Governance files are human-required — but NOT `.open-autonomy/**` broadly: the propose effect injects
+        # the run transcript into `.open-autonomy/history/**` on EVERY agent PR, so a broad glob makes the
+        # reviewer reject every PR (the loop could never merge). List the governance files explicitly; history
+        # is agent evidence, not a human-required change.
+        - .open-autonomy/autonomy.yml
+        - .open-autonomy/roadmap.yml
+        - .open-autonomy/architecture-invariants.yml
+        - .open-autonomy/review-rubric.yml
+        - .open-autonomy/strategy-rubric.yml
+        - .open-autonomy/human-required-paths.json
         - compliance/**                 # SOC 2 policies, risk register, subprocessor list, control matrix — change-managed
         - SECURITY.md
         - provision.json                # the branch-protection / required-checks manifest is a control itself

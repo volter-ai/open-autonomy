@@ -2,6 +2,25 @@
 
 All notable changes to the `soc2-baseline` profile. Versions follow semver for the profile's control set.
 
+## 1.0.3 — Tier B full-loop live proof (keystone) + 2 fixes
+
+Ran the funded full agent loop on a disposable cell (pm → draft → develop → gates → Verified squash-merge,
+\$0.81 spend). It caught two more bugs:
+- **reviewer rejected EVERY agent PR**: the propose effect injects the run transcript into
+  `.open-autonomy/history/**`, but the reviewer skill + `human_required_paths` treated any `.open-autonomy/`
+  diff as out-of-scope/human-required → `agent-review=failure` always (the loop could never merge). Fixed:
+  narrowed `human_required_paths` to the specific governance files (not `.open-autonomy/**`) and exempted
+  `.open-autonomy/history/**` in the reviewer skill. After the fix the reviewer passed (ztrack green, 17/17).
+- **finding #6 (documented, not yet fixed)**: applying `required_signatures` as a repository RULESET with
+  `enforce_admins:true` blocks the merge step itself (auto and manual) even though the PR commit is Verified —
+  the keystone merge required momentarily relaxing the ruleset. The agent commit AND the squash commit are
+  both GitHub-`verified:true`; the control is real, but the ruleset/auto-merge interaction needs reconciling
+  (e.g. classic-protection signed-commits, or operator merge). Tracked for a follow-up.
+
+Live-proven end-to-end: agent commit GitHub-Verified; ci + agent-review + human-approval + supply-chain all
+green; maintainer approval (required_reviews:1); Verified squash-merge on main; evidence-collect snapshot
+written. (CodeQL is GHAS-gated → proven on a public repo in Tier A, not runnable on the private cell.)
+
 ## 1.0.2 — codeql gate actually blocks (live-proof fix)
 
 Forcing a **real** violation (not just status-posting) exposed a false-pass in the CodeQL gate and fixed it:

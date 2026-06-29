@@ -31,9 +31,12 @@ The PR number arrives as `TARGET_REF`. Do not wait for the developer to finish �
      PR's head/commits; use `--no-verify-commits` only if this CI checkout is shallow and lacks them);
    - the PR **diff** actually implements the claimed ACs (no unrelated scope). **Deterministic reject:** the
      diff must touch ONLY the issue's subject — if it includes ANY OA harness / working file the issue is not
-     explicitly about (`issue.md`, `.volter/`, `.open-autonomy/`, `scripts/`, `scheduler/`, `standards/`,
-     `.claude/`, `.codex/`, `.github/`), that is unrelated scope → `agent-review=failure` every time (these
-     are also `human-required` paths — the loop must never auto-merge a change to its own machinery);
+     explicitly about (`issue.md`, `.volter/`, `.open-autonomy/` **except** `.open-autonomy/history/**`,
+     `scripts/`, `scheduler/`, `standards/`, `.claude/`, `.codex/`, `.github/`), that is unrelated scope →
+     `agent-review=failure` every time (these are also `human-required` paths — the loop must never auto-merge
+     a change to its own machinery). **EXEMPTION:** `.open-autonomy/history/**` is the run transcript the
+     propose effect injects into EVERY agent PR as permanent evidence — it is expected, not unrelated scope,
+     and never a reason to fail;
    - it touches no unapproved `human-required` path/topic from `risk-and-review.md`;
    - it adheres to every applicable **architecture invariant** (the check below).
    **Architecture invariants — be FASTIDIOUS; enumerate, do not sample.** This is the project's immune system

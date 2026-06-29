@@ -115,7 +115,7 @@ criteria:
   - id: CC4.1
     family: CC4
     statement: "Perform ongoing/separate monitoring evaluations"
-    class: ["a", ",", "b"]
+    class: ["a", "b"]
     status: tracked
     control_refs: [".github/workflows/evidence-collect.yml", ".github/workflows/heartbeat.yml"]
     owner_role: maintainer
@@ -124,7 +124,7 @@ criteria:
   - id: CC4.2
     family: CC4
     statement: "Evaluate & communicate control deficiencies (incl. senior mgmt/board)"
-    class: ["a", ",", "b", ",", "c"]
+    class: ["a", "b", "c"]
     status: tracked
     control_refs: [".github/workflows/compliance-cadence.yml"]
     owner_role: maintainer
@@ -161,15 +161,17 @@ criteria:
   - id: CC6.1
     family: CC6
     statement: "Logical access security software/architecture"
-    class: ["a"]
+    class: ["a", "c"]
     status: enforced
     control_refs: ["C1", "C15", "compliance/policies/access-control-policy.md"]
     owner_role: substrate
     evidence: "workflow-perms"
+    external_owner: "org GitHub/IdP admin (MFA enforcement)"
+    external_reason: "substrate logical access is enforced; org-wide MFA on human accounts is an external IdP setting"
   - id: CC6.2
     family: CC6
     statement: "Register/authorize/deprovision credentials"
-    class: ["a", ",", "b"]
+    class: ["a", "b"]
     status: tracked
     control_refs: [".github/workflows/evidence-collect.yml", "compliance/policies/hr-security-policy.md"]
     owner_role: maintainer
@@ -196,7 +198,7 @@ criteria:
   - id: CC6.5
     family: CC6
     statement: "Secure disposal so data cannot be recovered"
-    class: ["a", ",", "b", ",", "c"]
+    class: ["a", "b", "c"]
     status: tracked
     control_refs: ["C14", "compliance/policies/data-classification-and-retention-policy.md"]
     owner_role: maintainer
@@ -223,7 +225,7 @@ criteria:
   - id: CC6.8
     family: CC6
     statement: "Prevent/detect unauthorized or malicious software"
-    class: ["a", ",", "c"]
+    class: ["a", "c"]
     status: tracked
     control_refs: ["C7", "C8", "C11"]
     owner_role: maintainer
@@ -233,7 +235,7 @@ criteria:
   - id: CC7.1
     family: CC7
     statement: "Detect config changes & new vulnerabilities"
-    class: ["a", ",", "b"]
+    class: ["a", "b"]
     status: enforced
     control_refs: ["C8", "C9", "C11", ".github/workflows/security.yml"]
     owner_role: substrate
@@ -242,7 +244,7 @@ criteria:
   - id: CC7.2
     family: CC7
     statement: "Monitor for anomalies/security events"
-    class: ["a", ",", "c"]
+    class: ["a", "c"]
     status: tracked
     control_refs: ["C16", "C17"]
     owner_role: maintainer
@@ -288,7 +290,7 @@ criteria:
   - id: CC9.1
     family: CC9
     statement: "Mitigate business-disruption risk (BCP/DR, insurance)"
-    class: ["b", ",", "c"]
+    class: ["b", "c"]
     status: tracked
     control_refs: ["C20", "compliance/policies/business-continuity-dr-policy.md"]
     owner_role: leadership
@@ -299,16 +301,18 @@ criteria:
   - id: CC9.2
     family: CC9
     statement: "Assess & manage vendor/business-partner risk"
-    class: ["b"]
+    class: ["b", "c"]
     status: tracked
     control_refs: ["compliance/subprocessors.md", "compliance/policies/vendor-management-policy.md"]
     owner_role: leadership
     evidence: "vendor-assessments"
     processes: ["vendor-reassessment"]
+    external_owner: "org/legal (signed DPAs)"
+    external_reason: "vendor risk is tracked in-repo; signing the legal DPAs with each subprocessor is external"
   - id: A1.1
     family: A1
     statement: "Maintain/monitor/forecast processing capacity"
-    class: ["a", ",", "b"]
+    class: ["a", "b"]
     status: tracked
     control_refs: ["C17"]
     owner_role: maintainer
@@ -317,7 +321,7 @@ criteria:
   - id: A1.2
     family: A1
     statement: "Environmental protections, backups, recovery infra"
-    class: ["a", ",", "b"]
+    class: ["a", "b"]
     status: tracked
     control_refs: ["C16", "C20", "compliance/policies/business-continuity-dr-policy.md"]
     owner_role: maintainer
@@ -335,7 +339,7 @@ criteria:
   - id: C1.1
     family: C1
     statement: "Identify & retain confidential information"
-    class: ["a", ",", "b"]
+    class: ["a", "b"]
     status: enforced
     control_refs: ["C14", "compliance/policies/data-classification-and-retention-policy.md"]
     owner_role: maintainer
@@ -364,9 +368,9 @@ criteria:
     statement: "Input completeness & accuracy controls"
     class: ["a"]
     status: tracked
-    control_refs: [".github/workflows/ci.yml"]
+    control_refs: ["C2", "C7"]
     owner_role: substrate
-    evidence: "ci-tests"
+    evidence: "ci-tests (adopter ci + change pipeline)"
   - id: PI1.3
     family: PI1
     statement: "Processing controls (only reviewed/passing/intended lands)"
@@ -380,13 +384,13 @@ criteria:
     statement: "Output completeness/accuracy/timeliness controls"
     class: ["a"]
     status: tracked
-    control_refs: [".github/workflows/ci.yml"]
+    control_refs: ["C2", "C5"]
     owner_role: substrate
-    evidence: "build-reconciliation"
+    evidence: "build-reconciliation (review+branch-protection)"
   - id: PI1.5
     family: PI1
     statement: "Storage integrity controls"
-    class: ["a", ",", "b"]
+    class: ["a", "b"]
     status: tracked
     control_refs: ["C14", "C16"]
     owner_role: maintainer
@@ -440,7 +444,7 @@ criteria:
   - id: P4.2
     family: P
     statement: "Retain PI per objectives"
-    class: ["a", ",", "b"]
+    class: ["a", "b"]
     status: tracked
     control_refs: ["C14", "compliance/policies/privacy-policy.md"]
     owner_role: leadership
@@ -449,7 +453,7 @@ criteria:
   - id: P4.3
     family: P
     statement: "Securely dispose of PI"
-    class: ["a", ",", "b"]
+    class: ["a", "b"]
     status: tracked
     control_refs: ["C14", "compliance/policies/privacy-policy.md"]
     owner_role: leadership
@@ -621,3 +625,17 @@ processes:
     cadence: weekly
     owner_role: maintainer
     criteria: ["CC4.1", "C1.1"]
+
+meta_external:
+  - id: cpa-auditor
+    name: "CPA auditor engagement (Type I -> Type II report)"
+    owner: "org/leadership"
+    reason: "only a licensed CPA firm issues the SOC2 report"
+  - id: type-II-window
+    name: "The Type-II observation window"
+    owner: "time"
+    reason: "~3-12 months must elapse with evidence accruing; cannot be shortcut"
+  - id: background-screening
+    name: "Background-check execution"
+    owner: "org/HR + screening vendor"
+    reason: "external screening of real people"

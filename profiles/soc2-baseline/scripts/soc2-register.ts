@@ -43,15 +43,24 @@ function lastFor(procId: string, ledger: ReturnType<typeof loadLedger>): { date:
   return { date: st.effective_from, from: 'effective_from' };
 }
 
-// returns {overdue, dueBy, last} for an interval-gated process; null for event-driven
+// returns {overdue, dueBy, last, from, missing} for an interval-gated process; null for event-driven.
+// Two overdue modes: (1) RECENCY — latest evidence older than one interval; (2) CONTINUITY — fewer
+// distinct artifacts than the number of intervals elapsed since effective_from (a SKIPPED intermediate
+// interval surfaces even if the latest artifact is recent — the cardinal Type-II rule).
 function currency(proc: Proc, ledger: ReturnType<typeof loadLedger>, asOf?: string) {
   const days = INTERVAL_DAYS[proc.cadence];
   if (!days) return null; // per-event / per-change — not interval-gated
+  const st = ledger.processes_state.find((p) => p.process === proc.id);
+  if (!st) return { overdue: true, dueBy: '(no ledger state)', last: '(none)', from: 'none' as const, missing: 0 };
+  const arts = (st.artifacts || []).map((a) => a.interval_end).sort();
   const last = lastFor(proc.id, ledger);
-  if (last.from === 'none') return { overdue: true, dueBy: '(no ledger state)', last: '(none)', from: last.from };
   const due = new Date(last.date + 'T00:00:00Z'); due.setUTCDate(due.getUTCDate() + days);
-  const overdue = today(asOf) > due;
-  return { overdue, dueBy: due.toISOString().slice(0, 10), last: last.date, from: last.from };
+  const recencyOverdue = today(asOf) > due;
+  // continuity: how many full intervals have elapsed since effective_from vs distinct artifacts on record
+  const elapsed = daysBetween(today(asOf), new Date(st.effective_from + 'T00:00:00Z'));
+  const expected = Math.max(0, Math.floor(elapsed / days));
+  const missing = Math.max(0, expected - new Set(arts).size);
+  return { overdue: recencyOverdue || missing > 0, dueBy: due.toISOString().slice(0, 10), last: last.date, from: last.from, missing };
 }
 
 function render(): string {
@@ -79,8 +88,14 @@ function render(): string {
     const next = !cur ? '—' : cur.dueBy;
     o += `| ${p.id} | ${p.cadence} | ${p.owner_role} | ${last} | ${next} | ${state} | ${p.criteria.join(', ')} |\n`;
   }
-  o += '\n## External residuals (status: external — visible, never faked as automated)\n\n| Criterion | Owner | Why external |\n|---|---|---|\n';
+  o += '\n## External residuals (status: external OR an external leg — visible, never faked as automated)\n\n| Criterion | External owner | Why external |\n|---|---|---|\n';
   for (const c of criteria.filter((c) => c.status === 'external' || c.external_owner)) o += `| ${c.id} | ${c.external_owner || c.owner_role} | ${c.external_reason || '—'} |\n`;
+  const meta = (loadReg() as any).meta_external as { id: string; name: string; owner: string; reason: string }[] | undefined;
+  if (meta && meta.length) { o += '\n### Non-criterion residuals (the org owns these; not in-repo)\n\n| Item | Owner | Why |\n|---|---|---|\n'; for (const m of meta) o += `| ${m.name} | ${m.owner} | ${m.reason} |\n`; }
+  o += '\n## Honest limits (what this VISIBILITY system does and does not do)\n\n';
+  o += '- **Surfaced, not CI-enforced.** An overdue control opens a weekly `soc2-control-due` issue (re-opened every Monday while still overdue) — it does **not** fail CI or block merges. The currency gate hard-fails only in `check`/`soc2-register-check` (run on schedule + on register/ledger edits).\n';
+  o += '- **Cadence decay is machine-detected; evidence AUTHENTICITY is not.** `last` derives from ledger artifact timestamps, but the tool does not verify an artifact pointer resolves to a genuine snapshot. A fabricated `interval_end` reads current. The protection is change-management: `compliance/**` is a human-required path, so a forged ledger edit on a bot PR needs maintainer approval (it is review-gated, not machine-verified).\n';
+  o += '- **Fresh install grace.** With no artifacts yet, `last` = `effective_from` (the install date); a control is not overdue until its first interval elapses. Real Type-II evidence accrues over the observation window.\n';
   return o;
 }
 
@@ -96,11 +111,15 @@ function structural(): string[] {
   const ids = new Set(criteria.map((c) => c.id));
   if (ids.size !== criteria.length) errs.push('duplicate criterion id(s)');
   // per-row obligations by class
+  const ROOT = join(COMPLIANCE, '..');
+  const isPath = (r: string) => r.includes('/') || /\.(ya?ml|ts|sh|md|json)$/.test(r);
   for (const c of criteria) {
     if (c.class.includes('a') && !(c.control_refs && c.control_refs.length)) errs.push(`${c.id}: class a needs >=1 control_ref (automation)`);
     if (c.class.includes('c') && c.status === 'external' && !c.external_owner) errs.push(`${c.id}: class c/external needs external_owner`);
     if (!c.owner_role) errs.push(`${c.id}: missing owner_role`);
     if (!(c.class.includes('c')) && !(c.control_refs && c.control_refs.length)) errs.push(`${c.id}: non-external criterion needs >=1 control_ref`);
+    // file-path control_refs must resolve to a SHIPPED profile file (catches a dangling automation pointer)
+    for (const r of c.control_refs || []) if (isPath(r) && !existsSync(join(ROOT, r))) errs.push(`${c.id}: control_ref "${r}" does not resolve to a shipped file`);
   }
   // every process referenced by a criterion exists, and has cadence+owner
   const procIds = new Set(processes.map((p) => p.id));
@@ -115,7 +134,7 @@ function currencyErrs(asOf?: string): string[] {
   const errs: string[] = [];
   for (const p of processes) {
     const cur = currency(p, L, asOf);
-    if (cur && cur.overdue) errs.push(`process ${p.id} (${p.cadence}) OVERDUE — last ${cur.last} (${cur.from}), was due ${cur.dueBy}`);
+    if (cur && cur.overdue) errs.push(`process ${p.id} (${p.cadence}) OVERDUE — last ${cur.last} (${cur.from}), was due ${cur.dueBy}${cur.missing > 0 ? `; ${cur.missing} interval(s) with no artifact` : ''}`);
   }
   return errs;
 }

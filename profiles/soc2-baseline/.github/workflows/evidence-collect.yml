@@ -65,9 +65,11 @@ jobs:
           # On a fresh orphan branch, clear the working tree of the checked-out main content first.
           git ls-files | grep -v '^evidence/\|^LEDGER-INDEX.md$' | xargs -r rm -f 2>/dev/null || true
           mkdir -p "$dir" || true
-          # W6: materialize the per-interval Type-II ledger index — one appended row per interval, on the
-          # unprotected evidence branch (no protected-main edit). The `evidence-collection` periodic control
-          # is auto-evidenced here; a missing weekly row is a visible Type-II gap.
+          # W6: materialize the per-interval Type-II ledger index on the unprotected evidence branch (no
+          # protected-main edit) — one appended row per weekly snapshot. NOTE this is a SEPARATE artifact
+          # trail from compliance/evidence-ledger.yml (which the currency gate reads on `main`); a missing
+          # weekly row here is a visible Type-II gap, and the W11 liveness job independently asserts this
+          # workflow keeps running. Reflecting a snapshot into evidence-ledger.yml is a change-managed commit.
           if [ ! -f LEDGER-INDEX.md ]; then printf '# Type-II evidence ledger index (per-interval, auto-appended)\n\n| interval_end | process | snapshot |\n|---|---|---|\n' > LEDGER-INDEX.md; fi
           printf '| %s | evidence-collection | evidence/%s/SUMMARY.md |\n' "$stamp" "$stamp" >> LEDGER-INDEX.md
           git add -A evidence/ LEDGER-INDEX.md

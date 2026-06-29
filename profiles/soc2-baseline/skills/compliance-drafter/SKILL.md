@@ -53,12 +53,18 @@ in infra), produce a **template** with the missing piece marked
 executive performs the act and attaches the **artifact-of-performance** (the log/report) on the PR or commits
 it to `compliance-evidence`.
 
-## 3. Open the gated PR (W12.3)
+## 3. Produce the change — let the EFFECT propose the PR (do NOT open it yourself, W12.3)
 
-Branch `agent/issue-<N>` (N = the issue number — this lets `reconcile-merged-issues.ts` auto-close the issue
-on merge). Commit:
-- the evidence doc, and
-- the **ledger artifact** appended to `compliance/evidence-ledger.yml` under the process, with:
+**Just modify the working tree and STOP — do not branch, commit, push, or open a PR.** The standard propose
+**effect** (the job step after you) commits the tree, opens the gated PR on `agent/issue-<N>` (so
+`reconcile-merged-issues.ts` auto-closes the issue), dispatches `ci` + `agent-review` + `human-approval` + the
+**`compliance-verifier`** (via `propose_dispatch_reviews`), and arms auto-merge. If you open a PR yourself you
+**double-propose** and the effect's branch/push conflicts — leave the proposing to the effect (exactly like the
+`develop` agent does). Your job is the *content*, not the plumbing.
+
+Write into the tree:
+- the **evidence doc** at `compliance-evidence-draft/<process>-<interval_end>.md`, and
+- the **ledger artifact** appended to `compliance/evidence-ledger.yml` under the process:
   ```yaml
   - interval_end: <the interval end date>
     evidence: compliance-evidence-draft/<process>-<interval_end>.md
@@ -69,15 +75,13 @@ on merge). Commit:
   **Do not set `source: human-attested`, `assertion_author`, or `approver`** — those are the executive's, set
   when they edit the assertion and approve. The currency check rejects a human-attested artifact whose
   `assertion_author` ≠ `approver`, so a pre-signed draft would (correctly) fail.
+- **Re-render the register**: run `bun scripts/soc2-register.ts render` (leave the refreshed
+  `compliance/control-register.md` in the tree). The rendered register shows each process's last-evidence/state,
+  so an un-rendered ledger change trips the `soc2-register-check` drift gate.
 
-- **Re-render the register** after appending the artifact: run `bun scripts/soc2-register.ts render` and
-  commit the refreshed `compliance/control-register.md` in the SAME PR. The rendered register shows each
-  process's last-evidence/state, so an un-rendered ledger change trips the `soc2-register-check` drift gate.
-  (The executive, when they edit the `assertion`, re-renders too — a one-liner — before approving.)
-
-The PR body IS the **decision brief** (§4). The PR goes through the normal effect (dispatches `ci`,
-`agent-review`, `human-approval`); `compliance/**` is human-required, so a maintainer Approve is forced —
-that Approve is the executive's signature.
+Write the **decision brief** (§4) to `.agent-run/artifacts/pr.md` — the effect uses it as the PR body.
+`compliance/**` is human-required, so the effect's PR forces a maintainer Approve — that Approve is the
+executive's signature.
 
 ## 4. The decision brief (the PR body — one screen, W12.6)
 

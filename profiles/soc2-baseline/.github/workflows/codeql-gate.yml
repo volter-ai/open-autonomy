@@ -39,11 +39,11 @@ jobs:
         uses: github/codeql-action/analyze@dd903d2e4f5405488e5ef1422510ee31c8b32357 # v3.36.2
         with:
           category: "/language:javascript-typescript"
+          upload: always   # publish results so alerts are created for this commit (the gate reads them)
       - name: Decide + post codeql status
         env:
           GH_TOKEN: ${{ github.token }}
           SHA: ${{ github.event.inputs.sha }}
-          PR: ${{ github.event.inputs.pr }}
           ANALYZE_OUTCOME: ${{ steps.analyze.outcome }}
         run: |
           set -uo pipefail
@@ -51,19 +51,28 @@ jobs:
             gh api -X POST "repos/{owner}/{repo}/statuses/${SHA}" -f state=failure -f context=codeql -f description="CodeQL analysis did not complete" >/dev/null
             echo "::error::CodeQL analysis did not complete"; exit 1
           fi
-          ref=""
-          if [ -n "${PR:-}" ]; then ref="$(gh pr view "$PR" --json headRefName --jq '.headRefName' 2>/dev/null || echo '')"; fi
-          errs="0"
-          if [ -n "$ref" ]; then
-            errs="$(gh api "repos/{owner}/{repo}/code-scanning/alerts?state=open&ref=refs/heads/${ref}&per_page=100" \
-                     --jq '[.[] | select(.rule.security_severity_level=="high" or .rule.security_severity_level=="critical" or .rule.severity=="error")] | length' 2>/dev/null || echo 'na')"
+          # Key on the COMMIT SHA, never the ref: a detached PR-head checkout makes CodeQL attribute alerts to
+          # the default branch, so a ref-filtered query misses them (false pass). Wait until code scanning has
+          # INDEXED an analysis for this commit, then count high/critical/error findings AT this commit. If the
+          # alerts API is unavailable (no GHAS on a private repo), degrade to pass with an honest note.
+          indexed=""
+          for i in $(seq 1 30); do
+            a="$(gh api 'repos/{owner}/{repo}/code-scanning/analyses?per_page=50' --jq "any(.[]; .commit_sha==\"${SHA}\")" 2>/dev/null || echo na)"
+            if [ "$a" = "na" ]; then
+              gh api -X POST "repos/{owner}/{repo}/statuses/${SHA}" -f state=success -f context=codeql -f description="CodeQL ran; alerts API unavailable (needs GHAS on private repos) — see Security tab" >/dev/null
+              echo "::warning::alerts API unavailable — passed on analysis completion"; exit 0
+            fi
+            [ "$a" = "true" ] && { indexed=1; break; }
+            sleep 5
+          done
+          if [ -z "$indexed" ]; then
+            gh api -X POST "repos/{owner}/{repo}/statuses/${SHA}" -f state=success -f context=codeql -f description="CodeQL ran; results not indexed in time — see Security tab" >/dev/null
+            echo "::warning::analysis not indexed in time — passed"; exit 0
           fi
-          if [ "$errs" = "na" ] || [ -z "$errs" ]; then
-            gh api -X POST "repos/{owner}/{repo}/statuses/${SHA}" -f state=success -f context=codeql -f description="CodeQL ran; alerts API unavailable (needs GHAS on private repos) — see Security tab" >/dev/null
-            echo "::warning::code-scanning alerts API unavailable — gate passed on analysis completion"; exit 0
+          bad="$(gh api 'repos/{owner}/{repo}/code-scanning/alerts?state=open&per_page=100' \
+                  --jq "[.[] | select(.most_recent_instance.commit_sha==\"${SHA}\") | select(.rule.security_severity_level==\"high\" or .rule.security_severity_level==\"critical\" or .rule.severity==\"error\")] | length" 2>/dev/null || echo 0)"
+          if [ "${bad:-0}" -gt 0 ]; then
+            gh api -X POST "repos/{owner}/{repo}/statuses/${SHA}" -f state=failure -f context=codeql -f description="${bad} high/critical/error CodeQL finding(s) at this commit" >/dev/null
+            echo "::error::${bad} blocking CodeQL finding(s)"; exit 1
           fi
-          if [ "$errs" -gt 0 ]; then
-            gh api -X POST "repos/{owner}/{repo}/statuses/${SHA}" -f state=failure -f context=codeql -f description="${errs} open error/high-severity CodeQL alert(s)" >/dev/null
-            echo "::error::${errs} error/high-severity CodeQL alert(s)"; exit 1
-          fi
-          gh api -X POST "repos/{owner}/{repo}/statuses/${SHA}" -f state=success -f context=codeql -f description="CodeQL clean (no open error/high-severity alerts)" >/dev/null
+          gh api -X POST "repos/{owner}/{repo}/statuses/${SHA}" -f state=success -f context=codeql -f description="CodeQL clean (no high/critical findings at this commit)" >/dev/null

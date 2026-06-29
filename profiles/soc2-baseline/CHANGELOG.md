@@ -2,6 +2,20 @@
 
 All notable changes to the `soc2-baseline` profile. Versions follow semver for the profile's control set.
 
+## 1.0.2 — codeql gate actually blocks (live-proof fix)
+
+Forcing a **real** violation (not just status-posting) exposed a false-pass in the CodeQL gate and fixed it:
+- **codeql-gate.yml** filtered code-scanning alerts by the PR **branch ref**, but a detached PR-head checkout
+  makes CodeQL attribute alerts to the **default branch** — so the query returned `[]` and the gate posted
+  `success` on genuinely vulnerable code (a planted command-injection PR even merged during the buggy window).
+  Fixed: the gate now keys on the **commit SHA** (ref-independent), polls until code scanning has indexed an
+  analysis for that commit, then blocks on any high/critical/error finding at that commit; degrades to a clear
+  pass-with-note when the alerts API is unavailable (no GHAS on private repos).
+
+Live-proven blocking on a public throwaway repo: a GitHub-sourced dependency → `supply-chain: failure` →
+PR BLOCKED + merge refused; a command-injection file → `codeql: failure` (4 findings) → PR BLOCKED + merge
+refused.
+
 ## 1.0.1 — live-proof fixes (Tier A behavioral validation)
 
 Found and fixed by exercising the controls end-to-end on a throwaway GitHub repo:

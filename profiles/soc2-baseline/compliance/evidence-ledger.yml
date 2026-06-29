@@ -35,7 +35,7 @@ processes_state:
   - process: pen-test               # annual
     effective_from: 2026-06-29
     artifacts: []
-  - process: evidence-collection    # weekly (also auto-appended by evidence-collect.yml)
+  - process: evidence-collection    # weekly — gate: liveness (asserted by W11 workflow-liveness, not a ledger artifact)
     effective_from: 2026-06-29
     artifacts: []
 # per-event / per-change processes (hr-onboard-offboard, change-mgmt-infra, background-check)

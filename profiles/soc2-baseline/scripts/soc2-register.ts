@@ -25,7 +25,7 @@ const CANON_TOTAL = Object.values(CANON).reduce((a, b) => a + b, 0); // 61
 const INTERVAL_DAYS: Record<string, number> = { weekly: 8, monthly: 31, quarterly: 92, annual: 366 };
 
 type Crit = { id: string; family: string; statement: string; class: string[]; status: string; control_refs: string[]; owner_role: string; evidence: string; processes?: string[]; external_owner?: string; external_reason?: string };
-type Proc = { id: string; name: string; cadence: string; owner_role: string; criteria: string[] };
+type Proc = { id: string; name: string; cadence: string; owner_role: string; criteria: string[]; gate?: string };
 
 function loadReg() { return parse(readFileSync(REG, 'utf8')) as { criteria: Crit[]; processes: Proc[] }; }
 function loadLedger() { return parse(readFileSync(LEDGER, 'utf8')) as { processes_state: { process: string; effective_from: string; artifacts: { interval_end: string; evidence: string }[] }[] }; }
@@ -48,18 +48,25 @@ function lastFor(procId: string, ledger: ReturnType<typeof loadLedger>): { date:
 // distinct artifacts than the number of intervals elapsed since effective_from (a SKIPPED intermediate
 // interval surfaces even if the latest artifact is recent — the cardinal Type-II rule).
 function currency(proc: Proc, ledger: ReturnType<typeof loadLedger>, asOf?: string) {
+  // gate: liveness — currency is asserted by the W11 workflow-liveness check (the workflow actually ran),
+  // NOT by a hand-committed main-branch ledger artifact. (Used by evidence-collection, which is fully
+  // automated and whose evidence lands on the compliance-evidence branch.) Not ledger-currency-gated.
+  if (proc.gate === 'liveness') return null;
   const days = INTERVAL_DAYS[proc.cadence];
   if (!days) return null; // per-event / per-change — not interval-gated
   const st = ledger.processes_state.find((p) => p.process === proc.id);
   if (!st) return { overdue: true, dueBy: '(no ledger state)', last: '(none)', from: 'none' as const, missing: 0 };
+  const eff = new Date(st.effective_from + 'T00:00:00Z');
   const arts = (st.artifacts || []).map((a) => a.interval_end).sort();
   const last = lastFor(proc.id, ledger);
   const due = new Date(last.date + 'T00:00:00Z'); due.setUTCDate(due.getUTCDate() + days);
   const recencyOverdue = today(asOf) > due;
-  // continuity: how many full intervals have elapsed since effective_from vs distinct artifacts on record
-  const elapsed = daysBetween(today(asOf), new Date(st.effective_from + 'T00:00:00Z'));
+  // continuity: count distinct interval BUCKETS covered (not distinct dates — two artifacts in the same
+  // bucket must not mask a different empty bucket), vs the number of buckets elapsed since effective_from.
+  const elapsed = daysBetween(today(asOf), eff);
   const expected = Math.max(0, Math.floor(elapsed / days));
-  const missing = Math.max(0, expected - new Set(arts).size);
+  const buckets = new Set(arts.map((a) => Math.floor(daysBetween(new Date(a + 'T00:00:00Z'), eff) / days)));
+  const missing = Math.max(0, expected - buckets.size);
   return { overdue: recencyOverdue || missing > 0, dueBy: due.toISOString().slice(0, 10), last: last.date, from: last.from, missing };
 }
 
@@ -83,7 +90,7 @@ function render(): string {
   o += '| Process | Cadence | Owner | Last evidence | Next due | State | Criteria |\n|---|---|---|---|---|---|---|\n';
   for (const p of processes) {
     const cur = currency(p, L);
-    const state = !cur ? 'event-driven' : cur.overdue ? '⚠ OVERDUE' : 'ok';
+    const state = p.gate === 'liveness' ? 'liveness-gated (W11)' : !cur ? 'event-driven' : cur.overdue ? '⚠ OVERDUE' : 'ok';
     const last = !cur ? '—' : `${cur.last}${cur.from === 'effective_from' ? ' (since install)' : ''}`;
     const next = !cur ? '—' : cur.dueBy;
     o += `| ${p.id} | ${p.cadence} | ${p.owner_role} | ${last} | ${next} | ${state} | ${p.criteria.join(', ')} |\n`;
@@ -96,6 +103,7 @@ function render(): string {
   o += '- **Surfaced, not CI-enforced.** An overdue control opens a weekly `soc2-control-due` issue (re-opened every Monday while still overdue) — it does **not** fail CI or block merges. The currency gate hard-fails only in `check`/`soc2-register-check` (run on schedule + on register/ledger edits).\n';
   o += '- **Cadence decay is machine-detected; evidence AUTHENTICITY is not.** `last` derives from ledger artifact timestamps, but the tool does not verify an artifact pointer resolves to a genuine snapshot. A fabricated `interval_end` reads current. The protection is change-management: `compliance/**` is a human-required path, so a forged ledger edit on a bot PR needs maintainer approval (it is review-gated, not machine-verified).\n';
   o += '- **Fresh install grace.** With no artifacts yet, `last` = `effective_from` (the install date); a control is not overdue until its first interval elapses. Real Type-II evidence accrues over the observation window.\n';
+  o += '- **Correlated Actions-disable is a TERMINAL limit.** All surfacers (compliance-cadence, soc2-register-check, evidence-collect, heartbeat) are scheduled GitHub workflows. They cross-watch each other for an *individual* stall, but a *wholesale* Actions outage — GitHub auto-disabling schedules after 60 days of repo inactivity, an org disabling Actions, or archiving the repo — takes them all dark at once, and an in-repo watcher cannot survive its own Actions being disabled. Catching a full Actions outage requires **external** uptime/paging (org tooling), out of repo scope. This is disclosed, not prevented.\n';
   return o;
 }
 

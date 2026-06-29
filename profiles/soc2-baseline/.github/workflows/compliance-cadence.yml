@@ -40,7 +40,7 @@ jobs:
           MAX_HOURS=192
           now=$(date -u +%s)
           flag=""
-          for wf in evidence-collect.yml compliance-cadence.yml; do
+          for wf in evidence-collect.yml compliance-cadence.yml soc2-register-check.yml; do
             last=$(gh api "repos/${REPO}/actions/workflows/${wf}/runs?status=success&per_page=1" --jq '.workflow_runs[0].updated_at // empty' 2>/dev/null || echo "")
             if [ -z "$last" ]; then
               # no successful run yet — only flag if the workflow file exists in the repo

@@ -30,9 +30,11 @@ jobs:
           bun scripts/soc2-register.ts verify
       - name: structural + currency gates (all 61 criteria mapped; no overdue ledger interval)
         run: bun scripts/soc2-register.ts check
-      # independent watcher #2 (B-F2): this workflow watches compliance-cadence.yml's liveness, and
-      # compliance-cadence.yml watches this one — mutual, so neither can die silently. heartbeat.yml
-      # (separate, watches pm.yml) is a third independent schedule.
+      # independent watcher #2 (B-F2): this workflow watches compliance-cadence.yml, and compliance-cadence.yml
+      # watches THIS workflow back (its liveness loop includes soc2-register-check.yml) — genuinely mutual, so
+      # neither can die silently for an INDIVIDUAL stall. (A wholesale Actions-disable kills both at once — see
+      # the register "Honest limits": that terminal case needs external monitoring.) heartbeat.yml (separate,
+      # watches pm.yml) is a third independent schedule.
       - name: cross-watch — flag a stalled compliance-cadence workflow
         if: github.event_name == 'schedule'
         env: { GH_TOKEN: "${{ github.token }}", REPO: "${{ github.repository }}" }

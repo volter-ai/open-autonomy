@@ -625,6 +625,7 @@ processes:
     cadence: weekly
     owner_role: maintainer
     criteria: ["CC4.1", "C1.1"]
+    gate: liveness
 
 meta_external:
   - id: cpa-auditor

@@ -87,7 +87,7 @@ Criteria: **61/61** · enforced 10 · tracked 49 · external 2.
 | management-review | annual | leadership | 2026-06-29 (since install) | 2027-06-30 | ok | CC4.1, CC4.2, CC5.1 |
 | policy-review-ack | annual | leadership | 2026-06-29 (since install) | 2027-06-30 | ok | CC1.1, CC2.2, CC5.3 |
 | pen-test | annual | maintainer | 2026-06-29 (since install) | 2027-06-30 | ok | CC7.1 |
-| evidence-collection | weekly | maintainer | 2026-06-29 (since install) | 2026-07-07 | ok | CC4.1, C1.1 |
+| evidence-collection | weekly | maintainer | — | — | liveness-gated (W11) | CC4.1, C1.1 |
 
 ## External residuals (status: external OR an external leg — visible, never faked as automated)
 
@@ -116,3 +116,4 @@ Criteria: **61/61** · enforced 10 · tracked 49 · external 2.
 - **Surfaced, not CI-enforced.** An overdue control opens a weekly `soc2-control-due` issue (re-opened every Monday while still overdue) — it does **not** fail CI or block merges. The currency gate hard-fails only in `check`/`soc2-register-check` (run on schedule + on register/ledger edits).
 - **Cadence decay is machine-detected; evidence AUTHENTICITY is not.** `last` derives from ledger artifact timestamps, but the tool does not verify an artifact pointer resolves to a genuine snapshot. A fabricated `interval_end` reads current. The protection is change-management: `compliance/**` is a human-required path, so a forged ledger edit on a bot PR needs maintainer approval (it is review-gated, not machine-verified).
 - **Fresh install grace.** With no artifacts yet, `last` = `effective_from` (the install date); a control is not overdue until its first interval elapses. Real Type-II evidence accrues over the observation window.
+- **Correlated Actions-disable is a TERMINAL limit.** All surfacers (compliance-cadence, soc2-register-check, evidence-collect, heartbeat) are scheduled GitHub workflows. They cross-watch each other for an *individual* stall, but a *wholesale* Actions outage — GitHub auto-disabling schedules after 60 days of repo inactivity, an org disabling Actions, or archiving the repo — takes them all dark at once, and an in-repo watcher cannot survive its own Actions being disabled. Catching a full Actions outage requires **external** uptime/paging (org tooling), out of repo scope. This is disclosed, not prevented.

@@ -65,6 +65,11 @@ policy:
     # blocking on the agent-PR path, not just on human PRs. model/proxy/bot fall back to the substrate defaults.
     gh-actions:
       propose_dispatch_checks: [supply-chain.yml, codeql-gate.yml]
+      # C6 — re-create the agent commit via GitHub's git/commits API so the job's GITHUB_TOKEN
+      # (github-actions[bot]) signs it "Verified" (keyless). Lets provision.json require signed commits
+      # without wedging. A plain `git commit` is unsigned; a PAT-created API commit is unsigned too — only
+      # the Actions bot / a GitHub App identity gets GitHub's signature.
+      commit_signing: verified-api
     wip:
       maxInProgress: 1
       maxInReview: 1

@@ -93,6 +93,35 @@ if (isNumericRef) commitArgs.push('-m', `Closes #${ref}`);
 sh('git', commitArgs);
 sh('git', ['push', '--force', 'origin', branch]);
 
+// C6 — GitHub-VERIFIED signed commits (opt-in via COMMIT_SIGNING=verified-api; a profile like soc2-baseline
+// sets it). A commit CREATED through GitHub's git/commits API by the job's GITHUB_TOKEN (github-actions[bot],
+// a GitHub App identity) is signed by GitHub and shows "Verified" — keyless, nothing to register; a plain
+// `git commit` + push is unsigned. So we re-create the just-pushed commit through the API (same tree, parents,
+// author + message — only the COMMITTER becomes the signing bot) and move the branch ref to the signed copy;
+// the unsigned local commit is orphaned. This lets branch protection require signed commits without wedging.
+// Best-effort: any hiccup leaves the already-pushed (unsigned) commit in place rather than failing the propose.
+if ((env.COMMIT_SIGNING ?? '').trim() === 'verified-api') {
+  const tree = sh('git', ['rev-parse', 'HEAD^{tree}'], { allowFail: true }).trim();
+  const message = sh('git', ['log', '-1', '--format=%B'], { allowFail: true }).replace(/\n+$/, '');
+  const parents = sh('git', ['rev-list', '--parents', '-n', '1', 'HEAD'], { allowFail: true }).trim().split(/\s+/).slice(1);
+  const an = sh('git', ['log', '-1', '--format=%an'], { allowFail: true }).trim();
+  const ae = sh('git', ['log', '-1', '--format=%ae'], { allowFail: true }).trim();
+  const ad = sh('git', ['log', '-1', '--format=%aI'], { allowFail: true }).trim();
+  const args = ['api', '-X', 'POST', 'repos/{owner}/{repo}/git/commits',
+    '-f', `message=${message}`, '-f', `tree=${tree}`,
+    '-f', `author[name]=${an}`, '-f', `author[email]=${ae}`, '-f', `author[date]=${ad}`, '--jq', '.sha'];
+  for (const p of parents) if (p) args.push('-f', `parents[]=${p}`);
+  const signed = tree && message ? sh('gh', args, { allowFail: true }).trim() : '';
+  if (/^[0-9a-f]{40}$/.test(signed)
+      && ok('gh', ['api', '-X', 'PATCH', `repos/{owner}/{repo}/git/refs/heads/${branch}`, '-f', `sha=${signed}`, '-F', 'force=true'])) {
+    sh('git', ['fetch', 'origin', branch], { allowFail: true });
+    sh('git', ['reset', '--hard', 'FETCH_HEAD'], { allowFail: true });
+    process.stdout.write(`commit re-created via API as GitHub-verified ${signed.slice(0, 7)}\n`);
+  } else {
+    process.stdout.write('verified-api signing skipped (API create/ref-update failed); kept the unsigned pushed commit (non-fatal)\n');
+  }
+}
+
 // Resolve the repo through gh's `{owner}/{repo}` placeholders (filled from the remote) — works ambiently on
 // GitHub Actions AND a local runner, so this effect needs no injected GITHUB_REPOSITORY.
 const base = sh('gh', ['api', 'repos/{owner}/{repo}', '--jq', '.default_branch'], { allowFail: true }) || 'main';

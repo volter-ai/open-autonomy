@@ -16,7 +16,7 @@ TSC legend: **CC** = Security/Common Criteria (mandatory) · **C** = Confidentia
 | C3 | Egress lockdown (exfiltration prevention) | CC6 | `harden-runner egress-policy: block` on every credentialed job | agent workflow harden-runner step + run logs |
 | C4 | Human-approval change gate | CC8, **PI** | `human-approval.yml` + `scripts/human-approval-gate.ts`, per-head-SHA maintainer Approve on human-required paths | `human-approval` status; review records |
 | C5 | Branch protection (required checks, no self-merge, enforce_admins) | CC8, **PI** | `provision.json` → `scripts/provision-target-repo.ts` (enforce_admins:true, ≥1 review) | `evidence/*/branch-protection.json` |
-| C6 | Signed commits | CC8 | **v1: DCO sign-off (compensating).** `required_signatures` OFF — gitsign isn't GitHub-Verified (would wedge); see README C6 | PR template DCO |
+| C6 | Signed commits | CC8 | **GitHub-Verified** agent commits via the git/commits API (job GITHUB_TOKEN signs; `commit_signing: verified-api`); `required_signatures` ON. DCO retained as defense-in-depth | commit `verification.verified=true`; branch-protection snapshot |
 | C7 | Supply-chain integrity | CC7, CC8, **PI** | `check-supply-chain.ts` (registry-only + sha + `bun audit`) — **BLOCKING required check** on bot PRs via dispatched `supply-chain.yml` + monitoring `security.yml` | required `supply-chain` status |
 | C8 | SAST (CodeQL) | CC7 | **BLOCKING required check** on bot PRs via dispatched `codeql-gate.yml` (posts `codeql` status) + monitoring `codeql.yml` (Security tab) | required `codeql` status; code-scanning alerts |
 | C9 | Dependency vulnerability review | CC7 | `dependency-review.yml` (PR-time, dependency-graph compare) + `dependabot.yml` | PR check runs; Dependabot PRs/alerts |

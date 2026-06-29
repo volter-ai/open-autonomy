@@ -53,21 +53,22 @@ reviewed, passing, intended code lands (C2/C4/C5/C7) — see the control matrix 
 New adopters: start with [`compliance/ONBOARDING.md`](compliance/ONBOARDING.md) (compile → provision → fund →
 operate, with the `ci`/GHAS/signing gotchas called out).
 
-## C8/C7 — CodeQL + supply-chain are now BLOCKING required checks on bot PRs ✅
+## C7/C8/C12 — supply-chain + code-scan + secret-scan are BLOCKING required checks on bot PRs ✅ (no signup)
 
-These are in `provision.json`'s `required_checks` and enforced on **every** PR including bot-authored agent
-PRs. A bot PR fires no `pull_request` (GITHUB_TOKEN anti-recursion), so the **propose effect dispatches** the
-gate workflows so their status posts on the head SHA — wired generically via
-`policy.box.gh-actions.propose_dispatch_checks` (→ `EXTRA_CHECK_WORKFLOWS` → `scripts/agent-propose.ts`), the
-same mechanism that dispatches `ci`/`agent-review`/`human-approval`:
-- `.github/workflows/supply-chain.yml` — checks out the head, runs the supply-chain gate (lockfile integrity
-  + `bun audit`), posts a `supply-chain` commit status. **Hard block.**
-- `.github/workflows/codeql-gate.yml` — runs CodeQL on the head, posts a `codeql` commit status: fails on a
-  non-completing analysis or on open error/high-severity alerts; degrades to pass (with an honest description)
-  if the alerts API is unavailable (no GHAS on a private repo, see G3) so it never wedges.
+`provision.json`'s `required_checks` = `[ci, agent-review, human-approval, supply-chain, code-scan,
+secret-scan]`, enforced on **every** PR including bot-authored agent PRs. A bot PR fires no `pull_request`
+(GITHUB_TOKEN anti-recursion), so the **propose effect dispatches** the gate workflows so their status posts on
+the head SHA — wired via `policy.box.gh-actions.propose_dispatch_checks` (→ `EXTRA_CHECK_WORKFLOWS` →
+`scripts/agent-propose.ts`), the same mechanism that dispatches `ci`/`agent-review`/`human-approval`:
+- `supply-chain.yml` (C7) — lockfile integrity + `bun audit`, posts `supply-chain`. **Hard block.**
+- `code-scan.yml` (C8) — **Semgrep OSS** static analysis (free, no account, no GHAS), posts `code-scan`.
+  **Hard block — enforces on PRIVATE repos. Live-proven: a command-injection PR → `code-scan=failure` → BLOCKED.**
+- `secret-scan.yml` (C12) — **gitleaks** (free, no account, no GHAS), posts `secret-scan`. **Hard block —
+  enforces on PRIVATE repos. Live-proven: a committed AWS secret → `secret-scan=failure` → BLOCKED.**
 
-The monitoring `codeql.yml` / `security.yml` (push/weekly → Security tab) are unchanged; the above are their
-dispatched, blocking realization for the agent-PR path.
+`codeql.yml`/`codeql-gate.yml` (CodeQL) and GitHub-native secret-scanning remain as **optional richer layers
+where GHAS/public is available** — they are NOT in `required_checks` (so they never wedge a no-GHAS private
+repo). The three required gates above are the no-signup enforcers that work on any repo.
 
 ## C6 — GitHub-Verified signed commits ✅ (`required_signatures` ON)
 

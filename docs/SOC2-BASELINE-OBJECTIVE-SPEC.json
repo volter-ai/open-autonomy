@@ -1,27 +1,27 @@
 [
   {
     "id": "scope-broadest-tsc",
-    "statement": "soc2-baseline covers the broadest SOC 2 Trust Services Criteria scope — Security/Common Criteria + Confidentiality + Availability + Processing Integrity — with Privacy scaffolded, every area mapped to concrete deterministic controls.",
-    "provenance": "Founding session intent (broadest TSC scope); profiles/soc2-baseline/README.md 'TSC scope'; compliance/control-matrix.md TSC legend (CC/C/A/PI) + C19 Privacy; SOC 2 TSC areas CC1–CC9, A1, C1, PI1, P1–P8.",
-    "acceptance_criterion": "control-matrix.md maps ≥1 deterministic control to each of CC (Security), C (Confidentiality), A (Availability), PI (Processing Integrity); Privacy has a drafted policy + DSR process. Demonstrated by every TSC area having at least one control behaviorally exercised in a funded cell (or, for inherited/org items, an explicit evidence/owner)."
+    "statement": "soc2-baseline covers the broadest SOC 2 Trust Services Criteria scope \u2014 Security/Common Criteria + Confidentiality + Availability + Processing Integrity \u2014 with Privacy scaffolded, every area mapped to concrete deterministic controls.",
+    "provenance": "Founding session intent (broadest TSC scope); profiles/soc2-baseline/README.md 'TSC scope'; compliance/control-matrix.md TSC legend (CC/C/A/PI) + C19 Privacy; SOC 2 TSC areas CC1\u2013CC9, A1, C1, PI1, P1\u2013P8.",
+    "acceptance_criterion": "control-matrix.md maps \u22651 deterministic control to each of CC (Security), C (Confidentiality), A (Availability), PI (Processing Integrity); Privacy has a drafted policy + DSR process. Demonstrated by every TSC area having at least one control behaviorally exercised in a funded cell (or, for inherited/org items, an explicit evidence/owner)."
   },
   {
     "id": "deterministic-not-agents",
     "statement": "Every shipped control is a DETERMINISTIC baked-in mechanism (CI workflow / branch-protection / config / policy file), never 'the agents will handle it'.",
     "provenance": "Founding intent ('deterministic, baked-in controls, not the agents will handle it'); CLAUDE.md 'Scripts only for security'; compliance/control-matrix.md column 'Enforced by (deterministic)'.",
-    "acceptance_criterion": "For each control C1–C20, the enforcement is a file in the install (workflow/provision.json/policy), not a skill prose instruction. Demonstrated live by the control firing on a bot PR with no agent judgement in the loop (e.g. supply-chain/codeql/human-approval statuses posted by workflows, not by the reviewer's discretion)."
+    "acceptance_criterion": "For each control C1\u2013C20, the enforcement is a file in the install (workflow/provision.json/policy), not a skill prose instruction. Demonstrated live by the control firing on a bot PR with no agent judgement in the loop (e.g. supply-chain/codeql/human-approval statuses posted by workflows, not by the reviewer's discretion)."
   },
   {
     "id": "behaviorally-proven",
     "statement": "Default-readiness is proven BEHAVIORALLY by a real funded agent loop, not by compile/assertion.",
     "provenance": "Founding intent ('proven behaviorally'); CLAUDE.md 'live proof is the only proof'; this session's Tier A/Tier B mandate.",
-    "acceptance_criterion": "A funded agent loop (pm→draft→develop→reviewer) produces a fully-gated, GitHub-Verified, merged PR live on a real GitHub repo, AND each individual control is shown operating live (block on violation / pass on clean). compile + bun run check passing is necessary but NOT sufficient."
+    "acceptance_criterion": "A funded agent loop (pm\u2192draft\u2192develop\u2192reviewer) produces a fully-gated, GitHub-Verified, merged PR live on a real GitHub repo, AND each individual control is shown operating live (block on violation / pass on clean). compile + bun run check passing is necessary but NOT sufficient."
   },
   {
     "id": "budget-cap-10usd",
     "statement": "The entire behavioral proof is achieved within a HARD $10 model-proxy spend cap.",
     "provenance": "Founding hard constraint ($10 cap) restated in the Step-0 prompt; agent-model-proxy per-run caps (PUBLIC_AGENT_MAX_USD_CENTS) + account balance hard-stop.",
-    "acceptance_criterion": "Total proxy consumed_usd_cents attributable to this session's proof ≤ 1000 cents, read from the proxy admin ledger (/admin/limits/status). Stop and report if approached."
+    "acceptance_criterion": "Total proxy consumed_usd_cents attributable to this session's proof \u2264 1000 cents, read from the proxy admin ledger (/admin/limits/status). Stop and report if approached."
   },
   {
     "id": "policies-fully-drafted",
@@ -29,41 +29,208 @@
     "provenance": "Founding intent ('fully-drafted policies'); compliance/control-matrix.md O1; ir.yml resources list (13 policy files); compliance/policies/*.",
     "acceptance_criterion": "Each of the 13 policy files (information-security, access-control, change-management, vendor-management, data-classification-and-retention, encryption, incident-response, business-continuity-dr, secure-sdlc, risk-management, acceptable-use, hr-security, privacy) is a complete drafted policy with Purpose/Scope/Policy/Evidence/Review and [ORG]/[OWNER]/[DATE] placeholders, each traceable to its TSC criterion."
   },
-
-  { "id": "C1-least-privilege-tokens", "statement": "Each agent runs with least-privilege GITHUB_TOKEN permissions derived from its declared capabilities (read-only baseline).", "provenance": "compliance/control-matrix.md C1 (CC6); packages/substrate-github/src/emit.ts capability→permission map; emitted .github/workflows/<agent>.yml.", "acceptance_criterion": "Deterministic: emitted per-agent workflow permission block matches capabilities. Behavioral (live RUNTIME SoD): in a live cell, the reviewer role's GITHUB_TOKEN CANNOT push contents (a write/push attempt is rejected) and the develop role's GITHUB_TOKEN CANNOT post a commit status (a statuses:write attempt is rejected) — proving the least-privilege split at runtime, not merely by reading the permission block." },
-  { "id": "C2-merge-boundary-sod", "statement": "Segregation of duties: no actor holds both code:propose and code:review, none holds code:merge; only native auto-merge lands a PR.", "provenance": "compliance/control-matrix.md C2 (CC6,CC8,PI); ir.yml agents (develop=code:propose, reviewer=code:review); packages/core ir.ts validateIR; SOC 2 CC6.1/CC8.1.", "acceptance_criterion": "Deterministic: IR validation rejects both-on-one/code:merge. Behavioral: a live agent PR is reviewed by an independent reviewer posting agent-review and is merged only via native auto-merge — the proposer cannot self-certify (shown by the permission split + a merged-PR record)." },
-  { "id": "C3-egress-lockdown", "statement": "Every credentialed agent job blocks network egress to an allowlist (token-exfiltration prevention).", "provenance": "compliance/control-matrix.md C3 (CC6); emit.ts hardenRunner (egress-policy: block); SOC 2 CC6.6/CC6.7.", "acceptance_criterion": "Deterministic: harden-runner egress-policy:block present in each pm/draft/develop/reviewer job. Behavioral (live BLOCK): a credentialed job attempting egress to a NON-allowlisted host is DENIED by harden-runner, the denial visible in the run's harden-runner report; egress to an allowlisted HTTPS endpoint (api.github.com / the model proxy) succeeds." },
-  { "id": "C4-human-approval-gate", "statement": "A deterministic per-head-SHA human-approval gate parks any PR in human-required scope until a maintainer Approves, and auto-passes routine PRs.", "provenance": "compliance/control-matrix.md C4 (CC8,PI); .github/workflows/human-approval.yml + scripts/human-approval-gate.ts; ir.yml policy.box.human + risk.human_required_paths; SOC 2 CC8.1.", "acceptance_criterion": "Deterministic: the gate reads human-required-paths.json and posts a human-approval status. Behavioral (live): a PR touching a human-required path posts human-approval=pending and is BLOCKED from merge; a routine PR posts human-approval=success; a maintainer Approve on the current head SHA flips a parked PR to mergeable." },
-  { "id": "C5-branch-protection", "statement": "Branch protection is a profile-derived, change-managed control: required checks [ci, agent-review, human-approval, supply-chain, codeql], enforce_admins:true, ≥1 review, applied deterministically.", "provenance": "compliance/control-matrix.md C5 (CC8,PI); provision.json branch_protection; scripts/provision-target-repo.ts; SOC 2 CC8.1.", "acceptance_criterion": "Deterministic: provisioning applies the manifest. Behavioral (live): after provisioning, reading the repo's branch protection from GitHub shows enforce_admins=true, required_reviews=1, and the 5 required-check contexts; direct push to main is rejected." },
-  { "id": "C6-signed-commits", "statement": "Agent commits are GitHub-'Verified' (keyless) and required_signatures is enforced — only signed commits land on main.", "provenance": "compliance/control-matrix.md C6 (CC8); ir.yml policy.box.gh-actions.commit_signing=verified-api; provision.json required_signatures=true; scripts/agent-propose.ts git/commits API re-create; SOC 2 CC8.1.", "acceptance_criterion": "Deterministic: the propose effect re-creates the commit via the git/commits API so the job GITHUB_TOKEN signs it; required_signatures is set. Behavioral (live): a real agent PR's head commit shows verification.verified=true (committer GitHub); an unsigned push to main is rejected by the required-signatures rule; the merged squash commit is also verified=true." },
-  { "id": "C7-supply-chain-blocking", "statement": "Supply-chain integrity (registry-only + sha + bun audit) is a BLOCKING required check on bot PRs.", "provenance": "compliance/control-matrix.md C7 (CC7,CC8,PI); .github/workflows/supply-chain.yml + scripts/check-supply-chain.ts; ir.yml propose_dispatch_checks; SOC 2 CC7.1/CC8.1.", "acceptance_criterion": "Deterministic: the proposer dispatches supply-chain.yml which posts a supply-chain status. Behavioral (live): a PR introducing a non-registry/git-sourced dependency posts supply-chain=failure and is BLOCKED from merge; a clean PR posts supply-chain=success." },
-  { "id": "C8-sast-codeql-blocking", "statement": "Static code scanning is a BLOCKING required check on bot PRs, failing on findings — NO signup, NO GHAS (enforces on private).", "provenance": "compliance/control-matrix.md C8 (CC7); .github/workflows/code-scan.yml (Semgrep OSS) + ir.yml propose_dispatch_checks + provision.json required_checks; codeql-gate.yml/codeql.yml as optional richer SAST where GHAS/public; SOC 2 CC7.1.", "acceptance_criterion": "Deterministic: the proposer dispatches code-scan.yml (Semgrep OSS — free, no account, no GHAS) which posts a `code-scan` status. Behavioral (live, PRIVATE repo with NO GHAS): a PR with a real vulnerability (command injection) posts code-scan=failure and is BLOCKED; a clean PR passes. CodeQL remains available as richer SAST where GHAS/public exists." },
-  { "id": "C9-dependency-review", "statement": "PR-time dependency vulnerability review + Dependabot keep dependencies vuln-free.", "provenance": "compliance/control-matrix.md C9 (CC7); .github/workflows/dependency-review.yml + .github/dependabot.yml; SOC 2 CC7.1.", "acceptance_criterion": "Deterministic: dependency-review.yml runs the dependency-graph compare on PRs; dependabot.yml opens update PRs. Behavioral: dependency-review fails a PR adding a known-vulnerable dependency (where the dependency graph/GHAS is available); Dependabot opens pinned-bump PRs." },
-  { "id": "C10-sbom", "statement": "A CycloneDX SBOM is produced and retained as the record of shipped components.", "provenance": "compliance/control-matrix.md C10 (CC7,C); .github/workflows/sbom.yml; SOC 2 CC7.1.", "acceptance_criterion": "Deterministic: sbom.yml emits a CycloneDX SBOM on push + weekly. Behavioral (live): a run produces and retains an sbom-<sha> artifact for the repo's dependencies." },
-  { "id": "C11-actions-hardening", "statement": "All GitHub Actions are SHA-pinned and workflows are statically analysed (zizmor); pins kept current.", "provenance": "compliance/control-matrix.md C11 (CC7); .github/workflows/security.yml (zizmor) + .github/dependabot.yml; emitted workflows pinned by SHA; SOC 2 CC7.1.", "acceptance_criterion": "Deterministic: zero floating action tags in emitted workflows (all @<40-hex-sha>); security.yml runs zizmor. Behavioral: a compiled install shows N SHA-pinned uses, 0 floating; zizmor runs on push." },
-  { "id": "C12-secret-scanning", "statement": "Secret scanning is a BLOCKING required check on bot PRs — NO signup, NO GHAS (enforces on private).", "provenance": "compliance/control-matrix.md C12 (CC6,C); .github/workflows/secret-scan.yml (gitleaks) + ir.yml propose_dispatch_checks + provision.json required_checks; provision.json security block enables GitHub secret-scanning where free; SOC 2 CC6.1.", "acceptance_criterion": "Deterministic: the proposer dispatches secret-scan.yml (gitleaks — free, no account, no GHAS) which posts a `secret-scan` status. Behavioral (live, PRIVATE repo with NO GHAS): a PR committing a secret posts secret-scan=failure and is BLOCKED; a clean PR passes. GitHub secret-scanning + push-protection are also enabled via provision.json where free (public/GHAS)." },
-  { "id": "C13-transcript-redaction", "statement": "Agent transcripts redact secret-shaped tokens before they are persisted.", "provenance": "compliance/control-matrix.md C13 (Confidentiality); scripts/transcript.ts token-shape redaction; SOC 2 C1.1.", "acceptance_criterion": "Deterministic: transcript.ts strips known token shapes (sk-ant-*, ghp_*, …). Behavioral: a transcript containing a token-shaped string is written with the token redacted." },
-  { "id": "C14-classification-retention", "statement": "Data is classified and agent transcripts are retention-limited via a gated deletion sweep.", "provenance": "compliance/control-matrix.md C14 (Confidentiality,CC6); .github/workflows/retention.yml + compliance/policies/data-classification-and-retention-policy.md; SOC 2 C1.1/C1.2.", "acceptance_criterion": "Deterministic: retention.yml proposes deletion of transcripts older than the retention window as a gated PR (deletions are change-managed). Behavioral: the sweep opens a human-required PR deleting expired transcripts; the policy classifies data classes." },
-  { "id": "C15-encryption", "statement": "Data is encrypted in transit (enforced) and at rest (inherited from subprocessors, asserted).", "provenance": "compliance/control-matrix.md C15 (CC6,Confidentiality); emit.ts harden-runner HTTPS-only allowlist; compliance/policies/encryption-policy.md; SOC 2 CC6.1/CC6.7.", "acceptance_criterion": "Transit (behavioral, leans on C3-egress-lockdown): a credentialed job's egress to a non-allowlisted or non-HTTPS host is DENIED by harden-runner; only allowlisted HTTPS endpoints succeed. At-rest (inherited assertion): the encryption policy asserts at-rest encryption referencing GitHub/Cloudflare subprocessor attestations (subprocessors.md)." },
-  { "id": "C16-audit-evidence", "statement": "A tamper-evident, automated control-evidence trail is collected to an immutable git branch.", "provenance": "compliance/control-matrix.md C16 (CC7); .github/workflows/evidence-collect.yml → compliance-evidence branch; SOC 2 CC7.2/CC4.1.", "acceptance_criterion": "Deterministic: evidence-collect.yml snapshots branch-protection/collaborators/repo-settings/alerts/recent-runs to the compliance-evidence branch on a cron. Behavioral (live): a run writes a timestamped evidence/<ts>/ snapshot (with SUMMARY.md) to the compliance-evidence branch." },
-  { "id": "C17-availability-watchdog", "statement": "A liveness watchdog detects when the fleet (PM) has stopped, decoupled from the PM, and alerts.", "provenance": "compliance/control-matrix.md C17 (Availability); .github/workflows/heartbeat.yml; SOC 2 A1.1/A1.2.", "acceptance_criterion": "Deterministic: heartbeat.yml checks the pm last-run age on a cron and raises an alert issue + fails if stale. Behavioral: with a simulated-stale pm, heartbeat opens an alert issue and the run goes red." },
-  { "id": "C18-proxy-subprocessor", "statement": "Model-proxy controls (admin auth, rate limiting, ledger backup) are tracked as a SUBPROCESSOR dependency, not owned in the adopter repo.", "provenance": "compliance/control-matrix.md C18 (CC6,CC7,A); compliance/subprocessors.md; SOC 2 CC9.2.", "acceptance_criterion": "The subprocessor inventory names the OA model proxy (+ GitHub/Cloudflare/OpenRouter/providers) with data shared, risk rank, and the need to obtain their SOC 2 reports; the adopter has no in-repo control over proxy internals (documented, not demonstrated as a repo control)." },
-  { "id": "C19-privacy-dsr", "statement": "Privacy (PI handling) is scaffolded: a PI-minimizing posture plus a data-subject-request process.", "provenance": "compliance/control-matrix.md C19 (Privacy); compliance/policies/privacy-policy.md; SOC 2 Privacy TSC P1–P8.", "acceptance_criterion": "The privacy policy states the PI inventory (GitHub usernames), notice/choice/collection/use/retention/access/disclosure commitments, a DSR fulfilment process, and breach handling — checked against the SOC 2 Privacy criteria; v1 posture keeps PI out of inputs." },
-
-  { "id": "O1-security-policies", "statement": "A complete, leadership-approvable security policy set is shipped install-owned, covering the full Common Criteria series including CC2 (Communication & Information).", "provenance": "compliance/control-matrix.md O1 (CC1–CC5, incl. CC2 Communication & Information); compliance/policies/* (information-security-policy.md as the apex + acceptable-use/SECURITY.md as the internal/external communication channels); SOC 2 CC1–CC5, explicitly CC2.1–CC2.3.", "acceptance_criterion": "All 13 policies present as full drafts mapped to their criteria; CC2 (communication of security commitments/responsibilities internally + externally) is satisfied by information-security-policy.md + acceptable-use-policy.md + SECURITY.md; the org must approve/adopt/review annually (org action, not a repo demonstration)." },
-  { "id": "O2-risk-assessment", "statement": "A risk register / risk-assessment template is shipped for the org to run ≥ annually.", "provenance": "compliance/control-matrix.md O2 (CC3); compliance/risk-register.md + risk-management-policy.md; SOC 2 CC3.1–CC3.4.", "acceptance_criterion": "risk-register.md provides a scored register (L×I, owner, treatment) seeded with this stack's inherent risks; the org runs + dates it." },
-  { "id": "O3-access-reviews", "statement": "Quarterly access reviews are enabled by the automated collaborator-snapshot evidence.", "provenance": "compliance/control-matrix.md O3 (CC6); access-control-policy.md + C16 collaborators snapshot; SOC 2 CC6.1/CC6.2/CC6.3.", "acceptance_criterion": "access-control-policy.md defines the quarterly review off compliance-evidence/*/collaborators.json; the org performs + records it (org action)." },
-  { "id": "O4-vendor-management", "statement": "A pre-filled subprocessor inventory + vendor-management policy support CC9.", "provenance": "compliance/control-matrix.md O4 (CC9); subprocessors.md + vendor-management-policy.md; SOC 2 CC9.2.", "acceptance_criterion": "subprocessors.md lists every subprocessor (GitHub, OA proxy, Cloudflare, OpenRouter, providers) with report/DPA columns; the org collects reports + signs DPAs." },
-  { "id": "O5-incident-response", "statement": "An incident-response program (policy + SECURITY.md disclosure) is shipped; the org runs a tabletop.", "provenance": "compliance/control-matrix.md O5 (CC7); incident-response-policy.md + SECURITY.md; SOC 2 CC7.3/CC7.4/CC7.5.", "acceptance_criterion": "incident-response-policy.md defines severities/roles/timelines + post-incident review; SECURITY.md provides private disclosure; the org runs ≥1 tabletop in the window (org action)." },
-  { "id": "O6-hr-security", "statement": "HR/personnel security (onboarding/offboarding/training) is shipped as policy.", "provenance": "compliance/control-matrix.md O6 (CC1); hr-security-policy.md; SOC 2 CC1.1/CC1.4.", "acceptance_criterion": "hr-security-policy.md defines vetting, least-privilege onboarding, same-day offboarding, annual security-awareness training; the org operates + records it." },
-  { "id": "O7-change-management", "statement": "Change management + secure SDLC is both a deterministic control (C2/C4/C5/C7/C8) and a written policy narrative.", "provenance": "compliance/control-matrix.md O7 (CC8); compliance/policies/change-management-policy.md + compliance/policies/secure-sdlc-policy.md + the C2/C4/C5/C7/C8 controls; SOC 2 CC7.1 (SDLC) + CC8.1 (change mgmt).", "acceptance_criterion": "change-management-policy.md ties PR review + required checks + the human gate + branch protection to CC8, and secure-sdlc-policy.md ties tracked-work + review + SAST + supply-chain to CC7/CC8, both with evidence pointers; the controls are behaviorally demonstrated (see C2/C4/C5/C7/C8)." },
-  { "id": "O8-compliance-platform", "statement": "Adoption of a compliance-automation platform (Vanta/Drata) fed by the evidence branch is documented.", "provenance": "compliance/control-matrix.md O8; compliance/README.md cadence.", "acceptance_criterion": "compliance/README.md documents connecting a platform to the compliance-evidence branch; the org adopts it (org action; not a repo control)." },
-  { "id": "O9-auditor", "statement": "Engaging a CPA auditor for Type I then Type II is documented as the org's path.", "provenance": "compliance/control-matrix.md O9; compliance/README.md ceiling.", "acceptance_criterion": "The README states the Type-I-then-Type-II auditor path; the org engages a CPA firm (org action)." },
-  { "id": "O10-mfa-org-settings", "statement": "Org-wide MFA + org security settings are required; the repo-settable parts (secret scanning) are provisioned.", "provenance": "compliance/control-matrix.md O10 (CC6); access-control-policy.md + provision.json security (C12); SOC 2 CC6.1.", "acceptance_criterion": "access-control-policy.md mandates org MFA; C12 covers the repo-settable secret-scanning/push-protection (demonstrated); MFA enforcement is an org setting (org action)." },
-  { "id": "O11-dpa-data-commitments", "statement": "DPAs / data-handling commitments with subprocessors are required (CC9 + Privacy).", "provenance": "compliance/control-matrix.md O11 (CC9, Privacy); vendor-management-policy.md + data-classification-and-retention-policy.md + privacy-policy.md; SOC 2 CC9.2 + Privacy.", "acceptance_criterion": "The vendor/data/privacy policies require DPAs covering PI for each subprocessor; the org signs them (org action)." },
-  { "id": "O12-business-continuity-dr", "statement": "Business continuity & disaster recovery is scaffolded as a fully-drafted policy mapped to Availability — the recoverability half of the A-criteria that complements the C17 liveness watchdog.", "provenance": "compliance/policies/business-continuity-dr-policy.md; compliance/control-matrix.md Availability row; SOC 2 A1.2 (recovery/backup) + A1.3 (recovery testing).", "acceptance_criterion": "business-continuity-dr-policy.md defines RTO/RPO objectives, the backup posture for each asset class (repo/code, compliance-evidence branch, model-proxy/ledger as subprocessor, secrets re-provisioning), and an >= annual DOCUMENTED restore test; together with C17 (A1.1 liveness, behaviorally demonstrated) this makes the full A1 series (A1.1–A1.3) covered. The org runs + dates the restore test (org action)." },
-
-  { "id": "eng-install-ownership", "statement": "The compliance/ policy+evidence tree is install-owned (seed-once, adopter-edited); the security WORKFLOWS stay derived (upgrade re-pushes improvements).", "provenance": "ir.yml resources comment; packages/core/src/upgrade.ts INSTALL_OWNED_PREFIXES ('compliance/') + provision.json; docs/SOC2-BASELINE-PROFILE.md G2.", "acceptance_criterion": "Deterministic: upgrade seeds compliance/** + provision.json only if missing and never overwrites them; security workflows are regenerated. Demonstrated by isInstallOwned('compliance/...')==true and check:dogfood/profiles green." },
-  { "id": "eng-drift-guard", "statement": "Shared SDLC standards carried by 2+ github profiles are byte-identical (the security posture cannot silently fork).", "provenance": "bin/check-profiles.ts cross-profile drift guard; ir.yml 'shared SDLC standard' block.", "acceptance_criterion": "Deterministic: check:profiles asserts every non-install-owned resource carried by 2+ github profiles is byte-identical. Demonstrated by check:profiles passing with the SDLC standards identical to simple-gh-sdlc and codeql/human-approval identical to self-driving." },
-  { "id": "ceiling-honesty", "statement": "The profile honestly bounds its claim: it makes a repo Type-I-ready BY DESIGN (controls present + auditable) — it is NOT certification; the org program + the Type II observation window remain the adopter's, and GHAS-gated controls + the model proxy are explicitly out-of-repo.", "provenance": "compliance/control-matrix.md ceiling note + O8/O9; compliance/README.md 'honest ceiling'; profiles/soc2-baseline/README.md ceiling; docs/SOC2-BASELINE-PROFILE.md.", "acceptance_criterion": "The README + control-matrix state: default-ready not certified; org program (policy approval, access reviews, vendor DPAs, IR tabletop, MFA, platform, auditor) and the ~3–12 month Type II window are required and not ownable in code; GHAS-on-private (G3) and the proxy subprocessor are flagged. No control claims certification." }
+  {
+    "id": "C1-least-privilege-tokens",
+    "statement": "Each agent runs with least-privilege GITHUB_TOKEN permissions derived from its declared capabilities (read-only baseline).",
+    "provenance": "compliance/control-matrix.md C1 (CC6); packages/substrate-github/src/emit.ts capability\u2192permission map; emitted .github/workflows/<agent>.yml.",
+    "acceptance_criterion": "Deterministic: emitted per-agent workflow permission block matches capabilities. Behavioral (live RUNTIME SoD): in a live cell, the reviewer role's GITHUB_TOKEN CANNOT push contents (a write/push attempt is rejected) and the develop role's GITHUB_TOKEN CANNOT post a commit status (a statuses:write attempt is rejected) \u2014 proving the least-privilege split at runtime, not merely by reading the permission block."
+  },
+  {
+    "id": "C2-merge-boundary-sod",
+    "statement": "Segregation of duties: no actor holds both code:propose and code:review, none holds code:merge; only native auto-merge lands a PR.",
+    "provenance": "compliance/control-matrix.md C2 (CC6,CC8,PI); ir.yml agents (develop=code:propose, reviewer=code:review); packages/core ir.ts validateIR; SOC 2 CC6.1/CC8.1.",
+    "acceptance_criterion": "Deterministic: IR validation rejects both-on-one/code:merge. Behavioral: a live agent PR is reviewed by an independent reviewer posting agent-review and is merged only via native auto-merge \u2014 the proposer cannot self-certify (shown by the permission split + a merged-PR record)."
+  },
+  {
+    "id": "C3-egress-lockdown",
+    "statement": "Every credentialed agent job blocks network egress to an allowlist (token-exfiltration prevention).",
+    "provenance": "compliance/control-matrix.md C3 (CC6); emit.ts hardenRunner (egress-policy: block); SOC 2 CC6.6/CC6.7.",
+    "acceptance_criterion": "Deterministic: harden-runner egress-policy:block present in each pm/draft/develop/reviewer job. Behavioral (live BLOCK): a credentialed job attempting egress to a NON-allowlisted host is DENIED by harden-runner, the denial visible in the run's harden-runner report; egress to an allowlisted HTTPS endpoint (api.github.com / the model proxy) succeeds."
+  },
+  {
+    "id": "C4-human-approval-gate",
+    "statement": "A deterministic per-head-SHA human-approval gate parks any PR in human-required scope until a maintainer Approves, and auto-passes routine PRs.",
+    "provenance": "compliance/control-matrix.md C4 (CC8,PI); .github/workflows/human-approval.yml + scripts/human-approval-gate.ts; ir.yml policy.box.human + risk.human_required_paths; SOC 2 CC8.1.",
+    "acceptance_criterion": "Deterministic: the gate reads human-required-paths.json and posts a human-approval status. Behavioral (live): a PR touching a human-required path posts human-approval=pending and is BLOCKED from merge; a routine PR posts human-approval=success; a maintainer Approve on the current head SHA flips a parked PR to mergeable."
+  },
+  {
+    "id": "C5-branch-protection",
+    "statement": "Branch protection is a profile-derived, change-managed control: required checks [ci, agent-review, human-approval, supply-chain, code-scan, secret-scan], enforce_admins:true, \u22651 review, applied deterministically.",
+    "provenance": "compliance/control-matrix.md C5 (CC8,PI); provision.json branch_protection; scripts/provision-target-repo.ts; SOC 2 CC8.1.",
+    "acceptance_criterion": "Deterministic: provisioning applies the manifest. Behavioral (live): after provisioning, reading the repo's branch protection from GitHub shows enforce_admins=true, required_reviews=1, and the 6 required-check contexts [ci, agent-review, human-approval, supply-chain, code-scan, secret-scan]; direct push to main is rejected."
+  },
+  {
+    "id": "C6-signed-commits",
+    "statement": "Agent commits are GitHub-'Verified' (keyless) and required_signatures is enforced \u2014 only signed commits land on main.",
+    "provenance": "compliance/control-matrix.md C6 (CC8); ir.yml policy.box.gh-actions.commit_signing=verified-api; provision.json required_signatures=true; scripts/agent-propose.ts git/commits API re-create; SOC 2 CC8.1.",
+    "acceptance_criterion": "Deterministic: the propose effect re-creates the commit via the git/commits API so the job GITHUB_TOKEN signs it; required_signatures is set. Behavioral (live): a real agent PR's head commit shows verification.verified=true (committer GitHub); an unsigned push to main is rejected by the required-signatures rule; the merged squash commit is also verified=true."
+  },
+  {
+    "id": "C7-supply-chain-blocking",
+    "statement": "Supply-chain integrity (registry-only + sha + bun audit) is a BLOCKING required check on bot PRs.",
+    "provenance": "compliance/control-matrix.md C7 (CC7,CC8,PI); .github/workflows/supply-chain.yml + scripts/check-supply-chain.ts; ir.yml propose_dispatch_checks; SOC 2 CC7.1/CC8.1.",
+    "acceptance_criterion": "Deterministic: the proposer dispatches supply-chain.yml which posts a supply-chain status. Behavioral (live): a PR introducing a non-registry/git-sourced dependency posts supply-chain=failure and is BLOCKED from merge; a clean PR posts supply-chain=success."
+  },
+  {
+    "id": "C8-sast-codeql-blocking",
+    "statement": "Static code scanning is a BLOCKING required check on bot PRs, failing on findings \u2014 NO signup, NO GHAS (enforces on private).",
+    "provenance": "compliance/control-matrix.md C8 (CC7); .github/workflows/code-scan.yml (Semgrep OSS) + ir.yml propose_dispatch_checks + provision.json required_checks; codeql-gate.yml/codeql.yml as optional richer SAST where GHAS/public; SOC 2 CC7.1.",
+    "acceptance_criterion": "Deterministic: the proposer dispatches code-scan.yml (Semgrep OSS \u2014 free, no account, no GHAS) which posts a `code-scan` status. Behavioral (live, PRIVATE repo with NO GHAS): a PR with a real vulnerability (command injection) posts code-scan=failure and is BLOCKED; a clean PR passes. CodeQL remains available as richer SAST where GHAS/public exists."
+  },
+  {
+    "id": "C9-dependency-review",
+    "statement": "PR-time dependency vulnerability review + Dependabot keep dependencies vuln-free.",
+    "provenance": "compliance/control-matrix.md C9 (CC7); .github/workflows/dependency-review.yml + .github/dependabot.yml; SOC 2 CC7.1.",
+    "acceptance_criterion": "Deterministic: dependency-review.yml runs the dependency-graph compare on PRs; dependabot.yml opens update PRs. Behavioral: dependency-review fails a PR adding a known-vulnerable dependency (where the dependency graph/GHAS is available); Dependabot opens pinned-bump PRs."
+  },
+  {
+    "id": "C10-sbom",
+    "statement": "A CycloneDX SBOM is produced and retained as the record of shipped components.",
+    "provenance": "compliance/control-matrix.md C10 (CC7,C); .github/workflows/sbom.yml; SOC 2 CC7.1.",
+    "acceptance_criterion": "Deterministic: sbom.yml emits a CycloneDX SBOM on push + weekly. Behavioral (live): a run produces and retains an sbom-<sha> artifact for the repo's dependencies."
+  },
+  {
+    "id": "C11-actions-hardening",
+    "statement": "All GitHub Actions are SHA-pinned and workflows are statically analysed (zizmor); pins kept current.",
+    "provenance": "compliance/control-matrix.md C11 (CC7); .github/workflows/security.yml (zizmor) + .github/dependabot.yml; emitted workflows pinned by SHA; SOC 2 CC7.1.",
+    "acceptance_criterion": "Deterministic: zero floating action tags in emitted workflows (all @<40-hex-sha>); security.yml runs zizmor. Behavioral: a compiled install shows N SHA-pinned uses, 0 floating; zizmor runs on push."
+  },
+  {
+    "id": "C12-secret-scanning",
+    "statement": "Secret scanning is a BLOCKING required check on bot PRs \u2014 NO signup, NO GHAS (enforces on private).",
+    "provenance": "compliance/control-matrix.md C12 (CC6,C); .github/workflows/secret-scan.yml (gitleaks) + ir.yml propose_dispatch_checks + provision.json required_checks; provision.json security block enables GitHub secret-scanning where free; SOC 2 CC6.1.",
+    "acceptance_criterion": "Deterministic: the proposer dispatches secret-scan.yml (gitleaks \u2014 free, no account, no GHAS) which posts a `secret-scan` status. Behavioral (live, PRIVATE repo with NO GHAS): a PR committing a secret posts secret-scan=failure and is BLOCKED; a clean PR passes. GitHub secret-scanning + push-protection are also enabled via provision.json where free (public/GHAS)."
+  },
+  {
+    "id": "C13-transcript-redaction",
+    "statement": "Agent transcripts redact secret-shaped tokens before they are persisted.",
+    "provenance": "compliance/control-matrix.md C13 (Confidentiality); scripts/transcript.ts token-shape redaction; SOC 2 C1.1.",
+    "acceptance_criterion": "Deterministic: transcript.ts strips known token shapes (sk-ant-*, ghp_*, \u2026). Behavioral: a transcript containing a token-shaped string is written with the token redacted."
+  },
+  {
+    "id": "C14-classification-retention",
+    "statement": "Data is classified and agent transcripts are retention-limited via a gated deletion sweep.",
+    "provenance": "compliance/control-matrix.md C14 (Confidentiality,CC6); .github/workflows/retention.yml + compliance/policies/data-classification-and-retention-policy.md; SOC 2 C1.1/C1.2.",
+    "acceptance_criterion": "Deterministic: retention.yml proposes deletion of transcripts older than the retention window as a gated PR (deletions are change-managed). Behavioral: the sweep opens a human-required PR deleting expired transcripts; the policy classifies data classes."
+  },
+  {
+    "id": "C15-encryption",
+    "statement": "Data is encrypted in transit (enforced) and at rest (inherited from subprocessors, asserted).",
+    "provenance": "compliance/control-matrix.md C15 (CC6,Confidentiality); emit.ts harden-runner HTTPS-only allowlist; compliance/policies/encryption-policy.md; SOC 2 CC6.1/CC6.7.",
+    "acceptance_criterion": "Transit (behavioral, leans on C3-egress-lockdown): a credentialed job's egress to a non-allowlisted or non-HTTPS host is DENIED by harden-runner; only allowlisted HTTPS endpoints succeed. At-rest (inherited assertion): the encryption policy asserts at-rest encryption referencing GitHub/Cloudflare subprocessor attestations (subprocessors.md)."
+  },
+  {
+    "id": "C16-audit-evidence",
+    "statement": "A tamper-evident, automated control-evidence trail is collected to an immutable git branch.",
+    "provenance": "compliance/control-matrix.md C16 (CC7); .github/workflows/evidence-collect.yml \u2192 compliance-evidence branch; SOC 2 CC7.2/CC4.1.",
+    "acceptance_criterion": "Deterministic: evidence-collect.yml snapshots branch-protection/collaborators/repo-settings/alerts/recent-runs to the compliance-evidence branch on a cron. Behavioral (live): a run writes a timestamped evidence/<ts>/ snapshot (with SUMMARY.md) to the compliance-evidence branch."
+  },
+  {
+    "id": "C17-availability-watchdog",
+    "statement": "A liveness watchdog detects when the fleet (PM) has stopped, decoupled from the PM, and alerts.",
+    "provenance": "compliance/control-matrix.md C17 (Availability); .github/workflows/heartbeat.yml; SOC 2 A1.1/A1.2.",
+    "acceptance_criterion": "Deterministic: heartbeat.yml checks the pm last-run age on a cron and raises an alert issue + fails if stale. Behavioral: with a simulated-stale pm, heartbeat opens an alert issue and the run goes red."
+  },
+  {
+    "id": "C18-proxy-subprocessor",
+    "statement": "Model-proxy controls (admin auth, rate limiting, ledger backup) are tracked as a SUBPROCESSOR dependency, not owned in the adopter repo.",
+    "provenance": "compliance/control-matrix.md C18 (CC6,CC7,A); compliance/subprocessors.md; SOC 2 CC9.2.",
+    "acceptance_criterion": "The subprocessor inventory names the OA model proxy (+ GitHub/Cloudflare/OpenRouter/providers) with data shared, risk rank, and the need to obtain their SOC 2 reports; the adopter has no in-repo control over proxy internals (documented, not demonstrated as a repo control)."
+  },
+  {
+    "id": "C19-privacy-dsr",
+    "statement": "Privacy (PI handling) is scaffolded: a PI-minimizing posture plus a data-subject-request process.",
+    "provenance": "compliance/control-matrix.md C19 (Privacy); compliance/policies/privacy-policy.md; SOC 2 Privacy TSC P1\u2013P8.",
+    "acceptance_criterion": "The privacy policy states the PI inventory (GitHub usernames), notice/choice/collection/use/retention/access/disclosure commitments, a DSR fulfilment process, and breach handling \u2014 checked against the SOC 2 Privacy criteria; v1 posture keeps PI out of inputs."
+  },
+  {
+    "id": "O1-security-policies",
+    "statement": "A complete, leadership-approvable security policy set is shipped install-owned, covering the full Common Criteria series including CC2 (Communication & Information).",
+    "provenance": "compliance/control-matrix.md O1 (CC1\u2013CC5, incl. CC2 Communication & Information); compliance/policies/* (information-security-policy.md as the apex + acceptable-use/SECURITY.md as the internal/external communication channels); SOC 2 CC1\u2013CC5, explicitly CC2.1\u2013CC2.3.",
+    "acceptance_criterion": "All 13 policies present as full drafts mapped to their criteria; CC2 (communication of security commitments/responsibilities internally + externally) is satisfied by information-security-policy.md + acceptable-use-policy.md + SECURITY.md; the org must approve/adopt/review annually (org action, not a repo demonstration)."
+  },
+  {
+    "id": "O2-risk-assessment",
+    "statement": "A risk register / risk-assessment template is shipped for the org to run \u2265 annually.",
+    "provenance": "compliance/control-matrix.md O2 (CC3); compliance/risk-register.md + risk-management-policy.md; SOC 2 CC3.1\u2013CC3.4.",
+    "acceptance_criterion": "risk-register.md provides a scored register (L\u00d7I, owner, treatment) seeded with this stack's inherent risks; the org runs + dates it."
+  },
+  {
+    "id": "O3-access-reviews",
+    "statement": "Quarterly access reviews are enabled by the automated collaborator-snapshot evidence.",
+    "provenance": "compliance/control-matrix.md O3 (CC6); access-control-policy.md + C16 collaborators snapshot; SOC 2 CC6.1/CC6.2/CC6.3.",
+    "acceptance_criterion": "access-control-policy.md defines the quarterly review off compliance-evidence/*/collaborators.json; the org performs + records it (org action)."
+  },
+  {
+    "id": "O4-vendor-management",
+    "statement": "A pre-filled subprocessor inventory + vendor-management policy support CC9.",
+    "provenance": "compliance/control-matrix.md O4 (CC9); subprocessors.md + vendor-management-policy.md; SOC 2 CC9.2.",
+    "acceptance_criterion": "subprocessors.md lists every subprocessor (GitHub, OA proxy, Cloudflare, OpenRouter, providers) with report/DPA columns; the org collects reports + signs DPAs."
+  },
+  {
+    "id": "O5-incident-response",
+    "statement": "An incident-response program (policy + SECURITY.md disclosure) is shipped; the org runs a tabletop.",
+    "provenance": "compliance/control-matrix.md O5 (CC7); incident-response-policy.md + SECURITY.md; SOC 2 CC7.3/CC7.4/CC7.5.",
+    "acceptance_criterion": "incident-response-policy.md defines severities/roles/timelines + post-incident review; SECURITY.md provides private disclosure; the org runs \u22651 tabletop in the window (org action)."
+  },
+  {
+    "id": "O6-hr-security",
+    "statement": "HR/personnel security (onboarding/offboarding/training) is shipped as policy.",
+    "provenance": "compliance/control-matrix.md O6 (CC1); hr-security-policy.md; SOC 2 CC1.1/CC1.4.",
+    "acceptance_criterion": "hr-security-policy.md defines vetting, least-privilege onboarding, same-day offboarding, annual security-awareness training; the org operates + records it."
+  },
+  {
+    "id": "O7-change-management",
+    "statement": "Change management + secure SDLC is both a deterministic control (C2/C4/C5/C7/C8) and a written policy narrative.",
+    "provenance": "compliance/control-matrix.md O7 (CC8); compliance/policies/change-management-policy.md + compliance/policies/secure-sdlc-policy.md + the C2/C4/C5/C7/C8 controls; SOC 2 CC7.1 (SDLC) + CC8.1 (change mgmt).",
+    "acceptance_criterion": "change-management-policy.md ties PR review + required checks + the human gate + branch protection to CC8, and secure-sdlc-policy.md ties tracked-work + review + SAST + supply-chain to CC7/CC8, both with evidence pointers; the controls are behaviorally demonstrated (see C2/C4/C5/C7/C8)."
+  },
+  {
+    "id": "O8-compliance-platform",
+    "statement": "Adoption of a compliance-automation platform (Vanta/Drata) fed by the evidence branch is documented.",
+    "provenance": "compliance/control-matrix.md O8; compliance/README.md cadence.",
+    "acceptance_criterion": "compliance/README.md documents connecting a platform to the compliance-evidence branch; the org adopts it (org action; not a repo control)."
+  },
+  {
+    "id": "O9-auditor",
+    "statement": "Engaging a CPA auditor for Type I then Type II is documented as the org's path.",
+    "provenance": "compliance/control-matrix.md O9; compliance/README.md ceiling.",
+    "acceptance_criterion": "The README states the Type-I-then-Type-II auditor path; the org engages a CPA firm (org action)."
+  },
+  {
+    "id": "O10-mfa-org-settings",
+    "statement": "Org-wide MFA + org security settings are required; the repo-settable parts (secret scanning) are provisioned.",
+    "provenance": "compliance/control-matrix.md O10 (CC6); access-control-policy.md + provision.json security (C12); SOC 2 CC6.1.",
+    "acceptance_criterion": "access-control-policy.md mandates org MFA; C12 covers the repo-settable secret-scanning/push-protection (demonstrated); MFA enforcement is an org setting (org action)."
+  },
+  {
+    "id": "O11-dpa-data-commitments",
+    "statement": "DPAs / data-handling commitments with subprocessors are required (CC9 + Privacy).",
+    "provenance": "compliance/control-matrix.md O11 (CC9, Privacy); vendor-management-policy.md + data-classification-and-retention-policy.md + privacy-policy.md; SOC 2 CC9.2 + Privacy.",
+    "acceptance_criterion": "The vendor/data/privacy policies require DPAs covering PI for each subprocessor; the org signs them (org action)."
+  },
+  {
+    "id": "O12-business-continuity-dr",
+    "statement": "Business continuity & disaster recovery is scaffolded as a fully-drafted policy mapped to Availability \u2014 the recoverability half of the A-criteria that complements the C17 liveness watchdog.",
+    "provenance": "compliance/policies/business-continuity-dr-policy.md; compliance/control-matrix.md Availability row; SOC 2 A1.2 (recovery/backup) + A1.3 (recovery testing).",
+    "acceptance_criterion": "business-continuity-dr-policy.md defines RTO/RPO objectives, the backup posture for each asset class (repo/code, compliance-evidence branch, model-proxy/ledger as subprocessor, secrets re-provisioning), and an >= annual DOCUMENTED restore test; together with C17 (A1.1 liveness, behaviorally demonstrated) this makes the full A1 series (A1.1\u2013A1.3) covered. The org runs + dates the restore test (org action)."
+  },
+  {
+    "id": "eng-install-ownership",
+    "statement": "The compliance/ policy+evidence tree is install-owned (seed-once, adopter-edited); the security WORKFLOWS stay derived (upgrade re-pushes improvements).",
+    "provenance": "ir.yml resources comment; packages/core/src/upgrade.ts INSTALL_OWNED_PREFIXES ('compliance/') + provision.json; docs/SOC2-BASELINE-PROFILE.md G2.",
+    "acceptance_criterion": "Deterministic: upgrade seeds compliance/** + provision.json only if missing and never overwrites them; security workflows are regenerated. Demonstrated by isInstallOwned('compliance/...')==true and check:dogfood/profiles green."
+  },
+  {
+    "id": "eng-drift-guard",
+    "statement": "Shared SDLC standards carried by 2+ github profiles are byte-identical (the security posture cannot silently fork).",
+    "provenance": "bin/check-profiles.ts cross-profile drift guard; ir.yml 'shared SDLC standard' block.",
+    "acceptance_criterion": "Deterministic: check:profiles asserts every non-install-owned resource carried by 2+ github profiles is byte-identical. Demonstrated by check:profiles passing with the SDLC standards identical to simple-gh-sdlc and codeql/human-approval identical to self-driving."
+  },
+  {
+    "id": "ceiling-honesty",
+    "statement": "The profile honestly bounds its claim: it makes a repo Type-I-ready BY DESIGN (controls present + auditable) \u2014 it is NOT certification; the org program + the Type II observation window remain the adopter's, and GHAS-gated controls + the model proxy are explicitly out-of-repo.",
+    "provenance": "compliance/control-matrix.md ceiling note + O8/O9; compliance/README.md 'honest ceiling'; profiles/soc2-baseline/README.md ceiling; docs/SOC2-BASELINE-PROFILE.md.",
+    "acceptance_criterion": "The README + control-matrix state: default-ready not certified; org program (policy approval, access reviews, vendor DPAs, IR tabletop, MFA, platform, auditor) and the ~3\u201312 month Type II window are required and not ownable in code; GHAS-on-private (G3) and the proxy subprocessor are flagged. No control claims certification."
+  }
 ]

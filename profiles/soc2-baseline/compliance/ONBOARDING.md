@@ -15,7 +15,7 @@ evidence-collect, retention, heartbeat), the runtime, and the `compliance/` poli
 ```bash
 bun scripts/provision-target-repo.ts --repo <owner>/<name> --source <build-dir> --manifest <build-dir>/provision.json
 ```
-Applies branch protection (required checks `ci, agent-review, human-approval, supply-chain, codeql`,
+Applies branch protection (required checks `ci, agent-review, human-approval, supply-chain, code-scan, secret-scan`,
 `enforce_admins`, ≥1 review), the **required-signatures ruleset**, and secret-scanning + push-protection, then
 sets the repo variables + labels. Tune `provision.json` to your repo first (it's install-owned).
 
@@ -23,9 +23,11 @@ sets the repo variables + labels. Tune `provision.json` to your repo first (it's
 - **`ci`**: soc2-baseline ships **no** `ci.yml` — `ci` is *your product's* CI. Provide a workflow that posts a
   `ci` commit status (the proposer dispatches `ci.yml` with `-f sha -f pr`), or drop `ci` from
   `required_checks`.
-- **GHAS (gap G3)**: secret scanning, CodeQL, and dependency review are **free on public repos** but need
-  **GitHub Advanced Security on private repos**. Without GHAS on a private repo, the CodeQL gate fails closed
-  — either run the repo public, buy GHAS, or remove `codeql` from `required_checks`.
+- **No-signup required gates (work on private, no GHAS):** the SAST + secret-scan required checks are
+  `code-scan` (Semgrep OSS) and `secret-scan` (gitleaks) — free, no account, no GHAS — so a private repo gets
+  real code + secret scanning out of the box. **GHAS is OPTIONAL richer-where-available**: GitHub CodeQL
+  (`codeql.yml`), GitHub-native secret scanning, and dependency-review (C9) light up on public repos or with
+  GHAS on private, but are NOT in `required_checks`, so a no-GHAS private repo never wedges.
 - **Maintainers**: set the `PUBLIC_AGENT_MAINTAINERS` repo variable (comma-separated logins) — the
   human-approval gate engages them and they approve sensitive PRs.
 - **Egress lockdown (C3/C15)** enforces with **zero signup on BOTH public and private repos**. PUBLIC repos
@@ -35,8 +37,9 @@ sets the repo variables + labels. Tune `provision.json` to your repo first (it's
   verified live on a private repo: example.com DENIED (exit 7) while the proxy/npm/github egress stays intact.
   No StepSecurity account, no GHAS.
 - **Dependency review (C9) needs the dependency graph**: free on public repos; on private repos it requires
-  GitHub Advanced Security (same GHAS boundary as CodeQL/secret-scanning, G3). Without it `dependency-review.yml`
-  degrades to a no-op.
+  GitHub Advanced Security (same GHAS boundary as the optional CodeQL/GitHub-native secret-scanning, G3). Without
+  it `dependency-review.yml` no-ops — but dependency **integrity + CVE** scanning still enforces no-signup via the
+  required `supply-chain` gate (`bun audit`), so vulnerable deps are still caught on private.
 - **Signed commits**: the required-signatures **ruleset** can block native auto-merge under
   `enforce_admins:true` even when commits are Verified (known finding) — until reconciled, an operator/maintainer
   performs the merge.

@@ -18,7 +18,7 @@
     },
     {
       "name": "PUBLIC_AGENT_MAX_REQUESTS",
-      "value": "250"
+      "value": "200"
     },
     {
       "name": "PUBLIC_AGENT_MAX_USD_CENTS",

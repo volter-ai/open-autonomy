@@ -97,6 +97,10 @@ policy:
       # zero-account, no-GHAS enforcers for C8/C12 — they work on PRIVATE repos where CodeQL/GitHub secret
       # scanning would need GHAS. codeql-gate stays for richer SAST where GHAS/public is available.
       propose_dispatch_checks: [supply-chain.yml, code-scan.yml, secret-scan.yml, codeql-gate.yml]
+      # W12.4 — the advisory compliance-verifier is a SECOND agent-reviewer; a bot PR fires no
+      # pull_request_target, so the proposer kicks it with issue_number=<pr> (the agent-reviewer dispatch
+      # shape, not the gate sha/pr shape) so it runs autonomously on the drafter's PR and posts compliance-check.
+      propose_dispatch_reviews: [compliance-verifier.yml]
       # C6 — re-create the agent commit via GitHub's git/commits API so the job's GITHUB_TOKEN
       # (github-actions[bot]) signs it "Verified" (keyless). provision.json requires signed commits via a ruleset
       # (which blocks native auto-merge → operator-merges; see README C6). A plain `git commit` is unsigned;

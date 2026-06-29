@@ -163,3 +163,9 @@ dispatch('human-approval', ['human-approval.yml', '-f', `pr=${prNumber}`]);
 // Each gate workflow takes `sha` + `pr` inputs and posts a commit status named after its own check context.
 const extraChecks = (env.EXTRA_CHECK_WORKFLOWS ?? '').split(',').map((s) => s.trim()).filter(Boolean);
 for (const wf of extraChecks) dispatch(wf, [wf, '-f', `sha=${headSha}`, '-f', `pr=${prNumber}`]);
+
+// EXTRA agent-reviewers (e.g. the advisory compliance-verifier): a bot PR fires no pull_request_target, so the
+// proposer kicks each with the agent-reviewer `issue_number=<pr>` shape (NOT the gate sha/pr shape), exactly
+// as it kicks the main `review:` edge above. Empty unless policy.box.gh-actions.propose_dispatch_reviews set.
+const extraReviews = (env.EXTRA_REVIEW_WORKFLOWS ?? '').split(',').map((s) => s.trim()).filter(Boolean);
+for (const wf of extraReviews) dispatch(wf, [wf, '-f', `issue_number=${prNumber}`]);

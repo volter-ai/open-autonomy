@@ -115,6 +115,11 @@ interface GithubBox {
   // Each names a dispatchable gate workflow that posts a commit status; the check CONTEXT is the gate's own
   // name. Used by soc2-baseline to make `supply-chain` + `codeql` blocking on bot PRs. Empty elsewhere.
   propose_dispatch_checks?: string[];
+  // EXTRA agent-reviewer workflows the propose effect must dispatch on a bot PR (like the main `review:` edge):
+  // a bot-opened PR fires no pull_request_target, so a second reviewer (e.g. soc2-baseline's advisory
+  // `compliance-verifier`) only runs if the proposer KICKS it with `issue_number=<pr>` — the agent-reviewer
+  // dispatch shape (NOT the gate `sha=/pr=` shape). Empty everywhere except where declared.
+  propose_dispatch_reviews?: string[];
   // Opt-in commit-signing mode for the propose effect. `verified-api` re-creates the agent commit through
   // GitHub's git/commits API so the job's GITHUB_TOKEN (github-actions[bot]) signs it "Verified" — keyless,
   // lets branch protection require signed commits (C6). Unset ⇒ plain git commit (current behavior). Other
@@ -346,6 +351,9 @@ function wrapperYml(name: string, agent: IRAgent, gh: GithubBox, isControlPrimar
     ...(agent.review ? [`          REVIEW_WORKFLOW: ${agent.review}.yml`] : []),
     ...(gh.propose_dispatch_checks?.length
       ? [`          EXTRA_CHECK_WORKFLOWS: ${gh.propose_dispatch_checks.join(',')}`]
+      : []),
+    ...(gh.propose_dispatch_reviews?.length
+      ? [`          EXTRA_REVIEW_WORKFLOWS: ${gh.propose_dispatch_reviews.join(',')}`]
       : []),
     ...(gh.commit_signing ? [`          COMMIT_SIGNING: ${gh.commit_signing}`] : []),
     `        run: bun scripts/agent-propose.ts`,

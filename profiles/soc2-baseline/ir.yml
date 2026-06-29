@@ -56,6 +56,35 @@ agents:
         config: { types: [opened, synchronize, reopened, ready_for_review] }
     timeout: 20
 
+  # W12 — the executive ASSISTANT (drafter). On a `soc2-control-due` issue (opened by the cadence watchdog),
+  # it runs the control's PLAYBOOK, fills the evidence, and opens the gated PR with a one-screen decision brief
+  # for the executive to read + sign. code:propose (never code:review/merge). Reviewed by `reviewer` (the
+  # required agent-review) AND second-checked by `compliance-verifier` (advisory). SELF-FILTERS: an `issues`
+  # `labeled` event fires on ANY label, so the skill no-ops unless the applied label is `soc2-control-due`
+  # (W12.2 — the spec-allowed self-no-op instead of an emit-level label guard).
+  compliance-drafter:
+    behavior: compliance-drafter
+    capabilities: [code:propose, tasks:converse]
+    review: reviewer
+    triggers:
+      - event: issues
+        config: { types: [labeled] }
+        params:
+          TARGET_REF: subject.ref
+    timeout: 20
+
+  # W12 — the EA's second set of eyes (verifier). On the drafter's compliance PR it checks the draft for
+  # missing/wrong + that evidence pointers resolve, and posts an ADVISORY `compliance-check` status (NOT the
+  # required `agent-review` — that stays the generic reviewer's, W12.4). An assistant pre-check, NOT an
+  # independent SoD control. SELF-FILTERS to compliance-evidence PRs (touching compliance/evidence-ledger.yml).
+  compliance-verifier:
+    behavior: compliance-verifier
+    capabilities: [code:review, tasks:converse]
+    triggers:
+      - event: pull_request_target
+        config: { types: [opened, synchronize, reopened, ready_for_review] }
+    timeout: 20
+
 policy:
   maxConcurrent: 2   # the WIP ceiling: at most one in-progress + one in-review at a time
   box:

@@ -28,7 +28,16 @@ type Crit = { id: string; family: string; statement: string; class: string[]; st
 type Proc = { id: string; name: string; cadence: string; owner_role: string; criteria: string[]; gate?: string };
 
 function loadReg() { return parse(readFileSync(REG, 'utf8')) as { criteria: Crit[]; processes: Proc[] }; }
-function loadLedger() { return parse(readFileSync(LEDGER, 'utf8')) as { processes_state: { process: string; effective_from: string; artifacts: { interval_end: string; evidence: string }[] }[] }; }
+// Artifact schema v2 (W12): interval_end + evidence are required; the rest are OPTIONAL provenance/decision
+// metadata an EA-assisted close records. Backward-compatible — a v1 artifact (just interval_end+evidence)
+// stays valid. `source: human-attested` means a human signed it (then assertion + assertion_author are
+// required, and must match the approver — W12.7, the anti-laundering check).
+type Artifact = {
+  interval_end: string; evidence: string;
+  source?: 'ai-drafted' | 'human-attested'; assertion?: string; assertion_author?: string;
+  approver?: string; time_to_decide_s?: number; verifier_findings?: number; artifact_of_performance?: string;
+};
+function loadLedger() { return parse(readFileSync(LEDGER, 'utf8')) as { processes_state: { process: string; effective_from: string; artifacts: Artifact[] }[] }; }
 function today(asOf?: string) { return asOf ? new Date(asOf + 'T00:00:00Z') : new Date(); }
 function daysBetween(a: Date, b: Date) { return Math.floor((a.getTime() - b.getTime()) / 86400000); }
 
@@ -143,6 +152,17 @@ function structural(): string[] {
   const procIds = new Set(processes.map((p) => p.id));
   for (const c of criteria) for (const pr of c.processes || []) if (!procIds.has(pr)) errs.push(`${c.id}: references unknown process ${pr}`);
   for (const p of processes) { if (!p.cadence) errs.push(`process ${p.id}: missing cadence`); if (!p.owner_role) errs.push(`process ${p.id}: missing owner_role`); }
+  // W12.5/W12.7 — ledger artifact provenance (schema v2). A human-attested artifact must carry a human-authored
+  // assertion whose author matches the approver — so AI-drafted words cannot launder into "human-attested".
+  const L = loadLedger();
+  for (const st of L.processes_state) for (const a of st.artifacts || []) {
+    if (a.source === 'human-attested') {
+      if (!a.assertion) errs.push(`ledger ${st.process}@${a.interval_end}: human-attested artifact needs an \`assertion\``);
+      if (!a.assertion_author) errs.push(`ledger ${st.process}@${a.interval_end}: human-attested artifact needs \`assertion_author\``);
+      if (a.assertion_author && a.approver && a.assertion_author !== a.approver) errs.push(`ledger ${st.process}@${a.interval_end}: assertion_author "${a.assertion_author}" != approver "${a.approver}" (W12.7 — assertion must be human-authored by the approver)`);
+    }
+    if (a.source && a.source !== 'ai-drafted' && a.source !== 'human-attested') errs.push(`ledger ${st.process}@${a.interval_end}: invalid source "${a.source}"`);
+  }
   return errs;
 }
 

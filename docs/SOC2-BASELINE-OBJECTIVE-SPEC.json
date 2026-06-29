@@ -298,5 +298,71 @@
     "statement": "The cadence + evidence-collect workflows are themselves monitored; if either stalls, an issue opens (watcher-of-the-watchdog).",
     "provenance": "docs/SOC2-COMPLETE-WIDENING-DRAFT.md (maximality-confirmed widening; canonical AICPA 2017 TSC rev 2022; skeptic panel: completeness CONFIRMED + 7 classification refutations folded in)",
     "acceptance_criterion": "a meta-monitor asserts last-success freshness of compliance-cadence.yml and evidence-collect.yml; LIVE: a stale/disabled watchdog surfaces an issue or check failure."
+  },
+  {
+    "id": "W12.1-actors-tooling-not-sod",
+    "statement": "compliance-drafter + compliance-verifier are distinct IR agents with the capability split (code:propose / code:review); neither merges or closes; the AI split is documented as TOOLING, not SoD (no CC6.3 claim).",
+    "provenance": "docs/SOC2-W12-EXECUTIVE-ASSIST-DRAFT.md (maximality-confirmed; EA/secretary model; skeptic panel rev1 REFUTED -> rev3 CONCEDED on SoD-relabel + verifier-demotion + assertion-authorship + label-guard + honest-degrade)",
+    "acceptance_criterion": "ir.yml declares both; manifest shows code:propose (drafter) / code:review (verifier), no code:merge; the doc states the split is not CC6.3 and SoD stays human-side."
+  },
+  {
+    "id": "W12.2-trigger-label-guarded",
+    "statement": "The drafter fires on event:issues (action labeled) GUARDED by label.name=='soc2-control-due' (label-name if: on the emitter, or explicit drafter self-no-op) \u2014 not a bare dispatch, and not on every label.",
+    "provenance": "docs/SOC2-W12-EXECUTIVE-ASSIST-DRAFT.md (maximality-confirmed; EA/secretary model; skeptic panel rev1 REFUTED -> rev3 CONCEDED on SoD-relabel + verifier-demotion + assertion-authorship + label-guard + honest-degrade)",
+    "acceptance_criterion": "manifest shows the event trigger + name guard; live: a soc2-control-due label launches the drafter, an unrelated label does not."
+  },
+  {
+    "id": "W12.3-drafter-pr",
+    "statement": "The drafter opens a gated PR (branch agent/issue-<N>) carrying the pre-filled ledger artifact + evidence doc + a one-screen decision brief.",
+    "provenance": "docs/SOC2-W12-EXECUTIVE-ASSIST-DRAFT.md (maximality-confirmed; EA/secretary model; skeptic panel rev1 REFUTED -> rev3 CONCEDED on SoD-relabel + verifier-demotion + assertion-authorship + label-guard + honest-degrade)",
+    "acceptance_criterion": "live PR carrying all three."
+  },
+  {
+    "id": "W12.4-verifier-advisory",
+    "statement": "The verifier posts a NON-required compliance-check status + findings, reconciled with the generic reviewer's required agent-review (no status collision); it is an assistant pre-check (cross-model recommended), not an independent SoD control.",
+    "provenance": "docs/SOC2-W12-EXECUTIVE-ASSIST-DRAFT.md (maximality-confirmed; EA/secretary model; skeptic panel rev1 REFUTED -> rev3 CONCEDED on SoD-relabel + verifier-demotion + assertion-authorship + label-guard + honest-degrade)",
+    "acceptance_criterion": "live status compliance-check advisory; agent-review still gates; doc demotes the verifier honestly."
+  },
+  {
+    "id": "W12.5-ledger-schema-v2",
+    "statement": "The evidence-ledger schema is version-extended for provenance + decision metadata (approver, time-to-decide, verifier-finding-count, ai-drafted-vs-human-attested, assertion) and soc2-register.ts validates it (backward-compatible).",
+    "provenance": "docs/SOC2-W12-EXECUTIVE-ASSIST-DRAFT.md (maximality-confirmed; EA/secretary model; skeptic panel rev1 REFUTED -> rev3 CONCEDED on SoD-relabel + verifier-demotion + assertion-authorship + label-guard + honest-degrade)",
+    "acceptance_criterion": "schema v2 + checker update; structural gate green on both old and new artifacts."
+  },
+  {
+    "id": "W12.6-only-human-closes",
+    "statement": "Only the human approval closes the control; no AI self-close.",
+    "provenance": "docs/SOC2-W12-EXECUTIVE-ASSIST-DRAFT.md (maximality-confirmed; EA/secretary model; skeptic panel rev1 REFUTED -> rev3 CONCEDED on SoD-relabel + verifier-demotion + assertion-authorship + label-guard + honest-degrade)",
+    "acceptance_criterion": "live: drafter+verifier run, the control stays OPEN until a maintainer approves; then currency green + issue closed via agent/issue-<N> + reconcile-merged-issues.ts."
+  },
+  {
+    "id": "W12.7-human-authored-assertion",
+    "statement": "The signed assertion is human-committed/edited and the check enforces assertion.author==approver; world-act controls require an attached artifact-of-performance (a committed file, ideally on compliance-evidence).",
+    "provenance": "docs/SOC2-W12-EXECUTIVE-ASSIST-DRAFT.md (maximality-confirmed; EA/secretary model; skeptic panel rev1 REFUTED -> rev3 CONCEDED on SoD-relabel + verifier-demotion + assertion-authorship + label-guard + honest-degrade)",
+    "acceptance_criterion": "live: an unedited AI-authored assertion fails the check; a human-edited one passes; world-acts carry an artifact-of-performance."
+  },
+  {
+    "id": "W12.8-honest-degrade",
+    "statement": "I5 honest degrade: a control with no machine-readable input yields an un-evidenced template flagged 'needs <X> from the executive', never a fabricated assessment.",
+    "provenance": "docs/SOC2-W12-EXECUTIVE-ASSIST-DRAFT.md (maximality-confirmed; EA/secretary model; skeptic panel rev1 REFUTED -> rev3 CONCEDED on SoD-relabel + verifier-demotion + assertion-authorship + label-guard + honest-degrade)",
+    "acceptance_criterion": "live: vendor-reassessment draft is a flagged template, not an invented assessment."
+  },
+  {
+    "id": "W12.9-real-playbook-proven",
+    "statement": "At least one real per-control playbook is shipped + live-proven end-to-end (access-review): the EA produces a real filled review from collaborators x role-matrix; the executive approves; the loop closes.",
+    "provenance": "docs/SOC2-W12-EXECUTIVE-ASSIST-DRAFT.md (maximality-confirmed; EA/secretary model; skeptic panel rev1 REFUTED -> rev3 CONCEDED on SoD-relabel + verifier-demotion + assertion-authorship + label-guard + honest-degrade)",
+    "acceptance_criterion": "inspectable run/PR/issue IDs for the access-review end-to-end."
+  },
+  {
+    "id": "W12.10-honest-limits",
+    "statement": "The honest-limits doc is updated: human review irreducible; verifier correlated unless cross-model; no-input degrade; the AI split is not SoD; PR proves who-signed-what-when not that the act happened (artifact-of-performance covers the act).",
+    "provenance": "docs/SOC2-W12-EXECUTIVE-ASSIST-DRAFT.md (maximality-confirmed; EA/secretary model; skeptic panel rev1 REFUTED -> rev3 CONCEDED on SoD-relabel + verifier-demotion + assertion-authorship + label-guard + honest-degrade)",
+    "acceptance_criterion": "committed."
+  },
+  {
+    "id": "W12.11-skeptic-confirm",
+    "statement": ">=2 fresh independent skeptics confirm the BUILT W12: no false SoD/CC6.3 claim, no AI self-close, provenance not blurred (assertion.author==approver enforced), no fabricated assessment, trigger genuinely label-guarded.",
+    "provenance": "docs/SOC2-W12-EXECUTIVE-ASSIST-DRAFT.md (maximality-confirmed; EA/secretary model; skeptic panel rev1 REFUTED -> rev3 CONCEDED on SoD-relabel + verifier-demotion + assertion-authorship + label-guard + honest-degrade)",
+    "acceptance_criterion": "committed skeptic verdicts against the built artifacts + live runs."
   }
 ]

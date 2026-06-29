@@ -1,0 +1,154 @@
+# simple-soc2 — simple-gh-sdlc + a DETERMINISTIC SOC 2 control layer. Same 4-agent PR loop
+# (pm/draft/develop/reviewer) and the same merge boundary (code:propose ≠ code:review, native auto-merge),
+# but every install ships the SOC 2-relevant controls baked in as deterministic CI/config/branch-protection/
+# policy files — NOT as agent behavior. The agents run the SDLC; the controls are enforced by the substrate
+# and GitHub, so an adopter repo is "Type-I-ready by design". See docs/SIMPLE-SOC2-PROFILE.md for the full
+# control map (C1–C18), the can/can't-be-a-default split, and the honest ceiling (Type II still needs the org
+# program + the observation window). One unit: an agent = behavior + capabilities + triggers(+params)(+review).
+schema: autonomy.ir.v1
+# Same runner ⟂ code host independence as simple-gh-sdlc: github code host, either runner.
+targets: [gh-actions, local]
+codeHost: github
+
+# The agents are IDENTICAL to simple-gh-sdlc — the SDLC loop is unchanged; SOC 2 is a control layer over it,
+# not a different team. (Behavior skills are per-profile and carried verbatim.)
+agents:
+  # The only dispatcher. Sweeps the ztrack board on a tick, enforces WIP, and LAUNCHES the next eligible
+  # worker (draft/develop) through the Runner. Review happens on the PR, not by a launched worker.
+  pm:
+    behavior: pm
+    capabilities: [tasks:converse, agent:launch, agent:list]
+    triggers:
+      - cron: "*/15 * * * *"
+
+  # Turns an untriaged request into a verifiable Ready issue (sources + 1-3 ACs + evidence scaffold).
+  draft:
+    behavior: draft
+    capabilities: [tasks:author, tasks:converse]
+    triggers:
+      - dispatch: true
+        params: { ZTRACK_ISSUE: subject.ref }
+
+  # Implements one Ready issue with evidence and pushes its branch; the substrate opens an auto-merging
+  # PR. Its proposals are reviewed by `reviewer` (the merge boundary). Holds code:propose, never code:review.
+  develop:
+    behavior: develop
+    capabilities: [code:propose, tasks:converse]
+    review: reviewer
+    triggers:
+      - dispatch: true
+        params: { ZTRACK_ISSUE: subject.ref }
+
+  # The independent GitHub reviewer: verifies the developer's PR and posts the `agent-review` status
+  # (code:review = statuses:write). Holds NO contents:write, so it cannot merge; native auto-merge lands the
+  # PR once the required checks are green (docs/SPEC.md#capabilities — the merge boundary).
+  reviewer:
+    behavior: reviewer
+    capabilities: [code:review, tasks:converse]
+    triggers:
+      - event: issue_comment
+        config: { types: [created] }
+        params:
+          TARGET_REF: subject.ref
+          SUBJECT_TEXT: subject.text
+          ACTOR_ROLE: subject.actorRole
+      - event: pull_request_target
+        config: { types: [opened, synchronize, reopened, ready_for_review] }
+    timeout: 20
+
+policy:
+  maxConcurrent: 2   # the WIP ceiling: at most one in-progress + one in-review at a time
+  box:
+    wip:
+      maxInProgress: 1
+      maxInReview: 1
+    autonomy:
+      max_develop_attempts: 2
+    # The human-seam engage config (docs/SPEC.md#handoffs). simple-soc2 ships the human-approval gate
+    # (.github/workflows/human-approval.yml) as a required check, so a PR in human-required scope parks for a
+    # maintainer's per-head-SHA Approve — the SOC 2 change-management control (CC8). `maintainers_var` names
+    # the repo variable (comma-separated logins) of who to engage; falls back to the repo owner if unset.
+    human:
+      maintainers_var: PUBLIC_AGENT_MAINTAINERS
+      sla_minutes: 1440
+      decision_types: [approve, decide, answer, inform]
+    risk:
+      # The OA harness is human-required (an agent must never auto-merge a change to the runner/loop/skills/
+      # manifest), PLUS the SOC 2 governance surface: the compliance/ policy+evidence tree and the security
+      # workflows are change-managed (no agent rewrites a policy or a control workflow without a maintainer).
+      # Listed by name (NOT broad globs) so an adopter's OWN scripts/ product code isn't blocked — every
+      # OA-injected file under scripts/ is enumerated; an adopter's files are not. Mirrors standards/risk-and-review.md.
+      human_required_paths:
+        - .github/workflows/**
+        - .codex/skills/**
+        - .claude/skills/**
+        - .open-autonomy/**
+        - compliance/**                 # SOC 2 policies, risk register, subprocessor list, control matrix — change-managed
+        - SECURITY.md
+        - provision.json                # the branch-protection / required-checks manifest is a control itself
+        - scheduler/run.mjs
+        - scheduler/schedule.json
+        - scripts/prompts/**
+        - scripts/agent.ts
+        - scripts/agent-propose.ts
+        - scripts/agent-visual-verify.ts
+        - scripts/autonomy-runner.mjs
+        - scripts/check-supply-chain.ts
+        - scripts/claude-agent-run.ts
+        - scripts/human-approval-gate.ts
+        - scripts/model-proxy-exchange.ts
+        - scripts/model-proxy-mint.ts
+        - scripts/model-proxy-revoke.ts
+        - scripts/rearm-auto-merge.ts
+        - scripts/reconcile-merged-issues.ts
+        - scripts/run-agent.mjs
+        - scripts/runner-defaults.mjs
+        - scripts/runner.ts
+        - scripts/transcript.ts
+        - profiles/**/skills/**
+        - .volter/tracker/validation/**
+      human_required_topics: [auth, secrets, billing, deployment, destructive data migration, dependency trust, compliance, access control, audit logging, data retention]
+
+# Code-host + governance files carried verbatim into the installation. The first block is the SHARED SDLC
+# standard set (byte-identical to simple-gh-sdlc — check-profiles enforces it). The second block is the
+# simple-soc2-only deterministic compliance layer (workflows + policy/evidence tree). Security WORKFLOWS stay
+# derived (upgrade re-pushes improvements); the compliance/ POLICY TREE is install-owned (seed-once — the
+# adopter edits it to their org; never clobbered on upgrade). See docs/SIMPLE-SOC2-PROFILE.md G2.
+resources:
+  # --- shared SDLC standard (identical to simple-gh-sdlc) ---
+  - .open-autonomy/architecture-invariants.yml
+  - .claude/settings.json
+  - .github/workflows/merge.yml
+  - .github/workflows/security.yml
+  - .github/dependabot.yml
+  - standards/workflow.md
+  - standards/issue-and-evidence.md
+  - standards/risk-and-review.md
+  # --- SOC 2 control workflows (simple-soc2-only; codeql + human-approval are byte-identical to self-driving) ---
+  - .github/workflows/codeql.yml            # C8  SAST (semantic static analysis → Security tab)
+  - .github/workflows/human-approval.yml    # C4  deterministic per-head-SHA maintainer change gate
+  - .github/workflows/dependency-review.yml # C9  PR-time dependency vulnerability review (GHAS)
+  - .github/workflows/sbom.yml              # C10 CycloneDX SBOM on push + weekly
+  - .github/workflows/evidence-collect.yml  # C16 tamper-evident control-evidence snapshot → compliance-evidence branch
+  - .github/workflows/retention.yml         # C14 transcript retention sweep (gated PR — deletions are reviewed)
+  - .github/workflows/heartbeat.yml         # C17 fleet liveness watchdog (Availability)
+  # --- SOC 2 policy + evidence tree (install-owned: seed-once, adopter-edited) ---
+  - SECURITY.md
+  - standards/compliance.md
+  - provision.json
+  - compliance/README.md
+  - compliance/control-matrix.md
+  - compliance/risk-register.md
+  - compliance/subprocessors.md
+  - compliance/policies/information-security-policy.md
+  - compliance/policies/access-control-policy.md
+  - compliance/policies/change-management-policy.md
+  - compliance/policies/vendor-management-policy.md
+  - compliance/policies/data-classification-and-retention-policy.md
+  - compliance/policies/encryption-policy.md
+  - compliance/policies/incident-response-policy.md
+  - compliance/policies/business-continuity-dr-policy.md
+  - compliance/policies/secure-sdlc-policy.md
+  - compliance/policies/risk-management-policy.md
+  - compliance/policies/acceptable-use-policy.md
+  - compliance/policies/hr-security-policy.md

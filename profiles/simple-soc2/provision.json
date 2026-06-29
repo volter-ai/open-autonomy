@@ -1,0 +1,36 @@
+{
+  "$comment": "SOC 2 provisioning manifest for a simple-soc2 install (scripts/provision-target-repo.ts). This is the PROFILE-DERIVED branch-protection control (design-doc gap G1): branch protection, required checks, and repo security settings ship as a committed, change-managed file — not an out-of-band console click. enforce_admins:true and required_reviews:1 are the SOC 2 hardening over simple-gh-sdlc's permissive defaults. NOTE required_checks lists ONLY the checks that reliably post on BOT-authored PRs (ci=adopter product CI, agent-review=reviewer, human-approval=gate, all dispatched by the proposer effect). codeql + supply-chain (security.yml) SHIP and run on every push/PR/weekly, but are NOT in required_checks yet: making them blocking on bot PRs needs proposer-effect dispatch wiring in the shared runtime (flagged follow-on in README C8) — putting them here today would WEDGE every agent PR (GITHUB_TOKEN anti-recursion). required_signatures is OFF in v1 (DCO compensating control; keyless commit signing is the follow-on — README C6).",
+  "description": "open-autonomy simple-soc2 install",
+  "private": true,
+  "required_secrets": [],
+  "variables": [
+    { "name": "MODEL_PROXY_OIDC_AUDIENCE", "value": "volter-agent-model-proxy" },
+    { "name": "MODEL_PROXY_URL", "value": "https://volter-agent-model-proxy.aaron-0ed.workers.dev" },
+    { "name": "PUBLIC_AGENT_MAX_OPEN_AGENT_PRS", "value": "5" },
+    { "name": "PUBLIC_AGENT_MAX_REQUESTS", "value": "250" },
+    { "name": "PUBLIC_AGENT_MAX_USD_CENTS", "value": "200" },
+    { "name": "PUBLIC_AGENT_REPO_PAUSED", "value": "false" },
+    { "name": "PUBLIC_AGENT_TRANSCRIPT_RETENTION_DAYS", "value": "365" },
+    { "name": "PUBLIC_AGENT_HEARTBEAT_MAX_MINUTES", "value": "90" }
+  ],
+  "labels": [
+    { "name": "agent-paused", "color": "fbca04", "description": "Issue-level autonomy is paused" },
+    { "name": "agent-repo-paused", "color": "b60205", "description": "Repo-level autonomy pause fallback" },
+    { "name": "agent-blocked", "color": "d93f0b", "description": "Agent work is blocked" },
+    { "name": "human-required", "color": "b60205", "description": "A maintainer decision is required" },
+    { "name": "needs-info", "color": "fbca04", "description": "Waiting on clarifying information" },
+    { "name": "do-not-merge", "color": "b60205", "description": "Maintainer merge block" }
+  ],
+  "branch_protection": {
+    "branch": "main",
+    "required_checks": ["ci", "agent-review", "human-approval"],
+    "enforce_admins": true,
+    "required_reviews": 1,
+    "require_code_owner_reviews": false,
+    "required_signatures": false
+  },
+  "security": {
+    "secret_scanning": true,
+    "secret_scanning_push_protection": true
+  }
+}

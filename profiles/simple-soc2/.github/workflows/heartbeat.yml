@@ -1,0 +1,43 @@
+name: heartbeat
+# C17 (Availability / A1) — a liveness watchdog DECOUPLED from the PM (it must detect that the org itself,
+# including the PM, has stopped). On a fixed cron it checks when the pm workflow last completed a run; if that
+# is older than the threshold, the fleet is presumed down and it opens/refreshes a single alert issue (and
+# fails, so the run shows red on the Actions dashboard). This is the repo-side analog of the operator-down
+# monitor; real paging is org tooling layered on top. Threshold default 90 min (pm crons every 15 min);
+# override with PUBLIC_AGENT_HEARTBEAT_MAX_MINUTES.
+on:
+  schedule:
+    - cron: "7 */6 * * *"
+  workflow_dispatch:
+permissions:
+  contents: read
+  issues: write
+  actions: read
+jobs:
+  heartbeat:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check fleet liveness (pm last run) and alert if stale
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          MAX_MIN: ${{ vars.PUBLIC_AGENT_HEARTBEAT_MAX_MINUTES || '90' }}
+        run: |
+          set -euo pipefail
+          last="$(gh api "repos/${REPO}/actions/workflows/pm.yml/runs?per_page=1&status=completed" \
+                   --jq '.workflow_runs[0].updated_at' 2>/dev/null || echo '')"
+          if [ -z "$last" ] || [ "$last" = "null" ]; then
+            echo "::warning::no completed pm run found yet — skipping (fresh install)"; exit 0
+          fi
+          age_min=$(( ( $(date -u +%s) - $(date -u -d "$last" +%s) ) / 60 ))
+          echo "pm last completed ${age_min} min ago (threshold ${MAX_MIN})"
+          if [ "$age_min" -le "${MAX_MIN}" ]; then echo "fleet alive"; exit 0; fi
+          title="⚠️ fleet liveness: pm has not run in ${age_min} min"
+          existing="$(gh issue list --repo "${REPO}" --state open --search "in:title fleet liveness" --json number --jq '.[0].number' 2>/dev/null || echo '')"
+          body="Heartbeat watchdog: the pm workflow last completed ${age_min} minutes ago (> ${MAX_MIN}m threshold). The autonomous fleet may be down. Investigate per compliance/policies/incident-response-policy.md and compliance/policies/business-continuity-dr-policy.md."
+          if [ -n "$existing" ]; then
+            gh issue comment "$existing" --repo "${REPO}" --body "$body"
+          else
+            gh issue create --repo "${REPO}" --title "$title" --body "$body" --label agent-blocked || true
+          fi
+          echo "::error::fleet liveness alert raised (pm stale ${age_min}m)"; exit 1

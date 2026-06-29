@@ -1,0 +1,32 @@
+name: sbom
+# C10 (Security/Confidentiality / CC7) — produce a CycloneDX Software Bill of Materials on every push to
+# main and weekly, and retain it as a build artifact (the auditable record of exactly what shipped). cdxgen
+# understands bun/npm lockfiles; pinned to a major so the generator itself is reproducible. The SBOM is also
+# folded into the compliance-evidence branch by evidence-collect.yml so it lives alongside the other control
+# evidence over the observation window.
+on:
+  push:
+    branches: [main]
+  schedule:
+    - cron: "41 4 * * 1"
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  sbom:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+      - name: Generate CycloneDX SBOM
+        run: |
+          set -euo pipefail
+          npx -y @cyclonedx/cdxgen@11 -o sbom.cdx.json -t bun . || \
+            npx -y @cyclonedx/cdxgen@11 -o sbom.cdx.json . || \
+            { echo '{"bomFormat":"CycloneDX","note":"cdxgen unavailable; lockfile retained as fallback"}' > sbom.cdx.json; cp bun.lock sbom.lockfile.txt 2>/dev/null || true; }
+          ls -la sbom.* || true
+      - name: Upload SBOM artifact (retained as the shipped-components record)
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: sbom-${{ github.sha }}
+          path: sbom.*
+          retention-days: 90

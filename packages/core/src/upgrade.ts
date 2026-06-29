@@ -30,10 +30,19 @@ export const INSTALL_OWNED_PATHS = [
   'docs/PROJECT.md',
   'docs/ROADMAP.md',
   'docs/ARCHITECTURE.md',
+  'provision.json', // the install's branch-protection/required-checks manifest — the adopter tunes it to
+  //   their product (e.g. their own `ci` context, their reviewer count); seed-once so upgrade never reverts it.
 ];
 const installOwned = new Set(INSTALL_OWNED_PATHS);
+// Path PREFIXES the install owns. Unlike the exact paths above, these cover a whole tree an installation
+// fills in and then owns. `compliance/` is the SOC 2 policy/evidence tree a profile seeds as templates
+// (information-security policy, risk register, subprocessor list, …): the adopter edits them to match
+// THEIR org, so on upgrade they are seeded only if missing and never overwritten — exactly like the
+// constitution/roadmap. Security CI (the workflows under `.github/`) stays derived, so upgrades keep
+// pushing control improvements; only the human-authored policy bodies are seed-once.
+const INSTALL_OWNED_PREFIXES = ['compliance/'];
 export function isInstallOwned(path: string): boolean {
-  return installOwned.has(path);
+  return installOwned.has(path) || INSTALL_OWNED_PREFIXES.some((p) => path.startsWith(p));
 }
 
 export type UpgradeAction = 'add' | 'update' | 'delete';

@@ -65,7 +65,9 @@ function currency(proc: Proc, ledger: ReturnType<typeof loadLedger>, asOf?: stri
   // bucket must not mask a different empty bucket), vs the number of buckets elapsed since effective_from.
   const elapsed = daysBetween(today(asOf), eff);
   const expected = Math.max(0, Math.floor(elapsed / days));
-  const buckets = new Set(arts.map((a) => Math.floor(daysBetween(new Date(a + 'T00:00:00Z'), eff) / days)));
+  // count only buckets for COMPLETED intervals [0, expected); an artifact in the current in-progress
+  // interval (bucket index == expected) must NOT pad coverage of a skipped earlier complete interval.
+  const buckets = new Set(arts.map((a) => Math.floor(daysBetween(new Date(a + 'T00:00:00Z'), eff) / days)).filter((b) => b >= 0 && b < expected));
   const missing = Math.max(0, expected - buckets.size);
   return { overdue: recencyOverdue || missing > 0, dueBy: due.toISOString().slice(0, 10), last: last.date, from: last.from, missing };
 }

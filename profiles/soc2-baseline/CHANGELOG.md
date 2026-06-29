@@ -2,6 +2,23 @@
 
 All notable changes to the `soc2-baseline` profile. Versions follow semver for the profile's control set.
 
+## 1.1.1 — proof-cycle control-bug fixes (C13, C14) + egress enforcement boundary (C3)
+
+Behavioral re-demonstration against the frozen objective spec fixed two control bugs and pinned a boundary:
+- **C13 redaction**: added canonical Anthropic `sk-ant-` + AWS `AKIA…` key shapes to scripts/transcript.ts.
+  Demonstrated: both redacted (plus existing ghp_/Slack/Stripe/OpenRouter).
+- **C14 retention**: the sweep keyed on filesystem mtime (reset to ~now on checkout) so it never found old
+  files in CI. Now ages each transcript by its **git commit date** (fetch-depth:0). Demonstrated live: an
+  aged transcript triggered a gated, human-required deletion PR.
+- **C3/C15 egress lockdown — documented BLOCKED-ON-USER boundary**: verified live (public AND private repos,
+  no StepSecurity app) that harden-runner `egress-policy: block` does NOT block non-allowlisted egress — it
+  monitors/fails-open. True enforcement REQUIRES installing the **StepSecurity GitHub App** (eBPF), an
+  org-level enablement. Documented in control-matrix C3, encryption-policy, and ONBOARDING. Not an in-profile fix.
+- **C9 dependency-review**: confirmed it needs the dependency graph (free on public, GHAS on private) — same
+  boundary as CodeQL/secret-scanning; documented.
+
+bun run check green; dogfood 57/57.
+
 ## 1.1.0 — Privacy TSC scaffolded + adopter onboarding guide
 
 - **Privacy TSC**: added `compliance/policies/privacy-policy.md` (notice/choice/collection/use/retention/

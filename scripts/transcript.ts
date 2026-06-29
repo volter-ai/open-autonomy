@@ -46,7 +46,9 @@ export function redactSensitive(text: string): string {
     .replace(/ghp_[A-Za-z0-9]{30,}/g, '[redacted-secret-like-token]')
     .replace(/github_pat_[A-Za-z0-9_]{30,}/g, '[redacted-secret-like-token]')
     .replace(/sk-or-v1-[A-Za-z0-9]{20,}/g, '[redacted-secret-like-token]')
-    .replace(/anthropic_[A-Za-z0-9_-]{20,}/g, '[redacted-secret-like-token]');
+    .replace(/anthropic_[A-Za-z0-9_-]{20,}/g, '[redacted-secret-like-token]')
+    .replace(/sk-ant-[A-Za-z0-9-]{20,}/g, '[redacted-secret-like-token]') // Anthropic API key (sk-ant-api03-…)
+    .replace(/\bAKIA[0-9A-Z]{16}\b/g, '[redacted-secret-like-token]'); // AWS access key id
 }
 
 /** Truncate a blob so the durable transcript stays a reasonable size in history. */

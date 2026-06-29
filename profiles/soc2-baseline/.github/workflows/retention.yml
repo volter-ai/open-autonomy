@@ -20,6 +20,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        with:
+          fetch-depth: 0   # full history — the sweep ages files by GIT commit date, not filesystem mtime
       - name: Sweep expired transcripts → gated deletion PR
         env:
           GH_TOKEN: ${{ github.token }}
@@ -29,8 +31,15 @@ jobs:
           hist=".open-autonomy/history"
           [ -d "$hist" ] || { echo "no $hist — nothing to sweep"; exit 0; }
           cutoff=$(( $(date -u +%s) - DAYS*86400 ))
-          mapfile -t old < <(find "$hist" -type f -printf '%T@ %p\n' | awk -v c="$cutoff" '$1+0 < c {print $2}')
-          if [ "${#old[@]}" -eq 0 ]; then echo "no transcripts older than ${DAYS}d"; exit 0; fi
+          # Age each transcript by its LAST GIT COMMIT date (authored), NOT filesystem mtime — checkout resets
+          # mtime to ~now, so an mtime sweep can never find old files in CI. git log gives the real content age.
+          old=()
+          while IFS= read -r f; do
+            [ -n "$f" ] || continue
+            ts="$(git log -1 --format=%at -- "$f" 2>/dev/null || echo '')"
+            [ -n "$ts" ] && [ "$ts" -lt "$cutoff" ] && old+=("$f")
+          done < <(git ls-files "$hist")
+          if [ "${#old[@]}" -eq 0 ]; then echo "no transcripts older than ${DAYS}d (by git commit date)"; exit 0; fi
           echo "expiring ${#old[@]} file(s) older than ${DAYS}d"
           branch="retention/sweep-$(date -u +%Y%m%d)"
           git config user.name "open-autonomy-retention[bot]"

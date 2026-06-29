@@ -115,6 +115,11 @@ interface GithubBox {
   // Each names a dispatchable gate workflow that posts a commit status; the check CONTEXT is the gate's own
   // name. Used by soc2-baseline to make `supply-chain` + `codeql` blocking on bot PRs. Empty elsewhere.
   propose_dispatch_checks?: string[];
+  // Opt-in commit-signing mode for the propose effect. `verified-api` re-creates the agent commit through
+  // GitHub's git/commits API so the job's GITHUB_TOKEN (github-actions[bot]) signs it "Verified" — keyless,
+  // lets branch protection require signed commits (C6). Unset ⇒ plain git commit (current behavior). Other
+  // profiles don't set it, so this is a no-op everywhere except where declared.
+  commit_signing?: string;
 }
 // The box ALWAYS has a model endpoint (docs/SPEC.md#the-box), so the substrate supplies a DEFAULT model when
 // the profile names none — a profile that omits it (e.g. a generic SDLC preset) still runs instead of dying
@@ -318,6 +323,7 @@ function wrapperYml(name: string, agent: IRAgent, gh: GithubBox, isControlPrimar
     ...(gh.propose_dispatch_checks?.length
       ? [`          EXTRA_CHECK_WORKFLOWS: ${gh.propose_dispatch_checks.join(',')}`]
       : []),
+    ...(gh.commit_signing ? [`          COMMIT_SIGNING: ${gh.commit_signing}`] : []),
     `        run: bun scripts/agent-propose.ts`,
   ];
   return [

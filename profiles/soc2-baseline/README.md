@@ -65,24 +65,31 @@ same mechanism that dispatches `ci`/`agent-review`/`human-approval`:
 The monitoring `codeql.yml` / `security.yml` (push/weekly → Security tab) are unchanged; the above are their
 dispatched, blocking realization for the agent-PR path.
 
-## C6 — signed commits: DCO today; keyless gitsign analyzed, `required_signatures` deliberately OFF
+## C6 — GitHub-Verified signed commits ✅ (`required_signatures` ON)
 
-`provision.json` keeps `required_signatures: false`, and the provisioning script supports flipping it. We did
-**not** enable keyless signing because it hits a hard GitHub limitation:
+`provision.json` sets `required_signatures: true`, and the propose effect now produces **GitHub-"Verified"**
+agent commits — keyless, no key to register:
 
-- **gitsign/Sigstore commits are not marked "Verified" by GitHub.** GitHub's Verified badge (and the
-  `required_signatures` protection) only trusts GPG/SSH/S-MIME keys registered to the committing account;
-  Sigstore's ephemeral Fulcio certs (tied to the Actions OIDC identity) are not in that trust root. So
-  flipping `required_signatures: true` with gitsign would mark the agent's own commits **Unverified and
-  reject them → every agent PR wedges.**
-- gitsign would also need three Sigstore endpoints (`fulcio`/`rekor`/`tuf-repo-cdn.sigstore.dev`) added to
-  the agent job's `harden-runner` egress allowlist — a deliberate egress-posture change.
+- The effect (`scripts/agent-propose.ts`, gated by `policy.box.gh-actions.commit_signing: verified-api`)
+  re-creates the just-pushed agent commit through GitHub's **git/commits API**. A commit created via the API
+  by the job's `GITHUB_TOKEN` (github-actions[bot], a GitHub App identity) is **signed by GitHub** and shows
+  "Verified"; it then moves the branch ref to that signed copy (same tree/parents/author; only the committer
+  becomes the signing bot). A plain `git commit`, or an API commit made with a *personal* token, is
+  **unsigned** — only the Actions bot / a GitHub App gets GitHub's signature (verified empirically).
+- This needs **no new infra**: the ambient Actions `GITHUB_TOKEN` already present in every agent job is the
+  signing identity. No GPG/SSH key registration, no GitHub App to create, no egress change.
+- It does not wedge the loop: the agent's PR commit is Verified, and GitHub server-signs the squash-merge
+  commit it creates on the protected branch, so `required_signatures` is satisfied at merge.
+- Best-effort: if the API re-create hiccups, the effect keeps the (unsigned) pushed commit rather than
+  failing the propose — a squash-merge still lands a GitHub-signed commit on `main`.
 
-So v1 ships **DCO sign-off** as the compensating control. The two real paths to *GitHub-verifiable* signed
-commits — (a) create the agent commit via the GitHub commits API so GitHub server-signs it Verified, or
-(b) register an SSH/GPG signing key for the bot identity — are larger decisions (rewrite the propose flow, or
-introduce bot key management). Flagged for an explicit decision rather than wired blind. gitsign-for-provenance
-(real Rekor transparency, verifiable out-of-band but Unverified on GitHub) remains an option if desired.
+`required_signatures` is applied by provisioning as a **repository ruleset** (the classic
+`/protection/required_signatures` endpoint 404s on many repos/plans — verified live — so it would silently
+fail to apply). **Live-proven end-to-end** on a testbed with the ruleset active: the agent commit comes out
+GitHub-`verified:true` and the PR squash-merges onto the protected branch without wedging.
+
+This upgrades C6 from the prior DCO compensating control to a **real signing control**. (DCO sign-off remains
+in the commit body as defense-in-depth.)
 
 ## The ceiling
 

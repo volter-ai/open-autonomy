@@ -303,13 +303,27 @@ async function main(): Promise<void> {
       ], { input: body });
       branchProtection = result.ok ? 'configured' : 'failed';
       if (!result.ok) process.stderr.write(`branch protection not applied: ${result.out.trim()}\n`);
-      // Signed commits live on a dedicated protection sub-resource (PUT/DELETE), not the body above.
-      // Best-effort + non-fatal: requires every commit (incl. agent/bot commits) to be signature-verified,
-      // so only enable on a profile whose effect step signs (see soc2-baseline README C6 — v1 ships this OFF
-      // and uses DCO as the compensating control until keyless commit signing is wired into the runtime).
+      // Require signed commits via a repository RULESET, NOT the classic
+      // /branches/<b>/protection/required_signatures sub-resource — that endpoint 404s on many repos/plans
+      // (verified live), so the control would silently fail to apply. A ruleset enforces it reliably on the
+      // default branch. Idempotent: reconcile a named ruleset (create/keep when true, delete when false).
+      // Only enable on a profile whose propose effect produces GitHub-VERIFIED commits (soc2-baseline's
+      // commit_signing: verified-api) — otherwise every agent merge wedges. Best-effort + non-fatal.
       if (bp.required_signatures !== undefined) {
-        const verb = bp.required_signatures ? 'PUT' : 'DELETE';
-        tryRun('gh', ['api', '-X', verb, `repos/${options.repo}/branches/${bp.branch}/protection/required_signatures`]);
+        const rsName = 'open-autonomy-required-signatures';
+        const found = tryRun('gh', ['api', `repos/${options.repo}/rulesets`, '--jq', `.[] | select(.name=="${rsName}") | .id`]);
+        const rsId = found.ok ? found.out.trim().split('\n')[0] : '';
+        if (bp.required_signatures) {
+          const rsBody = JSON.stringify({
+            name: rsName, target: 'branch', enforcement: 'active',
+            conditions: { ref_name: { include: ['~DEFAULT_BRANCH'], exclude: [] } },
+            rules: [{ type: 'required_signatures' }],
+          });
+          if (rsId) tryRun('gh', ['api', '-X', 'PUT', `repos/${options.repo}/rulesets/${rsId}`, '--input', '-'], { input: rsBody });
+          else tryRun('gh', ['api', '-X', 'POST', `repos/${options.repo}/rulesets`, '--input', '-'], { input: rsBody });
+        } else if (rsId) {
+          tryRun('gh', ['api', '-X', 'DELETE', `repos/${options.repo}/rulesets/${rsId}`]);
+        }
       }
     }
   }

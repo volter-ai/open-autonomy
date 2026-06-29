@@ -83,6 +83,11 @@ agent commits — keyless, no key to register:
 - Best-effort: if the API re-create hiccups, the effect keeps the (unsigned) pushed commit rather than
   failing the propose — a squash-merge still lands a GitHub-signed commit on `main`.
 
+`required_signatures` is applied by provisioning as a **repository ruleset** (the classic
+`/protection/required_signatures` endpoint 404s on many repos/plans — verified live — so it would silently
+fail to apply). **Live-proven end-to-end** on a testbed with the ruleset active: the agent commit comes out
+GitHub-`verified:true` and the PR squash-merges onto the protected branch without wedging.
+
 This upgrades C6 from the prior DCO compensating control to a **real signing control**. (DCO sign-off remains
 in the commit body as defense-in-depth.)
 

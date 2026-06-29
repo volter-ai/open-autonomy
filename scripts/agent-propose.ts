@@ -102,14 +102,15 @@ sh('git', ['push', '--force', 'origin', branch]);
 // Best-effort: any hiccup leaves the already-pushed (unsigned) commit in place rather than failing the propose.
 if ((env.COMMIT_SIGNING ?? '').trim() === 'verified-api') {
   const tree = sh('git', ['rev-parse', 'HEAD^{tree}'], { allowFail: true }).trim();
+  // CRITICAL: do NOT pass an `author` (or `committer`) on the API commit. GitHub signs a git/commits API
+  // commit ONLY when the committer defaults to the authenticated identity (github-actions[bot]); the moment a
+  // custom author is given, the committer mirrors it (not the app) and GitHub leaves the commit UNSIGNED —
+  // which, under required_signatures, wedges every merge. So we let author+committer both be the signing bot
+  // and keep the agent's attribution in the commit MESSAGE (which already carries `agent: <id>` + `Closes #`).
   const message = sh('git', ['log', '-1', '--format=%B'], { allowFail: true }).replace(/\n+$/, '');
   const parents = sh('git', ['rev-list', '--parents', '-n', '1', 'HEAD'], { allowFail: true }).trim().split(/\s+/).slice(1);
-  const an = sh('git', ['log', '-1', '--format=%an'], { allowFail: true }).trim();
-  const ae = sh('git', ['log', '-1', '--format=%ae'], { allowFail: true }).trim();
-  const ad = sh('git', ['log', '-1', '--format=%aI'], { allowFail: true }).trim();
   const args = ['api', '-X', 'POST', 'repos/{owner}/{repo}/git/commits',
-    '-f', `message=${message}`, '-f', `tree=${tree}`,
-    '-f', `author[name]=${an}`, '-f', `author[email]=${ae}`, '-f', `author[date]=${ad}`, '--jq', '.sha'];
+    '-f', `message=${message}`, '-f', `tree=${tree}`, '--jq', '.sha'];
   for (const p of parents) if (p) args.push('-f', `parents[]=${p}`);
   const signed = tree && message ? sh('gh', args, { allowFail: true }).trim() : '';
   if (/^[0-9a-f]{40}$/.test(signed)

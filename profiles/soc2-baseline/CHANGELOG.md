@@ -2,6 +2,20 @@
 
 All notable changes to the `soc2-baseline` profile. Versions follow semver for the profile's control set.
 
+## 1.2.1 — skeptic-panel fixes: durable block-on-violation evidence + stale-policy fix
+
+A 2-agent default-REFUTED skeptic panel over the 39 frozen sub-objectives found real gaps (I had deleted the
+public block-demo repos, hand-reconfigured the test cell to 4 checks, and left a stale signing line). Fixes:
+- change-management-policy.md: corrected the stale "signing is planned/DCO" line (C6 ships Verified signing now).
+- DURABLE public proof repo `volter-ai/soc2-baseline-proof` (kept for audit), provisioned with the SHIPPED
+  provision.json: branch protection reads back ALL 5 required checks incl. codeql (C5); required-signatures
+  ruleset active (C6); secret_scanning + push_protection enabled (C12); a github-sourced-dep PR → supply-chain
+  FAILURE → BLOCKED (C7); a command-injection PR → codeql FAILURE (2 findings) → BLOCKED (C8); a compliance/**
+  PR → human-approval PENDING (parked) → BLOCKED (C4 block-half). All inspectable, consistent with shipped config.
+
+Documented boundary unchanged + honest: C8/C12 enforce free on PUBLIC repos (shown); on PRIVATE repos they
+need GHAS (the spec's own C8/C12 acceptance conditions on public/GHAS). bun run check green.
+
 ## 1.2.0 — C3/C15 egress lockdown: NO-account enforcement on PRIVATE repos too (self-managed guard)
 
 Ships `scripts/egress-guard.sh` (profile resource) + wires it into the credentialed agent jobs via the new

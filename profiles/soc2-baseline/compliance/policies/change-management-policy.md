@@ -19,8 +19,9 @@ record proves it.
   retrospective review within [N] business days.
 
 ## Code provenance
-Commits carry DCO sign-off (`git commit -s`). *(Cryptographic commit signing is a planned hardening — see the
-profile README C6; until then DCO is the compensating control.)*
+Agent commits are **GitHub-Verified** (signed): the propose effect re-creates the commit via the git/commits
+API so the job's `GITHUB_TOKEN` signs it, and `required_signatures` is enforced via a repository ruleset (C6).
+DCO sign-off is retained in the commit body as defense-in-depth.
 
 ## Evidence
 Merged-PR history (each merge has green required checks + review), the `human-approval` status records, and

@@ -49,21 +49,40 @@ installation is not designed to process end-user PII; keep PII out of inputs —
 policy). Processing Integrity is delivered by the change pipeline: only reviewed, passing, intended code
 lands (C2/C4/C5/C7) — see the control matrix PI note.
 
-## Two honest v1 decisions (read these)
+## C8/C7 — CodeQL + supply-chain are now BLOCKING required checks on bot PRs ✅
 
-- **C6 signed commits — chose DCO (compensating control), not keyless signing, for v1.** Cryptographically
-  signing *agent/bot* commits requires wiring keyless signing (gitsign/Sigstore) into the shared runtime
-  effect step that creates commits — a cross-cutting change to every profile's runtime, out of scope for a
-  profile-only build. v1 ships DCO sign-off as the compensating control; `provision.json` keeps
-  `required_signatures: false` (turning it on without runtime signing would wedge every agent commit). The
-  provisioning script already supports flipping it on once signing lands.
-- **C8/C7 as *required* checks — shipped + running, but not yet *blocking* on bot PRs.** CodeQL and the
-  supply-chain gate run on every push / PR / weekly and surface findings, but they are **not** in
-  `provision.json`'s `required_checks`. A bot-authored agent PR doesn't fire `pull_request` (GITHUB_TOKEN
-  anti-recursion), so a required check only blocks bot PRs if the proposer **dispatches** it — `ci`,
-  `agent-review`, and `human-approval` are dispatched today; wiring CodeQL + supply-chain dispatch is a
-  runtime follow-on. Listing them as required now would **wedge every agent PR**, so they are enforced as
-  blocking on **human** PRs and as monitoring on bot PRs until that wiring lands.
+These are in `provision.json`'s `required_checks` and enforced on **every** PR including bot-authored agent
+PRs. A bot PR fires no `pull_request` (GITHUB_TOKEN anti-recursion), so the **propose effect dispatches** the
+gate workflows so their status posts on the head SHA — wired generically via
+`policy.box.gh-actions.propose_dispatch_checks` (→ `EXTRA_CHECK_WORKFLOWS` → `scripts/agent-propose.ts`), the
+same mechanism that dispatches `ci`/`agent-review`/`human-approval`:
+- `.github/workflows/supply-chain.yml` — checks out the head, runs the supply-chain gate (lockfile integrity
+  + `bun audit`), posts a `supply-chain` commit status. **Hard block.**
+- `.github/workflows/codeql-gate.yml` — runs CodeQL on the head, posts a `codeql` commit status: fails on a
+  non-completing analysis or on open error/high-severity alerts; degrades to pass (with an honest description)
+  if the alerts API is unavailable (no GHAS on a private repo, see G3) so it never wedges.
+
+The monitoring `codeql.yml` / `security.yml` (push/weekly → Security tab) are unchanged; the above are their
+dispatched, blocking realization for the agent-PR path.
+
+## C6 — signed commits: DCO today; keyless gitsign analyzed, `required_signatures` deliberately OFF
+
+`provision.json` keeps `required_signatures: false`, and the provisioning script supports flipping it. We did
+**not** enable keyless signing because it hits a hard GitHub limitation:
+
+- **gitsign/Sigstore commits are not marked "Verified" by GitHub.** GitHub's Verified badge (and the
+  `required_signatures` protection) only trusts GPG/SSH/S-MIME keys registered to the committing account;
+  Sigstore's ephemeral Fulcio certs (tied to the Actions OIDC identity) are not in that trust root. So
+  flipping `required_signatures: true` with gitsign would mark the agent's own commits **Unverified and
+  reject them → every agent PR wedges.**
+- gitsign would also need three Sigstore endpoints (`fulcio`/`rekor`/`tuf-repo-cdn.sigstore.dev`) added to
+  the agent job's `harden-runner` egress allowlist — a deliberate egress-posture change.
+
+So v1 ships **DCO sign-off** as the compensating control. The two real paths to *GitHub-verifiable* signed
+commits — (a) create the agent commit via the GitHub commits API so GitHub server-signs it Verified, or
+(b) register an SSH/GPG signing key for the bot identity — are larger decisions (rewrite the propose flow, or
+introduce bot key management). Flagged for an explicit decision rather than wired blind. gitsign-for-provenance
+(real Rekor transparency, verifiable out-of-band but Unverified on GitHub) remains an option if desired.
 
 ## The ceiling
 

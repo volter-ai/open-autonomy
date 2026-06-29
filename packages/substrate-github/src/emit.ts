@@ -110,6 +110,11 @@ interface GithubBox {
   model?: string;
   bot_name?: string;
   bot_email?: string;
+  // EXTRA required-check workflows the propose effect must dispatch on a bot PR so their required status posts
+  // on the head SHA (a bot PR fires no pull_request, so an undispatched required check would wedge the PR).
+  // Each names a dispatchable gate workflow that posts a commit status; the check CONTEXT is the gate's own
+  // name. Used by soc2-baseline to make `supply-chain` + `codeql` blocking on bot PRs. Empty elsewhere.
+  propose_dispatch_checks?: string[];
 }
 // The box ALWAYS has a model endpoint (docs/SPEC.md#the-box), so the substrate supplies a DEFAULT model when
 // the profile names none — a profile that omits it (e.g. a generic SDLC preset) still runs instead of dying
@@ -310,6 +315,9 @@ function wrapperYml(name: string, agent: IRAgent, gh: GithubBox, isControlPrimar
     `          AGENT_BOT_NAME: ${gh.bot_name ?? 'open-autonomy-agent'}`,
     `          AGENT_BOT_EMAIL: ${gh.bot_email ?? 'open-autonomy-agent@users.noreply.github.com'}`,
     ...(agent.review ? [`          REVIEW_WORKFLOW: ${agent.review}.yml`] : []),
+    ...(gh.propose_dispatch_checks?.length
+      ? [`          EXTRA_CHECK_WORKFLOWS: ${gh.propose_dispatch_checks.join(',')}`]
+      : []),
     `        run: bun scripts/agent-propose.ts`,
   ];
   return [

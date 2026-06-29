@@ -143,6 +143,8 @@ policy:
         - compliance/**                 # SOC 2 policies, risk register, subprocessor list, control matrix — change-managed
         - SECURITY.md
         - provision.json                # the branch-protection / required-checks manifest is a control itself
+        - "**/bun.lock"               # merge-dangerous: next bun install executes deps (dependency-trust)
+        - package.json
         - scheduler/run.mjs
         - scheduler/schedule.json
         - scripts/prompts/**
@@ -200,6 +202,8 @@ resources:
   - standards/compliance.md
   - scripts/egress-guard.sh        # C3/C15 no-account egress fallback (wired into the agent jobs on private repos)
   - scripts/soc2-register.ts       # W1-W11 the VISIBLE control-register tool (render/verify/check/watchdog)
+  - package.json                   # runnable-install seed (install-owned) — makes `bun install` work so the agents run
+  - bun.lock                       # matching lockfile (frozen-lockfile) — merge-dangerous, human-required
   - provision.json
   - compliance/README.md
   - compliance/control-matrix.md

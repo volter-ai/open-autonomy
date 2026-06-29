@@ -18,6 +18,7 @@ store configuration.
 
 ## Egress enforcement note
 The in-transit allowlist (C3/C15) is enforced by the **free** harden-runner `egress-policy: block` Action on
-hosted runners — **no StepSecurity account/App required**. The allowlist must include harden-runner's own
-agent endpoints (`agent.api.stepsecurity.io`, `prod.app-api.stepsecurity.io`) so the eBPF block agent can
-initialize; the shipped allowlist includes them. Verified live: non-allowlisted egress is denied.
+**public** hosted runners — no StepSecurity account required (the shipped allowlist includes harden-runner's
+own agent endpoints so the block agent initializes). Verified live: on a public repo non-allowlisted egress is
+DENIED. On **private** repos the free tier does not block — StepSecurity Enterprise is required (public-free/
+private-paid boundary). [ORG] chooses public repos or budgets Enterprise for private.

@@ -28,10 +28,13 @@ sets the repo variables + labels. Tune `provision.json` to your repo first (it's
   — either run the repo public, buy GHAS, or remove `codeql` from `required_checks`.
 - **Maintainers**: set the `PUBLIC_AGENT_MAINTAINERS` repo variable (comma-separated logins) — the
   human-approval gate engages them and they approve sensitive PRs.
-- **Egress lockdown (C3/C15)** enforces with the **free Harden-Runner Action — no StepSecurity account/App**.
-  The shipped allowlist includes harden-runner's own agent endpoints (`agent.api.stepsecurity.io`,
-  `prod.app-api.stepsecurity.io`); without them the block agent can't initialize and fails open. Verified live
-  on a public hosted runner: non-allowlisted egress is DENIED (curl exit 7).
+- **Egress lockdown (C3/C15)** enforces with the **free Harden-Runner Action — no StepSecurity account — on
+  PUBLIC repos** (verified live: non-allowlisted egress DENIED, curl exit 7). The shipped allowlist now includes
+  harden-runner's own agent endpoints (`agent.api.stepsecurity.io`, `prod.app-api.stepsecurity.io`) so the block
+  agent can initialize. **On PRIVATE repos the free tier does NOT block** (verified) — private needs StepSecurity
+  Enterprise (the same public-free/private-paid boundary as CodeQL/dep-review/secret-scanning). A naive iptables
+  egress block breaks the GitHub runner's control-plane, so it's not a drop-in alternative. **For free egress
+  lockdown, run the repo public; for a private repo, budget StepSecurity Enterprise.**
 - **Dependency review (C9) needs the dependency graph**: free on public repos; on private repos it requires
   GitHub Advanced Security (same GHAS boundary as CodeQL/secret-scanning, G3). Without it `dependency-review.yml`
   degrades to a no-op.

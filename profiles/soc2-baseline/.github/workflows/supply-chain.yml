@@ -35,8 +35,12 @@ jobs:
       - name: Run supply-chain gate + post result
         env: { GH_TOKEN: "${{ github.token }}", SHA: "${{ github.event.inputs.sha }}" }
         run: |
-          set -uo pipefail
-          bun install --frozen-lockfile || bun install
+          set +e   # we handle every exit code + ALWAYS post a final status (never leave it stuck pending)
+          if [ ! -f bun.lock ] && [ ! -f package.json ]; then
+            gh api -X POST "repos/{owner}/{repo}/statuses/${SHA}" -f state=success -f context=supply-chain -f description="no JS lockfile in this repo — nothing to verify" >/dev/null
+            exit 0
+          fi
+          bun install --frozen-lockfile || bun install || true
           if bun scripts/check-supply-chain.ts; then state=success; desc="lockfiles registry-pinned + no known advisories"; else state=failure; desc="supply-chain gate failed (integrity or advisory)"; fi
           gh api -X POST "repos/{owner}/{repo}/statuses/${SHA}" -f state="$state" -f context=supply-chain -f description="$desc" >/dev/null
           [ "$state" = success ]

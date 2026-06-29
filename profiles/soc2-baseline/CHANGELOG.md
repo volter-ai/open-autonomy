@@ -2,6 +2,21 @@
 
 All notable changes to the `soc2-baseline` profile. Versions follow semver for the profile's control set.
 
+## 1.0.1 — live-proof fixes (Tier A behavioral validation)
+
+Found and fixed by exercising the controls end-to-end on a throwaway GitHub repo:
+- **evidence-collect.yml** declared `administration: read` — not a valid `GITHUB_TOKEN` permission, so GitHub
+  rejected the entire workflow (it could never run). Removed it; admin reads (branch protection, collaborators)
+  use the optional `EVIDENCE_PAT` secret and are gracefully recorded as errors without it.
+- **supply-chain.yml** aborted under `bash -e` at `bun install` on a repo with no JS lockfile, leaving the
+  required status stuck `pending` (wedge). Now short-circuits to a clear `success` ("nothing to verify") and
+  always posts a final status.
+
+Live-proven on the testbed: branch protection (5 required checks, `enforce_admins`, required-signatures
+ruleset, secret scanning) applied; human-approval **parks** a `compliance/**` PR and **blocks** the merge
+while auto-passing a routine PR; CodeQL gate posts `codeql:success` on a real PR; evidence-collect writes a
+timestamped snapshot to `compliance-evidence`; an agent commit lands **GitHub-Verified** (`verified:true`).
+
 ## 1.0.0 — v1 shipped
 
 First release. `simple-gh-sdlc` (4-agent PR loop) + a deterministic SOC 2 control layer. Makes an adopting

@@ -16,8 +16,11 @@ on:
   workflow_dispatch:
 permissions:
   contents: write          # push the evidence branch (never main)
-  administration: read     # read branch protection / repo settings
   security-events: read    # read code-scanning alerts
+  # NOTE: there is NO `administration` GITHUB_TOKEN permission (it's not a grantable scope — declaring it
+  # makes GitHub reject the whole workflow). Branch-protection + collaborators reads therefore need an
+  # admin-scoped PAT: set the EVIDENCE_PAT secret (used below) for full org/admin evidence. With the default
+  # GITHUB_TOKEN those specific reads return an error, which the step records rather than failing.
 jobs:
   evidence:
     runs-on: ubuntu-latest

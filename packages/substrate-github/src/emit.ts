@@ -150,6 +150,11 @@ function hardenRunner(gh: GithubBox): string[] {
     '            objects.githubusercontent.com:443',
     '            release-assets.githubusercontent.com:443',
     '            registry.npmjs.org:443',
+    // harden-runner's OWN agent/telemetry endpoints — REQUIRED for egress-policy:block to ENFORCE. Without
+    // them the block agent can't initialize and harden-runner FAILS OPEN (verified live: non-allowlisted
+    // egress was ALLOWED). With them, the free Action blocks on hosted runners — no StepSecurity account/App.
+    '            agent.api.stepsecurity.io:443',
+    '            prod.app-api.stepsecurity.io:443',
     `            ${varOr('PUBLIC_AGENT_PROXY_HOST', gh.proxy_host)}:443`,
   ];
 }

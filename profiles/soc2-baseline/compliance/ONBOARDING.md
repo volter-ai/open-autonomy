@@ -28,10 +28,10 @@ sets the repo variables + labels. Tune `provision.json` to your repo first (it's
   — either run the repo public, buy GHAS, or remove `codeql` from `required_checks`.
 - **Maintainers**: set the `PUBLIC_AGENT_MAINTAINERS` repo variable (comma-separated logins) — the
   human-approval gate engages them and they approve sensitive PRs.
-- **Egress lockdown (C3/C15) needs the StepSecurity GitHub App**: harden-runner `egress-policy: block` ships
-  on every credentialed job, but verified live that WITHOUT the StepSecurity app it monitors/audits and
-  ALLOWS non-allowlisted egress (fails open). **Install the StepSecurity GitHub App** on the org/repo to make
-  the block actually enforce — until then egress lockdown is monitor-only.
+- **Egress lockdown (C3/C15)** enforces with the **free Harden-Runner Action — no StepSecurity account/App**.
+  The shipped allowlist includes harden-runner's own agent endpoints (`agent.api.stepsecurity.io`,
+  `prod.app-api.stepsecurity.io`); without them the block agent can't initialize and fails open. Verified live
+  on a public hosted runner: non-allowlisted egress is DENIED (curl exit 7).
 - **Dependency review (C9) needs the dependency graph**: free on public repos; on private repos it requires
   GitHub Advanced Security (same GHAS boundary as CodeQL/secret-scanning, G3). Without it `dependency-review.yml`
   degrades to a no-op.

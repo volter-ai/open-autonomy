@@ -2,6 +2,18 @@
 
 All notable changes to the `soc2-baseline` profile. Versions follow semver for the profile's control set.
 
+## 1.1.2 — C3/C15 egress lockdown FIXED in-profile (no account); prior "needs the App" was wrong
+
+Re-investigation (per challenge) overturned 1.1.1's conclusion. Root cause of the fail-open: the shipped
+harden-runner allowlist was MISSING harden-runner's own agent endpoints, so the eBPF block agent couldn't
+initialize and failed open. Fix (packages/substrate-github/emit.ts): allowlist
+`agent.api.stepsecurity.io:443` + `prod.app-api.stepsecurity.io:443`. Side-by-side live proof on a PUBLIC
+hosted runner, NO StepSecurity account/App: WITHOUT those endpoints example.com is ALLOWED (exit 0);
+WITH them example.com is DENIED (curl exit 7), api.github.com still 200. The exact fixed shipped allowlist
+denies example.com. C3/C15 now PASS (deterministic, in-profile, zero signup). Corrected control-matrix C3,
+ONBOARDING, encryption-policy. Regenerated the dogfood root agent workflows (the fix improves self-driving's
+egress too). bun run check green; dogfood 57/57.
+
 ## 1.1.1 — proof-cycle control-bug fixes (C13, C14) + egress enforcement boundary (C3)
 
 Behavioral re-demonstration against the frozen objective spec fixed two control bugs and pinned a boundary:

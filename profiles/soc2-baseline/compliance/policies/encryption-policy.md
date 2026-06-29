@@ -16,7 +16,8 @@
 The `harden-runner` egress allowlist in the agent workflows; subprocessor encryption attestations; secret
 store configuration.
 
-## Egress enforcement dependency
-The in-transit allowlist (C3/C15) is enforced by harden-runner `egress-policy: block`, which only BLOCKS
-non-allowlisted egress when the **StepSecurity GitHub App** is installed (eBPF). Without the app it runs in
-monitor mode (fails open) — install the app for true enforcement. [ORG] must enable this.
+## Egress enforcement note
+The in-transit allowlist (C3/C15) is enforced by the **free** harden-runner `egress-policy: block` Action on
+hosted runners — **no StepSecurity account/App required**. The allowlist must include harden-runner's own
+agent endpoints (`agent.api.stepsecurity.io`, `prod.app-api.stepsecurity.io`) so the eBPF block agent can
+initialize; the shipped allowlist includes them. Verified live: non-allowlisted egress is denied.

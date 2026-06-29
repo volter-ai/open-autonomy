@@ -83,15 +83,13 @@ agent commits — keyless, no key to register:
   **unsigned** — only the Actions bot / a GitHub App gets GitHub's signature (verified empirically).
 - This needs **no new infra**: the ambient Actions `GITHUB_TOKEN` already present in every agent job is the
   signing identity. No GPG/SSH key registration, no GitHub App to create, no egress change.
-- It does not wedge the loop: the agent's PR commit is Verified, and GitHub server-signs the squash-merge
-  commit it creates on the protected branch, so `required_signatures` is satisfied at merge.
+- Both the agent's PR commit AND the squash-merge commit GitHub creates are `verified:true` (live-proven:
+  PR #12 head + merge commit `6651b30f`).
 - Best-effort: if the API re-create hiccups, the effect keeps the (unsigned) pushed commit rather than
-  failing the propose — a squash-merge still lands a GitHub-signed commit on `main`.
+  failing the propose.
 
 `required_signatures` is applied by provisioning as a **repository ruleset** (the classic
-`/protection/required_signatures` endpoint 404s on many repos/plans — verified live — so it would silently
-fail to apply). **Live-proven end-to-end** on a testbed with the ruleset active: the agent commit comes out
-GitHub-`verified:true` and the PR squash-merges onto the protected branch without wedging.
+`/protection/required_signatures` endpoint 404s on private-no-GHAS repos — verified live).
 
 **Documented constraint (finding, honest):** `required_signatures` is enforced via a repository *ruleset*
 (the classic `/protection/required_signatures` endpoint is 404 on private-no-GHAS repos). A required_signatures

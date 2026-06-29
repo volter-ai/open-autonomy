@@ -16,7 +16,20 @@ export interface ProvisionManifest {
   required_secrets: string[];
   variables: Array<{ name: string; value: string }>;
   labels: Array<{ name: string; color?: string; description?: string }>;
-  branch_protection?: { branch: string; required_checks: string[] };
+  branch_protection?: {
+    branch: string;
+    required_checks: string[];
+    // SOC 2-grade hardening knobs (all OPTIONAL — omitted ⇒ the original permissive defaults below, so
+    // existing manifests like bench/self-driving are unchanged). A profile like simple-soc2 ships these
+    // set, making branch protection PROFILE-DERIVED (resolves design-doc gap G1).
+    enforce_admins?: boolean; // default false (only human admins direct-push); simple-soc2 sets true
+    required_reviews?: number; // required_approving_review_count; default 0; simple-soc2 sets >=1
+    require_code_owner_reviews?: boolean; // default false
+    required_signatures?: boolean; // require signed commits; default false (see G3/C6 note in profile README)
+  };
+  // Repo security settings applied via the repo API (GitHub Advanced Security; free on public repos, a
+  // paid add-on on private repos — see profile README gap G3). Omitted ⇒ not touched.
+  security?: { secret_scanning?: boolean; secret_scanning_push_protection?: boolean };
 }
 
 export interface VariablePlan {
@@ -46,6 +59,7 @@ export function parseManifest(text: string): ProvisionManifest {
     variables: raw.variables,
     labels: raw.labels,
     branch_protection: raw.branch_protection,
+    security: raw.security,
   };
 }
 
@@ -266,14 +280,20 @@ async function main(): Promise<void> {
       // Enable native auto-merge so a PR lands the instant its required checks are green — the new merge
       // model (no agent merges; GitHub performs the merge). Best-effort; non-fatal if the API rejects it.
       tryRun('gh', ['api', '-X', 'PATCH', `repos/${options.repo}`, '-F', 'allow_auto_merge=true']);
+      const bp = manifest.branch_protection;
       const body = JSON.stringify({
-        // Require a PR (no direct push to main, even for a contents:write agent) + the two status checks
-        // that gate a merge: `ci` and `agent-review`. 0 approvals — the agent-review status is the gate
-        // (the reviewer can't post a PR approval), and a proposer can't post agent-review (no statuses:write),
-        // so no agent can land unreviewed code. strict:false avoids the up-to-date-with-base deadlock.
-        required_status_checks: { strict: false, contexts: manifest.branch_protection.required_checks },
-        enforce_admins: false,
-        required_pull_request_reviews: { required_approving_review_count: 0 },
+        // Require a PR (no direct push to main, even for a contents:write agent) + the status checks that
+        // gate a merge (e.g. `ci` + `agent-review`, or the SOC 2 set). By default 0 approvals — the
+        // agent-review status is the gate (the reviewer can't post a PR approval), and a proposer can't
+        // post agent-review (no statuses:write), so no agent can land unreviewed code. strict:false avoids
+        // the up-to-date-with-base deadlock. A hardened profile (simple-soc2) overrides enforce_admins +
+        // required_reviews + required_signatures via the manifest (gap G1 — branch protection is profile-derived).
+        required_status_checks: { strict: false, contexts: bp.required_checks },
+        enforce_admins: bp.enforce_admins ?? false,
+        required_pull_request_reviews: {
+          required_approving_review_count: bp.required_reviews ?? 0,
+          require_code_owner_reviews: bp.require_code_owner_reviews ?? false,
+        },
         restrictions: null,
       });
       const result = tryRun('gh', [
@@ -283,6 +303,30 @@ async function main(): Promise<void> {
       ], { input: body });
       branchProtection = result.ok ? 'configured' : 'failed';
       if (!result.ok) process.stderr.write(`branch protection not applied: ${result.out.trim()}\n`);
+      // Signed commits live on a dedicated protection sub-resource (PUT/DELETE), not the body above.
+      // Best-effort + non-fatal: requires every commit (incl. agent/bot commits) to be signature-verified,
+      // so only enable on a profile whose effect step signs (see simple-soc2 README C6 — v1 ships this OFF
+      // and uses DCO as the compensating control until keyless commit signing is wired into the runtime).
+      if (bp.required_signatures !== undefined) {
+        const verb = bp.required_signatures ? 'PUT' : 'DELETE';
+        tryRun('gh', ['api', '-X', verb, `repos/${options.repo}/branches/${bp.branch}/protection/required_signatures`]);
+      }
+    }
+  }
+
+  // Repo security settings (GitHub Advanced Security). Best-effort + non-fatal — secret scanning and
+  // push protection are free on PUBLIC repos but a paid add-on on PRIVATE repos (gap G3); on a private
+  // repo without GHAS this PATCH is simply rejected and the rest of provisioning proceeds.
+  if (manifest.security && !options.dryRun && (hasCommits || shouldPush)) {
+    const sec: Record<string, unknown> = {};
+    if (manifest.security.secret_scanning !== undefined)
+      sec.secret_scanning = { status: manifest.security.secret_scanning ? 'enabled' : 'disabled' };
+    if (manifest.security.secret_scanning_push_protection !== undefined)
+      sec.secret_scanning_push_protection = { status: manifest.security.secret_scanning_push_protection ? 'enabled' : 'disabled' };
+    if (Object.keys(sec).length > 0) {
+      tryRun('gh', ['api', '-X', 'PATCH', `repos/${options.repo}`, '--input', '-'], {
+        input: JSON.stringify({ security_and_analysis: sec }),
+      });
     }
   }
 

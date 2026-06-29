@@ -1,0 +1,10 @@
+version: 2
+updates:
+  # Keep the SHA-pinned GitHub Actions current — Dependabot bumps the pin AND the trailing version comment.
+  # PRs land in .github/workflows/** (human-required), so each is reviewed.
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: "hardening(ci)"

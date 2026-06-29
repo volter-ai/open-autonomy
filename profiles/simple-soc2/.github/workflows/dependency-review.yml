@@ -1,0 +1,40 @@
+name: dependency-review
+# C9 (Security / CC7) — block a PR that introduces a dependency with a known vulnerability. Uses the
+# native dependency-graph compare API (no third-party action to pin), so it runs on plain GITHUB_TOKEN.
+# Fires on pull_request for HUMAN-authored PRs; bot-authored agent PRs don't fire pull_request
+# (GITHUB_TOKEN anti-recursion), so for the agent path the supply-chain gate (security.yml: bun audit) +
+# the reviewer + CodeQL are the net. Requires the dependency graph (free on public repos; GitHub Advanced
+# Security on private repos — see README gap G3); if unavailable the API returns 403 and the step no-ops.
+on:
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      base: { description: "base ref", required: false, type: string }
+      head: { description: "head ref", required: false, type: string }
+permissions:
+  contents: read
+jobs:
+  dependency-review:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Review dependency changes for known vulnerabilities
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          BASE: ${{ github.event.pull_request.base.sha || github.event.inputs.base }}
+          HEAD: ${{ github.event.pull_request.head.sha || github.event.inputs.head }}
+        run: |
+          set -euo pipefail
+          if [ -z "${BASE:-}" ] || [ -z "${HEAD:-}" ]; then
+            echo "no base/head to compare (manual run without inputs) — skipping"; exit 0
+          fi
+          resp="$(gh api "repos/${REPO}/dependency-graph/compare/${BASE}...${HEAD}" 2>/dev/null || echo '__unavailable__')"
+          if [ "$resp" = "__unavailable__" ]; then
+            echo "::warning::dependency graph unavailable (needs GitHub Advanced Security on private repos) — gate skipped"; exit 0
+          fi
+          vulns="$(echo "$resp" | jq '[.[] | select(.change_type=="added") | .vulnerabilities[]?] | length')"
+          echo "added-dependency vulnerabilities: ${vulns}"
+          echo "$resp" | jq -r '.[] | select(.change_type=="added") | .vulnerabilities[]? | "  - \(.advisory_ghsa_id) [\(.severity)] \(.advisory_summary)"' || true
+          if [ "${vulns}" -gt 0 ]; then
+            echo "::error::PR introduces ${vulns} dependency vulnerability(ies) — blocking"; exit 1
+          fi

@@ -1,0 +1,67 @@
+name: evidence-collect
+# C16 (Security / CC7) — the highest-leverage SOC 2 control a profile can ship: a DETERMINISTIC, recurring
+# snapshot of the repo's control state, committed to a dedicated `compliance-evidence` branch so the trail is
+# tamper-evident in git history (not ephemeral logs) over the whole Type II observation window. Each run
+# records: branch protection + required checks (CC8), collaborators & their permissions (CC6 / access
+# reviews O3), repo security settings (CC6), open Dependabot/code-scanning alerts (CC7), and recent workflow
+# runs (CC7). An auditor reads the branch; an access review reads the collaborators snapshot.
+#
+# It pushes to compliance-evidence (an UNPROTECTED branch) — never to protected main — so it needs no PR and
+# no human in the loop. Some org/admin reads (collaborators, protection) need elevated scope: GITHUB_TOKEN
+# with administration:read covers repo-level protection; if a read is denied the step records the denial
+# rather than failing (set EVIDENCE_PAT to a read-scoped PAT for full org/admin coverage — see README).
+on:
+  schedule:
+    - cron: "17 6 * * 1"
+  workflow_dispatch:
+permissions:
+  contents: write          # push the evidence branch (never main)
+  administration: read     # read branch protection / repo settings
+  security-events: read    # read code-scanning alerts
+jobs:
+  evidence:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        with:
+          fetch-depth: 0
+      - name: Collect control evidence → compliance-evidence branch
+        env:
+          GH_TOKEN: ${{ secrets.EVIDENCE_PAT || github.token }}
+          REPO: ${{ github.repository }}
+          BRANCH: ${{ github.event.repository.default_branch }}
+          RUN_TS: ${{ github.run_id }}-${{ github.run_attempt }}
+        run: |
+          set -uo pipefail
+          stamp="$(date -u +%Y-%m-%dT%H-%M-%SZ)"
+          dir="evidence/${stamp}"
+          mkdir -p "$dir"
+          get() { gh api "$1" > "$2" 2>"$2.err" && rm -f "$2.err" || mv "$2.err" "$2"; }
+          get "repos/${REPO}/branches/${BRANCH}/protection"            "$dir/branch-protection.json"
+          get "repos/${REPO}/collaborators?affiliation=direct&per_page=100" "$dir/collaborators.json"
+          get "repos/${REPO}"                                          "$dir/repo-settings.json"
+          get "repos/${REPO}/dependabot/alerts?state=open&per_page=100" "$dir/dependabot-alerts.json"
+          get "repos/${REPO}/code-scanning/alerts?state=open&per_page=100" "$dir/code-scanning-alerts.json"
+          get "repos/${REPO}/actions/runs?per_page=50"                 "$dir/recent-workflow-runs.json"
+          {
+            echo "# Control evidence snapshot — ${stamp}"
+            echo ""
+            echo "- repo: ${REPO}"
+            echo "- collected by run: ${RUN_TS}"
+            echo "- required checks: $(jq -c '.required_status_checks.contexts // .required_status_checks.checks // []' "$dir/branch-protection.json" 2>/dev/null || echo '[unreadable]')"
+            echo "- enforce_admins: $(jq -c '.enforce_admins.enabled' "$dir/branch-protection.json" 2>/dev/null || echo '[unreadable]')"
+            echo "- direct collaborators: $(jq 'length' "$dir/collaborators.json" 2>/dev/null || echo '[unreadable]')"
+            echo "- open dependabot alerts: $(jq 'length' "$dir/dependabot-alerts.json" 2>/dev/null || echo '[unreadable]')"
+            echo "- open code-scanning alerts: $(jq 'length' "$dir/code-scanning-alerts.json" 2>/dev/null || echo '[unreadable]')"
+            echo ""
+            echo "Files in this snapshot are raw GitHub API responses (or the recorded access error)."
+          } > "$dir/SUMMARY.md"
+          git config user.name "open-autonomy-evidence[bot]"
+          git config user.email "evidence@users.noreply.github.com"
+          git fetch origin compliance-evidence 2>/dev/null && git checkout compliance-evidence || git checkout --orphan compliance-evidence
+          # On a fresh orphan branch, clear the working tree of the checked-out main content first.
+          git ls-files | grep -v '^evidence/' | xargs -r rm -f 2>/dev/null || true
+          mkdir -p "$dir" || true
+          git add -A evidence/
+          git commit -m "evidence: control snapshot ${stamp}" || { echo "no changes"; exit 0; }
+          git push origin compliance-evidence

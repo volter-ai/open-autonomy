@@ -74,16 +74,15 @@ only; the executive performs the act and attaches the **artifact-of-performance*
 or commits it to `compliance-evidence`. A degraded draft is honest and acceptable — a fabricated one is a
 firing offense for an auditor.
 
-## 3. Produce the change — let the EFFECT propose the PR (do NOT open it yourself, W12.3)
+## 3. Open the gated PR (W12.3)
 
-**Just modify the working tree and STOP — do not branch, commit, push, or open a PR.** The standard propose
-**effect** (the job step after you) commits the tree, opens the gated PR on `agent/issue-<N>` (so
-`reconcile-merged-issues.ts` auto-closes the issue), dispatches `ci` + `agent-review` + `human-approval` + the
-**`compliance-verifier`** (via `propose_dispatch_reviews`), and arms auto-merge. If you open a PR yourself you
-**double-propose** and the effect's branch/push conflicts — leave the proposing to the effect (exactly like the
-`develop` agent does). Your job is the *content*, not the plumbing.
+> Target pattern (once the `GH013` effect-signing follow-up lands): just modify the tree and let the propose
+> **effect** open the PR + dispatch `ci`/`agent-review`/`human-approval`/`compliance-verifier` — the `develop`
+> pattern. **Until then the effect's signing step aborts**, so YOU open the PR (the proven working path) and
+> the verifier is dispatched separately. Do BOTH: write the tree, then open the PR.
 
-Write into the tree:
+Branch `agent/issue-<N>` (N = the issue number — lets `reconcile-merged-issues.ts` auto-close on merge). Write
+into the tree:
 - the **evidence doc** at `compliance-evidence-draft/<process>-<interval_end>.md`, and
 - the **ledger artifact** appended to `compliance/evidence-ledger.yml` under the process:
   ```yaml
@@ -96,13 +95,14 @@ Write into the tree:
   **Do not set `source: human-attested`, `assertion_author`, or `approver`** — those are the executive's, set
   when they edit the assertion and approve. The currency check rejects a human-attested artifact whose
   `assertion_author` ≠ `approver`, so a pre-signed draft would (correctly) fail.
-- **Re-render the register**: run `bun scripts/soc2-register.ts render` (leave the refreshed
-  `compliance/control-register.md` in the tree). The rendered register shows each process's last-evidence/state,
-  so an un-rendered ledger change trips the `soc2-register-check` drift gate.
+- **Re-render the register**: run `bun scripts/soc2-register.ts render` and commit the refreshed
+  `compliance/control-register.md` in the SAME PR. The rendered register shows each process's
+  last-evidence/state, so an un-rendered ledger change trips the `soc2-register-check` drift gate.
 
-Write the **decision brief** (§4) to `.agent-run/artifacts/pr.md` — the effect uses it as the PR body.
-`compliance/**` is human-required, so the effect's PR forces a maintainer Approve — that Approve is the
-executive's signature.
+Then `git checkout -b agent/issue-<N>`, commit the tree, push, and `gh pr create` with the **decision brief**
+(§4) as the PR body (`--body-file`). `compliance/**` is human-required, so the PR forces a maintainer Approve —
+that Approve is the executive's signature. (When the GH013 follow-up lands, drop the manual branch/commit/PR and
+just leave the tree for the effect — see the §3 note.)
 
 ## 4. The decision brief (the PR body — one screen, W12.6)
 

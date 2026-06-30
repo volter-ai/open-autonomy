@@ -22,8 +22,19 @@ model run less reliable than the gate being tested.
 
 ## soc2-baseline control proofs (live, inspectable — this session, committed evidence)
 
-Each row records COMMITTED inspectable evidence — private repo (`advanced_security: absent` where noted), run
-ID, PR/status URL, and the log fact — not prose. The repos are kept live for independent audit.
+Each row records COMMITTED inspectable evidence — run ID, PR/status URL, and the log fact — not prose. The
+repos are kept live for independent audit.
+
+> **Public-flip (user-authorized):** 5 of 6 enforcement repos were secret-scanned clean (gitleaks, full
+> history, all branches → 0 findings) and **flipped PUBLIC** for anonymous independent verification —
+> `volter-ai/soc2-complete-proof`, `volter-ai/soc2-default-proof`, `volter-ai/soc2-w12-auto`,
+> `volter-ai/soc2-w12-proof`, `volter-test-fixtures/bench-todo-cli-soc2-baseline-mqyo1ofl`. Their runs/PRs now
+> resolve at HTTP 200 unauthenticated. **The no-signup enforcement was PROVEN while these repos were PRIVATE +
+> GHAS-absent** — the immutable run logs/timestamps record that condition; the flip only makes them inspectable,
+> it does not alter what the historical runs recorded. **`volter-ai/soc2-noghas-proof` (C8/C12) NOT flipped** —
+> gitleaks found 1 value (`leak.txt`, a variant of the well-known AWS-docs example secret `wJalrXUtnFEMI…`),
+> i.e. the *planted synthetic C12 secret-scan bait*, not a real credential; per the "only-if-clean" rule it
+> stays PRIVATE pending an explicit go (the bait IS the C12 proof + is a fake key).
 
 | Control | Committed inspectable evidence | Status |
 | --- | --- | --- |

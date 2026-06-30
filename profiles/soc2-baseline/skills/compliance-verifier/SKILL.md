@@ -27,9 +27,15 @@ For the appended ledger artifact + its evidence doc, verify:
 2. **No pre-signing.** The drafter must leave `source: ai-drafted` with NO `assertion_author`/`approver`. If
    the PR already says `source: human-attested` without a human edit in the diff, that's a laundering attempt
    ⇒ finding (the executive sets those when they sign).
-3. **Substance present, not a stub.** The evidence doc actually contains the review/assessment for THIS
-   interval (e.g. access-review lists real collaborators + flags), not an empty template — unless it's an
-   honest `un-evidenced: needs <X>` degrade, which is acceptable and you note as "awaiting executive input".
+3. **Substance present, not a stub.** The evidence doc follows the skeleton (What I gathered · Assessment ·
+   Findings · Open items · Coverage/gaps) and contains the real assessment for THIS interval — not an empty
+   template. Per control, "substance" means: **access-review** = a real collaborator table with flags;
+   **policy-review-ack** = per-policy last-change dates with overdue flags; **vendor-reassessment** = each
+   subprocessor's report/DPA freshness; **risk-assessment** = concrete proposed risk rows from real signal;
+   **management-review** = the current/overdue control summary. An honest `> un-evidenced: needs <X>` degrade
+   (or a world-act *record template* awaiting an artifact-of-performance) is **acceptable** — note it as
+   "awaiting executive input", not a failure. A doc that claims a result with NO gathered inputs behind it is a
+   **fabrication finding** (worse than a degrade).
 4. **Findings surfaced, not buried.** Anomalies the drafter found are in the decision brief.
 5. **Interval correct.** The `interval_end` matches the due interval from the issue.
 

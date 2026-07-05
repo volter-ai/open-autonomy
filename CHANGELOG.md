@@ -328,6 +328,7 @@ via the runner seam.
 ### Fixed
 
 - Fixed a dangling sentence in `docs/OSS_AGENT_RUNBOOK.md` — the incomplete "is in" fragment now correctly references `docs/ARCHITECTURE.md`.
+- Fixed inconsistent catalog count in `docs/SPEC.md` — the "shape of the whole thing" section said "three catalogs" (missing task lifecycle) while the intro correctly states "four catalogs."
 
 ### Changed
 

@@ -34,8 +34,8 @@
 
 ### The shape of the whole thing
 
-The IR is a **standard**. It concretely defines one unit (the *agent*) and three catalogs (capabilities,
-trigger-param sources, config keys). A **substrate** (`gh-actions`, `local`, …) — the agent **runner**, NOT
+The IR is a **standard**. It concretely defines one unit (the *agent*) and four catalogs (capabilities,
+trigger-param sources, task lifecycle, config keys). A **substrate** (`gh-actions`, `local`, …) — the agent **runner**, NOT
 the code host — is a **partial implementation** of that standard, realizing the subset it supports its own way.
 (`github` is a back-compat alias for `gh-actions`; it conflated the runner with the github code host — prefer
 `gh-actions`. Runner ⟂ code host: see §"Runner vs code host" and `docs/CODE_HOST_RESOURCES.md`.) **Conformance** reports the support

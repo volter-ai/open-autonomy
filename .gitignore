@@ -37,3 +37,5 @@ dist/
 /.volter/tracker/*
 !/.volter/tracker/validation/
 /.volter/tracker/validation/.preset.base.mts
+# adoption-fixes backlog: the markdown issue store is committed on this branch
+!/.volter/tracker/markdown/

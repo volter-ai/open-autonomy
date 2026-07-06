@@ -10,6 +10,16 @@ This is the single continuous roadmap for the canonical repo. Short plans,
 proof-gate notes, and expanded product direction should be folded into this
 file instead of creating parallel roadmap documents.
 
+> **Reading this file:** the roadmap doubles as the historical phase record — later phases
+> supersede earlier ones, and early-phase prose is **not** the current architecture. Three
+> mechanisms described in older phases were later retired: the standalone **merge-gate job**
+> (today: branch protection requires `ci` + `agent-review` + `human-approval` and **native
+> auto-merge** lands the PR — `docs/SPEC.md#capabilities`), the **automatic CI-retry loop**
+> (today: the PM decides from the issue/PR history — re-develop with context or escalate;
+> never a loop — `docs/LIVE_TESTING_STRATEGY.md`), and the **`agent-repo-paused` label
+> fallback** (today: the `PUBLIC_AGENT_REPO_PAUSED` repository variable is the only
+> repo-wide pause). Where prose below conflicts with `docs/SPEC.md`, SPEC wins.
+
 Core rule:
 
 ```text
@@ -25,7 +35,8 @@ issue/comment/PR comment
   -> the agent edits code + opens its own PR with auto-merge queued
   -> CI
   -> reviewer agent posts the agent-review status
-  -> native auto-merge lands it (ci + agent-review green), retries develop, or escalates
+  -> native auto-merge lands it (ci + agent-review green); on failure the PM
+     decides from history — re-develop with context, or escalate
 ```
 
 Human review is the exception path. The system should ask for a human only when
@@ -72,29 +83,28 @@ current review workflow is PR-oriented.
 
 ## CI Model
 
-CI must be explicit so reviewer and merge gate can make deterministic
-decisions.
+CI must be explicit so the reviewer and the required-checks gate can make
+deterministic decisions.
 
-Initial model:
-
-```json
-{
-  "required_checks": ["ci"],
-  "optional_checks": [],
-  "stale_after_minutes": 60,
-  "missing_required_check": "human_required",
-  "failed_required_check": "develop_retry",
-  "max_ci_fix_attempts": 2
-}
-```
+Current model: branch protection requires the `ci` + `agent-review` +
+`human-approval` status contexts on the PR's current head SHA, and native
+auto-merge lands the PR once they are green. There is no separate merge-gate
+job.
 
 Rules:
 
 - missing required CI blocks auto-merge
-- stale required CI blocks auto-merge
-- failed required CI dispatches `develop` on the same PR until the retry cap
-- repeated failure after the retry cap requires a human
-- reviewer may recommend another develop run, but the PM enforces attempts
+- stale required CI blocks auto-merge (checks are per-SHA; a changed head
+  re-earns them)
+- a failed required check simply blocks the merge — there is **no automatic
+  retry loop**. On its next sweep the PM decides from the full issue/PR
+  history: re-dispatch the developer with the failure as context, or escalate
+  `human-required`.
+
+> Historical note: an earlier phase ran a JSON-configured merge-gate job with
+> `develop_retry` and `max_ci_fix_attempts`. Both are retired — "the merge
+> gate" is branch protection + native auto-merge, and retry is the PM's
+> judgment, not machinery.
 
 ## Decision Audit
 
@@ -630,11 +640,8 @@ Build:
   - merge/escalation decisions
 - issue/PR comment format that is stable enough for humans and parsers
 - optional dashboard/export using model-proxy run state
-- operational commands:
-  - `/agent status`
-  - `/agent stop`
-  - `/agent resume`
-  - `/agent summarize`
+- operational commands (shipped as `/agent status|pause|resume|retry|cancel|decide|answer`;
+  the `stop`/`summarize` verbs planned here were folded into `cancel`/`status`)
 - cleanup policy for stale agent branches and abandoned PRs
 
 Acceptance criteria:
@@ -699,11 +706,10 @@ Required fixes from the live `open-autonomy-testbed` trials:
 Implemented:
 
 - issue-level pause/status/resume commands operate before model token minting
-- repo-level pause honors `PUBLIC_AGENT_REPO_PAUSED` when set externally and
-  also supports an `agent-repo-paused` issue-label fallback that works with the
-  default GitHub workflow token
-- PM sweeps and direct develop both stop while the repo-pause label fallback is
-  present
+- repo-level pause honors `PUBLIC_AGENT_REPO_PAUSED` when set externally (this
+  phase also shipped an `agent-repo-paused` issue-label fallback, since
+  RETIRED — the repository variable is the only repo-wide pause today)
+- PM sweeps and direct develop both stop while the repo pause is set
 - workflow-edit boundary blocks now write a visible issue comment plus a rejected
   publish decision artifact before the workflow fails
 
@@ -816,9 +822,12 @@ Testbed proof plan:
 ## Open Design Choices
 
 - Final structured schema for decision records.
-- Whether merge gate should keep direct squash merge or switch to GitHub
-  auto-merge when branch protection requires it.
-- How to identify human-blocking labels and unresolved maintainer comments.
+- ~~Whether merge gate should keep direct squash merge or switch to GitHub
+  auto-merge when branch protection requires it.~~ RESOLVED: native GitHub
+  auto-merge under branch protection; the merge-gate job is retired.
+- ~~How to identify human-blocking labels and unresolved maintainer
+  comments.~~ RESOLVED: `policy.merge.maintainer_block_labels` in the profile
+  (read by the auto-merge re-arm sweep) + the `human-approval` required check.
 - Whether PM agent may close obvious duplicates/spam or only recommend closure.
 - Whether raw artifacts should be mirrored to permanent object storage.
 - Whether trusted maintainers can opt into workflow edits per run. Default is

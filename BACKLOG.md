@@ -393,9 +393,18 @@ it. Every docs-first profile author hits both.
 
 ### Acceptance Criteria
 
-- [ ] dev/01 v1 The SPEC example compiles verbatim on both substrates (a fixture test compiles the doc's exact YAML).
-- [ ] dev/02 v1 The "no agents" error names the expected agents: key (and the actors:→agents: migration) so a docs-first author can self-correct.
-- [ ] dev/03 v1 Copy-source existence (skills + resources) is validated before any file is written, and --dry-run reports the same failure.
+- [x] dev/01 v1 The SPEC example compiles verbatim on both substrates (a fixture test compiles the doc's exact YAML).
+  - status: passed
+  - evidence ev-dev-01: commit=535360bef62d6b98db6083ac1af3fe23e83fbc3b acv=1
+  - proof: "docs/SPEC.md's `## The IR` example now uses `agents:` (not `actors:`) and bare behavior names (`developer`/`maintainer-review`/`planner`, not `skills/developer`); packages/substrate-local/src/spec-example.test.ts extracts the exact ```yaml fenced block from the doc (regex on the file, not a hand-copy) and asserts it parses, validates clean, and compiles on both compileGithub and compileLocal with zero missing copy sources. bun test packages/*/src/*.test.ts: 82 pass." -> ev-dev-01
+- [x] dev/02 v1 The "no agents" error names the expected agents: key (and the actors:→agents: migration) so a docs-first author can self-correct.
+  - status: passed
+  - evidence ev-dev-02: commit=535360bef62d6b98db6083ac1af3fe23e83fbc3b acv=1
+  - proof: "packages/core/src/ir.ts validateIR: an `actors:` key with no `agents:` now errors `no agents (found \"actors:\" — the key is \"agents:\")`; a plain missing/empty agents map errors `no agents (the top-level key is \"agents:\")`. Verified live: compiling a profile with `actors:` throws exactly `invalid profile IR:\n  no agents (found \"actors:\" — the key is \"agents:\")`. Fixture tests in packages/core/src/ir.test.ts cover both messages." -> ev-dev-02
+- [x] dev/03 v1 Copy-source existence (skills + resources) is validated before any file is written, and --dry-run reports the same failure.
+  - status: passed
+  - evidence ev-dev-03: commit=535360bef62d6b98db6083ac1af3fe23e83fbc3b acv=1
+  - proof: "packages/core/src/materialize.ts adds copySources/missingCopySources/missingCopySourcesIn (substrate-shared, core-owned); bin/autonomy-compile.ts runs missingCopySourcesIn BEFORE the outDir branch, so both --dry-run (no outDir) and materialize report the identical missing-file list and exit 1 with nothing written. Verified live against a profile with a missing skill dir + missing resource: both invocations print the same two-path error. Fixture tests in packages/core/src/materialize.test.ts." -> ev-dev-03
 
 ## BL-16 termfleet's public docs are a 404
 

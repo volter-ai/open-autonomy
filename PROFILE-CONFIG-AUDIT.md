@@ -40,7 +40,12 @@ fail `agent-review` when the linked issue carries it; reviewer `SKILL.md:73-77` 
 ("gated by the deterministic human-approval check — do NOT auto-fail") and its HOLD list omits the
 label; `human-approval-gate.ts:77` checks only the `human-required` label + path globs. In
 production the label is decorative. Decide the owner (cleanest: the gate treats it like
-`human-required`) and align the other two.
+`human-required`) and align the other two. Review note: the bench *expectation* is itself
+semantically wrong — develop-only means "held for maintainer approval" (its own label description),
+which is human-approval semantics; failing `agent-review` for a governance hold conflates "the
+review found defects" with "the merge is held". Correct end-state: gate resolves the linked issue's
+labels (the gate is trusted — runs from BASE), `agent-review` passes on merit, `human-approval`
+stays pending, PR unmerged.
 
 **1.3 The human-approval gate's `author_association` fast path partially undoes its own permission
 check.** `human-approval-gate.ts:92-95`: an Approve qualifies if `author_association ∈
@@ -65,7 +70,12 @@ status: an agent PR editing the gate's own qualification logic (plus its runtime
 The only defense today is reviewer judgment (prose). The policy *source* is transitively gated
 (editing `ir.yml`'s risk lists forces a regenerated `.open-autonomy/autonomy.yml`, which IS in the
 globs); the scripts are the gap. Fix: add the boundary-script paths to `human_required_paths` —
-which the §2.2 migration makes natural (profile-carried scripts, gated like the workflows they serve).
+which the §2.2 migration makes natural (profile-carried scripts, gated like the workflows they
+serve). Review note: **the sibling profiles already do this** — `simple-gh-sdlc` and `soc2-baseline`
+enumerate the OA-shipped scripts *by name* in their `human_required_paths` ("every OA-shipped file
+under scripts/ must be here — incl. the ones merge.yml/security.yml execute… MUST be kept
+complete"), listed by name rather than `scripts/**` so an adopter's own scripts aren't blocked.
+Self-driving is the outlier; the fix is adopting the siblings' pattern.
 
 **1.6 `private_egress_guard` is a substrate flag whose implementation lives in one profile — the
 inverse of the §2.2 misplacement.** `emit.ts:177-185` injects `run: bash scripts/egress-guard.sh`
@@ -77,6 +87,17 @@ to be the *default* for private repos) gets agent jobs that die on a missing fil
 of the credentialed job is runner security ("which box, how it's wrapped") — the script belongs in
 the substrate runtime, injected with the step; at minimum, compile must fail when the flag is set
 and the profile doesn't carry the script.
+
+**1.7 The rearm sweep's branch filter hardcodes a profile-agent name — a literal
+`substrate-is-runner-only` violation, and it's legacy.** `rearm-auto-merge.ts:55`
+`AGENT_BRANCH = /^(agent|strategist)\//` lives in the vendored mirror
+(`packages/substrate-github/src/runtime/`), and the invariant's violation clause names exactly this
+("hardcodes a profile-agent name (develop/reviewer/pm/draft/planner/**strategist**)"). Verified
+against live state: `agent-propose.ts:27` names every proposer branch `agent/issue-<n>` or
+`agent/<rid>` — the strategist's current PRs ride `agent/ir-strategist-*`; the only `strategist/*`
+ref ever pushed belongs to closed PR #79 (the pre-agent-propose strategist). Fix: the filter becomes
+`/^agent\//` — the one branch prefix `agent-propose` actually creates (a seam-contract constant, not
+org policy).
 
 ## 2. Dead config: declared in `policy.box`, read by nothing → OA-6 (decide) / OA-5 (validate)
 
@@ -217,7 +238,10 @@ lists** in sync-runtime, which already embody the theme.
 - **3.2** strategist `SKILL.md:29` dedups against prior PRs via `--label origin:strategist` — **no
   mechanism applies that label** (`agent-propose.ts` adds no labels; the emit effect step adds none;
   preflight seeds only `origin:roadmap-planner`). One live PR (#79) carries it, hand-applied. The
-  reliable key already exists: the `strategist/**` branch prefix (`rearm-auto-merge.ts:55`).
+  reliable key (verified against live branches): the `agent/ir-strategist-*` head-branch prefix —
+  `agent-propose.ts:27` names every proposer branch `agent/issue-<n>` or `agent/<rid>`, and the
+  strategist's rid is `ir-strategist-<run>`. (~~`strategist/**`~~ — an earlier recommendation here —
+  is itself legacy: only closed PR #79 ever used it; see 1.7.)
 - **3.3** developer `SKILL.md:31-36` teaches that root `AGENTS.md` "and `docs/*`" are "GENERATED"
   from the profile — edit profile + regenerate. **False for install-owned files** (`AGENTS.md`,
   `docs/CONSTITUTION|PROJECT|ROADMAP|ARCHITECTURE.md` — `upgrade.ts:17-35`): upgrade seeds

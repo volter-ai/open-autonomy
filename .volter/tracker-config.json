@@ -15,6 +15,10 @@
     {
       "path": "ROADMAP-DISTILLED.md",
       "format": "document"
+    },
+    {
+      "path": "BACKLOG.md",
+      "format": "document"
     }
   ]
 }

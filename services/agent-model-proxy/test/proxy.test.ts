@@ -43,6 +43,14 @@ describe('oidc mint trust (repo granularity)', () => {
     expect(isTrustedRepoWorkflow(env, 'volter-ai/open-autonomy', 'other/repo/.github/workflows/x.yml@y')).toBe(false);
   });
 
+  test('a plain repo scope (no workflow suffix — the deployed wrangler.toml form) trusts the repo', () => {
+    const plain = { GITHUB_OIDC_ALLOWED_WORKFLOW: 'volter-ai/open-autonomy,volter-ai/soc2-w12-auto' } as unknown as Env;
+    expect(isTrustedRepoWorkflow(plain, 'volter-ai/open-autonomy',
+      'volter-ai/open-autonomy/.github/workflows/developer.yml@refs/heads/main')).toBe(true);
+    expect(isTrustedRepoWorkflow(plain, 'volter-ai/open-autonomy-testbed',
+      'volter-ai/open-autonomy-testbed/.github/workflows/developer.yml@refs/heads/main')).toBe(false);
+  });
+
   describe('owner wildcard (disposable fleets)', () => {
     const wild = { GITHUB_OIDC_ALLOWED_WORKFLOW: 'volter-test-fixtures/*' } as unknown as Env;
     test('trusts any repo under a wildcarded owner', () => {

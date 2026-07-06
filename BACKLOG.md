@@ -150,8 +150,14 @@ excluded; the code compares it).
 
 ### Acceptance Criteria
 
-- [ ] dev/01 v1 All eight citations above are fixed in the profile sources, root is regenerated, and `check:dogfood` + `check:compile` are green.
-- [ ] dev/02 v1 A grep for the fictions returns empty: `policy.box.human`, `origin:strategist` (as a dedup instruction), `strategist/**`, the wrangler.toml-gated claim, "merge-sensitive defaults".
+- [x] dev/01 v1 All eight citations above are fixed in the profile sources, root is regenerated, and check:dogfood + check:compile are green.
+  - status: passed
+  - evidence ev-dev-01: commit=8980d4ad735b59c5257f7c5a5c35f47492903d6a acv=1
+  - proof: "All eight citations fixed in profile sources (pm/maintainer sla+decision_types paths, maintainer+reviewer scope lists sans wrangler.toml, strategist dedup by agent/ir-strategist- prefix, developer install-owned-seeds truth, gate scope comment, strategy-rubric governance-respect, check-dogfood comment); root regenerated (upgrade-changes=9); check:dogfood + check:compile green." -> ev-dev-01
+- [x] dev/02 v1 A grep for the fictions returns empty: policy.box.human, origin:strategist (as a dedup instruction), strategist/**, the wrangler.toml-gated claim, "merge-sensitive defaults".
+  - status: passed
+  - evidence ev-dev-02: commit=044814818a9fe1d7cd1ccfd3e68f657538da2144 acv=1
+  - proof: "grep over profiles/, .codex, .claude/skills, scripts/, packages/ returns empty for: policy.box.human (last mention in emit.test.ts reworded), origin:strategist, the wrangler.toml-gated claim, and merge-sensitive defaults; remaining strategist/ hits are the skill directory name and the deliberate negative test." -> ev-dev-02
 
 ## BL-7 Legacy hygiene
 

@@ -119,9 +119,16 @@ like `human-required` on the PR. Bench asserts the corrected outcome.
 
 ### Acceptance Criteria
 
-- [ ] dev/01 v1 The gate holds (status `pending`, engage comment) when the linked issue carries `agent-develop-only`; unit test with a fixture PR→issue link.
-- [ ] dev/02 v1 `opDevelopOnly` expects: `agent-review` SUCCESS on merit, `human-approval` pending, PR unmerged (not `agent-review:FAILURE`).
-- [ ] dev/03 v1 Live proof: the `governance-develop-only` scenario passes on the testbed (run URL recorded).
+- [x] dev/01 v1 The gate holds (status pending, engage comment) when the linked issue carries agent-develop-only; unit test with a fixture PR→issue link.
+  - status: passed
+  - evidence ev-dev-01: commit=a15b36fe17724b5668683ef0802107510dcf2762 acv=1
+  - proof: "human-approval-gate.ts resolves linked issues via closingIssuesReferences with a close-keyword body-parse fallback (linkedIssueNumbers), and a linked issue carrying agent-develop-only makes the PR scoped → status pending + engage comment (the existing scoped-and-unapproved path). human-approval-gate.test.ts covers the fixture PR→issue link, graph-preferred/fallback parsing, and the scoping decision." -> ev-dev-01
+- [x] dev/02 v1 opDevelopOnly expects: agent-review SUCCESS on merit, human-approval pending, PR unmerged (not agent-review:FAILURE).
+  - status: passed
+  - evidence ev-dev-02: commit=a15b36fe17724b5668683ef0802107510dcf2762 acv=1
+  - proof: "bench-operate.ts opDevelopOnly now waits for both agent-review and human-approval contexts and asserts agent-review:SUCCESS + human-approval not SUCCESS + PR unmerged; the old agent-review:FAILURE expectation is gone." -> ev-dev-02
+- [ ] dev/03 v1 Live proof: the governance-develop-only scenario passes on the testbed (run URL recorded).
+  - status: pending
 
 ## BL-6 Doctrine cites only mechanisms that exist
 

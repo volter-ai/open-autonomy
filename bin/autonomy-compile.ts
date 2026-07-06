@@ -7,7 +7,7 @@
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { basename, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { parseIr, compiledPaths, materialize } from '@open-autonomy/core';
+import { parseIr, compiledPaths, materialize, missingCopySourcesIn } from '@open-autonomy/core';
 import { compileLocal } from '@open-autonomy/substrate-local';
 import { compileGithub } from '@open-autonomy/substrate-github';
 
@@ -51,6 +51,18 @@ if (!profileDir) {
 
 const ir = parseIr(readFileSync(join(profileDir, 'ir.yml'), 'utf8'));
 const out = substrate === 'local' ? compileLocal(ir) : compileGithub(ir);
+
+// Pre-materialize validation: every skill dir + resource file the compile will copy must exist BEFORE any
+// file is written — a missing source used to surface as ENOENT after N files were already on disk, and
+// --dry-run (no outDir, below) never even looked, so it reported success on a profile that couldn't
+// actually compile. Runs for BOTH paths so they never disagree.
+const missing = missingCopySourcesIn(out, profileDir);
+if (missing.length) {
+  console.error(
+    `open-autonomy: profile "${profileArg}" is missing ${missing.length} source file(s) it would copy — nothing written:\n  ${missing.join('\n  ')}`,
+  );
+  process.exit(1);
+}
 
 if (outDir) {
   const written = materialize(out, outDir, (from) => readFileSync(join(profileDir, from), 'utf8'));

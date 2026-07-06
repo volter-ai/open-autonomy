@@ -132,7 +132,19 @@ describe('validateIR — schema/agents', () => {
   });
 
   test('rejects an empty actor set', () => {
-    expect(validateIR(ir({})).some((e) => e.includes('no agents'))).toBe(true);
+    const errs = validateIR(ir({}));
+    expect(errs.some((e) => e.includes('no agents'))).toBe(true);
+    // BL-15: a plain missing/empty agents map names the expected key so a docs-first author self-corrects.
+    expect(errs.some((e) => e.includes('no agents (the top-level key is "agents:")'))).toBe(true);
+  });
+
+  test('names the actors:->agents: mid-migration mistake when a profile used the SPEC prose key', () => {
+    // docs/SPEC.md#the-ir describes the FUTURE key as `actors:`, but the parser only accepts `agents:`
+    // today (packages/core/src/ir.ts) — a docs-first author who copies the prose literally gets an empty
+    // agent set. The error must name the specific mistake, not just "no agents".
+    const withActorsKey = { ...ir({}), actors: { a: agent() } } as unknown as AutonomyIR;
+    const errs = validateIR(withActorsKey);
+    expect(errs.some((e) => e.includes('no agents (found "actors:" — the key is "agents:")'))).toBe(true);
   });
 });
 

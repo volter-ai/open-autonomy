@@ -69,9 +69,14 @@ unchanged. The slots:
 schema: autonomy.ir.v1
 targets: [gh-actions, local]
 
-actors:
+# The top-level key is `agents:` TODAY (packages/core/src/ir.ts) — the rename to `actors:` described
+# above is mid-migration and NOT yet accepted by the parser; `actors:` here fails with `invalid profile
+# IR: no agents`. Compile this example verbatim once you see `agents:`.
+agents:
   developer:                           # kind: agent (the default)
-    behavior: skills/developer        # what it does — a SKILL (prose); run as a credentialed job
+    behavior: developer               # what it does — a SKILL (prose); run as a credentialed job. Bare
+                                       # name: both compilers resolve it under `skills/<name>/SKILL.md`
+                                       # themselves — do NOT write `skills/developer` here (ENOENT).
     capabilities: [code:propose, tasks:converse]   # its authority (the standard's capability catalog)
     triggers:                          # when it fires; three forms — cron | event | dispatch
       - { dispatch: true, params: { ISSUE: subject.ref } }  # portable: launched on demand by the orchestrator
@@ -80,12 +85,14 @@ actors:
 
   maintainer:                          # kind: human — a person; intrinsic, not a substrate choice
     kind: human
-    behavior: humans/maintainer-review # the task spec the person is handed (situation / decision / result)
+    behavior: maintainer-review        # the task spec the person is handed (situation / decision /
+                                       # result) — same bare-name rule as above: resolves to
+                                       # `skills/maintainer-review/SKILL.md`
     capabilities: [tasks:converse, code:review]
     triggers: [{ dispatch: true }]     # engaged on demand when the orchestrator routes work to a person
 
   planner:
-    behavior: skills/planner
+    behavior: planner
     capabilities: [tasks:author, tasks:converse]
     triggers: [{ cron: "17 6 * * *" }]
 

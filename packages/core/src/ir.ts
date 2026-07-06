@@ -94,7 +94,14 @@ export function compiledPaths(out: CompileOutput): string[] {
 export function validateIR(ir: AutonomyIR): string[] {
   const errors: string[] = [];
   if (ir.schema !== 'autonomy.ir.v1') errors.push(`bad schema: ${ir.schema}`);
-  if (!ir.agents || Object.keys(ir.agents).length === 0) errors.push('no agents');
+  if (!ir.agents || Object.keys(ir.agents).length === 0) {
+    // The IR's top-level actor map is (still) keyed `agents:` — the rename to `actors:` described in
+    // docs/SPEC.md#the-ir is mid-migration and not yet accepted here. A docs-first author who copies the
+    // SPEC's prose ("the one unit is an actor") into `actors:` gets an empty agent set and a bare "no
+    // agents" — name the mistake so they can self-correct without reading this file.
+    const sawActorsKey = (ir as unknown as { actors?: unknown }).actors !== undefined;
+    errors.push(sawActorsKey ? 'no agents (found "actors:" — the key is "agents:")' : 'no agents (the top-level key is "agents:")');
+  }
   for (const [name, a] of Object.entries(ir.agents ?? {})) {
     if (!a.behavior) errors.push(`agent ${name}: missing behavior`);
     if (!Array.isArray(a.capabilities)) errors.push(`agent ${name}: capabilities must be an array`);

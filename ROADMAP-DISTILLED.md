@@ -78,6 +78,9 @@ roadmap.v2 slot: id `deployed-boundary-hardening`, proof_gate `boundary-softspot
 - [ ] dev/03 v1 Capability `@scope` suffixes are either enforced (effect step refuses changes outside scope) or removed from profiles and docs — no fake restrictions.
 - [ ] dev/04 v1 Private-repo installs get enforced egress by default (`private_egress_guard` default-on or harden-runner block-mode equivalent), or the fail-open behavior is loudly declared in the install output.
 - [ ] dev/05 v1 soc2-baseline declares a `kind:human` actor to pair with its `policy.box.human` + human-approval gate, matching the self-driving pattern (review §3.8).
+- [ ] dev/06 v1 The hold-label vocabulary has ONE source of truth (audit §1.1): `merge.maintainer_block_labels` is read by `rearm-auto-merge.ts` and injected into the pm/reviewer skills; the `agent-blocked`-on-a-green-PR case (declared block label, auto-merge re-armed anyway) is fixed and fixtured.
+- [ ] dev/07 v1 `agent-develop-only` has a decided owner (audit §1.2 — cleanest: the human-approval gate treats it like `human-required`), the other two components (reviewer doctrine, bench scenario) are aligned to that decision, and the `governance-develop-only` scenario passes live.
+- [ ] dev/08 v1 The human-approval gate's `author_association` fast path no longer lets a read-only COLLABORATOR's Approve qualify (audit §1.3) — maintainership is decided by the repo-permission lookup the gate already implements.
 
 ## OA-6 Reconcile the doc layer to one truth
 
@@ -95,6 +98,8 @@ roadmap.v2 slot: id `doc-layer-reconciliation`, proof_gate `one-canonical-direct
 - [ ] dev/02 v1 SPEC.md's three internal contradictions are fixed (config slot, Runner sync/async, `actors:` example) and `review?`/`result?`/`codeHost` are documented in the IR section.
 - [ ] dev/03 v1 CLAUDE.md and ARCHITECTURE.md no longer teach the four-slot/config model; the Built-vs-designed ledger's HumanRunner entry is corrected to designed/not-built (or the code is fixed first — see the local human seam item).
 - [ ] dev/04 v1 Dead cross-references (AUTONOMY-IR.md, PUBLIC_AGENT_PRODUCTION_ROLLOUT.md) are fixed; ARCHITECTURE.md's doc map covers the actual docs/ contents; README names all five profiles.
+- [ ] dev/05 v1 Doctrine cites only mechanisms that exist (audit §3): the `policy.box.human.*` paths in pm/maintainer skills match the flattened manifest (`policy.human.*`); strategist dedup keys on the `strategist/**` branch prefix instead of the never-applied `origin:strategist` label; the developer skill's provenance claim distinguishes compiled files from install-owned ones (`AGENTS.md` and top-level `docs/*` are NOT regenerated); the reviewer/maintainer `wrangler.toml` claim and the gate's "merge-sensitive defaults" comment are corrected; the strategy rubric's governance-respect wording admits retirements and planner edits.
+- [ ] dev/06 v1 Every `policy.box` key is machine- or prompt-consumed or deleted (audit §2: 9 dead keys incl. the triplicated `human_required_topics`); the dead `skills/open-autonomy-upgrade/` dir is removed; the stale `AGENTS.md` profile seed is refreshed from root (it still ships the dead `open-autonomy-*` glob); the unshipped maintainer skill is shipped or its dangling manifest reference dropped (audit §4.3); self-driving ships a `provision.json` seed or the INSTALL_OWNED entry is annotated as optional (audit §4.4).
 
 ## OA-7 Stand up the org health monitor (the org must notice its own idleness)
 
@@ -157,4 +162,22 @@ roadmap.v2 slot: id `second-substrate-or-profile`, proof_gate `second-instance-f
 
 - [ ] dev/01 v1 EITHER substrate-local runs a profile continuously for a stated window (which forces the local human seam fix), OR a second profile reaches fleet-merged commits on a real repo.
 - [ ] dev/02 v1 The run's evidence is recorded under the mechanized `check:proof` (this item deliberately depends on the P0).
+
+## OA-11 Adopt ztrack as the typed tracker under the self-driving profile
+
+assignee: yueranyuan
+
+Priority: P1. Evidence: `ZTRACK-INTEGRATION.md` (the design); `SDLC-ASSESSMENT.md` §4 (no verification of done below the merge boundary — an issue's "done" is only "the PR merged"); review §I.1 / OA-2 (the proof layer needs exactly ztrack's evidence model); `architecture-invariants.yml` `substrate-is-runner-only` names ztrack as profile-layer methodology, which fixes the placement.
+
+"Done is earned, not declared" at the issue layer: the planner writes checkable acceptance criteria, the developer must cite real commits + evidence, `ztrack check` gates the PR in ci, and the reviewer consumes the oracle instead of re-deriving it from prose. Profile layer ONLY (skills, ci.yml resource, policy.box, package.json seed) — zero ztrack in `packages/*`.
+
+roadmap.v2 slot: id `ztrack-typed-tracker`, proof_gate `issue-done-earned-live`.
+
+### Acceptance Criteria
+
+- [ ] dev/01 v1 Phase 0 live proof on the testbed: one issue authored in the checkable grammar, one developer run drives it green through the shipped loop, and the red→green fixture (fabricated SHA → `ztrack check` exit 1 → real SHA → exit 0) is recorded as the gate's evidence.
+- [ ] dev/02 v1 Phase 1 profile wiring lands via the gated lane: planner/developer/reviewer skill doctrine (author ACs in the grammar / `ztrack ac patch` + check green before finish / cite the oracle in the verdict), a `ztrack check` step in the profile's `ci.yml`, and ztrack as a dev-dep in the profile's `package.json` seed.
+- [ ] dev/03 v1 The tracker runs in linked-sync mode — GitHub Issues remain the single source of truth, the tasks seam and `roadmap:<id>` choreography are unchanged, tracker runtime state stays gitignored.
+- [ ] dev/04 v1 The preset is governed as a measuring stick: `.volter/tracker-config.json` + `.volter/tracker/validation/**` are added to `risk.human_required_paths`, so agents propose rule changes and a maintainer ratifies them.
+- [ ] dev/05 v1 A recorded phase-3 decision (with the phase-1 live window's data) on arming `ztrack loop` for the developer job, based on whether PM re-dispatch cycles are the dominant waste.
 

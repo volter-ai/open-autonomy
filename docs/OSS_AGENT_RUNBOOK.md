@@ -64,19 +64,22 @@ The command must write one terminal artifact in `artifacts/`:
 
 - `result.json` for a successful machine-readable result
 - `pr.md` for PR-ready text
-- `blocked.md` when it cannot continue and needs a human answer
+
+(A blocked agent doesn't write a terminal artifact — it labels the issue
+`agent-blocked`/`needs-info` on the tracker and the PM escalates on the SLA.)
 
 ## Live Workflow Smoke
 
 1. Push changes to `main`.
 2. Confirm `ci` passes.
 3. Open or reuse a low-risk issue.
-4. Comment `/agent develop`, or trigger `Public Agent PM`.
+4. Comment `/agent developer`, or trigger the `pm` workflow.
 5. Verify the run uses `scripts/claude-agent-run.ts`, exchanges GitHub OIDC for a
    bounded model token, edits code, and opens its own PR with auto-merge queued.
 6. Verify the PR diff, the reviewer's `agent-review` status, and native auto-merge once `ci` + `agent-review` are green.
-7. If active-run limits block PM or agent dispatch, use the manual `Model Proxy Admin`
-   workflow to inspect proxy saturation and revoke stale run IDs before retrying.
+7. If active-run limits block PM or agent dispatch, inspect proxy saturation with the
+   operator-run `GET /admin/limits/status` (admin token from your local `.env`; there is
+   no in-repo admin workflow) and revoke stale run IDs via the admin API before retrying.
    On a CI or review failure the PR simply does not merge (the merge boundary holds);
    there is no automatic retry loop. On its next sweep the PM decides from the full
    issue/PR history — re-dispatch the developer with the failure as context (if
@@ -89,14 +92,15 @@ Use issue comments for day-to-day controls:
 - `/agent pause` adds `agent-paused` to the issue. PM sweeps and direct develop
   starts wait while the label is present.
 - `/agent resume` removes `agent-paused`.
-- `/agent pause repo` sets `PUBLIC_AGENT_REPO_PAUSED=true`; `/agent resume repo`
-  clears it.
-- `/agent status` posts labels, blocking labels, open agent PR, active workflow
-  runs, and active proxy runs for the issue.
-- `/agent cancel` cancels queued/in-progress public-agent workflow runs for the
-  issue and revokes matching active proxy runs visible in `/admin/limits/status`.
-- `/agent retry` reruns failed jobs from the latest failed infrastructure run for
-  the issue. It does not create a new `/agent develop` command.
+- Repo-wide pause is a **repository variable**, not a comment verb: set
+  `PUBLIC_AGENT_REPO_PAUSED=true` (`gh variable set …`) and every agent job
+  skips; clear it to resume.
+- `/agent status` comments the 5 most recent runs of that agent's workflow.
+- `/agent cancel` cancels queued/in-progress runs of that agent's workflow. It
+  does not revoke proxy run slots; an orphaned slot expires at token TTL (~2h).
+- `/agent retry` relaunches this issue's agent workflow when its agent PR has a
+  failed check — a fresh run (new model mint); otherwise it comments that there
+  is nothing to retry.
 - `/agent decide <decision>` / `/agent answer <answer>` resolve a human-blocked
   item (`human-required` / `needs-info`): they record the maintainer's typed
   decision/answer on the issue and clear the human-blocking labels so the PM
@@ -104,13 +108,15 @@ Use issue comments for day-to-day controls:
   this is the github realization of the human seam's `out` (resume on a recorded,
   authorized decision).
 
-Use `Model Proxy Admin` with `status`, `run-status`, or `revoke` when you need
-repository-wide proxy saturation details or a manual run-id revoke.
+For repository-wide proxy saturation details or a manual run-id revoke, use the
+proxy admin API directly (`GET /admin/limits/status`, `POST /admin/runs/revoke`)
+with the admin token from your local `.env` — it is an operator/treasury
+credential and never lives in the repo.
 
 ## Production Rollout
 
-Before enabling the agent on a public backlog, work through
-[`PUBLIC_AGENT_PRODUCTION_ROLLOUT.md`](./PUBLIC_AGENT_PRODUCTION_ROLLOUT.md).
+Before enabling the agent on a public backlog, work through the
+[GitHub production rollout](./OPERATIONS.md#github-production-rollout).
 
 ## Secrets
 

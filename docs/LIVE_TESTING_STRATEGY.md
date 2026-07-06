@@ -27,8 +27,9 @@ designed to consume):
 - apply or remove maintainer labels (`do-not-merge`, `human-required`,
   `agent-blocked`, `agent-maintainer-hold`, `manual-operator-test`)
 - type operator commands a human owns: `/agent pause`, `/agent resume`,
-  `/agent pause repo`, `/agent resume repo`, `/agent status`, `/agent retry`,
-  `/agent cancel`, and an explicit maintainer `/agent developer` or `/agent reviewer`
+  `/agent status`, `/agent retry`, `/agent cancel`, set/clear the
+  `PUBLIC_AGENT_REPO_PAUSED` repository variable (the repo-wide pause),
+  and an explicit maintainer `/agent developer` or `/agent reviewer`
 - review and approve or merge a PR that the system has deliberately routed to
   `human-required` (a maintainer decision the system asked for)
 - edit a PR branch as a maintainer (e.g. to create a head-change condition)
@@ -133,7 +134,7 @@ operator-sim manufactures the genuine condition and verifies the system's real r
 | Maintainer hold blocks auto-merge (reviewer posts `agent-review=failure`) | `governance-maintainer-hold` / `review-human-block` | apply hold label/comment, then clear | `human-required` → `done` |
 | Changed head clears `agent-review` so it can't auto-merge on stale approval | `head-changed-before-merge` | push to reviewed PR | `blocked` |
 | Operator pause/status/resume (issue) | `operator-pause-resume` | `/agent pause`, `/agent status`, `/agent resume` | manual fixture |
-| Operator repo pause/resume | `repo-pause` | `/agent pause repo`, `/agent resume repo` | manual fixture |
+| Operator repo pause/resume | `repo-pause` | set/clear `PUBLIC_AGENT_REPO_PAUSED` | manual fixture |
 | Operator retry with no failed run | `operator-retry-no-failure` | `/agent retry` | manual fixture |
 | Operator cancel active run | `operator-cancel` | `/agent cancel` while active | `blocked` |
 | Planner creates proof-gate issues + dedupe | `planner-creates-proof-gate-issues` | none (let planner run) | `in-progress` |
@@ -214,7 +215,7 @@ work between proctor ticks.
   decision before the job fails.
 - **T+35 — Operator controls.** `/agent pause` → `/agent status` → maintainer
   `/agent developer` (blocked) → `/agent resume` (`operator-pause-resume`).
-  `/agent pause repo` → confirm PM/develop stop → `/agent resume repo`
+  Set `PUBLIC_AGENT_REPO_PAUSED=true` → confirm PM/develop stop → clear it
   (`repo-pause`). `/agent retry` on a clean issue (`operator-retry-no-failure`).
   `/agent cancel` on an active run (`operator-cancel`).
 - **T+40 — Unblock governance.** Clear the hold from T+25; confirm the reviewer can

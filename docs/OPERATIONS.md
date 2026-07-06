@@ -343,14 +343,18 @@ Before opening broader access, verify these in the target repo:
 
 - `/agent pause` applies `agent-paused`.
 - `/agent developer` on a paused issue stops before model minting.
-- `/agent status` reports labels, open PR, active workflow runs, and active proxy
-  runs.
+- `/agent status` comments the 5 most recent runs of that agent's workflow (id, status,
+  conclusion, started-at).
 - `/agent resume` clears `agent-paused`.
-- `/agent retry` reports no infrastructure retry when no failed run exists, or
-  reruns failed jobs without posting a fresh `/agent developer`.
-- `/agent cancel` cancels active public-agent workflow runs and revokes active
-  proxy runs for the issue.
-- `Model Proxy Admin` `status` shows active-run saturation and daily counters.
+- `/agent retry` reports that there is nothing to retry when the issue's agent PR has no failed
+  check, and relaunches the agent workflow when one exists — a relaunch is a **fresh agent run**
+  (new model mint, new spend).
+- `/agent cancel` cancels queued/in-progress runs of that agent's workflow. It does **not** revoke
+  the run's proxy slot — an orphaned slot is reaped when the run token expires (~2h).
+- Setting `PUBLIC_AGENT_REPO_PAUSED=true` (repository variable) makes every agent job skip; clearing
+  it resumes the fleet.
+- Proxy saturation and daily counters: operator-run `GET /admin/limits/status` with the admin token
+  from the operator's local `.env` (there is no in-repo admin workflow).
 
 ### Private Trial Evidence
 

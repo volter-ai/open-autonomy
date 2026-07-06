@@ -141,7 +141,7 @@ One command is the front door — `open-autonomy <verb>` (alias `oa`):
 
 ```bash
 open-autonomy compile <profileName|profileDir> <local|gh-actions> [outDir]   # compile a profile onto a substrate ("github" still accepted)
-open-autonomy conformance <exec|termfleet|github>                        # run the substrate conformance battery
+open-autonomy conformance <exec|termfleet|gh-actions>                    # run the substrate conformance battery ("github" still accepted)
 open-autonomy upgrade --profile <dir> --target <dir> [--apply]           # re-compile an installation in place
 ```
 
@@ -168,13 +168,18 @@ else is ignored. To launch an agent by comment, name it: `/agent <agent>` (the w
 
 - `/agent developer` — ask the developer to work on the issue.
 - `/agent reviewer` — run the reviewer on an agent PR.
-- `/agent pause` / `/agent resume` — pause or resume issue-level work.
-- `/agent pause repo` / `/agent resume repo` — pause or resume the whole repo.
-- `/agent status` — show issue agent state.
-- `/agent retry` — rerun failed infrastructure jobs without a fresh develop pass.
-- `/agent cancel` — cancel active workflow runs and revoke active proxy runs.
+- `/agent pause` / `/agent resume` — pause or resume issue-level work (the `agent-paused` label).
+- `/agent status` — comment the recent runs of that agent's workflow.
+- `/agent retry` — relaunch this issue's agent workflow after a failed check on its agent PR (a
+  fresh run, fresh model spend); reports when there is nothing to retry.
+- `/agent cancel` — cancel active workflow runs (proxy run slots are not revoked; they expire at
+  token TTL, ~2h).
 - `/agent decide <decision>` / `/agent answer <answer>` — resolve a `human-required` / `needs-info` item:
   records your decision/answer and clears the block so the PM re-triages and resumes (the human seam's `out`).
+
+**Repo-wide kill switch** (not an `/agent` verb): set the repository variable
+`PUBLIC_AGENT_REPO_PAUSED=true` (`gh variable set PUBLIC_AGENT_REPO_PAUSED --body true`) — every
+agent job skips while it is set; clear it to resume the fleet.
 
 ## Security
 

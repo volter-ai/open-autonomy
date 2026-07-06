@@ -153,7 +153,7 @@ describe('compileGithub — kind: human is declared, not job-realized', () => {
   });
 
   // The remaining affordance — ESCALATE on SLA — is the BEHAVIORAL tier (PM doctrine, Step 2c: re-ping the
-  // engaged maintainer past policy.box.human.sla_minutes). It is judgment, not a frozen template, so it is
+  // engaged maintainer past the profile's human.sla_minutes policy). It is judgment, not a frozen template, so it is
   // proven by a live run + a calibrated simulator, never a unit test.
   test.todo('the human seam escalates on SLA (behavioral — PM Step 2c; live-proven, not unit-tested)', () => {});
 });

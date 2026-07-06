@@ -67,6 +67,17 @@ The only defense today is reviewer judgment (prose). The policy *source* is tran
 globs); the scripts are the gap. Fix: add the boundary-script paths to `human_required_paths` —
 which the §2.2 migration makes natural (profile-carried scripts, gated like the workflows they serve).
 
+**1.6 `private_egress_guard` is a substrate flag whose implementation lives in one profile — the
+inverse of the §2.2 misplacement.** `emit.ts:177-185` injects `run: bash scripts/egress-guard.sh`
+into every credentialed job when a profile sets `policy.box.gh-actions.private_egress_guard`, but
+the script is **not in the runtime mirror** (the mirror loader takes only `.ts` — `emit.ts:24`) and
+exists solely at `profiles/soc2-baseline/scripts/egress-guard.sh`. It works today only because
+soc2-baseline is the lone flag-setter. Any other profile enabling the flag (which OA-5 dev/04 wants
+to be the *default* for private repos) gets agent jobs that die on a missing file. Egress lockdown
+of the credentialed job is runner security ("which box, how it's wrapped") — the script belongs in
+the substrate runtime, injected with the step; at minimum, compile must fail when the flag is set
+and the profile doesn't carry the script.
+
 ## 2. Dead config: declared in `policy.box`, read by nothing → OA-6 (decide) / OA-5 (validate)
 
 Traced every key in `ir.yml:121-176` to its consumers. Live keys: `gh-actions.*` (emit.ts:143),
@@ -153,11 +164,50 @@ The residue, of which finding 1.1 is the symptom:
 
 Fix shape (per the doc's own pattern): the sweep reads the label set from
 `.open-autonomy/autonomy.yml` (or emit projects it like `human-required-paths.json`); skills consult
-the same key (§2.1 wire); and the three boundary scripts migrate from the runtime mirror to
+the same key (§2.1 wire); and the boundary scripts migrate from the runtime mirror to
 profile-carried resources (the `profiles/self-driving/scripts/` + `resources:` mechanism already
 exists and already carries preflight/config/upgrade-cli), with `human_required_paths` extended to
 cover them (closes 1.5). After that, "local substrate + github code host + merge blockers" is just a
 profile choice, as the architecture intends.
+
+Full residue inventory from sweeping every layer with this lens:
+
+- **Migrate to profile resources** (code-host logic in the runner's mirror): `rearm-auto-merge.ts`,
+  `reconcile-merged-issues.ts`, `human-approval-gate.ts`, **and `check-supply-chain.ts`** (called by
+  the `security.yml` *resource*, vendored as runtime — same split-stopped-halfway). The doc's own
+  "Open / deferred" section flagged exactly these four ("arguably resources too… revisit if it
+  causes friction") — the friction is now demonstrated (1.1, 1.5).
+- **Decide `agent-propose.ts`**: the mirror's remaining code-host logic — the `code:propose`
+  capability's github realization (`emit.ts:340` calls it "agent-owned, runner-INDEPENDENT"). Either
+  it migrates with the others, or it is explicitly documented as the one capability-realization
+  script the runner vendors because the emitted effect step invokes it. Not drift-prone (no policy
+  vocabulary inside), so a documented decision suffices.
+- **`bin/sync-runtime.ts`'s header already describes the post-migration state** — "the mirror holds
+  only substrate machinery — the thin credentialed skill runner…, the model-proxy clients, the
+  visual-verify helper, and the runner" — which is FALSE today (the mirror also holds the five
+  code-host scripts). The migration makes the substrate's own self-description true.
+- **Preflight's seeded label list is a fifth hardcoded vocabulary copy**
+  (`open-autonomy-preflight.ts:112`: `agent-paused, agent-blocked, human-required, needs-info,
+  origin:roadmap-planner`). Placement is right (profile-owned resource) but the list should derive
+  from policy + the contract constants, not be hand-kept.
+- **The contract/policy vocabulary split should be written into SPEC**: status contexts
+  (`ci`/`agent-review`/`human-approval`), the `human-required` label, and the control plane's
+  `agent-paused` marker are **seam-contract constants** (spec-fixed — branch protection and the gate
+  reference them by name); `merge.maintainer_block_labels` is **org-tunable policy**. Without the
+  distinction written down, future work either over-parameterizes the contract or hardcodes the policy.
+- **`docs/CODE_HOST_RESOURCES.md`'s "Open / deferred" needs updating** once ruled: the revisit
+  trigger fired; record that the substrate owns no label vocabulary and the scripts moved.
+
+Verified CLEAN under this lens (no change needed): **substrate-local** — the invariant's motivating
+propose-sweep bug is genuinely fixed (per-session pending-effect markers, "never any issue/tracker
+logic", code-host resources dropped for a local code host); **the control plane's verb layering** —
+`cancel/pause/resume/status/retry` are runner lifecycle, and `decide/answer` are legitimately
+substrate because they are the *human runner's* github realization (the human actor's `out`
+channel), not org methodology; **`zizmor.yml` + `human-required-paths.json`** as emit-derived DATA
+(the doc's sanctioned pattern); **`agent-visual-verify.ts`** as generic run-artifact collection
+(no-ops without a Playwright harness); **deploy layering** (`deploy.yml` resource +
+`provision-deploy.ts` dev-only maintainer command); and the **DEV_ONLY / PROFILE_OWNED exclusion
+lists** in sync-runtime, which already embody the theme.
 
 ## 3. Doctrine that cites mechanisms that don't exist → OA-6
 
@@ -221,10 +271,11 @@ anti-recursion model, with the scheduled sweep as backstop.
 
 ## 6. Disposition
 
-Findings 1.1–1.5 extend **OA-5** (deployed boundary soft spots — new ACs dev/06–09; 1.5 is the
-sharpest of the batch: the human gate's own logic is one un-human-gated agent PR from change, with
-only reviewer judgment in the way). Findings in §2–§4 extend **OA-6** (one-truth reconciliation —
-new ACs dev/05–07; dev/07 completes the CODE_HOST_RESOURCES split at the script layer per §2.2).
+Findings 1.1–1.6 extend **OA-5** (deployed boundary soft spots — new ACs dev/06–09, plus 1.6 folded
+into dev/04's egress work; 1.5 is the sharpest of the batch: the human gate's own logic is one
+un-human-gated agent PR from change, with only reviewer judgment in the way). Findings in §2–§4
+extend **OA-6** (one-truth reconciliation — new ACs dev/05–08; dev/07 completes the
+CODE_HOST_RESOURCES split at the script layer per §2.2; dev/08 wires the vocabulary residue).
 Nothing here breaks the merge boundary outright; the pattern-level lessons: **declared config must
 be read by the machine or deleted**, doctrine must cite only mechanisms that exist, and **a
 documented architectural split must be finished at every layer, or the unfinished layer becomes the

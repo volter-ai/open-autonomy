@@ -112,6 +112,11 @@ resources:
   - .github/workflows/merge.yml
   - .github/workflows/security.yml
   - .github/dependabot.yml
+  # the gate scripts those carried workflows call — shared standards, byte-identical across carrying
+  # profiles (docs/CODE_HOST_RESOURCES.md)
+  - scripts/rearm-auto-merge.ts
+  - scripts/reconcile-merged-issues.ts
+  - scripts/check-supply-chain.ts
   - standards/workflow.md
   - standards/issue-and-evidence.md
   - standards/risk-and-review.md

@@ -15,3 +15,6 @@ policy:
 resources:
   - .github/workflows/security.yml
   - .github/dependabot.yml
+  # the gate script security.yml calls — a shared standard, byte-identical across carrying profiles
+  # (docs/CODE_HOST_RESOURCES.md)
+  - scripts/check-supply-chain.ts

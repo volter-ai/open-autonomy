@@ -28,17 +28,22 @@ function workflows(out: { generated: Record<string, string> }): string[] {
 }
 
 describe('compileGithub — derived security data vs code-host resources', () => {
-  // The engine emits only what it DERIVES: the agent workflows + security DATA materializations (the zizmor
-  // baseline + the supply-chain runtime). The security.yml workflow + dependabot config that consume them
-  // are code-host RESOURCES carried by the profile (like the standards docs) — never engine output.
-  test('emits the zizmor baseline + supply-chain runtime; security.yml + dependabot are resources, not emitted', () => {
+  // The engine emits only what it DERIVES: the agent workflows + security DATA materializations (the
+  // zizmor baseline). The code-host workflows (security.yml, dependabot) AND the gate scripts they call
+  // (check-supply-chain, human-approval-gate, the merge pair) are RESOURCES carried by the profile (like
+  // the standards docs) — never engine output. The mirror ships only actor-execution machinery.
+  test('emits the zizmor baseline; code-host workflows AND their gate scripts are resources, not emitted', () => {
     const out = compileGithub(irWith([{ cron: '0 0 * * *' }]));
     // derived data the engine materializes:
     expect(out.generated['.github/zizmor.yml']).toContain('maintainer.yml'); // baseline = the emitted agent workflow
-    expect(out.generated['scripts/check-supply-chain.ts']).toBeDefined();    // supply-chain runtime is injected
-    // code-host CI workflows are RESOURCES (carried by the profile), NOT engine output:
+    // actor-execution runtime IS injected (the runner: how the credentialed box is wrapped):
+    expect(out.generated['scripts/claude-agent-run.ts']).toBeDefined();
+    expect(out.generated['scripts/agent-propose.ts']).toBeDefined(); // the emitted effect step invokes it
+    // code-host CI workflows + the gate scripts they call are RESOURCES (carried by the profile):
     expect(out.generated['.github/workflows/security.yml']).toBeUndefined();
     expect(out.generated['.github/dependabot.yml']).toBeUndefined();
+    for (const gate of ['check-supply-chain', 'human-approval-gate', 'rearm-auto-merge', 'reconcile-merged-issues'])
+      expect(out.generated[`scripts/${gate}.ts`]).toBeUndefined();
   });
 
   test('engine bakes in NO org IDENTITY (proxy/audience/bot) — but DOES default the model (a box capability)', () => {

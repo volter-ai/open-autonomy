@@ -37,6 +37,10 @@ documents:
     - scripts/open-autonomy-config.ts
     - scripts/open-autonomy-preflight.ts
     - scripts/open-autonomy-upgrade-cli.ts
+    - scripts/rearm-auto-merge.ts
+    - scripts/reconcile-merged-issues.ts
+    - scripts/human-approval-gate.ts
+    - scripts/check-supply-chain.ts
 skills:
   developer: .codex/skills/developer
   pm: .codex/skills/pm

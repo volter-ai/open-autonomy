@@ -218,3 +218,12 @@ resources:
   - scripts/open-autonomy-config.ts
   - scripts/open-autonomy-preflight.ts
   - scripts/open-autonomy-upgrade-cli.ts
+  # Code-host GATE scripts — the deterministic logic behind the carried workflows (merge.yml,
+  # human-approval.yml, security.yml). Code-host behavior, not substrate machinery (substrate = the actor
+  # runner only), so they travel with the workflows that call them, as resources — NOT via the runtime
+  # mirror (docs/CODE_HOST_RESOURCES.md). Shared standards: byte-identical across every carrying profile
+  # (check:profiles enforces).
+  - scripts/rearm-auto-merge.ts
+  - scripts/reconcile-merged-issues.ts
+  - scripts/human-approval-gate.ts
+  - scripts/check-supply-chain.ts

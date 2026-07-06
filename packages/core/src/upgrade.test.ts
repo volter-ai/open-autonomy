@@ -99,6 +99,28 @@ describe('upgrade = recompile (regenerate derived, keep owned inputs, prune orph
     expect(existsSync(join(target, 'scripts/agent-upgrade.ts'))).toBe(true);
   });
 
+  // The BL-8 migration shape: a script the prior compile GENERATED (runtime injection) that the new
+  // compile carries as a profile-resource COPY at the same install path. `desired` is generated+copies
+  // together, so the path is still produced → prune must not touch it (a delete here would rip a live
+  // gate script out of every upgraded install).
+  test('does NOT prune a manifest-listed path that moved from generated to a profile-carried copy', () => {
+    const { profile, target } = dirs();
+    write(target, '.open-autonomy/generated.json', priorManifest(['scripts/human-approval-gate.ts']));
+    write(target, 'scripts/human-approval-gate.ts', 'gate v1 (was runtime-generated)\n');
+    write(profile, 'scripts/human-approval-gate.ts', 'gate v2 (now a profile resource)\n');
+    const out: CompileOutput = {
+      generated: {},
+      copies: [{ from: 'scripts/human-approval-gate.ts', to: 'scripts/human-approval-gate.ts' }],
+    };
+    const plan = planUpgrade(out, profile, target, { prune: true });
+    expect(plan.changes.find((c) => c.action === 'delete')).toBeUndefined();
+    expect(plan.changes).toContainEqual({ path: 'scripts/human-approval-gate.ts', action: 'update' });
+    applyUpgrade(plan, out, profile, target);
+    expect(readFileSync(join(target, 'scripts/human-approval-gate.ts'), 'utf8')).toBe(
+      'gate v2 (now a profile resource)\n',
+    );
+  });
+
   test('no changes when the install already matches the compile', () => {
     const { profile, target } = dirs();
     write(target, 'scripts/agent-pm.ts', 'pm\n');

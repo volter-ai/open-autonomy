@@ -204,6 +204,12 @@ resources:
   - standards/compliance.md
   - scripts/egress-guard.sh        # C3/C15 no-account egress fallback (wired into the agent jobs on private repos)
   - scripts/soc2-register.ts       # W1-W11 the VISIBLE control-register tool (render/verify/check/watchdog)
+  # the gate scripts the carried workflows call — shared standards, byte-identical across carrying
+  # profiles (docs/CODE_HOST_RESOURCES.md)
+  - scripts/rearm-auto-merge.ts        # merge.yml
+  - scripts/reconcile-merged-issues.ts # merge.yml
+  - scripts/human-approval-gate.ts     # C4 human-approval.yml
+  - scripts/check-supply-chain.ts      # C7 security.yml + supply-chain.yml
   - package.json                   # runnable-install seed (install-owned) — makes `bun install` work so the agents run
   - bun.lock                       # matching lockfile (frozen-lockfile) — merge-dangerous, human-required
   - provision.json

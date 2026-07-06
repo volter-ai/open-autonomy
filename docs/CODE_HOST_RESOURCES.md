@@ -59,13 +59,21 @@ leaking into the agent runners; it's now a resource, decoupled from any agent ru
   - a `code:propose` agent's workflow materializes the actor's output (push the branch + open the PR) and
     then *dispatches* the code-host resources it can't fire itself (`ci`, `agent-review`, `human-approval`,
     `merge`) — it no longer arms auto-merge inline.
-- agent-runtime scripts: `claude-agent-run.ts`, `model-proxy-*`, `runner.ts`, `transcript.ts`,
-  `rearm-auto-merge.ts`, `reconcile-merged-issues.ts`, … (the merge scripts are runtime, called by `merge.yml`)
+- agent-runtime scripts: `claude-agent-run.ts` + `agent.ts` (the credentialed skill runner),
+  `model-proxy-*` (token mint/exchange/revoke), `runner.ts`, `transcript.ts`, `visual-verify.ts`,
+  `agent-propose.ts` — ONLY actor-execution machinery (the runner: which box, how it's wrapped, the
+  scoped token). Nothing else rides the mirror.
 - `.github/zizmor.yml`, `.open-autonomy/human-required-paths.json` (derived data)
 
 **Profile resources (carried, IR layer):**
 - `ci.yml`, `merge.yml`, `human-approval.yml`, `security.yml`, `dependabot.yml`, `codeql.yml`, `deploy.yml`,
   `open-autonomy-preflight.yml` — the github CI scaffolding, per github-targeting profile
+- the gate **scripts** those workflows call: `rearm-auto-merge.ts` + `reconcile-merged-issues.ts`
+  (merge.yml), `human-approval-gate.ts` (human-approval.yml), `check-supply-chain.ts` (security.yml) —
+  carried by every profile whose workflows invoke them (self-driving: all four; soc2-baseline: all four;
+  simple-gh-sdlc: merge pair + supply-chain; hello: supply-chain only). Shared standards: the copies must
+  be byte-identical across carrying profiles (`check:profiles` enforces); they are developed + unit-tested
+  in `scripts/` and excluded from the runtime mirror (`bin/sync-runtime.ts` CODE_HOST_RESOURCE set).
 
 **Done (2026-06-25):** `security.yml` + `dependabot.yml` moved from engine emission → resources across the
 three github profiles (`self-driving`, `hello`, `simple-gh-sdlc`); `zizmor.yml` + `human-required-paths.json`
@@ -78,13 +86,27 @@ by the proposer-bearing github profiles `self-driving` + `simple-gh-sdlc`). The 
 `merge.yml`; its schedule is the backstop. The engine emits only actor runners + the proposer's thin
 "materialize output + kick resources" effect.
 
+**Done (2026-07-06):** the gate **scripts** moved from runtime injection → profile resources (the deferred
+half of this split). The friction the deferral waited for arrived: the 2026-07 boundary audit found the
+substrate mirror hard-coding org *policy vocabulary* (§1.1 — `rearm-auto-merge.ts` shipping a hold-label
+list every install inherited invisibly) and the gate's own qualification logic outside any profile's
+human-gated scope (§1.5). Ruling ratified with the move: **the substrate owns no label vocabulary and no
+code-host gate logic** — substrate = triggers/crons/agent-runners/credentials only; every gate script is a
+profile-carried resource reading its parameters from the compiled `.open-autonomy/autonomy.yml`.
+`bin/sync-runtime.ts`'s header ("the mirror holds only substrate machinery") is now true.
+
+**Recorded decision — `agent-propose.ts` stays vendored (2026-07-06):** it is the one script the *emitted*
+effect step invokes (`emit.ts` writes `bun scripts/agent-propose.ts` into every `code:propose` agent's
+generated workflow) — the runner-side realization of the `code:propose` capability (push branch → PR →
+dispatch checks), identical for every profile and carrying **no policy vocabulary** (no labels, no paths,
+no thresholds). Engine-emitted workflows may depend only on engine-shipped runtime, so it rides the mirror
+with the skill runner. If it ever grows a policy parameter, that parameter moves to `policy.box` with a
+reader — the script still doesn't move.
+
 ## Open / deferred
 
-- The gate **scripts** `human-approval-gate.ts` / `check-supply-chain.ts` and the merge **scripts**
-  `rearm-auto-merge.ts` / `reconcile-merged-issues.ts` are still injected as *runtime* (agent-substrate).
-  They're code-host logic, not agent execution — arguably resources too, like their workflows. Left as runtime
-  for now (they work; the WORKFLOWS were the live issue). Revisit if it causes friction.
-- A **base/standard resource set** so github profiles don't each copy `security.yml`/`dependabot.yml`.
-  Deferred — not worth it at the current profile count.
+- A **base/standard resource set** so github profiles don't each copy `security.yml`/`dependabot.yml`
+  (and now the gate scripts). Deferred — not worth it at the current profile count; `check:profiles`'
+  byte-identity guard keeps the copies honest meanwhile.
 - The deploy **provisioning** (environment + ruleset) is still imperative `gh api`. Making it a reproducible
   setup step is the remaining deploy work (separate from this layering fix).

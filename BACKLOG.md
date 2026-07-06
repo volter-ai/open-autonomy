@@ -495,7 +495,9 @@ automates the correct protection but is dev-only and referenced by no adopter do
 
 assignee: yueranyuan
 
-**DECISION ITEM** — blocked on the maintainer's fork choice in dev/01; no build until decided.
+**DECIDED** (maintainer, 2026-07-06): variable-only — no repo-wide control verb. The kill-switch must
+not depend on the fleet's own control plane being able to run; `PUBLIC_AGENT_REPO_PAUSED` is the one
+mechanism, and `/agent pause repo` now answers with that command instead of silently mislabeling.
 Adopter-docs audit · personas C + D, found independently. `README.md:172` and
 `docs/OSS_AGENT_RUNBOOK.md:92-93` document `/agent pause repo` setting PUBLIC_AGENT_REPO_PAUSED=true;
 `.github/agent-control.mjs:20` implements only cancel|pause|resume|status|retry|decide|answer — no repo
@@ -506,15 +508,26 @@ proven live" — historically true, false today (pairs with BL-25).
 
 ### Acceptance Criteria
 
-- [ ] dev/01 v1 Recorded decision: reimplement the repo-wide pause (control verb sets the repo variable + emitted workflows honor it) OR remove it from README/RUNBOOK and document the real kill-switch (set the repo variable / disable workflows manually).
+- [x] dev/01 v1 Recorded decision: reimplement the repo-wide pause (control verb sets the repo variable + emitted workflows honor it) OR remove it from README/RUNBOOK and document the real kill-switch (set the repo variable / disable workflows manually).
   - progress (2026-07-06, commit 64092c8): the doc side is already truthful — the phantom verb is
     gone from README/RUNBOOK/LIVE_TESTING_STRATEGY and the real kill-switch (the
     `PUBLIC_AGENT_REPO_PAUSED` repository variable, which every emitted agent job's `if:` honors) is
     documented in all three. The open half is the FORK itself: whether to also add a maintainer-gated
     `/agent pause repo` verb to agent-control.mjs. Maintainer call.
-- [ ] dev/02 v1 Per the decision: docs and ROADMAP corrected, and `/agent pause repo` no longer silently does the wrong thing (errors or performs the documented action).
+  - status: passed
+  - evidence ev-dev-01: commit=7be83fa acv=1
+  - proof: "Decision recorded above (variable-only, with rationale) in this section and in the
+    control-backend.mjs header comment; docs were already variable-only from 64092c8." -> ev-dev-01
+- [x] dev/02 v1 Per the decision: docs and ROADMAP corrected, and `/agent pause repo` no longer silently does the wrong thing (errors or performs the documented action).
   - progress: docs + ROADMAP corrected (64092c8, 7459b64). Remaining: agent-control.mjs still label-pauses
     the single issue on `/agent pause repo` (prefix match) — the verb-level fix lands with dev/01's decision.
+  - status: passed
+  - evidence ev-dev-02: commit=7be83fa acv=1
+  - proof: "control-backend.mjs intercepts the repo scope: '/agent pause|resume repo' posts the
+    gh variable command (pause→true, resume→false) and labels nothing; per-issue pause/resume
+    unchanged. Root .github/agent-control.mjs regenerated via the upgrade CLI (check:dogfood green);
+    guarded by public-agent-production.test.ts 'repo-wide pause is variable-only' (15/15 pass);
+    full bun run check green." -> ev-dev-02
 
 ## BL-21 Operator-command docs describe a control plane that doesn't exist
 

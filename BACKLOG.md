@@ -599,18 +599,26 @@ and there is no `open-autonomy lint <profileDir>`.
 
 assignee: yueranyuan
 
-**DECISION ITEM** — the guide's scope (where it lives, how deep the policy.box/capability catalogs
-go) is a maintainer call before the writing starts. Adopter-docs audit · persona A. The entire authoring surface is one sentence (`profiles/README.md:11`
-and `docs/OPERATIONS.md:187-188` "fork the profile"). The policy.box vocabulary exists only as comments
-in substrate-github `emit.ts:113-186`; `SPEC.md:117`'s "four catalogs" omits `subject.actorRole`, which
-SPEC's own table (`SPEC.md:504-507`) and `profiles/simple-gh-sdlc/ir.yml:55` use. hello is the right
-starting point but is not self-contained (needs a SKILL.md + 3 resource files an author must discover
-by error message).
+**DECIDED** (maintainer, 2026-07-06): the guide lives at `profiles/README.md` — top of the `profiles/`
+directory, next to the profile folders, bundled with the npm package (`files: ["profiles/", ...]` already
+ships it wholesale), and explicitly NOT a profile resource (no `ir.yml` lists it, so it never compiles
+into any installation). Adopter-docs audit · persona A. The entire authoring surface was one sentence
+(`profiles/README.md:11` and `docs/OPERATIONS.md:187-188` "fork the profile"). The policy.box vocabulary
+existed only as comments in substrate-github `emit.ts:113-186`; `SPEC.md:117`'s "four catalogs" omitted
+`subject.actorRole`, which SPEC's own table (`SPEC.md:504-507`) and `profiles/simple-gh-sdlc/ir.yml:55`
+use. hello is the right starting point but was not self-contained (needed a SKILL.md + 3 resource files
+an author had to discover by error message).
 
 ### Acceptance Criteria
 
-- [ ] dev/01 v1 An authoring guide exists (profiles/README.md or a SPEC section): a minimal working ir.yml (agents:, bare behavior name), the SKILL.md contract, resources, the policy.box key catalog with semantics, the capability catalog, and trigger params including subject.actorRole.
-- [ ] dev/02 v1 hello is documented as the authoring template with its complete required file set.
+- [x] dev/01 v1 An authoring guide exists (profiles/README.md or a SPEC section): a minimal working ir.yml (agents:, bare behavior name), the SKILL.md contract, resources, the policy.box key catalog with semantics, the capability catalog, and trigger params including subject.actorRole.
+  - status: passed
+  - evidence ev-dev-01: commit=90f65d50ea742ad961c4035b5669c3f0b92fe44d acv=1
+  - proof: "profiles/README.md gained a 'Writing your own profile' section: the complete minimal ir.yml (agents: vs actors: trap with the exact validateIR error text, bare behavior name, policy: { box: {} }, resources: []), the SKILL.md name==folder contract, the full capability catalog (one-line semantics each) + the merge boundary rule citing docs/SPEC.md#capabilities rather than duplicating it, the three trigger forms + the complete trigger-param source catalog (subject.ref/subject.actor/subject.actorRole/subject.text/trigger.kind), and a policy.box key catalog grepped live from profiles/*/ir.yml with each key's reader (script or skill), framed as 'conventions the bundled profiles use' not a closed schema. docs/SPEC.md gained a one-line 'Authoring tutorial: profiles/README.md' cross-link at the top of the IR section. bun run check green end-to-end." -> ev-dev-01
+- [x] dev/02 v1 hello is documented as the authoring template with its complete required file set.
+  - status: passed
+  - evidence ev-dev-02: commit=90f65d50ea742ad961c4035b5669c3f0b92fe44d acv=1
+  - proof: "profiles/README.md's 'The minimal working profile' section names profiles/hello/ as the recommended starting template and lists its complete required file set (ir.yml + skills/greeter/SKILL.md), calling out that hello's three resources: entries are optional extras, not part of the required set — closing the audit's 'not self-contained' finding." -> ev-dev-02
 
 ## BL-24 No hosted step-by-step install path
 

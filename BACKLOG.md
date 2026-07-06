@@ -409,8 +409,14 @@ reserved for the maintainer's explicit "flip it" — this item's doc-side fixes 
 
 ### Acceptance Criteria
 
-- [ ] dev/01 v1 No adopter-facing termfleet link 404s: links point at npmjs.com/package/termfleet (or the public repo, once the maintainer flips it).
-- [ ] dev/02 v1 The security guidance OPERATIONS depends on exists and is reachable (an inline section or a shipped SECURITY.md).
+- [x] dev/01 v1 No adopter-facing termfleet link 404s: links point at npmjs.com/package/termfleet (or the public repo, once the maintainer flips it).
+  - status: passed
+  - evidence ev-dev-01: commit=4727ec594abbccb04eb2fc07de13968f92933905 acv=1
+  - proof: "README.md:49 + OPERATIONS.md:56 repointed to npmjs.com/package/termfleet (curl: repo 404, npm live); grep for github.com/volter-ai/termfleet over README+docs returns empty." -> ev-dev-01
+- [x] dev/02 v1 The security guidance OPERATIONS depends on exists and is reachable (an inline section or a shipped SECURITY.md).
+  - status: passed
+  - evidence ev-dev-02: commit=4727ec594abbccb04eb2fc07de13968f92933905 acv=1
+  - proof: "The dead 'see termfleet's SECURITY.md' pointer replaced with inline guidance in OPERATIONS step 2: loopback-only default, the provider launches sessions as your user, never bind/forward 7373/7402 to a non-local interface." -> ev-dev-02
 
 ## BL-17 The rollout's variable checklist is ~60% dead
 
@@ -426,7 +432,10 @@ supply-chain surprise), PUBLIC_AGENT_MAINTAINERS, PUBLIC_AGENT_TRIAGE_MODEL.
 
 ### Acceptance Criteria
 
-- [ ] dev/01 v1 The OPERATIONS variable table is regenerated against a fresh compile: every listed var has a read site in the emitted install and every var the emitted workflows read is listed (grep-verified both directions).
+- [x] dev/01 v1 The OPERATIONS variable table is regenerated against a fresh compile: every listed var has a read site in the emitted install and every var the emitted workflows read is listed (grep-verified both directions).
+  - status: passed
+  - evidence ev-dev-01: commit=c177be0a6773a742937c3d02718f3a97283333a9 acv=1
+  - proof: "Table rebuilt from grep of vars.* over .github/workflows + scripts: 10 vars each with read-site + default (PROXY_HOST, CLAUDE_CODE_VERSION incl. the @latest supply-chain warning, MAINTAINERS, TRIAGE_MODEL now present); the 11 dead vars gone; phantom PUBLIC_AGENT_TRIGGER_TOKEN secret dropped; rollout-policy bullets point at the policy box." -> ev-dev-01
 - [ ] dev/02 v1 A guard keeps it honest (every documented PUBLIC_AGENT_* var must have a read site, mirroring the check:policy-consumers pattern) — or a recorded decision to waive with reason.
 
 ## BL-18 simple-gh-sdlc on gh-actions wedges every PR (undocumented CI dispatch contract)
@@ -458,8 +467,14 @@ automates the correct protection but is dev-only and referenced by no adopter do
 
 ### Acceptance Criteria
 
-- [ ] dev/01 v1 Every adopter-facing branch-protection instruction lists all three required checks: ci, agent-review, human-approval.
-- [ ] dev/02 v1 provision-target-repo.ts is documented as the provisioning step (or its settings inlined into the rollout doc).
+- [x] dev/01 v1 Every adopter-facing branch-protection instruction lists all three required checks: ci, agent-review, human-approval.
+  - status: passed
+  - evidence ev-dev-01: commit=3621a30c2c05df5182b5b558a63f0ba53a2b8be2 acv=1
+  - proof: "OPERATIONS rollout bullet now requires ci + agent-review + human-approval and states the failure mode of omitting the gate (human_required_paths PRs auto-merge with no human). The local-runner simple-gh-sdlc section's two-check protection is correct as-is — that profile has no human-approval workflow." -> ev-dev-01
+- [x] dev/02 v1 provision-target-repo.ts is documented as the provisioning step (or its settings inlined into the rollout doc).
+  - status: passed
+  - evidence ev-dev-02: commit=3621a30c2c05df5182b5b558a63f0ba53a2b8be2 acv=1
+  - proof: "Same bullet names scripts/provision-target-repo.ts as the automated provisioning of exactly this protection." -> ev-dev-02
 
 ## BL-20 The documented repo kill-switch doesn't exist (security-relevant)
 
@@ -477,7 +492,14 @@ proven live" — historically true, false today (pairs with BL-25).
 ### Acceptance Criteria
 
 - [ ] dev/01 v1 Recorded decision: reimplement the repo-wide pause (control verb sets the repo variable + emitted workflows honor it) OR remove it from README/RUNBOOK and document the real kill-switch (set the repo variable / disable workflows manually).
+  - progress (2026-07-06, commit 64092c8): the doc side is already truthful — the phantom verb is
+    gone from README/RUNBOOK/LIVE_TESTING_STRATEGY and the real kill-switch (the
+    `PUBLIC_AGENT_REPO_PAUSED` repository variable, which every emitted agent job's `if:` honors) is
+    documented in all three. The open half is the FORK itself: whether to also add a maintainer-gated
+    `/agent pause repo` verb to agent-control.mjs. Maintainer call.
 - [ ] dev/02 v1 Per the decision: docs and ROADMAP corrected, and `/agent pause repo` no longer silently does the wrong thing (errors or performs the documented action).
+  - progress: docs + ROADMAP corrected (64092c8, 7459b64). Remaining: agent-control.mjs still label-pauses
+    the single issue on `/agent pause repo` (prefix match) — the verb-level fix lands with dev/01's decision.
 
 ## BL-21 Operator-command docs describe a control plane that doesn't exist
 
@@ -497,8 +519,14 @@ workflow name; `RUNBOOK:113` dead-links PUBLIC_AGENT_PRODUCTION_ROLLOUT.md; `RUN
 
 ### Acceptance Criteria
 
-- [ ] dev/01 v1 Every documented operator verb matches the implementation (doc corrected or verb extended — recorded per verb), including cancel's proxy-revoke claim and retry's semantics.
-- [ ] dev/02 v1 The phantom references are gone: Model Proxy Admin workflow, blocked.md, the dead ROLLOUT link, /agent develop, "Public Agent PM", and the conformance runner-name mismatch.
+- [x] dev/01 v1 Every documented operator verb matches the implementation (doc corrected or verb extended — recorded per verb), including cancel's proxy-revoke claim and retry's semantics.
+  - status: passed
+  - evidence ev-dev-01: commit=64092c8be4522088c9e6763a1859d3618979dfc0 acv=1
+  - proof: "Per-verb reconciliation against agent-control.mjs across README/OPERATIONS/RUNBOOK: status = 5-recent-runs comment; retry = relaunch only after a failed check on the issue's agent PR (a FRESH run, fresh spend — inverted claim fixed); cancel = gh run cancel only, proxy slots reap at token TTL (~2h); pause/resume = the agent-paused label. Docs corrected in every case (no verbs extended)." -> ev-dev-01
+- [x] dev/02 v1 The phantom references are gone: Model Proxy Admin workflow, blocked.md, the dead ROLLOUT link, /agent develop, "Public Agent PM", and the conformance runner-name mismatch.
+  - status: passed
+  - evidence ev-dev-02: commit=64092c8be4522088c9e6763a1859d3618979dfc0 acv=1
+  - proof: "grep over README+docs (excl. PROOF_LEDGER history + ROADMAP phase records) returns empty for: Model Proxy Admin, blocked.md, PUBLIC_AGENT_PRODUCTION_ROLLOUT, '/agent develop', 'Public Agent PM'; admin drills now say operator-run GET /admin/limits/status; RUNBOOK terminal artifacts = result.json|pr.md with the blocked-path explained; README conformance verb corrected to exec|termfleet|gh-actions." -> ev-dev-02
 
 ## BL-22 Profile authoring has no validation floor
 
@@ -574,8 +602,14 @@ removed PUBLIC_AGENT_REPO_PAUSED / agent-repo-paused fallback claimed "Implement
 
 ### Acceptance Criteria
 
-- [ ] dev/01 v1 The four retired narratives are corrected or explicitly marked historical.
-- [ ] dev/02 v1 A grep sweep confirms ROADMAP no longer contradicts SPEC / LIVE_TESTING_STRATEGY / the shipped control plane on these four points.
+- [x] dev/01 v1 The four retired narratives are corrected or explicitly marked historical.
+  - status: passed
+  - evidence ev-dev-01: commit=7459b647a9a3a9758db08ecebf2eaad02b48adfb acv=1
+  - proof: "Header supersession note names the three retired mechanisms (merge-gate job, auto-retry loop, repo-pause label fallback) and rules SPEC wins on conflict; Target Loop + CI Model rewritten to the shipped model (PM decides from history, never loops; branch protection + native auto-merge, per-SHA); the 'Implemented' repo-pause bullet marks the label fallback RETIRED; /agent stop|summarize noted as folded into cancel|status; two stale Open Design Choices marked RESOLVED." -> ev-dev-01
+- [x] dev/02 v1 A grep sweep confirms ROADMAP no longer contradicts SPEC / LIVE_TESTING_STRATEGY / the shipped control plane on these four points.
+  - status: passed
+  - evidence ev-dev-02: commit=7459b647a9a3a9758db08ecebf2eaad02b48adfb acv=1
+  - proof: "Grep: no current-tense develop_retry/max_ci_fix_attempts rules (historical note only); remaining 'merge gate' hits are phase records under the supersession header; agent-repo-paused appears only as RETIRED; /agent stop|summarize only in the folded-verbs note. ROADMAP now agrees with LIVE_TESTING_STRATEGY:101-105 and SPEC's no-merge-gate-job." -> ev-dev-02
 
 ## BL-26 Dead references and retired vocabulary across the doc set
 
@@ -597,7 +631,17 @@ fixes need the maintainer's hand and must be flagged, not auto-applied.
 ### Acceptance Criteria
 
 - [ ] dev/01 v1 All listed references are fixed (the CONSTITUTION edits done by the maintainer per its amendment rule; the wrangler.toml allowlist entry corrected or documented as intentional legacy).
-- [ ] dev/02 v1 A docs link-check pass is clean (no dead file references in docs/ or README).
+  - progress (2026-07-06, commit a3ece03): everything except CONSTITUTION is done — AUTONOMY-IR refs →
+    docs/SPEC.md (VISION ×3, PROJECT; SPEC:6's mention is the consolidation-history note, intentional);
+    SPEC conformance path scripts/→bin/; CODE_HOST_RESOURCES agent-visual-verify; LIVE_TESTING_STRATEGY
+    per-agent workflows + decision-memory coverage RETIRED-pending; wrangler.toml public-agent.yml@
+    entries documented KNOWN-STALE (removal is deploy-gated); template vocabulary → compile(profile).
+    REMAINING for the maintainer's hand: CONSTITUTION.md:26 (`AUTONOMY-IR.md` → `docs/SPEC.md`) and
+    the rule-6 "install the template" vocabulary — human-amended only.
+- [x] dev/02 v1 A docs link-check pass is clean (no dead file references in docs/ or README).
+  - status: passed
+  - evidence ev-dev-02: commit=a3ece031ab183c33a51292dcd18049aabd398514 acv=1
+  - proof: "Script check: every relative markdown file-link in README.md + docs/*.md resolved against the tree — link-check clean (0 dead)." -> ev-dev-02
 
 ## BL-27 Local-substrate papercuts batch
 
@@ -622,7 +666,10 @@ and REQUIRED_FILES is self-driving-shaped so it can't validate simple-gh-sdlc.
 ### Acceptance Criteria
 
 - [ ] dev/01 v1 Packaging/CLI fixes: engines field, preflight in the documented CLI surface + quickstart, a friendly missing-termfleet error, the "once published" hedge removed, ztrack examples corrected (and the pin refreshed or the divergence recorded).
-- [ ] dev/02 v1 Docs fixes: gh in prereqs, scheduler lifecycle/stop guidance, maintainer bleed-through removed or marked maintainer-only.
+- [x] dev/02 v1 Docs fixes: gh in prereqs, scheduler lifecycle/stop guidance, maintainer bleed-through removed or marked maintainer-only.
+  - status: passed
+  - evidence ev-dev-02: commit=bab404378d55d31e0c04df70a9a24ee6b1bad2b1 acv=1
+  - proof: "gh row added to the local prereqs table (GitHub code host only); 'Stopping the loop' block after step 4 (Ctrl-C scheduler, kill console/provider, in-flight tmux sessions, spend-stop note); Private Trial Evidence marked maintainer-history (adopters can't access those run IDs). The var-list bleed-through was fixed by BL-17 (c177be0); the README funding badge stays — it is the canonical repo's own storefront, repo-owned." -> ev-dev-02
 - [ ] dev/03 v1 Emitted-install hygiene: hello stops shipping PR/auto-merge scripts, deploy.yml stops shipping to adopter installs, and preflight mkdirs its output dir + validates against the compiled profile's own file set (with a recorded decision on MODEL_PROXY_URL warn-vs-fail).
 
 ## BL-28 The human seam on the local substrate is spec-only for adopters

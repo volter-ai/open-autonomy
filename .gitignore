@@ -1,6 +1,8 @@
 node_modules/
 .agent-run/
-/.volter/
+# .volter/ is local runtime state (termfleet workdir + ztrack runtime), except the
+# committed ztrack tracker config + validation preset (see the ztrack block below)
+/.volter/*
 *.log
 .dev.vars
 services/agent-model-proxy/.dev.vars
@@ -28,3 +30,10 @@ dist/
 .volter/.ztrack-loop-iter-*
 .volter/.ztrack-loop-exempt-*
 .volter/.ztrack-loop-capped.json
+
+# ztrack tracker: config + validation preset are committed; runtime state stays local
+!/.volter/tracker-config.json
+!/.volter/tracker/
+/.volter/tracker/*
+!/.volter/tracker/validation/
+/.volter/tracker/validation/.preset.base.mts

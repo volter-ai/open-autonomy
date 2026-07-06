@@ -129,7 +129,7 @@ engage is **github-native** (assignment + @mention → GitHub notifies them out-
   double up; just confirm it's engaged.
 
 **Escalate** — the SLA re-ping is what actually stops the org going dark:
-- read `policy.box.human.sla_minutes` from `.open-autonomy/autonomy.yml` (default 1440 = 24h).
+- read `policy.human.sla_minutes` from `.open-autonomy/autonomy.yml` (default 1440 = 24h).
 - if the item has been waiting on the human longer than the SLA with **no human reply since your last
   engage** (compare comment timestamps), post a **fresh** escalation comment re-pinging them
   (`@<login> — still blocked after <hours>h; this needs your <decision/answer/approval> to proceed`).

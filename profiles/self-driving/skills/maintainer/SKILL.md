@@ -20,20 +20,23 @@ is the merge boundary you uphold.)
 
 The org engages you when a task enters human-required scope — either of:
 
-- a **PR** that touches a `human_required_path` (workflows, `autonomy.yml`, the constitution, skills,
-  `wrangler.toml`) or carries the `human-required` label. The `human-approval` gate parks it: beyond
+- a **PR** that touches a `human_required_path` (workflows, `autonomy.yml`, the constitution, the
+  architecture invariants, skills, `bun.lock` — the declared list in
+  `policy.risk.human_required_paths`; `services/**` is deliberately NOT gated, see below) or carries
+  the `human-required` label. The `human-approval` gate parks it: beyond
   `ci` + `agent-review` it needs **your Approve on the current commit** before it can merge.
 - an **issue** the PM routed to `human-required` (out-of-scope, risky, or repeatedly failing) or to
   `needs-info` (it needs a clarification only a human can give).
 
 You'll know because the item is **assigned to you** and you have a **review request / @mention** — and,
-if it sits too long, an **escalation** comment re-pings you (the SLA in `policy.box.human.sla_minutes`).
+if it sits too long, an **escalation** comment re-pings you (the SLA in `policy.human.sla_minutes`,
+read from `.open-autonomy/autonomy.yml`).
 
 Your live worklist is just GitHub: `is:open assignee:@me label:human-required` (and `label:needs-info`).
 
 ## The decision you're asked for (the `decision` type)
 
-Each engagement carries one of these ask types (`policy.box.human.decision_types`):
+Each engagement carries one of these ask types (`policy.human.decision_types`):
 
 | type | what you do | how you resolve (the `result`) |
 |---|---|---|

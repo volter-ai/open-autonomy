@@ -24,7 +24,7 @@ criteria:
     fail: An item restates work already planned or proposed.
   - id: governance-respect
     title: Governance respect
-    pass: The proposal only adds roadmap items; it does not touch the constitution, merit criteria, proof gates, workflows, or skills.
+    pass: The proposal only edits roadmap items — adding new intents, retiring stale ones, or amending item text (the strategist's audit/retire duty and the planner's operational edits are in scope); it does not touch the constitution, merit criteria, proof gates, workflows, or skills.
     fail: The proposal attempts to edit governance files. Always human-required (and hard-blocked).
 verdicts:
   pass:

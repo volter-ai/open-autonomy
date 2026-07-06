@@ -4,9 +4,10 @@
 // single source of truth for OA itself — drift like a security fix landing in the live workflow but
 // not the profile (which would then ship vulnerable installations) fails the build.
 //
-// Repo-OWNED + seed-only files (package.json, README, roadmap, autonomy.yml, CONSTITUTION, the dev
-// docs) are owned per-repo and legitimately differ — this is the SAME install-owned set the upgrade
-// uses (seed-if-missing, never overwrite), declared once in core, and excluded here.
+// Repo-OWNED + seed-only files (package.json, README, roadmap, CONSTITUTION, the dev docs) are owned
+// per-repo and legitimately differ — this is the SAME install-owned set the upgrade uses
+// (seed-if-missing, never overwrite), declared once in core, and excluded here. autonomy.yml is NOT
+// among them: it is compiled output and IS compared.
 import { readFileSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { parseIr, INSTALL_OWNED_PATHS } from '@open-autonomy/core';

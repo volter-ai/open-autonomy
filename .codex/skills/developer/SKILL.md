@@ -29,11 +29,14 @@ your own work). The issue number is in the `ISSUE_REF` environment variable.
    to make (see Escalate), stop and escalate rather than proceed.
 3. Make focused code or documentation changes in the working tree. **Control files are compiled, not
    hand-edited in their derived form.** `profiles/self-driving/` is the SOURCE; the repo's skills
-   (`.codex/skills/`, `.claude/skills/`), workflows (`.github/workflows/`), `AGENTS.md`, and `docs/*` are
-   GENERATED from it. If your change touches any of those, edit the file **under `profiles/self-driving/`**
-   and then regenerate the derived copies with `bun scripts/open-autonomy-upgrade-cli.ts` — never edit a
-   generated copy directly (a hand-edited `.codex`/`.claude`/workflow copy that doesn't match the profile
-   fails `check:dogfood` and the PR can never merge). Commit both the profile edit and the regenerated files.
+   (`.codex/skills/`, `.claude/skills/`) and workflows (`.github/workflows/`) are GENERATED from it. If your
+   change touches any of those, edit the file **under `profiles/self-driving/`** and then regenerate the
+   derived copies with `bun scripts/open-autonomy-upgrade-cli.ts` — never edit a generated copy directly
+   (a hand-edited `.codex`/`.claude`/workflow copy that doesn't match the profile fails `check:dogfood` and
+   the PR can never merge). Commit both the profile edit and the regenerated files. `AGENTS.md` and the
+   top-level `docs/*` are **install-owned, NOT regenerated** — they were seeded once from the profile; edit
+   them directly at root (a profile-side edit to a seed silently never reaches this repo — also update the
+   profile seed only when the change should ship to NEW installs).
 4. **Run `bun run check` and make it pass before you finish.** This is the same gate CI runs (`check:dogfood`,
    `check:runtime-sync`, tests, tsc, …); a green local `check` is what makes your PR mergeable. If you edited
    anything under `profiles/self-driving/`, recompiling (step 3) is what makes `check:dogfood` pass. Also run

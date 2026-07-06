@@ -74,7 +74,8 @@ The PR number is in the `TARGET_REF` environment variable.
      a hold is in place (native auto-merge ignores labels, so failing the status is what stops the merge until
      a maintainer clears it).
    - **Human-required / sensitive scope is NOT your stop — there is a separate gate for it.** A PR touching
-     sensitive scope (workflows, `autonomy.yml`, the constitution, skills, `wrangler.toml`) or carrying the
+     sensitive scope (the declared `policy.risk.human_required_paths` — workflows, `autonomy.yml`, the
+     constitution, the invariants, skills, `bun.lock`; `services/**` is deliberately ungated) or carrying the
      `human-required` / `agent-develop-only` label is gated by the deterministic **`human-approval`** required
      check (a maintainer Approve on the current head) — that is what supplies the human sign-off. So do NOT
      auto-fail such a PR just because it is sensitive: **review its code on the merits** and pass if it is sound.

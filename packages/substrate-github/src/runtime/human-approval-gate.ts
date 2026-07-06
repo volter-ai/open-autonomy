@@ -61,7 +61,7 @@ if (import.meta.main) {
   };
 
   // Who to ENGAGE when a PR parks in human-required scope: the logins in the repo's maintainers variable
-  // (policy.box.human.maintainers_var → PUBLIC_AGENT_MAINTAINERS), passed in as $MAINTAINERS. Falls back to the
+  // (the profile's `human.maintainers_var` policy → PUBLIC_AGENT_MAINTAINERS), passed in as $MAINTAINERS. Falls back to the
   // repo owner. github-native engage (assign + request-review) routes the ask to them so GitHub notifies them
   // out-of-band — this is the gh runner's OWN human realization (each substrate owns its engage).
   function maintainerLogins(): string[] {
@@ -74,11 +74,12 @@ if (import.meta.main) {
     return owner ? [owner] : []; // best-effort fallback; if the owner is an org login the gh call simply no-ops
   }
 
-  // human-required scope is DATA, not hardcode: the install carries the resolved patterns (the substrate's
-  // merge-sensitive defaults ∪ the profile's policy.box.risk.human_required_paths) in
-  // .open-autonomy/human-required-paths.json, materialized at compile. The gate enforces whatever policy
-  // declares — no project structure baked into the engine. A PR in scope needs a maintainer Approve;
-  // everything else auto-passes. `.open-autonomy/history/**` (proposer transcripts) never counts as scope.
+  // human-required scope is DATA, not hardcode: the install carries the profile's declared
+  // policy.box.risk.human_required_paths, projected VERBATIM at compile into
+  // .open-autonomy/human-required-paths.json (no substrate defaults are added — the substrate owns no
+  // scope vocabulary). The gate enforces whatever policy declares — no project structure baked into the
+  // engine. A PR in scope needs a maintainer Approve; everything else auto-passes.
+  // `.open-autonomy/history/**` (proposer transcripts) never counts as scope.
   const HUMAN_REQUIRED_GLOBS = (() => {
     try {
       const patterns = JSON.parse(readFileSync('.open-autonomy/human-required-paths.json', 'utf8')) as string[];

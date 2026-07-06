@@ -53,7 +53,7 @@ only **how you feed it work and how a change lands** differ by code host. That s
 ## Local-runner quickstart
 
 Run the **agents on your own machine** — as local terminal sessions via
-[termfleet](https://github.com/volter-ai/termfleet), using *your own* logged-in coding CLI (Claude Code
+[termfleet](https://www.npmjs.com/package/termfleet), using *your own* logged-in coding CLI (Claude Code
 or Codex) for model access (no bounded-token proxy, no sponsor budget — **you pay your model provider
 directly**). This is the **local runner**. It works against **either code host**:
 
@@ -118,7 +118,9 @@ If that prints a session, termfleet + your agent CLI are wired correctly. Open
 <http://127.0.0.1:7373> for the optional visual console.
 
 > termfleet is loopback-only by default and makes no outbound requests unless you configure a
-> registry — fine for a single closed-source machine. See termfleet's `SECURITY.md` before exposing it.
+> registry — fine for a single closed-source machine. Keep the console/provider ports (7373/7402 above)
+> bound to loopback: anyone who can reach the provider can launch terminal sessions **as your user**, so
+> never bind or port-forward them to a non-local interface.
 
 ### 3. Compile a profile into your repo
 

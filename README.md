@@ -46,7 +46,7 @@ Two **independent** choices (a profile compiles to any valid combination — ins
 command, no clone required):
 
 - **Runner** — *where agents execute*: **GitHub Actions** (hosted jobs) or **local** (your machine,
-  via [termfleet](https://github.com/volter-ai/termfleet), using your own logged-in Claude Code / Codex).
+  via [termfleet](https://www.npmjs.com/package/termfleet), using your own logged-in Claude Code / Codex).
 - **Code host** — *where code lives and how it merges*: **GitHub** (the agent opens a PR; CI + an
   `agent-review` status gate **native auto-merge** — the reviewer is independently *enforced* on the hosted
   runner; on a local runner the agents share your token, so your CI is the real gate) or **local-git** (a

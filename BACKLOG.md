@@ -40,11 +40,24 @@ absent, so mid-upgrade installs don't fail open). Branch filter becomes `/^agent
 
 ### Acceptance Criteria
 
-- [ ] dev/01 v1 `rearm-auto-merge.ts` reads the label set from `policy.merge.maintainer_block_labels` (fallback documented + tested); a unit test with a fixture autonomy.yml proves a PR labeled `agent-blocked` is skipped.
-- [ ] dev/02 v1 The branch filter is `/^agent\//`; `strategist` no longer appears in any `packages/substrate-*` file (invariant clean).
-- [ ] dev/03 v1 `ir.yml` declares the ratified label set (recorded human decision — proposed: `do-not-merge, human-required, agent-blocked, agent-paused, agent-maintainer-hold`), and `check:dogfood` is green after regeneration.
-- [ ] dev/04 v1 pm/reviewer skills consult the policy key; their hand-kept label lists are gone (grep-clean).
-- [ ] dev/05 v1 Live proof: a green testbed PR labeled `agent-blocked` is NOT re-armed by the sweep (run URL recorded).
+- [x] dev/01 v1 rearm-auto-merge.ts reads the label set from policy.merge.maintainer_block_labels (fallback documented + tested); a unit test with a fixture autonomy.yml proves a PR labeled agent-blocked is skipped.
+  - status: passed
+  - evidence ev-dev-01: commit=0b434b6339682f95f240a778a86a48e999fd3a94 acv=1
+  - proof: "loadHoldLabels() in scripts/rearm-auto-merge.ts reads policy.merge.maintainer_block_labels from .open-autonomy/autonomy.yml with a documented fail-closed DEFAULT_HOLD fallback; scripts/rearm-auto-merge.test.ts includes a fixture-autonomy.yml test proving a PR labeled agent-blocked gets disposition held (9 tests pass)." -> ev-dev-01
+- [x] dev/02 v1 The branch filter is /^agent//; strategist no longer appears in any packages/substrate-* file (invariant clean).
+  - status: passed
+  - evidence ev-dev-02: commit=0b434b6339682f95f240a778a86a48e999fd3a94 acv=1
+  - proof: "AGENT_BRANCH is /^agent// in scripts/rearm-auto-merge.ts and the synced mirror; grep -rn strategist over packages/substrate-github/src and packages/substrate-local/src returns nothing (reconcile comment reworded too); a unit test asserts strategist/roadmap-123 is not matched." -> ev-dev-02
+- [x] dev/03 v1 ir.yml declares the ratified label set (recorded human decision — proposed: do-not-merge, human-required, agent-blocked, agent-paused, agent-maintainer-hold), and check:dogfood is green after regeneration.
+  - status: passed
+  - evidence ev-dev-03: commit=0b434b6339682f95f240a778a86a48e999fd3a94 acv=1
+  - proof: "profiles/self-driving/ir.yml declares maintainer_block_labels: [do-not-merge, human-required, agent-blocked, agent-paused, agent-maintainer-hold] with the ownership comment; root regenerated via open-autonomy-upgrade-cli; check:dogfood green (57 managed files)." -> ev-dev-03
+- [x] dev/04 v1 pm/reviewer skills consult the policy key; their hand-kept label lists are gone (grep-clean).
+  - status: passed
+  - evidence ev-dev-04: commit=0b434b6339682f95f240a778a86a48e999fd3a94 acv=1
+  - proof: "pm SKILL.md and reviewer SKILL.md now instruct reading policy.merge.maintainer_block_labels from autonomy.yml (reviewer carves out human-required for the separate gate); grep for the old hand-kept lists (agent-maintainer-hold enumerations) in skills returns only the policy declaration." -> ev-dev-04
+- [ ] dev/05 v1 Live proof: a green testbed PR labeled agent-blocked is NOT re-armed by the sweep (run URL recorded).
+  - status: pending
 
 ## BL-3 policy.box passes the parameter-with-a-reader test
 

@@ -269,6 +269,7 @@ items:
         run IDs in the ledger.
   - id: hosted-adopter-path
     priority: high
+    planned: true
     # Ratified by the maintainer 2026-07-06 (proposed removed): make hosted adoption genuinely
     # self-serve, not dogfood-only. The planner decomposes from BACKLOG.md BL-13/BL-18/BL-24.
     title: Hosted GitHub Adoption Is Real For Non-Maintainers

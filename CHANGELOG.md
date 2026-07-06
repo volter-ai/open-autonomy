@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- **PM routes existing agent PRs to review instead of starting duplicate work.** The PM's sweep doctrine now checks for open PRs before dispatching a developer to an issue, and explicitly routes existing PRs to the reviewer via `bun scripts/runner.ts launch reviewer` when agent-review is missing or pending. This prevents duplicate development and accelerates the review cycle. (Issue #114, remaining scope — proof gate `pm-open-pr-review`.)
+
 ## 0.3.1
 
 Hardening from the **first live autonomous installs** (simple-gh-sdlc on a local runner driving real
@@ -328,6 +334,7 @@ via the runner seam.
 ### Fixed
 
 - Fixed a dangling sentence in `docs/OSS_AGENT_RUNBOOK.md` — the incomplete "is in" fragment now correctly references `docs/ARCHITECTURE.md`.
+- Fixed inconsistent catalog count in `docs/SPEC.md` — the "shape of the whole thing" section said "three catalogs" (missing task lifecycle) while the intro correctly states "four catalogs."
 
 ### Changed
 

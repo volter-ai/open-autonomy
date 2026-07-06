@@ -72,10 +72,22 @@ check wiring.
 
 ### Acceptance Criteria
 
-- [ ] dev/01 v1 Deleted from ir.yml (+ regenerated): `autonomy.require_visible_pm_status`, `planner.enabled`, `autonomy.max_ci_retries`, `autonomy.max_review_retries`, `autonomy.stale_needs_info_minutes`, `human.decision_types` (the maintainer skill keeps the decision-types sentence as prose).
-- [ ] dev/02 v1 `risk.human_required_topics`: pm + reviewer skills consult the key from autonomy.yml; the three drifted prose lists are deleted.
-- [ ] dev/03 v1 `check:policy-consumers` runs in `bun run check`: every declared `policy.box` key must have a read site (emit, runtime script, or a skill read-instruction); the 9-dead-keys state would have failed it (regression-tested with a fixture).
-- [ ] dev/04 v1 `merge.require_ci/require_low_risk_review/require_current_head_sha`: recorded decision — delete as descriptions (recommended), or provision derives branch protection from them (if the latter, BL-7's provision.json decision merges into this).
+- [x] dev/01 v1 Deleted from ir.yml (+ regenerated): autonomy.require_visible_pm_status, planner.enabled, autonomy.max_ci_retries, autonomy.max_review_retries, autonomy.stale_needs_info_minutes, human.decision_types (the maintainer skill keeps the decision-types sentence as prose).
+  - status: passed
+  - evidence ev-dev-01: commit=80493552a82019f3307fb1804ceefa6b7d52c1d0 acv=1
+  - proof: "ir.yml deletions: require_visible_pm_status, planner.enabled, max_ci_retries, max_review_retries, stale_needs_info_minutes, human.decision_types (maintainer skill keeps the four ask types as prose, key reference dropped); root regenerated; check:dogfood green." -> ev-dev-01
+- [x] dev/02 v1 risk.human_required_topics: pm + reviewer skills consult the key from autonomy.yml; the three drifted prose lists are deleted.
+  - status: passed
+  - evidence ev-dev-02: commit=80493552a82019f3307fb1804ceefa6b7d52c1d0 acv=1
+  - proof: "pm SKILL.md (out-of-scope/risky triage) and reviewer SKILL.md (human-required constraint) instruct reading policy.risk.human_required_topics from autonomy.yml; the drifted enumerations (auth, secrets, workflow edits, billing... / workflow/CI/secret/auth/billing...) are deleted. Sibling declarers wired too." -> ev-dev-02
+- [x] dev/03 v1 check:policy-consumers runs in bun run check: every declared policy.box key must have a read site (emit, runtime script, or a skill read-instruction); the 9-dead-keys state would have failed it (regression-tested with a fixture).
+  - status: passed
+  - evidence ev-dev-03: commit=80493552a82019f3307fb1804ceefa6b7d52c1d0 acv=1
+  - proof: "bin/check-policy-consumers.ts runs in bun run check (after check:profiles): every box key needs a whole-word read site in engine/runtime code or the declaring profile's own non-test files. Unit test reproduces the historical dead-keys state and asserts it fails; live mutation test (planted zz_unread_key in hello) exited 1." -> ev-dev-03
+- [x] dev/04 v1 merge.require_ci/require_low_risk_review/require_current_head_sha: recorded decision — delete as descriptions (recommended), or provision derives branch protection from them (if the latter, BL-7's provision.json decision merges into this).
+  - status: passed
+  - evidence ev-dev-04: commit=80493552a82019f3307fb1804ceefa6b7d52c1d0 acv=1
+  - proof: "Recorded decision: DELETED as descriptions. require_ci/require_low_risk_review/require_current_head_sha described branch-protection + gate behavior (the seam contract), not tunables — no provision derivation (provision.json stays the manifest, BL-7 dev/04). ir.yml comment + SOC2-BASELINE-PROFILE.md M5 record the ruling." -> ev-dev-04
 
 ## BL-4 Human-approval gate: maintainership by permission only
 

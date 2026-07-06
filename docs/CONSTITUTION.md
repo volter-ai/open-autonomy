@@ -23,8 +23,8 @@ it changes only by amending this document.
 
 "Best" is pursued by a human-supervised search, not by building one organization and hand-tuning it. To
 find the best self-driving org you must be able to express, run, measure, and compare many — so the system
-is general by necessity, not ambition: it is the org-as-code standard (`AUTONOMY-IR.md`), not a single
-installation. The self-driving-repo-on-github is the proof, not the definition (see `docs/VISION.md`).
+is general by necessity, not ambition: it is the org-as-code standard (`docs/SPEC.md`, `autonomy.ir.v1`),
+not a single installation. The self-driving-repo-on-github is the proof, not the definition (see `docs/VISION.md`).
 
 The search runs at two nested levels, both anchored to the Merit Criteria:
 
@@ -66,7 +66,7 @@ Constraints on the search:
    deployment, dependency trust, and broad rewrites are never silently merged.
 5. Retry loops are bounded by stable failure signatures and attempt budgets.
 6. The system must be portable OSS. A new repository should be able to install
-   the template, configure secrets/variables, seed issues, and run itself.
+   a compiled profile, configure secrets/variables, seed issues, and run itself.
 7. Testbed proof is part of done. Roadmap items are complete only when their
    stated testbed evidence exists or a deterministic fixture proves the same
    gate without model spend.

@@ -314,7 +314,10 @@ Model proxy deployment:
 
 GitHub repository:
 
-- Branch protection requires ci + agent-review; native auto-merge lands reviewed PRs (no agent merges).
+- Branch protection requires **all three** status checks — `ci` + `agent-review` + `human-approval` —
+  and native auto-merge lands reviewed PRs (no agent merges). Omitting `human-approval` makes the
+  human gate decorative: PRs in `human_required_paths` scope would auto-merge with no human.
+  `scripts/provision-target-repo.ts` provisions exactly this protection.
 - Required CI check name matches `ci`.
 - Actions artifact retention is long enough for operator audits.
 - Workflow permissions stay capability-separated; do not use `write-all`.

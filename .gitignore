@@ -15,3 +15,16 @@ agent-sessions/
 
 # built CLI bundle (produced by prepublishOnly)
 dist/
+
+# ztrack (added by ztrack init)
+.volter/tracker/tracker.sqlite
+.volter/tracker/tracker.sqlite-*
+.volter/tracker/tracker.sqlite.lock
+.volter/tracker/local-store.json
+.volter/agent-dispatch/
+.volter/github/
+.volter/sync/
+.volter/.ztrack-loop.json
+.volter/.ztrack-loop-iter-*
+.volter/.ztrack-loop-exempt-*
+.volter/.ztrack-loop-capped.json

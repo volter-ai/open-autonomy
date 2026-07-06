@@ -49,13 +49,14 @@
     "bench": "bun bin/bench.ts",
     "test": "bun run check:public-agent",
     "check:proof": "mkdir -p .agent-run/proof && bun scripts/open-autonomy-proof-audit.ts --roadmap .open-autonomy/roadmap.yml --ledger docs/PROOF_LEDGER.md --out .agent-run/proof/audit.json",
-  "check:soc2-register": "bun profiles/soc2-baseline/scripts/soc2-register.ts verify && bun profiles/soc2-baseline/scripts/soc2-register.ts check",
+    "check:soc2-register": "bun profiles/soc2-baseline/scripts/soc2-register.ts verify && bun profiles/soc2-baseline/scripts/soc2-register.ts check",
     "check:supply-chain": "bun scripts/check-supply-chain.ts"
   },
   "devDependencies": {
     "@types/bun": "^1.3.14",
     "@types/node": "^24.13.2",
     "typescript": "^5.9.3",
-    "yaml": "^2.9.0"
+    "yaml": "^2.9.0",
+    "ztrack": "^0.49.0"
   }
 }

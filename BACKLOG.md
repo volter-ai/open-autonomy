@@ -276,9 +276,18 @@ Files: `profiles/soc2-baseline/scripts/egress-guard.sh` → substrate runtime;
 
 ### Acceptance Criteria
 
-- [ ] dev/01 v1 `egress-guard.sh` ships with the substrate runtime: compiling ANY profile with `private_egress_guard: true` emits both the job step and `scripts/egress-guard.sh`; a compile fixture proves it.
-- [ ] dev/02 v1 soc2-baseline drops its profile copy; its compiled output is functionally unchanged; alternatively (fallback decision) compile FAILS loudly when the flag is set and the script is absent — one of the two, recorded.
-- [ ] dev/03 v1 A fixture proves the pre-fix failure mode is closed: flag-setting profile ≠ soc2-baseline compiles to an install whose agent job does not reference a nonexistent file.
+- [x] dev/01 v1 egress-guard.sh ships with the substrate runtime: compiling ANY profile with private_egress_guard: true emits both the job step and scripts/egress-guard.sh; a compile fixture proves it.
+  - status: passed
+  - evidence ev-dev-01: commit=7cd19400ff880c4f1de224b50904adf48ad56bbf acv=1
+  - proof: "egress-guard.sh ships with the substrate (packages/substrate-github/src/, the control-backend.mjs sibling-source pattern); compileGithub emits scripts/egress-guard.sh whenever githubBox(ir).private_egress_guard is set, adjacent to the egressGuard() job step. Fixture: emit.test.ts compiles a generic flagged IR and asserts the workflow contains 'bash scripts/egress-guard.sh' AND generated['scripts/egress-guard.sh'] carries the implementation." -> ev-dev-01
+- [x] dev/02 v1 soc2-baseline drops its profile copy; its compiled output is functionally unchanged; alternatively (fallback decision) compile FAILS loudly when the flag is set and the script is absent — one of the two, recorded.
+  - status: passed
+  - evidence ev-dev-02: commit=7cd19400ff880c4f1de224b50904adf48ad56bbf acv=1
+  - proof: "Primary option taken and recorded: soc2-baseline dropped its resource copy (git mv preserved bytes, so its compiled output is functionally unchanged — same step, same content, same installed path). Recorded in soc2 ir.yml comments, profile CHANGELOG 1.3.4, and CODE_HOST_RESOURCES.md (the inverse-ruling paragraph). check:profiles compiles soc2 green without the resource." -> ev-dev-02
+- [x] dev/03 v1 A fixture proves the pre-fix failure mode is closed: flag-setting profile ≠ soc2-baseline compiles to an install whose agent job does not reference a nonexistent file.
+  - status: passed
+  - evidence ev-dev-03: commit=7cd19400ff880c4f1de224b50904adf48ad56bbf acv=1
+  - proof: "Fixture proves the pre-fix failure mode closed: the emit.test.ts flagged IR is NOT soc2-baseline (resources: [], asserted in-test) yet its agent job's egress step and the referenced scripts/egress-guard.sh both come from the one compile — no dependence on any profile resource; flag-unset compiles emit neither." -> ev-dev-03
 
 ## BL-11 SPEC: contract constants vs tunable policy
 

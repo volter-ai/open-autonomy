@@ -30,7 +30,7 @@ A profile declares which combinations it supports (`targets` × `codeHost`). The
 
 | Setup | Runner | Code host | Profile | Read |
 |---|---|---|---|---|
-| **Hosted** | GitHub Actions | GitHub | `self-driving` · `simple-gh-sdlc` | [GitHub production rollout](#github-production-rollout) |
+| **Hosted** | GitHub Actions | GitHub | `self-driving` (new/dedicated repo) · `simple-gh-sdlc` (your existing repo) | [GitHub production rollout](#github-production-rollout) |
 | **Local agents → GitHub PRs** | local | GitHub | `simple-gh-sdlc` | [Local-runner quickstart](#local-runner-quickstart) → *GitHub code host* |
 | **Fully local** | local | local-git | `simple-sdlc` (or `hello`) | [Local-runner quickstart](#local-runner-quickstart) → *local-git code host* |
 
@@ -38,12 +38,18 @@ The **runner steps are identical** for both local setups (prereqs → termfleet 
 only **how you feed it work and how a change lands** differ by code host. That split is exactly steps 1–4
 (shared) vs step 5 (per code host) below.
 
-> Installing onto an **existing** repo is an *overlay*: `simple-gh-sdlc` / `simple-sdlc` ship only
-> OA-specific files (`scripts/`, `.claude/skills/`, `scheduler/`, `.open-autonomy/`, `standards/`,
+> Installing onto an **existing** repo is an *overlay*: `simple-gh-sdlc` / `simple-sdlc` / `hello` ship
+> only OA-specific files (`scripts/`, `.claude/skills/`, `scheduler/`, `.open-autonomy/`, `standards/`,
 > `.github/workflows/merge.yml`), so `compile … .` is purely additive — it does **not** generate a
 > `package.json`, `README`, or `.gitignore` over yours. You still merge the runner's deps into your repo
 > (`npm install termfleet`, `npm install -D ztrack`) — step 1 below. The OA files are **committed** to the
 > repo (the agents run in git worktrees, which only see committed files — it's how OA maintains itself).
+>
+> **`self-driving` is the opposite: a whole-repo SCAFFOLD**, not an overlay — it carries
+> README.md/package.json/.gitignore/CHANGELOG.md as resources (this repo's own dogfood setup). It's for a
+> **new or dedicated** repo, not an adopt-in-place onto something you already have: compiling it into a
+> directory with existing, DIFFERENT copies of those files **refuses** with a clear error listing them
+> (`--force` to overwrite anyway). Adopting into an existing repo → use `simple-gh-sdlc` above instead.
 >
 > **Letting an agent do the install?** Point it at [`docs/INSTALL-AGENT.md`](./INSTALL-AGENT.md) — a
 > guided detect → ask → execute → verify playbook addressed to the installing agent.

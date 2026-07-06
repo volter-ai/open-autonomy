@@ -38,7 +38,7 @@
     "check:autonomy": "bunx tsc -p tsconfig.json",
     "check:core": "bun test packages/*/src/*.test.ts",
     "conformance": "bun bin/autonomy-conformance.ts",
-    "check:compile": "bun bin/check-compile.ts",
+    "check:compile": "bun test bin/autonomy-compile.test.ts && bun bin/check-compile.ts",
     "check:profiles": "bun bin/check-profiles.ts",
     "check:policy-consumers": "bun test bin/check-policy-consumers.test.ts && bun bin/check-policy-consumers.ts",
     "check:runtime-sync": "bun bin/sync-runtime.ts --check",

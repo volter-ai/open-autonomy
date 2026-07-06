@@ -57,15 +57,24 @@ auto-merging PRs on GitHub. Three setups people actually use:
 
 | Setup | Runner | Code host | Profile | Best for |
 |---|---|---|---|---|
-| **Hosted** | GitHub Actions | GitHub | `self-driving` / `simple-gh-sdlc` | public/team repos — fully autonomous in the cloud, `/agent` issue-comment control, a bounded model-token proxy |
+| **Hosted** | GitHub Actions | GitHub | `self-driving` (new/dedicated repo) or `simple-gh-sdlc` (your existing repo) | public/team repos — fully autonomous in the cloud, `/agent` issue-comment control, a bounded model-token proxy |
 | **Local agents, GitHub PRs** | local | GitHub | `simple-gh-sdlc` | run the agents on *your* machine/IP & your own model subscription, but still get PRs + native auto-merge on GitHub |
 | **Fully local** | local | local-git | `simple-sdlc` | closed-source — no GitHub at all; work comes from a local `ztrack` board, PR-free |
+
+> **`self-driving` is a whole-repo SCAFFOLD, not an overlay** — it carries README.md/package.json/
+> `.gitignore` as resources (this repo's own dogfood setup). Compiling it into a directory with existing,
+> different copies of those files **refuses** (`--force` to override). Adopting into an **existing**
+> repo? Use `simple-gh-sdlc` / `simple-sdlc` / `hello` instead — they're purely additive (see the overlay
+> note in [`OPERATIONS.md`](./docs/OPERATIONS.md#install--operate)).
 
 ```bash
 cd my-repo
 
-# Hosted (GitHub Actions runner, GitHub code host):
+# Hosted, NEW/dedicated repo (GitHub Actions runner, GitHub code host, whole-repo scaffold):
 npx open-autonomy compile self-driving gh-actions .   # then wire repo vars/secrets + branch protection
+
+# Hosted, EXISTING repo (GitHub Actions runner, GitHub code host, additive overlay):
+npx open-autonomy compile simple-gh-sdlc gh-actions .  # generates no package.json/README/.gitignore
 
 # Local agents → GitHub PRs (local runner, GitHub code host):
 npx open-autonomy compile simple-gh-sdlc local .       # agents on your machine; PRs auto-merge on GitHub

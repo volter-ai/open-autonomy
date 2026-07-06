@@ -1,13 +1,16 @@
 #!/usr/bin/env bun
 // Compile a profile (an `autonomy.ir.v1` ir.yml) onto a substrate, producing an installation.
-//   bun bin/autonomy-compile.ts <profileName|profileDir> <local|gh-actions> [outDir]  ("github" accepted as alias)
+//   bun bin/autonomy-compile.ts <profileName|profileDir> <local|gh-actions> [outDir] [--force]  ("github" accepted as alias)
 // The first arg is either a BUNDLED profile name (e.g. `self-driving`, resolved to the profiles/ shipped
 // with this package) or a path to a profile dir of your own. With no outDir, prints the installation's file
-// list (a dry run). With outDir, materializes it.
+// list (a dry run). With outDir, materializes it — refusing if that would overwrite an existing file with
+// DIFFERENT bytes (a scaffold-class profile like self-driving carries README.md/package.json/.gitignore
+// as resources, so compiling it into an adopter's existing repo used to silently clobber them); --force
+// overrides. This guard is fresh-compile only — `autonomy-upgrade.ts` legitimately overwrites in place.
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { basename, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { parseIr, compiledPaths, materialize, missingCopySourcesIn } from '@open-autonomy/core';
+import { parseIr, compiledPaths, materialize, missingCopySourcesIn, findClobbers } from '@open-autonomy/core';
 import { compileLocal } from '@open-autonomy/substrate-local';
 import { compileGithub } from '@open-autonomy/substrate-github';
 
@@ -35,11 +38,14 @@ function profileMentions(dir: string, token: string): boolean {
   return false;
 }
 
-const [profileArg, substrateArg, outDir] = process.argv.slice(2);
+// `--force` is a flag, not positional — filter it out before reading the three positional args.
+const rawArgs = process.argv.slice(2);
+const force = rawArgs.includes('--force');
+const [profileArg, substrateArg, outDir] = rawArgs.filter((a) => a !== '--force');
 // `gh-actions` is the runner-substrate; accept `github` as a back-compat alias. `local` unchanged.
 const substrate = substrateArg === 'github' ? 'gh-actions' : substrateArg;
 if (!profileArg || (substrate !== 'local' && substrate !== 'gh-actions')) {
-  console.error(`usage: autonomy-compile <profileName|profileDir> <local|gh-actions> [outDir]\n  bundled profiles: ${bundledProfileNames().join(', ') || '(none found)'}`);
+  console.error(`usage: autonomy-compile <profileName|profileDir> <local|gh-actions> [outDir] [--force]\n  bundled profiles: ${bundledProfileNames().join(', ') || '(none found)'}`);
   process.exit(2);
 }
 
@@ -65,6 +71,20 @@ if (missing.length) {
 }
 
 if (outDir) {
+  // The fresh-compile clobber guard (BL-14): refuse if this would silently overwrite existing files that
+  // differ. An additive profile (simple-*, hello) carries none of the files that could collide, so this
+  // is a no-op for them — only a whole-repo scaffold (self-driving) can trip it.
+  if (!force) {
+    const clobbers = findClobbers(out, outDir, (from) => readFileSync(join(profileDir, from), 'utf8'));
+    if (clobbers.length) {
+      console.error(
+        `open-autonomy: compiling "${profileArg}" into "${outDir}" would overwrite ${clobbers.length} existing file(s) that differ:\n  ${clobbers.join('\n  ')}\n` +
+          `"${profileArg}" is a whole-repo SCAFFOLD (it carries these as resources), not an overlay onto an existing repo — see README.md's "Run it on your repo" for the additive alternatives.\n` +
+          `Re-run with --force to overwrite anyway, or compile an additive profile (simple-gh-sdlc, simple-sdlc, hello) into this repo instead.`,
+      );
+      process.exit(1);
+    }
+  }
   const written = materialize(out, outDir, (from) => readFileSync(join(profileDir, from), 'utf8'));
   console.log(`installed ${written.length} files into ${outDir}`);
   if (substrate === 'local') {

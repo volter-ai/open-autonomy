@@ -1,5 +1,5 @@
 // Write a CompileOutput to disk: generated files verbatim, copied files via a source resolver.
-import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import type { CompileOutput } from './ir';
 
@@ -36,4 +36,24 @@ export function missingCopySources(out: CompileOutput, exists: (from: string) =>
  *  check-profiles want. */
 export function missingCopySourcesIn(out: CompileOutput, profileDir: string): string[] {
   return missingCopySources(out, (from) => existsSync(join(profileDir, from)));
+}
+
+/** Paths a materialize into `destDir` would OVERWRITE with DIFFERENT bytes than what's already there —
+ *  the fresh-compile clobber guard (BL-14): a scaffold-class profile (self-driving) carries
+ *  README.md/package.json/.gitignore as resources, so compiling it into an adopter's existing repo used
+ *  to silently overwrite them (the adopter's first hosted command). An additive profile (simple-*, hello)
+ *  never collides because it carries no such files — this returns [] for them. Comparing BYTES (not just
+ *  existence) means an idempotent re-compile of an already-current install is never flagged; this belongs
+ *  to the fresh-compile CLI, never the upgrade path (which legitimately overwrites derived files in
+ *  place — packages/core/src/upgrade.ts). */
+export function findClobbers(out: CompileOutput, destDir: string, readSource: (from: string) => string): string[] {
+  const clobbers: string[] = [];
+  const check = (rel: string, content: string) => {
+    const abs = join(destDir, rel);
+    if (!existsSync(abs)) return;
+    if (readFileSync(abs, 'utf8') !== content) clobbers.push(rel);
+  };
+  for (const [path, content] of Object.entries(out.generated)) check(path, content);
+  for (const { from, to } of out.copies) check(to, readSource(from));
+  return clobbers.sort();
 }

@@ -2,7 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { materialize, missingCopySources, missingCopySourcesIn } from './materialize';
+import { materialize, missingCopySources, missingCopySourcesIn, findClobbers } from './materialize';
 import type { CompileOutput } from './ir';
 
 function withTmpDir(fn: (dir: string) => void) {
@@ -47,6 +47,46 @@ describe('missingCopySources / missingCopySourcesIn (BL-15 dev/03 — pre-materi
     expect(alwaysMissing).toEqual(['docs/standards/code.md', 'skills/developer/SKILL.md']);
     const alwaysPresent = missingCopySources(out, () => true);
     expect(alwaysPresent).toEqual([]);
+  });
+});
+
+describe('findClobbers (BL-14 — fresh-compile clobber guard)', () => {
+  const out: CompileOutput = {
+    generated: { 'README.md': 'NEW README\n' },
+    copies: [{ from: 'gitignore', to: '.gitignore' }],
+  };
+  const readSource = () => '*.log\n';
+
+  test('flags an existing file whose bytes differ', () => {
+    withTmpDir((dir) => {
+      writeFileSync(join(dir, 'README.md'), "the adopter's OWN readme\n");
+      expect(findClobbers(out, dir, readSource)).toEqual(['README.md']);
+    });
+  });
+
+  test('does not flag a file that does not exist yet (additive-overlay / fresh-dir case)', () => {
+    withTmpDir((dir) => {
+      expect(findClobbers(out, dir, readSource)).toEqual([]);
+    });
+  });
+
+  test('does not flag a file whose existing bytes already match (idempotent re-compile)', () => {
+    withTmpDir((dir) => {
+      writeFileSync(join(dir, 'README.md'), 'NEW README\n');
+      writeFileSync(join(dir, '.gitignore'), '*.log\n');
+      expect(findClobbers(out, dir, readSource)).toEqual([]);
+    });
+  });
+
+  test('an additive profile with no colliding resources never clobbers, even over a populated repo', () => {
+    // The additive-overlay guarantee (simple-gh-sdlc/simple-sdlc/hello): they carry no README.md/
+    // package.json/.gitignore resources, so compiling them can never trip this guard.
+    const additiveOut: CompileOutput = { generated: { '.open-autonomy/autonomy.yml': 'schema: x\n' }, copies: [] };
+    withTmpDir((dir) => {
+      writeFileSync(join(dir, 'README.md'), "the adopter's OWN readme, totally unrelated\n");
+      writeFileSync(join(dir, 'package.json'), '{"name":"their-app"}');
+      expect(findClobbers(additiveOut, dir, readSource)).toEqual([]);
+    });
   });
 });
 

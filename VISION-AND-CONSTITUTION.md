@@ -3,7 +3,44 @@
 **Status:** distilled north star + hard invariants, derived from `ARCHITECTURE-REVIEW.md` (2026-07-05, second pass — re-verified by five independent evidence sweeps).
 **Relationship to existing docs:** this is the *reconciled* statement. It supersedes nothing by fiat — `docs/CONSTITUTION.md` remains the human-owned, amendment-only anchor and `docs/VISION.md` the long-form rationale. This document distills both against the evidence trail and makes explicit the judgment calls where the stated pitch and the lived reality diverge. Every claim is traceable to a file, commit, or resolved run cited in the review.
 
-**How to read it:** Part A is the Vision (the real north star, corrected where evidence demands). Part B is the Constitution (the hard invariants, sorted by *how they are actually enforced* — code, gate, doctrine, or aspiration). Part C maps both onto the real `autonomy.ir.v1` structure, so this document can inform a compilable profile rather than float beside it.
+**How to read it:** Part 0 is the whole thing on one screen — the philosophy you can recite and the invariants at a glance. Parts A–C are the evidence-calibrated long form: A the Vision (corrected where evidence demands), B the Constitution (invariants sorted by *how they are actually enforced*), C the mapping onto the real `autonomy.ir.v1` structure so this document can inform a compilable profile rather than float beside it.
+
+---
+
+## Part 0 — The creed on one screen
+
+### The philosophy (eight beliefs; everything else is derivation)
+
+1. **The org is code.** Declare the participants, their authority, their triggers, and the policy in one IR; `compile` it onto a substrate; the installation runs itself. The difference from infrastructure-as-code — the reason this needs constructs IaC never did — is that **the provisioned resources have agency**.
+2. **"Best" implies a search.** You cannot hand-tune your way to the best self-driving org; you must be able to express, run, measure, and compare *many*. Generality (across substrates, never across domains) is a necessity of the search, not an ambition.
+3. **Humans own the measuring stick.** The merit criteria and this constitution change only by human amendment. The optimizer never authors the criteria that judge it. Everything *below* the stick is searchable; the stick is not.
+4. **Live proof is the only proof.** A capability exists when a real run demonstrates it — never a unit test, a doc, or an assertion. Done is verified, not presumed; an honest refusal (the agent declines to fabricate) is itself valid proof.
+5. **Agents by default; scripts only for security.** The default executor is an agent — agents adapt, scripts can't. A deterministic script is justified by exactly one thing: a boundary an agent must not control.
+6. **Earn the abstraction.** Prove a capability is needed by a live run *before* building the thing that generalizes it. (Learned five times by revert in week one; stated here so it never has to be re-learned.)
+7. **Declared is not realized.** The profile declares what an actor *is* — including humans; the substrate chooses how it is *realized* (script, model, person, simulator). Trust derives from the realization, authority from the declaration.
+8. **Derived, never asserted.** Status is computed from ground truth (issue labels), installs from compilation (`root == compile(profile)`), permissions from capabilities. Anything hand-maintained will lie; anything derived cannot.
+
+### The invariants at a glance
+
+| # | Invariant | Enforced by | Tier |
+|---|---|---|---|
+| 1 | No agent merges | `validateIR` rejects `code:merge` (`ir.ts:101-106`) | **CODE** |
+| 2 | No agent writes *and* blesses code; reviewers are independent | `validateIR` propose/review split + review edge (`ir.ts:107-127`) | **CODE** |
+| 3 | The installation equals its source | `check:dogfood` (root == compile, 57 files) | **CODE** |
+| 4 | No agent re-architects | `architecture-invariants.yml` + reviewer rubric | **GATE** |
+| 5 | No agent deploys | human-cut `deploy-v*` tag + reviewer environment | **GATE** |
+| 6 | Risky changes need a human on the current SHA | `human-approval` required check, per-SHA re-earn | **GATE** *(typo-disarmable — OA-5)* |
+| 7 | The measuring stick amends only by human hand | `CONSTITUTION.md` ∈ `human_required_paths` (protects itself) | **GATE** |
+| 8 | Model spend is economically fenced | proxy clamps + atomic ledger reservations | **GATE** |
+| 9 | Retries are bounded; failure handling is PM judgment, never an auto-loop | attempt budgets + PM doctrine | **GATE/DOCTRINE** |
+| 10 | Every meaningful decision is visible | comments/artifacts/derived status | **DOCTRINE** |
+| 11 | Roadmap status is derived, never written | `rollupRoadmapStatus` from labels | **DOCTRINE** |
+| 12 | Live proof is the only proof | `check:proof` — *today a string check* | **ASPIRATIONAL** (OA-2, the P0) |
+| 13 | Canonical work ships through the pipeline | `develop-oa-through-oa` — *proposed, unratified* | **ASPIRATIONAL** (OA-3) |
+| 14 | The boundary as deployed is as strong as the boundary as compiled | app-pinning, policy-key validation, scope, egress | **ASPIRATIONAL** (OA-5) |
+| 15 | Earn the abstraction | nothing yet — proposed Constitution amendment | **ASPIRATIONAL** (OA-9) |
+
+The tier column is the honest part: an invariant is only as real as its enforcement. The roadmap's whole job (`ROADMAP-DISTILLED.md`) is to move rows 12–15 up the table.
 
 ---
 

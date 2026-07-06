@@ -376,8 +376,14 @@ strangers as the first hosted command.
 
 ### Acceptance Criteria
 
-- [ ] dev/01 v1 Compiling a scaffold-class profile into a directory whose existing files would be overwritten refuses with a clear error (opt-in --force to proceed), proven by a fixture.
-- [ ] dev/02 v1 README.md:68 and the OPERATIONS overlay-safety note steer adopters to the additive profiles and label self-driving as a scaffold.
+- [x] dev/01 v1 Compiling a scaffold-class profile into a directory whose existing files would be overwritten refuses with a clear error (opt-in --force to proceed), proven by a fixture.
+  - status: passed
+  - evidence ev-dev-01: commit=e764b043e51c366896483186d223c53a9b5a1d1e acv=1
+  - proof: "packages/core/src/materialize.ts: findClobbers(out, destDir, readSource) returns byte-differing paths a materialize would overwrite. bin/autonomy-compile.ts's outDir branch calls it before writing and exits 1 listing collisions unless --force. bin/autonomy-compile.test.ts spawns the real CLI: self-driving into a dir with a differing README.md exits 1 and stderr names README.md + mentions --force; the same invocation with --force exits 0 and installs; simple-gh-sdlc compiled into the SAME populated dir (README.md + package.json present) exits 0 with no refusal (additive profiles carry no colliding resources); a fresh nested dir is never refused. 4/4 tests pass; wired into check:compile." -> ev-dev-01
+- [x] dev/02 v1 README.md:68 and the OPERATIONS overlay-safety note steer adopters to the additive profiles and label self-driving as a scaffold.
+  - status: passed
+  - evidence ev-dev-02: commit=e764b043e51c366896483186d223c53a9b5a1d1e acv=1
+  - proof: "README.md's setup table + compile examples now label self-driving 'new/dedicated repo' scaffold vs simple-gh-sdlc 'your existing repo', with a blockquote calling out the refuse+--force behavior and pointing at OPERATIONS' overlay note; docs/OPERATIONS.md's setup table + overlay blockquote (~L33-53) gained the same new/dedicated-vs-existing framing and an explicit 'self-driving is the opposite: a whole-repo SCAFFOLD' paragraph naming the refusal + --force + the simple-gh-sdlc alternative." -> ev-dev-02
 
 ## BL-15 SPEC's canonical profile example fails twice
 
@@ -395,15 +401,15 @@ it. Every docs-first profile author hits both.
 
 - [x] dev/01 v1 The SPEC example compiles verbatim on both substrates (a fixture test compiles the doc's exact YAML).
   - status: passed
-  - evidence ev-dev-01: commit=535360bef62d6b98db6083ac1af3fe23e83fbc3b acv=1
+  - evidence ev-dev-01: commit=535360b7c91fbf35c69c62542e219b22a2a18cc9 acv=1
   - proof: "docs/SPEC.md's `## The IR` example now uses `agents:` (not `actors:`) and bare behavior names (`developer`/`maintainer-review`/`planner`, not `skills/developer`); packages/substrate-local/src/spec-example.test.ts extracts the exact ```yaml fenced block from the doc (regex on the file, not a hand-copy) and asserts it parses, validates clean, and compiles on both compileGithub and compileLocal with zero missing copy sources. bun test packages/*/src/*.test.ts: 82 pass." -> ev-dev-01
 - [x] dev/02 v1 The "no agents" error names the expected agents: key (and the actors:→agents: migration) so a docs-first author can self-correct.
   - status: passed
-  - evidence ev-dev-02: commit=535360bef62d6b98db6083ac1af3fe23e83fbc3b acv=1
+  - evidence ev-dev-02: commit=535360b7c91fbf35c69c62542e219b22a2a18cc9 acv=1
   - proof: "packages/core/src/ir.ts validateIR: an `actors:` key with no `agents:` now errors `no agents (found \"actors:\" — the key is \"agents:\")`; a plain missing/empty agents map errors `no agents (the top-level key is \"agents:\")`. Verified live: compiling a profile with `actors:` throws exactly `invalid profile IR:\n  no agents (found \"actors:\" — the key is \"agents:\")`. Fixture tests in packages/core/src/ir.test.ts cover both messages." -> ev-dev-02
 - [x] dev/03 v1 Copy-source existence (skills + resources) is validated before any file is written, and --dry-run reports the same failure.
   - status: passed
-  - evidence ev-dev-03: commit=535360bef62d6b98db6083ac1af3fe23e83fbc3b acv=1
+  - evidence ev-dev-03: commit=535360b7c91fbf35c69c62542e219b22a2a18cc9 acv=1
   - proof: "packages/core/src/materialize.ts adds copySources/missingCopySources/missingCopySourcesIn (substrate-shared, core-owned); bin/autonomy-compile.ts runs missingCopySourcesIn BEFORE the outDir branch, so both --dry-run (no outDir) and materialize report the identical missing-file list and exit 1 with nothing written. Verified live against a profile with a missing skill dir + missing resource: both invocations print the same two-path error. Fixture tests in packages/core/src/materialize.test.ts." -> ev-dev-03
 
 ## BL-16 termfleet's public docs are a 404

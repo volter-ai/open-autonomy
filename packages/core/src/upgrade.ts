@@ -32,6 +32,8 @@ export const INSTALL_OWNED_PATHS = [
   'docs/ARCHITECTURE.md',
   'provision.json', // the install's branch-protection/required-checks manifest — the adopter tunes it to
   //   their product (e.g. their own `ci` context, their reviewer count); seed-once so upgrade never reverts it.
+  //   OPTIONAL: a profile need not ship a seed (self-driving doesn't — provision-target-repo takes --manifest /
+  //   defaults); the entry exists so that when an install DOES write one, upgrade never clobbers it.
 ];
 const installOwned = new Set(INSTALL_OWNED_PATHS);
 // Path PREFIXES the install owns. Unlike the exact paths above, these cover a whole tree an installation

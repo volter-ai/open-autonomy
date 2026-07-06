@@ -7,7 +7,6 @@ on:
       - '.open-autonomy/**'
       - '.github/workflows/**'
       - 'scripts/open-autonomy-preflight.ts'
-      - 'scripts/public-agent-*.ts'
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"

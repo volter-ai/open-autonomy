@@ -524,12 +524,13 @@ export function compileGithub(ir: AutonomyIR): CompileOutput {
 
   const copies: Array<{ from: string; to: string }> = [];
   for (const agent of Object.values(ir.agents)) {
-    if (!isHuman(agent)) {
-      // Install the skill where each harness discovers it: codex from `.codex/skills/`, Claude Code from
-      // `.claude/skills/`. The agent's credentialed job runs Claude Code against the skill.
-      copies.push({ from: `skills/${agent.behavior}/SKILL.md`, to: `.codex/skills/${agent.behavior}/SKILL.md` });
-      copies.push({ from: `skills/${agent.behavior}/SKILL.md`, to: `.claude/skills/${agent.behavior}/SKILL.md` });
-    }
+    // Install the skill where each harness discovers it: codex from `.codex/skills/`, Claude Code from
+    // `.claude/skills/`. The behavior slot is UNIVERSAL — every actor has one, whatever its kind. An
+    // agent's credentialed job runs Claude Code against the skill; a human actor gets no job, but their
+    // skill ships too: it is the person's doctrine (what an engage points them at), and the manifest's
+    // `skill:` key must resolve to a real file, not dangle.
+    copies.push({ from: `skills/${agent.behavior}/SKILL.md`, to: `.codex/skills/${agent.behavior}/SKILL.md` });
+    copies.push({ from: `skills/${agent.behavior}/SKILL.md`, to: `.claude/skills/${agent.behavior}/SKILL.md` });
   }
   // npm UNCONDITIONALLY strips files literally named `.gitignore` from a published package (even under a
   // `files` whitelist), so a profile can't ship its `.gitignore` resource under that name — it stores the

@@ -5,7 +5,7 @@ review gates, and committed evidence. Agents working here must preserve the
 public OSS contract: small scoped changes, deterministic safety checks, visible
 status, and reversible maintainer control.
 
-Every agent is one credentialed job scoped to its capabilities; the merge boundary is the `code:review` / `code:propose` permission split plus native auto-merge (required checks: **ci** + **agent-review**).
+Every agent is one credentialed job scoped to its capabilities; the merge boundary is the `code:review` / `code:propose` permission split plus native auto-merge (required checks: **ci** + **agent-review** + **human-approval**).
 
 Operator commands (`/agent launch`, `/agent pause`, etc.) are maintainer-only (OWNER/MEMBER/COLLABORATOR); launch an agent by name, e.g. `/agent developer`.
 

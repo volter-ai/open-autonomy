@@ -301,5 +301,11 @@ Files: `docs/SPEC.md` (capabilities/merge-boundary section), `scripts/open-auton
 
 ### Acceptance Criteria
 
-- [ ] dev/01 v1 SPEC documents the split: seam-contract constants (status contexts `ci`/`agent-review`/`human-approval`; labels `human-required`, `agent-develop-only`, the control plane's `agent-paused` marker; branch prefix `agent/`) vs org-tunable policy (`merge.maintainer_block_labels`, `risk.human_required_paths`/`topics`), with the rule for which a new name belongs to.
-- [ ] dev/02 v1 Preflight's seeded label list derives from the contract constants + the profile's policy (block labels, planner prefix labels) instead of a fifth hand-kept copy.
+- [x] dev/01 v1 SPEC documents the split: seam-contract constants (status contexts ci/agent-review/human-approval; labels human-required, agent-develop-only, the control plane's agent-paused marker; branch prefix agent/) vs org-tunable policy (merge.maintainer_block_labels, risk.human_required_paths/topics), with the rule for which a new name belongs to.
+  - status: passed
+  - evidence ev-dev-01: commit=392698e6860710ef66e5d5c5c581faee3a83cc8a acv=1
+  - proof: "docs/SPEC.md gained 'Contract constants vs tunable policy' after the merge/deploy boundary sections: contract constants enumerated (ci/agent-review/human-approval contexts + per-SHA re-earn; human-required, agent-develop-only, agent-paused, needs-info, agent-blocked labels — the last two included because control-backend.mjs hardcodes them; agent/ prefix) vs tunable policy.box parameters-with-readers, plus the one-question rule for filing a new name (author-time knowledge → constant/spec change; runtime-readable → policy + reader)." -> ev-dev-01
+- [x] dev/02 v1 Preflight's seeded label list derives from the contract constants + the profile's policy (block labels, planner prefix labels) instead of a fifth hand-kept copy.
+  - status: passed
+  - evidence ev-dev-02: commit=392698e6860710ef66e5d5c5c581faee3a83cc8a acv=1
+  - proof: "Preflight's hand-kept fifth label list replaced by expectedLabels(root) = exported SEAM_CONTRACT_LABELS + the compiled manifest's policy (merge.maintainer_block_labels, planner origin-prefix + priority labels). 4 new tests incl. one against the REAL dogfood autonomy.yml (do-not-merge/agent-maintainer-hold/origin:roadmap-planner/priority:high all derived). Profile source synced; check:dogfood + full check green." -> ev-dev-02

@@ -219,10 +219,22 @@ only); `bin/sync-runtime.ts` exclusion lists; `packages/substrate-github/src/run
 
 ### Acceptance Criteria
 
-- [ ] dev/01 v1 The four scripts are profile-carried resources in every carrying profile; compiled output paths are unchanged (`scripts/<name>.ts` at root); `check:dogfood`, `check:compile`, `check:profiles`, `check:runtime-sync` all green.
-- [ ] dev/02 v1 The runtime mirror no longer contains them (sync-runtime prunes; its header/exclusion comments describe reality); upgrade on a fixture install does not orphan-prune a profile-carried script.
-- [ ] dev/03 v1 Recorded decision on `agent-propose.ts`: stays vendored as the one capability-realization script the emitted effect step invokes (recommended — it carries no policy vocabulary), or migrates with the others. Documented in CODE_HOST_RESOURCES.md either way.
-- [ ] dev/04 v1 `docs/CODE_HOST_RESOURCES.md`'s Open/deferred section records the ruling (substrate owns no label vocabulary; scripts moved; what triggered the revisit).
+- [x] dev/01 v1 The four scripts are profile-carried resources in every carrying profile; compiled output paths are unchanged (scripts/<name>.ts at root); check:dogfood, check:compile, check:profiles, check:runtime-sync all green.
+  - status: passed
+  - evidence ev-dev-01: commit=410ada443c94adb4dbe78da034d2da89663d2bd6 acv=1
+  - proof: "Four gate scripts declared in resources: of all carrying profiles (self-driving+soc2: all four; simple-gh-sdlc: merge pair+supply-chain; hello: supply-chain), sources at profiles/*/scripts/. Installed path unchanged (scripts/<name>.ts — root diff shows only autonomy.yml resources list). bun run check green end-to-end incl. check:dogfood/compile/profiles/runtime-sync; check:profiles byte-identity guard now covers the script paths." -> ev-dev-01
+- [x] dev/02 v1 The runtime mirror no longer contains them (sync-runtime prunes; its header/exclusion comments describe reality); upgrade on a fixture install does not orphan-prune a profile-carried script.
+  - status: passed
+  - evidence ev-dev-02: commit=410ada443c94adb4dbe78da034d2da89663d2bd6 acv=1
+  - proof: "sync-runtime CODE_HOST_RESOURCE exclusion set added; write-mode prune removed the four from packages/substrate-github/src/runtime/ (9 files remain, all actor-execution — header now factual). New upgrade.test.ts fixture: a manifest-listed path moving generated→profile-copy plans update (never delete) under prune, because desired = generated+copies." -> ev-dev-02
+- [x] dev/03 v1 Recorded decision on agent-propose.ts: stays vendored as the one capability-realization script the emitted effect step invokes (recommended — it carries no policy vocabulary), or migrates with the others. Documented in CODE_HOST_RESOURCES.md either way.
+  - status: passed
+  - evidence ev-dev-03: commit=410ada443c94adb4dbe78da034d2da89663d2bd6 acv=1
+  - proof: "Decision recorded in docs/CODE_HOST_RESOURCES.md: agent-propose.ts STAYS VENDORED — it is the one script the engine-emitted effect step invokes (emit.ts writes 'bun scripts/agent-propose.ts' into every code:propose workflow), the runner-side realization of the capability, carries zero policy vocabulary (verified by grep); emitted workflows may depend only on engine-shipped runtime. emit.test.ts pins it as generated." -> ev-dev-03
+- [x] dev/04 v1 docs/CODE_HOST_RESOURCES.md's Open/deferred section records the ruling (substrate owns no label vocabulary; scripts moved; what triggered the revisit).
+  - status: passed
+  - evidence ev-dev-04: commit=410ada443c94adb4dbe78da034d2da89663d2bd6 acv=1
+  - proof: "CODE_HOST_RESOURCES.md: Done(2026-07-06) entry records the ruling (substrate owns no label vocabulary and no code-host gate logic; substrate = triggers/crons/agent-runners/credentials only), what triggered the revisit (audit §1.1 substrate-shipped hold labels, §1.5 gating gap), and the moved scripts + carrier map; Open/deferred bullet replaced (only the base-resource-set deferral remains)." -> ev-dev-04
 
 ## BL-9 Boundary scripts enter self-driving's gated scope
 

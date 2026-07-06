@@ -1,10 +1,78 @@
 # Changelog
 
-## Unreleased
+## 0.4.0
+
+The **adopter release**: everything surfaced by the four-persona adopter-docs audit of 0.3.1 (BACKLOG
+BL-12..BL-29) plus the security/enforcement sweep that preceded it (BL-1..BL-11). The published package,
+the front-door docs, and the compiled installs now describe and enforce the same system.
 
 ### Added
+- **The human seam runs on the local substrate.** A `kind: human` actor is now *realized* locally, not
+  just declared: the emitted `scripts/runner.ts` gains a third launch route that PARKS the ask (never
+  auto-completes), engages the operator (console + `.open-autonomy/runner-state/human-attention.md` +
+  optional `AUTONOMY_HUMAN_ENGAGE_CMD` hook), and resumes only on an authorized
+  `update <id> --status done`. The runner CLI now implements all five Runner-contract verbs
+  (launch/list/get/update/cancel). New example profile **`profiles/hello-human/`** demonstrates the
+  full park → engage → verify → resume loop with no model or termfleet dependency; recipe in
+  OPERATIONS ("Human-in-the-loop on the local runner").
+- **Profile-authoring guide** at `profiles/README.md`: the minimal working profile, the SKILL.md
+  contract, the capability/trigger-source catalogs, the `policy.box` conventions (each key with its
+  reader), and the validate/compile workflow. SPEC.md cross-links it; SPEC stays normative.
+- **`open-autonomy lint <profileDir>`**: parse + compile a profile to every declared target + the
+  pre-materialize checks, writing nothing — full validation for profiles outside this repo.
+- **Fresh-compile clobber guard.** Compiling a scaffold-class profile (self-driving) into a populated
+  directory refuses when it would overwrite an existing file with different bytes, naming every
+  collision; `--force` overrides. Additive profiles (hello, simple-sdlc, simple-gh-sdlc) are unaffected.
+- **Profile validation floor.** `validateIR` now requires `policy`/`policy.box`/`resources` with
+  actionable messages, names the `actors:`-vs-`agents:` mistake, and rejects unknown capability names
+  and trigger-param sources instead of compiling them silently into a read-only agent or an empty
+  param. The SKILL.md name==folder contract is enforced for any profile (shared core check).
+- **`check:doc-vars`**: a deterministic guard that OPERATIONS' rollout-variable table matches the
+  emitted install's real read-set in both directions (documented-but-never-read and
+  read-but-undocumented both fail).
+- **PM routes existing agent PRs to review instead of starting duplicate work.** The PM's sweep
+  doctrine now checks for open PRs before dispatching a developer to an issue, and routes existing PRs
+  to the reviewer via `bun scripts/runner.ts launch reviewer` when agent-review is missing or pending.
+  (Issue #114, remaining scope — proof gate `pm-open-pr-review`.)
+- `engines: { node: ">=22.18" }` in package.json.
 
-- **PM routes existing agent PRs to review instead of starting duplicate work.** The PM's sweep doctrine now checks for open PRs before dispatching a developer to an issue, and explicitly routes existing PRs to the reviewer via `bun scripts/runner.ts launch reviewer` when agent-review is missing or pending. This prevents duplicate development and accelerates the review cycle. (Issue #114, remaining scope — proof gate `pm-open-pr-review`.)
+### Fixed
+- **SPEC's canonical profile example compiles verbatim** on both substrates (was failing twice), kept
+  honest by a fixture test that extracts the exact yaml from the doc. Copy-sources are validated
+  before materializing — a missing skill/resource is one clean error list, not an ENOENT partway
+  through writing files.
+- **`/agent pause repo` no longer silently pauses one issue.** The repo-wide kill-switch is
+  variable-only by decision: the control plane now answers the repo-scoped command with the real
+  mechanism (`gh variable set PUBLIC_AGENT_REPO_PAUSED`) and acts on nothing.
+- **The emitted local scheduler fails friendly when termfleet is missing** (an `npm install termfleet`
+  pointer instead of a buried ERR_MODULE_NOT_FOUND), and only when the schedule actually needs the
+  runner. Preflight generalizes: required agent workflows derive from the compiled manifest,
+  local-runner installs aren't warned about `MODEL_PROXY_URL`, and its output dir is created up front.
+- **ztrack preset resolution is explicit.** Profiles declare `policy.box.tracker.ztrackPreset`
+  (surviving a fork's directory rename); the basename fallback warns loudly on a miss.
+- **Security/enforcement sweep (BL-1..BL-11):** the human-approval gate verifies maintainership by
+  repo permission only (never `author_association`); the gate owns `agent-develop-only`; boundary
+  scripts sit inside self-driving's human-gated scope; the egress guard is runner-owned (step +
+  script emitted together); gate scripts are profile-carried code-host resources (byte-identical
+  across carriers); block labels are one profile-owned vocabulary; every `policy.box` key has a
+  reader (`check:policy-consumers`); SPEC separates contract constants from tunable policy.
+
+### Docs
+- **Operator docs describe the shipped control plane** — verb-for-verb against `agent-control.mjs`
+  (retry/cancel/status semantics, phantom commands removed), the real kill-switch documented, and
+  the OPERATIONS variable checklist regenerated from the emitted install's actual read-set (11 dead
+  vars dropped, the `PUBLIC_AGENT_CLAUDE_CODE_VERSION` supply-chain pin called out).
+- **Branch protection documents all three required checks** (`ci` + `agent-review` +
+  `human-approval`) with the failure mode explained; ROADMAP stops narrating retired architecture as
+  current (merge-gate job, auto-retry loop, repo-pause label — all marked superseded); termfleet
+  links point at npm; dead references and retired vocabulary swept across the doc set.
+
+### Migration notes (compiled installs)
+- Re-compile (or `autonomy-upgrade`) to pick up: the new `scripts/runner.ts` (human route +
+  `get`/`update` verbs), the `agent-control.mjs` repo-pause answer, the scheduler's termfleet
+  guard, and the generalized preflight.
+- Fresh compiles of scaffold profiles into non-empty directories now refuse on differing files —
+  pass `--force` for the old overwrite behavior. Upgrades are unaffected.
 
 ## 0.3.1
 

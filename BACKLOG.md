@@ -331,7 +331,8 @@ are workable from this backlog:
   BL-29, BL-27 dev/01+03. Workable now.
 - **LIFTED → roadmap intent `hosted-adopter-path`** (strategic: is hosted adoption a product yet?):
   BL-13, BL-18, BL-24. Their sections below are the planner's spec, not workable backlog items.
-- **DECISION ITEMS** (blocked on a maintainer fork choice before any build): BL-20, BL-23, BL-28.
+- **DECISION ITEMS** (blocked on a maintainer fork choice before any build): BL-20, BL-23.
+  BL-28's decision is made (maintainer, 2026-07-06: ship the full realization) and built — see its section.
 - **Externally gated:** BL-16's repo flip (reserved phrase) and BL-26's CONSTITUTION edits
   (human-amended only).
 
@@ -725,16 +726,23 @@ and REQUIRED_FILES is self-driving-shaped so it can't validate simple-gh-sdlc.
 
 assignee: yueranyuan
 
-**DECISION ITEM** — blocked on the maintainer's fork choice in dev/01 (ship the example vs mark
-designed-not-built); no build until decided. Adopter-docs audit · persona B. No adopter-facing profile declares a kind:human actor; substrate-local's
-emit has no human-actor emission path; HumanRunner (`packages/core/src/runner.ts:93`) is the documented
-"no-op bookkeeping floor" (`SPEC.md:667,687`); there is no runnable human-in-the-loop recipe an adopter
-can follow, even though the local substrate is where HumanRunner is actually driven.
+**DECIDED** (maintainer, 2026-07-06): build the full realization — ship the adopter-facing example AND
+drive the human route in the local runner itself, not a docs-only descope. Adopter-docs audit · persona B.
+No adopter-facing profile declared a kind:human actor; substrate-local's emit had no human-actor emission
+path; HumanRunner (`packages/core/src/runner.ts:93`) was the documented "no-op bookkeeping floor"
+(`SPEC.md:667,687`); there was no runnable human-in-the-loop recipe an adopter could follow, even though
+the local substrate is where HumanRunner is actually driven.
 
 ### Acceptance Criteria
 
-- [ ] dev/01 v1 Recorded decision: ship an adopter-facing human-in-the-loop example (a profile declaring kind:human on the local substrate + a doc recipe) OR mark the local human seam designed-not-built in adopter-facing docs.
-- [ ] dev/02 v1 Implemented per the decision.
+- [x] dev/01 v1 Recorded decision: ship an adopter-facing human-in-the-loop example (a profile declaring kind:human on the local substrate + a doc recipe) OR mark the local human seam designed-not-built in adopter-facing docs.
+  - status: passed
+  - evidence ev-dev-01: commit=926dac5 acv=1
+  - proof: "Maintainer decision (2026-07-06): build the full realization, not the designed-not-built descope — ship BOTH the adopter-facing example and the local-runner drive. Recorded in this BACKLOG entry and in CLAUDE.md's Built-vs-designed section (commit=9dee69d), which moves the local human seam from 'still designed' to 'Built'." -> ev-dev-01
+- [x] dev/02 v1 Implemented per the decision.
+  - status: passed
+  - evidence ev-dev-02: commit=926dac5 acv=1
+  - proof: "compileLocal (packages/substrate-local/src/emit.ts) is now kind-aware: a kind:human actor is excluded from scheduler/schedule.json (even if it carries a cron — human-seam.test.ts's guard case) and from launch prompts, but its SKILL.md is still copied as doctrine, mirroring compileGithub's own choices exactly. The emitted scripts/runner.ts (packages/substrate-local/src/runner-frontend.ts) gained a THIRD launch route: manifestAgent(agent).kind === 'human' -> launch() PARKS a session under .open-autonomy/runner-state/human-sessions.json (id/agent/status/params/note, matching core's HumanRunner semantics verbatim) and NEVER auto-completes; engage prints to console + appends to .open-autonomy/runner-state/human-attention.md, plus an optional AUTONOMY_HUMAN_ENGAGE_CMD command hook (session JSON on stdin) for a real notification path (Slack/email/paging) — black-box, never required. Design decision (recorded): the route is REIMPLEMENTED inline in runner-frontend.ts rather than importing core's HumanRunner verbatim, because this file ships into every install with NO dependency on @open-autonomy/core; core's class remains the substrate-neutral reference (packages/core/src/runner.test.ts) this route matches. The runner CLI now implements all five Runner-contract verbs (launch/list/get/update/cancel, not just three): get/update operate on the local human-session store for a parked human ask, and delegate straight to the termfleet backend (backend.mjs, which already implemented get/update) for an agent session — so both realizations are reachable through the one seam, beyond the backlog's minimum (human-only) ask. list <actor> now also surfaces parked (running) human sessions. profiles/hello-human/ is the new adopter-facing example (one script `requester` + a declared human `approver`, no termfleet needed); docs/OPERATIONS.md gained a 'Human-in-the-loop on the local runner' recipe (park -> engage -> operator acts -> update done -> resume) pointing at it. Tests: packages/substrate-local/src/human-seam.test.ts (8 tests) cover compileLocal's kind-awareness plus the emitted runner.ts's human route driven as a REAL subprocess against a scaffolded install. LIVE PROOF (not just unit tests): compiled profiles/hello-human to a scratch dir outside the repo and ran the full flow for real — `bun scripts/request-approval.ts` parked an ask with `approver` and printed '[runner] HUMAN ENGAGE: approver #approver-1783330552588-562768 — approve the hello-human demo change'; the attention file appeared with the ask + resume command; re-running the requester before resolution reported 'still running — waiting on the human operator' (no presumed-done); acting as the operator, `bun scripts/runner.ts update approver-1783330552588-562768 --status done` exited 0; `bun scripts/runner.ts get <id>` then showed status=done and `list approver` returned `[]` (no longer in-flight); re-running the requester reported 'resolved: status=done — proceeding'. Transcript saved to <scratchpad>/bl28-live-run-transcript.txt. Note for the SPEC-holding agent: docs/SPEC.md's Runner/Handoffs sections describe the human realization generically but do not yet name the LOCAL runner's specific engage/park mechanics (console+file+cmd-hook) the way they should eventually parallel the github section's specificity — left unedited per this task's scope guard; a follow-up SPEC line would read something like 'on local, engage = console + a well-known attention file + an optional operator command hook.' `bun run check` is green (autonomy/core/conformance/runtime-sync/compile/profiles/policy-consumers/doc-vars/dogfood/provision/supply-chain/public-agent/agent-proxy/proof/soc2-register)." -> ev-dev-02
 
 ## BL-29 simple-gh-sdlc fork hazards
 

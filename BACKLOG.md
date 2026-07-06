@@ -16,7 +16,13 @@ earnable now, live-proof ACs stay open until the branch ships through the gated 
 
 ### Acceptance Criteria
 
-- [ ] dev/01 v1 Every BL item below is done (all its ACs checked with evidence) or explicitly dropped with a recorded reason in this file.
+- [x] dev/01 v1 Every BL item below is done (all its ACs checked with evidence) or explicitly dropped with a recorded reason in this file.
+  - status: passed
+  - evidence ev-dev-01: run=https://github.com/volter-test-fixtures/bench-self-driving-conformance-self-driving-mr90gwhj/actions/runs/28783523081 acv=1
+  - proof: "Rollup over BL-2..BL-11: every AC is checked with evidence (unit/fixture commits + the four
+    live testbed proofs — BL-2 dev/05 run 28782004703, BL-4 dev/02 run 28782716760, BL-5 dev/03 run
+    28783523081, BL-9 dev/03 run 28782469988). No item dropped; the cited run is the last live proof
+    to land." -> ev-dev-01
 
 ## BL-2 Block labels: one profile-owned vocabulary
 
@@ -148,15 +154,20 @@ like `human-required` on the PR. Bench asserts the corrected outcome.
   - status: passed
   - evidence ev-dev-02: commit=a15b36fe17724b5668683ef0802107510dcf2762 acv=1
   - proof: "bench-operate.ts opDevelopOnly now waits for both agent-review and human-approval contexts and asserts agent-review:SUCCESS + human-approval not SUCCESS + PR unmerged; the old agent-review:FAILURE expectation is gone." -> ev-dev-02
-- [ ] dev/03 v1 Live proof: the governance-develop-only scenario passes on the testbed (run URL recorded).
-  - status: pending
+- [x] dev/03 v1 Live proof: the governance-develop-only scenario passes on the testbed (run URL recorded).
+  - status: passed
   - progress (2026-07-06): the first live attempt FOUND A REAL FAIL-OPEN BUG instead of a proof — the
     gate's workflow token had no `issues: read`, so the linked-issue label lookup failed, gh() swallowed
     the error into '' ("no labels"), developOnly evaluated false, and the develop-only PR (#32, bench
     cell run 28782283869) auto-passed and merged. Fixed both layers same day: `issues: read` granted in
     human-approval.yml (both profile carriers + emitted root) and the lookup now FAILS CLOSED
-    (developOnlyFromLookup(null)=scoped, unit-tested). The live re-proof runs on the bench cell with the
-    fixed workflow — this AC stays open until that run URL is recorded.
+    (developOnlyFromLookup(null)=scoped, unit-tested).
+  - evidence ev-dev-03: run=https://github.com/volter-test-fixtures/bench-self-driving-conformance-self-driving-mr90gwhj/actions/runs/28783523081 acv=1
+  - proof: "Re-proof with the fixed gate (canonical 8038b4d deployed to the cell as e5692f1): issue #35
+    labeled agent-develop-only → agent PR #36 (Closes #35, ci+agent-review green) HELD at
+    human-approval:pending, log `scoped=true approved=false → pending` with NO label-read error (a real
+    scope decision, not the fail-closed fallback; held run 28783416668) → maintainer Approve flipped it
+    `scoped=true approved=true → success` and only then did auto-merge land (mergedAt 10:01:36Z)." -> ev-dev-03
 
 ## BL-6 Doctrine cites only mechanisms that exist
 
@@ -360,6 +371,11 @@ are workable from this backlog:
 ### Acceptance Criteria
 
 - [ ] dev/01 v1 Every BL-13..BL-29 item is done (all ACs checked with evidence) or explicitly dropped with a recorded reason in this file.
+  - progress (2026-07-06): everything is done or lifted EXCEPT one AC: BL-26 dev/01's CONSTITUTION.md
+    edits (line 26 AUTONOMY-IR ref, rule-6 "template" vocabulary), which are maintainer-hand-only per
+    the amendment rule — all other BL-26 references were fixed in a3ece03. BL-13/BL-18/BL-24 are
+    LIFTED → roadmap intent `hosted-adopter-path` (ratified 2026-07-06, planner issue #120). This
+    rollup closes when the maintainer amends CONSTITUTION.
 
 ## BL-13 Hosted path terminates at the maintainer's private proxy
 

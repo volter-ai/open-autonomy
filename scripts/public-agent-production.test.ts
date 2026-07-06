@@ -35,6 +35,17 @@ describe('public agent production readiness', () => {
     for (const verb of ['cancel', 'pause', 'resume', 'status', 'retry']) expect(control()).toContain(verb);
   });
 
+  test('repo-wide pause is variable-only: /agent pause repo points at the kill-switch, never labels', () => {
+    // BL-20 decision: the fleet-wide kill-switch is the PUBLIC_AGENT_REPO_PAUSED repository variable
+    // (works even when the control plane is down), NOT a control verb. `/agent pause repo` used to fall
+    // through to the per-issue path and silently pause ONE issue while the operator believed the fleet
+    // was stopped — it must answer with the real command instead.
+    const text = control();
+    expect(text).toMatch(/pause\|resume\)\\s\+repo/); // the repo-scope intercept exists
+    expect(text).toContain('gh variable set PUBLIC_AGENT_REPO_PAUSED');
+    expect(text).toContain('Nothing was ${verb}d');
+  });
+
   test('the comment surface is maintainer-gated and fork-gated (no drive-by launch, no fork escalation)', () => {
     // Every agent that fires on issue_comment / pull_request_target must gate those untrusted-actor
     // surfaces. The control plane and the comment-launch require a maintainer (author_association); a

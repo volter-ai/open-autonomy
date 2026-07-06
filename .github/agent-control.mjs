@@ -7,6 +7,10 @@
 //   retry  -> gh workflow run            (Runner.launch)
 //   pause  -> add the agent-paused label (Runner.update status=paused; the agent job honors it)
 //   resume -> remove the agent-paused label (Runner.update status=running)
+// pause/resume are per-ISSUE. The repo-wide kill-switch is NOT a control verb: it is the
+// PUBLIC_AGENT_REPO_PAUSED repository variable (every agent job's `if:` gates on it) — decided
+// variable-only (BACKLOG BL-20) so pausing the fleet never depends on the fleet's own control
+// plane still running. `/agent pause repo` replies with that command instead of mislabeling.
 //   decide -> record a maintainer DECISION + clear the human block (the human seam's `out`; Runner.update done)
 //   answer -> record a maintainer ANSWER to a needs-info ask + clear the block (same seam, answer flavor)
 // On local this isn't emitted at all — the runner CLI (`autonomy cancel|update|get|list`) IS the
@@ -39,10 +43,20 @@ if (verb === 'cancel') {
     .filter(Boolean);
   for (const id of ids) sh(`gh run cancel ${id} --repo ${repo} || true`);
   sh(`gh issue comment ${issue} --repo ${repo} --body ${q('Agent run cancelled (/agent cancel).')}`);
-} else if (verb === 'pause') {
-  sh(`gh issue edit ${issue} --repo ${repo} --add-label agent-paused`);
-} else if (verb === 'resume') {
-  sh(`gh issue edit ${issue} --repo ${repo} --remove-label agent-paused`);
+} else if (verb === 'pause' || verb === 'resume') {
+  // `/agent pause repo` used to fall through to the per-issue path and silently label ONE issue —
+  // the operator believed the fleet was stopped when it wasn't (the audit's BL-20). Repo scope is
+  // not this script's job: point at the real kill-switch instead of doing the wrong thing quietly.
+  if (/^\/agent\s+(?:pause|resume)\s+repo\b/i.test(body)) {
+    const setting = verb === 'pause' ? 'true' : 'false';
+    sh(
+      `gh issue comment ${issue} --repo ${repo} --body ${q(`\`/agent ${verb} repo\` is not a control verb — the repo-wide kill-switch is the repository variable, so it works even when the control plane itself is down:\n\n\`\`\`\ngh variable set PUBLIC_AGENT_REPO_PAUSED --repo ${repo} --body ${setting}\n\`\`\`\n\nNothing was ${verb}d. (\`/agent ${verb}\` without \`repo\` ${verb === 'pause' ? 'pauses' : 'resumes'} just this issue.)`)}`,
+    );
+  } else if (verb === 'pause') {
+    sh(`gh issue edit ${issue} --repo ${repo} --add-label agent-paused`);
+  } else {
+    sh(`gh issue edit ${issue} --repo ${repo} --remove-label agent-paused`);
+  }
 } else if (verb === 'status') {
   const s = out(`gh run list --repo ${repo} --workflow ${wf} --limit 5 --json databaseId,status,conclusion,createdAt`);
   sh(`gh issue comment ${issue} --repo ${repo} --body ${q(`Recent agent runs:\n${s}`)}`);

@@ -54,6 +54,19 @@ the glob file as "the substrate's merge-sensitive defaults ∪ the profile's hum
 `emit.ts:521-523` writes **only** the profile list (no defaults exist anywhere). Consequence of note:
 `wrangler.toml` is NOT in scope — see 3.4.
 
+**1.5 The merge boundary's own scripts are outside the deterministically gated scope.**
+`risk.human_required_paths` (ir.yml:153-163) gates `.github/workflows/**` — the *shells* of the
+boundary — but neither `scripts/**` nor `packages/substrate-github/src/runtime/**`: the *logic* of
+the boundary (`human-approval-gate.ts`, `rearm-auto-merge.ts`, `reconcile-merged-issues.ts`).
+`human-approval.yml:39-43` correctly checks out BASE, so a PR's edit to the gate script is inert
+pre-merge — but *merging* that edit needs only ci + agent-review + the auto-passing human-approval
+status: an agent PR editing the gate's own qualification logic (plus its runtime mirror, to keep
+`check:runtime-sync` green) lands with no human sign-off, and every subsequent gate run executes it.
+The only defense today is reviewer judgment (prose). The policy *source* is transitively gated
+(editing `ir.yml`'s risk lists forces a regenerated `.open-autonomy/autonomy.yml`, which IS in the
+globs); the scripts are the gap. Fix: add the boundary-script paths to `human_required_paths` —
+which the §2.2 migration makes natural (profile-carried scripts, gated like the workflows they serve).
+
 ## 2. Dead config: declared in `policy.box`, read by nothing → OA-6 (decide) / OA-5 (validate)
 
 Traced every key in `ir.yml:121-176` to its consumers. Live keys: `gh-actions.*` (emit.ts:143),
@@ -107,6 +120,44 @@ Applied to §2's inventory, OA-6 dev/06 resolves each key three ways:
 Regression guard so the box can't rot again: a **`check:policy-consumers`** lint — every declared
 box key must appear either in runtime-script code or in a skill as a read-instruction — turns
 wire-or-delete from a one-time cleanup into an invariant. (Candidate AC under OA-6.)
+
+### 2.2 Where the block-label machinery belongs — OA already ruled, the split stopped halfway
+
+The placement question ("are block labels substrate or profile?") is **already answered** by
+`docs/CODE_HOST_RESOURCES.md` (2026-06-25/26): *substrate = the actor runner (which box, how it's
+wrapped, the scoped token) — **nothing else***. Triggers, crons, agent runners. A merge is neither an
+agent run nor a human run — it's a code-host event, so `merge.yml`/`human-approval.yml` are
+**code-host resources carried by the profile** (a local-substrate org still has a github repo with
+merge blockers; the code host is orthogonal to the runner — `architecture-invariants.yml`
+`code-host-orthogonal-to-runner` says the same). And emit's only legitimate policy output is
+**security DATA derived from the IR** — the doc's own precedent is
+`.open-autonomy/human-required-paths.json`, "the IR projected into a runtime-readable form."
+
+The split was executed at the **workflow layer** (merge.yml/human-approval.yml live in
+`profiles/self-driving/.github/workflows/` — verified byte-identical at root) **and stopped there**.
+The residue, of which finding 1.1 is the symptom:
+
+- **The scripts those resource workflows call** (`rearm-auto-merge.ts`, `human-approval-gate.ts`,
+  `reconcile-merged-issues.ts`) are still vendored by the *runner* compiler (`emit.ts:19-20`:
+  "runtime backend… a profile never carries it"). So the code-host resource is a thin shim whose
+  logic body lives in the layer the doc says owns nothing but running agents. (`emit.ts:481` itself
+  concedes "the runtime's eventual neutral home" is elsewhere.)
+- **The vocabulary is authored constants in that vendored script** (`HOLD`,
+  `rearm-auto-merge.ts:53`) instead of IR-projected data. Because the label set lived in a file the
+  profile has no channel to, the declared `merge.maintainer_block_labels` went unread and four prose
+  copies drifted — 1.1 was structurally guaranteed.
+- **The substrate should own zero labels — including `agent-paused`.** Pausing agent *runs* is
+  runner lifecycle (the kill-switch); "a paused org also lands no PRs" is an org-policy choice the
+  profile expresses by listing `agent-paused` in its block set. No "substrate defaults ∪ profile"
+  union is needed (that fiction is finding 1.4): one list, profile-declared, mechanism-read.
+
+Fix shape (per the doc's own pattern): the sweep reads the label set from
+`.open-autonomy/autonomy.yml` (or emit projects it like `human-required-paths.json`); skills consult
+the same key (§2.1 wire); and the three boundary scripts migrate from the runtime mirror to
+profile-carried resources (the `profiles/self-driving/scripts/` + `resources:` mechanism already
+exists and already carries preflight/config/upgrade-cli), with `human_required_paths` extended to
+cover them (closes 1.5). After that, "local substrate + github code host + merge blockers" is just a
+profile choice, as the architecture intends.
 
 ## 3. Doctrine that cites mechanisms that don't exist → OA-6
 
@@ -170,7 +221,11 @@ anti-recursion model, with the scheduled sweep as backstop.
 
 ## 6. Disposition
 
-Findings 1.1–1.4 extend **OA-5** (deployed boundary soft spots — new ACs dev/06–08). Findings in
-§2–§4 extend **OA-6** (one-truth reconciliation — new ACs dev/05–06). No new P0s: nothing here
-breaks the merge boundary itself; the pattern-level lesson is the same as review §5.2 — **declared
-config must be read by the machine or deleted**, and doctrine must cite only mechanisms that exist.
+Findings 1.1–1.5 extend **OA-5** (deployed boundary soft spots — new ACs dev/06–09; 1.5 is the
+sharpest of the batch: the human gate's own logic is one un-human-gated agent PR from change, with
+only reviewer judgment in the way). Findings in §2–§4 extend **OA-6** (one-truth reconciliation —
+new ACs dev/05–07; dev/07 completes the CODE_HOST_RESOURCES split at the script layer per §2.2).
+Nothing here breaks the merge boundary outright; the pattern-level lessons: **declared config must
+be read by the machine or deleted**, doctrine must cite only mechanisms that exist, and **a
+documented architectural split must be finished at every layer, or the unfinished layer becomes the
+drift site** (§2.2).

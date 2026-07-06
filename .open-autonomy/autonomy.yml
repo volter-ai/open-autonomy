@@ -150,18 +150,9 @@ policy:
   autonomy:
     max_open_agent_prs: 5
     max_develop_attempts: 2
-    max_ci_retries: 2
-    max_review_retries: 2
-    stale_needs_info_minutes: 10080
-    require_visible_pm_status: true
   human:
     maintainers_var: PUBLIC_AGENT_MAINTAINERS
     sla_minutes: 1440
-    decision_types:
-      - approve
-      - decide
-      - answer
-      - inform
   risk:
     human_required_paths:
       - .github/workflows/**
@@ -179,9 +170,6 @@ policy:
       - destructive data migration
       - dependency trust
   merge:
-    require_ci: true
-    require_low_risk_review: true
-    require_current_head_sha: true
     maintainer_block_labels:
       - do-not-merge
       - human-required
@@ -189,7 +177,6 @@ policy:
       - agent-paused
       - agent-maintainer-hold
   planner:
-    enabled: true
     issue_origin_label_prefix: "origin:"
     phase_label_prefix: "phase:"
     priority_labels:

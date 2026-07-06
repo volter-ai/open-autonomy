@@ -57,9 +57,8 @@ agents:
 policy:
   maxConcurrent: 2   # the WIP ceiling: at most one in-progress + one in-review at a time
   box:
-    wip:
-      maxInProgress: 1
-      maxInReview: 1
+    # (the WIP ceiling — one develop in flight, one in review — is the PM doctrine in standards/workflow.md;
+    # policy.maxConcurrent is the enforced runner cap. No component reads a wip.* key.)
     risk:
       human_required_paths:
         - .github/workflows/**

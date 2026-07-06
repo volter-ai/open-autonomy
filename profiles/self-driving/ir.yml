@@ -133,13 +133,12 @@ policy:
     # NOTE: the deploy gate is NOT here. The deploy WORKFLOW (.github/workflows/deploy.yml) declares its own
     # gate — `environment:` + `on: push: tags:` — so provision-deploy.ts derives it from there; policy.box is
     # opaque governance, not deploy config.
+    # Every key here is a PARAMETER WITH A READER — deterministic (emit/runtime script) or agent-at-runtime
+    # (a skill instructs reading the key from .open-autonomy/autonomy.yml). A norm with no reader is prose
+    # and lives in the owning skill/doc instead; `bun run check:policy-consumers` enforces this.
     autonomy:
-      max_open_agent_prs: 5
-      max_develop_attempts: 2
-      max_ci_retries: 2
-      max_review_retries: 2
-      stale_needs_info_minutes: 10080
-      require_visible_pm_status: true
+      max_open_agent_prs: 5      # read by ingest-manifest (concurrency) + the PM skill
+      max_develop_attempts: 2    # read by the PM skill (rework cap)
     human:
       # The declared `maintainer` consumer's engage config (docs/SPEC.md#handoffs). When a task enters
       # human-required scope the org ENGAGES the maintainer github-natively (assign + request-review/@mention
@@ -148,7 +147,7 @@ policy:
       # who to engage; if unset, the substrate falls back to the repo owner.
       maintainers_var: PUBLIC_AGENT_MAINTAINERS
       sla_minutes: 1440            # re-notify/escalate a human-required item still waiting after this long
-      decision_types: [approve, decide, answer, inform]
+      # (the ask types — approve/decide/answer/inform — are the maintainer skill's prose, not a parameter)
     risk:
       human_required_paths:
         - .github/workflows/**
@@ -163,16 +162,14 @@ policy:
         - "**/bun.lock"          # merge-dangerous: the next CI `bun install` executes deps (dependency-trust)
       human_required_topics: [auth, secrets, billing, deployment, destructive data migration, dependency trust]
     merge:
-      require_ci: true
-      require_low_risk_review: true
-      require_current_head_sha: true
+      # (ci/agent-review/human-approval being required, and per-head-SHA re-earn, are the seam CONTRACT —
+      # enforced by branch protection + the gate, described in docs/SPEC.md, not tunable parameters here)
       # The ONE declaration of the hold vocabulary. Read at runtime by the rearm sweep (a labeled PR is
       # never re-armed) and consulted by the pm/reviewer skills — no component keeps its own copy.
       # `agent-paused` is applied by the control plane's pause verb; listing it here is what makes the
       # sweep respect it (the substrate owns no label vocabulary of its own).
       maintainer_block_labels: [do-not-merge, human-required, agent-blocked, agent-paused, agent-maintainer-hold]
     planner:
-      enabled: true
       issue_origin_label_prefix: "origin:"
       # MUST differ from the `roadmap:<id>` parent-link namespace — fetchRoadmapStatus counts every
       # `roadmap:*` label as an item id, so a phase label of `roadmap:<phase>` would corrupt the rollup.

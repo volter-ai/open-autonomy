@@ -64,7 +64,9 @@ decided and why:
   one) → launch the developer: `bun scripts/runner.ts launch developer --ref <n> --branch agent/issue-<n>`.
   Never launch a second developer for an issue that already has one in flight.
 - **Fresh + underspecified** → comment the specific questions; label `needs-info`; **engage the requester** (Step 2c).
-- **Out of scope / risky** (auth, secrets, workflow edits, billing, destructive data) → comment why; label `human-required`; **engage the maintainer** (Step 2c).
+- **Out of scope / risky** (it touches a topic in `policy.risk.human_required_topics` — read the list from
+  `.open-autonomy/autonomy.yml`, the one source; never keep your own — or is otherwise beyond the org's
+  authority) → comment why; label `human-required`; **engage the maintainer** (Step 2c).
 - **Has an open PR that FAILED** (`ci` failure or `agent-review` failure) → read the failure from the session
   and the PR/issue comments, then JUDGE from history:
   - a clear, addressable failure you have **not** already retried → relaunch the developer with a comment

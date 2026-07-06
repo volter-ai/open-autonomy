@@ -36,7 +36,7 @@ Your live worklist is just GitHub: `is:open assignee:@me label:human-required` (
 
 ## The decision you're asked for (the `decision` type)
 
-Each engagement carries one of these ask types (`policy.human.decision_types`):
+Each engagement carries one of these ask types:
 
 | type | what you do | how you resolve (the `result`) |
 |---|---|---|

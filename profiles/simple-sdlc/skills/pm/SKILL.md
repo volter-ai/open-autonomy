@@ -10,6 +10,11 @@ Read:
 - `standards/workflow.md` (WIP + dispatch + integration rules)
 - `standards/issue-and-evidence.md`
 
+Before dispatching develop on an issue, consult `policy.risk.human_required_topics` and
+`policy.risk.human_required_paths` in `.open-autonomy/autonomy.yml` (the one source — never keep
+your own list): an issue on one of those topics, or whose change would land in a matching path,
+is a human decision — do not dispatch it; note it as blocked-for-human in your tick output.
+
 This is an execution skill, not a status report. Do not stop after summarizing
 state. A tick is complete only after exactly one action happened (a dispatch or
 an integration), or after you verified none is eligible.

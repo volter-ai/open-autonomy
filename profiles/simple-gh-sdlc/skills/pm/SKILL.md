@@ -23,7 +23,9 @@ GitHub — durable and visible to every stateless run — NOT in a local ztrack 
   auto-merge). You do not dispatch review.
 - **done** = the PR merged (the issue auto-closes via `Closes #<n>`).
 - **`needs-info` / `human-required`** = parked for a human; skip unless a human has
-  since replied.
+  since replied. An issue touching a topic in `policy.risk.human_required_topics` (read the
+  list from `.open-autonomy/autonomy.yml` — the one source; never keep your own) is routed
+  `human-required` rather than dispatched.
 
 ztrack is the **acceptance gate on the issue's content**, not the board: `develop`
 and `reviewer` run `ztrack check` against the issue's ACs + evidence. The PM reads

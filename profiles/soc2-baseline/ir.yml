@@ -111,9 +111,8 @@ policy:
       # harden-runner block only audits. Injects scripts/egress-guard.sh into the credentialed jobs — a
       # self-managed iptables allowlist (GitHub /meta ranges + the agent's hosts) with default-deny.
       private_egress_guard: true
-    wip:
-      maxInProgress: 1
-      maxInReview: 1
+    # (the WIP ceiling — one develop in flight, one in review — is the PM doctrine in standards/workflow.md;
+    # policy.maxConcurrent is the enforced runner cap. No component reads a wip.* key.)
     autonomy:
       max_develop_attempts: 2
     # The human-seam engage config (docs/SPEC.md#handoffs). soc2-baseline ships the human-approval gate
@@ -123,7 +122,6 @@ policy:
     human:
       maintainers_var: PUBLIC_AGENT_MAINTAINERS
       sla_minutes: 1440
-      decision_types: [approve, decide, answer, inform]
     risk:
       # The OA harness is human-required (an agent must never auto-merge a change to the runner/loop/skills/
       # manifest), PLUS the SOC 2 governance surface: the compliance/ policy+evidence tree and the security

@@ -321,8 +321,19 @@ reproduced by executing commands, not by reading prose. Verdict: the local path 
 papercuts; the hosted github path is effectively maintainer-only as documented; the SPEC's own profile
 example is broken; the operator docs describe a control plane that no longer exists. BL-13..BL-29 file
 every finding, one item per finding (cohesive batches stay batched). Distinct stream from the BL-1
-boundary/policy backlog (BL-2..BL-11) — BL-1's rollup reads over its own wave list only. **Filing
-only:** which items get built is the maintainer's call; no fixer work is authorized by this charter.
+boundary/policy backlog (BL-2..BL-11) — BL-1's rollup reads over its own wave list only.
+
+**Initiatives (ratified 2026-07-06):** the findings decompose into five kinds of work, and only two
+are workable from this backlog:
+- **Wave A — docs-truth sweep** (prose only; doc == shipped reality): BL-17, BL-19, BL-21, BL-25,
+  BL-26, BL-27 dev/02, BL-16 (doc-side). Workable now.
+- **Wave B — engine/CLI hardening** (product code for external adopters): BL-14, BL-15, BL-22,
+  BL-29, BL-27 dev/01+03. Workable now.
+- **LIFTED → roadmap intent `hosted-adopter-path`** (strategic: is hosted adoption a product yet?):
+  BL-13, BL-18, BL-24. Their sections below are the planner's spec, not workable backlog items.
+- **DECISION ITEMS** (blocked on a maintainer fork choice before any build): BL-20, BL-23, BL-28.
+- **Externally gated:** BL-16's repo flip (reserved phrase) and BL-26's CONSTITUTION edits
+  (human-amended only).
 
 ### Acceptance Criteria
 
@@ -332,7 +343,9 @@ only:** which items get built is the maintainer's call; no fixer work is authori
 
 assignee: yueranyuan
 
-Adopter-docs audit · personas C + D, found independently. Compiled installs default the model-proxy
+**LIFTED → roadmap intent `hosted-adopter-path`** (2026-07-06): strategic, not workable from this
+backlog — this section is the spec the planner decomposes. Adopter-docs audit · personas C + D,
+found independently. Compiled installs default the model-proxy
 endpoint to the maintainer's Worker — `vars.PUBLIC_AGENT_PROXY_HOST ||
 'volter-agent-model-proxy.aaron-0ed.workers.dev'` (emitted `developer.yml:51`;
 `profiles/self-driving/ir.yml:128-129`; compiled `autonomy.yml:149`) — and that proxy is closed three
@@ -420,7 +433,8 @@ supply-chain surprise), PUBLIC_AGENT_MAINTAINERS, PUBLIC_AGENT_TRIAGE_MODEL.
 
 assignee: yueranyuan
 
-Adopter-docs audit · persona C. The proposer dispatches CI by literal filename with sha/pr inputs and
+**LIFTED → roadmap intent `hosted-adopter-path`** (2026-07-06): spec for the planner, not a
+workable backlog item. Adopter-docs audit · persona C. The proposer dispatches CI by literal filename with sha/pr inputs and
 expects it to post the `ci` commit status (`scripts/agent-propose.ts:141`); dispatch failure is
 "non-fatal" after 6 retries (`agent-propose.ts:49-51`). simple-gh-sdlc's gh-actions compile ships NO
 ci.yml → the required check never posts and every agent PR wedges forever. The contract (the proposer
@@ -451,6 +465,7 @@ automates the correct protection but is dev-only and referenced by no adopter do
 
 assignee: yueranyuan
 
+**DECISION ITEM** — blocked on the maintainer's fork choice in dev/01; no build until decided.
 Adopter-docs audit · personas C + D, found independently. `README.md:172` and
 `docs/OSS_AGENT_RUNBOOK.md:92-93` document `/agent pause repo` setting PUBLIC_AGENT_REPO_PAUSED=true;
 `.github/agent-control.mjs:20` implements only cancel|pause|resume|status|retry|decide|answer — no repo
@@ -512,7 +527,8 @@ and there is no `open-autonomy lint <profileDir>`.
 
 assignee: yueranyuan
 
-Adopter-docs audit · persona A. The entire authoring surface is one sentence (`profiles/README.md:11`
+**DECISION ITEM** — the guide's scope (where it lives, how deep the policy.box/capability catalogs
+go) is a maintainer call before the writing starts. Adopter-docs audit · persona A. The entire authoring surface is one sentence (`profiles/README.md:11`
 and `docs/OPERATIONS.md:187-188` "fork the profile"). The policy.box vocabulary exists only as comments
 in substrate-github `emit.ts:113-186`; `SPEC.md:117`'s "four catalogs" omits `subject.actorRole`, which
 SPEC's own table (`SPEC.md:504-507`) and `profiles/simple-gh-sdlc/ir.yml:55` use. hello is the right
@@ -528,7 +544,8 @@ by error message).
 
 assignee: yueranyuan
 
-Adopter-docs audit · persona C. "GitHub production rollout" (`docs/OPERATIONS.md:276-380`) is an
+**LIFTED → roadmap intent `hosted-adopter-path`** (2026-07-06): spec for the planner, not a
+workable backlog item. Adopter-docs audit · persona C. "GitHub production rollout" (`docs/OPERATIONS.md:276-380`) is an
 environment checklist, not an install path — it never says compile → commit → seed labels → enable
 auto-merge → set workflow permissions → create the production environment; INSTALL-AGENT.md scopes
 itself to local (`INSTALL-AGENT.md:11`). Required repo settings are listed nowhere: "Allow auto-merge"
@@ -612,7 +629,8 @@ and REQUIRED_FILES is self-driving-shaped so it can't validate simple-gh-sdlc.
 
 assignee: yueranyuan
 
-Adopter-docs audit · persona B. No adopter-facing profile declares a kind:human actor; substrate-local's
+**DECISION ITEM** — blocked on the maintainer's fork choice in dev/01 (ship the example vs mark
+designed-not-built); no build until decided. Adopter-docs audit · persona B. No adopter-facing profile declares a kind:human actor; substrate-local's
 emit has no human-actor emission path; HumanRunner (`packages/core/src/runner.ts:93`) is the documented
 "no-op bookkeeping floor" (`SPEC.md:667,687`); there is no runnable human-in-the-loop recipe an adopter
 can follow, even though the local substrate is where HumanRunner is actually driven.

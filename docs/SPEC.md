@@ -387,6 +387,36 @@ runner one). The realization:
 So merge and deploy are the two production boundaries: an agent may propose code and an agent may bless a
 review, but **no agent lands on `main` and no agent ships to production** — each requires the human/native gate.
 
+#### Contract constants vs tunable policy — which names belong to the standard
+
+Two kinds of names cross the seam, and conflating them has produced both failure modes: hardcoding org
+policy into substrate machinery (a runtime script shipping its own copy of an org's hold-label list into
+every install), and the temptation to parameterize the seam itself (which would let one install silently
+rename the thing every component must agree on).
+
+- **Contract constants** — names independent components must agree on **at author time** for the seam to
+  function: the proposer dispatches checks by name, branch protection requires them by name, the control
+  plane applies/clears labels by name, the human gate reads them by name. They are part of `autonomy.ir.v1`'s
+  realization; renaming one is a **spec change** coordinated across components, never a per-org knob.
+  - status contexts: `ci`, `agent-review` (the merge boundary above), and `human-approval` — the
+    additional required check shipped by gate-carrying profiles, re-earned **per head SHA**;
+  - labels: `human-required` and `agent-develop-only` (the human-approval gate's scope triggers),
+    `agent-paused` (the control plane's pause-verb marker), `needs-info` and `agent-blocked` (the
+    human-block labels the control plane's `decide`/`answer` resolutions clear);
+  - the agent branch prefix `agent/`.
+- **Tunable policy** — a `policy.box` parameter **with a reader** (a declared key nothing reads doesn't
+  exist — `check:policy-consumers` makes that state unrepresentable): `merge.maintainer_block_labels`,
+  `risk.human_required_paths` / `human_required_topics`, `human.sla_minutes` / `maintainers_var`, the
+  planner's label prefixes. Declared per profile, read at **runtime** from the compiled
+  `.open-autonomy/autonomy.yml`; an org tunes them per install and no component changes.
+
+The rule for a new name: **if a component must know it at author/compile time** (baked into a script, a
+workflow expression, branch protection), it is a contract constant — record it here, export it as a code
+constant where machinery needs the list (preflight seeds its expected labels from that export plus the
+install's declared policy), and treat renames as spec changes. **If every consumer can read it at runtime
+from the manifest**, it is policy — declare it under `policy.box` and wire the reader. One question decides;
+both misfilings are bugs.
+
 ### The agent lifecycle (what replaced prepare / interpret)
 
 ```

@@ -51,6 +51,43 @@ const REQUIRED_ENV = [
 // never stored in a fleet repo.
 const REQUIRED_SECRET_NAMES: string[] = [];
 
+// The seam-contract labels (docs/SPEC.md#capabilities — contract constants vs tunable policy): names the
+// gate/control-plane machinery acts on at author time. Renaming one is a spec change, so they are a code
+// constant here — NOT read from policy (an install must not be able to rename the seam out from under the
+// components that hardcode it).
+export const SEAM_CONTRACT_LABELS = [
+  'human-required', // the human-approval gate's scope trigger
+  'agent-develop-only', // the gate's develop-only hold (read via the PR's linked issue)
+  'agent-paused', // the control plane's pause-verb marker
+  'needs-info', // human-block label the control plane's answer verb clears
+  'agent-blocked', // human-block label the control plane's resolutions clear
+];
+
+// The labels an install should have seeded: the contract constants + the install's OWN declared label
+// policy, read from the compiled manifest — never a hand-kept copy (this list used to be the fifth
+// hand-maintained copy of the label vocabulary; now the manifest is the only tunable source).
+export function expectedLabels(root = '.'): string[] {
+  let policy: {
+    merge?: { maintainer_block_labels?: string[] };
+    planner?: { issue_origin_label_prefix?: string; priority_labels?: Record<string, string> };
+  } = {};
+  try {
+    const manifest = (Bun.YAML.parse(readFileSync(`${root}/.open-autonomy/autonomy.yml`, 'utf8')) ?? {}) as {
+      policy?: typeof policy;
+    };
+    policy = manifest.policy ?? {};
+  } catch {
+    /* no manifest → contract constants only (the missing manifest is reported by its own check) */
+  }
+  const block = Array.isArray(policy.merge?.maintainer_block_labels) ? policy.merge.maintainer_block_labels : [];
+  const planner = policy.planner ?? {};
+  // `<origin-prefix>roadmap-planner` is the planner's provenance label for roadmap-born issues; the prefix
+  // is the policy half, the `roadmap-planner` suffix is the planner-skill convention.
+  const origin = planner.issue_origin_label_prefix ? [`${planner.issue_origin_label_prefix}roadmap-planner`] : [];
+  const priority = Object.values(planner.priority_labels ?? {});
+  return [...new Set([...SEAM_CONTRACT_LABELS, ...block, ...origin, ...priority])];
+}
+
 function usage(): never {
   throw new Error(`Usage:
   bun scripts/open-autonomy-preflight.ts [--root .] [--labels labels.json] [--branch-protection branch.json] --out preflight.json`);
@@ -109,7 +146,7 @@ export function buildPreflightReport(input: PreflightInput = {}): PreflightRepor
     });
   }
 
-  for (const label of ['agent-paused', 'agent-blocked', 'human-required', 'needs-info', 'origin:roadmap-planner']) {
+  for (const label of expectedLabels(root)) {
     checks.push({
       id: `label:${label}`,
       status: labels.size === 0 || labels.has(label) ? 'pass' : 'warn',

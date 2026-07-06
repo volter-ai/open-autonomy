@@ -78,6 +78,36 @@ This is review §5.2 ("the policy.box grab-bag") made concrete: roughly half the
 Each key should be wired (injected into the skill prompt / read by the sweep), or deleted — a policy
 file that half-lies trains readers to ignore all of it.
 
+### 2.1 The decision rule (what earns a key its place in the box)
+
+"Is it substrate-enforced?" is the wrong test — it would evict the tunables into skill prose and
+reproduce the paraphrase-drift disease in the other direction. The right test:
+
+> **A key belongs in `policy.box` iff it is a *parameter* with exactly one authoritative copy and at
+> least one real reader.** Two reader channels are legitimate: **(a) deterministic** — the
+> compiler/gate/sweep derives behavior from it; **(b) agent-at-runtime** — a skill instructs the
+> agent to read the key from `autonomy.yml` (and never paraphrases its value). **Norms** (judgment
+> sentences) live in skill doctrine. **Descriptions** of behavior enforced elsewhere live in docs.
+> **No reader → delete.**
+
+Channel (b) is legitimate because parameters and norms change on different cycles: an operator
+tuning `sla_minutes` or an install forking `max_open_agent_prs` should not need a doctrine edit; the
+skill states the norm, the box carries the value. The corollary discipline is the one this repo
+violated: a skill **reads** a key, it never inlines a copy (`human_required_topics` triplicated into
+three drifted prose lists is what inlining produces).
+
+Applied to §2's inventory, OA-6 dev/06 resolves each key three ways:
+
+| Disposition | Keys |
+|---|---|
+| **Keep** (already earning) | `gh-actions.*`, `risk.human_required_paths`, `human.maintainers_var`, `autonomy.max_open_agent_prs`, `autonomy.max_develop_attempts`, `human.sla_minutes` (fix the `policy.box.*` citation, 3.1), `planner.issue_origin_label_prefix` / `phase_label_prefix` / `priority_labels` |
+| **Wire** (parameter whose rightful reader isn't reading it) | `merge.maintainer_block_labels` → read by `rearm-auto-merge.ts` + consulted by reviewer/pm skills (collapses 1.1's four-way drift to one source); `risk.human_required_topics` → skills consult the key, the three prose copies deleted; *optionally* `merge.require_*` → provision derives branch protection from them (which would also fix 4.4 by generating `provision.json` instead of hand-owning it) — else delete as mere description |
+| **Delete** (norms-as-flags and orphans) | `autonomy.require_visible_pm_status` (a boolean for a prose norm), `planner.enabled` (the roster is the enable flag), `autonomy.max_ci_retries` / `max_review_retries` (the real knob is `max_develop_attempts`), `autonomy.stale_needs_info_minutes` (SLA covers cadence), `human.decision_types` (the sentence stays in the maintainer skill) |
+
+Regression guard so the box can't rot again: a **`check:policy-consumers`** lint — every declared
+box key must appear either in runtime-script code or in a skill as a read-instruction — turns
+wire-or-delete from a one-time cleanup into an invariant. (Candidate AC under OA-6.)
+
 ## 3. Doctrine that cites mechanisms that don't exist → OA-6
 
 - **3.1** pm `SKILL.md:132` + maintainer `SKILL.md:30,36` cite `policy.box.human.sla_minutes` "from

@@ -1,5 +1,30 @@
 # Changelog
 
+## 0.4.1
+
+Security patch for the `human-approval` gate shipped in 0.4.0's profile resources — upgrade compiled
+installs (re-compile / `autonomy-upgrade`) to pick up the fixed `human-approval.yml` +
+`human-approval-gate.ts`.
+
+### Fixed
+- **The develop-only hold failed OPEN** (found by live testbed proof, BL-5 dev/03): the
+  `human-approval` workflow never granted `issues: read`, so the gate's linked-issue label lookup
+  failed and the error was swallowed into the same empty string as "no labels" — every
+  `agent-develop-only` PR auto-passed the gate and merged. Fixed at both layers, in both profile
+  carriers (self-driving, soc2-baseline): the workflow grants `issues: read`, and the lookup now
+  **fails CLOSED** — an unreadable label set scopes the PR to require a maintainer Approve
+  (`developOnlyFromLookup(null) === true`, unit-tested). Re-proven live: the held → Approve → merge
+  path on a real develop-only PR, with the log showing a genuine label read.
+- **Bench provisioning omitted `human-approval` from required checks** (`provision.template.json` +
+  the self-driving workload seeds), so bench cells merged PRs on `ci` + `agent-review` alone. All
+  three required contexts are now provisioned, matching the documented branch protection.
+
+### Migration notes
+- Compiled installs: re-run the upgrade (or re-compile) so the install's `.github/workflows/human-approval.yml`
+  gains `issues: read` and `scripts/human-approval-gate.ts` gains the fail-closed lookup. Without the
+  permission grant, the patched script will hold **every** PR with a linked issue (fail-closed), so
+  ship both files together — the upgrade does.
+
 ## 0.4.0
 
 The **adopter release**: everything surfaced by the four-persona adopter-docs audit of 0.3.1 (BACKLOG

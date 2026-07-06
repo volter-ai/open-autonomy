@@ -102,12 +102,28 @@ export function validateIR(ir: AutonomyIR): string[] {
     const sawActorsKey = (ir as unknown as { actors?: unknown }).actors !== undefined;
     errors.push(sawActorsKey ? 'no agents (found "actors:" — the key is "agents:")' : 'no agents (the top-level key is "agents:")');
   }
+  // policy/resources are required top-level slots (docs/SPEC.md#the-ir): omitting either used to surface
+  // as a raw engine TypeError deep in a substrate (manifest.ts reading ir.policy.box, emit.ts reading
+  // ir.resources.includes) — turn the mistake into an actionable message at the one place every profile
+  // is parsed, instead of at whichever substrate happens to touch the missing field first.
+  if (ir.policy === undefined || ir.policy === null) errors.push('missing policy (add "policy: { box: {} }" — governance data every substrate + skill reads verbatim)');
+  else if (typeof ir.policy !== 'object' || ir.policy.box === undefined || ir.policy.box === null)
+    errors.push('policy.box is required (e.g. "policy: { box: {} }" if the profile declares no governance data)');
+  else if (typeof ir.policy.box !== 'object') errors.push('policy.box must be an object');
+  if (ir.resources === undefined || ir.resources === null) errors.push('missing resources (add "resources: []" if the profile carries no verbatim files)');
+  else if (!Array.isArray(ir.resources)) errors.push('resources must be an array');
   for (const [name, a] of Object.entries(ir.agents ?? {})) {
     if (!a.behavior) errors.push(`agent ${name}: missing behavior`);
     if (!Array.isArray(a.capabilities)) errors.push(`agent ${name}: capabilities must be an array`);
     // code:merge is gate-only: merge is the one irreversible, default-branch act, never granted to an
     // agent (docs/SPEC.md#capabilities — the merge boundary). The base (before any @scope) must not be code:merge.
     const capBases = (a.capabilities ?? []).filter((c): c is string => typeof c === 'string').map((c) => c.split('@')[0]);
+    // The capability catalog (docs/SPEC.md#capabilities): a typo (`code:proposal`, `totally-made-up`)
+    // used to compile silently — capsToPermissions (substrate-github emit.ts) just skips names it doesn't
+    // recognize, producing a READ-ONLY agent that fails at runtime with no compile-time signal at all.
+    for (const cap of capBases)
+      if (!KNOWN_CAPABILITIES.has(cap))
+        errors.push(`agent ${name}: unknown capability '${cap}' (catalog: ${[...KNOWN_CAPABILITIES].join(', ')})`);
     for (const cap of capBases)
       if (cap === 'code:merge')
         errors.push(`agent ${name}: code:merge is gate-only — no agent may merge`);
@@ -143,10 +159,34 @@ export function validateIR(ir: AutonomyIR): string[] {
         errors.push(`agent ${name}: trigger must be a cron, an event, or a dispatch`);
       else if ('dispatch' in t && t.dispatch !== true)
         errors.push(`agent ${name}: dispatch trigger must be { dispatch: true }`);
+      // The trigger-param SOURCE catalog (docs/SPEC.md#trigger-params): an unrecognized source used to
+      // resolve to a silent empty string at compile time (substrate-github emit.ts's `?? "''"` fallback)
+      // — the agent would run with a blank param and no signal anything was wrong.
+      for (const [param, source] of Object.entries((t as { params?: Record<string, string> }).params ?? {}))
+        if (!KNOWN_TRIGGER_SOURCES.has(source))
+          errors.push(`agent ${name}: trigger param '${param}' has unknown source '${source}' (catalog: ${[...KNOWN_TRIGGER_SOURCES].join(', ')})`);
     }
   }
   return errors;
 }
+
+// The capability catalog (docs/SPEC.md#capabilities): the agent's authority, over three nouns (code ·
+// tasks · agent). Additive-only — a new capability is added here first, then implemented by substrates.
+const KNOWN_CAPABILITIES = new Set([
+  'code:propose',
+  'code:review',
+  'code:merge', // gate-only (never granted — enforced separately above); still a catalog member
+  'tasks:author',
+  'tasks:converse',
+  'agent:launch',
+  'agent:list',
+  'agent:update',
+  'agent:cancel',
+]);
+
+// The trigger-param source catalog (docs/SPEC.md#trigger-params): what a trigger can forward to an
+// agent. Additive-only, like the capability catalog above.
+const KNOWN_TRIGGER_SOURCES = new Set(['subject.ref', 'subject.actor', 'subject.actorRole', 'subject.text', 'trigger.kind']);
 
 /** A compact structural fingerprint for comparing two IRs (the universality smoke test). */
 export function irShape(ir: AutonomyIR) {

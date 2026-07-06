@@ -1,7 +1,8 @@
 // Write a CompileOutput to disk: generated files verbatim, copied files via a source resolver.
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
-import type { CompileOutput } from './ir';
+import { isScript } from './ir';
+import type { AutonomyIR, CompileOutput } from './ir';
 
 export function materialize(out: CompileOutput, destDir: string, readSource: (from: string) => string): string[] {
   const written: string[] = [];
@@ -56,4 +57,26 @@ export function findClobbers(out: CompileOutput, destDir: string, readSource: (f
   for (const [path, content] of Object.entries(out.generated)) check(path, content);
   for (const { from, to } of out.copies) check(to, readSource(from));
   return clobbers.sort();
+}
+
+/** BL-22 dev/03: a skill's SKILL.md frontmatter `name` MUST equal its folder (the agent's `behavior`).
+ *  Both harnesses trigger a skill by that name — codex `$name`, Claude Code `/name` (`promptFiles` in
+ *  substrate-local's emit.ts sends exactly that) — and it's installed under `.{codex,claude}/skills/
+ *  <behavior>/`, so a frontmatter mismatch compiles clean and then the launch prompt never resolves.
+ *  Previously enforced only in-repo (bin/check-profiles.ts), so an external profile author got no signal
+ *  at all. Substrate-agnostic (works from the IR + profile dir directly, before any substrate compiles
+ *  it) — skips a SKILL.md that doesn't exist (missingCopySourcesIn already reports that separately). */
+export function validateSkillFrontmatterIn(ir: AutonomyIR, profileDir: string): string[] {
+  const errors: string[] = [];
+  for (const [role, agent] of Object.entries(ir.agents ?? {})) {
+    if (isScript(agent.behavior)) continue; // a script has no SKILL.md — it IS the behavior
+    const skillFile = join(profileDir, 'skills', agent.behavior, 'SKILL.md');
+    if (!existsSync(skillFile)) continue;
+    const name = readFileSync(skillFile, 'utf8').match(/^name:\s*(.+?)\s*$/m)?.[1];
+    if (name !== agent.behavior)
+      errors.push(
+        `agent ${role}: skill "${agent.behavior}"'s SKILL.md frontmatter name "${name ?? '(missing)'}" must equal its folder "${agent.behavior}" (the launch trigger resolves by name)`,
+      );
+  }
+  return errors;
 }

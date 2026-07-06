@@ -165,6 +165,69 @@ describe('validateIR — result schema (optional, skill agents)', () => {
   });
 });
 
+describe('validateIR — policy/resources are required (BL-22: raw engine TypeErrors -> actionable errors)', () => {
+  // manifest.ts reads ir.policy.box and substrate-github emit.ts reads ir.resources.includes(...) —
+  // omitting either used to crash deep in a substrate instead of failing at parse time with a clear
+  // message (the audit's three raw TypeErrors: no policy, policy: {}, no resources).
+  test('rejects a missing policy', () => {
+    const bad = { ...ir({ a: agent() }) } as Partial<AutonomyIR>;
+    delete bad.policy;
+    expect(validateIR(bad as AutonomyIR).some((e) => e.includes('missing policy'))).toBe(true);
+  });
+
+  test('rejects policy: {} (no box key) — the substrate-github emit.ts:154 TypeError', () => {
+    const bad = { ...ir({ a: agent() }), policy: {} as never };
+    expect(validateIR(bad).some((e) => e.includes('policy.box is required'))).toBe(true);
+  });
+
+  test('rejects a missing resources — the emit.ts:501 TypeError', () => {
+    const bad = { ...ir({ a: agent() }) } as Partial<AutonomyIR>;
+    delete bad.resources;
+    expect(validateIR(bad as AutonomyIR).some((e) => e.includes('missing resources'))).toBe(true);
+  });
+
+  test('accepts policy: { box: {} } and resources: [] (the minimum valid form)', () => {
+    expect(validateIR(ir({ a: agent() }))).toEqual([]);
+  });
+});
+
+describe('validateIR — capability catalog (BL-22: a typo used to compile silently)', () => {
+  test('rejects an unknown capability', () => {
+    const a = agent({ capabilities: ['tasks:converse', 'totally-made-up'] });
+    expect(validateIR(ir({ a })).some((e) => e.includes("unknown capability 'totally-made-up'"))).toBe(true);
+  });
+
+  test('rejects a near-miss typo (code:proposal, not code:propose)', () => {
+    const a = agent({ capabilities: ['code:proposal'] });
+    expect(validateIR(ir({ a })).some((e) => e.includes("unknown capability 'code:proposal'"))).toBe(true);
+  });
+
+  test('accepts every catalog capability, including a scoped one', () => {
+    const a = agent({
+      capabilities: ['code:propose@roadmap', 'code:review', 'tasks:author', 'tasks:converse', 'agent:launch', 'agent:list', 'agent:update', 'agent:cancel'],
+    });
+    // code:review + code:propose together trip the merge-boundary error, not the catalog — drop review to isolate the catalog check.
+    const errs = validateIR(ir({ a: { ...a, capabilities: a.capabilities!.filter((c) => c !== 'code:review') } }));
+    expect(errs.some((e) => e.includes('unknown capability'))).toBe(false);
+  });
+});
+
+describe('validateIR — trigger param source catalog (BL-22: an unknown source silently resolved to \'\')', () => {
+  test('rejects an unknown trigger param source', () => {
+    const a = agent({ triggers: [{ dispatch: true, params: { ISSUE: 'subject.reff' } }] });
+    expect(validateIR(ir({ a })).some((e) => e.includes("trigger param 'ISSUE' has unknown source 'subject.reff'"))).toBe(true);
+  });
+
+  test('accepts every catalog source', () => {
+    const a = agent({
+      triggers: [
+        { dispatch: true, params: { A: 'subject.ref', B: 'subject.actor', C: 'subject.actorRole', D: 'subject.text', E: 'trigger.kind' } },
+      ],
+    });
+    expect(validateIR(ir({ a }))).toEqual([]);
+  });
+});
+
 describe('irShape', () => {
   test('renders a dispatch trigger as dispatch (not event:undefined)', () => {
     const a = agent({ triggers: [{ dispatch: true }, { cron: '0 0 * * *' }] });

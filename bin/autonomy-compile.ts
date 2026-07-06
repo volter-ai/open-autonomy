@@ -10,7 +10,7 @@
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { basename, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { parseIr, compiledPaths, materialize, missingCopySourcesIn, findClobbers } from '@open-autonomy/core';
+import { parseIr, compiledPaths, materialize, missingCopySourcesIn, findClobbers, validateSkillFrontmatterIn } from '@open-autonomy/core';
 import { compileLocal } from '@open-autonomy/substrate-local';
 import { compileGithub } from '@open-autonomy/substrate-github';
 
@@ -56,6 +56,15 @@ if (!profileDir) {
 }
 
 const ir = parseIr(readFileSync(join(profileDir, 'ir.yml'), 'utf8'));
+
+// docs/SPEC.md#the-ir (conformance): a profile declares which substrates it supports via `targets:`.
+// Compiling onto one it doesn't list still WORKS (a substrate is a partial implementation of one shared
+// standard, so an undeclared target often just means "never tried", not "incompatible") — but it's
+// unproven, so warn instead of silently proceeding as if it were as supported as a declared target.
+if (!ir.targets.includes(substrate)) {
+  console.error(`open-autonomy: WARNING — profile "${profileArg}" declares targets: [${ir.targets.join(', ')}]; "${substrate}" is not among them (proceeding — an undeclared target may still work, just unproven for this profile).`);
+}
+
 const out = substrate === 'local' ? compileLocal(ir) : compileGithub(ir);
 
 // Pre-materialize validation: every skill dir + resource file the compile will copy must exist BEFORE any
@@ -67,6 +76,15 @@ if (missing.length) {
   console.error(
     `open-autonomy: profile "${profileArg}" is missing ${missing.length} source file(s) it would copy — nothing written:\n  ${missing.join('\n  ')}`,
   );
+  process.exit(1);
+}
+
+// The SKILL.md name==folder contract (docs/SPEC.md#the-ir): a mismatch compiles clean today and then the
+// launch trigger (`/name` / `$name`) never resolves — previously enforced only for this repo's OWN
+// profiles/ (bin/check-profiles.ts), so an external profile author got no signal at all.
+const badSkills = validateSkillFrontmatterIn(ir, profileDir);
+if (badSkills.length) {
+  console.error(`open-autonomy: profile "${profileArg}" has ${badSkills.length} skill/folder name mismatch(es) — nothing written:\n  ${badSkills.join('\n  ')}`);
   process.exit(1);
 }
 

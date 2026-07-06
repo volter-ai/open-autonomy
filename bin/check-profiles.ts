@@ -5,7 +5,7 @@
 // per-file mirror/dogfood checks for self-driving live in check-compile / check-dogfood.
 import { readFileSync, readdirSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
-import { parseIr, isInstallOwned } from '@open-autonomy/core';
+import { parseIr, isInstallOwned, validateSkillFrontmatterIn } from '@open-autonomy/core';
 import { compileGithub } from '@open-autonomy/substrate-github';
 import { compileLocal } from '@open-autonomy/substrate-local';
 
@@ -76,21 +76,10 @@ for (const name of profiles) {
     }
   }
 
-  // Skill identity invariant: a skill's SKILL.md frontmatter `name` MUST equal its folder (the agent's
-  // behavior). The local launch prompt triggers the skill by that name (`$name` for codex, `/name` for
-  // Claude Code) and the skill is installed under .{codex,claude}/skills/<behavior>/ — so a frontmatter
-  // name that differs from the folder makes the trigger unresolvable.
-  const skillsDir = join(dir, 'skills');
-  if (existsSync(skillsDir)) {
-    for (const behavior of readdirSync(skillsDir)) {
-      const skillFile = join(skillsDir, behavior, 'SKILL.md');
-      if (!existsSync(skillFile)) continue;
-      const fm = readFileSync(skillFile, 'utf8').match(/^name:\s*(.+?)\s*$/m)?.[1];
-      if (fm !== behavior) {
-        errs.push(`${name}: skill "${behavior}" frontmatter name "${fm ?? '(missing)'}" must equal its folder "${behavior}" (the launch trigger resolves by name)`);
-      }
-    }
-  }
+  // Skill identity invariant (BL-22 dev/03, docs/SPEC.md#the-ir): a skill's SKILL.md frontmatter `name`
+  // MUST equal its folder (the agent's behavior) — shared with the compile CLI (validateSkillFrontmatterIn)
+  // so an external profile author gets the same signal this repo's own catalog is checked against.
+  for (const e of validateSkillFrontmatterIn(ir, dir)) errs.push(`${name}: ${e}`);
 }
 
 // Cross-profile drift guard: every install-path carried by 2+ github profiles must be byte-identical

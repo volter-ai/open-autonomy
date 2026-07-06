@@ -112,6 +112,14 @@ An actor also carries a **kind** (`agent` | `human`, default `agent`) — a disc
 substrate's (see Kind/realization below). `policy`
 (global governance) and `resources` (verbatim files) sit at the top level. That is the entire IR.
 
+**The SKILL.md name==folder contract.** A non-script `behavior` (a bare name, e.g. `developer`) resolves
+to `skills/<behavior>/SKILL.md`, and that file's frontmatter `name:` **must equal `<behavior>`** — both
+harnesses launch a skill by that name (`/name` for Claude Code, `$name` for codex; a `kind: human`
+actor's skill is the doctrine a person is handed, same rule). A mismatch compiles clean and then the
+launch trigger never resolves. `validateSkillFrontmatterIn` (`@open-autonomy/core`) checks this at
+compile time for any profile (`bin/autonomy-compile.ts`, and `bin/check-profiles.ts` for this repo's own
+catalog) — before it was enforced only for profiles shipped in this repo.
+
 ### The four catalogs (the standard's concrete vocabulary)
 
 A profile depends **only** on these named vocabularies, never on a substrate's raw shapes. New entries
@@ -242,8 +250,18 @@ repo-owned resource — never an escape hatch in the IR.
 A substrate implements a **core** contract (required — any core-conformant substrate runs any IR) and an
 **expanded** set it advertises. `bin/autonomy-conformance.ts` drives the real runner against its real
 backend and reports `supported`/`unsupported` per feature — extended, under this model, to the whole
-standard (capabilities, param sources, config keys), not just Runner ops. `compile` warns when a profile
-uses a feature its target does not support: **partial support is first-class, not failure.**
+standard (capabilities, param sources, config keys), not just Runner ops. **Partial support is
+first-class, not failure.**
+
+**What `compile` warns on today (BL-22 dev/04 — minimal, not full feature-conformance):** `bin/
+autonomy-compile.ts` warns when the substrate you're compiling ONTO isn't in the profile's own declared
+`targets:` (e.g. `targets: [local]` but you ran `compile … gh-actions`) — the shallow, easy-to-derive
+signal that a combination is unproven for this profile. It does NOT yet warn on the deeper claim this
+section used to make ("uses a feature its target does not support" — e.g. a profile using event triggers
+against a substrate whose conformance battery reports them unsupported): that needs `compile` to consult
+the conformance battery's per-feature matrix, which isn't wired up. `open-autonomy lint <profileDir>`
+(BL-22 dev/04) runs the same pre-materialize validation (parse + compile to every declared target +
+skill/folder-name check) without writing anything, for a profile of your own.
 
 **Runner core (MUST):** `launch` / `list` / `cancel`, ids received (not invented), params passed verbatim.
 **Trigger core (MUST):** fire `cron` and launch the agent. PM-on-cron is the universal dispatcher, so cron

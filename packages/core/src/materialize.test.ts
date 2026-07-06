@@ -2,8 +2,8 @@ import { describe, expect, test } from 'bun:test';
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { materialize, missingCopySources, missingCopySourcesIn, findClobbers } from './materialize';
-import type { CompileOutput } from './ir';
+import { materialize, missingCopySources, missingCopySourcesIn, findClobbers, validateSkillFrontmatterIn } from './materialize';
+import type { AutonomyIR, CompileOutput } from './ir';
 
 function withTmpDir(fn: (dir: string) => void) {
   const dir = mkdtempSync(join(tmpdir(), 'oa-materialize-'));
@@ -86,6 +86,43 @@ describe('findClobbers (BL-14 — fresh-compile clobber guard)', () => {
       writeFileSync(join(dir, 'README.md'), "the adopter's OWN readme, totally unrelated\n");
       writeFileSync(join(dir, 'package.json'), '{"name":"their-app"}');
       expect(findClobbers(additiveOut, dir, readSource)).toEqual([]);
+    });
+  });
+});
+
+describe('validateSkillFrontmatterIn (BL-22 dev/03 — SKILL.md name==folder, external profiles too)', () => {
+  const ir: AutonomyIR = {
+    schema: 'autonomy.ir.v1',
+    targets: ['local'],
+    agents: {
+      dev: { behavior: 'developer', capabilities: ['tasks:converse'], triggers: [{ cron: '0 0 * * *' }] },
+      sweep: { behavior: 'scripts/sweep.ts', capabilities: ['tasks:converse'], triggers: [{ cron: '0 0 * * *' }] },
+    },
+    policy: { box: {} },
+    resources: [],
+  };
+
+  test('rejects a SKILL.md whose frontmatter name differs from its folder', () => {
+    withTmpDir((dir) => {
+      mkdirSync(join(dir, 'skills/developer'), { recursive: true });
+      writeFileSync(join(dir, 'skills/developer/SKILL.md'), '---\nname: dev-worker\n---\n');
+      const errs = validateSkillFrontmatterIn(ir, dir);
+      expect(errs.some((e) => e.includes('developer') && e.includes('dev-worker'))).toBe(true);
+    });
+  });
+
+  test('accepts a matching frontmatter name and skips script behaviors entirely', () => {
+    withTmpDir((dir) => {
+      mkdirSync(join(dir, 'skills/developer'), { recursive: true });
+      writeFileSync(join(dir, 'skills/developer/SKILL.md'), '---\nname: developer\n---\n');
+      // `sweep`'s behavior is a script (scripts/sweep.ts) — it has no SKILL.md and must not be checked.
+      expect(validateSkillFrontmatterIn(ir, dir)).toEqual([]);
+    });
+  });
+
+  test('skips a missing SKILL.md (missingCopySourcesIn reports that failure separately)', () => {
+    withTmpDir((dir) => {
+      expect(validateSkillFrontmatterIn(ir, dir)).toEqual([]);
     });
   });
 });

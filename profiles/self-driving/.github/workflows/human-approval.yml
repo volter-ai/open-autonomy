@@ -24,6 +24,10 @@ permissions:
   contents: read
   statuses: write
   pull-requests: write
+  # The gate reads the LABELS of a PR's linked issues (the agent-develop-only scope). Without issues:read
+  # that lookup fails — live-proven on the testbed (BL-5 dev/03): every develop-only PR auto-passed. Both
+  # layers are fixed: this grant, and the fail-closed lookup in human-approval-gate.ts.
+  issues: read
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"

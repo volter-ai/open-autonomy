@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import {
   DEVELOP_ONLY_LABEL,
+  developOnlyFromLookup,
   isMaintainerPermission,
   isSensitivePath,
   linkedIssueNumbers,
@@ -74,6 +75,16 @@ describe('linkedIssueNumbers — the PR→issue link the gate scopes agent-devel
     const issueLabelsOf: Record<number, string[]> = { 12: [DEVELOP_ONLY_LABEL, 'origin:roadmap-planner'] };
     const scoped = linkedIssueNumbers(undefined, 'Closes #12').some((n) => (issueLabelsOf[n] ?? []).includes(DEVELOP_ONLY_LABEL));
     expect(scoped).toBe(true);
+  });
+
+  test('an unreadable label lookup fails CLOSED (scoped), never open', () => {
+    // Live-proven on the testbed (BL-5 dev/03): the workflow token lacked issues:read, the failed
+    // lookup returned the same '' as "no labels", and every develop-only PR auto-passed. A security
+    // gate that cannot read its inputs must hold, not wave through.
+    expect(developOnlyFromLookup(null)).toBe(true); // lookup failed → scoped
+    expect(developOnlyFromLookup('')).toBe(false); // issue readable, no labels → unscoped
+    expect(developOnlyFromLookup('origin:roadmap-planner,priority:high')).toBe(false);
+    expect(developOnlyFromLookup(`${DEVELOP_ONLY_LABEL},origin:roadmap-planner`)).toBe(true);
   });
 });
 

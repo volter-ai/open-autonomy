@@ -56,8 +56,12 @@ absent, so mid-upgrade installs don't fail open). Branch filter becomes `/^agent
   - status: passed
   - evidence ev-dev-04: commit=0b434b6339682f95f240a778a86a48e999fd3a94 acv=1
   - proof: "pm SKILL.md and reviewer SKILL.md now instruct reading policy.merge.maintainer_block_labels from autonomy.yml (reviewer carves out human-required for the separate gate); grep for the old hand-kept lists (agent-maintainer-hold enumerations) in skills returns only the policy declaration." -> ev-dev-04
-- [ ] dev/05 v1 Live proof: a green testbed PR labeled agent-blocked is NOT re-armed by the sweep (run URL recorded).
-  - status: pending
+- [x] dev/05 v1 Live proof: a green testbed PR labeled agent-blocked is NOT re-armed by the sweep (run URL recorded).
+  - status: passed
+  - evidence ev-dev-05: run=https://github.com/volter-test-fixtures/bench-self-driving-conformance-self-driving-mr90gwhj/actions/runs/28782004703 acv=1
+  - proof: "Live on a funded bench cell (2026-07-06): PR #27 fully green (ci+agent-review+human-approval
+    success), auto-merge disabled, labeled agent-blocked; the rearm sweep run logged 'rearm: 0 PR(s)
+    re-armed, 1 held (6 open)' and PR #27 stayed OPEN with autoMergeRequest null." -> ev-dev-05
 
 ## BL-3 policy.box passes the parameter-with-a-reader test
 
@@ -110,8 +114,13 @@ review event — negligible.
   - status: passed
   - evidence ev-dev-01: commit=b3587caf7dcd02362565b71e9e0f4bb0c8d390ca acv=1
   - proof: "scripts/human-approval-gate.ts: the MAINTAINER association set is deleted; qualifies(review, headSha, isMaintainer) requires APPROVED + commit_id==head + repo-permission write/maintain/admin. scripts/human-approval-gate.test.ts proves read-permission (even with author_association OWNER) does not qualify and write/maintain/admin do (58 script tests green)." -> ev-dev-01
-- [ ] dev/02 v1 Live proof: a maintainer Approve on a testbed human-required PR still flips the gate to success (run URL recorded).
-  - status: pending
+- [x] dev/02 v1 Live proof: a maintainer Approve on a testbed human-required PR still flips the gate to success (run URL recorded).
+  - status: passed
+  - evidence ev-dev-02: run=https://github.com/volter-test-fixtures/bench-self-driving-conformance-self-driving-mr90gwhj/actions/runs/28782716760 acv=1
+  - proof: "Live on a funded bench cell (2026-07-06): PR #34 labeled human-required parked at the gate
+    (run 28782621375: 'scoped=true approved=false → pending', mergeStateStatus BLOCKED with ci +
+    agent-review green); a maintainer Approve (repo admin permission — no association shortcut) flipped
+    it ('scoped=true approved=true → success') and only then did the PR merge." -> ev-dev-02
 
 ## BL-5 The gate owns `agent-develop-only`
 
@@ -141,6 +150,13 @@ like `human-required` on the PR. Bench asserts the corrected outcome.
   - proof: "bench-operate.ts opDevelopOnly now waits for both agent-review and human-approval contexts and asserts agent-review:SUCCESS + human-approval not SUCCESS + PR unmerged; the old agent-review:FAILURE expectation is gone." -> ev-dev-02
 - [ ] dev/03 v1 Live proof: the governance-develop-only scenario passes on the testbed (run URL recorded).
   - status: pending
+  - progress (2026-07-06): the first live attempt FOUND A REAL FAIL-OPEN BUG instead of a proof — the
+    gate's workflow token had no `issues: read`, so the linked-issue label lookup failed, gh() swallowed
+    the error into '' ("no labels"), developOnly evaluated false, and the develop-only PR (#32, bench
+    cell run 28782283869) auto-passed and merged. Fixed both layers same day: `issues: read` granted in
+    human-approval.yml (both profile carriers + emitted root) and the lookup now FAILS CLOSED
+    (developOnlyFromLookup(null)=scoped, unit-tested). The live re-proof runs on the bench cell with the
+    fixed workflow — this AC stays open until that run URL is recorded.
 
 ## BL-6 Doctrine cites only mechanisms that exist
 
@@ -258,8 +274,13 @@ Files: `profiles/self-driving/ir.yml` `risk.human_required_paths` (+ regenerated
   - status: passed
   - evidence ev-dev-02: commit=fa9a45531e5ce6ad8361a9d3c14018a8e5aa7983 acv=1
   - proof: "isSensitivePath extracted to a pure export and unit-tested against the REAL regenerated .open-autonomy/human-required-paths.json (not a fixture): scripts/human-approval-gate.ts (and the other three, both layers) in scope; bench-judge/transcript/agent NOT scoped; history/ exclusion + missing-file fallback pinned. 15/15 gate tests green." -> ev-dev-02
-- [ ] dev/03 v1 Live proof: a testbed PR editing a boundary script parks at human-approval pending until a maintainer Approve (run URL recorded).
-  - status: pending
+- [x] dev/03 v1 Live proof: a testbed PR editing a boundary script parks at human-approval pending until a maintainer Approve (run URL recorded).
+  - status: passed
+  - evidence ev-dev-03: run=https://github.com/volter-test-fixtures/bench-self-driving-conformance-self-driving-mr90gwhj/actions/runs/28782469988 acv=1
+  - proof: "Live on a funded bench cell (2026-07-06): PR #31 edited scripts/rearm-auto-merge.ts (a
+    boundary script); the gate scoped it by PATH alone (no label — run 28782239343: 'scoped=true
+    approved=false → pending', PR blocked ~4 min with ci + agent-review green) until a maintainer
+    Approve flipped it to success and it merged." -> ev-dev-03
 
 ## BL-10 egress-guard becomes runner-owned
 

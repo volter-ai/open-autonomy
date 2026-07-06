@@ -35,6 +35,6 @@
   ],
   "branch_protection": {
     "branch": "main",
-    "required_checks": ["ci", "agent-review"]
+    "required_checks": ["ci", "agent-review", "human-approval"]
   }
 }

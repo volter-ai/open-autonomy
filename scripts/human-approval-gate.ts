@@ -33,6 +33,13 @@ export const isMaintainerPermission = (perm: string): boolean => perm === 'admin
 // like `human-required` on the PR itself.
 export const DEVELOP_ONLY_LABEL = 'agent-develop-only';
 
+// The develop-only decision from one linked issue's label lookup. FAILS CLOSED: this gate is a security
+// boundary, so an UNREADABLE label set (null — e.g. the workflow token lacks issues:read) scopes the PR
+// rather than waving it through. Live-proven necessary (BL-5 dev/03): with the swallowed-error path,
+// every develop-only PR auto-passed because the failed lookup looked identical to "no labels".
+export const developOnlyFromLookup = (labelsCsv: string | null): boolean =>
+  labelsCsv === null ? true : labelsCsv.split(',').includes(DEVELOP_ONLY_LABEL);
+
 // Resolve which issues a PR closes: prefer the code host's own link graph (closingIssuesReferences — populated
 // from close keywords at PR creation), fall back to parsing the body for "Closes #N"-style keywords when the
 // field is empty/unavailable.
@@ -111,9 +118,23 @@ if (import.meta.main) {
   const labels = (view.labels ?? []).map((l) => l.name);
   const files = (view.files ?? []).map((f) => f.path);
   // A linked issue marked develop-only puts the PR in human-required scope (see DEVELOP_ONLY_LABEL).
+  // gh() maps failure to '' — indistinguishable from an issue with no labels — so this lookup catches
+  // its own errors and hands developOnlyFromLookup a null to fail CLOSED on (see its note).
   const developOnly = linkedIssueNumbers(view.closingIssuesReferences, view.body).some((n) => {
-    const issueLabels = gh(['issue', 'view', String(n), '-R', repo, '--json', 'labels', '--jq', '[.labels[].name]|join(",")']);
-    return issueLabels.split(',').includes(DEVELOP_ONLY_LABEL);
+    let issueLabels: string | null;
+    try {
+      issueLabels = execFileSync(
+        'gh',
+        ['issue', 'view', String(n), '-R', repo, '--json', 'labels', '--jq', '[.labels[].name]|join(",")'],
+        { encoding: 'utf8' },
+      ).trim();
+    } catch (e) {
+      process.stderr.write(
+        `human-approval: could not read labels of linked issue #${n} (${e instanceof Error ? e.message : String(e)}) — failing CLOSED (scoped)\n`,
+      );
+      issueLabels = null;
+    }
+    return developOnlyFromLookup(issueLabels);
   });
   const scoped =
     labels.includes('human-required') || developOnly || files.some((f) => isSensitivePath(f, HUMAN_REQUIRED_GLOBS));

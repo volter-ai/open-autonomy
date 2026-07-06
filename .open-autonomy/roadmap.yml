@@ -236,7 +236,7 @@ items:
     proof_gate: action-evidence-replay
     acceptance:
       - Each high-impact agent action (shell command, file write, PR merge, credential access)
-        emits a structured trace artifact showing: action type, triggering task context, checked
+        emits a structured trace artifact showing action type, triggering task context, checked
         evidence or input fields, decision (ALLOW/BLOCK/ESCALATE), and replayable decision record.
       - The reviewer can inspect the evidence artifact independently (not relying on agent-run logs)
         and verify that the action was justified before the fact, not just after.
@@ -258,7 +258,7 @@ items:
       and strategist pattern mining from historical runs.
     proof_gate: trajectory-roundtrip
     acceptance:
-      - Every agent run emits a standardized trajectory artifact: a time-ordered sequence
+      - Every agent run emits a standardized trajectory artifact as a time-ordered sequence
         of (state, action, observation) triples with consistent schema across all roles
         (developer, reviewer, PM, planner).
       - The trajectory can be replayed deterministically through a testbed fixture to reproduce
@@ -291,3 +291,82 @@ items:
         traceability.
       - Proven by a testbed run that evolves one role prompt through at least 3 generations and
         demonstrates score improvement against a deterministic fixture; run IDs in the ledger.
+  - id: agent-episodic-memory
+    priority: medium
+    proposed: true
+    title: Agent Episodic Memory For Cross-Issue Context Retrieval
+    intent: >
+      OA's durable-decision-memory captures decision records per run but does not
+      make past solutions retrievable as context for future agent work. SWE-agent
+      #1440 proposes "episodic memory" via Dakera — recalling successful patch
+      patterns from past issues to guide similar future issues. An episodic memory
+      capability — where the developer agent can recall similar past fixes, review
+      decisions, or PM routing patterns before starting work — would reduce
+      re-derivation of solutions already proven in the same codebase. This serves
+      the constitution's "absorb the best ideas from the field" method and the
+      low-human-toil merit criterion (fewer rework cycles caused by missing context).
+    proof_gate: cross-issue-retrieval-smoke
+    acceptance:
+      - Before starting an issue, the agent queries a memory store for similar past
+        issues and their successful patches or decisions, and the retrieved context
+        is injected into the agent's initial run context.
+      - After a successful patch or merge, a structured memory record (issue summary,
+        diff signature, decision rationale) is stored and indexed for future retrieval.
+      - Retrieval precision and recall are measured against a testbed fixture with
+        known similar-issue pairs; precision >= 0.7 and recall >= 0.5 on the fixture.
+      - Proven by a live testbed run where an agent resolves a known-recurring issue
+        type in fewer attempts WITH episodic memory than without; run IDs in the ledger.
+  - id: installation-supply-chain-audit
+    priority: medium
+    proposed: true
+    title: Installation Supply Chain Audit For Self-Hosted Repos
+    intent: >
+      OA's self-hosted-fleet (phase 9) and public-oss-readiness (phase 13) expand
+      the installation surface to new repos, each inheriting OA's dependency graph
+      and runtime (scripts, model-proxy integration, GitHub workflows). SWE-agent
+      #1429 ("dependency hardening: pin minimum safe dependency versions") signals
+      that autonomous-engineering systems are recognizing supply chain risk. OA has
+      no roadmap item for auditing or hardening the dependency chain that installations
+      depend on. A supply chain audit — automated dependency scanning, minimum-version
+      pinning, and provenance verification for the runtime that ships into installs —
+      would serve the robustness merit criterion and give new adopters confidence
+      that the loop does not introduce unmanaged dependency risk.
+    proof_gate: supply-chain-audit-smoke
+    acceptance:
+      - The OA runtime's dependency graph is documented and scanned by an automated
+        vulnerability scanner (e.g., `npm audit`, `bun run audit`, or a GitHub
+        Dependabot-equivalent) on every release.
+      - All runtime dependencies have pinned minimum safe versions; automated alerts
+        fire on newly disclosed vulnerabilities affecting the runtime.
+      - A supply-chain provenance document is published with each release, listing
+        all runtime dependencies, their licenses, and known vulnerability status.
+      - Proven by a testbed run that scaffolds a fresh OA installation, runs the
+        supply-chain scanner, and reports zero actionable vulnerabilities in the
+        runtime; run IDs in the ledger.
+  - id: strategist-operational-feed
+    priority: low
+    proposed: true
+    title: Strategist Operational Data Feed From Bench And Run History
+    intent: >
+      The strategist currently scans only external sources (competitor repos,
+      analogous fields) for strategic intelligence. Meanwhile, OA's own bench
+      harness (bench-autonomy-ratio, quality-benchmark-gate) and run-ledger
+      generate operational data — cycle times, failure rates, per-role accuracy,
+      regression trends — that the strategist never reads. Adding a programmatic
+      feed that lets the strategist query bench results, run statistics, and
+      failure patterns would close the gap between operational data and strategic
+      direction. This directly serves the proof merit criterion ("capabilities
+      are demonstrated, not asserted") by grounding strategy in OA's own empirical
+      evidence, and feeds the strategist-roadmap-research loop with internal data
+      alongside external signals.
+    proof_gate: strategist-queries-bench
+    acceptance:
+      - The strategist can invoke bench summaries and run-history queries as part
+        of its research phase, reading structured data (cycle time, failure rates,
+        per-role pass/fail counts, quality-benchmark scores) from the ledger.
+      - Strategist proposals cite both external sources AND internal operational
+        metrics when relevant; proposals lacking internal data note the gap.
+      - A testbed fixture verifies that the strategist research loop can access
+        bench data without model spend (the data query is a deterministic fetch).
+      - Proven by a strategist-run that produces at least one proposal citing
+        internal operational metrics alongside external sources; run IDs in the ledger.

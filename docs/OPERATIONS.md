@@ -80,6 +80,7 @@ Install these once, on the machine that will run the loop:
 | **termfleet** | the local runner drives it through its **SDK** (a `node_modules` dependency, not a PATH binary) | in your repo: `npm install termfleet` (then `npx termfleet …` runs its console/provider CLI) |
 | **A coding agent CLI, logged in** | the agent's model access | Claude Code (default) **or** Codex — see next step |
 | **bun** (for `simple-sdlc`) | the orchestrator dispatches workers via `bun scripts/runner.ts launch …` | `curl -fsSL https://bun.sh/install \| bash` — not needed for the `hello` demo (Node-only) |
+| **gh** (for the GitHub code host) | `simple-gh-sdlc`'s agents and the merge reconcile shell out to the GitHub CLI (step 5's `gh api` / `gh pr` calls) | `brew install gh`, then `gh auth login` — not needed for `hello` / `simple-sdlc` |
 
 #### Sign in to your coding agent
 
@@ -162,6 +163,13 @@ TERMFLEET_AGENT=codex node scheduler/run.mjs
 
 With the `hello` profile, the first `--once` tick launches a `greeter` session — you'll see it in
 `termfleet sessions recent --live` and the console. That confirms the whole local path works.
+
+**Stopping the loop:** `Ctrl-C` the scheduler (or `kill` its PID if you backgrounded it). The
+termfleet console/provider from step 2 are separate background processes — stop them with `kill %1 %2`
+in the shell that started them (or `pkill -f "termfleet (console|provider)"`). Stopping the scheduler
+stops new launches; a worker session already running in tmux finishes on its own (kill it from the
+termfleet console if you need it gone now). On the local runner this is also your spend stop — there
+is no proxy cap, so a stopped loop is what bounds model billing.
 
 ### 5. Give the loop work — by code host
 
@@ -357,6 +365,10 @@ Before opening broader access, verify these in the target repo:
   from the operator's local `.env` (there is no in-repo admin workflow).
 
 ### Private Trial Evidence
+
+> Maintainer history — run IDs from the canonical project's own private trials, kept as the record of
+> when each capability was first proven. As an adopter you don't need (and can't access) these; your
+> equivalent evidence is your own repo's first supervised runs.
 
 These live trial runs are the baseline acceptance evidence as of
 2026-06-16:

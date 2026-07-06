@@ -1,0 +1,35 @@
+# hello-human: the human-in-the-loop recipe for the LOCAL substrate (docs/SPEC.md#handoffs — the human
+# seam; docs/OPERATIONS.md's "Human-in-the-loop on the local runner" recipe). A minimal runnable profile
+# demonstrating a `kind: human` actor end to end: one SCRIPT agent (`requester` — no model, no termfleet
+# install needed) that asks the declared human actor (`approver`) for approval via the runner seam, and a
+# second run that observes whether an operator has resolved it. Compile it onto local:
+#   bun bin/autonomy-compile.ts profiles/hello-human local <dir>
+#   cd <dir> && bun scripts/request-approval.ts        # parks the ask
+#   cat .open-autonomy/runner-state/human-attention.md # what the operator sees
+#   bun scripts/runner.ts update <id> --status done    # the operator resolves it
+#   bun scripts/request-approval.ts                    # observes it resolved
+schema: autonomy.ir.v1
+targets: [local]
+agents:
+  requester:
+    behavior: scripts/request-approval.ts   # a script -> runs via bun; the live proof needs no termfleet
+    capabilities: [agent:launch, tasks:converse]
+    triggers:
+      - { cron: "*/30 * * * *" }
+  # The declared kind:human actor — a person, not an agent (docs/SPEC.md#handoffs). No job/session is ever
+  # launched FOR it on any substrate; `requester` engages it THROUGH the runner seam
+  # (`bun scripts/runner.ts launch approver --ask ... --completion ...`), which PARKS the ask. The flow
+  # resumes only once an operator (or, in test, a human simulator) runs an authorized
+  # `bun scripts/runner.ts update <id> --status done` — never presumed, only verified.
+  approver:
+    kind: human
+    behavior: approver
+    capabilities: [tasks:converse, code:review]
+    triggers:
+      - dispatch: true
+policy:
+  box: {}
+resources:
+  # A script BEHAVIOR is not auto-copied like a skill folder — it must be declared as a resource so the
+  # compiler carries it into the install (the same pattern profiles/hello uses for its gate script).
+  - scripts/request-approval.ts

@@ -332,23 +332,25 @@ async function opFollowUpAfterNeedsInfo(repo: string, n: number): Promise<OpResu
 }
 
 async function opDevelopOnly(repo: string, n: number): Promise<OpResult> {
-  // The issue is develop-only: develop + review run, but the merge must HOLD for maintainer approval. The
-  // reviewer checks the linked issue's labels, so `agent-develop-only` on the issue → agent-review=failure
-  // (held). Verify the PR is reviewed but not auto-merged.
+  // The issue is develop-only: develop + review run, but the merge must HOLD for maintainer approval — which
+  // is human-approval semantics, and the human-approval GATE owns it (it resolves the PR's linked issue and
+  // treats `agent-develop-only` like `human-required`). agent-review must still pass on the code's merits —
+  // failing it for a governance hold would conflate "review found defects" with "merge is held". Verify: the
+  // PR is reviewed (agent-review success), human-approval is NOT success (pending on the hold), not merged.
   ghOk(['label', 'create', 'agent-develop-only', '-R', repo, '--color', 'd4c5f9', '--description', 'develop+review but require maintainer approval to merge']);
   ghOk(['issue', 'edit', String(n), '-R', repo, '--add-label', 'agent-develop-only']);
   const pr = await developAndWaitForPr(repo, n);
   if (!pr) return { scenario: 'governance-develop-only', issue: n, status: 'fail', note: 'no agent PR produced' };
   ghOk(['workflow', 'run', 'reviewer.yml', '-R', repo, '-f', `issue_number=${pr}`]);
   let review = '';
-  for (let i = 0; i < 16 && !/agent-review:/.test(review); i++) {
+  for (let i = 0; i < 16 && !(/agent-review:/.test(review) && /human-approval:/.test(review)); i++) {
     await sleep(30000);
     review = prChecks(repo, pr);
   }
   const merged = gh(['pr', 'view', String(pr), '-R', repo, '--json', 'state', '--jq', '.state']) === 'MERGED';
-  const ok = /agent-review:FAILURE/i.test(review) && !merged;
+  const ok = /agent-review:SUCCESS/i.test(review) && /human-approval:/.test(review) && !/human-approval:SUCCESS/i.test(review) && !merged;
   closePr(repo, pr);
-  return { scenario: 'governance-develop-only', issue: n, status: ok ? 'pass' : 'fail', note: ok ? `develop-only held PR #${pr} for approval (agent-review failed)` : `GAP: PR #${pr} checks=[${review}] merged=${merged}` };
+  return { scenario: 'governance-develop-only', issue: n, status: ok ? 'pass' : 'fail', note: ok ? `develop-only held PR #${pr} at human-approval (agent-review passed on merit)` : `GAP: PR #${pr} checks=[${review}] merged=${merged}` };
 }
 
 async function opRiskyApproval(repo: string, n: number): Promise<OpResult> {

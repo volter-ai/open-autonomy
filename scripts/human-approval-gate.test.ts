@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { isMaintainerPermission, qualifies, type Review } from './human-approval-gate';
+import { DEVELOP_ONLY_LABEL, isMaintainerPermission, linkedIssueNumbers, qualifies, type Review } from './human-approval-gate';
 
 const HEAD = 'abc123';
 // A permission oracle keyed by login — what the live gate resolves via repos/{repo}/collaborators/{login}/permission.
@@ -43,5 +43,28 @@ describe('qualifies — maintainership by repo permission ONLY', () => {
 describe('isMaintainerPermission', () => {
   test('read/triage/none are not maintainer permissions', () => {
     for (const perm of ['read', 'triage', 'none', '']) expect(isMaintainerPermission(perm)).toBe(false);
+  });
+});
+
+describe('linkedIssueNumbers — the PR→issue link the gate scopes agent-develop-only through', () => {
+  test('prefers the code-host link graph (closingIssuesReferences)', () => {
+    expect(linkedIssueNumbers([{ number: 12 }, { number: 12 }, { number: 40 }], 'Closes #99')).toEqual([12, 40]);
+  });
+
+  test('falls back to close-keyword parsing when the graph is empty', () => {
+    expect(linkedIssueNumbers([], 'Closes #7.\n\nAlso fixes #9 and resolves #7 again.')).toEqual([7, 9]);
+    expect(linkedIssueNumbers(undefined, 'Fixed #33')).toEqual([33]);
+  });
+
+  test('a bare "#N" mention is NOT a close link', () => {
+    expect(linkedIssueNumbers([], 'Related to #5, see #6')).toEqual([]);
+  });
+
+  test('a develop-only hold on the linked issue scopes the PR (the gate owns the label)', () => {
+    // The fixture link: PR body closes #12; the issue carries the label. This is the pure half of the
+    // scoping decision — the live half (gh issue view) just supplies issueLabelsOf.
+    const issueLabelsOf: Record<number, string[]> = { 12: [DEVELOP_ONLY_LABEL, 'origin:roadmap-planner'] };
+    const scoped = linkedIssueNumbers(undefined, 'Closes #12').some((n) => (issueLabelsOf[n] ?? []).includes(DEVELOP_ONLY_LABEL));
+    expect(scoped).toBe(true);
   });
 });

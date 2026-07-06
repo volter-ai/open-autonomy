@@ -27,6 +27,23 @@ export const qualifies = (r: Review, headSha: string, isMaintainer: (login: stri
 // Which repo permissions count as maintainer (write+) for the gate.
 export const isMaintainerPermission = (perm: string): boolean => perm === 'admin' || perm === 'write' || perm === 'maintain';
 
+// `agent-develop-only` on a PR's LINKED ISSUE means "develop + review, but hold the merge for maintainer
+// approval" — human-approval semantics, so THIS gate owns it (not agent-review: failing the review status for
+// a governance hold would conflate "review found defects" with "merge is held"). The gate treats it exactly
+// like `human-required` on the PR itself.
+export const DEVELOP_ONLY_LABEL = 'agent-develop-only';
+
+// Resolve which issues a PR closes: prefer the code host's own link graph (closingIssuesReferences — populated
+// from close keywords at PR creation), fall back to parsing the body for "Closes #N"-style keywords when the
+// field is empty/unavailable.
+export function linkedIssueNumbers(refs: { number?: number }[] | undefined, body: string | undefined): number[] {
+  const fromRefs = (refs ?? []).map((r) => r.number).filter((n): n is number => typeof n === 'number');
+  if (fromRefs.length) return [...new Set(fromRefs)];
+  const out = new Set<number>();
+  for (const m of (body ?? '').matchAll(/\b(?:close[sd]?|fix(?:e[sd])?|resolve[sd]?)\s+#(\d+)/gi)) out.add(Number(m[1]));
+  return [...out];
+}
+
 if (import.meta.main) {
   const repo = process.env.GITHUB_REPOSITORY;
   const pr = process.env.PR_NUMBER;
@@ -75,10 +92,12 @@ if (import.meta.main) {
     return HUMAN_REQUIRED_GLOBS.some((g) => g.match(f));
   }
 
-  const view = JSON.parse(gh(['pr', 'view', pr, '-R', repo, '--json', 'headRefOid,labels,files']) || '{}') as {
+  const view = JSON.parse(gh(['pr', 'view', pr, '-R', repo, '--json', 'headRefOid,labels,files,body,closingIssuesReferences']) || '{}') as {
     headRefOid?: string;
     labels?: { name: string }[];
     files?: { path: string }[];
+    body?: string;
+    closingIssuesReferences?: { number?: number }[];
   };
   const headSha = view.headRefOid;
   if (!headSha) {
@@ -87,7 +106,12 @@ if (import.meta.main) {
   }
   const labels = (view.labels ?? []).map((l) => l.name);
   const files = (view.files ?? []).map((f) => f.path);
-  const scoped = labels.includes('human-required') || files.some(isSensitivePath);
+  // A linked issue marked develop-only puts the PR in human-required scope (see DEVELOP_ONLY_LABEL).
+  const developOnly = linkedIssueNumbers(view.closingIssuesReferences, view.body).some((n) => {
+    const issueLabels = gh(['issue', 'view', String(n), '-R', repo, '--json', 'labels', '--jq', '[.labels[].name]|join(",")']);
+    return issueLabels.split(',').includes(DEVELOP_ONLY_LABEL);
+  });
+  const scoped = labels.includes('human-required') || developOnly || files.some(isSensitivePath);
 
   // Does this login have maintainer (write+) permission on the repo? Verified per review event — one extra API
   // call, and the only trustworthy signal (see the qualifies() note on author_association).
@@ -135,7 +159,9 @@ if (import.meta.main) {
     ? 'no human-required scope — auto-passed'
     : approved
       ? 'maintainer approved the current head'
-      : 'awaiting a maintainer Approve on the current commit (human-required scope)';
+      : developOnly
+        ? 'awaiting a maintainer Approve on the current commit (linked issue is agent-develop-only)'
+        : 'awaiting a maintainer Approve on the current commit (human-required scope)';
 
   gh(['api', '-X', 'POST', `repos/${repo}/statuses/${headSha}`, '-f', `state=${state}`, '-f', 'context=human-approval', '-f', `description=${description}`]);
   process.stdout.write(`human-approval: #${pr} scoped=${scoped} approved=${approved} → ${state} (${headSha.slice(0, 7)})\n`);

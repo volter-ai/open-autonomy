@@ -21,8 +21,9 @@ The PR number is in the `TARGET_REF` environment variable.
    - `gh pr diff "$TARGET_REF"` — the diff under review.
    - `gh pr view "$TARGET_REF" --json headRefOid,headRefName,labels` — the head SHA + the PR's labels.
    - The branch is `agent/issue-<N>`; read the LINKED ISSUE's labels too —
-     `gh issue view <N> --json labels` — because a maintainer marks governance (hold / develop-only) on
-     the issue, and that must reach the merge decision (which is you).
+     `gh issue view <N> --json labels` — because a maintainer marks a hold on the issue, and that must
+     reach the merge decision (which is you). (`agent-develop-only` on the issue is NOT yours: the
+     human-approval gate resolves the linked issue and holds the merge for a maintainer Approve.)
    - Read `docs/CONSTITUTION.md`, `.open-autonomy/roadmap.yml`, `docs/standards/*`,
      `.open-autonomy/review-rubric.yml`, and `.open-autonomy/architecture-invariants.yml` from the checkout —
      the criteria you apply. The invariants are the project's architectural immune system, and HUMAN-OWNED.

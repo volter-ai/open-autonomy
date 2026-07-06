@@ -281,33 +281,27 @@ Use this checklist before enabling open-autonomy on a repository.
 
 ### Required Configuration
 
-Repository variables:
+Repository variables — this is the complete set the **emitted workflows actually read** (behavioral
+knobs like sweep limits, retry budgets, and allowed paths are **not** variables anymore; they live in
+the profile's `policy` box, compiled into `.open-autonomy/autonomy.yml`):
 
-- `MODEL_PROXY_URL`
-- `MODEL_PROXY_OIDC_AUDIENCE`
-- `PUBLIC_AGENT_MODELS`
-- `PUBLIC_AGENT_MODEL`
-- `PUBLIC_AGENT_TRIAGE_MODEL`
-- `PUBLIC_AGENT_PM_MODEL`
-- `PUBLIC_AGENT_REVIEW_MODEL`
-- `PUBLIC_AGENT_MAX_USD_CENTS`
-- `PUBLIC_AGENT_TRIAGE_MAX_USD_CENTS`
-- `PUBLIC_AGENT_PM_MAX_USD_CENTS`
-- `PUBLIC_AGENT_REVIEW_MAX_USD_CENTS`
-- `PUBLIC_AGENT_MAX_REQUESTS`
-- `PUBLIC_AGENT_MAX_DEVELOP_ATTEMPTS`
-- `PUBLIC_AGENT_MAX_OPEN_AGENT_PRS`
-- `PUBLIC_AGENT_STALE_NEEDS_INFO_MINUTES`
-- `PUBLIC_AGENT_PM_LIMIT`
-- `PUBLIC_AGENT_ALLOWED_PATHS`
-- `PUBLIC_AGENT_REPO_PAUSED`
+| Variable | Read by | Default when unset |
+|---|---|---|
+| `MODEL_PROXY_URL` | every agent job's mint/exchange steps — the model-proxy base URL | *(none — required)* |
+| `MODEL_PROXY_OIDC_AUDIENCE` | the OIDC token exchange | `volter-agent-model-proxy` |
+| `PUBLIC_AGENT_PROXY_HOST` | the harden-runner egress allowlist (must match `MODEL_PROXY_URL`'s host) | the maintainer's proxy host |
+| `PUBLIC_AGENT_MODEL` | the per-run model allowlist minted for every agent | `deepseek/deepseek-v4-flash` |
+| `PUBLIC_AGENT_TRIAGE_MODEL` | the preflight workflow's triage step | unset (skipped) |
+| `PUBLIC_AGENT_MAX_USD_CENTS` | the per-run spend cap minted into the run token | `200` |
+| `PUBLIC_AGENT_MAX_REQUESTS` | the per-run request cap (the binding cap in practice) | `250` |
+| `PUBLIC_AGENT_CLAUDE_CODE_VERSION` | the coding-CLI version the agent job installs — **set this**; unset means `@latest` (a supply-chain surprise) | latest |
+| `PUBLIC_AGENT_MAINTAINERS` | the human-approval gate's engage step (who gets assigned + review-requested) | the repo owner |
+| `PUBLIC_AGENT_REPO_PAUSED` | every agent job's `if:` guard — `true` pauses the whole fleet (the repo-wide kill switch) | unset (running) |
 
 Repository secrets:
 
 - none required for model access: in-cell agents mint and exchange bounded
   per-run model tokens via GitHub OIDC; no admin token lives in the repo.
-- `PUBLIC_AGENT_TRIGGER_TOKEN` if PM-triggered comments must use a token with
-  enough permissions to trigger follow-on workflows.
 
 Model proxy deployment:
 
@@ -331,9 +325,9 @@ GitHub repository:
 Start with a narrow allowed surface:
 
 - trusted maintainers only for manual `/agent developer`
-- PM sweep limit of 1-3 issues
-- conservative `PUBLIC_AGENT_ALLOWED_PATHS`
-- low per-run spend caps
+- a PM sweep limit of 1–3 issues and a conservative path scope — both are **profile policy**
+  (`policy:` in the profile's ir.yml, compiled into `.open-autonomy/autonomy.yml`), not repo variables
+- low per-run spend caps (`PUBLIC_AGENT_MAX_USD_CENTS` / `PUBLIC_AGENT_MAX_REQUESTS`)
 - `PUBLIC_AGENT_REPO_PAUSED=false` only during supervised windows
 
 Escalate to humans for security issues, broad architecture changes, unclear

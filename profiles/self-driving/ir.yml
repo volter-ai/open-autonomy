@@ -166,7 +166,11 @@ policy:
       require_ci: true
       require_low_risk_review: true
       require_current_head_sha: true
-      maintainer_block_labels: [do-not-merge, human-required, agent-blocked]
+      # The ONE declaration of the hold vocabulary. Read at runtime by the rearm sweep (a labeled PR is
+      # never re-armed) and consulted by the pm/reviewer skills — no component keeps its own copy.
+      # `agent-paused` is applied by the control plane's pause verb; listing it here is what makes the
+      # sweep respect it (the substrate owns no label vocabulary of its own).
+      maintainer_block_labels: [do-not-merge, human-required, agent-blocked, agent-paused, agent-maintainer-hold]
     planner:
       enabled: true
       issue_origin_label_prefix: "origin:"

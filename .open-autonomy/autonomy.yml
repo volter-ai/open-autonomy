@@ -186,6 +186,8 @@ policy:
       - do-not-merge
       - human-required
       - agent-blocked
+      - agent-paused
+      - agent-maintainer-hold
   planner:
     enabled: true
     issue_origin_label_prefix: "origin:"

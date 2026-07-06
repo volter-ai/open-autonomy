@@ -66,10 +66,12 @@ The PR number is in the `TARGET_REF` environment variable.
      verify it's correct. But don't reflexively mark it `human-required`: merging proxy code is inert (it
      doesn't deploy), and the human checkpoint already lives at the gated deploy. Review it on the merits
      and pass if sound, so the fleet can iterate on the proxy autonomously.
-   - **Explicit HOLD** (a deliberate "stop"): if the PR or its linked issue carries `do-not-merge`,
-     `agent-blocked`, `agent-maintainer-hold`, or `hold`, post `agent-review` = **failure** regardless of code
-     quality and comment that a hold is in place (native auto-merge ignores labels, so failing the status is
-     what stops the merge until a maintainer clears it).
+   - **Explicit HOLD** (a deliberate "stop"): if the PR or its linked issue carries any label declared in
+     `policy.merge.maintainer_block_labels` (read the set from `.open-autonomy/autonomy.yml` — the one source
+     of the hold vocabulary; never keep your own list) — except `human-required`, which is the next bullet's
+     separate gate, not yours — post `agent-review` = **failure** regardless of code quality and comment that
+     a hold is in place (native auto-merge ignores labels, so failing the status is what stops the merge until
+     a maintainer clears it).
    - **Human-required / sensitive scope is NOT your stop — there is a separate gate for it.** A PR touching
      sensitive scope (workflows, `autonomy.yml`, the constitution, skills, `wrangler.toml`) or carrying the
      `human-required` / `agent-develop-only` label is gated by the deterministic **`human-approval`** required

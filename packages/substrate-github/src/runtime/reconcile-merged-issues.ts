@@ -45,7 +45,7 @@ try {
 let closed = 0;
 for (const pr of mergedPrs) {
   const m = /^agent\/issue-(\d+)$/.exec(pr.headRefName || '');
-  if (!m) continue; // not an issue-bound developer PR (e.g. a strategist roadmap branch)
+  if (!m) continue; // not an issue-bound PR (e.g. an `agent/<rid>` proposal with no linked issue)
   const issue = Number(m[1]);
   if (!openSet.has(issue)) continue; // already closed (or no such open issue)
   gh(['issue', 'close', String(issue), '-R', repo, '-c', `Resolved by #${pr.number} (merged). Closed by the deterministic reconcile.`]);

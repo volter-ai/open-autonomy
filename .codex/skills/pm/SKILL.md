@@ -153,5 +153,6 @@ never stops you from *reviewing* every issue and run.
 - Only add or remove labels your doctrine owns (the triage/status/risk labels above — `needs-info`,
   `human-required`, `agent-blocked`, `priority:*`, `origin:*`). Never strip a label you don't recognize:
   it may be set by a human maintainer or external tooling, and clobbering it destroys signal you don't own.
-- Respect every pause/hold: the repo-pause kill-switch is enforced by the substrate; honor `agent-paused` and
-  `agent-maintainer-hold` on individual issues.
+- Respect every pause/hold: the repo-pause kill-switch is enforced by the substrate; on individual issues/PRs,
+  honor every label declared in `policy.merge.maintainer_block_labels` (read it from
+  `.open-autonomy/autonomy.yml` — that key is the one source of the hold vocabulary; never keep your own list).

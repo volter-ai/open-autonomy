@@ -168,11 +168,26 @@ install inherits.
 
 ### Acceptance Criteria
 
-- [ ] dev/01 v1 `profiles/self-driving/skills/open-autonomy-upgrade/` is deleted (no actor declares the behavior; the upgrade is a maintainer CLI); tests asserting the retired workflow stays deleted still pass.
-- [ ] dev/02 v1 The `AGENTS.md` profile seed is refreshed from root (merge-boundary paragraph, operator-commands note, LIVE_TESTING_STRATEGY pointer, fixed skills glob — the dead `.codex/skills/open-autonomy-*/SKILL.md` glob ships to no new install).
-- [ ] dev/03 v1 Recorded decision on the maintainer skill (audit §4.3): ship human-actor skills too (emit stops skipping `kind:human`, the gate's engage comment links the spec) or drop the dangling `agents.maintainer.skill` manifest key. Implemented per the decision.
-- [ ] dev/04 v1 Recorded decision on `provision.json` (audit §4.4): self-driving ships a seed, or the INSTALL_OWNED entry is annotated optional. Implemented per the decision (may merge with BL-3 dev/04 if provision derives from policy.merge).
-- [ ] dev/05 v1 `open-autonomy-preflight.yml`'s dead watch path `scripts/public-agent-*.ts` is removed or corrected to the files that exist.
+- [x] dev/01 v1 profiles/self-driving/skills/open-autonomy-upgrade/ is deleted (no actor declares the behavior; the upgrade is a maintainer CLI); tests asserting the retired workflow stays deleted still pass.
+  - status: passed
+  - evidence ev-dev-01: commit=24a55303d47ad107abf5557e2e3688728afd333a acv=1
+  - proof: "git rm of profiles/self-driving/skills/open-autonomy-upgrade/; check:core (upgrade prune tests incl. the retired open-autonomy-upgrade.yml fixture) still green — 73 tests." -> ev-dev-01
+- [x] dev/02 v1 The AGENTS.md profile seed is refreshed from root (merge-boundary paragraph, operator-commands note, LIVE_TESTING_STRATEGY pointer, fixed skills glob — the dead .codex/skills/open-autonomy-*/SKILL.md glob ships to no new install).
+  - status: passed
+  - evidence ev-dev-02: commit=24a55303d47ad107abf5557e2e3688728afd333a acv=1
+  - proof: "Seed now carries the merge-boundary paragraph, operator-commands note, LIVE_TESTING_STRATEGY pointer, and the live .codex/.claude skills glob; the dead .codex/skills/open-autonomy-*/SKILL.md glob is gone; both copies corrected to ci + agent-review + human-approval." -> ev-dev-02
+- [x] dev/03 v1 Recorded decision on the maintainer skill (audit §4.3): ship human-actor skills too (emit stops skipping kind:human, the gate's engage comment links the spec) or drop the dangling agents.maintainer.skill manifest key. Implemented per the decision.
+  - status: passed
+  - evidence ev-dev-03: commit=24a55303d47ad107abf5557e2e3688728afd333a acv=1
+  - proof: "Decision: ship human-actor skills. emit.ts skill-copy loop is kind-agnostic (behavior slot is universal); compile now resolves 49 copies incl. skills/maintainer to .codex+.claude; agents.maintainer.skill no longer dangles. Engage comment intentionally kept generic (no profile names in runtime)." -> ev-dev-03
+- [x] dev/04 v1 Recorded decision on provision.json (audit §4.4): self-driving ships a seed, or the INSTALL_OWNED entry is annotated optional. Implemented per the decision (may merge with BL-3 dev/04 if provision derives from policy.merge).
+  - status: passed
+  - evidence ev-dev-04: commit=24a55303d47ad107abf5557e2e3688728afd333a acv=1
+  - proof: "Decision: INSTALL_OWNED provision.json annotated OPTIONAL in packages/core/src/upgrade.ts — no profile seed required (provision-target-repo takes --manifest/defaults); the entry exists to protect adopter-written manifests from upgrade." -> ev-dev-04
+- [x] dev/05 v1 open-autonomy-preflight.yml's dead watch path scripts/public-agent-*.ts is removed or corrected to the files that exist.
+  - status: passed
+  - evidence ev-dev-05: commit=24a55303d47ad107abf5557e2e3688728afd333a acv=1
+  - proof: "scripts/public-agent-*.ts removed from open-autonomy-preflight.yml watch paths (profile source + regenerated root); remaining paths all exist." -> ev-dev-05
 
 ## BL-8 Finish the code-host split at the script layer
 

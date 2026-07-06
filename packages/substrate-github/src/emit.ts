@@ -24,6 +24,17 @@ for (const f of readdirSync(RUNTIME_DIR)) {
   if (f.endsWith('.ts')) RUNTIME[`scripts/${f}`] = readFileSync(join(RUNTIME_DIR, f), 'utf8');
 }
 
+// The self-managed egress allowlist the credentialed jobs run when a profile sets
+// policy.box.gh-actions.private_egress_guard. Egress lockdown of the credentialed box is RUNNER security
+// ("which box, how it's wrapped") — substrate machinery, so the substrate owns the implementation
+// (sibling source, like control-backend.mjs) and emits it TOGETHER with the job step that invokes it
+// (egressGuard()). Flag set ⇒ step + scripts/egress-guard.sh, both; unset ⇒ neither. It was previously one
+// profile's resource, so any OTHER flag-setting profile compiled to agent jobs that died on a missing file.
+const EGRESS_GUARD = readFileSync(
+  join(dirname(fileURLToPath(import.meta.url)), 'egress-guard.sh'),
+  'utf8',
+);
+
 const CONTROL_VERBS = ['cancel', 'pause', 'resume', 'status', 'retry'];
 
 // The security baseline (security.yml + dependabot.yml) is a CODE-HOST RESOURCE, not engine output — a
@@ -506,6 +517,9 @@ export function compileGithub(ir: AutonomyIR): CompileOutput {
   }
   // The substrate injects its runtime backend.
   Object.assign(generated, RUNTIME);
+  // The egress-guard step and its script ship together (see EGRESS_GUARD): a flag-setting profile must
+  // never get a job step referencing a file only some other profile carries.
+  if (githubBox(ir).private_egress_guard) generated['scripts/egress-guard.sh'] = EGRESS_GUARD;
 
   // Derived security DATA: the zizmor baseline scoped to the agent workflows THIS compile emitted (their
   // guarded patterns are the engine's, not the app's). The security.yml workflow + dependabot config that

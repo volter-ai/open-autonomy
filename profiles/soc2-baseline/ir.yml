@@ -108,8 +108,10 @@ policy:
       # the Actions bot / a GitHub App identity gets GitHub's signature.
       commit_signing: verified-api
       # No-account egress lockdown that ENFORCES on PRIVATE repos (the common adopter case) where the free
-      # harden-runner block only audits. Injects scripts/egress-guard.sh into the credentialed jobs — a
-      # self-managed iptables allowlist (GitHub /meta ranges + the agent's hosts) with default-deny.
+      # harden-runner block only audits. The SUBSTRATE ships both halves when this is set: the job step and
+      # scripts/egress-guard.sh itself — a self-managed iptables allowlist (GitHub /meta ranges + the
+      # agent's hosts) with default-deny. Runner security, so the implementation is substrate-owned; this
+      # profile carries no copy (any flag-setting profile gets a working install).
       private_egress_guard: true
     # (the WIP ceiling — one develop in flight, one in review — is the PM doctrine in standards/workflow.md;
     # policy.maxConcurrent is the enforced runner cap. No component reads a wip.* key.)
@@ -202,7 +204,8 @@ resources:
   # --- SOC 2 policy + evidence tree (install-owned: seed-once, adopter-edited) ---
   - SECURITY.md
   - standards/compliance.md
-  - scripts/egress-guard.sh        # C3/C15 no-account egress fallback (wired into the agent jobs on private repos)
+  # (scripts/egress-guard.sh is NOT here: since 2026-07-06 the substrate emits it with the
+  # private_egress_guard step — runner security is substrate-owned, the inverse of the gate-script move)
   - scripts/soc2-register.ts       # W1-W11 the VISIBLE control-register tool (render/verify/check/watchdog)
   # the gate scripts the carried workflows call — shared standards, byte-identical across carrying
   # profiles (docs/CODE_HOST_RESOURCES.md)

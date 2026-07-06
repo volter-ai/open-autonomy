@@ -94,6 +94,10 @@ human-gated scope (§1.5). Ruling ratified with the move: **the substrate owns n
 code-host gate logic** — substrate = triggers/crons/agent-runners/credentials only; every gate script is a
 profile-carried resource reading its parameters from the compiled `.open-autonomy/autonomy.yml`.
 `bin/sync-runtime.ts`'s header ("the mirror holds only substrate machinery") is now true.
+The **inverse** move landed the same day: `egress-guard.sh` (the `private_egress_guard` implementation) left
+soc2-baseline's resources and became substrate-emitted alongside its job step — egress lockdown of the
+credentialed box is RUNNER security ("which box, how it's wrapped"), the one thing the substrate does own.
+The two moves are the same ruling applied in both directions.
 
 **Recorded decision — `agent-propose.ts` stays vendored (2026-07-06):** it is the one script the *emitted*
 effect step invokes (`emit.ts` writes `bun scripts/agent-propose.ts` into every `code:propose` agent's

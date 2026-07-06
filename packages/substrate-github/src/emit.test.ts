@@ -72,6 +72,29 @@ describe('compileGithub — derived security data vs code-host resources', () =>
     expect(out.generated['.github/zizmor.yml']).not.toContain('maintainer.yml');
   });
 
+  // The egress guard is RUNNER security (how the credentialed box is wrapped) — substrate-owned, the
+  // inverse of the gate-script split above. Its implementation used to be ONE profile's resource, so any
+  // OTHER profile setting the flag compiled to agent jobs invoking a nonexistent file.
+  test('private_egress_guard: ANY flag-setting profile gets the step AND scripts/egress-guard.sh together', () => {
+    const flagged: AutonomyIR = {
+      ...irWith([{ cron: '0 0 * * *' }]),
+      policy: { box: { 'gh-actions': { private_egress_guard: true } } },
+    };
+    const out = compileGithub(flagged);
+    const wf = out.generated['.github/workflows/maintainer.yml'];
+    expect(wf).toContain('bash scripts/egress-guard.sh'); // the job step…
+    expect(out.generated['scripts/egress-guard.sh']).toContain('default-DENY'); // …and its implementation
+    // the pre-fix failure mode, stated as the invariant: every emitted job that invokes the guard gets the
+    // file from the SAME compile — no dependence on a profile resource.
+    expect(flagged.resources).toEqual([]);
+  });
+
+  test('private_egress_guard unset: no step, no file', () => {
+    const out = compileGithub(irWith([{ cron: '0 0 * * *' }]));
+    expect(out.generated['scripts/egress-guard.sh']).toBeUndefined();
+    expect(out.generated['.github/workflows/maintainer.yml']).not.toContain('egress-guard.sh');
+  });
+
   test('materializes the profile human-required scope VERBATIM — the engine carries policy, never authors it', () => {
     const base = irWith([{ cron: '0 0 * * *' }]);
     const declared = ['.github/workflows/**', 'custom/sensitive/**'];

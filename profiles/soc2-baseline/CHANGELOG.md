@@ -2,6 +2,13 @@
 
 All notable changes to the `soc2-baseline` profile. Versions follow semver for the profile's control set.
 
+## 1.3.4 — egress-guard.sh becomes substrate-owned (no control change)
+
+C3/C15 behavior is unchanged (same step, same script, same installed path `scripts/egress-guard.sh`), but
+the implementation now ships from the SUBSTRATE, emitted together with the `private_egress_guard` job step —
+runner security is the runner's to own. This profile no longer carries the file as a resource; any other
+flag-setting profile now compiles to a working install instead of agent jobs that die on a missing file.
+
 ## 1.3.3 — doc-hygiene reconciliation (skeptic-verified evidence; no control change)
 
 No control behavior changed. An independent control-skeptic re-verified every row of

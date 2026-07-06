@@ -53,14 +53,31 @@ export function cronToSeconds(cron: string): number {
 // still working (running / background-running), one a human took over, or one asking/errored is never
 // reaped — keeping the "take over at any time" guarantee. `--once` fires a single tick and exits (no reap).
 const LOOP_DRIVER = `#!/usr/bin/env node
-import { readFileSync, readdirSync, unlinkSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync, unlinkSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+const here = dirname(fileURLToPath(import.meta.url));
 const SCHEDULE = process.env.AUTONOMY_SCHEDULE || 'scheduler/schedule.json';
 const args = process.argv.slice(2);
 const schedule = JSON.parse(readFileSync(SCHEDULE, 'utf8'));
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+// A schedule command that launches a skill (prose) agent goes through run-agent.mjs -> the runner (the
+// termfleet SDK) — a peer dep this loop drives but does NOT vendor. Before this check, a schedule fired
+// before \`npm install termfleet\` died several process-hops deep with a raw, buried ERR_MODULE_NOT_FOUND
+// (the FIRST command an adopter runs, per docs/OPERATIONS.md: \`node scheduler/run.mjs --once\`). A
+// script-only schedule (every agent a deterministic scripts/*.ts behavior) never touches the runner, so
+// the check is scoped to schedules that actually need it — never a false alarm on one that doesn't.
+const needsRunner = schedule.scripts.some((c) => c.includes('run-agent.mjs'));
+if (needsRunner && !existsSync(join(here, '..', 'node_modules', 'termfleet'))) {
+  console.error(
+    '[loop] this schedule launches a skill agent through the runner, but termfleet is not installed in this repo.\\n' +
+      '  Fix:  npm install termfleet   (the local runner drives it via its SDK — see docs/OPERATIONS.md#local-runner-quickstart)',
+  );
+  process.exit(1);
+}
+
 const fireTick = () => {
   for (const command of schedule.scripts) {
     spawnSync(command, { shell: true, stdio: 'inherit', env: Object.assign({}, schedule.env, process.env) });
@@ -74,7 +91,6 @@ if (args.includes('--once')) {
 
 // Continuous mode: a fast heartbeat that fires ticks on the schedule interval and reaps idle sessions in
 // between. The runner (termfleet SDK) does the reaping; we keep the persistent idle-since map here.
-const here = dirname(fileURLToPath(import.meta.url));
 const IDLE_REAP_MS = Number(process.env.AUTONOMY_IDLE_REAP_MS ?? 60000);
 const POLL_MS = Math.max(1000, Number(process.env.AUTONOMY_REAP_POLL_MS ?? 20000));
 const intervalMs = Number(schedule.intervalSeconds) * 1000;

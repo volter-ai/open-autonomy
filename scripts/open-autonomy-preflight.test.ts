@@ -1,8 +1,8 @@
 import { describe, expect, test } from 'bun:test';
-import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { SEAM_CONTRACT_LABELS, expectedLabels } from './open-autonomy-preflight';
+import { SEAM_CONTRACT_LABELS, expectedLabels, buildPreflightReport } from './open-autonomy-preflight';
 
 const installWith = (manifestYml?: string): string => {
   const dir = mkdtempSync(join(tmpdir(), 'preflight-labels-'));
@@ -53,6 +53,89 @@ describe('expectedLabels — contract constants + the declared policy, never a h
       'priority:high',
     ]) {
       expect(labels).toContain(l);
+    }
+  });
+});
+
+describe('buildPreflightReport — REQUIRED_FILES derives per-agent workflows from the manifest (BL-27 dev/03)', () => {
+  const installWith = (agents: Record<string, { workflowFile?: string }>): string => {
+    const dir = mkdtempSync(join(tmpdir(), 'preflight-files-'));
+    mkdirSync(join(dir, '.open-autonomy'), { recursive: true });
+    writeFileSync(
+      join(dir, '.open-autonomy', 'autonomy.yml'),
+      `agents:\n${Object.entries(agents).map(([role, a]) => `  ${role}: ${a.workflowFile ? `{ workflowFile: ${a.workflowFile} }` : '{}'}\n`).join('')}`,
+    );
+    return dir;
+  };
+
+  test('a self-driving-shaped manifest checks for developer/reviewer/pm/planner.yml — no hardcode needed', () => {
+    const dir = installWith({
+      developer: { workflowFile: 'developer.yml' },
+      reviewer: { workflowFile: 'reviewer.yml' },
+      pm: { workflowFile: 'pm.yml' },
+      planner: { workflowFile: 'planner.yml' },
+    });
+    const report = buildPreflightReport({ root: dir });
+    for (const f of ['.github/workflows/developer.yml', '.github/workflows/reviewer.yml', '.github/workflows/pm.yml', '.github/workflows/planner.yml']) {
+      expect(report.checks.some((c) => c.id === `file:${f}`)).toBe(true);
+    }
+  });
+
+  test('a differently-shaped fork (renamed agents) is checked for ITS OWN workflow files, not the hardcoded four', () => {
+    const dir = installWith({ builder: { workflowFile: 'builder.yml' }, critic: { workflowFile: 'critic.yml' } });
+    const report = buildPreflightReport({ root: dir });
+    expect(report.checks.some((c) => c.id === 'file:.github/workflows/builder.yml')).toBe(true);
+    expect(report.checks.some((c) => c.id === 'file:.github/workflows/developer.yml')).toBe(false);
+  });
+
+  test('a kind:human actor (no workflowFile) is never checked for a workflow file', () => {
+    const dir = installWith({ maintainer: {}, developer: { workflowFile: 'developer.yml' } });
+    const report = buildPreflightReport({ root: dir });
+    expect(report.checks.some((c) => c.id.includes('maintainer'))).toBe(false);
+    expect(report.checks.some((c) => c.id === 'file:.github/workflows/developer.yml')).toBe(true);
+  });
+});
+
+describe('buildPreflightReport — MODEL_PROXY_URL does not apply to a local-runner install (BL-27 dev/03)', () => {
+  test('a gh-actions-shaped install (no scheduler/run.mjs) warns when MODEL_PROXY_URL is unset', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'preflight-env-gh-'));
+    const report = buildPreflightReport({ root: dir, env: {} });
+    const check = report.checks.find((c) => c.id === 'env:MODEL_PROXY_URL')!;
+    expect(check.status).toBe('warn');
+  });
+
+  test('a local-runner install (scheduler/run.mjs present) passes without needing MODEL_PROXY_URL at all', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'preflight-env-local-'));
+    mkdirSync(join(dir, 'scheduler'), { recursive: true });
+    writeFileSync(join(dir, 'scheduler', 'run.mjs'), '// loop driver\n');
+    const report = buildPreflightReport({ root: dir, env: {} });
+    const check = report.checks.find((c) => c.id === 'env:MODEL_PROXY_URL')!;
+    expect(check.status).toBe('pass');
+    expect(check.message).toContain('does not apply to a local-runner install');
+  });
+});
+
+describe('the CLI writes its --out into a directory that does not exist yet (BL-27 dev/03)', () => {
+  test('a bare run mkdir -ps the output parent instead of crashing ENOENT', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'preflight-mkdir-'));
+    try {
+      writeFileSync(join(dir, 'AGENTS.md'), '# agents\n');
+      writeFileSync(join(dir, 'VERSION'), '0.0.0\n');
+      mkdirSync(join(dir, '.open-autonomy'), { recursive: true });
+      writeFileSync(join(dir, '.open-autonomy', 'autonomy.yml'), 'agents: {}\n');
+      writeFileSync(join(dir, 'open-autonomy-upgrade-cli.ts'), '');
+      mkdirSync(join(dir, 'scripts'), { recursive: true });
+      writeFileSync(join(dir, 'scripts', 'open-autonomy-upgrade-cli.ts'), '');
+      const outPath = join(dir, 'nested', 'does', 'not', 'exist', 'preflight.json');
+      const r = Bun.spawnSync(
+        ['bun', join(import.meta.dir, 'open-autonomy-preflight.ts'), '--root', dir, '--out', outPath],
+        { stdout: 'pipe', stderr: 'pipe' },
+      );
+      expect(existsSync(outPath)).toBe(true);
+      expect(JSON.parse(readFileSync(outPath, 'utf8')).schema).toBe('open-autonomy.preflight.v1');
+      void r; // exit code may be 78 (not-ready) — this test only cares that the write succeeded
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
     }
   });
 });

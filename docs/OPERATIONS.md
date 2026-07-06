@@ -88,6 +88,15 @@ Install these once, on the machine that will run the loop:
 | **bun** (for `simple-sdlc`) | the orchestrator dispatches workers via `bun scripts/runner.ts launch …` | `curl -fsSL https://bun.sh/install \| bash` — not needed for the `hello` demo (Node-only) |
 | **gh** (for the GitHub code host) | `simple-gh-sdlc`'s agents and the merge reconcile shell out to the GitHub CLI (step 5's `gh api` / `gh pr` calls) | `brew install gh`, then `gh auth login` — not needed for `hello` / `simple-sdlc` |
 
+Right after installing `termfleet`, run the **`preflight`** CLI verb once — it rebuilds `node-pty` for
+your Node (termfleet's `virtual-tmux` provider ships no prebuilt for newer Node and crashes at launch
+without this) and checks your `package-lock.json` against your CI's Node version (desync there passes
+locally but fails your CI's `npm ci` on the first agent PR):
+
+```bash
+npm install termfleet  &&  npx --yes open-autonomy preflight
+```
+
 #### Sign in to your coding agent
 
 The loop launches **Claude Code** by default. termfleet drives whatever CLI you point it at, and
@@ -191,7 +200,7 @@ npm install -D ztrack                       # a PROJECT dep, not -g: the install
                                             # `import`s `ztrack/preset-kit`, so it must resolve from the
                                             # repo — a global/npx install fails `ztrack check`.
 npx ztrack init --preset simple-sdlc        # the PR-free dev preset (the `default`); no remote needed
-npx ztrack issue create                     # add a work item (repeat for each task)
+npx ztrack issue create --title "Wire the widget"   # add a work item (repeat for each task; --title is required)
 ```
 
 The `simple-sdlc` preset is **PR-free**: an issue is `done` once every AC is passed with commit-evidence
@@ -224,7 +233,7 @@ JSON
 gh api "repos/<owner>/<repo>/branches/<default-branch>/protection/required_status_checks/contexts" --jq '.'
 
 # c) add a Ready issue (open + `ready` label + assignee + ACs in the body), then sync
-npx ztrack issue create   # ... ; then: gh issue edit <n> --add-label ready
+npx ztrack issue create --title "Wire the widget"   # --title is required; then: gh issue edit <n> --add-label ready
 ```
 
 Then run the loop and **watch the first PR merge under supervision** — once its gate is green, merge it

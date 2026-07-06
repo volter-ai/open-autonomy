@@ -18,6 +18,9 @@
   ],
   "type": "module",
   "packageManager": "bun@1.3.10",
+  "engines": {
+    "node": ">=22.18"
+  },
   "bin": {
     "open-autonomy": "dist/cli.js",
     "oa": "dist/cli.js"

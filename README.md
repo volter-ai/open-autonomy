@@ -157,10 +157,11 @@ open-autonomy upgrade --profile <dir> --target <dir> [--apply]           # re-co
 ```
 
 The first argument is a **bundled profile name** (`self-driving`, `simple-gh-sdlc`, `simple-sdlc`, `hello` — shipped with the
-package) or a path to your own profile dir. No clone required once published — `npx open-autonomy <verb>`
-(or `bunx open-autonomy <verb>`). The published package is a self-contained Node bundle, so plain Node works;
-bun is not required to *use* it. From a clone (bun-native, runs TypeScript directly): `bun run autonomy <verb>`
-or `bun bin/open-autonomy.ts <verb>`. The published bundle is produced by `bun run build`.
+package) or a path to your own profile dir. `open-autonomy` **is published** ([npmjs.com/package/open-autonomy](https://www.npmjs.com/package/open-autonomy)) —
+no clone required: `npx open-autonomy <verb>` (or `bunx open-autonomy <verb>`). The published package is a
+self-contained Node bundle, so plain Node works; bun is not required to *use* it. From a clone (bun-native,
+runs TypeScript directly): `bun run autonomy <verb>` or `bun bin/open-autonomy.ts <verb>`. The published
+bundle is produced by `bun run build`.
 
 To adopt open-autonomy into your own repo, compile a profile into it — see
 [**Run it on your repo**](#run-it-on-your-repo) for the runner ⟂ code-host setups and the follow-up

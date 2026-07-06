@@ -1,5 +1,6 @@
 #!/usr/bin/env bun
-import { existsSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { dirname } from 'node:path';
 import { readAutonomyConfig, referencedAutonomyPaths } from './open-autonomy-config.js';
 
 export interface PreflightInput {
@@ -29,18 +30,37 @@ interface Options {
   out: string;
 }
 
+// This preflight is itself a self-driving-carried resource (only self-driving lists it in `resources:`),
+// so these six are genuinely self-driving-SCAFFOLD invariants, not an accidental hardcode — a fork stays
+// this shape as long as it forks self-driving's install layout (roadmap.yml/review-rubric.yml/
+// upgrade-cli.ts are self-driving concepts, not part of the generic autonomy.ir.v1 manifest schema).
 const REQUIRED_FILES = [
   'AGENTS.md',
   '.open-autonomy/autonomy.yml',
   '.open-autonomy/roadmap.yml',
   '.open-autonomy/review-rubric.yml',
-  '.github/workflows/developer.yml',
-  '.github/workflows/reviewer.yml',
-  '.github/workflows/pm.yml',
-  '.github/workflows/planner.yml',
   'scripts/open-autonomy-upgrade-cli.ts',
   'VERSION',
 ];
+
+// Per-agent workflow files: DERIVED from the compiled manifest's own `agents` map (`workflowFile`), not a
+// hardcoded name list — the hardcoded [developer, reviewer, pm, planner].yml this used to be would silently
+// stop validating (or falsely fail) the moment a self-driving fork renamed/added/removed an agent. A
+// `kind: human` actor carries no workflowFile (docs/SPEC.md#the-ir) and is correctly skipped.
+function agentWorkflowFiles(root: string): string[] {
+  try {
+    const manifest = Bun.YAML.parse(readFileSync(`${root}/.open-autonomy/autonomy.yml`, 'utf8')) as {
+      agents?: Record<string, { workflowFile?: string }>;
+    };
+    return Object.values(manifest.agents ?? {})
+      .map((a) => a.workflowFile)
+      .filter((f): f is string => Boolean(f))
+      .map((f) => `.github/workflows/${f}`)
+      .sort();
+  } catch {
+    return []; // no manifest yet -> the missing `.open-autonomy/autonomy.yml` file check above already fails loud
+  }
+}
 
 const REQUIRED_ENV = [
   'MODEL_PROXY_URL',
@@ -113,7 +133,7 @@ export function buildPreflightReport(input: PreflightInput = {}): PreflightRepor
   const labels = new Set(input.labels ?? []);
   const checks: PreflightCheck[] = [];
 
-  for (const file of REQUIRED_FILES) {
+  for (const file of [...REQUIRED_FILES, ...agentWorkflowFiles(root)]) {
     checks.push({
       id: `file:${file}`,
       status: existsSync(`${root}/${file}`) ? 'pass' : 'fail',
@@ -130,7 +150,19 @@ export function buildPreflightReport(input: PreflightInput = {}): PreflightRepor
     });
   }
 
+  // A local runner never mints a model token through the proxy (ambient/local model access instead —
+  // docs/SPEC.md#the-box), so MODEL_PROXY_URL genuinely does not apply there. `scheduler/run.mjs` exists
+  // ONLY in a local-substrate compile (packages/substrate-local's emit), so its presence is a reliable,
+  // derived signal — not a guess — for scoping the check out instead of forever WARNING on a var this
+  // install will never set. Decision recorded (BL-27 dev/03): stays a WARN, never a hard FAIL, for a
+  // gh-actions install missing it too — an operator may be mid-setup, and a preflight FAIL here would
+  // block on a var that's cheap to add later, unlike a genuinely missing structural file.
+  const isLocalRunner = existsSync(`${root}/scheduler/run.mjs`);
   for (const name of REQUIRED_ENV) {
+    if (name === 'MODEL_PROXY_URL' && isLocalRunner) {
+      checks.push({ id: `env:${name}`, status: 'pass', message: `${name} does not apply to a local-runner install (agents use ambient/local model access, not the proxy)` });
+      continue;
+    }
     checks.push({
       id: `env:${name}`,
       status: env[name] ? 'pass' : 'warn',
@@ -189,6 +221,10 @@ async function main(): Promise<void> {
     labels: readLabels(options.labels),
     branchProtection: readBranchProtection(options.branchProtection),
   });
+  // A bare run (no CI step pre-creating the output dir) used to crash ENOENT here — mkdir -p the parent
+  // first so `--out .agent-run/preflight.json` works from a clean checkout, not just under the workflow
+  // that happens to `mkdir -p .agent-run/preflight` as a separate step first.
+  mkdirSync(dirname(options.out), { recursive: true });
   writeFileSync(options.out, `${JSON.stringify(report, null, 2)}\n`);
   process.stdout.write(`preflight=${report.ready ? 'ready' : 'blocked'}\n`);
   if (!report.ready) process.exit(78);

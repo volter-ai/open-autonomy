@@ -250,9 +250,16 @@ Files: `profiles/self-driving/ir.yml` `risk.human_required_paths` (+ regenerated
 
 ### Acceptance Criteria
 
-- [ ] dev/01 v1 self-driving's `human_required_paths` enumerates (by name, per the siblings' pattern) the boundary scripts at both their installed paths (`scripts/…`) and their profile source paths (`profiles/self-driving/scripts/…`), plus the sync-runtime tool itself if the scripts remain mirrored anywhere.
-- [ ] dev/02 v1 Gate fixture: a PR touching `scripts/human-approval-gate.ts` is in human-required scope (unit test on `isSensitivePath` with the regenerated globs).
-- [ ] dev/03 v1 Live proof: a testbed PR editing a boundary script parks at `human-approval` pending until a maintainer Approve (run URL recorded).
+- [x] dev/01 v1 self-driving's human_required_paths enumerates (by name, per the siblings' pattern) the boundary scripts at both their installed paths (scripts/…) and their profile source paths (profiles/self-driving/scripts/…), plus the sync-runtime tool itself if the scripts remain mirrored anywhere.
+  - status: passed
+  - evidence ev-dev-01: commit=fa9a45531e5ce6ad8361a9d3c14018a8e5aa7983 acv=1
+  - proof: "self-driving human_required_paths enumerates the four boundary scripts by name at installed (scripts/<name>.ts) AND profile-source (profiles/self-driving/scripts/<name>.ts) layers, per the siblings' pattern. sync-runtime intentionally not listed with the rationale recorded in the ir.yml comment: post-BL-8 the scripts are never mirrored (the AC's condition is false); sibling profiles' copies covered transitively by check:profiles byte-identity. autonomy.yml + human-required-paths.json regenerated." -> ev-dev-01
+- [x] dev/02 v1 Gate fixture: a PR touching scripts/human-approval-gate.ts is in human-required scope (unit test on isSensitivePath with the regenerated globs).
+  - status: passed
+  - evidence ev-dev-02: commit=fa9a45531e5ce6ad8361a9d3c14018a8e5aa7983 acv=1
+  - proof: "isSensitivePath extracted to a pure export and unit-tested against the REAL regenerated .open-autonomy/human-required-paths.json (not a fixture): scripts/human-approval-gate.ts (and the other three, both layers) in scope; bench-judge/transcript/agent NOT scoped; history/ exclusion + missing-file fallback pinned. 15/15 gate tests green." -> ev-dev-02
+- [ ] dev/03 v1 Live proof: a testbed PR editing a boundary script parks at human-approval pending until a maintainer Approve (run URL recorded).
+  - status: pending
 
 ## BL-10 egress-guard becomes runner-owned
 

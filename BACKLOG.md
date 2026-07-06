@@ -365,17 +365,19 @@ are workable from this backlog:
   BL-13, BL-18, BL-24. Their sections below are the planner's spec, not workable backlog items.
 - **DECISION ITEMS** (blocked on a maintainer fork choice before any build): BL-20, BL-23.
   BL-28's decision is made (maintainer, 2026-07-06: ship the full realization) and built — see its section.
-- **Externally gated:** BL-16's repo flip (reserved phrase) and BL-26's CONSTITUTION edits
-  (human-amended only).
+- **Externally gated:** BL-16's repo flip (maintainer-initiated only — never offered or asked about).
+  BL-26's CONSTITUTION edits landed 2026-07-06 as a maintainer-approved amendment (81cfc9e).
 
 ### Acceptance Criteria
 
-- [ ] dev/01 v1 Every BL-13..BL-29 item is done (all ACs checked with evidence) or explicitly dropped with a recorded reason in this file.
+- [x] dev/01 v1 Every BL-13..BL-29 item is done (all ACs checked with evidence) or explicitly dropped with a recorded reason in this file.
   - progress (2026-07-06): everything is done or lifted EXCEPT one AC: BL-26 dev/01's CONSTITUTION.md
     edits (line 26 AUTONOMY-IR ref, rule-6 "template" vocabulary), which are maintainer-hand-only per
     the amendment rule — all other BL-26 references were fixed in a3ece03. BL-13/BL-18/BL-24 are
     LIFTED → roadmap intent `hosted-adopter-path` (ratified 2026-07-06, planner issue #120). This
     rollup closes when the maintainer amends CONSTITUTION.
+  - evidence ev-dev-01: commit=81cfc9e acv=1
+  - proof: "The last open AC closed: CONSTITUTION amended on the maintainer's explicit approval (81cfc9e). Board disposition — BL-14/15/17/19/21/22/25/26/27/28/29 + BL-16 doc-side + BL-20/23 done with evidence; BL-13/18/24 LIFTED → hosted-adopter-path (issue #120); BL-16's repo flip is explicitly out of scope until the maintainer says otherwise (never offered again)." -> ev-dev-01
 
 ## BL-13 Hosted path terminates at the maintainer's private proxy
 
@@ -719,14 +721,14 @@ fixes need the maintainer's hand and must be flagged, not auto-applied.
 
 ### Acceptance Criteria
 
-- [ ] dev/01 v1 All listed references are fixed (the CONSTITUTION edits done by the maintainer per its amendment rule; the wrangler.toml allowlist entry corrected or documented as intentional legacy).
+- [x] dev/01 v1 All listed references are fixed (the CONSTITUTION edits done by the maintainer per its amendment rule; the wrangler.toml allowlist entry corrected or documented as intentional legacy).
   - progress (2026-07-06, commit a3ece03): everything except CONSTITUTION is done — AUTONOMY-IR refs →
     docs/SPEC.md (VISION ×3, PROJECT; SPEC:6's mention is the consolidation-history note, intentional);
     SPEC conformance path scripts/→bin/; CODE_HOST_RESOURCES agent-visual-verify; LIVE_TESTING_STRATEGY
     per-agent workflows + decision-memory coverage RETIRED-pending; wrangler.toml public-agent.yml@
     entries documented KNOWN-STALE (removal is deploy-gated); template vocabulary → compile(profile).
-    REMAINING for the maintainer's hand: CONSTITUTION.md:26 (`AUTONOMY-IR.md` → `docs/SPEC.md`) and
-    the rule-6 "install the template" vocabulary — human-amended only.
+  - evidence ev-dev-01: commit=81cfc9e acv=1
+  - proof: "CONSTITUTION amended on the maintainer's explicit approval (2026-07-06): line 26 AUTONOMY-IR.md → docs/SPEC.md (autonomy.ir.v1); rule 6 'install the template' → 'install a compiled profile'. The amendment rule held: the human decided, the edit was applied for them, never autonomously." -> ev-dev-01
 - [x] dev/02 v1 A docs link-check pass is clean (no dead file references in docs/ or README).
   - status: passed
   - evidence ev-dev-02: commit=a3ece031ab183c33a51292dcd18049aabd398514 acv=1

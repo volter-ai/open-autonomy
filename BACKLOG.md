@@ -94,8 +94,12 @@ review event — negligible.
 
 ### Acceptance Criteria
 
-- [ ] dev/01 v1 The association fast path is gone; a unit test proves an APPROVED review from a login whose repo permission is `read` does NOT qualify, and one with `write`/`maintain`/`admin` does.
+- [x] dev/01 v1 The association fast path is gone; a unit test proves an APPROVED review from a login whose repo permission is read does NOT qualify, and one with write/maintain/admin does.
+  - status: passed
+  - evidence ev-dev-01: commit=b3587caf7dcd02362565b71e9e0f4bb0c8d390ca acv=1
+  - proof: "scripts/human-approval-gate.ts: the MAINTAINER association set is deleted; qualifies(review, headSha, isMaintainer) requires APPROVED + commit_id==head + repo-permission write/maintain/admin. scripts/human-approval-gate.test.ts proves read-permission (even with author_association OWNER) does not qualify and write/maintain/admin do (58 script tests green)." -> ev-dev-01
 - [ ] dev/02 v1 Live proof: a maintainer Approve on a testbed human-required PR still flips the gate to success (run URL recorded).
+  - status: pending
 
 ## BL-5 The gate owns `agent-develop-only`
 

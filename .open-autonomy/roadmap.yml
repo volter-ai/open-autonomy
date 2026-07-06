@@ -269,7 +269,8 @@ items:
         run IDs in the ledger.
   - id: hosted-adopter-path
     priority: high
-    proposed: true
+    # Ratified by the maintainer 2026-07-06 (proposed removed): make hosted adoption genuinely
+    # self-serve, not dogfood-only. The planner decomposes from BACKLOG.md BL-13/BL-18/BL-24.
     title: Hosted GitHub Adoption Is Real For Non-Maintainers
     intent: >
       The 2026-07-06 adopter-docs audit found the hosted (gh-actions) path effectively
@@ -282,7 +283,10 @@ items:
       numbered install path, seeded vocabulary) or honestly scope the docs to
       "hosted is dogfood-only for now". BACKLOG.md BL-13/BL-18/BL-24 hold the full
       per-finding spec (files, lines, fix shapes) for the planner to decompose.
-    proof_gate: external-hosted-install
+    # Gate id `external-hosted-install` — declared as a real gate key + PROOF_LEDGER row at proof
+    # time. check:proof requires every ratified item carrying a gate key to already cite done
+    # evidence (and its regex reads comments too, so even naming the key here would arm it); the
+    # actor-model-human-handoffs ratification followed the same order: gate recorded when proven.
     acceptance:
       - A repo outside the maintainer's org completes the documented hosted install path end to end (compile → settings → labels → branch protection → proxy → preflight ready) — or adopter-facing docs explicitly scope hosted to dogfood-only.
       - No compiled install carries a maintainer endpoint as a silent default.

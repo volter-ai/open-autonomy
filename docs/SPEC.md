@@ -22,6 +22,10 @@
 
 `autonomy.ir.v1` — the standard.
 
+> **Authoring tutorial:** [`profiles/README.md`](../profiles/README.md) — the practical, worked-example
+> counterpart to this normative section (write your first `ir.yml`, the SKILL.md contract, the
+> `policy.box` conventions). This section stays the source of truth on conflict.
+
 > **Status:** finalized model; the codebase is being aligned to it. The terms `workflow`,
 > `launch`, `run`, `raw`, `steps`, `box.model`, `skill|script`, `commit|propose` are **retired** — see
 > "What this replaces" at the end. If the code still shows them, the code is mid-migration, not the spec.

@@ -13,6 +13,7 @@ import { fileURLToPath } from 'node:url';
 import { parseIr, compiledPaths, materialize, missingCopySourcesIn, findClobbers, validateSkillFrontmatterIn } from '@open-autonomy/core';
 import { compileLocal } from '@open-autonomy/substrate-local';
 import { compileGithub } from '@open-autonomy/substrate-github';
+import { resolveZtrackPreset } from './ztrack-preset.ts';
 
 // The bundled profiles ship next to this module's package root: at dist/cli.js when installed from npm
 // (import.meta.url → dist/, profiles/ is its sibling), and at bin/ in the dev checkout (../profiles/). So
@@ -111,19 +112,26 @@ if (outDir) {
     const cd = outDir === '.' ? '' : `cd ${outDir} && `;
     // The local runner drives termfleet through its SDK (a node_modules dep), so termfleet is installed
     // IN the repo and run via `npx termfleet`, not a global PATH binary.
-    // The ztrack preset is keyed by the profile name; the init form depends on the code host (a GitHub
-    // code host syncs to GitHub Issues, a local-git one is a board on disk). Show the RIGHT init — never a
-    // bare `ztrack init`, which is a silent no-op once `.volter/` exists and never applies `--sync`.
-    const presetName = basename(profileDir);
-    const trackerInit =
-      ir.codeHost === 'github'
-        ? `npx ztrack init --preset ${presetName} --sync github --repo <owner>/<repo>   (then: \`npx ztrack sync github\`)`
-        : `npx ztrack init --preset ${presetName}   (then add work: \`npx ztrack issue create\`)`;
-    const tracker = profileMentions(profileDir, 'ztrack')
-      ? `  4. Tracker: this profile's agents use ztrack — install it as a project dep (the validation\n` +
+    const usesZtrack = profileMentions(profileDir, 'ztrack');
+    let tracker = '';
+    if (usesZtrack) {
+      // The ztrack preset name (BL-29 — see bin/ztrack-preset.ts): an explicit
+      // policy.box.tracker.ztrackPreset if the profile declares one, else the directory basename, which
+      // degrades LOUDLY (not silently) when it doesn't match a known bundled preset.
+      const { presetName, warning } = resolveZtrackPreset(ir, basename(profileDir), bundledProfileNames());
+      if (warning) console.error(warning);
+      // The init form depends on the code host (a GitHub code host syncs to GitHub Issues, a local-git one
+      // is a board on disk). Show the RIGHT init — never a bare `ztrack init`, which is a silent no-op once
+      // `.volter/` exists and never applies `--sync`.
+      const trackerInit =
+        ir.codeHost === 'github'
+          ? `npx ztrack init --preset ${presetName} --sync github --repo <owner>/<repo>   (then: \`npx ztrack sync github\`)`
+          : `npx ztrack init --preset ${presetName}   (then add work: \`npx ztrack issue create\`)`;
+      tracker =
+        `  4. Tracker: this profile's agents use ztrack — install it as a project dep (the validation\n` +
         `     preset \`import\`s it; a global install is NOT enough) and init it:\n` +
-        `       ${cd}npm install -D ztrack  &&  ${trackerInit}\n`
-      : '';
+        `       ${cd}npm install -D ztrack  &&  ${trackerInit}\n`;
+    }
     console.log(
       `\nNext steps (local loop):\n` +
         `  1. Prereqs: Node 22.18+ (the ztrack preset is .mts), tmux. Add termfleet to this repo (the runner uses its SDK),\n` +

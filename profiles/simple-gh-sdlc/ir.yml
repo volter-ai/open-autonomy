@@ -62,6 +62,14 @@ policy:
   box:
     # (the WIP ceiling — one develop in flight, one in review — is the PM doctrine in standards/workflow.md;
     # policy.maxConcurrent is the enforced runner cap. No component reads a wip.* key.)
+    tracker:
+      # bin/autonomy-compile.ts's local-runner "next steps" print resolves the ztrack preset name from
+      # THIS key first, falling back to the profile directory's basename only if it's absent (a bundled
+      # profile's basename happens to equal its preset name today). FORKING this profile? Keep this key —
+      # renaming the directory without it silently selects a nonexistent preset (BL-29); the CLI warns
+      # loudly if the basename fallback doesn't match a bundled name, but an explicit declaration survives
+      # the rename outright.
+      ztrackPreset: simple-gh-sdlc
     autonomy:
       max_develop_attempts: 2   # the PM caps rework at this; without it a stuck issue re-launches develop forever
     risk:
@@ -74,9 +82,21 @@ policy:
       # OA-shipped file under scripts/ must be here — incl. the ones merge.yml/security.yml execute
       # (reconcile-merged-issues.ts, rearm-auto-merge.ts, check-supply-chain.ts) and scripts/prompts/** (the
       # launch→skill mapping) — or an in-scope issue could auto-merge a rewrite of that privileged machinery.
-      # Listed by name (NOT scripts/**) so an adopter's own scripts/ isn't blocked. MUST be kept complete by
-      # hand when OA adds a script: there is no automated guard (a generic check would wrongly fire on
-      # self-driving, where scripts/ IS the product). Mirrors standards/risk-and-review.md, which the skills read.
+      # Listed by name (NOT scripts/**) so an adopter's own scripts/ isn't blocked. Mirrors
+      # standards/risk-and-review.md, which the skills read.
+      #
+      # BL-29 dev/02 — FORK INSTRUCTION (kept manual, not automated; decision recorded in BACKLOG.md):
+      # if you add a script to this profile's `resources:` list above that a carried workflow (merge.yml /
+      # security.yml) EXECUTES, add its path here too, or an in-scope agent PR could auto-merge a rewrite
+      # of that privileged machinery through the very gate it's supposed to enforce. A generic "every
+      # scripts/ resource must be listed here" check was considered and REJECTED: this repo's own
+      # self-driving profile legitimately ships scripts/ resources that are NOT gated here (e.g.
+      # open-autonomy-preflight.ts, open-autonomy-upgrade-cli.ts, open-autonomy-config.ts — maintainer-run
+      # tooling, never executed by an automated merge/security workflow against agent-authored code), so a
+      # blanket guard would false-positive there. The correct scope (only paths a workflow with
+      # merge-relevant permissions actually invokes) isn't reliably derivable by a generic script — it's a
+      # per-script security judgment call, which is why this stays a documented, human-authored list.
+      # MUST be kept complete by hand when OA adds a script.
       human_required_paths:
         - .github/workflows/**
         - .codex/skills/**

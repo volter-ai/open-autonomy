@@ -59,6 +59,13 @@ policy:
   box:
     # (the WIP ceiling — one develop in flight, one in review — is the PM doctrine in standards/workflow.md;
     # policy.maxConcurrent is the enforced runner cap. No component reads a wip.* key.)
+    tracker:
+      # bin/autonomy-compile.ts's local-runner "next steps" print resolves the ztrack preset name from
+      # THIS key first, falling back to the profile directory's basename only if it's absent. FORKING this
+      # profile? Keep this key — renaming the directory without it silently selects a nonexistent preset
+      # (BL-29); the CLI warns loudly if the basename fallback doesn't match a bundled name, but an
+      # explicit declaration survives the rename outright.
+      ztrackPreset: simple-sdlc
     risk:
       human_required_paths:
         - .github/workflows/**

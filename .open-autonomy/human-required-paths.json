@@ -5,5 +5,13 @@
   ".open-autonomy/architecture-invariants.yml",
   ".codex/skills/**",
   ".claude/skills/**",
-  "**/bun.lock"
+  "**/bun.lock",
+  "scripts/human-approval-gate.ts",
+  "scripts/rearm-auto-merge.ts",
+  "scripts/reconcile-merged-issues.ts",
+  "scripts/check-supply-chain.ts",
+  "profiles/self-driving/scripts/human-approval-gate.ts",
+  "profiles/self-driving/scripts/rearm-auto-merge.ts",
+  "profiles/self-driving/scripts/reconcile-merged-issues.ts",
+  "profiles/self-driving/scripts/check-supply-chain.ts"
 ]

@@ -21,8 +21,8 @@ is the merge boundary you uphold.)
 The org engages you when a task enters human-required scope — either of:
 
 - a **PR** that touches a `human_required_path` (workflows, `autonomy.yml`, the constitution, the
-  architecture invariants, skills, `bun.lock` — the declared list in
-  `policy.risk.human_required_paths`; `services/**` is deliberately NOT gated, see below) or carries
+  architecture invariants, skills, `bun.lock`, the boundary gate scripts themselves — the declared list
+  in `policy.risk.human_required_paths`; `services/**` is deliberately NOT gated, see below) or carries
   the `human-required` label. The `human-approval` gate parks it: beyond
   `ci` + `agent-review` it needs **your Approve on the current commit** before it can merge.
 - an **issue** the PM routed to `human-required` (out-of-scope, risky, or repeatedly failing) or to

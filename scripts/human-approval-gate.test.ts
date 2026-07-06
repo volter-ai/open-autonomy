@@ -1,5 +1,13 @@
 import { describe, expect, test } from 'bun:test';
-import { DEVELOP_ONLY_LABEL, isMaintainerPermission, linkedIssueNumbers, qualifies, type Review } from './human-approval-gate';
+import {
+  DEVELOP_ONLY_LABEL,
+  isMaintainerPermission,
+  isSensitivePath,
+  linkedIssueNumbers,
+  loadHumanRequiredGlobs,
+  qualifies,
+  type Review,
+} from './human-approval-gate';
 
 const HEAD = 'abc123';
 // A permission oracle keyed by login — what the live gate resolves via repos/{repo}/collaborators/{login}/permission.
@@ -66,5 +74,34 @@ describe('linkedIssueNumbers — the PR→issue link the gate scopes agent-devel
     const issueLabelsOf: Record<number, string[]> = { 12: [DEVELOP_ONLY_LABEL, 'origin:roadmap-planner'] };
     const scoped = linkedIssueNumbers(undefined, 'Closes #12').some((n) => (issueLabelsOf[n] ?? []).includes(DEVELOP_ONLY_LABEL));
     expect(scoped).toBe(true);
+  });
+});
+
+describe('isSensitivePath — the boundary scripts are inside the gated scope', () => {
+  // NOT a fixture: these globs are the repo's REAL compiled .open-autonomy/human-required-paths.json
+  // (self-driving's declared policy.risk.human_required_paths, projected at compile). The gate's own
+  // qualification logic must never be one un-gated agent PR from change — so this pins the scope on the
+  // regenerated data, at BOTH layers (the installed copy and its profile source).
+  const globs = loadHumanRequiredGlobs('.');
+
+  test('every boundary script is in scope, at installed AND profile-source paths', () => {
+    for (const name of ['human-approval-gate', 'rearm-auto-merge', 'reconcile-merged-issues', 'check-supply-chain']) {
+      expect(isSensitivePath(`scripts/${name}.ts`, globs)).toBe(true);
+      expect(isSensitivePath(`profiles/self-driving/scripts/${name}.ts`, globs)).toBe(true);
+    }
+  });
+
+  test('non-boundary dev tooling in scripts/ is NOT scoped (enumerated by name, not a broad glob)', () => {
+    for (const f of ['scripts/bench-judge.ts', 'scripts/transcript.ts', 'scripts/agent.ts']) {
+      expect(isSensitivePath(f, globs)).toBe(false);
+    }
+  });
+
+  test('proposer transcripts under .open-autonomy/history/ never count as scope', () => {
+    expect(isSensitivePath('.open-autonomy/history/run-1/transcript.md', [new Bun.Glob('**/*.md')])).toBe(false);
+  });
+
+  test('a missing scope file yields no path scope (labels still gate)', () => {
+    expect(loadHumanRequiredGlobs('/nonexistent-root')).toEqual([]);
   });
 });

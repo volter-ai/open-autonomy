@@ -160,6 +160,21 @@ policy:
         # separately (human-cut deploy-v* tag + required-reviewer environment). The fleet iterates on the
         # proxy autonomously; the human checkpoint is at deploy, not merge.
         - "**/bun.lock"          # merge-dangerous: the next CI `bun install` executes deps (dependency-trust)
+        # The boundary's OWN machinery (the gate that decides "needs a human", and the merge/supply-chain
+        # sweeps beside it) must not be rewritable by an un-human-gated agent PR. Enumerated BY NAME per the
+        # siblings' pattern (scripts/ here also holds dev tooling; a broad glob would gate the product), at
+        # BOTH layers: the installed copies and their profile sources. check:dogfood + check:profiles keep
+        # every copy (incl. other profiles') in lockstep with these two, so gating this pair gates them all.
+        # bin/sync-runtime.ts is deliberately NOT listed: since BL-8 the four are code-host resources, never
+        # mirrored — sync-runtime no longer carries them.
+        - scripts/human-approval-gate.ts
+        - scripts/rearm-auto-merge.ts
+        - scripts/reconcile-merged-issues.ts
+        - scripts/check-supply-chain.ts
+        - profiles/self-driving/scripts/human-approval-gate.ts
+        - profiles/self-driving/scripts/rearm-auto-merge.ts
+        - profiles/self-driving/scripts/reconcile-merged-issues.ts
+        - profiles/self-driving/scripts/check-supply-chain.ts
       human_required_topics: [auth, secrets, billing, deployment, destructive data migration, dependency trust]
     merge:
       # (ci/agent-review/human-approval being required, and per-head-SHA re-earn, are the seam CONTRACT —

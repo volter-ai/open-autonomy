@@ -82,6 +82,33 @@
       "status": "proposed",
       "rationale": "Analogous field: DGM's core innovation (evolving agent prompts through mutation/selection), plus Google AlphaEvolve (evolutionary search over agent capabilities). OA hand-crafts every prompt per role; automated prompt evolution treats prompts as evolvable artifacts improving autonomously against bench scores. Serves the constitution's method of absorbing best ideas from the field and feeds quality-benchmark-gate.",
       "falsified_by": "Automated prompt mutation does not produce reliably better prompts than hand-crafting, OR bench variance is too high to distinguish improved variants from noise."
+    },
+    {
+      "id": "agent-episodic-memory",
+      "title": "Agent Episodic Memory For Cross-Issue Context Retrieval",
+      "proposed_in": "strategist-run-2026-07-06",
+      "pr_number": null,
+      "status": "proposed",
+      "rationale": "Competitor gap: SWE-agent #1440 proposes episodic memory via Dakera for recalling successful patch patterns across issues. OA's durable-decision-memory captures records but doesn't make them retrievable as context for future runs. Each agent re-derives solutions to similar problems. Serves absorb-best-ideas method and low-human-toil criterion.",
+      "falsified_by": "Past solutions do not generalize to similar-but-not-identical issues, making retrieval noise exceed benefit, OR benchmark variance masks any improvement from extra context."
+    },
+    {
+      "id": "installation-supply-chain-audit",
+      "title": "Installation Supply Chain Audit For Self-Hosted Repos",
+      "proposed_in": "strategist-run-2026-07-06",
+      "pr_number": null,
+      "status": "proposed",
+      "rationale": "Competitor gap: SWE-agent #1429 dependency hardening signals supply chain risk awareness in autonomous engineering repos. OA's self-hosted-fleet expands installation surface without supply chain audit. Serves robustness merit criterion and adopter trust for portability.",
+      "falsified_by": "Standard GitHub Dependabot/npm audit already covers OA's dependency risk, making a dedicated audit item redundant, OR installations do not actually inherit dependency risk at the level that would justify automated scanning."
+    },
+    {
+      "id": "strategist-operational-feed",
+      "title": "Strategist Operational Data Feed From Bench And Run History",
+      "proposed_in": "strategist-run-2026-07-06",
+      "pr_number": null,
+      "status": "proposed",
+      "rationale": "Internal gap: strategist-roadmap-research scans only external sources; OA's own bench and run-ledger data is never read. bench-autonomy-ratio and quality-benchmark-gate generate operational metrics that should inform strategic decisions. Serves proof merit criterion (data-driven strategy) and closes the external-only data gap.",
+      "falsified_by": "Internal operational metrics do not change or improve strategist proposals compared to external-only research, making the data feed overhead not worth the integration cost."
     }
   ]
 }

@@ -233,7 +233,7 @@ repo-owned resource — never an escape hatch in the IR.
 ### Conformance — the support matrix
 
 A substrate implements a **core** contract (required — any core-conformant substrate runs any IR) and an
-**expanded** set it advertises. `scripts/autonomy-conformance.ts` drives the real runner against its real
+**expanded** set it advertises. `bin/autonomy-conformance.ts` drives the real runner against its real
 backend and reports `supported`/`unsupported` per feature — extended, under this model, to the whole
 standard (capabilities, param sources, config keys), not just Runner ops. `compile` warns when a profile
 uses a feature its target does not support: **partial support is first-class, not failure.**

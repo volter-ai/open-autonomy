@@ -32,6 +32,10 @@ ENFORCE_ACCOUNT_BALANCE = "true"
 DEFAULT_FUNDING_ACCOUNT = "volter-ai/open-autonomy"
 DEFAULT_SPONSOR_ACCOUNT = "volter-ai/open-autonomy"
 GITHUB_OIDC_AUDIENCE = "volter-agent-model-proxy"
+# KNOWN-STALE entries (2026-07-06 docs audit): the monolithic `public-agent.yml` workflow was retired —
+# emitted workflows are per-agent (developer.yml, pm.yml, …), so the three public-agent.yml@ entries
+# match nothing that exists today. Kept verbatim (removal is a deploy-time change gated on the human-cut
+# deploy-v* tag); audit against the live minting workflows before the next deploy.
 GITHUB_OIDC_ALLOWED_WORKFLOW = "volter-ai/open-autonomy/.github/workflows/public-agent.yml@,volter-ai/open-autonomy-testbed/.github/workflows/public-agent.yml@,volter-ai/open-autonomy-self-driving-testbed/.github/workflows/public-agent.yml@,volter-test-fixtures/*,volter-ai/soc2-w12-auto/.github/workflows/compliance-drafter.yml@"
 # Org health monitor (detect + surface, #66): an org silent past SILENCE is "down"; past DEAD it's
 # "dormant" (long idle, not an outage). GET /health classifies by these — it surfaces the signal; notifying

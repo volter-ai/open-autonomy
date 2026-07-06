@@ -398,7 +398,7 @@ Release checklist:
    and run its `bun run check`.
 5. Verify the committed release evidence in [`docs/PROOF_LEDGER.md`](./PROOF_LEDGER.md).
 6. Tag the release as `vX.Y.Z`.
-7. Record migration notes for template changes in the changelog.
+7. Record migration notes for compiled-install changes in the changelog.
 
 Generated or upgraded repositories should keep their local
 `.open-autonomy/version.json` so runs can record the Open Autonomy version and

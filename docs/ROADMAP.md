@@ -927,7 +927,8 @@ Build:
   follow-up)
 - versioned policy/profile file so each repo can declare allowed paths,
   required checks, retry budgets, PM mode, and merge mode
-- upgrade workflow that opens a PR when the open-autonomy template changes
+- upgrade workflow that opens a PR when the compiled open-autonomy install changes
+  (there is no hand-maintained template — an install is `compile(profile, substrate)`)
 - compatibility checks that report missing secrets, variables, labels, branch
   protection, and workflow permissions before autonomous work starts
 
@@ -936,7 +937,7 @@ Acceptance criteria:
 - A fresh repo can be converted into a self-driving repo with a documented,
   repeatable command sequence.
 - The testbed can verify both a new install and an upgrade from an older
-  template revision.
+  compiled revision.
 - Each autonomous run records which open-autonomy version/profile it used.
 
 Testbed proof plan:
@@ -948,10 +949,10 @@ Testbed proof plan:
   - Evidence: repo URL, scaffold output, CI run URL, preflight report.
   - Final state: `done`.
 - `fleet-template-upgrade`
-  - Trigger: testbed repo starts from an older template revision, then upgrade
-    workflow runs.
-  - Expected: upgrade opens a PR with template changes and migration notes.
-  - Evidence: repo URL, upgrade run URL, PR URL, template version before/after.
+  - Trigger: testbed repo starts from an older compiled revision, then upgrade
+    (re-compile) runs.
+  - Expected: upgrade opens a PR with the regenerated files and migration notes.
+  - Evidence: repo URL, upgrade run URL, PR URL, OA version before/after.
   - Final state: `in-progress` or `done`.
 - `fleet-missing-config`
   - Trigger: preflight runs in a repo with missing secret/variable/label/branch

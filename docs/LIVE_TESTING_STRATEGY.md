@@ -56,7 +56,9 @@ record it as a gap, never paper over it.
 
 - **The autonomy** (must drive itself): scheduled PM triage,
   developer agent, CI gate, reviewer agent, native auto-merge, planner,
-  upgrade, decision memory.
+  upgrade. (Decision memory joins this list when `durable-decision-memory`
+  is re-implemented — the old records were dropped in the agent-model
+  cutover; see `.open-autonomy/roadmap.yml`.)
 - **The proctor** (human-in-the-loop, played by a maintainer or an AI agent acting
   as one): sets up preconditions, supplies human inputs that unblock new lines,
   assesses progress qualitatively and quantitatively, and records evidence. The
@@ -76,8 +78,11 @@ provisions, seeds, and starts the run — each step idempotent:
    (`scripts/provision-target-repo.ts`).
 2. confirm the operator's treasury credential is present locally
    (`MODEL_PROXY_ADMIN_TOKEN` in `.env`, used to fund the repo's account — never
-   set as a repo secret); the proxy must already trust the repo's
-   `public-agent.yml` workflow for OIDC (`services/agent-model-proxy/wrangler.toml`).
+   set as a repo secret); the proxy must already trust the repo's agent
+   workflows for OIDC (`GITHUB_OIDC_ALLOWED_WORKFLOW` in
+   `services/agent-model-proxy/wrangler.toml` — emitted workflows are
+   per-agent: `developer.yml`, `pm.yml`, …; a `<owner>/<repo>/*` entry covers
+   them all).
 3. set the PM cron to a fast cadence (`*/5 * * * *`) so a 60 minute session
    sees many sweeps. This is workload-only; production stays at `*/30`.
 4. seed every scenario issue and fixture (the workload's `intake.mode: scenarios`
@@ -138,7 +143,7 @@ operator-sim manufactures the genuine condition and verifies the system's real r
 | Operator retry with no failed run | `operator-retry-no-failure` | `/agent retry` | manual fixture |
 | Operator cancel active run | `operator-cancel` | `/agent cancel` while active | `blocked` |
 | Planner creates proof-gate issues + dedupe | `planner-creates-proof-gate-issues` | none (let planner run) | `in-progress` |
-| Decision memory reconstructs state | `decision-memory-smoke` | none | `done` |
+| Decision memory reconstructs state | `decision-memory-smoke` | RETIRED pending `durable-decision-memory` (roadmap.yml) — the old records were dropped in the agent-model cutover | — |
 | Five low-risk issues end-to-end | `five-issue-dogfood` | answer any questions | `done` |
 | Fleet: scaffold / provision / preflight / upgrade / version recorded | `scaffold-install-check`, `fleet-*` | run preflight/upgrade | `done` |
 | Governance develop-only / risky-approval | `governance-develop-only`, `governance-risky-approval` | approve the human-required PR | `human-required` → `done` |
@@ -223,8 +228,9 @@ work between proctor ticks.
   any `human-required` / develop-only PR
   (`governance-develop-only`, `governance-risky-approval`).
 - **T+45 — Planner & memory.** Let the planner run; confirm it creates missing
-  proof-gate issues and dedupes (`planner-creates-proof-gate-issues`). Confirm the
-  decision index reconstructs state (`decision-memory-smoke`).
+  proof-gate issues and dedupes (`planner-creates-proof-gate-issues`). (The
+  `decision-memory-smoke` check is retired until `durable-decision-memory`
+  is re-implemented.)
 - **T+50 — PM open-PR routing.** With an open agent PR present, let the scheduled
   sweep route it to `/agent reviewer` (`pm-open-pr-review`).
 - **T+55 — Fleet & upgrade.** Run preflight and the upgrade workflow; confirm version

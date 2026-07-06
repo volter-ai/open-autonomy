@@ -1,7 +1,7 @@
 # Open Autonomy — Vision: org-as-code
 
 > **Status:** vision / category doc. Peer to `CONSTITUTION.md` (the north star, merit criteria, and
-> method) and `AUTONOMY-IR.md` (the spec). This doc says *what category this is*, *what the mission is*,
+> method) and `docs/SPEC.md` (the spec). This doc says *what category this is*, *what the mission is*,
 > and *the three pieces that carry it*. Tactical execution lives in `ROADMAP.md` /
 > `.open-autonomy/roadmap.yml` — this doc defers to them and never duplicates their phases.
 
@@ -93,12 +93,12 @@ Applying our own Theory of Constraints to the mission: Standards is mature and D
 
 ## 1 · Standards — the space
 
-The org-as-code system: what orgs can be expressed and run. `AUTONOMY-IR.md` owns the spec; this is the
+The org-as-code system: what orgs can be expressed and run. `docs/SPEC.md` owns the spec; this is the
 *why* and the model we are completing.
 
 ### Standard → implementations (already our structure)
 
-`AUTONOMY-IR.md` frames the IR as a **standard** with **substrates** as partial implementations (spec :
+`docs/SPEC.md` frames the IR as a **standard** with **substrates** as partial implementations (spec :
 browsers). "Terraform : providers" is the identical structure — same idea, more familiar to the infra
 audience. We use both; they do not compete.
 

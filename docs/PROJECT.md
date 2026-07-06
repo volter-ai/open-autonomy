@@ -4,7 +4,7 @@ Open Autonomy is the system and spec for autonomous software organizations: a
 substrate-neutral standard for declaring an org — its participants, their
 authority, when they act, and the policy they run under — and compiling it onto a
 substrate where it runs the software-development lifecycle itself. The standard is
-the thing (see `AUTONOMY-IR.md`); a substrate (github, local, …) is one
+the thing (see `docs/SPEC.md`); a substrate (github, local, …) is one
 implementation; a profile (`self-driving`) is one declared org. The generality is
 across substrates, not domains — the work is always software.
 

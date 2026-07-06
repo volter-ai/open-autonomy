@@ -270,6 +270,49 @@ required you'd be auto-merging on the agents' own (same-token) say-so.
 > addressed to the installing agent — detect the repo, ask the human only the judgment calls (the gate,
 > identity, the first issue), run this overlay, and **verify the loop merges before declaring done**.
 
+### 6. Human-in-the-loop on the local runner
+
+A profile can declare a `kind: human` actor (`docs/SPEC.md#handoffs` — the human seam) alongside your
+agents. On the local runner this needs **no termfleet, no coding CLI, no login** — a person cannot be
+executed or watched, so `bun scripts/runner.ts launch <human-actor> …` just **parks** the ask and never
+completes it itself. The flow is: **park → engage → operator acts → update done → resume**.
+
+```bash
+npx open-autonomy compile hello-human local .   # the minimal example: one script "requester" +
+                                                 # a declared human "approver"
+bun scripts/request-approval.ts                 # PARKS an ask (agent:launch -> the human route)
+```
+
+That prints the ask to the console and appends it to a well-known **attention file** — tail it (or point
+your own alerting at it) to see outstanding asks:
+
+```bash
+cat .open-autonomy/runner-state/human-attention.md
+```
+
+As the **operator**, resolve the ask once you've actually done what it asks — this is the *only* path to
+`done` (never presumed, always verified, per `docs/SPEC.md#handoffs`):
+
+```bash
+bun scripts/runner.ts update <id> --status done
+```
+
+Re-running the requester (or the PM's own polling) now **observes** the resolution and resumes:
+
+```bash
+bun scripts/request-approval.ts                 # "resolved: status=done — proceeding"
+```
+
+`bun scripts/runner.ts get <id>` and `list <actor>` work the same way for a parked human session as for a
+termfleet one — `list` surfaces only sessions still `running`, so a PM's WIP/dedup check and the
+escalate-on-SLA doctrine see an outstanding ask instead of relaunching it. **Engage** defaults to
+console + the attention file; set `AUTONOMY_HUMAN_ENGAGE_CMD` to a command that receives the parked
+session as JSON on stdin for a real notification path (Slack/email/paging/whatever) — entirely optional,
+black-box, never required.
+
+`profiles/hello-human/` is the full worked example (`ir.yml`, the `requester` script, the `approver`
+skill/doctrine) — fork it as the starting point for your own human-required step.
+
 ### What depends on the code host vs the runner
 
 The agent loop is the same everywhere; a few controls vary by **axis** (runner ⟂ code host):

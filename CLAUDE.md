@@ -188,9 +188,9 @@ while local stays green.
 
 ## Built vs designed (so we stop conflating)
 
-- **Built:** the IR + actor model (core); `HumanRunner` (core, driven by the *local* substrate); the merge
-  boundary; the two-layer roadmap + strategist audit/retire + planner reap; the `human-approval` gate
-  (github realization of the human *review* handoff, enforced).
+- **Built:** the IR + actor model (core); `HumanRunner` (core — the substrate-neutral reference semantics,
+  `packages/core/src/runner.test.ts`); the merge boundary; the two-layer roadmap + strategist audit/retire +
+  planner reap; the `human-approval` gate (github realization of the human *review* handoff, enforced).
 - **Built (the human seam, H1 — github realization, live-proven):** `human_required` is now a **declared
   consumer**, not a bare flag — a `maintainer` `kind:human` actor (`profiles/self-driving/ir.yml` +
   `skills/maintainer/SKILL.md`; declared in the manifest, no job emitted). The github *engage* is
@@ -200,6 +200,24 @@ while local stays green.
   (`policy.box.human.sla_minutes`); and the seam **resumes** on the authorized `out` — a maintainer Approve,
   or `/agent decide|answer` (control plane; runs once via the `ISSUE_CONTROL_PRIMARY` control job). The manifest
   serializes `kind: human` (no `workflowFile`) and round-trips the `dispatch` trigger.
+- **Built (the human seam — LOCAL realization, live-proven, BL-28):** the local runner now DRIVES the human
+  route directly — `packages/substrate-local/src/runner-frontend.ts`'s `launch()` PARKS a session for a
+  `kind: human` actor (never executes/watches one), matching `HumanRunner`'s semantics (note field,
+  never-auto-completes) but reimplemented inline (not imported — the file ships verbatim into every
+  install with no dependency on `@open-autonomy/core`). `engage` = print to console + append to the
+  well-known `.open-autonomy/runner-state/human-attention.md`, plus an optional operator-configured
+  `AUTONOMY_HUMAN_ENGAGE_CMD` command hook (receives the session as JSON on stdin) for Slack/email/paging —
+  black-box, never required. The runner CLI now implements all five contract verbs
+  (`launch|list|get|update|cancel`; `get`/`update` are new) — for a human session they operate on the
+  local park-file directly, and for a termfleet session they delegate straight to the backend
+  (`packages/substrate-local/src/backend.mjs`), which already implemented `get`/`update`. `list <actor>`
+  surfaces parked (running) human sessions alongside live termfleet ones and pending propose effects, so a
+  PM's WIP/dedup + escalate-on-SLA doctrine can see an outstanding human ask. `compileLocal` excludes a
+  `kind:human` actor from the schedule (even if it somehow carries a cron) and from launch prompts, but
+  still copies its `SKILL.md` (the person's doctrine), mirroring compileGithub's choices exactly.
+  `profiles/hello-human/` is the adopter-facing worked example (one script `requester` + a declared human
+  `approver`); recipe in `docs/OPERATIONS.md`'s local-runner quickstart ("Human-in-the-loop on the local
+  runner").
 - **Still designed / NOT built:** the **distributional/model-roleplay human simulators** + the calibrated twin
   (H3/H4) and the **producing-side typed seam graph** (H4). The behavioral **escalate-on-SLA** is PM doctrine
   (proven live, not unit-tested — `emit.test.ts` keeps it as the one human-seam `test.todo`). A standalone

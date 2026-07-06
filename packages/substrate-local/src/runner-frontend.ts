@@ -37,6 +37,7 @@ const scriptsDir = dirname(fileURLToPath(import.meta.url));
 const isScript = (behavior: string): boolean => /\.(ts|mjs|js)$/.test(behavior);
 
 interface ManifestAgent {
+  kind?: 'agent' | 'human'; // `human` -> a person; the runner PARKS a session instead of executing one
   skill?: string;
   params?: Record<string, string>;
   capabilities?: string[];
@@ -117,6 +118,103 @@ function manifestCodeHost(): string {
   return m.codeHost ?? '';
 }
 
+// --- the HUMAN route: a kind:human actor cannot be executed or watched -------------------------------------
+// This is the THIRD launch realization (beside script-via-bun and skill-via-termfleet): a person. `launch`
+// PARKS a session instead of running anything, and it NEVER auto-completes — completion is an external
+// authorized act (`update <id> --status done`), driven by an operator (or, in test, a human simulator)
+// after verifying the completion condition. This mirrors core's HumanRunner semantics EXACTLY (same
+// fields: `status` stays `running`, `params` carry the ask opaquely, `note` echoes the completion
+// condition — packages/core/src/runner.ts, tested in packages/core/src/runner.test.ts), but is
+// REIMPLEMENTED here rather than imported: this file is emitted VERBATIM into every install with no
+// package dependency on @open-autonomy/core (installs never see the monorepo's workspace packages), and
+// it already owns this pattern of file-backed session state (the effect markers above) — so folding the
+// human route in here keeps ONE emitted file with no new install-time dependency, while core's HumanRunner
+// remains the substrate-neutral REFERENCE implementation (used directly in core's own tests/conformance).
+// Divergence from the reference: this route adds a REAL (not no-op) `engage` — console + a well-known
+// attention file an operator can tail, plus an optional command hook — because a shipped install needs an
+// actual default delivery mechanism, not just a pluggable callback a host language wires up.
+const HUMAN_SESSIONS_PATH = '.open-autonomy/runner-state/human-sessions.json';
+const HUMAN_ATTENTION_PATH = '.open-autonomy/runner-state/human-attention.md';
+
+interface HumanSession {
+  id: string;
+  agent: string;
+  status: string; // running | cancelled | done | failed — bookkeeping only until an authorized `update`
+  params?: Record<string, string>;
+  note?: string;
+}
+
+function readHumanSessions(): HumanSession[] {
+  try {
+    return JSON.parse(readFileSync(HUMAN_SESSIONS_PATH, 'utf8')) as HumanSession[];
+  } catch {
+    return []; // no parked sessions yet
+  }
+}
+function writeHumanSessions(sessions: HumanSession[]): void {
+  mkdirSync(dirname(HUMAN_SESSIONS_PATH), { recursive: true });
+  writeFileSync(HUMAN_SESSIONS_PATH, `${JSON.stringify(sessions, null, 2)}\n`);
+}
+function getHumanSession(id: string): HumanSession | undefined {
+  return readHumanSessions().find((s) => s.id === id);
+}
+function updateHumanSession(id: string, patch: { status?: string }): boolean {
+  const sessions = readHumanSessions();
+  const target = sessions.find((s) => s.id === id);
+  if (!target) return false;
+  if (patch.status) target.status = patch.status;
+  writeHumanSessions(sessions);
+  return true;
+}
+
+// ENGAGE: deliver the ask to a person. Default = print it to the console AND append it to a well-known
+// attention file (an operator can `tail -f` it, or a health-monitor/PM can read it). An operator-configured
+// command hook (AUTONOMY_HUMAN_ENGAGE_CMD) receives the session JSON on stdin — Slack/email/paging/whatever
+// — entirely black-box and never required: absent, engage still parks + prints + appends, it just has no
+// extra delivery. Never a path to auto-completion; engage only NOTIFIES.
+function engageHuman(session: HumanSession): void {
+  const ask = session.params?.ask ?? '(no ask given)';
+  console.log(`[runner] HUMAN ENGAGE: ${session.agent} #${session.id} — ${ask}`);
+  if (session.note) console.log(`[runner]   ${session.note}`);
+  mkdirSync(dirname(HUMAN_ATTENTION_PATH), { recursive: true });
+  appendFileSync(
+    HUMAN_ATTENTION_PATH,
+    [
+      `## ${session.agent} #${session.id}`,
+      '',
+      `- ask: ${ask}`,
+      `- completion condition: ${session.params?.completion ?? '(none provided)'}`,
+      `- resume once verified: \`bun scripts/runner.ts update ${session.id} --status done\``,
+      '',
+      '',
+    ].join('\n'),
+  );
+  const cmd = process.env.AUTONOMY_HUMAN_ENGAGE_CMD;
+  if (cmd) {
+    const r = spawnSync(cmd, { shell: true, input: JSON.stringify(session), encoding: 'utf8' });
+    if (r.error) console.error(`[runner] AUTONOMY_HUMAN_ENGAGE_CMD failed: ${r.error.message}`);
+  }
+}
+
+/** Launch a kind:human actor (agent:launch's human realization): park a session, engage, return. NEVER
+ *  completes on its own — the note tells the caller (the PM / an operator) exactly what to verify before
+ *  driving `update(id, { status: 'done' })`, the only path to terminal (docs/SPEC.md#handoffs). */
+function launchHuman(agent: string, params: LaunchParams = {}): void {
+  const stringParams = Object.fromEntries(Object.entries(params).map(([k, v]) => [k, String(v)]));
+  const session: HumanSession = {
+    id: `${agent}-${Date.now()}-${Math.floor(Math.random() * 1e6)}`,
+    agent,
+    status: 'running', // parked; a human runner can never confirm completion itself — no presumed-done
+    ...(Object.keys(stringParams).length ? { params: stringParams } : {}),
+    note: `bookkeeping only — completion is not auto-detected here; verify this completion condition, then mark done: ${stringParams.completion ?? '(none provided)'}`,
+  };
+  const sessions = readHumanSessions();
+  sessions.push(session);
+  writeHumanSessions(sessions);
+  engageHuman(session);
+  console.log(JSON.stringify(session)); // same convention as autonomy-runner.mjs's launch (last line = JSON)
+}
+
 // --- worktree isolation (local analogue of github's per-job fresh checkout) ---
 // The PM ASSIGNS a branch and hands the SAME `--branch` to develop and review, so they share one isolated
 // worktree; the runner just EXECUTES the branch it's given — it derives nothing and decides nothing. A
@@ -187,7 +285,13 @@ function ensureWorktree(branch: string, worktree: string): void {
 
 /** Launch an agent with forwarded params (agent:launch). */
 export async function launch(agent: string, params: LaunchParams = {}): Promise<void> {
-  const { skill: behavior = '', params: declared = {}, review = '' } = manifestAgent(agent);
+  const { kind, skill: behavior = '', params: declared = {}, review = '' } = manifestAgent(agent);
+
+  if (kind === 'human') {
+    // The THIRD route: a person cannot be executed — park the ask instead (see the human route above).
+    launchHuman(agent, params);
+    return;
+  }
 
   if (behavior && isScript(behavior)) {
     // Deterministic agent: run its script via bun. Resolve its declared trigger params from the launch
@@ -260,11 +364,14 @@ export async function launch(agent: string, params: LaunchParams = {}): Promise<
 }
 
 /** List an agent's in-flight work (agent:list): live termfleet sessions PLUS pending post-session effects
- *  (a finished session whose propose has not run yet). Including the pending effects makes "in-flight" span
- *  the whole launch→propose lifecycle, so a WIP/dedup caller never relaunches the proposer in the reap→propose
- *  gap (which would open a duplicate PR). Deduped by id: while a session is live its marker.id == the session
- *  id, so it counts once; once reaped, only the marker remains; once proposed, the marker is gone (the PR
- *  exists, which the caller dedups on instead). */
+ *  (a finished session whose propose has not run yet) PLUS any PARKED human sessions for this agent
+ *  (running only — a resolved one is no longer in-flight). Including parked human sessions is what lets a
+ *  PM's WIP/dedup check and the escalate-on-SLA doctrine SEE an outstanding ask instead of relaunching it,
+ *  and matches core's HumanRunner.list() semantics (running only). Including the pending effects makes
+ *  "in-flight" span the whole launch→propose lifecycle, so a WIP/dedup caller never relaunches the
+ *  proposer in the reap→propose gap (which would open a duplicate PR). Deduped by id: while a session is
+ *  live its marker.id == the session id, so it counts once; once reaped, only the marker remains; once
+ *  proposed, the marker is gone (the PR exists, which the caller dedups on instead). */
 export async function list(agent: string, _limit = 50): Promise<RunInfo[]> {
   const r = spawnSync('node', [join(scriptsDir, 'autonomy-runner.mjs'), 'list'], { encoding: 'utf8' });
   let sessions: Array<{ id: string; agent: string; status: string }> = [];
@@ -273,7 +380,11 @@ export async function list(agent: string, _limit = 50): Promise<RunInfo[]> {
   } catch {
     /* no sessions / backend unavailable */
   }
-  return mergeInFlight(sessions, pendingEffects(agent), agent);
+  const inFlight = mergeInFlight(sessions, pendingEffects(agent), agent);
+  const parkedHuman = readHumanSessions()
+    .filter((s) => s.agent === agent && s.status === 'running')
+    .map((s) => ({ id: s.id, status: s.status, conclusion: null, title: agent, ...(s.params?.ref ? { ref: s.params.ref } : {}) }));
+  return [...inFlight, ...parkedHuman];
 }
 
 /** Merge live sessions + pending effects into one in-flight list for `agent`, deduped by id (a live session
@@ -313,11 +424,38 @@ function parseFlags(args: string[]): LaunchParams {
 export async function runCli(argv: string[]): Promise<number> {
   const [cmd, agent, ...rest] = argv;
   if (!cmd || !agent || agent.startsWith('--')) {
-    console.error('usage: runner.ts <launch|list|cancel> <agent|id> [--ref <work-item>] [--key value ...]');
+    console.error('usage: runner.ts <launch|list|get|update|cancel> <agent|id> [--ref <work-item>] [--key value ...]');
     return 2;
   }
+  // `get`/`update`/`cancel` take a SESSION ID (not an agent name). A parked human session lives in this
+  // file's own store; anything else (a termfleet session) is delegated to the backend, which already
+  // implements all five Runner verbs (packages/substrate-local/src/backend.mjs) — so both realizations of
+  // the Runner contract (human + agent) are reachable through the ONE agent-facing seam (SPEC's five verbs:
+  // launch/list/get/update/cancel), not just the human resume path this backlog item's minimum required.
+  if (cmd === 'get') {
+    const human = getHumanSession(agent);
+    if (human) {
+      console.log(JSON.stringify(human));
+      return 0;
+    }
+    const r = spawnSync('node', [join(scriptsDir, 'autonomy-runner.mjs'), 'get', agent], { stdio: 'inherit' });
+    return r.status ?? 0;
+  }
+  if (cmd === 'update') {
+    const flags = parseFlags(rest);
+    const status = typeof flags.status === 'string' ? flags.status : '';
+    if (!status) {
+      console.error('usage: runner.ts update <id> --status <running|paused|cancelled|done|failed>');
+      return 2;
+    }
+    if (getHumanSession(agent)) return updateHumanSession(agent, { status }) ? 0 : 1;
+    const r = spawnSync('node', [join(scriptsDir, 'autonomy-runner.mjs'), 'update', agent, '--status', status], { stdio: 'inherit' });
+    return r.status ?? 0;
+  }
   if (cmd === 'cancel') {
-    // `cancel <id>` — the positional is the session id (not an agent). Delegate to the backend's cancel.
+    // `cancel <id>` — the positional is the session id (not an agent). A parked human ask is retracted in
+    // its own store; otherwise delegate to the backend's cancel (a termfleet session).
+    if (getHumanSession(agent)) return updateHumanSession(agent, { status: 'cancelled' }) ? 0 : 1;
     const r = spawnSync('node', [join(scriptsDir, 'autonomy-runner.mjs'), 'cancel', agent], { stdio: 'inherit' });
     return r.status ?? 0;
   }

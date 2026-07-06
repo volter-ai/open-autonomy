@@ -10,7 +10,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { stringify as stringifyYaml } from 'yaml';
 import { cronOf, emitAutonomy, isScript, withGeneratedManifest } from '@open-autonomy/core';
-import type { AutonomyIR, CompileOutput } from '@open-autonomy/core';
+import type { AutonomyIR, CompileOutput, IRAgent } from '@open-autonomy/core';
 import { SUPPORTED_RUNNERS, type RunnerName } from '@open-autonomy/core';
 // Only the shared portable runtime is borrowed from the github substrate (its neutral relocation is the
 // remaining de-vendor work); the manifest serialization + IR helpers now come from core, so local's emit
@@ -38,6 +38,17 @@ const RUNNER_FRONTEND = readFileSync(join(here, 'runner-frontend.ts'), 'utf8');
 // runs it when that session finishes (reconcilePendingEffects above) — the local mirror of github's
 // post-skill job step. (This replaced the old propose-sweep poller, which scanned worktrees + reconstructed
 // SDLC state in the runner — a methodology leak. See the loop driver + runner-frontend's effect markers.)
+
+// Is this actor a person? A kind:human actor is DECLARED (visible in the manifest) but never EXECUTED on
+// any substrate — mirrors github's own `isHuman` (substrate-github/src/emit.ts): no scheduled tick, no
+// launch prompt. Unlike github, local still emits no per-agent job either way (the loop is one shared
+// driver), so the only local-specific decisions are: exclude a human from the schedule (even if it
+// somehow carries a cron — see cronAgents below) and from promptFiles (no harness invocation for a
+// person). Its SKILL.md IS still copied (see the copies loop below) — same as github: the file is the
+// person's doctrine (what an engage points them at), not a launchable unit.
+function isHuman(agent: IRAgent): boolean {
+  return agent.kind === 'human';
+}
 
 // Inverse of secondsToCron for the simple every-N-minutes cron form the local loop honors.
 export function cronToSeconds(cron: string): number {
@@ -195,7 +206,9 @@ process.exit(r.error?.code === 'ETIMEDOUT' ? 0 : (r.status ?? 1));
 function promptFiles(ir: AutonomyIR): Record<string, string> {
   const out: Record<string, string> = {};
   for (const [role, agent] of Object.entries(ir.agents)) {
-    if (isScript(agent.behavior)) continue;
+    // A kind:human actor has no harness to invoke — there is no model to hand a `/name`/`$name` prompt to
+    // (the runner's human route parks a session instead; see runner-frontend.ts). Skip it like a script.
+    if (isScript(agent.behavior) || isHuman(agent)) continue;
     out[`scripts/prompts/codex/${role}.txt`] = `$${agent.behavior}\n`;
     out[`scripts/prompts/claude/${role}.txt`] = `/${agent.behavior}\n`;
   }
@@ -235,7 +248,9 @@ export function compileLocal(ir: AutonomyIR, opts: { runner?: RunnerName } = {})
 
   // The local driver: a loop that fires each cron agent on an interval (github used `on: schedule`).
   // Each runs its own behavior via bun, exactly as its github job runs `bun <behavior>`.
-  const cronAgents = Object.entries(ir.agents).filter(([, a]) => cronOf(a));
+  // Exclude a kind:human actor even if it (unusually) carries a cron — a person is never ticked by the
+  // loop; it is DISPATCHED (see the runner's human route) when another actor routes work to it.
+  const cronAgents = Object.entries(ir.agents).filter(([, a]) => cronOf(a) && !isHuman(a));
   const intervalSeconds = cronAgents[0] ? cronToSeconds(cronOf(cronAgents[0][1]) as string) : 900;
   generated['scheduler/run.mjs'] = LOOP_DRIVER;
   // A script agent runs its behavior via bun; a prose-skill agent is launched through the runner.
@@ -260,6 +275,11 @@ export function compileLocal(ir: AutonomyIR, opts: { runner?: RunnerName } = {})
       // sends `/<behavior>` / `$<behavior>`, which activates the skill of that name — verified end-to-end
       // (a real compiled install: `/greeter` → the greeter skill runs). The skill's frontmatter `name`
       // must equal `<behavior>` for the trigger to resolve (enforced by check:profiles).
+      // A kind:human actor's behavior is ALSO a prose folder (a task spec, not a script), so it falls
+      // through this same `!isScript` branch and its SKILL.md is copied too — mirroring github
+      // (compileGithub copies every actor's skill unconditionally): the file is never launched here, but
+      // it is the doctrine an `engage` hands the person (see runner-frontend.ts's human route). No
+      // separate kind check needed — the copy decision is already "any non-script behavior".
       copies.push({ from: `skills/${agent.behavior}/SKILL.md`, to: `.codex/skills/${agent.behavior}/SKILL.md` });
       copies.push({ from: `skills/${agent.behavior}/SKILL.md`, to: `.claude/skills/${agent.behavior}/SKILL.md` });
     }

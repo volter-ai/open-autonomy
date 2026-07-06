@@ -309,3 +309,330 @@ Files: `docs/SPEC.md` (capabilities/merge-boundary section), `scripts/open-auton
   - status: passed
   - evidence ev-dev-02: commit=392698e6860710ef66e5d5c5c581faee3a83cc8a acv=1
   - proof: "Preflight's hand-kept fifth label list replaced by expectedLabels(root) = exported SEAM_CONTRACT_LABELS + the compiled manifest's policy (merge.maintainer_block_labels, planner origin-prefix + priority labels). 4 new tests incl. one against the REAL dogfood autonomy.yml (do-not-merge/agent-maintainer-hold/origin:roadmap-planner/priority:high all derived). Profile source synced; check:dogfood + full check green." -> ev-dev-02
+
+## BL-12 Adopter-docs audit (2026-07-06) — charter
+
+assignee: yueranyuan
+
+A four-persona audit — (A) profile author, (B) local-substrate adopter, (C) github-substrate adopter,
+(D) docs cross-reference — ran the new-adopter journey against the published `open-autonomy@0.3.1`
+package and the front-door docs (README → OPERATIONS → SPEC). Findings marked *verified live* were
+reproduced by executing commands, not by reading prose. Verdict: the local path works end-to-end with
+papercuts; the hosted github path is effectively maintainer-only as documented; the SPEC's own profile
+example is broken; the operator docs describe a control plane that no longer exists. BL-13..BL-29 file
+every finding, one item per finding (cohesive batches stay batched). Distinct stream from the BL-1
+boundary/policy backlog (BL-2..BL-11) — BL-1's rollup reads over its own wave list only. **Filing
+only:** which items get built is the maintainer's call; no fixer work is authorized by this charter.
+
+### Acceptance Criteria
+
+- [ ] dev/01 v1 Every BL-13..BL-29 item is done (all ACs checked with evidence) or explicitly dropped with a recorded reason in this file.
+
+## BL-13 Hosted path terminates at the maintainer's private proxy
+
+assignee: yueranyuan
+
+Adopter-docs audit · personas C + D, found independently. Compiled installs default the model-proxy
+endpoint to the maintainer's Worker — `vars.PUBLIC_AGENT_PROXY_HOST ||
+'volter-agent-model-proxy.aaron-0ed.workers.dev'` (emitted `developer.yml:51`;
+`profiles/self-driving/ir.yml:128-129`; compiled `autonomy.yml:149`) — and that proxy is closed three
+ways: `wrangler.toml:35` `GITHUB_OIDC_ALLOWED_WORKFLOW` allowlists only `volter-ai/*`,
+`ENFORCE_ACCOUNT_BALANCE="true"`, `DEFAULT_FUNDING_ACCOUNT` set. No adopter-facing doc says "deploy
+your own Worker" (DO migration; secrets `AGENT_PROXY_ADMIN_TOKEN`/`AGENT_PROXY_HMAC_SECRET`/
+`OPENROUTER_API_KEY` per `services/agent-model-proxy/src/types.ts:6-8`; wrangler.toml edits; ledger
+funding). The only deploy guide (`services/agent-model-proxy/DEPLOY.md:43-46`) is
+maintainer-machine-specific ("approver is yueranyuan… keyring") and OPERATIONS never links it. Bonus
+contradiction: the proxy README says `ENFORCE_ACCOUNT_BALANCE` defaults false; wrangler.toml sets "true".
+
+### Acceptance Criteria
+
+- [ ] dev/01 v1 Compiled installs carry no maintainer endpoint as a silent default: the proxy host is a required install-time setting (unset → preflight fails loudly) or a profile-declared value, with no volter fallback baked into emitted workflows.
+- [ ] dev/02 v1 OPERATIONS (or a doc it links) gains an adopter-facing "deploy your own model proxy" path: wrangler deploy, the DO migration, the three secrets, the wrangler.toml vars to change, and ledger funding; DEPLOY.md is marked maintainer-only.
+- [ ] dev/03 v1 The ENFORCE_ACCOUNT_BALANCE default is documented consistently with wrangler.toml.
+
+## BL-14 README's hosted quickstart clobbers the adopter's repo
+
+assignee: yueranyuan
+
+Adopter-docs audit · personas B + C, **verified live** independently. `npx open-autonomy compile
+self-driving gh-actions .` (`README.md:68`) silently overwrote a test repo's README.md, package.json,
+and .gitignore (73 files written). The overlay-safety note (`docs/OPERATIONS.md:41-47,143-145`) names
+only the `simple-*` profiles; nothing tells an adopter self-driving is a whole-repo scaffold, not an
+overlay. Same failure class as the repo's own compile-clobbers-install-owned rule — now shipped to
+strangers as the first hosted command.
+
+### Acceptance Criteria
+
+- [ ] dev/01 v1 Compiling a scaffold-class profile into a directory whose existing files would be overwritten refuses with a clear error (opt-in --force to proceed), proven by a fixture.
+- [ ] dev/02 v1 README.md:68 and the OPERATIONS overlay-safety note steer adopters to the additive profiles and label self-driving as a scaffold.
+
+## BL-15 SPEC's canonical profile example fails twice
+
+assignee: yueranyuan
+
+Adopter-docs audit · persona A, **verified live**. The canonical ir.yml example at `docs/SPEC.md:72`
+uses `actors:` but the parser requires `agents:` (`packages/core/src/ir.ts:30` — the rename is
+mid-migration); the verbatim error `invalid profile IR: no agents` is not actionable. `SPEC.md:74,:83`
+shows `behavior: skills/developer` but both compilers prepend `skills/` themselves (substrate-local
+`emit.ts:247`, substrate-github `emit.ts:546`) → ENOENT `skills/skills/…/SKILL.md` from
+`materialize.ts`, surfacing only after 14 files were already written; `--dry-run` exits 0 and misses
+it. Every docs-first profile author hits both.
+
+### Acceptance Criteria
+
+- [ ] dev/01 v1 The SPEC example compiles verbatim on both substrates (a fixture test compiles the doc's exact YAML).
+- [ ] dev/02 v1 The "no agents" error names the expected agents: key (and the actors:→agents: migration) so a docs-first author can self-correct.
+- [ ] dev/03 v1 Copy-source existence (skills + resources) is validated before any file is written, and --dry-run reports the same failure.
+
+## BL-16 termfleet's public docs are a 404
+
+assignee: yueranyuan
+
+Adopter-docs audit · persona B, **verified live**. `README.md:49` and `docs/OPERATIONS.md:56` link
+github.com/volter-ai/termfleet — dead. `OPERATIONS.md:121-122` instructs adopters to read termfleet's
+SECURITY.md before exposing it; that file exists nowhere (the npm tarball ships none). termfleet is the
+load-bearing local-runner dependency. **Note:** the real fix (flipping the termfleet repo public) is
+reserved for the maintainer's explicit "flip it" — this item's doc-side fixes must not perform the flip.
+
+### Acceptance Criteria
+
+- [ ] dev/01 v1 No adopter-facing termfleet link 404s: links point at npmjs.com/package/termfleet (or the public repo, once the maintainer flips it).
+- [ ] dev/02 v1 The security guidance OPERATIONS depends on exists and is reachable (an inline section or a shipped SECURITY.md).
+
+## BL-17 The rollout's variable checklist is ~60% dead
+
+assignee: yueranyuan
+
+Adopter-docs audit · personas C + D, found independently (grep of a fresh compile). Of the 18 vars in
+`docs/OPERATIONS.md:282-301`, 11 are read by nothing: PUBLIC_AGENT_MODELS, PM_MODEL, REVIEW_MODEL,
+TRIAGE_MAX_USD_CENTS, PM_MAX_USD_CENTS, REVIEW_MAX_USD_CENTS, MAX_DEVELOP_ATTEMPTS,
+MAX_OPEN_AGENT_PRS, STALE_NEEDS_INFO_MINUTES, PM_LIMIT, ALLOWED_PATHS (knobs since migrated to the
+policy box); PUBLIC_AGENT_TRIGGER_TOKEN is referenced nowhere at all. The vars the emitted workflows DO
+read are absent: PUBLIC_AGENT_PROXY_HOST, PUBLIC_AGENT_CLAUDE_CODE_VERSION (unset → @latest
+supply-chain surprise), PUBLIC_AGENT_MAINTAINERS, PUBLIC_AGENT_TRIAGE_MODEL.
+
+### Acceptance Criteria
+
+- [ ] dev/01 v1 The OPERATIONS variable table is regenerated against a fresh compile: every listed var has a read site in the emitted install and every var the emitted workflows read is listed (grep-verified both directions).
+- [ ] dev/02 v1 A guard keeps it honest (every documented PUBLIC_AGENT_* var must have a read site, mirroring the check:policy-consumers pattern) — or a recorded decision to waive with reason.
+
+## BL-18 simple-gh-sdlc on gh-actions wedges every PR (undocumented CI dispatch contract)
+
+assignee: yueranyuan
+
+Adopter-docs audit · persona C. The proposer dispatches CI by literal filename with sha/pr inputs and
+expects it to post the `ci` commit status (`scripts/agent-propose.ts:141`); dispatch failure is
+"non-fatal" after 6 retries (`agent-propose.ts:49-51`). simple-gh-sdlc's gh-actions compile ships NO
+ci.yml → the required check never posts and every agent PR wedges forever. The contract (the proposer
+dispatches ci/agent-review/human-approval/merge by filename; each must post its status context;
+GITHUB_TOKEN anti-recursion is why) is documented nowhere.
+
+### Acceptance Criteria
+
+- [ ] dev/01 v1 simple-gh-sdlc ships a ci.yml resource that posts the ci status — or compile fails loudly when a code:propose profile lacks the workflows its effect step dispatches.
+- [ ] dev/02 v1 The dispatch contract is documented (SPEC or OPERATIONS): which filenames the proposer dispatches, which status contexts each must post, and why.
+
+## BL-19 Documented branch protection omits the human-approval check (security-relevant)
+
+assignee: yueranyuan
+
+Adopter-docs audit · personas C + D, found independently. `docs/OPERATIONS.md:321` tells adopters to
+require only `ci` + `agent-review`; README/OPERATIONS never mention `human-approval` as a required
+check (zero grep hits). An adopter who follows the doc gets a `human_required_paths` policy whose gate
+is decorative — PRs touching gated paths auto-merge with no human. `scripts/provision-target-repo.ts`
+automates the correct protection but is dev-only and referenced by no adopter doc.
+
+### Acceptance Criteria
+
+- [ ] dev/01 v1 Every adopter-facing branch-protection instruction lists all three required checks: ci, agent-review, human-approval.
+- [ ] dev/02 v1 provision-target-repo.ts is documented as the provisioning step (or its settings inlined into the rollout doc).
+
+## BL-20 The documented repo kill-switch doesn't exist (security-relevant)
+
+assignee: yueranyuan
+
+Adopter-docs audit · personas C + D, found independently. `README.md:172` and
+`docs/OSS_AGENT_RUNBOOK.md:92-93` document `/agent pause repo` setting PUBLIC_AGENT_REPO_PAUSED=true;
+`.github/agent-control.mjs:20` implements only cancel|pause|resume|status|retry|decide|answer — no repo
+variant, and nothing anywhere reads or writes that variable. Worse: the prefix regex matches the bare
+`pause` verb, so `/agent pause repo` silently labels that one issue agent-paused while the operator
+believes the fleet is stopped. `docs/ROADMAP.md:701-706,713-715` claims the repo pause is "Implemented…
+proven live" — historically true, false today (pairs with BL-25).
+
+### Acceptance Criteria
+
+- [ ] dev/01 v1 Recorded decision: reimplement the repo-wide pause (control verb sets the repo variable + emitted workflows honor it) OR remove it from README/RUNBOOK and document the real kill-switch (set the repo variable / disable workflows manually).
+- [ ] dev/02 v1 Per the decision: docs and ROADMAP corrected, and `/agent pause repo` no longer silently does the wrong thing (errors or performs the documented action).
+
+## BL-21 Operator-command docs describe a control plane that doesn't exist
+
+assignee: yueranyuan
+
+Adopter-docs audit · personas C + D. Against the shipped `.github/agent-control.mjs`: `/agent cancel`
+does NOT revoke proxy runs (`README.md:175` claims it does; `agent-control.mjs:33-41` only cancels the
+gh run); `/agent retry` semantics are inverted (`README.md:174` promises "without a fresh develop
+pass"; `agent-control.mjs:50-67` launches a fresh developer run — new mint, new spend); `/agent status`
+posts 5 run links, not the documented labels/PR/proxy-runs report (an OPERATIONS drill would judge a
+correct install failed); the "Model Proxy Admin" workflow invoked by two drills doesn't exist
+(`OPERATIONS.md:354`, `OSS_AGENT_RUNBOOK.md:79,107` — and `OPERATIONS.md:314-319` itself says there is
+no in-repo admin workflow); `RUNBOOK:74` uses the stale `/agent develop` verb and "Public Agent PM"
+workflow name; `RUNBOOK:113` dead-links PUBLIC_AGENT_PRODUCTION_ROLLOUT.md; `RUNBOOK:63-67` documents a
+`blocked.md` terminal artifact with zero references in code; `README.md:144` offers conformance
+`<exec|termfleet|github>` where the CLI takes `gh-actions`.
+
+### Acceptance Criteria
+
+- [ ] dev/01 v1 Every documented operator verb matches the implementation (doc corrected or verb extended — recorded per verb), including cancel's proxy-revoke claim and retry's semantics.
+- [ ] dev/02 v1 The phantom references are gone: Model Proxy Admin workflow, blocked.md, the dead ROLLOUT link, /agent develop, "Public Agent PM", and the conformance runner-name mismatch.
+
+## BL-22 Profile authoring has no validation floor
+
+assignee: yueranyuan
+
+Adopter-docs audit · persona A, all **verified live**. `validateIR` doesn't check `policy`/`resources`
+→ raw engine TypeErrors (no policy → `manifest.ts:73`; `policy: {}` → substrate-github `emit.ts:154`;
+no resources → `emit.ts:501`). Capability typos compile silently — `[code:proposal, tasks:chat,
+totally-made-up]` exits 0; `capsToPermissions` (`emit.ts:275-287`) skips unknown names → a read-only
+agent that fails at runtime. Trigger param sources and policy.box keys are equally unchecked.
+`SPEC.md:238-239` promises compile warns on unsupported target features — not implemented (the CLI
+never reads `ir.targets`). The SKILL.md frontmatter name==folder contract is undocumented (enforced
+only by in-repo `bin/check-profiles.ts:88-91`; noted in `emit.ts:243-246` comments) — a mismatch
+compiles clean and the launch prompt never resolves. Every safety net (`check:profiles` byte-identity,
+`check:policy-consumers`) iterates this repo's `profiles/` only; an external author gets none of it,
+and there is no `open-autonomy lint <profileDir>`.
+
+### Acceptance Criteria
+
+- [ ] dev/01 v1 validateIR requires (or defaults) policy.box and resources; the three raw TypeErrors become actionable validation errors (fixture tests).
+- [ ] dev/02 v1 Unknown capability names, trigger param sources, and policy.box keys produce compile-time warnings or errors (fixture-tested).
+- [ ] dev/03 v1 The SKILL.md name==folder contract is documented and validated at compile time for external profiles.
+- [ ] dev/04 v1 Recorded decision on open-autonomy lint <profileDir> (expose check-profiles-grade validation through the published CLI), and the SPEC targets-warning claim is implemented or removed.
+
+## BL-23 No "write your own profile" guide
+
+assignee: yueranyuan
+
+Adopter-docs audit · persona A. The entire authoring surface is one sentence (`profiles/README.md:11`
+and `docs/OPERATIONS.md:187-188` "fork the profile"). The policy.box vocabulary exists only as comments
+in substrate-github `emit.ts:113-186`; `SPEC.md:117`'s "four catalogs" omits `subject.actorRole`, which
+SPEC's own table (`SPEC.md:504-507`) and `profiles/simple-gh-sdlc/ir.yml:55` use. hello is the right
+starting point but is not self-contained (needs a SKILL.md + 3 resource files an author must discover
+by error message).
+
+### Acceptance Criteria
+
+- [ ] dev/01 v1 An authoring guide exists (profiles/README.md or a SPEC section): a minimal working ir.yml (agents:, bare behavior name), the SKILL.md contract, resources, the policy.box key catalog with semantics, the capability catalog, and trigger params including subject.actorRole.
+- [ ] dev/02 v1 hello is documented as the authoring template with its complete required file set.
+
+## BL-24 No hosted step-by-step install path
+
+assignee: yueranyuan
+
+Adopter-docs audit · persona C. "GitHub production rollout" (`docs/OPERATIONS.md:276-380`) is an
+environment checklist, not an install path — it never says compile → commit → seed labels → enable
+auto-merge → set workflow permissions → create the production environment; INSTALL-AGENT.md scopes
+itself to local (`INSTALL-AGENT.md:11`). Required repo settings are listed nowhere: "Allow auto-merge"
+(`rearm-auto-merge.ts:92` `gh pr merge --auto`), "Allow GitHub Actions to create and approve pull
+requests" (`agent-propose.ts:132`), the production environment + deploy-tags-admin-only ruleset.
+Required labels are never seeded or listed — `gh issue edit --add-label agent-paused`
+(`agent-control.mjs:43`) errors on a fresh repo; the vocabulary lives only in
+`scripts/open-autonomy-preflight.ts:54-87` (expectedLabels) and `bench/provision.template.json`.
+
+### Acceptance Criteria
+
+- [ ] dev/01 v1 OPERATIONS gains a numbered hosted install path: compile → commit → seed labels → repo settings (auto-merge, Actions-create-PRs) → branch protection (three checks) → vars → proxy → preflight → smoke test.
+- [ ] dev/02 v1 Label seeding is documented or automated from expectedLabels() / provision-target-repo.ts — not left for the first control-plane command to crash on.
+
+## BL-25 ROADMAP narrates retired architecture as current
+
+assignee: yueranyuan
+
+Adopter-docs audit · persona D. Four fictions: the REMOVED auto-retry loop described as current
+(`docs/ROADMAP.md:28,87,94-96` — contradicting `docs/LIVE_TESTING_STRATEGY.md:101-105` "NO automatic
+retry loop" and `RUNBOOK:80-83`); the retired "merge gate" job narrated as acting
+(`ROADMAP.md:817-818,565-567,580-581` vs `docs/SPEC.md:366-369,466-467` "no merge gate job"); the
+removed PUBLIC_AGENT_REPO_PAUSED / agent-repo-paused fallback claimed "Implemented… proven live"
+(`ROADMAP.md:701-706,713-715` — no such code today; pairs with BL-20); `/agent stop` and
+`/agent summarize` verbs that don't exist (`ROADMAP.md:633-637`).
+
+### Acceptance Criteria
+
+- [ ] dev/01 v1 The four retired narratives are corrected or explicitly marked historical.
+- [ ] dev/02 v1 A grep sweep confirms ROADMAP no longer contradicts SPEC / LIVE_TESTING_STRATEGY / the shipped control plane on these four points.
+
+## BL-26 Dead references and retired vocabulary across the doc set
+
+assignee: yueranyuan
+
+Adopter-docs audit · persona D (full link/anchor sweep — these were the only failures; every other
+link resolves). Five refs to the retired AUTONOMY-IR.md (`docs/VISION.md:4,96,101`;
+`docs/CONSTITUTION.md:26`; `docs/PROJECT.md:7` — PROJECT contradicts itself by :18). `SPEC.md:238` says
+`scripts/autonomy-conformance.ts` (actually `bin/`). `docs/CODE_HOST_RESOURCES.md:64` says
+`visual-verify.ts` (actually `agent-visual-verify.ts`). `docs/LIVE_TESTING_STRATEGY.md:78-79` and
+`services/agent-model-proxy/wrangler.toml:35` reference the retired monolithic `public-agent.yml`
+workflow (emitted workflows are per-agent). `LIVE_TESTING_STRATEGY.md:140` lists decision memory as
+`done` coverage while ROADMAP Phase 1 (`ROADMAP.md:234-252`) has it as the first "Next Implementation".
+`CONSTITUTION.md:68-69` rule 6 uses retired "install the template" vocabulary (vs
+`ARCHITECTURE.md:130-131` "no templates/"); same vocabulary at `ROADMAP.md:922,941-945` and
+`OPERATIONS.md:398`. **Note:** CONSTITUTION.md is human-owned — amended, never auto-edited; its two
+fixes need the maintainer's hand and must be flagged, not auto-applied.
+
+### Acceptance Criteria
+
+- [ ] dev/01 v1 All listed references are fixed (the CONSTITUTION edits done by the maintainer per its amendment rule; the wrangler.toml allowlist entry corrected or documented as intentional legacy).
+- [ ] dev/02 v1 A docs link-check pass is clean (no dead file references in docs/ or README).
+
+## BL-27 Local-substrate papercuts batch
+
+assignee: yueranyuan
+
+Adopter-docs audit · personas B + C (each item **verified live**). Packaging/CLI: no `engines` field in
+the published package despite the documented Node 22.18+ floor (`OPERATIONS.md:78`); the load-bearing
+`preflight` verb is absent from the OPERATIONS quickstart steps and the README CLI list
+(`README.md:143-146`); running the scheduler before `npm install termfleet` dies with raw
+ERR_MODULE_NOT_FOUND; `README.md:149-152` hedges "once published" though the package IS published;
+`npx ztrack issue create` as documented (`OPERATIONS.md:178,211`) errors (needs --title) and the repo
+pins ztrack ^0.49.0 vs npm latest 1.0.0. Docs: `gh` missing from the prerequisites table though step 5
+and the emitted runner need it; emitted scheduler daemons are backgrounded with `&` and no
+lifecycle/stop guidance; maintainer bleed-through — `OPERATIONS.md:284-317` lists 18 PUBLIC_AGENT_*
+vars with no provenance, `:357-369` cites private trial evidence, and the README funding badge points
+at the maintainer's workers.dev. Emitted-install hygiene: hello ("no code host" demo) ships
+PR/auto-merge scripts (human-approval-gate.ts etc.); the maintainer's deploy.yml ships into adopter
+installs (builds services/agent-model-proxy, which isn't in the install); preflight nits — a bare run
+crashes ENOENT (no mkdir for .agent-run/), reports ready:true with MODEL_PROXY_URL unset (warn-only),
+and REQUIRED_FILES is self-driving-shaped so it can't validate simple-gh-sdlc.
+
+### Acceptance Criteria
+
+- [ ] dev/01 v1 Packaging/CLI fixes: engines field, preflight in the documented CLI surface + quickstart, a friendly missing-termfleet error, the "once published" hedge removed, ztrack examples corrected (and the pin refreshed or the divergence recorded).
+- [ ] dev/02 v1 Docs fixes: gh in prereqs, scheduler lifecycle/stop guidance, maintainer bleed-through removed or marked maintainer-only.
+- [ ] dev/03 v1 Emitted-install hygiene: hello stops shipping PR/auto-merge scripts, deploy.yml stops shipping to adopter installs, and preflight mkdirs its output dir + validates against the compiled profile's own file set (with a recorded decision on MODEL_PROXY_URL warn-vs-fail).
+
+## BL-28 The human seam on the local substrate is spec-only for adopters
+
+assignee: yueranyuan
+
+Adopter-docs audit · persona B. No adopter-facing profile declares a kind:human actor; substrate-local's
+emit has no human-actor emission path; HumanRunner (`packages/core/src/runner.ts:93`) is the documented
+"no-op bookkeeping floor" (`SPEC.md:667,687`); there is no runnable human-in-the-loop recipe an adopter
+can follow, even though the local substrate is where HumanRunner is actually driven.
+
+### Acceptance Criteria
+
+- [ ] dev/01 v1 Recorded decision: ship an adopter-facing human-in-the-loop example (a profile declaring kind:human on the local substrate + a doc recipe) OR mark the local human seam designed-not-built in adopter-facing docs.
+- [ ] dev/02 v1 Implemented per the decision.
+
+## BL-29 simple-gh-sdlc fork hazards
+
+assignee: yueranyuan
+
+Adopter-docs audit · persona A. The ztrack preset is keyed by the profile directory's basename
+(`bin/autonomy-compile.ts:67`) — renaming a fork silently selects a nonexistent preset. The profile's
+`human_required_paths` is hand-maintained with an in-comment admission "no automated guard"
+(`profiles/simple-gh-sdlc/ir.yml:80-105`) — a fork inherits a silent security hole the moment it adds
+a script.
+
+### Acceptance Criteria
+
+- [ ] dev/01 v1 The preset is keyed by an explicit profile declaration (not directory basename), or basename misses degrade to a loud warning + documented fallback.
+- [ ] dev/02 v1 A guard (or a documented fork instruction) keeps human_required_paths complete when OA-shipped scripts are added or renamed.

@@ -4,13 +4,19 @@
 // installing the runner deps (`npm install termfleet` + `npm install -D ztrack`), BEFORE committing the
 // harness. Idempotent — safe to re-run.
 //
-//   0. namespace collisions — an npm-workspace host (or a workspace member of one) whose package NAME
+//   0. dev-dependency installability — `NODE_ENV=production` (or any npm config that resolves to
+//      `omit=dev`: npm_config_omit, a persisted `.npmrc` omit=dev, the legacy production=true) makes
+//      `npm install -D ztrack` exit 0 and install NOTHING — the pin lands in package.json, node_modules
+//      stays untouched, and ztrack's own hint then prescribes the exact command that just no-opped (see
+//      docs/adoption-fixes/OA-06-node-env-production-devdep-noop.md). Run FIRST — a poisoned install
+//      environment explains any later missing-module symptom the checks below would otherwise report as
+//      an unrelated crash.
+//   1. namespace collisions — an npm-workspace host (or a workspace member of one) whose package NAME
 //      collides with the runner's own dependency namespace (termfleet, @termfleet/core, ztrack, and their
 //      transitive deps) silently shadows or self-references the published package (see
-//      docs/adoption-fixes/OA-04-workspace-name-collision-detection.md). Run FIRST — it explains downstream
-//      failures the other checks below would otherwise report as an unrelated crash. Implemented in
-//      ./collision-check.ts (shared with bin/autonomy-compile.ts's compile-time gate).
-//   1. node-pty — termfleet's PTY provider dependency (today @homebridge/node-pty-prebuilt-multiarch,
+//      docs/adoption-fixes/OA-04-workspace-name-collision-detection.md). Implemented in ./collision-check.ts
+//      (shared with bin/autonomy-compile.ts's compile-time gate).
+//   2. node-pty — termfleet's PTY provider dependency (today @homebridge/node-pty-prebuilt-multiarch,
 //      discovered from termfleet's OWN package.json — never hardcoded) ships prebuilt natives, not source;
 //      the health check that matters is "does it load under this Node", verified with a real `require` in a
 //      child `node` process — never a compiled-artifact path guess (build/Release/pty.node), which a healthy
@@ -19,25 +25,192 @@
 //      only shown) when the load probe actually fails, and success/failure is decided by a re-probe, not by
 //      npm's own "rebuilt dependencies successfully" text — so this can never again print a false FAILED
 //      next to a real success.
-//   2. lockfile — adding the runner deps under a different Node/npm than the repo's CI can desync
+//   3. lockfile — adding the runner deps under a different Node/npm than the repo's CI can desync
 //      package-lock.json so the repo's CI `npm ci` rejects it ("package.json and package-lock.json are not in
 //      sync") — and `npm run build` passes locally (it reuses node_modules) so it only surfaces in CI, on the
 //      first agent PR. We verify `npm ci` under the repo's *CI Node version* in a throwaway copy (the repo's
 //      node_modules is never touched) and regenerate the lock under that Node if it's out of sync.
 import { existsSync, readFileSync, readdirSync, mkdtempSync, copyFileSync, rmSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { checkNamespaceCollisions } from './collision-check.ts';
 
 const cwd = process.cwd();
 let failed = false;
+let cautioned = false;
 const note = (m: string) => console.log(`preflight: ${m}`);
 const warn = (m: string) => { console.log(`preflight: ! ${m}`); failed = true; };
+// Third output tier (OA-06): a PROMINENT `!`-prefixed line, same as warn(), but never sets `failed` — for
+// a condition worth the operator's attention (an environment that silently no-ops `npm install -D`) that
+// preflight must not itself fail the gate over (it may be running BEFORE the devDependency is even
+// declared, e.g. docs/OPERATIONS.md's step order — see checkDevDepInstallability below). It DOES set
+// `cautioned` so the final summary doesn't print a bare "install-ready ✓" that contradicts the caution.
+const caution = (m: string) => { console.log(`preflight: ! ${m}`); cautioned = true; };
 const run = (cmd: string, args: string[], opts: Record<string, unknown> = {}) =>
   spawnSync(cmd, args, { encoding: 'utf8', ...opts });
 const have = (cmd: string) => { try { return run(cmd, ['--version']).status === 0; } catch { return false; } };
 
-// ── 1. node-pty: termfleet's provider native module ─────────────────────────────────────────────
+// ── 0. dev-dependency installability: NODE_ENV=production / npm omit=dev silent no-op ───────────────
+// Extracted as a pure(ish), dependency-injected helper (bin/preflight.test.ts), matching OA-05's pattern —
+// the `io` seam (existsSync/readFileSync/run + an injectable `env`) lets tests assert the omit-detection
+// and the evidence-gate decision without mutating global `process.env` or touching a real npm config.
+
+export interface DevDepIO {
+  existsSync: (p: string) => boolean;
+  readFileSync: (p: string) => string;
+  run: RunFn;
+  env: Record<string, string | undefined>;
+}
+
+const defaultDevDepIO: DevDepIO = {
+  existsSync,
+  readFileSync: (p) => readFileSync(p, 'utf8'),
+  run,
+  env: process.env,
+};
+
+export interface DevDepCheckResult {
+  notes: string[];
+  warns: string[];
+  /** Prominent `!`-line output that must NOT set `failed` — see caution() above. */
+  cautions: string[];
+  failed: boolean;
+}
+
+export interface OmitProbe {
+  /** The raw, trimmed value `npm config get omit` reports — empty when nothing is omitted, else a
+   *  comma-separated list (`dev`, `dev,optional`). Only meaningful when `ok` is true. */
+  omit: string;
+  /** Whether the probe itself SUCCEEDED (npm exited 0). A NON-zero exit (npm not on PATH, or — before the
+   *  `--no-workspaces` flag below — the ENOWORKSPACES error npm raises for this command inside a workspace
+   *  MEMBER) leaves stdout empty, which must NOT be mistaken for "healthy, nothing omitted". */
+  ok: boolean;
+}
+
+/** npm's EFFECTIVE omit config — not just `NODE_ENV` — since `npm_config_omit`, a persisted `.npmrc`
+ *  `omit=dev`/`omit[]=dev`, and the legacy `production=true` (npm translates it to `omit=dev` itself) all
+ *  funnel into this single value; `npm config get omit` is the one thing npm itself consults, so testing
+ *  it (not one of its inputs) is what catches every route to the same silent no-op.
+ *
+ *  Run with `--no-workspaces`: inside an npm WORKSPACE MEMBER (a first-class adopter host — see check #1's
+ *  OA-04 header), a bare `npm config get omit` exits 1 with `ENOWORKSPACES` and EMPTY stdout, so reading
+ *  stdout alone would report "nothing omitted" and silently skip the check while the F-6 no-op fully
+ *  reproduces (a member's `NODE_ENV=production npm install -D <pkg>` writes the pin, installs nothing).
+ *  `--no-workspaces` makes the command succeed and report the real value in a member too (verified npm
+ *  10.9.7 / 11.12.1). Returns `ok:false` on ANY non-zero exit so the caller can NOTE "couldn't determine"
+ *  rather than treat an unreadable config as healthy. */
+export function effectiveOmit(io: Pick<DevDepIO, 'run'>): OmitProbe {
+  const r = io.run('npm', ['config', 'get', 'omit', '--no-workspaces']);
+  return { omit: (r.stdout ?? '').trim(), ok: r.status === 0 };
+}
+
+/** Whether the effective omit set includes `dev` — a word-boundary test so `dev` matches standalone or
+ *  comma-adjacent (`dev,optional` / `optional,dev`) but never a substring like a hypothetical `devx`. */
+export function omitsDev(omit: string): boolean {
+  return /\bdev\b/.test(omit);
+}
+
+/** Resolve a declared devDependency the way Node itself would from THIS package — walking up the
+ *  node_modules chain (cwd/node_modules → parent/node_modules → … → root), NOT a single fixed
+ *  `cwd/node_modules/<name>` path. In an npm WORKSPACE MEMBER a devDependency HOISTS to the workspace
+ *  ROOT's node_modules (verified: member-local absent, root present, `require.resolve` from the member
+ *  succeeds) — probing only the member-local path would FALSE-ALARM a healthy production member (F-5
+ *  cry-wolf). Walk-up (via the injected `existsSync` seam) models the same hoisting resolution without an
+ *  `exports`-map subpath hazard that a bare `require.resolve('<name>/package.json')` can hit. */
+export function devDepResolvable(cwd: string, name: string, existsFn: (p: string) => boolean): boolean {
+  let dir = cwd;
+  // eslint-disable-next-line no-constant-condition
+  while (true) {
+    if (existsFn(join(dir, 'node_modules', name, 'package.json'))) return true;
+    const parent = dirname(dir);
+    if (parent === dir) return false; // reached the filesystem root
+    dir = parent;
+  }
+}
+
+// Lead with `--include=dev`: it is the ONLY override that works on EVERY route to omit=dev. When the
+// omission comes from a persisted `.npmrc omit=dev`, `npm_config_omit=dev`, or the legacy `production=true`,
+// that EXPLICIT config beats the NODE_ENV-derived DEFAULT, so `NODE_ENV=development npm install -D <pkg>`
+// installs NOTHING too (verified) — an operator who follows only the NODE_ENV form loops on the same no-op.
+// `NODE_ENV=development` is offered as a secondary note only when the cause IS the NODE_ENV default.
+const devDepOverride = (pkg: string, nodeEnvDefault: boolean): string => {
+  const primary = `npm install -D ${pkg} --include=dev`;
+  return nodeEnvDefault
+    ? `${primary}   (or, since NODE_ENV=production is the cause: NODE_ENV=development npm install -D ${pkg})`
+    : primary;
+};
+
+/** Detect the effective dev-dependency omission and, when present, print a caution ALWAYS (cause +
+ *  consequence + override) but escalate to a hard failure ONLY when there is concrete evidence the no-op
+ *  already happened: a `devDependencies` key in this repo's package.json that Node cannot resolve. Two
+ *  tiers on purpose — see docs/adoption-fixes/OA-06-node-env-production-devdep-noop.md "Why two tiers":
+ *  preflight can run BEFORE ztrack is even declared (docs/OPERATIONS.md's local-git flow), so it must
+ *  never hard-fail on omit=dev alone — only on a devDependency that is DECLARED but unresolvable. */
+export function checkDevDepInstallability(cwd: string, io: DevDepIO = defaultDevDepIO): DevDepCheckResult {
+  const notes: string[] = [];
+  const warns: string[] = [];
+  const cautions: string[] = [];
+  const note = (m: string) => notes.push(m);
+  const warn = (m: string) => warns.push(m);
+  const caution = (m: string) => cautions.push(m);
+
+  const pkgPath = join(cwd, 'package.json');
+  if (!io.existsSync(pkgPath)) {
+    // No package.json ⇒ not an npm project ⇒ no `npm install -D` target here, so we skip the WHOLE check
+    // (including the omit caution) deliberately — there is nothing this environment could no-op an install
+    // INTO. A note records the skip so a silent pass is never mistaken for "omit was checked and clean".
+    note('no package.json — skip devDependency-installability check');
+    return { notes, warns, cautions, failed: false };
+  }
+
+  const probe = effectiveOmit(io);
+  if (!probe.ok) {
+    // The probe itself failed (npm not on PATH, or some other non-zero exit) — we could NOT determine the
+    // omit config. Never treat that as "healthy, nothing omitted" (the silent-ship trap); surface it as a
+    // note with the exact command to check by hand.
+    note(
+      "could not determine npm's dev-dependency omit config (`npm config get omit --no-workspaces` exited " +
+        'nonzero) — if this box sets NODE_ENV=production or omit=dev, `npm install -D` installs NOTHING; ' +
+        'verify manually with: npm config get omit --no-workspaces',
+    );
+    return { notes, warns, cautions, failed: false };
+  }
+  if (!omitsDev(probe.omit)) {
+    // Silent on a healthy box: no NODE_ENV/omit is in effect, so `npm install -D` behaves normally — this
+    // check must never cry wolf (the F-5 lesson OA-05 already had to unlearn once).
+    return { notes, warns, cautions, failed: false };
+  }
+
+  const nodeEnvDefault = io.env.NODE_ENV === 'production';
+  const cause = nodeEnvDefault ? 'NODE_ENV=production → npm omit=dev' : `npm omit=${probe.omit}`;
+  caution(
+    `this environment omits devDependencies (${cause}): 'npm install -D ztrack' will exit 0 and install ` +
+      `NOTHING. Override: ${devDepOverride('ztrack', nodeEnvDefault)}`,
+  );
+
+  let pkg: { devDependencies?: Record<string, string> };
+  try {
+    pkg = JSON.parse(io.readFileSync(pkgPath));
+  } catch {
+    note('package.json is not valid JSON — skip the declared-devDependency evidence check');
+    return { notes, warns, cautions, failed: warns.length > 0 };
+  }
+
+  const declared = Object.keys(pkg.devDependencies ?? {});
+  const missing = declared.filter((name) => !devDepResolvable(cwd, name, io.existsSync));
+  if (missing.length > 0) {
+    // "declared but not installed" — NOT "already happened": a devDep can also be legitimately absent from
+    // an intentional prune / platform-restricted optional, so state the fact, not a presumed cause.
+    warn(
+      `declared devDependencies not installed (omit=dev, so \`npm install -D\` would be a no-op) — missing: ` +
+        `${missing.join(', ')}. Re-run: ${devDepOverride(missing.join(' '), nodeEnvDefault)}`,
+    );
+  }
+
+  return { notes, warns, cautions, failed: warns.length > 0 };
+}
+
+// ── 2. node-pty: termfleet's provider native module ─────────────────────────────────────────────
 // Extracted as a pure(ish), dependency-injected helper (bin/preflight.test.ts) instead of a script with
 // top-level side effects — the `io` seam (fs reads + the spawn used for both the load probe and `npm
 // rebuild`) is what lets tests assert "probe passes ⇒ npm is never invoked" without a real install.
@@ -197,7 +370,7 @@ export function ensurePtyModule(cwd: string, io: PtyIO = defaultPtyIO): PtyCheck
   return { notes, warns, failed: warns.length > 0, rebuildAttempted };
 }
 
-// ── 2. lockfile: `npm ci` under the repo's CI Node version ──────────────────────────────────────
+// ── 3. lockfile: `npm ci` under the repo's CI Node version ──────────────────────────────────────
 function detectCiNodeMajor(): string | null {
   if (existsSync(join(cwd, '.nvmrc'))) {
     const m = readFileSync(join(cwd, '.nvmrc'), 'utf8').match(/(\d+)/);
@@ -273,8 +446,15 @@ function verifyLock(): void {
 // runs it too, via the `import.meta.main` guard below (matches bin/check-doc-vars.ts's convention).
 export function runPreflightCli(): void {
   console.log('open-autonomy preflight — environment checks for a local-runner install\n');
-  // Run FIRST (docs/adoption-fixes/OA-04...): a namespace collision explains any downstream failure the
+  // Run FIRST (docs/adoption-fixes/OA-06...): a poisoned install environment (NODE_ENV=production / npm
+  // omit=dev silently no-opping `npm install -D`) explains any downstream missing-module symptom the
   // checks below would otherwise report as an unrelated crash.
+  const devDepResult = checkDevDepInstallability(cwd);
+  for (const n of devDepResult.notes) note(n);
+  for (const c of devDepResult.cautions) caution(c);
+  for (const w of devDepResult.warns) warn(w);
+  // Run next (docs/adoption-fixes/OA-04...): a namespace collision explains any further downstream failure
+  // the checks below would otherwise report as an unrelated crash.
   const collisionResult = checkNamespaceCollisions(cwd);
   for (const n of collisionResult.notes) note(n);
   for (const w of collisionResult.warns) warn(w);
@@ -282,11 +462,10 @@ export function runPreflightCli(): void {
   for (const n of ptyResult.notes) note(n);
   for (const w of ptyResult.warns) warn(w);
   verifyLock();
-  console.log(
-    failed
-      ? '\npreflight: FAILED — fix the item(s) above and re-run.'
-      : '\npreflight: OK — environment is install-ready ✓ (compile + commit the harness, then prove the loop with `npx open-autonomy doctor`)',
-  );
+  const okSummary = cautioned
+    ? '\npreflight: OK — no blocking issues, but REVIEW the caution(s) above before installing (compile + commit the harness, then prove the loop with `npx open-autonomy doctor`)'
+    : '\npreflight: OK — environment is install-ready ✓ (compile + commit the harness, then prove the loop with `npx open-autonomy doctor`)';
+  console.log(failed ? '\npreflight: FAILED — fix the item(s) above and re-run.' : okSummary);
   process.exit(failed ? 1 : 0);
 }
 

@@ -1,13 +1,13 @@
 ---
 identifier: "LOCAL-43"
 title: "OA-14: verify coding-CLI sign-in with a real auth probe, not --version"
-state: "ready"
-stateType: "open"
+state: "done"
+stateType: "completed"
 assignees: ["tony"]
 priority: 0
 devProgress: ""
 createdAt: "2026-07-06T12:58:42.861Z"
-updatedAt: "2026-07-06T12:58:42.861Z"
+updatedAt: "2026-07-07T12:50:29.122Z"
 url: "local://tracker/issue/LOCAL-43"
 ---
 Assignee: tony
@@ -20,10 +20,12 @@ Coordinate with: OA-16 (checklist), OA-05 (shared preflight surface)
 Provenance: OA-INSTALL-AUDIT-FINDINGS.md F-13 (§2 P2) + narrative §1 phase 2.
 
 ## Acceptance Criteria
-- [ ] dev/01 v1 the documented sign-in check fails (non-zero / loggedIn:false) on a logged-out box (today's documented check passes); preflight reports auth state
-  - status: pending
-- [ ] dev/02 v1 every numbered criterion in the spec's Acceptance criteria section is demonstrated: each fails before the fix and passes after, with command output as evidence
-  - status: pending
+- [x] dev/01 v1 the documented sign-in check fails (non-zero / loggedIn:false) on a logged-out box (today's documented check passes); preflight reports auth state
+  - status: done — see close-out
+- [x] dev/02 v1 every numbered criterion in the spec's Acceptance criteria section is demonstrated: each fails before the fix and passes after, with command output as evidence
+  - status: done — see close-out
+
+Close-out: merged @ f0b607a (builder 6b16f27 + 7953d14). Sign-in verified via `claude auth status --json` loggedIn-field parse (not `--version`, not exit code); tiers: signed-out→hard warn exit 1, ANTHROPIC_API_KEY/AUTH_TOKEN/Bedrock/Vertex→note-green bypass, older/missing CLI→note-green. Both Fable panelists PASS + spend-safety sign-off (single auth-status probe, no billed -p; marker-file tripwire). Merge-resolved with OA-09 port check (both compose in preflight.ts). 5-link proof: /workspace/proofs/oa-14.md.
 
 <!--tracker:comments
 []

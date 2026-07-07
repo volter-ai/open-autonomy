@@ -1,13 +1,13 @@
 ---
 identifier: "LOCAL-32"
 title: "OA-03: quickstart commit-the-harness step + uncommitted-harness guard in the loop driver"
-state: "ready"
-stateType: "open"
+state: "done"
+stateType: "completed"
 assignees: ["tony"]
 priority: 0
 devProgress: ""
 createdAt: "2026-07-06T12:58:16.472Z"
-updatedAt: "2026-07-07T06:50:51.388Z"
+updatedAt: "2026-07-07T07:48:46.458Z"
 url: "local://tracker/issue/LOCAL-32"
 ---
 Assignee: tony
@@ -21,10 +21,12 @@ Unblocked 2026-07-07: LOCAL-31 (OA-02) done — committed-locally is sufficient 
 Provenance: OA-INSTALL-AUDIT-FINDINGS.md F-3 (§2 P0) + narrative §1 step 14.
 
 ## Acceptance Criteria
-- [ ] dev/01 v1 running 'node scheduler/run.mjs --once' with an uncommitted harness produces a clear refusal naming the uncommitted paths (today it silently dispatches doomed workers)
-  - status: pending
-- [ ] dev/02 v1 every numbered criterion in the spec's Acceptance criteria section is demonstrated: each fails before the fix and passes after, with command output as evidence
-  - status: pending
+- [x] dev/01 v1 running 'node scheduler/run.mjs --once' with an uncommitted harness produces a clear refusal naming the uncommitted paths (today it silently dispatches doomed workers)
+  - status: done — see close-out
+- [x] dev/02 v1 every numbered criterion in the spec's Acceptance criteria section is demonstrated: each fails before the fix and passes after, with command output as evidence
+  - status: done — see close-out
+
+Close-out: merged to adoption-fixes-backlog @ 738b8ab (builder commits f1e477d + ccbfacc). Guard drives the emitted scheduler/run.mjs; gitignore-aware (untracked-ignored refuses with -f remediation; tracked-past-ignore clean); per-profile derived staging command (hello has no standards/). Composition with OA-07 pinned @ fbb85bc: paused wins over the harness nag. 5-link proof: /workspace/proofs/oa-03.md.
 
 <!--tracker:comments
 []

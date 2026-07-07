@@ -155,12 +155,18 @@ describe('doctor CLI — read-only guarantee under a kill -INT mid-run (AC-12)',
     // THIS box's `claude auth status` etc. happen to run; a fixed sleep would race) instead of guessing a
     // fixed delay -- deterministic up to the poll's own generous ceiling.
     const worktreesRoot = join(dir, '.worktrees');
+    // Poll until the probe worktree is actually POPULATED, not merely that `.worktrees/` exists: the probe
+    // creates the parent dir and THEN `git worktree add` populates it, so a bare existsSync can win the race
+    // and read an empty dir (the flake). The 6000ms HOLD window keeps it present far longer than the poll
+    // interval, so once `add` completes the next poll sees it well inside the window.
+    const listWorktrees = () =>
+      existsSync(worktreesRoot) ? spawnSync('ls', [worktreesRoot], { encoding: 'utf8' }).stdout.trim() : '';
     const deadline = Date.now() + 15000;
-    while (Date.now() < deadline && !existsSync(worktreesRoot)) {
-      await new Promise((r) => setTimeout(r, 100));
+    while (Date.now() < deadline && listWorktrees().length === 0) {
+      await new Promise((r) => setTimeout(r, 50));
     }
     // Confirm the probe worktree actually exists RIGHT NOW (the hold window), not just assume timing.
-    const worktreesDuring = existsSync(worktreesRoot) ? spawnSync('ls', [worktreesRoot], { encoding: 'utf8' }).stdout : '';
+    const worktreesDuring = listWorktrees();
     proc.kill('SIGINT');
     await proc.exited;
 
@@ -190,11 +196,15 @@ describe('doctor CLI — read-only guarantee under a kill -INT mid-run (AC-12)',
       env: { ...process.env, OA_DOCTOR_TEST_HOLD_BEFORE_RECORD_MS: '6000' },
     });
     const worktreesRoot = join(dir, '.worktrees');
+    // Poll until POPULATED (see the sibling test above): existsSync alone races the empty parent dir the
+    // probe creates just before `git worktree add` fills it.
+    const listWorktrees = () =>
+      existsSync(worktreesRoot) ? spawnSync('ls', [worktreesRoot], { encoding: 'utf8' }).stdout.trim() : '';
     const deadline = Date.now() + 15000;
-    while (Date.now() < deadline && !existsSync(worktreesRoot)) {
-      await new Promise((r) => setTimeout(r, 100));
+    while (Date.now() < deadline && listWorktrees().length === 0) {
+      await new Promise((r) => setTimeout(r, 50));
     }
-    const worktreesDuring = existsSync(worktreesRoot) ? spawnSync('ls', [worktreesRoot], { encoding: 'utf8' }).stdout : '';
+    const worktreesDuring = listWorktrees();
     proc.kill('SIGINT');
     await proc.exited;
 

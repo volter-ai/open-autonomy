@@ -28,11 +28,40 @@ const GITHUB_ONLY = new Set([
   'scripts/claude-agent-run.ts',
 ]);
 
-const here = dirname(fileURLToPath(import.meta.url));
+// Lazy sibling-data reads (OA-01, symmetric with substrate-github/src/emit.ts): module-scope
+// `readFileSync`s here meant merely importing '@open-autonomy/substrate-local' (e.g. from `lint`, which
+// imports every substrate to compile a profile against its declared targets) touched disk before any
+// caller actually asked for a local compile. Now the read happens on first use, and a miss throws an
+// actionable error instead of a raw ENOENT.
+function readSiblingOrThrow(read: () => string, literal: string): string {
+  try {
+    return read();
+  } catch (e) {
+    throw new Error(
+      `open-autonomy: packaging bug — sibling data file '${literal}' is missing next to the substrate-local ` +
+        `module (expected beside ${import.meta.url}). This file should ship with the package; reinstall ` +
+        `open-autonomy, or file an issue: https://github.com/volter-ai/open-autonomy/issues. ` +
+        `Underlying error: ${(e as Error).message}`,
+    );
+  }
+}
+
 // The domain-free runner backend (TermfleetRunner + CLI) and the agent-facing runner seam — emitted
 // verbatim from their single sources beside this compiler so generated and dev-time never drift.
-const RUNNER_BACKEND = readFileSync(join(here, 'backend.mjs'), 'utf8');
-const RUNNER_FRONTEND = readFileSync(join(here, 'runner-frontend.ts'), 'utf8');
+let _runnerBackend: string | undefined;
+function runnerBackendSrc(): string {
+  return (_runnerBackend ??= readSiblingOrThrow(
+    () => readFileSync(join(dirname(fileURLToPath(import.meta.url)), 'backend.mjs'), 'utf8'),
+    'backend.mjs',
+  ));
+}
+let _runnerFrontend: string | undefined;
+function runnerFrontendSrc(): string {
+  return (_runnerFrontend ??= readSiblingOrThrow(
+    () => readFileSync(join(dirname(fileURLToPath(import.meta.url)), 'runner-frontend.ts'), 'utf8'),
+    'runner-frontend.ts',
+  ));
+}
 // NOTE: a github code host's propose effect (turning a finished proposer's worktree into a PR) is NOT a
 // scheduled script. It is a per-session LIFECYCLE effect: runner.ts records it at launch and the loop driver
 // runs it when that session finishes (reconcilePendingEffects above) — the local mirror of github's
@@ -234,9 +263,9 @@ export function compileLocal(ir: AutonomyIR, opts: { runner?: RunnerName } = {})
 
   // Local execution layer: the runner OVERRIDES the github runner.ts from the runtime — launches go to
   // termfleet, not `gh workflow run`.
-  generated['scripts/runner.ts'] = RUNNER_FRONTEND;
+  generated['scripts/runner.ts'] = runnerFrontendSrc();
   generated['scripts/run-agent.mjs'] = RUN_AGENT_DRIVER;
-  generated['scripts/autonomy-runner.mjs'] = RUNNER_BACKEND;
+  generated['scripts/autonomy-runner.mjs'] = runnerBackendSrc();
   // The single source of the runner's defaults (harness, cli, provider url, timeout). The vendored .mjs
   // runtime imports this instead of re-hardcoding literals; TERMFLEET_* env vars override at runtime.
   generated['scripts/runner-defaults.mjs'] = runnerDefaultsModule();

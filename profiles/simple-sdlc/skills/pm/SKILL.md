@@ -94,9 +94,34 @@ worktrees by hand.
 
      Once a candidate clears both the allowlist gate and the body read, launch the developer:
      `bun scripts/runner.ts launch develop --ref <id> --branch
-     agent/issue-<id>` (creates the worktree for fresh work, reuses it for rework).
+     agent/issue-<id>` (creates the worktree for fresh work, reuses it for rework). Never pick an issue
+     labeled `human-required` as a Develop candidate (see "Failed launches" below for the escalation that
+     adds it); an issue labeled `launch-failed` IS still eligible — it gets exactly one retry (see below).
    - Else stop without action.
 4. After acting, `ztrack check --json`. Do not wait for a launched worker to finish.
+
+## Failed launches
+
+`bun scripts/runner.ts launch` exits **non-zero** when the launch itself failed — its skill invocation could
+not resolve in the session's cwd, or the launch call errored for any other reason. That is a **failed
+dispatch, not a claim**: the issue is not `ready`/`in-progress` because of it, and the tick's "exactly one
+action" has not happened yet by launching alone — recording the failure on the board is what completes the
+tick's action instead.
+
+- **First failure:** when `launch develop --ref <id> --branch agent/issue-<id>` exits non-zero, record it
+  before ending the tick (a tick is a fresh session — the board is the **only** memory across ticks):
+  `ztrack issue edit <id> --add-label launch-failed`, and `ztrack issue comment <id> "<the runner's error
+  line>"`.
+- **An issue carrying `launch-failed` gets exactly one more attempt (N=2 total).** On a later tick, when it
+  would otherwise be the Develop candidate, dispatch it again the same way. If this second attempt **also**
+  exits non-zero: stop dispatching it — `ztrack issue edit <id> --add-label human-required`, comment the
+  runner's error line, and end the tick with `OUTCOME: blocked launch-failure <id>`. Never dispatch a
+  `launch-failed`-labeled issue a third time, and never remove `launch-failed` or `human-required` yourself —
+  a human clears them after fixing the cause (e.g. committing a missing skill).
+- **A successful dispatch of a `launch-failed` issue clears the label**
+  (`ztrack issue edit <id> --remove-label launch-failed`) — the failure was environmental and is now gone.
+- An issue carrying `human-required` (for this reason or any other) is never a Develop candidate — skip it
+  exactly like the risk-gated / body-deferred cases above, every tick, until a human clears the label.
 
 Launch/integrate exactly one issue per tick. Never launch review for an issue
 already labeled `ztrack:reviewing`. Use `bun scripts/runner.ts list <agent>` to

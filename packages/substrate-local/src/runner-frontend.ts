@@ -57,6 +57,21 @@ function pausedMessage(): string {
   );
 }
 
+// --- the SKILL pre-check (OA-08): refuse a launch whose invocation cannot resolve --------------------------
+// A skill agent's launch prompt is `/behavior` (claude) or `$behavior` (codex) — emit.ts:436-437 — which the
+// coding CLI resolves against THIS session's cwd (the worktree, or the trunk checkout with no `--branch`). A
+// worktree materializes only what is committed on its base; a missing/uncommitted/renamed skill there dies
+// silently inside the model session ("Unknown command: /develop") with no signal anywhere upstream (the
+// audit's F-7: the runner reports success, the dead session later reads `done`, the PM re-dispatches
+// forever). This check is a plain existsSync, deterministic and free — it runs BEFORE any termfleet spend
+// and refuses the launch outright: no session is created, no post-session effect marker is recorded.
+export class SkillMissingError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'SkillMissingError';
+  }
+}
+
 interface ManifestAgent {
   kind?: 'agent' | 'human'; // `human` -> a person; the runner PARKS a session instead of executing one
   skill?: string;
@@ -342,15 +357,47 @@ export function worktreeProbe(branch: string): WorktreeProbeResult {
   return { branch, worktree, base, sha, codeHost };
 }
 
-/** Launch an agent with forwarded params (agent:launch). */
-export async function launch(agent: string, params: LaunchParams = {}): Promise<void> {
+/** Where harness `harness` resolves behavior `behavior`'s skill invocation in `cwd` — mirrors EXACTLY the
+ *  copy paths compileLocal installs (emit.ts:512-513): `codex` -> `.codex/skills/<behavior>/SKILL.md`, any
+ *  other harness (`claude`, the default) -> `.claude/skills/<behavior>/SKILL.md`. Pure + exported (mirrors
+ *  the `mergeInFlight`/`worktreeBase` precedent) so the claude/codex truth table is unit-testable with no
+ *  process, env, or git involved at all. */
+export function skillPathFor(harness: string, behavior: string, cwd: string): string {
+  const skillsRoot = harness === 'codex' ? '.codex/skills' : '.claude/skills';
+  return join(cwd, skillsRoot, behavior, 'SKILL.md');
+}
+
+// The harness default, resolved EXACTLY as run-agent.mjs does (emit.ts:394): `TERMFLEET_AGENT` overrides;
+// otherwise `RUNNER_DEFAULTS.harness`. That constant is emitted as a co-located sibling, `./runner-defaults.mjs`
+// (emit.ts:471; backend.mjs imports it the very same way), which exists next to THIS file only once it has
+// been emitted as `scripts/runner.ts` into a real install — not in this package's own `src/`, where this same
+// source is ALSO imported directly (unemitted) by this package's own unit tests (worktree-probe.test.ts et
+// al). The dynamic import below uses a VARIABLE specifier (never a literal) so `tsc` never attempts to
+// resolve it statically (a literal `import('./runner-defaults.mjs')` fails `check:autonomy` outright when the
+// file is absent, which it is in-package); at runtime it picks up the real sibling when one exists and falls
+// back to `'claude'` — `RUNNER_DEFAULTS.harness`'s actual value (runner-config.ts) — when it doesn't, so both
+// contexts agree without hardcoding the literal on the emitted path.
+async function defaultHarness(): Promise<string> {
+  try {
+    const sibling = './runner-defaults.mjs';
+    const mod = (await import(sibling)) as { RUNNER_DEFAULTS?: { harness?: string } };
+    if (mod.RUNNER_DEFAULTS?.harness) return mod.RUNNER_DEFAULTS.harness;
+  } catch {
+    /* in-package: no sibling on disk yet (this file imported directly, not via a compiled install) */
+  }
+  return 'claude';
+}
+
+/** Launch an agent with forwarded params (agent:launch). Resolves to the launch's exit code; the pre-check
+ *  refusal (and the pause gate, OA-07) throw instead — see runCli, which maps both to a nonzero exit. */
+export async function launch(agent: string, params: LaunchParams = {}): Promise<number> {
   const { kind, skill: behavior = '', params: declared = {}, review = '' } = manifestAgent(agent);
 
   if (kind === 'human') {
     // The THIRD route: a person cannot be executed — park the ask instead (see the human route above).
     // Exempt from the pause gate: parking an ask for a person spends nothing.
     launchHuman(agent, params);
-    return;
+    return 0;
   }
 
   if (existsSync(PAUSED_PATH)) {
@@ -366,8 +413,8 @@ export async function launch(agent: string, params: LaunchParams = {}): Promise<
     for (const [name, source] of Object.entries(declared)) {
       env[name] = source === 'subject.ref' ? String(params.issue_number ?? '') : '';
     }
-    spawnSync('bun', [behavior], { stdio: 'inherit', env });
-    return;
+    const r = spawnSync('bun', [behavior], { stdio: 'inherit', env });
+    return r.status ?? 1;
   }
 
   // Skill agent: a termfleet session via the launch adapter (forwards params verbatim). ISOLATION is requested
@@ -382,6 +429,27 @@ export async function launch(agent: string, params: LaunchParams = {}): Promise<
   // (below) and the post-session propose effect (below, at the github-only branch).
   const codeHost = manifestCodeHost();
   if (branch) ensureWorktree(branch, worktree, codeHost);
+
+  // OA-08 pre-check: does this launch's skill invocation actually resolve in the session's cwd? Applies with
+  // OR without `--branch` (a trunk-checkout launch of a skill missing from the main checkout dies the exact
+  // same way). Runs AFTER the pause gate above (a paused install refuses first) and before any termfleet
+  // spend — no session is created, no post-session effect marker is recorded, on refusal.
+  const cwd = worktree || process.cwd();
+  const harness = process.env.TERMFLEET_AGENT || (await defaultHarness());
+  const skillPath = skillPathFor(harness, behavior, cwd);
+  if (!existsSync(skillPath)) {
+    const baseSha = git(['rev-parse', 'HEAD'], cwd).stdout.trim() || '(unknown)';
+    const message =
+      `[runner] launch refused: ${agent}'s skill "${behavior}" is missing at\n` +
+      `  ${skillPath} — the session would die at launch ("Unknown command: /${behavior}").\n` +
+      `  The worktree contains only files committed on its base; commit the harness on trunk\n` +
+      `  (docs/OPERATIONS.md#local-runner-quickstart, "Commit the harness"), or check the skill\n` +
+      `  exists for harness "${harness}".` +
+      (branch ? ` (branch ${branch}, base ${baseSha})` : '');
+    console.error(message);
+    throw new SkillMissingError(message);
+  }
+
   const names = Object.keys(params).filter((k) => k !== 'branch');
   const env: Record<string, string> = {
     ...(process.env as Record<string, string>),
@@ -426,9 +494,10 @@ export async function launch(agent: string, params: LaunchParams = {}): Promise<
     } else {
       console.error(`[runner] ${agent}: launched but no terminalId in output; post-session propose not recorded`);
     }
-    return;
+    return r.status ?? 1;
   }
-  spawnSync('node', [join(scriptsDir, 'run-agent.mjs')], { stdio: 'inherit', env, ...(worktree ? { cwd: worktree } : {}) });
+  const r = spawnSync('node', [join(scriptsDir, 'run-agent.mjs')], { stdio: 'inherit', env, ...(worktree ? { cwd: worktree } : {}) });
+  return r.status ?? 1;
 }
 
 /** List an agent's in-flight work (agent:list): live termfleet sessions PLUS pending post-session effects
@@ -549,14 +618,14 @@ export async function runCli(argv: string[]): Promise<number> {
       delete flags.ref;
     }
     try {
-      await launch(agent, flags);
+      return await launch(agent, flags);
     } catch (e) {
-      // PausedError already printed its own message (launch()) — just surface the nonzero exit so a
-      // scripted caller (or a human at the terminal) notices, instead of silently returning 0.
-      if (e instanceof PausedError) return 1;
+      // PausedError / SkillMissingError already printed their own message (launch()) — just surface the
+      // nonzero exit so a scripted caller (or a human at the terminal) notices, instead of silently
+      // returning 0.
+      if (e instanceof PausedError || e instanceof SkillMissingError) return 1;
       throw e;
     }
-    return 0;
   }
   if (cmd === 'list') {
     console.log(JSON.stringify(await list(agent)));

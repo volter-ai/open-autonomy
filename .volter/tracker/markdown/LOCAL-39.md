@@ -1,13 +1,13 @@
 ---
 identifier: "LOCAL-39"
 title: "OA-10: overlay collision detection everywhere, printed manifest receipt, settings.json merge policy"
-state: "ready"
-stateType: "open"
+state: "done"
+stateType: "completed"
 assignees: ["tony"]
 priority: 0
 devProgress: ""
 createdAt: "2026-07-06T12:58:33.282Z"
-updatedAt: "2026-07-06T12:58:33.282Z"
+updatedAt: "2026-07-07T11:30:59.652Z"
 url: "local://tracker/issue/LOCAL-39"
 ---
 Assignee: tony
@@ -20,10 +20,12 @@ Coordinate with: OA-07 (exempt its pause marker from the resurrection guard), OA
 Provenance: OA-INSTALL-AUDIT-FINDINGS.md F-9 (§2 P1) + narrative §1 step 8 — NOTE: partially fixed in source since the audited 0.3.1 artifact; this issue covers the verified residuals.
 
 ## Acceptance Criteria
-- [ ] dev/01 v1 compiling into a repo with a conflicting scripts/<name> or an existing .claude/settings.json refuses (or merges) with a named diff instead of silently overwriting (fails today for the settings/hook and resurrection cases)
-  - status: pending
-- [ ] dev/02 v1 every numbered criterion in the spec's Acceptance criteria section is demonstrated: each fails before the fix and passes after, with command output as evidence
-  - status: pending
+- [x] dev/01 v1 compiling into a repo with a conflicting scripts/<name> or an existing .claude/settings.json refuses (or merges) with a named diff instead of silently overwriting (fails today for the settings/hook and resurrection cases)
+  - status: done — profile-agnostic collision refusal; .claude/settings.json structured MERGE (permissions preserved, Stop hook appended, idempotent); findResurrections refuses operator-deleted manifest files
+- [x] dev/02 v1 every numbered criterion in the spec's Acceptance criteria section is demonstrated: each fails before the fix and passes after, with command output as evidence
+  - status: done — ACs 1-8 proven; see close-out and /workspace/proofs/oa-10.md
+
+Close-out: merged to adoption-fixes-backlog @ 3b1ef38 (builder e76c93b + 081b5d3). findResurrections() deletion-resurrection guard (EXEMPTS OA-07's .open-autonomy/paused + all install-owned paths — both panelists signed off at the adversarial shape), .claude/settings.json structured merge (append-if-absent Stop hook, permissions untouched, idempotent) on compile AND upgrade, profile-agnostic collision message + grouped receipt. Fable correctness panel caught a FALSE Stop-hook opt-out doc claim (every documented avenue was silently reverted by the merge/upgrade machinery — the F-9 human-session hazard); cured with a real durable opt-out sentinel (_openAutonomyStopHookOptOut) honored on compile+upgrade, plus truthful docs (resurrection guard is compile-only). 5-link proof: /workspace/proofs/oa-10.md.
 
 <!--tracker:comments
 []

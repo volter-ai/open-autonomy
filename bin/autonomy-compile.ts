@@ -9,8 +9,8 @@
 // MERGE instead of a refusal (settings-merge.ts). These guards are fresh-compile only — `autonomy-upgrade.ts`
 // legitimately overwrites derived files in place (and applies the same settings.json merge strategy there).
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
-import { basename, dirname, join } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { basename, join } from 'node:path';
+import { bundledProfileNames, profilesRoot } from './bundled-profiles.ts';
 import {
   parseIr,
   compiledPaths,
@@ -35,18 +35,14 @@ import { settingsMergeStrategies, CLAUDE_SETTINGS_PATH } from './settings-merge.
 // compile simple-sdlc instead" while they're compiling simple-sdlc is exactly the false claim this fixes).
 const REPO_SHELL_FILES = new Set(['README.md', 'package.json', '.gitignore', 'CHANGELOG.md']);
 
-// The bundled profiles ship next to this module's package root: at dist/cli.js when installed from npm
-// (import.meta.url → dist/, profiles/ is its sibling), and at bin/ in the dev checkout (../profiles/). So
-// `../profiles` resolves correctly in both. A bare name picks a bundled profile; an existing path wins first.
-const profilesRoot = join(dirname(fileURLToPath(import.meta.url)), '..', 'profiles');
+// profilesRoot + bundledProfileNames() moved to ./bundled-profiles.ts (OA-11) so bin/open-autonomy.ts's
+// --help can derive the same list — see that file for the resolution-in-both-dev-and-packed-install note
+// and the substrate-free import constraint.
 function resolveProfile(arg: string): string | undefined {
   if (existsSync(join(arg, 'ir.yml'))) return arg; // an explicit path to a profile dir
   const bundled = join(profilesRoot, arg); // a bare bundled-profile name
   if (existsSync(join(bundled, 'ir.yml'))) return bundled;
   return undefined;
-}
-function bundledProfileNames(): string[] {
-  try { return readdirSync(profilesRoot).filter((n) => existsSync(join(profilesRoot, n, 'ir.yml'))).sort(); } catch { return []; }
 }
 // The printed receipt's grouped-by-directory summary (OA-10, F-9's "nothing prints what was written"):
 // top-level directory (or bare filename, for a root-level path like `.gitignore`) -> file count, sorted.

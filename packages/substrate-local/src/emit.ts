@@ -5,11 +5,11 @@
 // no mint, no wrapper — so a local install and a github install share the portable behavior and ZERO
 // execution-layer code. The model endpoint is the box's: on local that means ambient env (the operator's
 // OPENAI_API_KEY / OPENAI_BASE_URL, or a local proxy they run) — no injection, no mint.
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { stringify as stringifyYaml } from 'yaml';
-import { cronOf, emitAutonomy, isScript, withGeneratedManifest } from '@open-autonomy/core';
+import { GENERATED_MANIFEST_PATH, cronOf, emitAutonomy, isScript, withGeneratedManifest } from '@open-autonomy/core';
 import type { AutonomyIR, CompileOutput, IRAgent } from '@open-autonomy/core';
 import { SUPPORTED_RUNNERS, type RunnerName } from '@open-autonomy/core';
 // Only the shared portable runtime is borrowed from the github substrate (its neutral relocation is the
@@ -103,6 +103,24 @@ const args = process.argv.slice(2);
 const schedule = JSON.parse(readFileSync(SCHEDULE, 'utf8'));
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
+// PAUSE GATE (OA-07): a fresh install lands PAUSED (see compileLocal's seed-once marker) so an existing
+// backlog is never dispatched before the operator reviews it. Checked at TICK-FIRE time (not just at
+// startup) in BOTH modes, so \`touch .open-autonomy/paused\` also works as a live kill-switch and
+// \`rm .open-autonomy/paused\` un-pauses immediately on the next check — never only once at process start.
+const PAUSED = join(here, '..', '.open-autonomy', 'paused');
+const pausedMessage = () =>
+  '[loop] PAUSED — fresh installs start paused so an existing backlog is never dispatched unreviewed.\\n' +
+  '[loop] review the board, then unpause:  rm .open-autonomy/paused   (details: ' + PAUSED + ')';
+
+// \`--once\` checks PAUSED first — before even the termfleet dependency check below — so a paused install
+// deterministically reports PAUSED as the reason nothing ran, never masked by an unrelated "termfleet not
+// installed" exit that would also (coincidentally) prevent a launch. Continuous mode's gate lives in its
+// own heartbeat loop further down (it must re-check on every beat, not just once at startup).
+if (args.includes('--once') && existsSync(PAUSED)) {
+  console.error(pausedMessage());
+  process.exit(1); // scripted install pipelines notice a nonzero exit, not just log text
+}
+
 // A schedule command that launches a skill (prose) agent goes through run-agent.mjs -> the runner (the
 // termfleet SDK) — a peer dep this loop drives but does NOT vendor. Before this check, a schedule fired
 // before \`npm install termfleet\` died several process-hops deep with a raw, buried ERR_MODULE_NOT_FOUND
@@ -125,6 +143,7 @@ const fireTick = () => {
 };
 
 if (args.includes('--once')) {
+  // PAUSED was already checked above (before the termfleet gate) — reaching here means it's clear.
   fireTick();
   process.exit(0);
 }
@@ -176,10 +195,19 @@ async function reconcilePendingEffects(runner) {
 }
 const idleSince = new Map();
 let lastTick = 0;
+// PAUSE GATE, continuous mode: re-checked every heartbeat (not cached), so a marker created/removed
+// mid-run takes effect on the very next poll. Logged at most once per STATE CHANGE (not every heartbeat),
+// so a paused loop doesn't spam its own log while idling.
+let paused = false;
 while (true) {
   const now = Date.now();
+  const nowPaused = existsSync(PAUSED);
+  if (nowPaused !== paused) {
+    console.error(nowPaused ? pausedMessage() : '[loop] unpaused — resuming ticks.');
+    paused = nowPaused;
+  }
   if (now - lastTick >= intervalMs) {
-    fireTick();
+    if (!paused) fireTick();
     lastTick = Date.now();
   }
   if (runner) {
@@ -227,6 +255,17 @@ const r = spawnSync('node', [runner, 'launch', agent, ...params], { stdio: 'inhe
 process.exit(r.error?.code === 'ETIMEDOUT' ? 0 : (r.status ?? 1));
 `;
 
+// The pause marker (OA-07). Self-describing content: an operator who stumbles on the file (not just one
+// who reads the docs) understands why it's paused and the exact unpause command. Seeded ONLY on a fresh
+// install (compileLocal's freshInstall check below) and NEVER re-added by a re-compile/upgrade — an
+// operator's `rm .open-autonomy/paused` is the intended interaction and must survive every future compile.
+const PAUSED_MARKER = `This open-autonomy install is PAUSED (fresh installs start paused so a pre-existing
+backlog is never dispatched before you review it).
+Review your board first — on a populated tracker, decide which issues the loop may work
+(see policy.dispatch in .open-autonomy/autonomy.yml and docs/OPERATIONS.md step 5).
+Unpause:  rm .open-autonomy/paused
+`;
+
 // Per-agent launch prompts for SKILL agents, split by harness: codex invokes the skill with `$name`,
 // Claude Code with `/name` — where the name is the skill's OWN id (its behavior = the SKILL.md folder +
 // frontmatter `name` it is installed under in .codex/skills/ and .claude/skills/), so the trigger
@@ -244,11 +283,16 @@ function promptFiles(ir: AutonomyIR): Record<string, string> {
   return out;
 }
 
-export function compileLocal(ir: AutonomyIR, opts: { runner?: RunnerName } = {}): CompileOutput {
+export function compileLocal(ir: AutonomyIR, opts: { runner?: RunnerName; destDir?: string } = {}): CompileOutput {
   const runner = opts.runner ?? 'termfleet';
   if (!SUPPORTED_RUNNERS.includes(runner)) {
     throw new Error(`unsupported runner "${runner}"; supported: ${SUPPORTED_RUNNERS.join(', ')}`);
   }
+  // Fresh-install detection for the pause marker (OA-07): "fresh" = no `.open-autonomy/generated.json` in
+  // destDir yet — the exact signal `readGeneratedManifest` already treats as "no prior install" (the same
+  // one upgrade's prune relies on). No destDir given (an in-memory compile: a dry-run print, a unit test,
+  // lint/bench's own disposable cells) is treated as fresh, matching the common case.
+  const freshInstall = !opts.destDir || !existsSync(join(opts.destDir, GENERATED_MANIFEST_PATH));
 
   const generated: Record<string, string> = {};
 
@@ -325,5 +369,16 @@ export function compileLocal(ir: AutonomyIR, opts: { runner?: RunnerName } = {})
     // fails to compile to a local install.
     if (keepCodeHostWorkflows || !r.startsWith('.github/')) copies.push({ from: r === '.gitignore' ? 'gitignore' : r, to: r });
   }
-  return withGeneratedManifest({ generated, copies });
+  const compiled = withGeneratedManifest({ generated, copies });
+  // The pause marker is added AFTER withGeneratedManifest computes `.open-autonomy/generated.json`'s file
+  // list — deliberately: it must never be recorded there. Prune (packages/core/src/upgrade.ts) only ever
+  // deletes paths the manifest lists as open-autonomy-generated, so a marker that never enters the
+  // manifest can never be treated as an orphan and silently pruned (which would silently UNPAUSE a running
+  // install). It is written to disk on a fresh install only (materialize() writes whatever's in
+  // `.generated`); a re-compile/upgrade of an EXISTING install (freshInstall === false) never adds this
+  // key at all, so it neither resurrects a removed marker nor clobbers a still-present one — the file is
+  // simply outside that compile's output entirely, matching INSTALL_OWNED_PATHS's seed-once contract
+  // (packages/core/src/upgrade.ts) if it's ever routed through the generic upgrade machinery instead.
+  if (freshInstall) compiled.generated['.open-autonomy/paused'] = PAUSED_MARKER;
+  return compiled;
 }

@@ -86,6 +86,10 @@ function scaffoldLocalGitRepoWithStaleOrigin(): { dir: string; staleSha: string;
     mkdirSync(join(dir, dirname(path)), { recursive: true });
     writeFileSync(join(dir, path), content);
   }
+  // This fixture proves the worktree-base decision (OA-02), not the day-one pause fence (OA-07) — a fresh
+  // compileLocal() lands paused by default, which would refuse the launch below for an unrelated reason.
+  // Unpause here, exactly like an operator's `rm .open-autonomy/paused` would.
+  rmSync(join(dir, '.open-autonomy', 'paused'), { force: true });
   writeFileSync(join(dir, 'scripts', 'run-agent.mjs'), 'process.exit(0);\n');
   writeFileSync(join(dir, 'harness-marker.txt'), 'committed locally, never pushed\n');
   gitIn(dir, 'add', '-A');

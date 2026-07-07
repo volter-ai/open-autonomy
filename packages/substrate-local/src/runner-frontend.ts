@@ -36,6 +36,27 @@ export interface RunInfo {
 const scriptsDir = dirname(fileURLToPath(import.meta.url));
 const isScript = (behavior: string): boolean => /\.(ts|mjs|js)$/.test(behavior);
 
+// --- the PAUSE gate (OA-07): defense in depth at the launch seam -------------------------------------
+// The scheduler (scheduler/run.mjs) is the primary fence — it never fires a tick while paused. This is the
+// SECOND, independent check: even a manually invoked `runner.ts launch`, or a tick that raced the marker
+// between its own check and the launch, must still refuse. Scoped to the same file the scheduler checks,
+// relative to cwd (this CLI is always invoked from the install root — same convention as
+// `.open-autonomy/autonomy.yml` below). EXCEPT the human route: `launchHuman` parks an ask for a person,
+// which spends nothing, so it stays unaffected (see `launch` below — the check is skipped for `kind === 'human'`).
+const PAUSED_PATH = '.open-autonomy/paused';
+export class PausedError extends Error {
+  constructor() {
+    super('paused');
+    this.name = 'PausedError';
+  }
+}
+function pausedMessage(): string {
+  return (
+    '[runner] PAUSED — this install starts paused so an existing backlog is never dispatched unreviewed.\n' +
+    '[runner] review the board, then unpause:  rm .open-autonomy/paused'
+  );
+}
+
 interface ManifestAgent {
   kind?: 'agent' | 'human'; // `human` -> a person; the runner PARKS a session instead of executing one
   skill?: string;
@@ -300,8 +321,14 @@ export async function launch(agent: string, params: LaunchParams = {}): Promise<
 
   if (kind === 'human') {
     // The THIRD route: a person cannot be executed — park the ask instead (see the human route above).
+    // Exempt from the pause gate: parking an ask for a person spends nothing.
     launchHuman(agent, params);
     return;
+  }
+
+  if (existsSync(PAUSED_PATH)) {
+    console.error(pausedMessage());
+    throw new PausedError();
   }
 
   if (behavior && isScript(behavior)) {
@@ -483,7 +510,14 @@ export async function runCli(argv: string[]): Promise<number> {
       if (refParam) flags[refParam] = flags.ref;
       delete flags.ref;
     }
-    await launch(agent, flags);
+    try {
+      await launch(agent, flags);
+    } catch (e) {
+      // PausedError already printed its own message (launch()) — just surface the nonzero exit so a
+      // scripted caller (or a human at the terminal) notices, instead of silently returning 0.
+      if (e instanceof PausedError) return 1;
+      throw e;
+    }
     return 0;
   }
   if (cmd === 'list') {

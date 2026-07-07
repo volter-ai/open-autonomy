@@ -21,6 +21,10 @@ Read this from PM and Review skills.
   worker is running — to know that, check `runner.ts list develop`/`list review`.
 - PM is the only dispatcher and the only integrator.
 - Develop and Review agents handle one issue and stop.
+- **`ready` means implementable, not necessarily *approved for the loop*: dispatch eligibility
+  additionally requires `policy.dispatch` (the `allow_label` allowlist, when `mode: allowlist`) and a
+  body free of explicit deferral/do-not-dispatch markers.** State is a property the PM reads; the body's
+  prose can still say "not this one" — prose wins.
 - `ztrack:reviewing` means a review worker already claimed an `in-review` issue.
 - **Rework:** when a reviewer requests changes it sends the issue back to `in-progress`
   and ends — the branch stays but no worker runs. The PM re-dispatches `develop` into

@@ -3,7 +3,7 @@ import { mkdirSync, mkdtempSync, readFileSync, writeFileSync, existsSync } from 
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { CompileOutput } from './ir';
-import { planUpgrade, applyUpgrade } from './upgrade';
+import { planUpgrade, applyUpgrade, isInstallOwned, INSTALL_OWNED_PATHS } from './upgrade';
 
 function dirs() {
   const root = mkdtempSync(join(tmpdir(), 'oa-upgrade-'));
@@ -128,5 +128,26 @@ describe('upgrade = recompile (regenerate derived, keep owned inputs, prune orph
     const plan = planUpgrade(out, profile, target);
     expect(plan.changes).toEqual([]);
     expect(plan.notes[0]).toContain('up to date');
+  });
+
+  // OA-07: the local substrate's day-one pause marker. compileLocal (packages/substrate-local/src/emit.ts)
+  // deliberately keeps it OUT of `.open-autonomy/generated.json`'s `files` list, so — regardless of this —
+  // prune (below) can structurally never see it as an orphan to delete. INSTALL_OWNED_PATHS carries it too,
+  // as the seed-once contract of record for any future generic-upgrade path.
+  test('.open-autonomy/paused is declared install-owned (seed-once contract of record)', () => {
+    expect(INSTALL_OWNED_PATHS).toContain('.open-autonomy/paused');
+    expect(isInstallOwned('.open-autonomy/paused')).toBe(true);
+  });
+
+  test('a still-present paused marker is never pruned even if a manifest somehow listed it (belt-and-suspenders)', () => {
+    const { profile, target } = dirs();
+    // Simulate the worst case a future bug could produce: the marker ends up in the prior manifest anyway.
+    write(target, '.open-autonomy/generated.json', priorManifest(['.open-autonomy/paused']));
+    write(target, '.open-autonomy/paused', 'PAUSED — operator has not unpaused yet\n');
+    const out: CompileOutput = { generated: {}, copies: [] }; // this compile does not produce it (not fresh)
+    const plan = planUpgrade(out, profile, target, { prune: true });
+    expect(plan.changes.find((c) => c.path === '.open-autonomy/paused')).toBeUndefined();
+    applyUpgrade(plan, out, profile, target);
+    expect(existsSync(join(target, '.open-autonomy/paused'))).toBe(true); // never deleted — never silently unpaused
   });
 });

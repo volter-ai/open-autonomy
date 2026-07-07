@@ -22,6 +22,14 @@ export const INSTALL_OWNED_PATHS = [
   '.gitignore',
   '.gitattributes',
   'AGENTS.md',
+  // The local substrate's day-one pause marker (OA-07, packages/substrate-local/src/emit.ts). In practice
+  // it never even reaches this list's normal seed/prune machinery — compileLocal deliberately keeps it OUT
+  // of `.open-autonomy/generated.json` (see emit.ts's compileLocal), so prune (below, `readGeneratedManifest`
+  // scoped) can never treat it as an orphan. Listed here anyway as the seed-once contract of record and as
+  // belt-and-suspenders for any future generic-upgrade path (e.g. a local-install upgrade CLI) that might
+  // route a local compile's output through `planUpgrade`/`applyUpgrade`: an operator's `rm
+  // .open-autonomy/paused` is the intended unpause and must never be resurrected or clobbered by upgrade.
+  '.open-autonomy/paused',
   '.open-autonomy/roadmap.yml',
   '.open-autonomy/strategist-sources.json',
   '.open-autonomy/architecture-invariants.yml', // the architectural measuring stick — human-owned, ratified
@@ -96,8 +104,13 @@ export function planUpgrade(
   }
   if (opts.prune) {
     // Orphans = paths the PRIOR install recorded as generated, that this compile no longer produces.
-    // Scoped to the manifest, so only open-autonomy's own files can ever be deleted.
+    // Scoped to the manifest, so only open-autonomy's own files can ever be deleted — and an INSTALL-OWNED
+    // path (seed-once, never overwritten above) is never pruned either: "never overwritten" without "never
+    // removed" would be a silent downgrade of the same guarantee (e.g. OA-07's pause marker — an operator's
+    // own `rm .open-autonomy/paused` must be the only way it goes away, never a prune inferring it's an
+    // orphan because a later compile happens not to produce it that run).
     for (const owned of readGeneratedManifest(targetDir)) {
+      if (isInstallOwned(owned)) continue;
       if (!desired.has(owned) && existsSync(join(targetDir, owned))) changes.push({ path: owned, action: 'delete' });
     }
   }

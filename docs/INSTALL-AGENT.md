@@ -279,6 +279,25 @@ gh issue edit "$n" -R <owner>/<repo> --add-label ready
 Start the loop and **watch one trivial issue all the way to a merged PR**. Asserting "installed" without
 this is the most common way a guided install silently ships broken.
 
+**Expect the first tick to report PAUSED, not to launch anything.** Every local install (`compile` in
+Phase 3) lands with `.open-autonomy/paused` present — a fresh install never dispatches before *someone*
+has looked at the board, even one this guide just populated with a single issue. Confirm the fence, then
+ask the human before lifting it (this is a judgment call, not yours to default):
+
+```bash
+node scheduler/run.mjs --once   # expect: "[loop] PAUSED ..." on stderr, exit nonzero, nothing launched
+```
+
+Tell the human: *"This install starts paused so an existing backlog is never worked without review. I've
+filed one issue (labeled `ready`) — should I unpause now, or do you want to review the board first?"* On a
+**go-ahead**, unpause (durable — a later re-compile/upgrade never re-adds the marker):
+
+```bash
+rm .open-autonomy/paused
+```
+
+Then start the loop:
+
 ```bash
 node scheduler/run.mjs &        # the loop: each tick the PM sweeps the board + launches workers
 ```

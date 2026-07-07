@@ -74,7 +74,7 @@ let out: CompileOutput;
 try {
   out =
     substrate === 'local'
-      ? (await import('@open-autonomy/substrate-local')).compileLocal(ir)
+      ? (await import('@open-autonomy/substrate-local')).compileLocal(ir, { destDir: outDir })
       : (await import('@open-autonomy/substrate-github')).compileGithub(ir);
 } catch (e) {
   // A lazy sibling-data read (emit.ts) throws an actionable packaging-bug Error naming the missing file —
@@ -164,6 +164,9 @@ if (outDir) {
         `       npx termfleet provider serve --kind virtual-tmux --prefix dev --count 1 --port 7402 &\n` +
         tracker +
         `  ${tracker ? 5 : 4}. Run the loop:  ${cd}node scheduler/run.mjs --once   (one tick)  |  node scheduler/run.mjs   (continuous)\n` +
+        `  ${tracker ? 6 : 5}. This install starts PAUSED (fresh installs start paused so a pre-existing backlog is\n` +
+        `     never dispatched before you review it) — step ${tracker ? 5 : 4}'s first tick exits naming this.\n` +
+        `     Review your tracker board (especially a pre-existing backlog), then unpause:  rm .open-autonomy/paused\n` +
         `  Full guide: https://github.com/volter-ai/open-autonomy/blob/main/docs/OPERATIONS.md#local-runner-quickstart`,
     );
   }

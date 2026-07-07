@@ -39,7 +39,7 @@ no single agent holds both `code:review` (statuses:write — blesses) and `code:
 — pushes), so none can both write code and bless it. GitHub native auto-merge lands a PR once `ci` +
 `agent-review` are both green. The agent gets bounded model access (no raw keys) and can never merge.
 (This scoped-token enforcement is the **hosted** substrate; on a local runner the agents share your token —
-your CI + supervision are the boundary. See [`OPERATIONS.md`](./docs/OPERATIONS.md#local-runner-quickstart).)
+your CI + supervision are the boundary. See [`OPERATIONS.md`](./docs/OPERATIONS.md#local-install-checklist).)
 
 Read [`docs/SPEC.md`](./docs/SPEC.md) for the full model and conformance contract, and
 [`docs/ARCHITECTURE.md`](./docs/ARCHITECTURE.md) for the vocabulary and layout.
@@ -80,15 +80,20 @@ npx open-autonomy compile self-driving gh-actions .   # then wire repo vars/secr
 # Hosted, EXISTING repo (GitHub Actions runner, GitHub code host, additive overlay):
 npx open-autonomy compile simple-gh-sdlc gh-actions .  # generates no package.json/README/.gitignore
 
-# Local agents → GitHub PRs (local runner, GitHub code host):
+# Local agents → GitHub PRs (local runner, GitHub code host) — step 3 of the checklist below:
 npx open-autonomy compile simple-gh-sdlc local .       # agents on your machine; PRs auto-merge on GitHub
 
-# Fully local (local runner, local-git code host):
+# Fully local (local runner, local-git code host) — step 3 of the checklist below:
 npx open-autonomy compile simple-sdlc local .          # no GitHub; or `hello` for a zero-tracker demo
 ```
 
-Full step-by-step for every setup (termfleet console/provider, agent sign-in, the merge gate, feeding
-the loop work) → [**`docs/OPERATIONS.md`**](./docs/OPERATIONS.md#install--operate). `self-driving` and
+> **The two `local` lines above are a teaser, not an entry point — they're step 3 of 8 in the ordered
+> checklist.** Don't start here on a real repo: deps, sign-in, and the termfleet ports/pin come first.
+> Follow the full checklist end to end →
+> [**`docs/OPERATIONS.md#local-install-checklist`**](./docs/OPERATIONS.md#local-install-checklist).
+
+Full step-by-step for the **hosted** GitHub Actions runner (repo vars/secrets, branch protection) →
+[**`docs/OPERATIONS.md`**](./docs/OPERATIONS.md#github-production-rollout). `self-driving` and
 `simple-gh-sdlc` run on **either** runner; `simple-sdlc` is local-git (no code host). See
 [the CLI](#the-open-autonomy-cli) for all verbs and options.
 
@@ -107,7 +112,7 @@ issue or PM sweep -> developer (a credentialed skill agent, bounded model token)
 ```
 
 (The scoped-token reviewer independence above is the **hosted** substrate; a local runner runs the same
-loop with the agents on your token — see [`OPERATIONS.md`](./docs/OPERATIONS.md#local-runner-quickstart).)
+loop with the agents on your token — see [`OPERATIONS.md`](./docs/OPERATIONS.md#local-install-checklist).)
 
 Operators steer it with `/agent` issue comments (see Commands). The `local` substrate runs the same
 loop with a scheduler loop + a termfleet runner instead of GitHub Actions.
@@ -170,14 +175,14 @@ bundle is produced by `bun run build`.
 To adopt open-autonomy into your own repo, compile a profile into it — see
 [**Run it on your repo**](#run-it-on-your-repo) for the runner ⟂ code-host setups and the follow-up
 guides ([`OPERATIONS.md`](./docs/OPERATIONS.md#github-production-rollout) for the GitHub Actions runner,
-[`OPERATIONS.md`](./docs/OPERATIONS.md#local-runner-quickstart) for the local runner). From a clone, a
+[`OPERATIONS.md`](./docs/OPERATIONS.md#local-install-checklist) for the local runner). From a clone, a
 profile *path* also works: `open-autonomy compile profiles/self-driving gh-actions ../my-repo`.
 
 ## Operator commands
 
 These are the **GitHub code host's** control plane (issue comments). On a local-git board you steer the
 fleet with termfleet directly and the tracker instead — see
-[`docs/OPERATIONS.md`](./docs/OPERATIONS.md#local-runner-quickstart).
+[`docs/OPERATIONS.md`](./docs/OPERATIONS.md#local-install-checklist).
 
 Operator commands work only for maintainers (repo OWNER/MEMBER/COLLABORATOR); a comment from anyone
 else is ignored. To launch an agent by comment, name it: `/agent <agent>` (the workflow name).

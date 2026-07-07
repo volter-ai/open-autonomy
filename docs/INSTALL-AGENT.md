@@ -234,8 +234,12 @@ npx ztrack init --preset simple-gh-sdlc --sync github --repo <owner>/<repo>
 # 4. (Phase-2 #4) if skipping OA's net-new CI surface:
 #    rm -f .github/dependabot.yml .github/workflows/security.yml
 
-# 5. Commit the harness (Phase-2 #3) to the STILL-UNPROTECTED branch. Keep runtime scratch out (guard the
-#    append so a re-run doesn't duplicate it). Stage the overlay paths EXPLICITLY — never `git add -A` (it
+# 5. Commit the harness (Phase-2 #3) to the STILL-UNPROTECTED branch. This is the canonical commit step —
+#    docs/OPERATIONS.md#4-commit-the-harness (WHY: worktrees only see committed files; the generated.json
+#    manifest is the authoritative file list) — PLUS these agent-specific deltas an unattended install needs:
+#    also stage .volter/ (the tracker config from step 3), .github/, and the lockfiles; keep runtime scratch
+#    out (guard the .gitignore append so a re-run doesn't duplicate it); and `git push` (GitHub code host).
+#    Stage the overlay paths EXPLICITLY — never `git add -A` (it
 #    would sweep unrelated/secret files in the human's dirty tree onto the default branch) and never a glob
 #    like `*.lock*` (zsh aborts the whole `git add` on no-match; it also misses `package-lock.json`). Add only
 #    paths that exist, then HARD-STOP if nothing staged (a silent empty commit = a no-op install). Before
@@ -275,22 +279,24 @@ JSON
 # confirm protection took (errors on a free private plan / non-admin / under-scoped token → STOP, tell human):
 gh api "repos/<owner>/<repo>/branches/<default-branch>/protection/required_status_checks/contexts" --jq '.'
 
-# 7. Start termfleet + sign in to the coding CLI BEFORE running the loop. On a shared/lived-in box, NEVER
-#    attach to a console/provider this install did not start — a termfleet provider can launch terminal
-#    sessions as YOUR user, box-wide, so re-using a foreign one hands it that reach. Run your OWN console +
-#    provider on a repo-unique prefix/port pair and PIN TERMFLEET_PROVIDER_URL to it — required on a shared
-#    box (cheap enough to always do). Re-use is defensible ONLY on a single-user box where you started that
-#    provider yourself — and even then, still pin (auto-discovery / a stray `termfleet use` can still drift).
-#    Truthful occupancy probe: /healthz + BODY-SHAPE, never a bare `curl -fsS .../` (which reads a
-#    provider's 404-on-`/` as "nothing running" and silently double-starts behind `&`) — this only tells you
-#    WHETHER something answers, never that it's YOURS; Phase 4's `doctor --json` is the identity check.
+# 7. Start termfleet + sign in to the coding CLI BEFORE running the loop. The canonical console + provider
+#    recipe (the exact `npx termfleet console serve` / `provider serve` commands, the repo-unique
+#    prefix/port choice, the /healthz body-shape probe) is docs/OPERATIONS.md#2-start-termfleet-console--a-local-provider
+#    — run those two commands now, with these agent-specific deltas on top:
+#    - On a shared/lived-in box, NEVER attach to a console/provider this install did not start — a
+#      termfleet provider can launch terminal sessions as the HUMAN's user, box-wide. Re-use is defensible
+#      ONLY on a single-user box where this install started that provider itself — and even then, still
+#      pin (auto-discovery / a stray `termfleet use` can still drift).
+#    - Treat an already-answering port as a hard ABORT, not a human eyeball judgment call: the /healthz
+#      probe only tells you WHETHER something answers, never that it's YOURS; Phase 4's `doctor --json` is
+#      the identity check.
 TF_PREFIX="$(basename "$PWD")-oa"; TF_CONSOLE=7573; TF_PROVIDER=7602   # repo-unique — NOT the box defaults 7373/7402
 curl -sS "http://127.0.0.1:$TF_CONSOLE/healthz" 2>/dev/null | grep -q '"ok":true' \
-  && { echo "ABORT: port $TF_CONSOLE already answers — pick a different --port for $TF_PREFIX"; exit 1; } \
-  || (npx termfleet console serve --name "$TF_PREFIX" --port "$TF_CONSOLE" &)
+  && { echo "ABORT: port $TF_CONSOLE already answers — pick a different --port for $TF_PREFIX"; exit 1; }
 curl -sS "http://127.0.0.1:$TF_PROVIDER/healthz" 2>/dev/null | grep -q '"ok":true' \
-  && { echo "ABORT: port $TF_PROVIDER already answers — pick a different --port for $TF_PREFIX"; exit 1; } \
-  || (npx termfleet provider serve --kind virtual-tmux --prefix "$TF_PREFIX" --count 1 --port "$TF_PROVIDER" &)
+  && { echo "ABORT: port $TF_PROVIDER already answers — pick a different --port for $TF_PREFIX"; exit 1; }
+# both ports free — now run docs/OPERATIONS.md step 2's `console serve` / `provider serve` commands with
+# --name/--prefix "$TF_PREFIX" and --port "$TF_CONSOLE"/"$TF_PROVIDER" (background both with `&`), then:
 export TERMFLEET_PROVIDER_URL="http://127.0.0.1:$TF_PROVIDER"   # PIN — required in shared environments
 #   claude → /login    then sanity-check:  npx termfleet claude new -y --prompt "say hi"
 #   (-y auto-approves the panel-review prompt that fires once any panel already exists)
@@ -458,9 +464,10 @@ Phase 4 proves *one* merge. For the loop to actually run a backlog over days, se
 - **`ztrack init` is a silent no-op if `.volter/` already exists** — it will NOT (re)apply `--sync github`.
   (OA's compile next-steps hint has been preset-aware since BL-29 — it never prints a bare `ztrack init` —
   but the no-op itself is ztrack's behavior regardless of which command names the preset.) The canonical
-  statement of this caveat is the local-git quickstart's inline warning,
-  `docs/OPERATIONS.md#local-runner-quickstart` step 6 (right after its `ztrack init` line) — read it there;
-  if the GitHub link is missing, fix `.volter/tracker-config.json` directly rather than re-running init.
+  statement of this caveat is the local install checklist's inline warning,
+  `docs/OPERATIONS.md#6-give-the-loop-work--by-code-host` (the local-git flavor, right after its
+  `ztrack init` line) — read it there; if the GitHub link is missing, fix `.volter/tracker-config.json`
+  directly rather than re-running init.
 - **Re-running `compile` regenerates the harness files** (scripts/, .claude/skills/, .open-autonomy/, …) —
   but two collision classes are now GUARDED, not silent (OA-10): (1) `.claude/settings.json` is
   **merged**, not overwritten (your `permissions` and other keys survive; only the Stop hook entry is
@@ -487,19 +494,11 @@ Phase 4 proves *one* merge. For the loop to actually run a backlog over days, se
 
 ### Teardown (how the human backs OA out)
 
-There is no one-command uninstall; reverse what the install armed:
-
-```bash
-# stop the loop + termfleet
-pkill -f scheduler/run.mjs ; pkill -f 'termfleet .* serve'
-# disarm the gate
-gh repo edit <owner>/<repo> --enable-auto-merge=false
-gh api -X DELETE "repos/<owner>/<repo>/branches/<default-branch>/protection"
-# remove the harness commit + runtime scratch
-git revert --no-edit <install-commit>   # or git rm the overlay paths; then push
-git worktree prune ; rm -rf .worktrees .open-autonomy/runner-state
-# (optional) uninstall the deps: npm remove termfleet ztrack
-```
+The canonical teardown sequence (stop the loop + termfleet, disarm the GitHub gate, revert/remove the
+harness commit, prune worktrees/runner-state, optionally remove the deps) is
+`docs/OPERATIONS.md#stop--teardown` — run it as written; this setup (`simple-gh-sdlc` on `local`) uses all
+of it, including the GitHub-gate-disarm step. There is no local-git-only delta here: nothing about this
+setup's teardown is GitHub-agent-specific beyond what the canonical sequence already covers.
 
 ---
 

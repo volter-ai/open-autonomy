@@ -27,7 +27,7 @@
 // it inlines its own copy of just the Check-C probe rather than importing this module.
 import { existsSync, lstatSync, readdirSync, readFileSync, realpathSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
-import { join, sep } from 'node:path';
+import { dirname, join, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 // ── the protected name set ──────────────────────────────────────────────────────────────────────────
@@ -36,27 +36,35 @@ import { fileURLToPath } from 'node:url';
 // installed validation preset `import`s it — `.volter/tracker/validation/preset.mts`, docs/OPERATIONS.md's
 // tracker step), and `open-autonomy` itself (a local workspace of that name would shadow every
 // `npx open-autonomy` via `node_modules/.bin`). This list must NOT grow dynamically — it's the fixed
-// contract; the dynamic part is the transitive closure below.
-//
+// contract; the dynamic part is the transitive closure below. Used by Check B (workspace shadowing) — a
+// workspace MEMBER named any of these is a real hazard (a `.bin` shadow for open-autonomy; an import shadow
+// for the rest).
 export const DIRECT_PROTECTED_NAMES = ['termfleet', '@termfleet/core', 'ztrack', 'open-autonomy'] as const;
+
+// Check A (self-reference) is a STRICT SUBSET: only the names the runner actually BARE-IMPORTS at runtime.
+// Node's ESM self-reference hazard exists only for a bare `import '<name>'` whose enclosing package scope
+// (the repo's own root package.json) is named `<name>` with an `exports` field — so it applies to the
+// imported specifiers (termfleet, @termfleet/core, ztrack) but NOT to "open-autonomy", which the runner
+// never imports: "open-autonomy" is a CLI invoked via `node_modules/.bin`, so a repo NAMED open-autonomy
+// is not a self-reference hazard at all (this repo's own dogfood regen — `compile profiles/self-driving
+// github .` per CLAUDE.md — runs in a repo literally named "open-autonomy" and must not false-alarm).
+// open-autonomy's real risk (a workspace MEMBER named open-autonomy shadowing the `.bin`) is still caught
+// by Check B, which keys off DIRECT_PROTECTED_NAMES.
+export const SELF_REFERENCE_NAMES = ['termfleet', '@termfleet/core', 'ztrack'] as const;
 
 // Check C (the resolution probe) needs the ACTUAL specifier the runtime resolves — which for two of
 // these is a SUBPATH, not the bare package root: `backend.mjs` imports `@termfleet/core/local-providers.js`,
-// and the ztrack preset imports `ztrack/preset-kit`. This matters because a perfectly healthy,
-// non-colliding `@termfleet/core`/`ztrack` install can legitimately have NO "." entry in its own `exports`
-// map (both do, empirically) — probing the bare package root there would throw ERR_PACKAGE_PATH_NOT_EXPORTED
-// on a HEALTHY install, exactly the false-alarm class this project's own F-5 lesson
-// (docs/adoption-fixes/OA-05-preflight-false-pty-failure.md) warns never to repeat.
+// and the ztrack preset imports `ztrack/preset-kit`. Probing the actual runtime specifier (not the bare
+// package root) is what keeps this from false-alarming: `@termfleet/core`'s published `exports` map has no
+// "." entry, so probing the bare `@termfleet/core` would throw ERR_PACKAGE_PATH_NOT_EXPORTED on a HEALTHY
+// install — exactly the F-5 crying-wolf class (docs/adoption-fixes/OA-05-preflight-false-pty-failure.md).
+// (ztrack@1.2.0 DOES export ".", so bare ztrack would happen to resolve today — but we still probe the
+// subpath the preset actually imports, `ztrack/preset-kit`, so the probe stays faithful to the real
+// runtime import regardless of a dependency's future exports-map changes.)
 //
 // "open-autonomy" is deliberately ABSENT from this probe list: nothing the runner emits ever bare-imports
-// it (it is a CLI, invoked as `npx open-autonomy` / a `node_modules/.bin` entry, not a library dependency —
-// its `package.json` ships no "main"/"exports" at all). Its actual collision risk is `.bin` PATH shadowing
-// (a workspace member named "open-autonomy" would shadow the real CLI's `node_modules/.bin/open-autonomy`),
-// which `import.meta.resolve` cannot observe — and worse, probing it would FAIL on every healthy install
-// (bin-only packages have no importable entry point to resolve), a guaranteed false alarm, not a rare one.
-// Checks A/B still cover "open-autonomy" — they are pure name-matches against `DIRECT_PROTECTED_NAMES`,
-// mechanism-agnostic, so they catch the self-reference/workspace-member-name risk without needing to
-// resolve anything.
+// it, and probing it would FAIL on every healthy install (bin-only packages have no importable entry point
+// to resolve) — a guaranteed false alarm. Checks A/B cover it (Check B) without needing to resolve anything.
 export interface ProtectedSpecifier {
   name: string;
   /** what the runtime actually resolves — equals `name` unless the real import is a subpath. */
@@ -126,13 +134,17 @@ export interface TransitiveResult {
 }
 
 /** Resolve an installed dep's package.json honoring npm's hoist-or-nest behavior: hoisted at
- *  `<cwd>/node_modules/<name>` when possible, else nested under its parent's own `node_modules`. Mirrors
- *  bin/preflight.ts's `resolvePtyDir` (same nesting rule, generalized to an arbitrary parent). */
-function resolveDepPkgJson(cwd: string, name: string, parentName: string | undefined, io: CollisionIO): string | null {
+ *  `<cwd>/node_modules/<name>` when possible, else nested under its PARENT'S OWN dir (`<parentDir>/
+ *  node_modules/<name>`). `parentDir` is the parent package's actual installed directory (not just its
+ *  name) so nesting works at ANY depth — a grandparent-nested dep (`<cwd>/node_modules/gp/node_modules/
+ *  parent/node_modules/dep`) resolves because each level's `parentDir` is the real resolved dir, not a
+ *  one-level-only `<cwd>/node_modules/<parentName>` guess. Mirrors bin/preflight.ts's `resolvePtyDir`
+ *  hoist-then-nest rule, generalized to arbitrary depth. */
+function resolveDepPkgJson(cwd: string, name: string, parentDir: string | undefined, io: CollisionIO): string | null {
   const hoisted = join(cwd, 'node_modules', name, 'package.json');
   if (io.existsSync(hoisted)) return hoisted;
-  if (parentName) {
-    const nested = join(cwd, 'node_modules', parentName, 'node_modules', name, 'package.json');
+  if (parentDir) {
+    const nested = join(parentDir, 'node_modules', name, 'package.json');
     if (io.existsSync(nested)) return nested;
   }
   return null;
@@ -147,24 +159,25 @@ export function buildTransitiveClosure(cwd: string, roots: readonly string[] = T
   const chains = new Map<string, string[]>();
   const visited = new Set<string>();
   const rootsInstalled: string[] = [];
-  const queue: Array<{ name: string; parent: string | undefined; chain: string[] }> = [];
+  const queue: Array<{ name: string; parentDir: string | undefined; chain: string[] }> = [];
   for (const root of roots) {
     if (resolveDepPkgJson(cwd, root, undefined, io)) {
       rootsInstalled.push(root);
-      queue.push({ name: root, parent: undefined, chain: [root] });
+      queue.push({ name: root, parentDir: undefined, chain: [root] });
     }
   }
   while (queue.length) {
-    const { name, parent, chain } = queue.shift()!;
+    const { name, parentDir, chain } = queue.shift()!;
     if (visited.has(name)) continue;
     visited.add(name);
-    const pkgPath = resolveDepPkgJson(cwd, name, parent, io);
+    const pkgPath = resolveDepPkgJson(cwd, name, parentDir, io);
     if (!pkgPath) continue;
+    const ownDir = dirname(pkgPath); // this package's actual installed dir — the parentDir for ITS deps
     const pkg = readJson(io, pkgPath);
     const deps = (pkg && (pkg.dependencies as Record<string, string> | undefined)) || {};
     for (const dep of Object.keys(deps)) {
       if (!roots.includes(dep) && !chains.has(dep)) chains.set(dep, [...chain, dep]);
-      if (!visited.has(dep)) queue.push({ name: dep, parent: name, chain: [...chain, dep] });
+      if (!visited.has(dep)) queue.push({ name: dep, parentDir: ownDir, chain: [...chain, dep] });
     }
   }
   return { chains, rootsInstalled };
@@ -214,6 +227,9 @@ export function expandWorkspaceGlob(cwd: string, pattern: string, io: CollisionI
           continue;
         }
         for (const e of entries) {
+          // A `*` segment never matches a dot-dir (npm/glob semantics: `*` excludes leading-dot entries) —
+          // so a stray `.git`/`.cache` directory is never mistaken for a workspace member.
+          if (e.startsWith('.')) continue;
           if (re.test(e) && io.isDirectory(join(d, e))) next.push(join(d, e));
         }
       }
@@ -234,13 +250,19 @@ export interface WorkspaceMember {
 }
 
 /** Expand every `workspaces` glob (npm array form, or the yarn-style `{packages: [...]}` object form)
- *  into the member directories that actually have a package.json, and read each one's `name`. */
+ *  into the member directories that actually have a package.json, and read each one's `name`. Honors
+ *  `!`-negation patterns (npm workspaces support `"!packages/excluded"` to opt a dir out): positives are
+ *  expanded, then any directory matched by a negation is removed — an excluded member is never flagged. */
 export function workspaceMembers(cwd: string, workspaces: string[], io: CollisionIO): WorkspaceMember[] {
+  const positives = workspaces.filter((p) => !p.startsWith('!'));
+  const negatives = workspaces.filter((p) => p.startsWith('!')).map((p) => p.slice(1));
+  const excluded = new Set<string>();
+  for (const neg of negatives) for (const dir of expandWorkspaceGlob(cwd, neg, io)) excluded.add(dir);
   const seen = new Set<string>();
   const members: WorkspaceMember[] = [];
-  for (const pattern of workspaces) {
+  for (const pattern of positives) {
     for (const dir of expandWorkspaceGlob(cwd, pattern, io)) {
-      if (seen.has(dir)) continue;
+      if (seen.has(dir) || excluded.has(dir)) continue;
       seen.add(dir);
       const pkg = readJson(io, join(dir, 'package.json'));
       if (pkg && typeof pkg.name === 'string') members.push({ name: pkg.name, dir });
@@ -259,6 +281,19 @@ export interface ResolutionResult {
   detail?: string;
 }
 
+/** A raw `node` resolution stack is dozens of frames; the one line worth showing an operator is the thrown
+ *  `Error [ERR_*]: <message>` line. Prefer a line that STARTS with `Error` (the actual thrown message) over
+ *  one that merely CONTAINS an `ERR_*` token (which also matches the `return new ERR_*(` code-frame line a
+ *  couple frames up) — else fall back to the first non-empty line. Keeps the warn a legible single line. */
+export function compactResolveError(stderr: string): string {
+  const lines = stderr
+    .split('\n')
+    .map((l) => l.trim())
+    .filter(Boolean);
+  const errLine = lines.find((l) => /^Error\b/.test(l)) ?? lines.find((l) => /\bERR_[A-Z_]+/.test(l));
+  return errLine ?? lines[0] ?? 'node exited nonzero with no error output';
+}
+
 /** Resolve `specifier` (the actual bare-or-subpath import the runtime uses — see RESOLUTION_PROBE_SPECIFIERS)
  *  the way the emitted runner will: `import.meta.resolve(specifier)` in a real child `node` process run
  *  with `cwd` as its working directory (so it shares the root package scope with `scripts/`, faithfully
@@ -266,15 +301,22 @@ export interface ResolutionResult {
  *  decide whether there's anything to probe at all and to realpath-check the package's own directory. A
  *  package that isn't installed at all under `<cwd>/node_modules/` yet is NOT a failure here — that's
  *  simply "nothing to probe" (checks A/B, or a plain "not installed" note, cover that case); this check is
- *  about a package that IS present resolving to something OTHER than its own real installed copy. */
-export function probeResolution(cwd: string, name: string, specifier: string, io: CollisionIO = defaultCollisionIO): ResolutionResult {
+ *  about a package that IS present resolving to something OTHER than its own real installed copy.
+ *
+ *  `cwd` is absolute-ized up front: the resolved path we compare against comes back ABSOLUTE (from
+ *  `import.meta.resolve` → `fileURLToPath`), so a RELATIVE cwd (e.g. the documented `compile … local .`,
+ *  which passes `outDir` verbatim) would string-prefix-compare `node_modules/...` against `/abs/.../
+ *  node_modules/...` and spuriously report EVERY probe as "outside node_modules". Resolving once here makes
+ *  every comparison absolute-vs-absolute. */
+export function probeResolution(cwdArg: string, name: string, specifier: string, io: CollisionIO = defaultCollisionIO): ResolutionResult {
+  const cwd = resolve(cwdArg);
   const nodeModulesRoot = join(cwd, 'node_modules');
   const pkgDir = join(nodeModulesRoot, name);
   if (!io.existsSync(join(pkgDir, 'package.json'))) return { ok: true }; // not installed yet — not this check's concern
 
   const r = io.run('node', ['--input-type=module', '-e', "console.log(import.meta.resolve(process.argv[1]))", specifier], { cwd });
   if (r.status !== 0) {
-    return { ok: false, reason: 'resolution-failed', detail: (r.stderr ?? '').trim() || 'node exited nonzero with no stderr' };
+    return { ok: false, reason: 'resolution-failed', detail: compactResolveError((r.stderr ?? '').trim()) };
   }
 
   let resolvedPath: string;
@@ -359,11 +401,15 @@ export interface CollisionCheckResult {
 }
 
 /** Checks A + B + C against `cwd`. Shaped like bin/preflight.ts's other checks ({notes, warns, failed}) so
- *  both call sites (preflight's CLI driver, autonomy-compile's compile-time gate) replay it identically. */
-export function checkNamespaceCollisions(cwd: string, io: CollisionIO = defaultCollisionIO): CollisionCheckResult {
+ *  both call sites (preflight's CLI driver, autonomy-compile's compile-time gate) replay it identically.
+ *  `cwd` is absolute-ized up front (Check C compares against absolute resolved paths — a RELATIVE cwd such
+ *  as the documented `compile … local .` would otherwise spuriously fail every probe; see probeResolution). */
+export function checkNamespaceCollisions(cwdArg: string, io: CollisionIO = defaultCollisionIO): CollisionCheckResult {
+  const cwd = resolve(cwdArg);
   const notes: string[] = [];
   const warns: string[] = [];
   const direct = new Set<string>(DIRECT_PROTECTED_NAMES);
+  const selfRef = new Set<string>(SELF_REFERENCE_NAMES);
 
   const rootPkg = readJson(io, join(cwd, 'package.json'));
   if (!rootPkg) {
@@ -380,12 +426,20 @@ export function checkNamespaceCollisions(cwd: string, io: CollisionIO = defaultC
     );
   }
 
-  // Check A — self-reference.
-  if (typeof rootPkg.name === 'string' && direct.has(rootPkg.name)) {
+  // Check A — self-reference. Keyed off SELF_REFERENCE_NAMES (the bare-imported subset), NOT the full direct
+  // set: a repo NAMED "open-autonomy" is not a self-reference hazard (the runner never bare-imports it), so
+  // this repo's own dogfood regen doesn't false-alarm. open-autonomy's real risk is caught by Check B.
+  if (typeof rootPkg.name === 'string' && selfRef.has(rootPkg.name)) {
     warns.push(selfReferenceError(rootPkg.name));
   }
 
-  // Check B — workspace shadowing (direct set, or the dynamic transitive closure — printing the owning chain).
+  // Check B — workspace shadowing (direct set, or the dynamic transitive closure — printing the owning
+  // chain). NOTE: the transitive branch is NAME-BASED and deliberately broad (~280 names incl. common ones
+  // like `ws`, `semver`, `ms`, `zod`) — it flags a workspace member sharing a name with anything in
+  // termfleet's/ztrack's dependency closure. AC-4 mandates this conservative behavior (catch the shadow
+  // BEFORE it bites), so it may occasionally flag a benign same-named package that npm actually nested a
+  // correct copy for. The remediation (rename the member) is always safe; a false positive costs a rename,
+  // a false negative costs a silent deep crash — we bias to the former, as the F-4 finding requires.
   const workspacesField = rootPkg.workspaces as string[] | { packages?: string[] } | undefined;
   const workspaces: string[] = Array.isArray(workspacesField)
     ? workspacesField

@@ -97,4 +97,68 @@ describe('scheduler/run.mjs --once — the termfleet pre-flight guard', () => {
       rmSync(dir, { recursive: true, force: true });
     }
   });
+
+  // A minimal HEALTHY node_modules/termfleet (real dir, resolves to itself) — so the `termfleet` probe
+  // passes and a LATER specifier's collision is what trips the guard, not termfleet's.
+  const installHealthyTermfleet = (dir: string) => {
+    mkdirSync(join(dir, 'node_modules', 'termfleet'), { recursive: true });
+    writeFileSync(
+      join(dir, 'node_modules', 'termfleet', 'package.json'),
+      JSON.stringify({ name: 'termfleet', version: '0.2.0', main: 'index.js', exports: { '.': './index.js' } }),
+    );
+    writeFileSync(join(dir, 'node_modules', 'termfleet', 'index.js'), 'export const x = 1;\n');
+  };
+
+  // OA-04 concern-3: the drift the guard exists to catch is a workspace member named `@termfleet/core`
+  // added AFTER install — `termfleet` still resolves fine, so a termfleet-only probe passes and the run
+  // dies hops-deep with ERR_PACKAGE_PATH_NOT_EXPORTED (audit mode (a)). The guard must probe
+  // `@termfleet/core/local-providers.js` too. Tamper probe for the multi-specifier loop: dropping
+  // @termfleet/core from the emitted RUNNER_SPECS makes this go green-when-it-should-be-red.
+  test('a workspace-shadowed @termfleet/core (termfleet itself resolves fine) is refused before any tick, naming @termfleet/core', () => {
+    const dir = scaffold(skillAgentIr);
+    try {
+      installHealthyTermfleet(dir);
+      mkdirSync(join(dir, 'packages', 'core'), { recursive: true });
+      writeFileSync(join(dir, 'packages', 'core', 'package.json'), JSON.stringify({ name: '@termfleet/core', version: '0.0.0-dev' }));
+      writeFileSync(join(dir, 'packages', 'core', 'local-providers.js'), 'export const p = 1;\n');
+      mkdirSync(join(dir, 'node_modules', '@termfleet'), { recursive: true });
+      symlinkSync(join(dir, 'packages', 'core'), join(dir, 'node_modules', '@termfleet', 'core'), 'dir');
+      const r = spawnSync('node', ['scheduler/run.mjs', '--once'], { cwd: dir, encoding: 'utf8' });
+      expect(r.status).toBe(1);
+      expect(r.stderr).toContain('COLLISION');
+      expect(r.stderr).toContain('@termfleet/core');
+      expect(r.stderr).not.toContain('ERR_PACKAGE_PATH_NOT_EXPORTED'); // named error replaces the deep crash
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  // Exercises the emitted guard's realpathSync-ESCAPE sub-branch specifically. Under Node's default
+  // realpath-on resolution, a symlinked node_modules/termfleet resolves straight to its repo target, so the
+  // earlier "resolved OUTSIDE node_modules" branch fires. Under NODE_OPTIONS=--preserve-symlinks, resolution
+  // keeps the symlink path (string-wise inside node_modules/termfleet/), so ONLY the realpath check reveals
+  // the escape — this is the one condition that reaches that sub-branch.
+  test('under --preserve-symlinks, a symlinked node_modules/termfleet is caught by the realpath-escape branch', () => {
+    const dir = scaffold(skillAgentIr);
+    try {
+      mkdirSync(join(dir, 'packages', 'tf'), { recursive: true });
+      writeFileSync(
+        join(dir, 'packages', 'tf', 'package.json'),
+        JSON.stringify({ name: 'termfleet', version: '0.2.0', main: 'index.js', exports: { '.': './index.js' } }),
+      );
+      writeFileSync(join(dir, 'packages', 'tf', 'index.js'), 'export const x = 1;\n');
+      mkdirSync(join(dir, 'node_modules'), { recursive: true });
+      symlinkSync(join(dir, 'packages', 'tf'), join(dir, 'node_modules', 'termfleet'), 'dir');
+      const r = spawnSync('node', ['scheduler/run.mjs', '--once'], {
+        cwd: dir,
+        encoding: 'utf8',
+        env: { ...process.env, NODE_OPTIONS: '--preserve-symlinks' },
+      });
+      expect(r.status).toBe(1);
+      expect(r.stderr).toContain('COLLISION');
+      expect(r.stderr).toContain('escapes node_modules into this repo'); // the realpath-escape branch's wording
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
 });

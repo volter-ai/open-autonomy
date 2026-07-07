@@ -118,7 +118,13 @@ if (outDir) {
   // member is itself named termfleet/@termfleet/core/ztrack/open-autonomy) — exactly the case that
   // matters most (an operator who skips `preflight` still gets stopped before the time bomb is written).
   // Mirrors the clobber guard's --force escape hatch just below.
-  if (!force && existsSync(join(outDir, 'package.json'))) {
+  //
+  // SCOPED TO `local` ONLY: the collision hazard is entirely about the LOCAL termfleet runner's bare
+  // imports (termfleet/@termfleet/core/ztrack). A `gh-actions` compile emits GitHub workflows and never
+  // runs that runner, so gating it is pure false-alarm surface — and it would break this repo's OWN
+  // dogfood regen (`compile profiles/self-driving github .`, per CLAUDE.md), which runs in a repo whose
+  // root package is legitimately named "open-autonomy".
+  if (substrate === 'local' && !force && existsSync(join(outDir, 'package.json'))) {
     const collisions = checkNamespaceCollisions(outDir);
     if (collisions.warns.length) {
       console.error(

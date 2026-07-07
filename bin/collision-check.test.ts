@@ -12,6 +12,8 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
   DIRECT_PROTECTED_NAMES,
+  RESOLUTION_PROBE_SPECIFIERS,
+  SELF_REFERENCE_NAMES,
   buildTransitiveClosure,
   chainText,
   checkNamespaceCollisions,
@@ -89,6 +91,33 @@ describe('buildTransitiveClosure — dynamic BFS, never a hardcoded dep list', (
     const { chains } = buildTransitiveClosure('/repo', ['termfleet'], io);
     expect(chains.has('nested-dep')).toBe(true);
   });
+
+  test('descends GRANDPARENT-nested deps (parentDir carries the actual resolved dir, not a one-level name guess)', () => {
+    // gp nested under termfleet's own node_modules; parent nested under gp's; dep nested under parent's —
+    // three levels deep. A one-level `<cwd>/node_modules/<parentName>/node_modules` lookup would drop it.
+    const base = '/repo/node_modules/termfleet/node_modules';
+    const dirs = new Set([
+      '/repo/node_modules',
+      '/repo/node_modules/termfleet',
+      '/repo/node_modules/termfleet/node_modules',
+      `${base}/gp`,
+      `${base}/gp/node_modules`,
+      `${base}/gp/node_modules/parent`,
+      `${base}/gp/node_modules/parent/node_modules`,
+      `${base}/gp/node_modules/parent/node_modules/leaf`,
+    ]);
+    const io = fakeIo(
+      {
+        '/repo/node_modules/termfleet/package.json': JSON.stringify({ name: 'termfleet', dependencies: { gp: '^1.0.0' } }),
+        [`${base}/gp/package.json`]: JSON.stringify({ name: 'gp', dependencies: { parent: '^1.0.0' } }),
+        [`${base}/gp/node_modules/parent/package.json`]: JSON.stringify({ name: 'parent', dependencies: { leaf: '^1.0.0' } }),
+        [`${base}/gp/node_modules/parent/node_modules/leaf/package.json`]: JSON.stringify({ name: 'leaf' }),
+      },
+      dirs,
+    );
+    const { chains } = buildTransitiveClosure('/repo', ['termfleet'], io);
+    expect(chains.get('leaf')).toEqual(['termfleet', 'gp', 'parent', 'leaf']);
+  });
 });
 
 describe('expandWorkspaceGlob / workspaceMembers', () => {
@@ -114,6 +143,31 @@ describe('expandWorkspaceGlob / workspaceMembers', () => {
   test('workspaceMembers reads each expanded member\'s package.json name, skipping dirs with none', () => {
     const members = workspaceMembers('/repo', ['packages/*'], io);
     expect(members.map((m) => m.name).sort()).toEqual(['@termfleet/core', 'my-utils']);
+  });
+
+  test('a `*` segment never matches a dot-dir (a stray .git/.cache is not a workspace member)', () => {
+    const d = new Set(['/repo', '/repo/packages', '/repo/packages/real', '/repo/packages/.hidden']);
+    const fio = fakeIo(
+      {
+        '/repo/packages/real/package.json': JSON.stringify({ name: 'real-pkg' }),
+        '/repo/packages/.hidden/package.json': JSON.stringify({ name: 'termfleet' }), // would be a false alarm if matched
+      },
+      d,
+    );
+    expect(expandWorkspaceGlob('/repo', 'packages/*', fio)).toEqual([join('/repo', 'packages', 'real')]);
+  });
+
+  test('honors a `!`-negation pattern — an explicitly-excluded member is never returned', () => {
+    const d = new Set(['/repo', '/repo/packages', '/repo/packages/keep', '/repo/packages/drop']);
+    const fio = fakeIo(
+      {
+        '/repo/packages/keep/package.json': JSON.stringify({ name: 'keep-pkg' }),
+        '/repo/packages/drop/package.json': JSON.stringify({ name: 'termfleet' }), // opted out via negation
+      },
+      d,
+    );
+    const members = workspaceMembers('/repo', ['packages/*', '!packages/drop'], fio);
+    expect(members.map((m) => m.name)).toEqual(['keep-pkg']);
   });
 });
 
@@ -208,6 +262,30 @@ describe('checkNamespaceCollisions — the assembled check, DI-driven', () => {
     const io = fakeIo({ '/repo/package.json': JSON.stringify({ name: 'my-app' }) }, new Set(['/repo', '/repo/node_modules']));
     const r = checkNamespaceCollisions('/repo', io);
     expect(r.failed).toBe(false);
+  });
+
+  test('Check A does NOT fire when the ROOT is named "open-autonomy" (not a bare-imported specifier — this repo\'s own dogfood regen)', () => {
+    // open-autonomy is a CLI (node_modules/.bin), never bare-imported by the runner, so a repo named
+    // open-autonomy is not an ESM self-reference hazard. This is exactly this repo's own dogfood shape
+    // (root package.json name === "open-autonomy"); flagging it would false-alarm every regen.
+    const io = fakeIo({ '/repo/package.json': JSON.stringify({ name: 'open-autonomy' }) }, new Set(['/repo', '/repo/node_modules']));
+    const r = checkNamespaceCollisions('/repo', io);
+    expect(r.failed).toBe(false);
+    expect(r.warns).toEqual([]);
+  });
+
+  test('Check B STILL fires when a workspace MEMBER is named "open-autonomy" (the .bin-shadow risk is real)', () => {
+    const dirs = new Set(['/repo', '/repo/node_modules', '/repo/packages', '/repo/packages/oa']);
+    const io = fakeIo(
+      {
+        '/repo/package.json': JSON.stringify({ name: 'host-app', workspaces: ['packages/*'] }),
+        '/repo/packages/oa/package.json': JSON.stringify({ name: 'open-autonomy' }),
+      },
+      dirs,
+    );
+    const r = checkNamespaceCollisions('/repo', io);
+    expect(r.failed).toBe(true);
+    expect(r.warns.some((w) => w.includes('workspace shadowing') && w.includes('open-autonomy'))).toBe(true);
   });
 
   test('Check B (direct) — a workspace member literally named "@termfleet/core" → failed, workspace-shadowing named, no chain suffix', () => {
@@ -393,6 +471,22 @@ describe('checkNamespaceCollisions — LIVE fixtures (real fs, real symlinks, re
   });
 });
 
-test('DIRECT_PROTECTED_NAMES sanity — the fixed static contract this whole check is built on', () => {
+test('DIRECT_PROTECTED_NAMES sanity — the fixed static contract this whole check is built on (Check B)', () => {
   expect(DIRECT_PROTECTED_NAMES).toEqual(['termfleet', '@termfleet/core', 'ztrack', 'open-autonomy']);
+});
+
+test('SELF_REFERENCE_NAMES pin — Check A covers only the BARE-IMPORTED names (open-autonomy excluded, it is never imported)', () => {
+  expect(SELF_REFERENCE_NAMES).toEqual(['termfleet', '@termfleet/core', 'ztrack']);
+});
+
+test('RESOLUTION_PROBE_SPECIFIERS pin — Check C probes the ACTUAL runtime specifiers (subpaths for @termfleet/core + ztrack), not the bare package roots', () => {
+  // Unpinned, this list would silently rot: dropping the @termfleet/core or ztrack subpath specifier keeps
+  // every other test green (the DI tests stub `run`), so pin it explicitly. open-autonomy must NOT appear
+  // (bin-only, no importable entry — probing it false-alarms on every healthy install).
+  expect(RESOLUTION_PROBE_SPECIFIERS).toEqual([
+    { name: 'termfleet', specifier: 'termfleet' },
+    { name: '@termfleet/core', specifier: '@termfleet/core/local-providers.js' },
+    { name: 'ztrack', specifier: 'ztrack/preset-kit' },
+  ]);
+  expect(RESOLUTION_PROBE_SPECIFIERS.some((s) => s.name === 'open-autonomy')).toBe(false);
 });

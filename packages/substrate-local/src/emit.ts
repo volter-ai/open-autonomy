@@ -139,61 +139,81 @@ if (needsRunner) {
     process.exit(1);
   }
   // OA-04 (docs/adoption-fixes/OA-04-workspace-name-collision-detection.md): node_modules/termfleet
-  // EXISTING is not enough — an npm workspace can symlink that path to the HOST's own in-development
-  // source (shadowing), or this repo's own root package.json can itself be named "termfleet" (Node ESM
-  // self-reference then binds a bare \`import 'termfleet'\` to THIS repo). Either way the runner would load
-  // the wrong code — sometimes silently. So resolve it the way the emitted runner actually will
+  // EXISTING is not enough — an npm workspace can symlink a runner-dependency path to the HOST's own
+  // in-development source (shadowing), or this repo's own root package.json can itself be named one of the
+  // runner's imported specifiers (Node ESM self-reference). Either way the runner would load the wrong code
+  // — sometimes silently. So resolve each specifier the runner ACTUALLY imports the way it will at launch
   // (\`import.meta.resolve\` from this repo's root, in a fresh child \`node\`) and refuse unless it lands on a
   // REAL copy inside node_modules/ — the same authoritative probe \`preflight\`/\`compile\` run (Check C in
-  // bin/collision-check.ts), inlined here (not imported — this file ships dependency-free plain Node into
-  // every install; it must never \`import\` from bin/).
+  // bin/collision-check.ts), inlined here (NOT imported — this file ships dependency-free plain Node into
+  // every install; it must never \`import\` from bin/). Probes the SAME specifiers as Check C — critically
+  // \`@termfleet/core/local-providers.js\`, not just \`termfleet\`: a workspace member named \`@termfleet/core\`
+  // added AFTER install leaves \`termfleet\` resolving fine while \`@termfleet/core\` shadows, so the run would
+  // otherwise still die hops-deep with ERR_PACKAGE_PATH_NOT_EXPORTED (audit mode (a)) at this last chokepoint.
   const nodeModulesRoot = join(repoRoot, 'node_modules');
-  const probe = spawnSync(
-    'node',
-    ['--input-type=module', '-e', "console.log(import.meta.resolve(process.argv[1]))", 'termfleet'],
-    { cwd: repoRoot, encoding: 'utf8' },
-  );
-  let collisionDetail = null;
-  if (probe.status !== 0) {
-    collisionDetail = (probe.stderr || '').trim() || 'node exited nonzero resolving "termfleet" with no stderr';
-  } else {
+  const RUNNER_SPECS = [
+    ['termfleet', 'termfleet'],
+    ['@termfleet/core', '@termfleet/core/local-providers.js'],
+    ['ztrack', 'ztrack/preset-kit'],
+  ];
+  const firstErrLine = (s) => {
+    const lines = (s || '').split('\\n').map((l) => l.trim()).filter(Boolean);
+    // Prefer the thrown 'Error [ERR_*]: <msg>' line over the 'return new ERR_*(' code-frame line (which
+    // also contains an ERR_ token a few frames up), else the first non-empty line.
+    return lines.find((l) => /^Error\\b/.test(l)) || lines.find((l) => /\\bERR_[A-Z_]+/.test(l)) || lines[0] || 'no error output';
+  };
+  const probeSpec = (name, spec) => {
+    const pkgDir = join(nodeModulesRoot, name);
+    if (!existsSync(join(pkgDir, 'package.json'))) return null; // not installed -> nothing to probe (termfleet handled above)
+    const probe = spawnSync(
+      'node',
+      ['--input-type=module', '-e', "console.log(import.meta.resolve(process.argv[1]))", spec],
+      { cwd: repoRoot, encoding: 'utf8' },
+    );
+    if (probe.status !== 0) return '"' + spec + '" failed to resolve (' + firstErrLine(probe.stderr) + ')';
     let resolvedPath;
     try {
       resolvedPath = fileURLToPath((probe.stdout || '').trim());
     } catch {
-      collisionDetail = 'could not parse the resolved specifier: ' + (probe.stdout || '').trim();
+      return 'could not parse the resolved specifier for "' + spec + '": ' + (probe.stdout || '').trim();
     }
-    if (resolvedPath !== undefined) {
-      const expectedPrefix = nodeModulesRoot + sep;
-      if (resolvedPath !== nodeModulesRoot && !resolvedPath.startsWith(expectedPrefix)) {
-        collisionDetail = 'resolved OUTSIDE node_modules/ entirely (to ' + resolvedPath + ')';
-      } else {
-        let real = termfleetDir;
-        try {
-          real = realpathSync(termfleetDir);
-        } catch {
-          /* leave as termfleetDir */
-        }
-        if (real !== nodeModulesRoot && !real.startsWith(expectedPrefix)) {
-          collisionDetail = "its installed location escapes node_modules/ into this repo's own tree (realpath " + real + ')';
-        }
-      }
+    const expectedPrefix = pkgDir + sep;
+    if (resolvedPath !== pkgDir && !resolvedPath.startsWith(expectedPrefix)) {
+      return '"' + spec + '" resolved OUTSIDE node_modules/' + name + '/ (to ' + resolvedPath + ') — a self-reference, not the installed package';
     }
-  }
-  if (collisionDetail) {
-    console.error(
-      '[loop] COLLISION: "termfleet" does not resolve to the published package this repo depends on — ' +
-        collisionDetail +
-        '.\\n' +
-        '  This means either (a) this repo\\'s own root package.json is itself named "termfleet" (Node ESM\\n' +
-        '  self-reference then binds the bare import to THIS repo instead of node_modules/termfleet), or (b) an\\n' +
-        '  npm workspace member is named "termfleet"/"@termfleet/core" and its symlink shadows the published copy.\\n' +
-        '  Consequence: the runner would load this repo\\'s own dev code as the runner SDK, or crash several hops\\n' +
-        '  deep. Fix: rename the colliding workspace/root package, or run the loop from a repo that does not\\n' +
-        '  itself develop the runner\\'s own dependencies. npm has NO flag to prefer the registry copy over a\\n' +
-        '  workspace link — there is no in-place override. (docs/adoption-fixes/OA-04-workspace-name-collision-detection.md)',
-    );
-    process.exit(1);
+    // realpathSync-escape branch: reached when resolution DID land string-wise inside node_modules/<name>/
+    // but the dir is a symlink whose real target escapes into the repo tree. With Node's default
+    // realpath-on resolution the OUTSIDE branch above already fires for a symlink, so this is the defense
+    // for a run under NODE_OPTIONS=--preserve-symlinks (resolution keeps the symlink path, so only the
+    // realpath reveals the escape) — kept because that mode is real and cheap to cover.
+    let real = pkgDir;
+    try {
+      real = realpathSync(pkgDir);
+    } catch {
+      /* leave as pkgDir */
+    }
+    if (real !== nodeModulesRoot && !real.startsWith(expectedPrefix) && !real.startsWith(nodeModulesRoot + sep)) {
+      return '"' + name + '" is installed via a link that escapes node_modules into this repo (realpath ' + real + ')';
+    }
+    return null;
+  };
+  for (const [name, spec] of RUNNER_SPECS) {
+    const collisionDetail = probeSpec(name, spec);
+    if (collisionDetail) {
+      console.error(
+        '[loop] COLLISION: a runner dependency does not resolve to the published package this repo depends on — ' +
+          collisionDetail +
+          '.\\n' +
+          '  This means either (a) this repo\\'s own root package.json is itself named a runner dependency (Node ESM\\n' +
+          '  self-reference binds the bare import to THIS repo instead of node_modules/), or (b) an npm workspace\\n' +
+          '  member is named "termfleet"/"@termfleet/core"/a runner dependency and its symlink shadows the published copy.\\n' +
+          '  Consequence: the runner would load this repo\\'s own dev code as the runner SDK, or crash several hops\\n' +
+          '  deep. Fix: rename the colliding workspace/root package, or run the loop from a repo that does not\\n' +
+          '  itself develop the runner\\'s own dependencies. npm has NO flag to prefer the registry copy over a\\n' +
+          '  workspace link — there is no in-place override. (docs/adoption-fixes/OA-04-workspace-name-collision-detection.md)',
+      );
+      process.exit(1);
+    }
   }
 }
 

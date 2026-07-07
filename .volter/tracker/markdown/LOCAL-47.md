@@ -1,13 +1,13 @@
 ---
 identifier: "LOCAL-47"
 title: "OA-18: open-autonomy doctor — self-verifying local install (7 checks, end-to-end evidence gate)"
-state: "ready"
-stateType: "open"
+state: "done"
+stateType: "completed"
 assignees: ["tony"]
 priority: 0
 devProgress: ""
 createdAt: "2026-07-06T12:58:52.276Z"
-updatedAt: "2026-07-07T07:11:38.084Z"
+updatedAt: "2026-07-07T09:37:40.429Z"
 url: "local://tracker/issue/LOCAL-47"
 ---
 Assignee: tony

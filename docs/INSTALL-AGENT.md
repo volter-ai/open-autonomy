@@ -56,6 +56,8 @@ command -v jq >/dev/null || echo "note: jq not found (optional — the guide avo
 node -e 'const[a,b]=process.versions.node.split(".").map(Number);process.exit(a>22||(a===22&&b>=18)?0:1)' \
   || echo "Node >= 22.18 required (the installed ztrack validation preset is .mts → needs TS type-stripping)"
 gh auth status || echo "gh not authenticated"
+claude auth status --json 2>/dev/null | grep -Eq '"loggedIn"[[:space:]]*:[[:space:]]*true' || test -n "$ANTHROPIC_API_KEY" \
+  || echo "claude not signed in — run: claude, then /login (or set ANTHROPIC_API_KEY); TERMFLEET_AGENT=codex? verify with: codex login status"
 ```
 
 - **`node` ≥ 22.18** — the `ztrack` preset this install commits is `.mts` (loaded via Node type-stripping);
@@ -65,7 +67,11 @@ gh auth status || echo "gh not authenticated"
   `administration:write` and the agents post commit statuses; a logged-in-but-under-scoped token 403s the
   same as a non-admin (see Phase-3 step 6).
 - **A coding CLI (Claude Code / Codex) installed and signed in** — the agents' model access (the loop
-  launches `claude` by default; `claude` then `/login`).
+  launches `claude` by default; `claude` then `/login`). Verify with `claude auth status --json` (the
+  snippet above) — **never** the bare `--version` flag, which exits `0` identically whether signed in or
+  not and would let a logged-out box pass this gate, only to fail ~45s into the loop's first real launch.
+  For `TERMFLEET_AGENT=codex`, the analogous probe is `codex login status` (not independently verified
+  against a pinned codex CLI here — confirm with `codex login --help` if your CLI reports differently).
 - **npm registry reachable** — `npx open-autonomy|ztrack|termfleet` fetch from it (an air-gapped/proxied box
   needs them pre-installed). The guide uses `npx --yes` so a cold box doesn't hang on an install prompt.
 

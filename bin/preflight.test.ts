@@ -8,7 +8,7 @@
 // all, so it can neither discover the dep name dynamically, nor honor nesting, nor skip a rebuild when a
 // probe passes.
 import { describe, expect, test } from 'bun:test';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
@@ -16,6 +16,7 @@ import {
   checkTermfleetPorts,
   classifyPort,
   effectiveOmit,
+  ensureAgentAuth,
   ensurePtyModule,
   occupantOf,
   omitsDev,
@@ -23,6 +24,7 @@ import {
   portOf,
   probePtyLoad,
   resolvePtyDir,
+  type AgentAuthIO,
   type DevDepIO,
   type RunFn,
   type TermfleetPortIO,
@@ -313,8 +315,16 @@ describe('ensurePtyModule — the assembled check', () => {
 // exit code itself.
 describe('runPreflightCli — a pty warn fails the gate (exit 1), skips pass it (exit 0)', () => {
   const REPO_ROOT = join(import.meta.dir, '..');
+  // OA-14's agent-auth check would otherwise probe whatever REAL `claude` CLI happens to be on this box's
+  // PATH (signed in or not) — a test-determinism hazard unrelated to what this describe block tests. Force
+  // the ANTHROPIC_API_KEY bypass so ensureAgentAuth is a no-op here, isolating these checks from ambient
+  // machine auth state (never a real `claude` invocation either way — see OA-14's own describe block below).
   const runCli = (cwd: string): { exitCode: number; stdout: string } => {
-    const r = Bun.spawnSync(['bun', join(REPO_ROOT, 'bin', 'preflight.ts')], { cwd, stdout: 'pipe', stderr: 'pipe' });
+    const env: Record<string, string> = {};
+    for (const [k, v] of Object.entries({ ...process.env, ANTHROPIC_API_KEY: 'test-oa-preflight-bypass' })) {
+      if (v !== undefined) env[k] = v;
+    }
+    const r = Bun.spawnSync(['bun', join(REPO_ROOT, 'bin', 'preflight.ts')], { cwd, stdout: 'pipe', stderr: 'pipe', env });
     return { exitCode: r.exitCode, stdout: r.stdout.toString('utf8') };
   };
 
@@ -349,16 +359,22 @@ describe('runPreflightCli — a pty warn fails the gate (exit 1), skips pass it 
 // `runPreflightCli` end to end, in the exact shape the acceptance criteria's commands describe.
 describe('runPreflightCli — OA-04 namespace collisions against real npm fixtures', () => {
   const REPO_ROOT = join(import.meta.dir, '..');
+  // OA-14's agent-auth check would otherwise probe whatever REAL `claude` CLI happens to be on this box's
+  // PATH (signed in or not) — a test-determinism hazard unrelated to what this describe block tests. Force
+  // the ANTHROPIC_API_KEY bypass so ensureAgentAuth is a no-op here, isolating these checks from ambient
+  // machine auth state (never a real `claude` invocation either way — see OA-14's own describe block below).
   const runCli = (cwd: string): { exitCode: number; stdout: string } => {
     // OA-09 (skeptic-panel Blocker 1): these fixtures do a REAL `npm install termfleet`, so the port/provider
     // coexistence check is live here — and this suite's own dev box legitimately runs termfleet as fleet
     // infrastructure on the doc-default port. That case is now a CAUTION (never exit 1): an unpinned live
-    // occupant can't be proven foreign, so it must not fail a healthy box. So NO test-spawn pin is needed
-    // (an earlier revision added one to mask a false-alarm exit 1 — the very F-5 crying-wolf the caution
-    // downgrade fixes; its removal here is part of the proof the downgrade works). The collision assertions
-    // below are unaffected: a caution keeps exit 0, and the COLLISION detection is a hard warn independent
-    // of the port check.
-    const r = Bun.spawnSync(['bun', join(REPO_ROOT, 'bin', 'preflight.ts')], { cwd, stdout: 'pipe', stderr: 'pipe' });
+    // occupant can't be proven foreign, so it must not fail a healthy box. So NO test-spawn pin is needed.
+    // OA-14: also force the ANTHROPIC_API_KEY bypass so the new agent-auth check is a no-op here — this box's
+    // real `claude` may be signed out, which would otherwise exit 1 and break these collision assertions.
+    const env: Record<string, string> = {};
+    for (const [k, v] of Object.entries({ ...process.env, ANTHROPIC_API_KEY: 'test-oa-preflight-bypass' })) {
+      if (v !== undefined) env[k] = v;
+    }
+    const r = Bun.spawnSync(['bun', join(REPO_ROOT, 'bin', 'preflight.ts')], { cwd, stdout: 'pipe', stderr: 'pipe', env });
     return { exitCode: r.exitCode, stdout: r.stdout.toString('utf8') };
   };
   const npmInstall = (dir: string, ...args: string[]) => {
@@ -686,9 +702,12 @@ describe('checkDevDepInstallability — the assembled check, DI-driven (AC-6 mat
 // `process.env.NODE_ENV` check) goes red on the `.npmrc`-only case, which never sets NODE_ENV at all.
 describe('runPreflightCli — OA-06 dev-dependency installability against a real npm binary', () => {
   const REPO_ROOT = join(import.meta.dir, '..');
+  // Same OA-14 isolation as the describe blocks above: default the ANTHROPIC_API_KEY bypass so
+  // ensureAgentAuth never probes whatever real `claude` happens to be on this box's PATH; a per-test `env`
+  // can still override it (none here do — this suite isn't testing agent auth).
   const runCli = (dir: string, env: Record<string, string | undefined>): { exitCode: number; stdout: string } => {
     const fullEnv: Record<string, string> = {};
-    for (const [k, v] of Object.entries({ ...process.env, ...env })) {
+    for (const [k, v] of Object.entries({ ...process.env, ANTHROPIC_API_KEY: 'test-oa-preflight-bypass', ...env })) {
       if (v !== undefined) fullEnv[k] = v;
     }
     const r = Bun.spawnSync(['bun', join(REPO_ROOT, 'bin', 'preflight.ts')], { cwd: dir, stdout: 'pipe', stderr: 'pipe', env: fullEnv });
@@ -1125,5 +1144,364 @@ describe('checkTermfleetPorts — warn-vs-caution policy + machine-global state 
     const r = await checkTermfleetPorts('/repo', fakeIo({ advertised: ['http://127.0.0.1:9500'] }));
     expect(r.notes.some((n) => n.includes('9500'))).toBe(true);
     expect(r.notes.some((n) => n.includes('9500') && n.includes('free'))).toBe(true); // classified, found free
+  });
+});
+// ── OA-14: agent auth — `claude auth status --json` real probe, never `claude --version` ────────────
+// docs/adoption-fixes/OA-14-claude-signin-verification.md (F-13). `claude --version` succeeds identically
+// signed-in or signed-out, so a logged-out operator passed every preflight check pre-fix and only found
+// out ~45s into the loop's first real launch. These tests exercise the extracted, dependency-injected
+// `ensureAgentAuth` (a fake `run` seam standing in for spawnSync — NEVER a real `claude` making a network
+// or model call) AND the assembled CLI against PATH-shimmed STUB `claude` binaries (shell scripts — never
+// the real signed-in CLI). A tamper that reverts to `--version` or to exit-code parsing must go red on the
+// "field beats exit code" pair below: real observed behavior on the investigation box is exit 1 on a
+// signed-out `auth status --json` (JSON is still the default output mode) — an exit-code-only check would
+// get that backwards.
+function fakeAuthRun(opts: {
+  status?: number | null;
+  stdout?: string;
+  stderr?: string;
+}): { run: RunFn; calls: { cmd: string; args: string[]; opts?: Record<string, unknown> }[] } {
+  const calls: { cmd: string; args: string[]; opts?: Record<string, unknown> }[] = [];
+  const run: RunFn = (cmd, args, callOpts) => {
+    calls.push({ cmd, args, opts: callOpts });
+    if (opts.status === undefined && opts.stdout === undefined && opts.stderr === undefined) {
+      return { status: null, stdout: null, stderr: null }; // CLI missing from PATH (bun-runtime ENOENT shape)
+    }
+    return { status: opts.status ?? 0, stdout: opts.stdout ?? '', stderr: opts.stderr ?? '' };
+  };
+  return { run, calls };
+}
+
+describe('ensureAgentAuth — DI-driven, stub `run` only (never a real claude/codex call)', () => {
+  test('signed in (loggedIn: true, exit 0) ⇒ pass, no warn', () => {
+    const { run, calls } = fakeAuthRun({ status: 0, stdout: '{"loggedIn": true, "authMethod": "claude.ai"}\n' });
+    const r = ensureAgentAuth({ run, env: {} });
+    expect(r.failed).toBe(false);
+    expect(r.warns).toEqual([]);
+    expect(r.notes.some((n) => /signed in/.test(n) && n.includes('✓'))).toBe(true);
+    // The exact command must be the real auth probe — never `--version` — as sign-in evidence.
+    expect(calls).toHaveLength(1);
+    expect(calls[0]!.cmd).toBe('claude');
+    expect(calls[0]!.args).toEqual(['auth', 'status', '--json']);
+    expect(calls[0]!.args).not.toContain('--version');
+  });
+
+  test('signed out (loggedIn: false) ⇒ hard gate: warn + failed:true, names the /login remedy', () => {
+    const { run } = fakeAuthRun({ status: 1, stdout: '{"loggedIn": false, "authMethod": "none"}\n' });
+    const r = ensureAgentAuth({ run, env: {} });
+    expect(r.failed).toBe(true);
+    expect(r.warns).toHaveLength(1);
+    expect(r.warns[0]).toContain('NOT signed in');
+    expect(r.warns[0]).toContain('/login');
+  });
+
+  test('field beats exit code: loggedIn:true with a NONZERO exit still PASSES (guards a revert to exit-code parsing)', () => {
+    const { run } = fakeAuthRun({ status: 1, stdout: '{"loggedIn": true}\n' });
+    const r = ensureAgentAuth({ run, env: {} });
+    expect(r.failed).toBe(false);
+    expect(r.warns).toEqual([]);
+  });
+
+  test('field beats exit code: loggedIn:false with a ZERO exit still WARNS (guards a revert to exit-code parsing)', () => {
+    const { run } = fakeAuthRun({ status: 0, stdout: '{"loggedIn": false}\n' });
+    const r = ensureAgentAuth({ run, env: {} });
+    expect(r.failed).toBe(true);
+    expect(r.warns).toHaveLength(1);
+  });
+
+  test('ANTHROPIC_API_KEY set ⇒ pass with a note, and the auth-status probe is NEVER invoked', () => {
+    const { run, calls } = fakeAuthRun({ status: 1, stdout: '{"loggedIn": false}\n' }); // would fail if it were ever called
+    const r = ensureAgentAuth({ run, env: { ANTHROPIC_API_KEY: 'sk-test-dummy' } });
+    expect(r.failed).toBe(false);
+    expect(r.warns).toEqual([]);
+    expect(r.notes.some((n) => n.includes('ANTHROPIC_API_KEY'))).toBe(true);
+    expect(calls).toHaveLength(0);
+  });
+
+  test('an EMPTY ANTHROPIC_API_KEY (unset-equivalent, `test -n` semantics) does NOT bypass the probe', () => {
+    const { run, calls } = fakeAuthRun({ status: 0, stdout: '{"loggedIn": true}\n' });
+    const r = ensureAgentAuth({ run, env: { ANTHROPIC_API_KEY: '' } });
+    expect(r.failed).toBe(false);
+    expect(calls).toHaveLength(1); // the probe still ran — an empty string is not "set"
+  });
+
+  // FIX 5: the non-interactive claude credential routes — a bearer token, or the Bedrock/Vertex cloud
+  // routes — legitimately report `loggedIn: false` on a healthy box (claude authenticates without a
+  // `/login` session), so each must bypass the probe with a note instead of hard-failing (residual F-5).
+  for (const v of ['ANTHROPIC_AUTH_TOKEN', 'CLAUDE_CODE_USE_BEDROCK', 'CLAUDE_CODE_USE_VERTEX']) {
+    test(`${v} set ⇒ pass with a note, probe NEVER invoked (a logged-out stub behind it would fail if called)`, () => {
+      const { run, calls } = fakeAuthRun({ status: 1, stdout: '{"loggedIn": false}\n' });
+      const r = ensureAgentAuth({ run, env: { [v]: '1' } });
+      expect(r.failed).toBe(false);
+      expect(r.warns).toEqual([]);
+      expect(r.notes.some((n) => n.includes(v))).toBe(true);
+      expect(calls).toHaveLength(0);
+    });
+
+    test(`an EMPTY ${v} does NOT bypass the probe (\`test -n\` semantics)`, () => {
+      const { run, calls } = fakeAuthRun({ status: 0, stdout: '{"loggedIn": true}\n' });
+      const r = ensureAgentAuth({ run, env: { [v]: '' } });
+      expect(r.failed).toBe(false);
+      expect(calls).toHaveLength(1);
+    });
+  }
+
+  test('older CLI: `auth status --json` errors with no loggedIn field ⇒ a NOTE, gate stays green (feature-detect, not version-parse)', () => {
+    const { run } = fakeAuthRun({ status: 1, stdout: '', stderr: "error: unknown command 'auth'\n" });
+    const r = ensureAgentAuth({ run, env: {} });
+    expect(r.failed).toBe(false);
+    expect(r.warns).toEqual([]);
+    expect(r.notes.some((n) => /cannot verify sign-in/i.test(n))).toBe(true);
+  });
+
+  test('claude not on PATH (status null, bun-runtime ENOENT shape) ⇒ a NOTE, gate stays green — never a hard fail on a missing CLI here', () => {
+    const { run } = fakeAuthRun({});
+    const r = ensureAgentAuth({ run, env: {} });
+    expect(r.failed).toBe(false);
+    expect(r.warns).toEqual([]);
+    expect(r.notes.some((n) => /could not run/i.test(n))).toBe(true);
+  });
+
+  test('claude not on PATH, node-runtime ENOENT shape (status null explicitly) ⇒ same soft note, not a hard fail', () => {
+    const run: RunFn = () => ({ status: null, stdout: '', stderr: '' });
+    const r = ensureAgentAuth({ run, env: {} });
+    expect(r.failed).toBe(false);
+    expect(r.warns).toEqual([]);
+  });
+
+  test('default harness is claude when TERMFLEET_AGENT is unset', () => {
+    const { run, calls } = fakeAuthRun({ status: 0, stdout: '{"loggedIn": true}\n' });
+    ensureAgentAuth({ run, env: {} });
+    expect(calls[0]!.cmd).toBe('claude');
+  });
+
+  test('TERMFLEET_AGENT=codex — no probe wired for this spec yet ⇒ a NOTE naming the gap, gate stays green, no process spawned', () => {
+    const { run, calls } = fakeAuthRun({ status: 1, stdout: '{"loggedIn": false}\n' }); // would fail this test if ever invoked
+    const r = ensureAgentAuth({ run, env: { TERMFLEET_AGENT: 'codex' } });
+    expect(r.failed).toBe(false);
+    expect(r.warns).toEqual([]);
+    expect(r.notes.some((n) => n.includes('codex') && /manually/i.test(n))).toBe(true);
+    expect(calls).toHaveLength(0);
+  });
+
+  test('ANTHROPIC_API_KEY bypass only applies to the claude harness — TERMFLEET_AGENT=codex + a key set still just notes the gap', () => {
+    const { run, calls } = fakeAuthRun({ status: 0, stdout: '{"loggedIn": true}\n' });
+    const r = ensureAgentAuth({ run, env: { TERMFLEET_AGENT: 'codex', ANTHROPIC_API_KEY: 'sk-test-dummy' } });
+    expect(r.failed).toBe(false);
+    expect(calls).toHaveLength(0);
+  });
+
+  test('the probe is wrapped with a ~10s timeout (safety against a hanging CLI)', () => {
+    const { run, calls } = fakeAuthRun({ status: 0, stdout: '{"loggedIn": true}\n' });
+    ensureAgentAuth({ run, env: {} });
+    expect(calls[0]!.opts).toMatchObject({ timeout: 10_000 });
+  });
+});
+
+// ── runPreflightCli — OA-14 wired end to end against PATH-shimmed STUB `claude` binaries. Unlike the DI
+// tests above, these drive the real CLI (bun bin/preflight.ts) so a mutation that fails to WIRE
+// ensureAgentAuth into the main sequence (or replays its warn as a note) goes red here even though the
+// unit tests above would stay green. The stub `claude` is a plain shell script — NEVER the real signed-in
+// CLI, and NEVER a `-p` model call (the billed probe this spec explicitly does not implement in preflight).
+describe('runPreflightCli — OA-14 agent-auth gate, against PATH-shimmed stub `claude` CLIs', () => {
+  const REPO_ROOT = join(import.meta.dir, '..');
+  function shim(dir: string, name: string, script: string): void {
+    const p = join(dir, name);
+    writeFileSync(p, `#!/bin/sh\n${script}\n`);
+    chmodSync(p, 0o755);
+  }
+  // A bare empty repo (no package.json/node_modules/lockfile) so every OTHER preflight check cleanly
+  // SKIPs — isolating the agent-auth check as the only possible source of a warn/failure in these tests.
+  function emptyRepo(): string {
+    return mkdtempSync(join(tmpdir(), 'oa-preflight-auth-'));
+  }
+  function runCli(cwd: string, binDir: string, extraEnv: Record<string, string | undefined> = {}): { exitCode: number; stdout: string } {
+    const fullEnv: Record<string, string> = {};
+    // Default the harness + every claude auth-bypass var UNSET (undefined → filtered out below) so ambient
+    // env on the machine running the suite can't flip AC-1/AC-3/AC-5: `TERMFLEET_AGENT=codex` would divert
+    // to the note-green branch, and any of ANTHROPIC_API_KEY / ANTHROPIC_AUTH_TOKEN / CLAUDE_CODE_USE_* set
+    // ambiently would bypass the probe entirely — all reasons unrelated to what these tests assert. A test
+    // overrides via extraEnv (AC-4 sets ANTHROPIC_API_KEY back on).
+    const cleared: Record<string, undefined> = {
+      TERMFLEET_AGENT: undefined,
+      ANTHROPIC_API_KEY: undefined,
+      ANTHROPIC_AUTH_TOKEN: undefined,
+      CLAUDE_CODE_USE_BEDROCK: undefined,
+      CLAUDE_CODE_USE_VERTEX: undefined,
+    };
+    for (const [k, v] of Object.entries({ ...process.env, ...cleared, ...extraEnv, PATH: `${binDir}:${process.env.PATH ?? ''}` })) {
+      if (v !== undefined) fullEnv[k] = v;
+    }
+    const r = Bun.spawnSync(['bun', join(REPO_ROOT, 'bin', 'preflight.ts')], { cwd, stdout: 'pipe', stderr: 'pipe', env: fullEnv });
+    return { exitCode: r.exitCode, stdout: r.stdout.toString('utf8') };
+  }
+
+  test('AC-1/AC-3: a logged-out stub claude ⇒ preflight prints a `preflight: !` warning naming the signed-out CLI + /login remedy, exit 1', () => {
+    const repo = emptyRepo();
+    const bin = mkdtempSync(join(tmpdir(), 'oa-preflight-auth-bin-'));
+    try {
+      shim(
+        bin,
+        'claude',
+        [
+          'if [ "$1" = "auth" ] && [ "$2" = "status" ]; then',
+          '  echo \'{"loggedIn": false, "authMethod": "none", "apiProvider": "firstParty"}\'',
+          '  exit 1', // the REAL signed-out exit code observed on the investigation box — must not be trusted
+          'fi',
+          'echo "2.1.202 (Claude Code)"; exit 0', // --version — must NEVER be treated as sign-in evidence
+        ].join('\n'),
+      );
+      const r = runCli(repo, bin, { ANTHROPIC_API_KEY: undefined });
+      expect(r.exitCode).toBe(1);
+      expect(r.stdout).toContain('preflight: ! ');
+      expect(r.stdout).toContain('NOT signed in');
+      expect(r.stdout).toContain('/login');
+      expect(r.stdout).toContain('preflight: FAILED');
+    } finally {
+      rmSync(repo, { recursive: true, force: true });
+      rmSync(bin, { recursive: true, force: true });
+    }
+  });
+
+  test('AC-2: a signed-in stub claude ⇒ passes (note, no warn), exit 0', () => {
+    const repo = emptyRepo();
+    const bin = mkdtempSync(join(tmpdir(), 'oa-preflight-auth-bin-'));
+    try {
+      shim(
+        bin,
+        'claude',
+        [
+          'if [ "$1" = "auth" ] && [ "$2" = "status" ]; then',
+          '  echo \'{"loggedIn": true, "authMethod": "claude.ai", "apiProvider": "firstParty"}\'',
+          '  exit 0',
+          'fi',
+          'echo "2.1.202 (Claude Code)"; exit 0',
+        ].join('\n'),
+      );
+      const r = runCli(repo, bin, { ANTHROPIC_API_KEY: undefined });
+      expect(r.exitCode).toBe(0);
+      expect(r.stdout).toContain('signed in');
+      // Narrow to the AUTH-specific warn substring, NOT the bare `preflight: ! ` prefix: OA-09's
+      // provider/port check emits `caution()` lines with that SAME prefix when a termfleet provider
+      // occupies 7373/7402 (true on a fleet dev box), which would make this go RED post-merge for a
+      // reason unrelated to agent auth. `is NOT signed in` is uniquely the auth warn (bin/preflight.ts).
+      expect(r.stdout).not.toContain('is NOT signed in');
+      expect(r.stdout).toContain('preflight: OK');
+    } finally {
+      rmSync(repo, { recursive: true, force: true });
+      rmSync(bin, { recursive: true, force: true });
+    }
+  });
+
+  test('AC-4: logged-out stub claude PLUS ANTHROPIC_API_KEY set ⇒ NOT false-flagged — passes with a note, claude is never invoked', () => {
+    const repo = emptyRepo();
+    const bin = mkdtempSync(join(tmpdir(), 'oa-preflight-auth-bin-'));
+    try {
+      // Touches a marker if ever invoked — this test asserts the marker is ABSENT (the key bypasses the
+      // probe entirely, so a logged-out stub answering it must never even be observed).
+      shim(
+        bin,
+        'claude',
+        [
+          `touch "${join(bin, '.invoked')}"`,
+          'if [ "$1" = "auth" ] && [ "$2" = "status" ]; then',
+          '  echo \'{"loggedIn": false}\'',
+          '  exit 1',
+          'fi',
+          'exit 0',
+        ].join('\n'),
+      );
+      const r = runCli(repo, bin, { ANTHROPIC_API_KEY: 'sk-test-dummy-set' });
+      expect(r.exitCode).toBe(0);
+      expect(r.stdout).toContain('ANTHROPIC_API_KEY');
+      // Auth-specific negative (see AC-2's note) — not the bare prefix OA-09's port caution shares.
+      expect(r.stdout).not.toContain('is NOT signed in');
+      expect(existsSync(join(bin, '.invoked'))).toBe(false);
+    } finally {
+      rmSync(repo, { recursive: true, force: true });
+      rmSync(bin, { recursive: true, force: true });
+    }
+  });
+
+  test('AC-5: an older-CLI stub that errors on `auth status` (unknown subcommand) ⇒ a note, gate stays GREEN on this check alone', () => {
+    const repo = emptyRepo();
+    const bin = mkdtempSync(join(tmpdir(), 'oa-preflight-auth-bin-'));
+    try {
+      shim(
+        bin,
+        'claude',
+        [
+          'if [ "$1" = "auth" ]; then',
+          '  echo "error: unknown command \'auth\'" >&2',
+          '  exit 1',
+          'fi',
+          'echo "1.0.0 (Claude Code)"; exit 0',
+        ].join('\n'),
+      );
+      const r = runCli(repo, bin, { ANTHROPIC_API_KEY: undefined });
+      expect(r.exitCode).toBe(0);
+      expect(r.stdout).toContain('cannot verify sign-in');
+      // Auth-specific negative (see AC-2's note) — not the bare prefix OA-09's port caution shares.
+      expect(r.stdout).not.toContain('is NOT signed in');
+      expect(r.stdout).toContain('preflight: OK');
+    } finally {
+      rmSync(repo, { recursive: true, force: true });
+      rmSync(bin, { recursive: true, force: true });
+    }
+  });
+
+  test('never invokes `claude -p` (the billed probe is reserved for the doctor tier, not preflight)', () => {
+    const repo = emptyRepo();
+    const bin = mkdtempSync(join(tmpdir(), 'oa-preflight-auth-bin-'));
+    try {
+      // The tripwire is a MARKER FILE, not a stderr line: runCli returns only stdout, so an earlier
+      // stderr-only tripwire had NO teeth (a real `-p` call would leave the suite green). The stub touches
+      // `.p-invoked` if ever called with `-p` (a regression to the billed deep probe) and still exits
+      // nonzero; the assertion is that the marker is ABSENT — this test goes red the instant preflight
+      // shells out `claude -p`, no matter where that call's output goes. NEVER wire a real `claude -p`.
+      shim(
+        bin,
+        'claude',
+        [
+          `if [ "$1" = "-p" ]; then touch "${join(bin, '.p-invoked')}"; echo "PREFLIGHT MUST NEVER CALL claude -p" >&2; exit 99; fi`,
+          'if [ "$1" = "auth" ] && [ "$2" = "status" ]; then echo \'{"loggedIn": true}\'; exit 0; fi',
+          'exit 0',
+        ].join('\n'),
+      );
+      const r = runCli(repo, bin, { ANTHROPIC_API_KEY: undefined });
+      expect(r.exitCode).toBe(0);
+      expect(existsSync(join(bin, '.p-invoked'))).toBe(false);
+    } finally {
+      rmSync(repo, { recursive: true, force: true });
+      rmSync(bin, { recursive: true, force: true });
+    }
+  });
+});
+
+// ── AC-6 (docs): no doc still claims `claude --version` verifies sign-in; INSTALL-AGENT's Phase-0 gates
+// on a real coding-CLI auth line alongside `gh auth status`. A plain grep — but pinned as a test so a
+// future doc edit that reintroduces the wrong advice fails `bun run check`, not just a one-off audit.
+describe('OA-14 docs (AC-6): no `claude --version` sign-in advice; INSTALL-AGENT Phase 0 has an auth line', () => {
+  const REPO_ROOT = join(import.meta.dir, '..');
+  const read = (p: string) => readFileSync(join(REPO_ROOT, p), 'utf8');
+
+  test('docs/OPERATIONS.md, docs/INSTALL-AGENT.md, README.md never cite `claude --version` as sign-in verification', () => {
+    for (const doc of ['docs/OPERATIONS.md', 'docs/INSTALL-AGENT.md', 'README.md']) {
+      expect(read(doc)).not.toContain('claude --version');
+    }
+  });
+
+  test('docs/OPERATIONS.md documents the real `claude auth status --json` probe, honoring the ANTHROPIC_API_KEY alternative', () => {
+    const text = read('docs/OPERATIONS.md');
+    expect(text).toContain('claude auth status --json');
+    expect(text).toMatch(/loggedIn.*true/);
+    expect(text).toContain('ANTHROPIC_API_KEY');
+  });
+
+  test("docs/INSTALL-AGENT.md's Phase-0 snippet gates on coding-CLI auth alongside `gh auth status`", () => {
+    const text = read('docs/INSTALL-AGENT.md');
+    const phase0 = text.slice(text.indexOf('## Phase 0'), text.indexOf('## Phase 1'));
+    expect(phase0).toContain('gh auth status');
+    expect(phase0).toContain('claude auth status');
   });
 });

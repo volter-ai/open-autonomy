@@ -228,8 +228,14 @@ function cli(args: string[], cwd: string): SpawnSyncReturns<string> {
 // checks legitimately take their skip paths — a nonzero exit in this environment means the gate is crying
 // wolf (the exact F-5 failure mode: preflight false-failing where nothing is wrong), not that the env is
 // bad. Any-exit-accepted was the pre-OA-05 stance, kept only because the pty check itself false-failed.
+// OA-14 added a THIRD real check (agent auth) whose skip path is "no verdict either way" — never silent
+// on this box specifically. Force the ANTHROPIC_API_KEY bypass so this smoke test isn't hostage to
+// whatever real `claude` CLI (signed in or not) happens to be on the machine running `bun run check`.
 {
-  const r = cli(['preflight'], installDir);
+  const r = run('npx', ['--no-install', 'open-autonomy', 'preflight'], {
+    cwd: installDir,
+    env: { ...CHILD_ENV, ANTHROPIC_API_KEY: 'test-pack-smoke-bypass' },
+  });
   const out = `${r.stdout ?? ''}${r.stderr ?? ''}`;
   if (r.signal) fail('preflight', `killed by signal ${r.signal} (crash)`);
   else if (!out.trim()) fail('preflight', 'no diagnostic output at all (silent failure)');

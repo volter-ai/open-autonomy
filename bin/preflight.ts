@@ -40,6 +40,14 @@
 //      sync") — and `npm run build` passes locally (it reuses node_modules) so it only surfaces in CI, on the
 //      first agent PR. We verify `npm ci` under the repo's *CI Node version* in a throwaway copy (the repo's
 //      node_modules is never touched) and regenerate the lock under that Node if it's out of sync.
+//   4. agent auth — the loop launches a coding CLI (`claude` by default) that must be SIGNED IN; a
+//      logged-out CLI passes every check above and only fails ~45s into the first real launch (see
+//      docs/adoption-fixes/OA-14-claude-signin-verification.md). `claude --version` succeeds identically
+//      signed-in or signed-out, so it is never used here — this check runs `claude auth status --json`
+//      (the CLI's own free, offline, non-spending introspection) and parses the `loggedIn` JSON field, not
+//      the exit code (unverified across CLI versions). An older CLI without the `auth status` subcommand is
+//      feature-detected (never version-parsed) and left GREEN with a note — the billed end-to-end probe
+//      (`claude -p '...'`) is intentionally NOT run here; it belongs to the deeper `doctor` tier.
 import { existsSync, readFileSync, readdirSync, mkdtempSync, copyFileSync, rmSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import { createConnection } from 'node:net';
@@ -760,6 +768,111 @@ function verifyLock(): void {
   }
 }
 
+// ── 4. agent auth: coding-CLI sign-in — a real probe, never `claude --version` ────────────────────
+// docs/adoption-fixes/OA-14-claude-signin-verification.md (F-13). Extracted as a pure(ish),
+// dependency-injected helper (bin/preflight.test.ts) matching OA-05/OA-06's pattern — the `io` seam (an
+// injectable `run` + `env`) lets tests assert every branch (signed in / signed out / API key / older CLI)
+// against a STUB `claude`/`codex`, never the real signed-in CLI making a request.
+
+export interface AgentAuthIO {
+  run: RunFn;
+  env: Record<string, string | undefined>;
+}
+
+const defaultAgentAuthIO: AgentAuthIO = { run, env: process.env };
+
+export interface AgentAuthCheckResult {
+  notes: string[];
+  warns: string[];
+  failed: boolean;
+}
+
+// The CLI's own auth-status probe per harness (`packages/substrate-local/src/runner-config.ts`'s
+// `TERMFLEET_AGENT` resolution — same default 'claude'). `claude auth status --json` is verified on this
+// spec's investigation box (claude CLI 2.1.201/2.1.202): free, offline, `{"loggedIn": true|false, ...}`,
+// exit 0 signed-in (signed-out exit code observed as 1 on THIS box but is NOT trusted — see the JSON-field
+// parse below). Only `claude` is wired here BY DESIGN: this spec (OA-14) verified only the claude-side
+// contract, so a non-claude harness (e.g. codex) has NO entry and is handled note-green below (never a
+// fabricated, unverified probe). `bin/doctor-checks.ts`'s separately-designed `checkAuth` DOES carry a
+// `codex login status` entry (its own comment likewise doesn't claim the codex contract was verified); if
+// a live codex CLI later confirms the name/output, add a `codex` entry here to gate on it too.
+const AGENT_AUTH_PROBE: Record<string, { cmd: string; args: string[] }> = {
+  claude: { cmd: 'claude', args: ['auth', 'status', '--json'] },
+};
+
+// Any of these being set means claude authenticates WITHOUT an interactive `/login` session, so
+// `auth status` legitimately reports `loggedIn: false` on a perfectly healthy box (verified: a Bedrock/
+// Vertex/token box is signed OUT of claude.ai yet launches fine). Treating that as a hard failure would be
+// exactly the F-5 cry-wolf class this file exists to kill — so any of them bypasses the probe with a note.
+// ANTHROPIC_API_KEY is the common case; ANTHROPIC_AUTH_TOKEN (a bearer token), and the
+// CLAUDE_CODE_USE_BEDROCK / CLAUDE_CODE_USE_VERTEX cloud-provider routes are the other credential paths the
+// claude CLI honors. A non-claude harness ignores this list (its own auth env is not modeled here).
+const CLAUDE_AUTH_BYPASS_VARS = ['ANTHROPIC_API_KEY', 'ANTHROPIC_AUTH_TOKEN', 'CLAUDE_CODE_USE_BEDROCK', 'CLAUDE_CODE_USE_VERTEX'] as const;
+
+const AGENT_AUTH_TIMEOUT_MS = 10_000;
+
+/** Ensure the coding CLI the loop will actually launch is signed in — the check `claude --version` never
+ *  was (it exits 0 identically logged-in or logged-out). Resolves the harness the SAME way the local
+ *  runner does (`TERMFLEET_AGENT`, default `claude`); a non-interactive claude credential env var
+ *  (`CLAUDE_AUTH_BYPASS_VARS` — API key, bearer token, or a Bedrock/Vertex route) bypasses the claude probe
+ *  entirely (those launches work regardless of `loggedIn`). This is a HARD gate (warn ⇒ failed) when we can
+ *  positively determine "signed out" — but a MISSING/older `auth status` subcommand, a `claude` not on
+ *  PATH, or a probe that times out all feature-detect to a soft note and leave the gate green, since none
+ *  of those are proof of a logged-out CLI. */
+export function ensureAgentAuth(io: AgentAuthIO = defaultAgentAuthIO): AgentAuthCheckResult {
+  const notes: string[] = [];
+  const warns: string[] = [];
+  const note = (m: string) => notes.push(m);
+  const warn = (m: string) => warns.push(m);
+
+  const harness = io.env.TERMFLEET_AGENT || 'claude';
+
+  if (harness === 'claude') {
+    // `test -n` semantics — an EMPTY string is not "set" (mirrors the documented doc-check condition).
+    const bypass = CLAUDE_AUTH_BYPASS_VARS.find((v) => !!io.env[v]);
+    if (bypass) {
+      note(`${bypass} is set — claude will authenticate via that credential regardless of \`claude /login\` state ✓`);
+      return { notes, warns, failed: false };
+    }
+  }
+
+  const probe = AGENT_AUTH_PROBE[harness];
+  if (!probe) {
+    // This spec (OA-14) only verified the claude-side contract; a non-claude harness (e.g. codex) has no
+    // probe wired here yet — note the gap honestly rather than invent an unverified check. Never fail the
+    // gate over a check we don't actually have.
+    note(`TERMFLEET_AGENT=${harness} — this preflight check only verifies claude sign-in today; verify ${harness} is signed in manually before the first launch`);
+    return { notes, warns, failed: false };
+  }
+
+  const r = io.run(probe.cmd, probe.args, { timeout: AGENT_AUTH_TIMEOUT_MS });
+  // Nullish (== null) on purpose, matching probePtyLoad's convention above: node's spawnSync reports a
+  // missing executable (or a timeout kill) as status null, bun's as status undefined. Either way the
+  // process never gave us a verdict — that's an environment gap, not proof of being signed out.
+  if (r.status == null) {
+    note(`could not run \`${probe.cmd} ${probe.args.join(' ')}\` (CLI not found on PATH, or the probe didn't return within ${AGENT_AUTH_TIMEOUT_MS / 1000}s) — cannot verify sign-in automatically; install/upgrade ${probe.cmd} or verify manually`);
+    return { notes, warns, failed: false };
+  }
+
+  const out = `${r.stdout ?? ''}${r.stderr ?? ''}`;
+  // Parse the JSON field, NOT the exit code — the doc's AC-1 pins that the signed-out exit code is
+  // unverified across CLI versions (observed as 1 on this box, but `--json` is documented as the default
+  // output mode regardless of exit status), so the field is the only version-stable, unambiguous signal.
+  if (/"loggedIn"\s*:\s*true/.test(out)) {
+    note(`${probe.cmd} is signed in (\`${probe.cmd} ${probe.args.join(' ')}\` reports loggedIn: true) ✓`);
+    return { notes, warns, failed: false };
+  }
+  if (/"loggedIn"\s*:\s*false/.test(out)) {
+    warn(`${probe.cmd} is NOT signed in — the loop's launch will fail ~45s in against a logged-out CLI. Run \`${probe.cmd}\` then \`/login\` (or set ANTHROPIC_API_KEY), then re-run preflight.`);
+    return { notes, warns, failed: true };
+  }
+  // Neither field observed: an older CLI without `auth status --json` support (unknown subcommand, a
+  // pre-JSON output shape, etc). Feature-detect — never version-parse — and leave the gate green; the
+  // billed `claude -p` probe is the deeper doctor-tier fallback, not something preflight invokes.
+  note(`\`${probe.cmd} ${probe.args.join(' ')}\` did not report a loggedIn field (older CLI?) — cannot verify sign-in automatically; upgrade ${probe.cmd}, or verify manually with a one-off \`claude -p\` call (doctor tier)`);
+  return { notes, warns, failed: false };
+}
+
 // Wrapped in an exported function — never auto-run at module-eval time — so importing this module
 // (bin/preflight.test.ts, which tests ensurePtyModule/pickPtyDepName/resolvePtyDir/probePtyLoad directly;
 // bin/open-autonomy.ts, which dynamic-`import()`s this file to delegate the `preflight` subcommand) never
@@ -791,6 +904,11 @@ export async function runPreflightCli(): Promise<void> {
   for (const c of portsResult.cautions) caution(c);
   for (const w of portsResult.warns) warn(w);
   verifyLock();
+  // Run last (docs/adoption-fixes/OA-14...): agent auth is independent of the checks above — it doesn't
+  // explain any of their failure modes, and none of theirs explain a logged-out coding CLI.
+  const authResult = ensureAgentAuth();
+  for (const n of authResult.notes) note(n);
+  for (const w of authResult.warns) warn(w);
   const okSummary = cautioned
     ? '\npreflight: OK — no blocking issues, but REVIEW the caution(s) above before installing (compile + commit the harness, then prove the loop with `npx open-autonomy doctor`)'
     : '\npreflight: OK — environment is install-ready ✓ (compile + commit the harness, then prove the loop with `npx open-autonomy doctor`)';

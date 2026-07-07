@@ -127,10 +127,26 @@ The loop launches **Claude Code** by default. termfleet drives whatever CLI you 
 that CLI must already be **installed on PATH and signed in** — the launch fails after ~45s against a
 missing or logged-out CLI. So sign in *first*:
 
-- **Claude Code (default):** run `claude`, then `/login` (or set `ANTHROPIC_API_KEY`). Verify with
-  `claude --version`.
+- **Claude Code (default):** run `claude`, then `/login` (or set `ANTHROPIC_API_KEY`). **Verify with a
+  real sign-in probe — never the bare `--version` flag**, which prints the installed binary's version and
+  exits `0` identically whether you're signed in or not (it performs no credential read, no API call).
+  Instead check the CLI's own auth-status introspection (free, offline, no model call) and honor the
+  API-key alternative:
+  ```bash
+  claude auth status --json | grep -Eq '"loggedIn"[[:space:]]*:[[:space:]]*true' || test -n "$ANTHROPIC_API_KEY" \
+    || echo "NOT signed in — run: claude /login"
+  ```
+  Parse the `loggedIn` JSON field, not the exit code — the signed-out exit code isn't a stable contract
+  across CLI versions, but the field is. (The `-E` whitespace-tolerant pattern also matches compact JSON,
+  where the CLI may print `"loggedIn":true` with no space.)
 - **Codex (alternative):** run `codex login`. To use Codex instead of Claude, set
-  `TERMFLEET_AGENT=codex` when you start the loop (step 5).
+  `TERMFLEET_AGENT=codex` when you start the loop (step 5). Verify sign-in with the codex analogue of the
+  probe above:
+  ```bash
+  codex login status || echo "NOT signed in — run: codex login"
+  ```
+  (`codex login status`'s exact exit/output contract was not independently verified against a pinned codex
+  CLI for this check — if your installed codex CLI reports differently, confirm with `codex login --help`.)
 
 There is no separate "open-autonomy login" — the agent uses your coding CLI's own session, so your
 local subscription/key is what's billed.

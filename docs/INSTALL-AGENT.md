@@ -166,6 +166,12 @@ it gates everything.**
    `<default-branch>`** — the agents run in git worktrees, which only see committed files (this is how OA
    maintains itself). OK?" *Default:* yes (the only supported model; a clean/symlinked mode is not built).
    If they refuse, stop.
+   - **`.claude/settings.json` specifically wires a Claude Code Stop hook that fires at the end of EVERY
+     Claude Code session in this repo — including the human's own interactive sessions**, not just the
+     loop's (it self-guards, no-op unless `node_modules/ztrack/...` exists). If an existing
+     `.claude/settings.json` is present, `compile` merges the hook into it rather than overwriting (keeps
+     the human's own `permissions`/hooks); if it isn't valid JSON, `compile` refuses by name instead —
+     hand-merge it. Full detail: `docs/OPERATIONS.md#claude-settings`.
 4. **OA's Dependabot + Security workflows (net-new CI surface).** "OA also ships `.github/dependabot.yml`
    (weekly Actions-bumps → PRs the PM triages) and `.github/workflows/security.yml` (a **bun**-based
    supply-chain + workflow scan that runs on your PRs and `<default-branch>`). On a non-bun repo the
@@ -417,10 +423,16 @@ Phase 4 proves *one* merge. For the loop to actually run a backlog over days, se
 - **`ztrack init` is a silent no-op if `.volter/` already exists** — it will NOT (re)apply `--sync github`.
   Never run a bare `ztrack init` first (OA's compile next-steps hint shows one); if the GitHub link is
   missing, fix `.volter/config` directly rather than re-running init.
-- **Re-running `compile` overwrites the harness files** (including `.claude/settings.json`) and **re-creates
-  the `dependabot.yml`/`security.yml` you deleted in step 4** — re-run that `rm` after any re-compile. Stage
-  only the harness files you actually changed (don't sweep in the `.volter/` sync-state churn a re-compile
-  leaves behind).
+- **Re-running `compile` regenerates the harness files** (scripts/, .claude/skills/, .open-autonomy/, …) —
+  but two collision classes are now GUARDED, not silent (OA-10): (1) `.claude/settings.json` is
+  **merged**, not overwritten (your `permissions` and other keys survive; only the Stop hook entry is
+  appended if missing) — no `--force` needed for it specifically; (2) re-compiling **refuses** to
+  re-create any OA-generated file you deliberately deleted (e.g. the `dependabot.yml`/`security.yml` from
+  step 4) — it names the path and explains it was in a prior `.open-autonomy/generated.json` but is now
+  gone from disk; `--force` re-creates it if you actually want that (reported as `resurrected:`). State
+  files (`.open-autonomy/paused`) are exempt from guard (2) — deleting one is a normal operator action, not
+  a "deletion to undo". Stage only the harness files you actually changed (don't sweep in the `.volter/`
+  sync-state churn a re-compile leaves behind).
 - **Updating the committed harness AFTER the gate is wired:** `enforce_admins:true` (correctly) blocks even
   an admin's direct push to the default branch (`GH006: N of N required status checks are expected`), so an
   operator pushing a harness/skill update can't `git push` to `main`. Use **`npx open-autonomy harness-push`**

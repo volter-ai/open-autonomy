@@ -4,16 +4,36 @@
 // The first arg is either a BUNDLED profile name (e.g. `self-driving`, resolved to the profiles/ shipped
 // with this package) or a path to a profile dir of your own. With no outDir, prints the installation's file
 // list (a dry run). With outDir, materializes it — refusing if that would overwrite an existing file with
-// DIFFERENT bytes (a scaffold-class profile like self-driving carries README.md/package.json/.gitignore
-// as resources, so compiling it into an adopter's existing repo used to silently clobber them); --force
-// overrides. This guard is fresh-compile only — `autonomy-upgrade.ts` legitimately overwrites in place.
+// DIFFERENT bytes (BL-14, see findClobbers below), or re-create a file the operator deliberately deleted
+// (OA-10, see findResurrections below); --force overrides both. `.claude/settings.json` gets a structured
+// MERGE instead of a refusal (settings-merge.ts). These guards are fresh-compile only — `autonomy-upgrade.ts`
+// legitimately overwrites derived files in place (and applies the same settings.json merge strategy there).
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { basename, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { parseIr, compiledPaths, materialize, missingCopySourcesIn, findClobbers, validateSkillFrontmatterIn } from '@open-autonomy/core';
+import {
+  parseIr,
+  compiledPaths,
+  materialize,
+  missingCopySourcesIn,
+  findClobbers,
+  findMerges,
+  findResurrections,
+  readGeneratedManifest,
+  GENERATED_MANIFEST_PATH,
+  validateSkillFrontmatterIn,
+} from '@open-autonomy/core';
 import type { CompileOutput } from '@open-autonomy/core';
 import { resolveZtrackPreset } from './ztrack-preset.ts';
 import { checkNamespaceCollisions } from './collision-check.ts';
+import { settingsMergeStrategies, CLAUDE_SETTINGS_PATH } from './settings-merge.ts';
+
+// Repo-shell files ONLY a whole-repo SCAFFOLD profile (self-driving) carries as resources. The clobber
+// guard's message adds scaffold-specific advice iff a collision actually names one of THESE — never keyed
+// to the profile's own name (an additive profile like simple-sdlc can trip the guard on, say,
+// `.claude/settings.json` or `scripts/agent.ts`, and telling the adopter "this is a whole-repo scaffold,
+// compile simple-sdlc instead" while they're compiling simple-sdlc is exactly the false claim this fixes).
+const REPO_SHELL_FILES = new Set(['README.md', 'package.json', '.gitignore', 'CHANGELOG.md']);
 
 // The bundled profiles ship next to this module's package root: at dist/cli.js when installed from npm
 // (import.meta.url → dist/, profiles/ is its sibling), and at bin/ in the dev checkout (../profiles/). So
@@ -27,6 +47,18 @@ function resolveProfile(arg: string): string | undefined {
 }
 function bundledProfileNames(): string[] {
   try { return readdirSync(profilesRoot).filter((n) => existsSync(join(profilesRoot, n, 'ir.yml'))).sort(); } catch { return []; }
+}
+// The printed receipt's grouped-by-directory summary (OA-10, F-9's "nothing prints what was written"):
+// top-level directory (or bare filename, for a root-level path like `.gitignore`) -> file count, sorted.
+// Deliberately generic (no per-profile hardcoded labels) so it never drifts from whatever a profile
+// actually emits — the authoritative per-path list is always `.open-autonomy/generated.json` itself.
+function summarizeByDir(paths: string[]): Array<{ dir: string; count: number }> {
+  const counts = new Map<string, number>();
+  for (const p of paths) {
+    const dir = p.includes('/') ? `${p.split('/')[0]}/` : p;
+    counts.set(dir, (counts.get(dir) ?? 0) + 1);
+  }
+  return [...counts.entries()].map(([dir, count]) => ({ dir, count })).sort((a, b) => a.dir.localeCompare(b.dir));
 }
 // Does the profile's agents reference a tool (e.g. `ztrack`)? Scans the profile's source files so the
 // next-steps print can name the right project deps without the core/substrate ever hardcoding a tool.
@@ -136,22 +168,72 @@ if (outDir) {
       process.exit(1);
     }
   }
-  // The fresh-compile clobber guard (BL-14): refuse if this would silently overwrite existing files that
-  // differ. An additive profile (simple-*, hello) carries none of the files that could collide, so this
-  // is a no-op for them — only a whole-repo scaffold (self-driving) can trip it.
-  if (!force) {
-    const clobbers = findClobbers(out, outDir, (from) => readFileSync(join(profileDir, from), 'utf8'));
-    if (clobbers.length) {
-      console.error(
-        `open-autonomy: compiling "${profileArg}" into "${outDir}" would overwrite ${clobbers.length} existing file(s) that differ:\n  ${clobbers.join('\n  ')}\n` +
-          `"${profileArg}" is a whole-repo SCAFFOLD (it carries these as resources), not an overlay onto an existing repo — see README.md's "Run it on your repo" for the additive alternatives.\n` +
-          `Re-run with --force to overwrite anyway, or compile an additive profile (simple-gh-sdlc, simple-sdlc, hello) into this repo instead.`,
-      );
-      process.exit(1);
-    }
+  const readSource = (from: string) => readFileSync(join(profileDir, from), 'utf8');
+
+  // The deletion-resurrection guard (OA-10, F-9): before writing anything, check whether this compile
+  // would re-create a file the operator deliberately deleted since the prior install (listed in
+  // `.open-autonomy/generated.json`, absent on disk, produced again by this compile). Runs BEFORE the
+  // clobber guard so an operator sees "you deleted this" rather than a misleading "would overwrite" for a
+  // path that doesn't even exist right now. `findResurrections` itself exempts install-owned/state paths
+  // (OA-07's `.open-autonomy/paused`) — see packages/core/src/materialize.ts.
+  const priorManifest = readGeneratedManifest(outDir);
+  const resurrections = findResurrections(out, outDir, priorManifest);
+  if (resurrections.length && !force) {
+    console.error(
+      `open-autonomy: compiling "${profileArg}" into "${outDir}" would re-create ${resurrections.length} file(s) you deleted:\n  ${resurrections.join('\n  ')}\n` +
+        `These paths are listed in ${GENERATED_MANIFEST_PATH} from a prior install but no longer exist on disk — re-compiling would silently undo that deletion.\n` +
+        `Nothing was written. Re-run with --force to re-create them (reported as resurrected below), or leave this compile out of your workflow until you've reconciled the deletion.`,
+    );
+    process.exit(1);
   }
-  const written = materialize(out, outDir, (from) => readFileSync(join(profileDir, from), 'utf8'));
-  console.log(`installed ${written.length} files into ${outDir}`);
+
+  // The fresh-compile clobber guard (BL-14): refuse if this would silently overwrite existing files that
+  // differ. NOT scoped to scaffold profiles only — an additive profile (simple-sdlc/simple-gh-sdlc) carries
+  // `.claude/settings.json`, the single most likely path to pre-exist in a Claude-using repo, and any
+  // same-named file under scripts/, standards/, scheduler/, .claude/skills/ also trips it. `.claude/
+  // settings.json` gets a structured MERGE instead (settingsMergeStrategies, ./settings-merge.ts) whenever
+  // the existing file parses as JSON — this only refuses for it when the existing file is NOT valid JSON.
+  const clobbers = findClobbers(out, outDir, readSource, settingsMergeStrategies);
+  if (clobbers.length && !force) {
+    const disposition = (path: string) =>
+      settingsMergeStrategies[path]
+        ? '(exists but is not valid JSON — a structured merge needs parseable JSON; fix it or move it aside, then re-run — see docs/OPERATIONS.md#claude-settings)'
+        : '(a file of yours with the same name)';
+    const isScaffoldCollision = clobbers.some((p) => REPO_SHELL_FILES.has(p));
+    let message =
+      `open-autonomy: compiling "${profileArg}" into "${outDir}" would overwrite ${clobbers.length} existing file(s) that differ:\n` +
+      clobbers.map((p) => `  ${p}   ${disposition(p)}`).join('\n') +
+      `\nNothing was written. Re-run with --force to overwrite anyway, or move/rename your conflicting files first.`;
+    if (isScaffoldCollision) {
+      message +=
+        `\n("${profileArg}" carries these as resources — it is a whole-repo SCAFFOLD, not an overlay onto an ` +
+        `existing repo; for an existing repo, use an additive profile instead: simple-gh-sdlc, simple-sdlc, hello.)`;
+    }
+    console.error(message);
+    process.exit(1);
+  }
+
+  // The printed receipt (OA-10): computed BEFORE materialize (merges/overwritten/resurrected all need the
+  // PRE-write "existing" bytes, which materialize is about to replace).
+  const merges = findMerges(out, outDir, readSource, settingsMergeStrategies);
+  const overwritten = force ? clobbers : [];
+  const resurrected = force ? resurrections : [];
+
+  const written = materialize(out, outDir, readSource, settingsMergeStrategies);
+  console.log(`installed ${written.length} files into ${outDir} — full list: ${GENERATED_MANIFEST_PATH}`);
+  for (const { dir, count } of summarizeByDir(written)) {
+    console.log(`  ${dir.padEnd(20)}${count} file${count === 1 ? '' : 's'}`);
+  }
+  for (const m of merges) console.log(`  merged: ${m.path} (${m.note})`);
+  if (overwritten.length) console.log(`  overwritten (--force): ${overwritten.join(', ')}`);
+  if (resurrected.length) console.log(`  resurrected (--force): ${resurrected.join(', ')}`);
+  if (written.includes(CLAUDE_SETTINGS_PATH)) {
+    console.log(
+      `NOTE: ${CLAUDE_SETTINGS_PATH} wires a Claude Code Stop hook that runs at the end of EVERY Claude Code\n` +
+        `session in this repo, including your OWN interactive ones (it no-ops unless\n` +
+        `node_modules/ztrack/... exists). Details: docs/OPERATIONS.md#claude-settings`,
+    );
+  }
   if (substrate === 'local') {
     // A local install isn't runnable until termfleet + a logged-in agent CLI are up, and the start
     // command lives only here — print it so the user never has to read source to run the loop.

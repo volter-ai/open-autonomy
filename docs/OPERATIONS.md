@@ -39,12 +39,14 @@ loop); only **how you feed it work and how a change lands** differ by code host.
 steps 1–5 (shared) vs step 6 (per code host) below.
 
 > Installing onto an **existing** repo is an *overlay*: `simple-gh-sdlc` / `simple-sdlc` / `hello` ship
-> only OA-specific files (`scripts/`, `.claude/skills/`, `scheduler/`, `.open-autonomy/`, `standards/`,
-> `.github/workflows/merge.yml`), so `compile … .` is purely additive — it does **not** generate a
-> `package.json`, `README`, or `.gitignore` over yours. You still merge the runner's deps into your repo
-> (`npm install termfleet`, `npm install -D ztrack`) — step 1 below. The OA files are **committed** to the
-> repo (the agents run in git worktrees, which only see committed files — it's how OA maintains itself) —
-> see quickstart [step 4, "Commit the harness"](#4-commit-the-harness).
+> only OA-specific files (`scripts/`, `.claude/skills/`, `.claude/settings.json`, `scheduler/`,
+> `.open-autonomy/`, `standards/`, `.github/workflows/merge.yml`), so `compile … .` is purely additive — it
+> does **not** generate a `package.json`, `README`, or `.gitignore` over yours. You still merge the runner's
+> deps into your repo (`npm install termfleet`, `npm install -D ztrack`) — step 1 below. The OA files are
+> **committed** to the repo (the agents run in git worktrees, which only see committed files — it's how OA
+> maintains itself) — see quickstart [step 4, "Commit the harness"](#4-commit-the-harness).
+> `.claude/settings.json` wires a Claude Code Stop hook that runs in **every** Claude Code session in this
+> repo, including your own interactive ones — see [step 3's callout](#claude-settings) before you compile.
 >
 > **`self-driving` is the opposite: a whole-repo SCAFFOLD**, not an overlay — it carries
 > README.md/package.json/.gitignore/CHANGELOG.md as resources (this repo's own dogfood setup). It's for a
@@ -171,11 +173,36 @@ npx open-autonomy compile simple-gh-sdlc local .
 ```
 
 This is an **overlay**: it lays down `scheduler/` (the loop driver + schedule), `scripts/` (the local
-runner), the agent skills under `.claude/skills/` + `.codex/skills/`, `standards/`, and `.open-autonomy/`
-— and, for the GitHub code host, `.github/workflows/merge.yml` (the auto-merge reconcile). It generates
-**no** `package.json` / `README` / `.gitignore`, so it's safe to run over an existing repo. No clone of
-this repo is required — `npx open-autonomy …` runs the published CLI. (`self-driving` also compiles to
-`local`; `simple-sdlc` is local-git only.)
+runner), the agent skills under `.claude/skills/` + `.codex/skills/`, `.claude/settings.json` (see the
+callout just below), `standards/`, and `.open-autonomy/` — and, for the GitHub code host,
+`.github/workflows/merge.yml` (the auto-merge reconcile). It generates **no** `package.json` / `README` /
+`.gitignore`, so it's safe to run over an existing repo. No clone of this repo is required — `npx
+open-autonomy …` runs the published CLI. (`self-driving` also compiles to `local`; `simple-sdlc` is
+local-git only.)
+
+If any of these paths **already exist and differ**, the compile refuses by name instead of silently
+overwriting (`--force` to override) — except `.claude/settings.json`, handled specially next.
+
+<a id="claude-settings"></a>
+> **`.claude/settings.json` — a Claude Code Stop hook that runs in every session, including yours.**
+> `simple-sdlc` and `simple-gh-sdlc` both carry this file: it wires a `hooks.Stop` command (the ztrack
+> "drive-to-green" loop gate) that Claude Code runs at the end of **every session in this repo — agent
+> *and* human interactive sessions alike** (Claude Code project settings aren't scoped to the loop's own
+> sessions). The command self-guards — it no-ops unless `node_modules/ztrack/plugins/ztrack-gate/hooks/
+> stop-loop.sh` exists — so it's inert until you install ztrack, but it fires every time either way.
+>
+> - **If you already have a `.claude/settings.json`** (most repos with Claude Code do): the compile does a
+>   **structured merge**, not a clobber — it parses both files as JSON and appends the Stop hook entry onto
+>   your existing `hooks.Stop` array (only if an identical command isn't already there); every other key
+>   (your `permissions`, other hook events, …) is left untouched. The printed receipt reports
+>   `merged: .claude/settings.json (+1 Stop hook)`. Re-running never duplicates the entry. If your existing
+>   file **isn't valid JSON**, the compile refuses by name instead of guessing — fix or move it aside, then
+>   re-run.
+> - **To opt out**, delete the `hooks.Stop` entry (or the whole file) after compiling — the
+>   deletion-resurrection guard ([step 4](#4-commit-the-harness)) will not silently re-add it on a later
+>   re-compile.
+> - `simple-gh-sdlc` ships the **same** file (byte-identical hook command) — the callout applies to both
+>   the local-git and GitHub code-host setups.
 
 ### 4. Commit the harness
 
@@ -204,6 +231,13 @@ is part of the harness (the ztrack drive-to-green Stop hook) and is included abo
 every re-compile/upgrade. **No push is required:** on the local-git code host, worktrees base on your
 **local** trunk — committing locally is sufficient. GitHub code host installs (`simple-gh-sdlc`)
 additionally push as part of their normal PR flow.
+
+**Deleted a harness file on purpose?** (e.g. you don't want `.github/workflows/security.yml`, or you
+opted out of the Stop hook above.) A re-compile **refuses** instead of silently re-creating it — it names
+the path and explains it was listed in a prior `.open-autonomy/generated.json` but is now gone from disk;
+`--force` re-creates it (reported as `resurrected:`). State/install-owned paths are exempt from this
+guard — most notably `.open-autonomy/paused` (step 5): `rm .open-autonomy/paused` is the intended
+unpause, never flagged or undone by a later compile/upgrade.
 
 ### 5. Run the loop
 

@@ -13,6 +13,10 @@ import { readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { parseIr, planUpgrade, applyUpgrade } from '@open-autonomy/core';
 import { compileGithub } from '@open-autonomy/substrate-github';
+// OA-10: the SAME `.claude/settings.json` merge policy the fresh-compile CLI applies
+// (bin/autonomy-compile.ts) — without it, every upgrade would silently revert an adopter's merged settings
+// file back to the profile's whole-file copy (planUpgrade's `update` on a byte-differing derived file).
+import { settingsMergeStrategies } from './settings-merge.ts';
 
 function arg(name: string): string | undefined {
   const i = process.argv.indexOf(name);
@@ -30,7 +34,7 @@ if (!profileDir || !targetDir) {
 
 const ir = parseIr(readFileSync(join(profileDir, 'ir.yml'), 'utf8'));
 const out = compileGithub(ir);
-const plan = planUpgrade(out, resolve(profileDir), resolve(targetDir), { prune });
+const plan = planUpgrade(out, resolve(profileDir), resolve(targetDir), { prune, mergeStrategies: settingsMergeStrategies });
 
 for (const note of plan.notes) process.stdout.write(`${note}\n`);
 
@@ -43,7 +47,7 @@ if (deletes.length) {
 }
 
 if (apply && plan.changes.length) {
-  applyUpgrade(plan, out, resolve(profileDir), resolve(targetDir));
+  applyUpgrade(plan, out, resolve(profileDir), resolve(targetDir), settingsMergeStrategies);
   process.stdout.write(`\nApplied ${plan.changes.length} change(s)${deletes.length ? ` (incl. ${deletes.length} deletion(s))` : ''} to ${targetDir}. Review with \`git diff\`, then commit and push.\n`);
 }
 process.stdout.write(`upgrade-changes=${plan.changes.length}\n`);

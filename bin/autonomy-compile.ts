@@ -13,6 +13,7 @@ import { fileURLToPath } from 'node:url';
 import { parseIr, compiledPaths, materialize, missingCopySourcesIn, findClobbers, validateSkillFrontmatterIn } from '@open-autonomy/core';
 import type { CompileOutput } from '@open-autonomy/core';
 import { resolveZtrackPreset } from './ztrack-preset.ts';
+import { checkNamespaceCollisions } from './collision-check.ts';
 
 // The bundled profiles ship next to this module's package root: at dist/cli.js when installed from npm
 // (import.meta.url → dist/, profiles/ is its sibling), and at bin/ in the dev checkout (../profiles/). So
@@ -111,6 +112,30 @@ if (badSkills.length) {
 }
 
 if (outDir) {
+  // OA-04 namespace-collision gate: when the target already has a package.json, run the SAME check
+  // preflight runs (bin/collision-check.ts) against it BEFORE writing anything. At compile time termfleet
+  // typically isn't installed yet, so this mainly exercises checks A/B (the host root or a workspace
+  // member is itself named termfleet/@termfleet/core/ztrack/open-autonomy) — exactly the case that
+  // matters most (an operator who skips `preflight` still gets stopped before the time bomb is written).
+  // Mirrors the clobber guard's --force escape hatch just below.
+  //
+  // SCOPED TO `local` ONLY: the collision hazard is entirely about the LOCAL termfleet runner's bare
+  // imports (termfleet/@termfleet/core/ztrack). A `gh-actions` compile emits GitHub workflows and never
+  // runs that runner, so gating it is pure false-alarm surface — and it would break this repo's OWN
+  // dogfood regen (`compile profiles/self-driving github .`, per CLAUDE.md), which runs in a repo whose
+  // root package is legitimately named "open-autonomy".
+  if (substrate === 'local' && !force && existsSync(join(outDir, 'package.json'))) {
+    const collisions = checkNamespaceCollisions(outDir);
+    if (collisions.warns.length) {
+      console.error(
+        `open-autonomy: refusing to compile "${profileArg}" into "${outDir}" — namespace collision(s) between ` +
+          `this repo and the runner's dependency namespace (see docs/adoption-fixes/OA-04-workspace-name-collision-detection.md):\n\n` +
+          collisions.warns.map((w) => `  - ${w}`).join('\n\n') +
+          `\n\nRe-run with --force to compile anyway (not recommended until the collision above is resolved).`,
+      );
+      process.exit(1);
+    }
+  }
   // The fresh-compile clobber guard (BL-14): refuse if this would silently overwrite existing files that
   // differ. An additive profile (simple-*, hello) carries none of the files that could collide, so this
   // is a no-op for them — only a whole-repo scaffold (self-driving) can trip it.

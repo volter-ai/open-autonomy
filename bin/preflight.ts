@@ -4,6 +4,12 @@
 // installing the runner deps (`npm install termfleet` + `npm install -D ztrack`), BEFORE committing the
 // harness. Idempotent — safe to re-run.
 //
+//   0. namespace collisions — an npm-workspace host (or a workspace member of one) whose package NAME
+//      collides with the runner's own dependency namespace (termfleet, @termfleet/core, ztrack, and their
+//      transitive deps) silently shadows or self-references the published package (see
+//      docs/adoption-fixes/OA-04-workspace-name-collision-detection.md). Run FIRST — it explains downstream
+//      failures the other checks below would otherwise report as an unrelated crash. Implemented in
+//      ./collision-check.ts (shared with bin/autonomy-compile.ts's compile-time gate).
 //   1. node-pty — termfleet's PTY provider dependency (today @homebridge/node-pty-prebuilt-multiarch,
 //      discovered from termfleet's OWN package.json — never hardcoded) ships prebuilt natives, not source;
 //      the health check that matters is "does it load under this Node", verified with a real `require` in a
@@ -21,6 +27,7 @@
 import { existsSync, readFileSync, readdirSync, mkdtempSync, copyFileSync, rmSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import { join } from 'node:path';
+import { checkNamespaceCollisions } from './collision-check.ts';
 
 const cwd = process.cwd();
 let failed = false;
@@ -266,6 +273,11 @@ function verifyLock(): void {
 // runs it too, via the `import.meta.main` guard below (matches bin/check-doc-vars.ts's convention).
 export function runPreflightCli(): void {
   console.log('open-autonomy preflight — environment checks for a local-runner install\n');
+  // Run FIRST (docs/adoption-fixes/OA-04...): a namespace collision explains any downstream failure the
+  // checks below would otherwise report as an unrelated crash.
+  const collisionResult = checkNamespaceCollisions(cwd);
+  for (const n of collisionResult.notes) note(n);
+  for (const w of collisionResult.warns) warn(w);
   const ptyResult = ensurePtyModule(cwd);
   for (const n of ptyResult.notes) note(n);
   for (const w of ptyResult.warns) warn(w);

@@ -2,7 +2,7 @@
 // underlying findClobbers unit — the AC is about `open-autonomy compile` behavior end-to-end: refuse by
 // default, --force overrides, and an additive profile never trips it).
 import { describe, expect, test } from 'bun:test';
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -156,4 +156,161 @@ describe('autonomy-compile — printed next-steps include the commit-the-harness
       rmSync(dir, { recursive: true, force: true });
     }
   }, 30_000);
+});
+
+// OA-04 (docs/adoption-fixes/OA-04-workspace-name-collision-detection.md): compiling into a repo whose
+// package.json (or a declared workspace member) collides with the runner's own dependency namespace must
+// refuse LOUDLY before writing anything — mirroring the clobber guard's shape (refuse by default,
+// `--force` overrides). At compile time termfleet is typically not installed yet, so no real npm install
+// is needed here — this exercises checks A/B (the static protected-name set) exactly as the spec's own
+// note describes; bin/preflight.test.ts's OA-04 describe block covers the full checks A+B+C against a
+// real npm-installed fixture (needs termfleet actually on disk for Check C to have anything to probe).
+describe('autonomy-compile — OA-04 namespace-collision gate', () => {
+  test('a target repo whose root package.json is itself named "termfleet" (with a colliding workspace member) refuses before writing any file', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'oa-collision-compile-'));
+    try {
+      writeFileSync(
+        join(dir, 'package.json'),
+        JSON.stringify({ name: 'termfleet', version: '0.0.0-dev', exports: { '.': './dist/index.js' }, workspaces: ['packages/*'] }),
+      );
+      mkdirSync(join(dir, 'packages', 'core'), { recursive: true });
+      writeFileSync(join(dir, 'packages', 'core', 'package.json'), JSON.stringify({ name: '@termfleet/core', version: '0.2.0' }));
+      const r = compile(['simple-sdlc', 'local', dir]);
+      expect(r.exitCode).toBe(1);
+      expect(r.stderr).toContain('COLLISION (self-reference)');
+      expect(r.stderr).toContain('COLLISION (workspace shadowing)');
+      expect(r.stderr).toContain('--force');
+      expect(r.stdout).not.toMatch(/installed \d+ files/); // nothing written
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test('--force compiles anyway despite the collision (the same escape hatch the clobber guard uses)', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'oa-collision-compile-force-'));
+    try {
+      writeFileSync(join(dir, 'package.json'), JSON.stringify({ name: 'termfleet', version: '0.0.0-dev' }));
+      const r = compile(['simple-sdlc', 'local', dir, '--force']);
+      expect(r.exitCode).toBe(0);
+      expect(r.stdout).toContain('installed');
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  }, 30_000);
+
+  test('a target repo with an unrelated name and no workspace collision compiles clean (no false alarm)', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'oa-collision-compile-clean-'));
+    try {
+      writeFileSync(join(dir, 'package.json'), JSON.stringify({ name: 'their-totally-unrelated-app', version: '1.0.0' }));
+      const r = compile(['simple-sdlc', 'local', dir]);
+      expect(r.exitCode).toBe(0);
+      expect(r.stdout).toContain('installed');
+      expect(r.stderr).not.toContain('COLLISION');
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  }, 30_000);
+
+  test('a target dir with NO package.json at all is never checked (nothing to collide with yet) — compiles clean', () => {
+    const parent = mkdtempSync(join(tmpdir(), 'oa-collision-compile-nopkg-'));
+    const dir = join(parent, 'fresh');
+    try {
+      const r = compile(['hello', 'local', dir]);
+      expect(r.exitCode).toBe(0);
+      expect(r.stderr).not.toContain('COLLISION');
+    } finally {
+      rmSync(parent, { recursive: true, force: true });
+    }
+  }, 30_000);
+
+  // BLOCKER 1 (skeptic panel): the documented adopter command is `compile simple-sdlc local .` — a RELATIVE
+  // outDir. Check C resolves each specifier to an ABSOLUTE path; if the gate compares that against a
+  // node_modules prefix built from the relative `.`, every probe spuriously reads "outside node_modules"
+  // and a HEALTHY clean repo hard-fails. Reproduce with a real-ish node_modules/termfleet so Check C
+  // actually probes (it is a no-op when termfleet isn't installed). Faked node_modules (a real dir with an
+  // exports map + entry) is enough for `import.meta.resolve('termfleet')` to resolve — no network needed.
+  const compileIn = (cwd: string, args: string[]) => {
+    const r = Bun.spawnSync(['bun', join(REPO_ROOT, 'bin', 'autonomy-compile.ts'), ...args], { cwd, stdout: 'pipe', stderr: 'pipe' });
+    return { exitCode: r.exitCode, stdout: r.stdout.toString('utf8'), stderr: r.stderr.toString('utf8') };
+  };
+  const installFakeTermfleet = (dir: string) => {
+    mkdirSync(join(dir, 'node_modules', 'termfleet'), { recursive: true });
+    writeFileSync(
+      join(dir, 'node_modules', 'termfleet', 'package.json'),
+      JSON.stringify({ name: 'termfleet', version: '0.2.0', main: 'index.js', exports: { '.': './index.js' } }),
+    );
+    writeFileSync(join(dir, 'node_modules', 'termfleet', 'index.js'), 'export const x = 1;\n');
+  };
+
+  test('BLOCKER 1: a RELATIVE outDir (`compile simple-sdlc local .`) in a clean repo with termfleet installed compiles clean — no spurious "outside node_modules"', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'oa-collision-relout-'));
+    try {
+      writeFileSync(join(dir, 'package.json'), JSON.stringify({ name: 'a-clean-adopter-app', version: '1.0.0' }));
+      installFakeTermfleet(dir);
+      const r = compileIn(dir, ['simple-sdlc', 'local', '.']); // the exact documented command form
+      expect(r.stderr).not.toContain('COLLISION');
+      expect(r.exitCode).toBe(0);
+      expect(r.stdout).toContain('installed');
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  }, 30_000);
+
+  test('BLOCKER 1 (gate still fires on a relative outDir): a colliding repo named "termfleet", `compile … local .`, still refuses', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'oa-collision-relout-bad-'));
+    try {
+      writeFileSync(join(dir, 'package.json'), JSON.stringify({ name: 'termfleet', version: '0.0.0-dev' }));
+      installFakeTermfleet(dir);
+      const r = compileIn(dir, ['simple-sdlc', 'local', '.']);
+      expect(r.exitCode).toBe(1);
+      expect(r.stderr).toContain('COLLISION');
+      expect(r.stdout).not.toMatch(/installed \d+ files/);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  }, 30_000);
+
+  // BLOCKER 2 (skeptic panel): the collision gate is LOCAL-only — a gh-actions compile never runs the local
+  // termfleet runner, so gating it is pure false-alarm surface and would break this repo's own dogfood regen.
+  test('BLOCKER 2a: a gh-actions compile into a repo named "termfleet" is NOT gated (github never runs the local runner)', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'oa-collision-gh-'));
+    try {
+      writeFileSync(join(dir, 'package.json'), JSON.stringify({ name: 'termfleet', version: '0.0.0-dev' }));
+      const r = compile(['simple-gh-sdlc', 'gh-actions', dir]); // additive profile, would-collide name, github substrate
+      expect(r.stderr).not.toContain('COLLISION');
+      expect(r.exitCode).toBe(0);
+      expect(r.stdout).toContain('installed');
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  }, 30_000);
+
+  test('BLOCKER 2b: a LOCAL compile into a repo named "open-autonomy" is NOT flagged as self-reference (open-autonomy is never bare-imported)', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'oa-collision-oaname-'));
+    try {
+      writeFileSync(join(dir, 'package.json'), JSON.stringify({ name: 'open-autonomy', version: '1.0.0' }));
+      const r = compile(['simple-sdlc', 'local', dir]);
+      expect(r.stderr).not.toContain('COLLISION');
+      expect(r.exitCode).toBe(0);
+      expect(r.stdout).toContain('installed');
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  }, 30_000);
+
+  test('BLOCKER 2 (dogfood regen shape): compile self-driving github into an "open-autonomy"-named dir does not collision-block', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'oa-collision-dogfood-'));
+    try {
+      writeFileSync(join(dir, 'package.json'), JSON.stringify({ name: 'open-autonomy', version: '0.4.1' }));
+      // self-driving is a whole-repo SCAFFOLD carrying package.json/README/etc., so a fresh dir trips the
+      // clobber guard — --force bypasses that (the real dogfood regen targets the repo root, where the files
+      // already match). The point of THIS test is only that no COLLISION appears and it materializes.
+      const r = compile(['self-driving', 'github', dir, '--force']);
+      expect(r.stderr).not.toContain('COLLISION');
+      expect(r.exitCode).toBe(0);
+      expect(r.stdout).toContain('installed');
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  }, 60_000);
 });

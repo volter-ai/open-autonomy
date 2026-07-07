@@ -324,3 +324,123 @@ describe('runPreflightCli — a pty warn fails the gate (exit 1), skips pass it 
     rmSync(dir, { recursive: true, force: true });
   });
 });
+
+// ── OA-04: the namespace-collision check, wired into the real CLI, against REAL npm-installed fixtures
+// (docs/adoption-fixes/OA-04-workspace-name-collision-detection.md's exact AC fixture recipe). These hit
+// the real npm registry (a genuine `termfleet` install, ~5-10s) — the point is to reproduce the audit's
+// EXACT empirically-observed failure (a real `@termfleet/core@0.2.0` workspace-symlinked over the real
+// published copy), not a stand-in. bin/collision-check.test.ts's own LIVE fixtures cover the same checks
+// without the network dependency; these additionally prove the checks are actually WIRED into
+// `runPreflightCli` end to end, in the exact shape the acceptance criteria's commands describe.
+describe('runPreflightCli — OA-04 namespace collisions against real npm fixtures', () => {
+  const REPO_ROOT = join(import.meta.dir, '..');
+  const runCli = (cwd: string): { exitCode: number; stdout: string } => {
+    const r = Bun.spawnSync(['bun', join(REPO_ROOT, 'bin', 'preflight.ts')], { cwd, stdout: 'pipe', stderr: 'pipe' });
+    return { exitCode: r.exitCode, stdout: r.stdout.toString('utf8') };
+  };
+  const npmInstall = (dir: string, ...args: string[]) => {
+    const r = Bun.spawnSync(['npm', 'install', ...args, '--no-audit', '--no-fund'], { cwd: dir, stdout: 'pipe', stderr: 'pipe' });
+    if (r.exitCode !== 0) throw new Error(`npm install ${args.join(' ')} failed in ${dir}:\n${r.stderr.toString('utf8')}`);
+  };
+
+  test('AC-1/AC-2 fixture: a host repo named "termfleet" with a workspace "@termfleet/core" — preflight names BOTH collisions and fails', () => {
+    // The spec's exact fixture recipe: root package.json named "termfleet" (with `exports` + a
+    // `workspaces` glob + a declared dep on @termfleet/core), a workspace member packages/core =
+    // @termfleet/core@0.2.0, then `npm install && npm install termfleet` (both succeed — this is the
+    // audit's real repro shape, not a synthetic stand-in).
+    const dir = mkdtempSync(join(tmpdir(), 'oa-collision-e2e-'));
+    try {
+      writeFileSync(
+        join(dir, 'package.json'),
+        JSON.stringify({
+          name: 'termfleet',
+          version: '0.0.0-dev',
+          exports: { '.': './dist/index.js' },
+          workspaces: ['packages/*'],
+          dependencies: { '@termfleet/core': '^0.2.0' },
+        }),
+      );
+      mkdirSync(join(dir, 'packages', 'core'), { recursive: true });
+      writeFileSync(
+        join(dir, 'packages', 'core', 'package.json'),
+        JSON.stringify({ name: '@termfleet/core', version: '0.2.0', exports: { '.': './dist/index.js' } }),
+      );
+      npmInstall(dir);
+      npmInstall(dir, 'termfleet');
+
+      const r = runCli(dir);
+      expect(r.exitCode).toBe(1);
+      // Today (pre-fix) this text is entirely absent — only pty/lockfile lines would print.
+      expect(r.stdout).toContain('COLLISION (self-reference)');
+      expect(r.stdout).toContain('"termfleet"');
+      expect(r.stdout).toContain('COLLISION (workspace shadowing)');
+      expect(r.stdout).toContain('@termfleet/core');
+      expect(r.stdout).toContain('npm has NO flag to prefer a registry copy over a workspace link');
+      expect(r.stdout).toContain('preflight: FAILED');
+
+      // AC-2 (same fixture): compile refuses loudly too, before writing any file — and --force overrides.
+      const compileNoForce = Bun.spawnSync(['bun', join(REPO_ROOT, 'bin', 'autonomy-compile.ts'), 'simple-sdlc', 'local', dir], {
+        stdout: 'pipe',
+        stderr: 'pipe',
+      });
+      expect(compileNoForce.exitCode).toBe(1);
+      const compileErr = compileNoForce.stderr.toString('utf8');
+      expect(compileErr).toContain('COLLISION');
+      expect(compileNoForce.stdout.toString('utf8')).not.toMatch(/installed \d+ files/); // nothing was written
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  }, 60_000);
+
+  test('AC-4 fixture: a workspace member named "ws" (a real transitive dep of termfleet) — preflight names it AND the owning chain', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'oa-collision-e2e-transitive-'));
+    try {
+      writeFileSync(
+        join(dir, 'package.json'),
+        JSON.stringify({ name: 'some-fleet-repo', version: '0.0.0-dev', workspaces: ['packages/*'] }),
+      );
+      mkdirSync(join(dir, 'packages', 'ws'), { recursive: true });
+      writeFileSync(join(dir, 'packages', 'ws', 'package.json'), JSON.stringify({ name: 'ws', version: '9.9.9-local' }));
+      npmInstall(dir);
+      npmInstall(dir, 'termfleet'); // pulls in termfleet's real dependency tree, including its real "ws" dep
+
+      const r = runCli(dir);
+      expect(r.exitCode).toBe(1);
+      expect(r.stdout).toContain('COLLISION (workspace shadowing)');
+      expect(r.stdout).toContain('"ws"');
+      expect(r.stdout).toContain('ws ← termfleet'); // the owning chain, discovered dynamically — never hardcoded
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  }, 60_000);
+
+  test('AC-5 fixture: a clean repo (npm init; npm install termfleet, no workspaces) — no false alarm', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'oa-collision-e2e-clean-'));
+    try {
+      writeFileSync(join(dir, 'package.json'), JSON.stringify({ name: 'my-real-app', version: '1.0.0' }));
+      npmInstall(dir, 'termfleet');
+      const r = runCli(dir);
+      expect(r.exitCode).toBe(0);
+      expect(r.stdout).toContain("namespace-collision check: no collisions between this repo and the runner's dependency namespace ✓");
+      expect(r.stdout).not.toContain('COLLISION');
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  }, 60_000);
+
+  test('AC-5 fixture: a workspace repo whose member names never intersect the protected set — no false alarm', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'oa-collision-e2e-nonintersecting-'));
+    try {
+      writeFileSync(join(dir, 'package.json'), JSON.stringify({ name: 'my-cool-app', version: '1.0.0', workspaces: ['packages/*'] }));
+      mkdirSync(join(dir, 'packages', 'utils'), { recursive: true });
+      writeFileSync(join(dir, 'packages', 'utils', 'package.json'), JSON.stringify({ name: '@my-cool-app/utils', version: '1.0.0' }));
+      npmInstall(dir);
+      npmInstall(dir, 'termfleet');
+      const r = runCli(dir);
+      expect(r.exitCode).toBe(0);
+      expect(r.stdout).not.toContain('COLLISION');
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  }, 60_000);
+});

@@ -98,6 +98,20 @@ passes locally but fails your CI's `npm ci` on the first agent PR):
 npm install termfleet  &&  npx --yes open-autonomy preflight
 ```
 
+> **npm workspaces / package-name collisions.** If your repo uses **npm workspaces** (a root `package.json`
+> with a `workspaces` field), check that neither the repo root nor any workspace member is named
+> `termfleet`, `@termfleet/core`, `ztrack`, `open-autonomy`, or anything in termfleet's own dependency tree
+> (e.g. `ws`) — npm workspaces symlink `node_modules/<name>` to that member's own source, silently
+> **shadowing** the published package the runner needs (there is no supported way to prefer the registry
+> copy over a workspace link — `--install-links` only helps `file:` deps). Naming your **root** package
+> `termfleet` is worse: Node's ESM self-reference resolution can bind the runner's bare `import 'termfleet'`
+> to your own repo instead of the installed one, even with a genuine copy sitting in `node_modules/`.
+> `preflight` (above) and `open-autonomy compile` both detect every form of this — self-reference, a
+> colliding workspace member, and any workspace member shadowing a *transitive* dependency of termfleet's —
+> and refuse loudly, naming the exact package and the fix, before anything breaks several process-hops deep.
+> See `docs/adoption-fixes/OA-04-workspace-name-collision-detection.md` for the failure modes this guards
+> against.
+
 #### Sign in to your coding agent
 
 The loop launches **Claude Code** by default. termfleet drives whatever CLI you point it at, and

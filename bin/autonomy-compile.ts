@@ -30,7 +30,7 @@ import {
   validateSkillFrontmatterIn,
 } from '@open-autonomy/core';
 import type { CompileOutput } from '@open-autonomy/core';
-import { resolveZtrackPreset } from './ztrack-preset.ts';
+import { KNOWN_GOOD_ZTRACK, resolveZtrackPreset } from './ztrack-preset.ts';
 import { checkNamespaceCollisions } from './collision-check.ts';
 import { settingsMergeStrategies, CLAUDE_SETTINGS_PATH } from './settings-merge.ts';
 
@@ -294,14 +294,21 @@ if (outDir) {
       // The init form depends on the code host (a GitHub code host syncs to GitHub Issues, a local-git one
       // is a board on disk). Show the RIGHT init — never a bare `ztrack init`, which is a silent no-op once
       // `.volter/` exists and never applies `--sync`.
+      // OA-12 (F-11): the local-git branch used to trail off with a BARE `npx ztrack issue create` — no
+      // --title (required), no --assignee, no AC body — reproducing the exact issue_missing_assignee
+      // non-conformance the docs' quickstart hits (see docs/OPERATIONS.md#local-runner-quickstart step 6).
+      // Point at the conforming form instead of printing a bare, non-conforming one-liner here.
       const trackerInit =
         ir.codeHost === 'github'
           ? `npx ztrack init --preset ${presetName} --sync github --repo <owner>/<repo>   (then: \`npx ztrack sync github\`)`
-          : `npx ztrack init --preset ${presetName}   (then add work: \`npx ztrack issue create\`)`;
+          : `npx ztrack init --preset ${presetName}   (then add work — a conforming issue needs --title, --assignee\n` +
+            `       and an "## Acceptance Criteria" body: see docs/OPERATIONS.md#local-runner-quickstart step 6)`;
       tracker =
         `  4. Tracker: this profile's agents use ztrack — install it as a project dep (the validation\n` +
         `     preset \`import\`s it; a global install is NOT enough) and init it:\n` +
-        `       ${cd}npm install -D ztrack  &&  ${trackerInit}\n`;
+        `       ${cd}npm install -D ztrack@${KNOWN_GOOD_ZTRACK}  &&  ${trackerInit}\n` +
+        `     (already tracker-initialized? \`ztrack init\` silently no-ops when .volter/ exists — verify the\n` +
+        `     preset in .volter/tracker-config.json)\n`;
     }
     // The commit-the-harness step (OA-03): agents run in git worktrees, which only see COMMITTED files —
     // an uncommitted harness produces workers that die at launch with `Unknown command: /develop`. This is

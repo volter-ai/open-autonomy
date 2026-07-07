@@ -1,5 +1,7 @@
 import { describe, expect, test } from 'bun:test';
-import { resolveZtrackPreset } from './ztrack-preset';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { KNOWN_GOOD_ZTRACK, resolveZtrackPreset } from './ztrack-preset';
 import type { AutonomyIR } from '@open-autonomy/core';
 
 function ir(box: Record<string, unknown> = {}): AutonomyIR {
@@ -25,5 +27,12 @@ describe('resolveZtrackPreset (BL-29 dev/01)', () => {
     expect(r.warning).toBeDefined();
     expect(r.warning).toContain('no policy.box.tracker.ztrackPreset');
     expect(r.warning).toContain('my-renamed-fork');
+  });
+});
+
+describe('KNOWN_GOOD_ZTRACK (OA-12, F-11: version drift)', () => {
+  test('stays in sync with package.json\'s own ztrack devDependency pin — bump both together', () => {
+    const pkg = JSON.parse(readFileSync(join(import.meta.dir, '..', 'package.json'), 'utf8'));
+    expect(KNOWN_GOOD_ZTRACK).toBe(pkg.devDependencies.ztrack);
   });
 });

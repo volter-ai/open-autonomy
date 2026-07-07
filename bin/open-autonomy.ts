@@ -18,6 +18,7 @@ const HELP = `open-autonomy <command> [args]
   compile <profileName|profileDir> <local|gh-actions> [outDir]  compile a profile onto a substrate (dry run without outDir)
   lint <profileDir>                                             validate a profile of your own: parses + compiles to every declared target + checks skill/folder names, writes nothing
   preflight                                                     make an adopter repo install-ready (verifies termfleet's PTY module loads + lockfile vs CI Node); run after installing the runner deps
+  doctor [--live] [--json] [--branch-prefix oa-doctor]          prove a compiled local-runner install end-to-end (self/env/provider/auth/harness/skills[/live]); run after preflight + before leaving the loop unattended
   harness-push [--repo o/r --branch b]                          push an OA harness/skill update past the enforce_admins gate (relax -> push -> restore)
   conformance <exec|termfleet|gh-actions> [probeAgent]          run the substrate conformance battery
   upgrade --profile <dir> --target <dir> [--apply]              re-compile an installation in place (dry run without --apply)
@@ -52,6 +53,9 @@ switch (sub) {
     runPreflightCli();
     break;
   }
+  case 'doctor':
+    await import('./doctor.ts');
+    break;
   case 'harness-push':
     await import('./harness-push.ts');
     break;

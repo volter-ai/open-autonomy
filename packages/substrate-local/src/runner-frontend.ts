@@ -283,8 +283,13 @@ export function worktreeBase(codeHost: string, originTrunkResolves: boolean, tru
   return codeHost === 'github' && originTrunkResolves ? `origin/${trunk}` : 'HEAD';
 }
 
-function ensureWorktree(branch: string, worktree: string, codeHost: string): void {
-  if (existsSync(worktree)) return;
+// Returns the base descriptor actually used to create the worktree ('existing' when the branch already
+// had one — idempotent reuse — otherwise the ref `ensureWorktree` based the new branch on: 'HEAD' or
+// 'origin/<trunk>'). Callers that don't care (launch()) simply ignore the return value; the doctor's
+// worktree-probe entry (below) reports it so an operator can see exactly which base a real dispatch would
+// pick, without doctor ever re-deriving that decision itself (OA-18).
+function ensureWorktree(branch: string, worktree: string, codeHost: string): string {
+  if (existsSync(worktree)) return 'existing';
   ensureRunnerPathsIgnored();
   mkdirSync(dirname(worktree), { recursive: true });
   const branchExists = git(['rev-parse', '--verify', '--quiet', branch]).status === 0;
@@ -313,6 +318,28 @@ function ensureWorktree(branch: string, worktree: string, codeHost: string): voi
       /* best-effort: a missing symlink just means the worktree falls back to global tools */
     }
   }
+  return branchExists ? 'existing' : base;
+}
+
+export interface WorktreeProbeResult {
+  branch: string;
+  worktree: string;
+  base: string; // 'existing' | 'HEAD' | 'origin/<trunk>' — whatever ensureWorktree actually chose
+  sha: string; // the worktree's resolved HEAD, after creation
+  codeHost: string;
+}
+
+/** OA-18's harness-integrity seam: doctor's check 5 must prove a real worktree through the RUNNER'S OWN
+ *  code path, never a doctor-side reimplementation of the base-ref decision (which would drift the day
+ *  `ensureWorktree`'s rule changes — see OA-02). This is that one exported, base-reporting entry point,
+ *  invoked from outside as `bun scripts/runner.ts worktree-probe <branch>` (see runCli below). Doctor owns
+ *  cleanup (`git worktree remove --force` + `git branch -D`) — this function only ever creates. */
+export function worktreeProbe(branch: string): WorktreeProbeResult {
+  const codeHost = manifestCodeHost();
+  const worktree = worktreePathFor(branch);
+  const base = ensureWorktree(branch, worktree, codeHost);
+  const sha = git(['rev-parse', 'HEAD'], worktree).stdout.trim();
+  return { branch, worktree, base, sha, codeHost };
 }
 
 /** Launch an agent with forwarded params (agent:launch). */
@@ -465,8 +492,19 @@ function parseFlags(args: string[]): LaunchParams {
 export async function runCli(argv: string[]): Promise<number> {
   const [cmd, agent, ...rest] = argv;
   if (!cmd || !agent || agent.startsWith('--')) {
-    console.error('usage: runner.ts <launch|list|get|update|cancel> <agent|id> [--ref <work-item>] [--key value ...]');
+    console.error('usage: runner.ts <launch|list|get|update|cancel|worktree-probe> <agent|id|branch> [--ref <work-item>] [--key value ...]');
     return 2;
+  }
+  if (cmd === 'worktree-probe') {
+    // The second positional is a throwaway BRANCH name here (doctor's `oa-doctor/probe-<epoch>`), not an
+    // agent — reusing the generic positional slot like every other verb reuses it for its own subject.
+    try {
+      console.log(JSON.stringify(worktreeProbe(agent)));
+      return 0;
+    } catch (e) {
+      console.error(`[runner] worktree-probe failed: ${(e as Error).message}`);
+      return 1;
+    }
   }
   // `get`/`update`/`cancel` take a SESSION ID (not an agent name). A parked human session lives in this
   // file's own store; anything else (a termfleet session) is delegated to the backend, which already

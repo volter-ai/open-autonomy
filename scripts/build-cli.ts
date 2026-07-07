@@ -15,6 +15,9 @@
 import { chmodSync, copyFileSync, cpSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { spawnSync } from 'node:child_process';
+// Extensionless on purpose: scripts/*.ts are typechecked by `check:public-agent` WITHOUT
+// allowImportingTsExtensions, which rejects a `.ts` import specifier here; bun resolves it either way.
+import { BUNDLE_DATA_FILES } from './bundle-data-files';
 
 const DIST = 'dist';
 rmSync(DIST, { recursive: true, force: true });
@@ -29,14 +32,10 @@ if (build.status) process.exit(build.status ?? 1);
 
 // Data files the bundled emit reads at runtime via import.meta.url (now resolving to dist/). Each entry
 // is [source path (repo-root relative), dest path relative to DIST]. A `dir: true` entry is copied
-// recursively (cpSync) rather than as a single file (copyFileSync).
-const DATA_FILES = [
-  { src: 'packages/substrate-local/src/backend.mjs', dest: 'backend.mjs' },
-  { src: 'packages/substrate-local/src/runner-frontend.ts', dest: 'runner-frontend.ts' },
-  { src: 'packages/substrate-github/src/control-backend.mjs', dest: 'control-backend.mjs' },
-  { src: 'packages/substrate-github/src/egress-guard.sh', dest: 'egress-guard.sh' },
-  { src: 'packages/substrate-github/src/runtime', dest: 'runtime', dir: true },
-] as const;
+// recursively (cpSync) rather than as a single file (copyFileSync). Declared once in
+// scripts/bundle-data-files.ts so bin/doctor-checks.ts's check-1 (self) shares this exact set — a
+// forgotten data file becomes a doctor FAIL by construction, never a hand-kept second list that drifts.
+const DATA_FILES = BUNDLE_DATA_FILES;
 
 for (const f of DATA_FILES) {
   const destPath = `${DIST}/${f.dest}`;

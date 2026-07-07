@@ -37,6 +37,10 @@ const DEV_ONLY = new Set([
   'bench-judge.ts', 'bench-coverage.ts', 'bench-coverage.test.ts', 'bench-operate.ts',
   // Packaging tooling: builds the published node CLI bundle — dev-only, never shipped into an install.
   'build-cli.ts',
+  // Packaging tooling (OA-18): the single declaration of the bundle's sibling DATA files, shared by
+  // build-cli.ts (copies them into dist/) and bin/doctor-checks.ts (check 1 asserts they shipped). A
+  // build-time manifest, never runtime — like build-cli.ts, excluded from the install runtime mirror.
+  'bundle-data-files.ts',
   // Release gate (OA-01): packs + installs + smoke-runs the published CLI from a throwaway tarball
   // install — dev-only release tooling, never shipped into an install.
   'pack-smoke.ts',

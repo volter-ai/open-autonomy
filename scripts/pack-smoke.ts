@@ -240,4 +240,30 @@ function cli(args: string[], cwd: string): SpawnSyncReturns<string> {
   else ok('compile simple-sdlc local (dry run)');
 }
 
+// ---------- doctor --json (OA-18) — check 1 (self) is meaningful with NO repo at all: this is exactly
+// the release gate the spec's Dependencies section calls for ("OA-01's tarball-smoke CI should run
+// `open-autonomy doctor` from the packed tarball, making every future publish self-verifying"). A broken
+// publish (a missing sibling data file, F-1) makes check 1 FAIL right here, at release time, instead of at
+// the first adopter's `npx open-autonomy doctor` months later. The other checks are env/repo-dependent
+// (this installDir is not a compiled install), so only check 1's status is asserted strictly; the run as a
+// whole must simply behave (valid JSON, a real exit code, no crash/signal) — never itself the thing that's
+// broken.
+{
+  const r = cli(['doctor', '--json'], installDir);
+  if (r.signal) fail('doctor --json', `killed by signal ${r.signal} (crash)`);
+  else if (r.status !== 0 && r.status !== 1) fail('doctor --json', `unexpected exit ${r.status} (expected 0 or 1, never a usage/crash code)\n${r.stdout}\n${r.stderr}`);
+  else {
+    let parsed: { checks?: Array<{ id: string; status: string }>; verdict?: string } = {};
+    try {
+      parsed = JSON.parse(r.stdout);
+    } catch {
+      fail('doctor --json', `stdout did not parse as JSON:\n${r.stdout}`);
+    }
+    const self = parsed.checks?.find((c) => c.id === 'self');
+    if (!self) fail('doctor --json', `no "self" check in the JSON output:\n${r.stdout}`);
+    else if (self.status === 'FAIL') fail('doctor --json', `check 1 (self) FAILed against the packed artifact — a broken publish:\n${r.stdout}`);
+    else ok(`doctor --json — self: ${self.status}, verdict: ${parsed.verdict}`);
+  }
+}
+
 reportAndExit();

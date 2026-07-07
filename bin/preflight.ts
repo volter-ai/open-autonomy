@@ -282,7 +282,11 @@ export function runPreflightCli(): void {
   for (const n of ptyResult.notes) note(n);
   for (const w of ptyResult.warns) warn(w);
   verifyLock();
-  console.log(failed ? '\npreflight: FAILED — fix the item(s) above and re-run.' : '\npreflight: OK — environment is install-ready ✓');
+  console.log(
+    failed
+      ? '\npreflight: FAILED — fix the item(s) above and re-run.'
+      : '\npreflight: OK — environment is install-ready ✓ (compile + commit the harness, then prove the loop with `npx open-autonomy doctor`)',
+  );
   process.exit(failed ? 1 : 0);
 }
 

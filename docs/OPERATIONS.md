@@ -225,8 +225,12 @@ npx ztrack init --preset simple-gh-sdlc --sync github --repo <owner>/<repo>
 # b) require the gate in branch protection (NOT auto-merge yet — that comes after a supervised first merge,
 #    step d). The contexts are the CI check-run NAMES that run on PULL REQUESTS — read them from an OPEN PR (a
 #    MERGED PR's head also carries push-run checks), excluding release-only/push-only/path-filtered jobs.
+#    `security` ships with the profile (the zizmor + supply-chain scan): security.yml posts it for a
+#    human-authored PR, and its dispatched, blocking realization (.github/workflows/security-gate.yml) posts
+#    it for an agent-authored PR (a bot PR fires no pull_request, so the proposer effect kicks the gate with
+#    the head SHA) — one context, populated by whichever path the PR took.
 gh api -X PUT "repos/<owner>/<repo>/branches/<default-branch>/protection" --input - <<'JSON'
-{ "required_status_checks": { "strict": false, "contexts": ["<pr-ci-check>", "agent-review"] },
+{ "required_status_checks": { "strict": false, "contexts": ["<pr-ci-check>", "agent-review", "security"] },
   "enforce_admins": true, "required_pull_request_reviews": null, "restrictions": null }
 JSON
 # verify protection took (errors if it didn't — e.g. free private plan):
@@ -255,12 +259,13 @@ gh repo edit <owner>/<repo> --enable-auto-merge
 
 On its next tick the PM sweeps GitHub, and for a `ready` issue **launches the developer in an isolated
 worktree** (`runner.ts launch developer --ref <n> --branch agent/issue-<n>`). The developer commits, the
-runner opens the PR, the **reviewer** posts `agent-review`, and once **your CI (`ci`/`build`/…) + `agent-review`**
-are green the PR is mergeable — **merge the first one yourself** to prove the gate, then arm auto-merge (above)
-so later PRs land via **native auto-merge**. With `enforce_admins:true` no agent bypasses the gate —
-but **your CI is the real boundary**: on a local runner the agents share your token, so the reviewer's
-`agent-review` is not independent of the proposer. **Require your real CI**; with only `agent-review`
-required you'd be auto-merging on the agents' own (same-token) say-so.
+runner opens the PR, the **reviewer** posts `agent-review`, and once **your CI (`ci`/`build`/…) + `security` +
+`agent-review`** are all green the PR is mergeable — **merge the first one yourself** to prove the gate, then
+arm auto-merge (above) so later PRs land via **native auto-merge**. With `enforce_admins:true` no agent
+bypasses the gate — but **your CI is the real boundary**: on a local runner the agents share your token, so
+the reviewer's `agent-review` is not independent of the proposer (the `security` gate's zizmor + supply-chain
+scan IS independent — it runs deterministically, not on the agents' own say-so). **Require your real CI**;
+with only `agent-review` required you'd be auto-merging on the agents' own (same-token) say-so.
 
 > Identity: for a *technically enforced* independent reviewer, run on the hosted (scoped-token) substrate,
 > or give the reviewer a **separate bot identity** (a GitHub App / dedicated account) — on local under one

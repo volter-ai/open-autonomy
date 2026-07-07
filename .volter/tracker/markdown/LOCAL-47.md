@@ -1,13 +1,13 @@
 ---
 identifier: "LOCAL-47"
 title: "OA-18: open-autonomy doctor — self-verifying local install (7 checks, end-to-end evidence gate)"
-state: "draft"
+state: "ready"
 stateType: "open"
 assignees: ["tony"]
 priority: 0
 devProgress: ""
 createdAt: "2026-07-06T12:58:52.276Z"
-updatedAt: "2026-07-06T12:58:52.276Z"
+updatedAt: "2026-07-07T07:11:38.084Z"
 url: "local://tracker/issue/LOCAL-47"
 ---
 Assignee: tony
@@ -17,7 +17,7 @@ A new read-only 'open-autonomy doctor' verb (new bin/doctor.ts; preflight stays 
 Spec: docs/adoption-fixes/OA-18-doctor-self-verifying-install.md — authored by Fable 5; build against it (verified file:line root cause, fix spec, alternatives, full numbered ACs).
 Priority: P0-adjacent (umbrella) | Fix target: open-autonomy
 Coordinate with: consumes OA-02's ensureWorktree probe export and OA-01's pack-smoke gate; checks 1-4 and 6 buildable in parallel with stubs
-Blocked by: LOCAL-30 (OA-01 — doctor from packed artifact). LOCAL-31 (OA-02) done 2026-07-07 — ensureWorktree/worktreeBase seam landed for check 5 to bind to.
+Unblocked 2026-07-07: LOCAL-30 (OA-01) + LOCAL-31 (OA-02) both done — pack-smoke gate exists; ensureWorktree/worktreeBase seam landed for check 5 to bind to.
 Provenance: OA-INSTALL-AUDIT-FINDINGS.md §5 verdict — the single biggest change.
 
 ## Acceptance Criteria

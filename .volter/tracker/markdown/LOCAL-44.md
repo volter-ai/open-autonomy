@@ -1,13 +1,13 @@
 ---
 identifier: "LOCAL-44"
 title: "OA-15: reconcile the release process — version stamps, one checklist, npm/VERSION/version.json consistency"
-state: "draft"
+state: "ready"
 stateType: "open"
 assignees: ["tony"]
 priority: 0
 devProgress: ""
 createdAt: "2026-07-06T12:58:45.198Z"
-updatedAt: "2026-07-06T12:58:45.198Z"
+updatedAt: "2026-07-07T07:11:35.616Z"
 url: "local://tracker/issue/LOCAL-44"
 ---
 Assignee: tony
@@ -16,7 +16,7 @@ Version/doc skew is structural: two disjoint release docs (OPERATIONS.md release
 
 Spec: docs/adoption-fixes/OA-15-version-doc-skew-release-process.md — authored by Fable 5; build against it (verified file:line root cause, fix spec, alternatives, full numbered ACs).
 Priority: P2 | Fix target: open-autonomy
-Blocked by: LOCAL-30 (OA-01 — checklist references check:pack-smoke; registry re-alignment needs the fixed release)
+Unblocked 2026-07-07: LOCAL-30 (OA-01) done — check:pack-smoke landed; registry re-alignment (AC-10) remains a post-merge owner action.
 Provenance: OA-INSTALL-AUDIT-FINDINGS.md F-14 (§2 P2) + narrative §1 step 7 aftermath.
 
 ## Acceptance Criteria

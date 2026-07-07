@@ -1,13 +1,13 @@
 ---
 identifier: "LOCAL-40"
 title: "OA-11: fix --help adoption hint (recommends the scaffold for existing repos)"
-state: "draft"
+state: "ready"
 stateType: "open"
 assignees: ["tony"]
 priority: 0
 devProgress: ""
 createdAt: "2026-07-06T12:58:35.726Z"
-updatedAt: "2026-07-06T12:58:35.726Z"
+updatedAt: "2026-07-07T07:11:33.135Z"
 url: "local://tracker/issue/LOCAL-40"
 ---
 Assignee: tony
@@ -16,7 +16,7 @@ The hardcoded HELP string pairs 'Adopt into the current repo' with 'compile self
 
 Spec: docs/adoption-fixes/OA-11-help-adoption-hint-wrong-profile.md — authored by Fable 5; build against it (verified file:line root cause, fix spec, alternatives, full numbered ACs).
 Priority: P2 | Fix target: open-autonomy
-Blocked by: LOCAL-30 (OA-01 — needs a working publish as the delivery vehicle + packed-help check)
+Unblocked 2026-07-07: LOCAL-30 (OA-01) done — check:pack-smoke exists for the packed-help check; publish itself remains a post-merge owner action.
 Provenance: OA-INSTALL-AUDIT-FINDINGS.md F-10 (§2 P2) + narrative §1 phase 1.
 
 ## Acceptance Criteria

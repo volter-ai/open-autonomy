@@ -105,7 +105,7 @@ npm install termfleet  &&  npx --yes open-autonomy preflight
 > re-resolves the whole tree when adding a dep, and may re-save ranges for pre-existing direct deps it
 > re-places (tree-shape/npm-version dependent — e.g. an existing `@termfleet/core` range was bumped
 > `^0.2.0`→`^0.2.1` in one observed install). Review `git diff package.json package-lock.json` before you
-> commit (step 5) — don't let an unreviewed range bump ride into the "install open-autonomy" commit.
+> commit (step 4, "Commit the harness") — don't let an unreviewed range bump ride into the "install open-autonomy" commit.
 
 > **npm workspaces / package-name collisions.** If your repo uses **npm workspaces** (a root `package.json`
 > with a `workspaces` field), check that neither the repo root nor any workspace member is named

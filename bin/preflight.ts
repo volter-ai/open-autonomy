@@ -111,5 +111,9 @@ function verifyLock(): void {
 console.log('open-autonomy preflight — environment checks for a local-runner install\n');
 ensureNodePty();
 verifyLock();
-console.log(failed ? '\npreflight: FAILED — fix the item(s) above and re-run.' : '\npreflight: OK — environment is install-ready ✓');
+console.log(
+  failed
+    ? '\npreflight: FAILED — fix the item(s) above and re-run.'
+    : '\npreflight: OK — environment is install-ready ✓ (compile + commit the harness, then prove the loop with `npx open-autonomy doctor`)',
+);
 process.exit(failed ? 1 : 0);

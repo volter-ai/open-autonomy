@@ -371,6 +371,39 @@ black-box, never required.
 `profiles/hello-human/` is the full worked example (`ir.yml`, the `requester` script, the `approver`
 skill/doctrine) — fork it as the starting point for your own human-required step.
 
+### 8. Verify the install
+
+Everything between `compile` and the first surviving worker used to be verified by nothing — a broken
+publish, a missing `NODE_ENV`, a workspace-shadowed dependency, a wrong provider port, a logged-out CLI, an
+uncommitted or origin-stale harness, and a mismatched skill name all failed *silently*, visible only inside
+a `tmux` window (or not at all). **`doctor`** walks that exact failure chain, in order, and refuses to bless
+an install that would produce a zombie loop:
+
+```bash
+npx open-autonomy doctor            # read-only: no session launch, no model call, no spend
+```
+
+It reports `PASS | FAIL | WARN | SKIP` for seven checks — `self` (the CLI itself runs from its installed
+artifact), `env` (toolchain, devDeps, the pty module, workspace shadowing), `provider` (the configured port
+answers as *your* provider, not someone else's), `auth` (the coding CLI is actually signed in, never just
+`--version`), `harness` (every compile-owned file is committed **and** visible from a real, freshly-created
+agent worktree — the load-bearing check), `skills` (that worktree resolves every agent's launch skill), and
+`live` (see below). Exit code is `0` iff nothing `FAIL`ed; add `--json` for a machine-parseable
+`{ checks: [...], verdict }` (what `docs/INSTALL-AGENT.md`'s verify phase gates on). The **only** mutation
+doctor ever makes is a throwaway probe worktree/branch under `.worktrees/`, always removed on exit —
+including on a `FAIL`, a `Ctrl-C`, or a kill signal.
+
+Before leaving the loop **unattended** (`node scheduler/run.mjs &`, no one watching), spend the one real
+tick doctor's `--live` flag buys you: it launches a single doctor-owned session through the *same* path a
+PM dispatch takes, waits for it to survive (or emit a proof string), captures its terminal on failure, and
+always cancels it — the local-runner equivalent of "verify the loop merges before declaring done"
+(`docs/INSTALL-AGENT.md`'s Phase 4). This is the one doctor invocation that spends money on a metered
+account:
+
+```bash
+npx open-autonomy doctor --live     # one real session, cancelled either way — costs money, run it once
+```
+
 ### What depends on the code host vs the runner
 
 The agent loop is the same everywhere; a few controls vary by **axis** (runner ⟂ code host):

@@ -234,7 +234,9 @@ gh api "repos/<owner>/<repo>/branches/<default-branch>/protection/required_statu
 
 # 7. Start termfleet + sign in to the coding CLI BEFORE running the loop. Re-use a running console/provider if
 #    one is up (one provider is GLOBAL across repos) — a second `serve` on a bound port fails silently behind
-#    `&`. Check first; use a repo-unique --prefix/--port if you run your own:
+#    `&`. Check first; use a repo-unique --prefix/--port if you run your own. NOTE: this curl is only a
+#    "should I start one" convenience — it does NOT verify the thing answering is YOUR provider (a foreign
+#    termfleet, or anything else, answers the same way here); Phase 4's `doctor --json` is the identity check:
 curl -fsS http://127.0.0.1:7373/ >/dev/null 2>&1 || (npx termfleet console serve --name dev --port 7373 &)
 curl -fsS http://127.0.0.1:7402/healthz >/dev/null 2>&1 || (npx termfleet provider serve --kind virtual-tmux --prefix dev --count 1 --port 7402 &)
 #   claude → /login    then sanity-check:  npx termfleet claude new --prompt "say hi"
@@ -278,6 +280,20 @@ gh issue edit "$n" -R <owner>/<repo> --add-label ready
 
 Start the loop and **watch one trivial issue all the way to a merged PR**. Asserting "installed" without
 this is the most common way a guided install silently ships broken.
+
+**First, a mechanical gate — before you (or the human) spend any attention on the loop at all:**
+
+```bash
+npx open-autonomy doctor --json     # parse .verdict; a FAIL names exactly what to fix, with a remediation
+```
+
+This REPLACES hand-rolled polling probes — including a bare `curl` port check (Phase 3 step 7), which
+misreads a live-but-FOREIGN provider as "nothing running" (F-8) — with checks that actually verify publish
+integrity, toolchain/env sanity, provider IDENTITY, coding-CLI sign-in, and harness integrity from a real
+freshly-created agent worktree (not just "the files exist here"). It is read-only and spends nothing. A
+`FAIL` here means STOP and fix the named item before touching the loop; a clean `PASS`/`WARN` doesn't skip
+the live proof below (doctor's own `--live` flag launches a doctor-owned probe session, not the human's
+actual backlog item — see `docs/OPERATIONS.md#8-verify-the-install`).
 
 **Expect the first tick to report PAUSED, not to launch anything.** Every local install (`compile` in
 Phase 3) lands with `.open-autonomy/paused` present — a fresh install never dispatches before *someone*

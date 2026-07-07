@@ -48,7 +48,7 @@
     "check:runtime-sync": "bun bin/sync-runtime.ts --check",
     "check:dogfood": "bun bin/check-dogfood.ts",
     "check:provision": "bun bin/check-provision.ts",
-    "check:preflight": "bun test bin/preflight.test.ts",
+    "check:preflight": "bun test bin/preflight.test.ts bin/collision-check.test.ts",
     "check:pack-smoke": "bun scripts/pack-smoke.ts",
     "check": "bun run check:autonomy && bun run check:core && bun run conformance exec && bun run check:runtime-sync && bun run check:compile && bun run check:profiles && bun run check:policy-consumers && bun run check:doc-vars && bun run check:preflight && bun run check:dogfood && bun run check:provision && bun run check:supply-chain && bun run check:public-agent && bun run check:agent-proxy && bun run check:proof && bun run check:soc2-register && bun run check:pack-smoke",
     "check:agent-proxy": "cd services/agent-model-proxy && bun install --frozen-lockfile && bun test test/*.test.ts && bunx tsc --noEmit",

@@ -83,6 +83,16 @@ test -f package.json && echo "JS project" || echo "NO package.json — STOP (see
 # Package manager — use it for every install below (do NOT hardcode npm):
 ls bun.lock 2>/dev/null && echo bun; ls pnpm-lock.yaml 2>/dev/null && echo pnpm; ls package-lock.json 2>/dev/null && echo npm
 
+# npm WORKSPACES + name collisions — a workspace member (or the root package itself) named termfleet,
+# @termfleet/core, ztrack, open-autonomy, or anything in termfleet's own dependency tree (e.g. ws) will
+# shadow (workspace link) or self-reference (Node ESM self-reference on the root name) the runner's real
+# published dependency once installed — a silent, several-process-hops-deep failure with no supported npm
+# override. Cross-check every declared member's name against the root's own name and against the direct
+# set above BEFORE `npm install termfleet`; `open-autonomy preflight` / `compile` also detect this (see
+# docs/adoption-fixes/OA-04-workspace-name-collision-detection.md), but catching it here means you can flag
+# it to the human before spending an install cycle on it:
+node -e "const p=require('./package.json'); console.log('workspaces:', JSON.stringify(p.workspaces||'(none)'))"
+
 # Do you have admin? (branch protection requires it). Is it private? (a private repo on a FREE plan can't use
 # classic branch protection — the Phase-3 PUT will 403; the install wires protection BEFORE auto-merge so that
 # failure stops safely). `.owner.type` is account type, not plan — probe the plan separately (may be null if

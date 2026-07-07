@@ -93,9 +93,9 @@ export function cronToSeconds(cron: string): number {
 // still working (running / background-running), one a human took over, or one asking/errored is never
 // reaped — keeping the "take over at any time" guarantee. `--once` fires a single tick and exits (no reap).
 const LOOP_DRIVER = `#!/usr/bin/env node
-import { existsSync, readFileSync, readdirSync, unlinkSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync, realpathSync, unlinkSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
-import { dirname, join } from 'node:path';
+import { dirname, join, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 const here = dirname(fileURLToPath(import.meta.url));
 const SCHEDULE = process.env.AUTONOMY_SCHEDULE || 'scheduler/schedule.json';
@@ -128,12 +128,73 @@ if (args.includes('--once') && existsSync(PAUSED)) {
 // script-only schedule (every agent a deterministic scripts/*.ts behavior) never touches the runner, so
 // the check is scoped to schedules that actually need it — never a false alarm on one that doesn't.
 const needsRunner = schedule.scripts.some((c) => c.includes('run-agent.mjs'));
-if (needsRunner && !existsSync(join(here, '..', 'node_modules', 'termfleet'))) {
-  console.error(
-    '[loop] this schedule launches a skill agent through the runner, but termfleet is not installed in this repo.\\n' +
-      '  Fix:  npm install termfleet   (the local runner drives it via its SDK — see docs/OPERATIONS.md#local-runner-quickstart)',
+if (needsRunner) {
+  const repoRoot = join(here, '..');
+  const termfleetDir = join(repoRoot, 'node_modules', 'termfleet');
+  if (!existsSync(termfleetDir)) {
+    console.error(
+      '[loop] this schedule launches a skill agent through the runner, but termfleet is not installed in this repo.\\n' +
+        '  Fix:  npm install termfleet   (the local runner drives it via its SDK — see docs/OPERATIONS.md#local-runner-quickstart)',
+    );
+    process.exit(1);
+  }
+  // OA-04 (docs/adoption-fixes/OA-04-workspace-name-collision-detection.md): node_modules/termfleet
+  // EXISTING is not enough — an npm workspace can symlink that path to the HOST's own in-development
+  // source (shadowing), or this repo's own root package.json can itself be named "termfleet" (Node ESM
+  // self-reference then binds a bare \`import 'termfleet'\` to THIS repo). Either way the runner would load
+  // the wrong code — sometimes silently. So resolve it the way the emitted runner actually will
+  // (\`import.meta.resolve\` from this repo's root, in a fresh child \`node\`) and refuse unless it lands on a
+  // REAL copy inside node_modules/ — the same authoritative probe \`preflight\`/\`compile\` run (Check C in
+  // bin/collision-check.ts), inlined here (not imported — this file ships dependency-free plain Node into
+  // every install; it must never \`import\` from bin/).
+  const nodeModulesRoot = join(repoRoot, 'node_modules');
+  const probe = spawnSync(
+    'node',
+    ['--input-type=module', '-e', "console.log(import.meta.resolve(process.argv[1]))", 'termfleet'],
+    { cwd: repoRoot, encoding: 'utf8' },
   );
-  process.exit(1);
+  let collisionDetail = null;
+  if (probe.status !== 0) {
+    collisionDetail = (probe.stderr || '').trim() || 'node exited nonzero resolving "termfleet" with no stderr';
+  } else {
+    let resolvedPath;
+    try {
+      resolvedPath = fileURLToPath((probe.stdout || '').trim());
+    } catch {
+      collisionDetail = 'could not parse the resolved specifier: ' + (probe.stdout || '').trim();
+    }
+    if (resolvedPath !== undefined) {
+      const expectedPrefix = nodeModulesRoot + sep;
+      if (resolvedPath !== nodeModulesRoot && !resolvedPath.startsWith(expectedPrefix)) {
+        collisionDetail = 'resolved OUTSIDE node_modules/ entirely (to ' + resolvedPath + ')';
+      } else {
+        let real = termfleetDir;
+        try {
+          real = realpathSync(termfleetDir);
+        } catch {
+          /* leave as termfleetDir */
+        }
+        if (real !== nodeModulesRoot && !real.startsWith(expectedPrefix)) {
+          collisionDetail = "its installed location escapes node_modules/ into this repo's own tree (realpath " + real + ')';
+        }
+      }
+    }
+  }
+  if (collisionDetail) {
+    console.error(
+      '[loop] COLLISION: "termfleet" does not resolve to the published package this repo depends on — ' +
+        collisionDetail +
+        '.\\n' +
+        '  This means either (a) this repo\\'s own root package.json is itself named "termfleet" (Node ESM\\n' +
+        '  self-reference then binds the bare import to THIS repo instead of node_modules/termfleet), or (b) an\\n' +
+        '  npm workspace member is named "termfleet"/"@termfleet/core" and its symlink shadows the published copy.\\n' +
+        '  Consequence: the runner would load this repo\\'s own dev code as the runner SDK, or crash several hops\\n' +
+        '  deep. Fix: rename the colliding workspace/root package, or run the loop from a repo that does not\\n' +
+        '  itself develop the runner\\'s own dependencies. npm has NO flag to prefer the registry copy over a\\n' +
+        '  workspace link — there is no in-place override. (docs/adoption-fixes/OA-04-workspace-name-collision-detection.md)',
+    );
+    process.exit(1);
+  }
 }
 
 // The uncommitted-harness guard (OA-03): agents launched with \`--branch\` run in git WORKTREES, which

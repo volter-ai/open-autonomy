@@ -2,7 +2,7 @@
 // underlying findClobbers unit — the AC is about `open-autonomy compile` behavior end-to-end: refuse by
 // default, --force overrides, and an additive profile never trips it).
 import { describe, expect, test } from 'bun:test';
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -154,6 +154,72 @@ describe('autonomy-compile — printed next-steps include the commit-the-harness
       expect(st.stdout.toString('utf8').trim()).toBe('');
     } finally {
       rmSync(dir, { recursive: true, force: true });
+    }
+  }, 30_000);
+});
+
+// OA-04 (docs/adoption-fixes/OA-04-workspace-name-collision-detection.md): compiling into a repo whose
+// package.json (or a declared workspace member) collides with the runner's own dependency namespace must
+// refuse LOUDLY before writing anything — mirroring the clobber guard's shape (refuse by default,
+// `--force` overrides). At compile time termfleet is typically not installed yet, so no real npm install
+// is needed here — this exercises checks A/B (the static protected-name set) exactly as the spec's own
+// note describes; bin/preflight.test.ts's OA-04 describe block covers the full checks A+B+C against a
+// real npm-installed fixture (needs termfleet actually on disk for Check C to have anything to probe).
+describe('autonomy-compile — OA-04 namespace-collision gate', () => {
+  test('a target repo whose root package.json is itself named "termfleet" (with a colliding workspace member) refuses before writing any file', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'oa-collision-compile-'));
+    try {
+      writeFileSync(
+        join(dir, 'package.json'),
+        JSON.stringify({ name: 'termfleet', version: '0.0.0-dev', exports: { '.': './dist/index.js' }, workspaces: ['packages/*'] }),
+      );
+      mkdirSync(join(dir, 'packages', 'core'), { recursive: true });
+      writeFileSync(join(dir, 'packages', 'core', 'package.json'), JSON.stringify({ name: '@termfleet/core', version: '0.2.0' }));
+      const r = compile(['simple-sdlc', 'local', dir]);
+      expect(r.exitCode).toBe(1);
+      expect(r.stderr).toContain('COLLISION (self-reference)');
+      expect(r.stderr).toContain('COLLISION (workspace shadowing)');
+      expect(r.stderr).toContain('--force');
+      expect(r.stdout).not.toMatch(/installed \d+ files/); // nothing written
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test('--force compiles anyway despite the collision (the same escape hatch the clobber guard uses)', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'oa-collision-compile-force-'));
+    try {
+      writeFileSync(join(dir, 'package.json'), JSON.stringify({ name: 'termfleet', version: '0.0.0-dev' }));
+      const r = compile(['simple-sdlc', 'local', dir, '--force']);
+      expect(r.exitCode).toBe(0);
+      expect(r.stdout).toContain('installed');
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  }, 30_000);
+
+  test('a target repo with an unrelated name and no workspace collision compiles clean (no false alarm)', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'oa-collision-compile-clean-'));
+    try {
+      writeFileSync(join(dir, 'package.json'), JSON.stringify({ name: 'their-totally-unrelated-app', version: '1.0.0' }));
+      const r = compile(['simple-sdlc', 'local', dir]);
+      expect(r.exitCode).toBe(0);
+      expect(r.stdout).toContain('installed');
+      expect(r.stderr).not.toContain('COLLISION');
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  }, 30_000);
+
+  test('a target dir with NO package.json at all is never checked (nothing to collide with yet) — compiles clean', () => {
+    const parent = mkdtempSync(join(tmpdir(), 'oa-collision-compile-nopkg-'));
+    const dir = join(parent, 'fresh');
+    try {
+      const r = compile(['hello', 'local', dir]);
+      expect(r.exitCode).toBe(0);
+      expect(r.stderr).not.toContain('COLLISION');
+    } finally {
+      rmSync(parent, { recursive: true, force: true });
     }
   }, 30_000);
 });

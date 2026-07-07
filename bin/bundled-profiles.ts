@@ -2,11 +2,13 @@
 // --help can render the SAME derived list instead of a hand-maintained one that goes stale (F-10: 2 of 6
 // profiles were missing from the old hardcoded HELP string).
 //
-// CRITICAL: import ONLY node:fs / node:path here — NEVER a substrate package (@open-autonomy/core,
-// @open-autonomy/substrate-github, @open-autonomy/substrate-local). bin/open-autonomy.ts's verb switch
-// lazy-imports substrate packages per-verb specifically so `--help` keeps working even when packaging is
-// broken (OA-01); this helper is imported at HELP-construction time (unconditionally, before the verb
-// switch), so any substrate import here would defeat that property for the one verb that must never break.
+// CRITICAL: import ONLY node builtins here (node:fs / node:path / node:url) — NEVER an @open-autonomy/*
+// package (@open-autonomy/core, @open-autonomy/substrate-github, @open-autonomy/substrate-local).
+// bin/open-autonomy.ts's verb switch lazy-imports substrate packages per-verb specifically so `--help`
+// keeps working even when packaging is broken (OA-01); this helper is imported at HELP-construction time
+// (unconditionally, before the verb switch), so any substrate import here would defeat that property for
+// the one verb that must never break. bin/open-autonomy-help.test.ts's "lazy-import guard" test enforces
+// this statically — adding an @open-autonomy/* import to this file (or to bin/open-autonomy.ts) goes red.
 import { existsSync, readdirSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';

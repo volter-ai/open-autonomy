@@ -4,6 +4,9 @@
 
 [![funding](https://volter-agent-model-proxy.aaron-0ed.workers.dev/v1/funding/runway.svg)](https://github.com/sponsors/volter-ai)
 
+> Documentation for **open-autonomy v0.4** (`npm install open-autonomy@^0.4.1`). Older packages: use
+> the docs at that version's tag, e.g. `blob/v0.3.1/`. (Machine-checked: `bun run check:release-consistency`.)
+
 `open-autonomy` makes a repository drive its own maintenance work: work items become reviewed,
 gated, merged changes, produced by bounded AI agents under **deterministic guardrails**.
 It is **substrate-agnostic** — the same setup compiles onto **GitHub Actions** or onto a **local**

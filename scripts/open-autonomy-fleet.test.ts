@@ -10,10 +10,11 @@ describe('open autonomy fleet and audit surfaces', () => {
     expect(report.checks.some((check) => check.id === 'env:MODEL_PROXY_URL' && check.status === 'warn')).toBe(true);
   });
 
-  test('version metadata exists for run evidence', () => {
+  test('version metadata exists for run evidence and agrees with package.json (OA-15: one version truth)', () => {
     const version = readFileSync('VERSION', 'utf8').trim();
     const metadata = JSON.parse(readFileSync('.open-autonomy/version.json', 'utf8'));
-    expect(version).toBe('0.1.0');
+    const pkgVersion = JSON.parse(readFileSync('package.json', 'utf8')).version;
+    expect(version).toBe(pkgVersion);
     expect(metadata.version).toBe(version);
     expect(metadata.profile).toBe('default');
   });

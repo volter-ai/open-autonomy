@@ -1,5 +1,8 @@
 # Operating Open Autonomy
 
+> Documentation for **open-autonomy v0.4** (`npm install open-autonomy@^0.4.1`). Older packages: use
+> the docs at that version's tag, e.g. `blob/v0.3.1/`. (Machine-checked: `bun run check:release-consistency`.)
+
 > **The operator/maintainer how-to doc.**
 >
 > 1. [Install & operate](#install--operate) — the model: **runner ⟂ code host**, and the three setups.
@@ -676,20 +679,80 @@ Go only when all of these are true:
 
 ## Release process
 
-Open Autonomy releases are versioned by `VERSION` and
-`.open-autonomy/version.json`.
+`package.json`'s `.version` field is the **authority** — it is what npm publishes. `VERSION` and
+`.open-autonomy/version.json` are **enforced mirrors** of it (`bun run check:release-consistency`,
+`bin/check-release.ts`): `version.json` is load-bearing — it ships into every compiled install so runs
+can record the Open Autonomy version and profile used for each session (see below), so it must always
+tell the truth instead of freezing at a stale number. `CHANGELOG.md`'s top `## X.Y.Z` entry and the
+"Documentation for **open-autonomy vX.Y**" stamp near the top of this doc, `README.md`, and
+`docs/INSTALL-AGENT.md` must also agree with `package.json`. The checker fails the build the moment any
+of these drift, naming exactly what's stale — this is the ONE release process; `RELEASING.md` is a
+pointer here, not a second procedure.
 
-Release checklist:
+### Prerequisites
 
-1. Update `VERSION`, `.open-autonomy/version.json`, and `CHANGELOG.md`.
-2. Run `bun run check`.
-3. Run planner and preflight workflows on `main`.
-4. Compile into a clean directory (`bun bin/open-autonomy.ts compile profiles/self-driving gh-actions <dir>`)
-   and run its `bun run check`.
-5. Verify the committed release evidence in [`docs/PROOF_LEDGER.md`](./PROOF_LEDGER.md).
-6. Tag the release as `vX.Y.Z`.
-7. Record migration notes for compiled-install changes in the changelog.
+- An npm auth token with publish rights for the `open-autonomy` name (owner: volter). The full-publish
+  token lives in `~/.npmrc` + Keychain `npm-publish-token` — never print or commit it.
+- A clean, green tree: `bun run check` must pass (the in-memory conformance battery `conformance exec`,
+  `check:release-consistency`, and `check:pack-smoke` among its gates). The **live** GitHub conformance
+  bench (`bun bin/bench.ts`) is a separate maintainer eval — it provisions real repos and spends via the
+  proxy, so it is NOT part of release gating; run it manually for a full end-to-end signal.
 
-Generated or upgraded repositories should keep their local
-`.open-autonomy/version.json` so runs can record the Open Autonomy version and
-profile used for each session.
+### Checklist (ordered — do not skip or reorder steps 5/6)
+
+1. **Write the CHANGELOG entry:** a new `## X.Y.Z` heading in `CHANGELOG.md`, with migration notes for
+   any compiled-install changes.
+2. **Bump the version everywhere, in one shot:** `package.json`, `VERSION`, `.open-autonomy/version.json`
+   (and its dogfood mirror, `profiles/self-driving/.open-autonomy/version.json`), and the "Documentation
+   for **open-autonomy vX.Y**" stamp in `README.md`, `docs/OPERATIONS.md` (this doc), and
+   `docs/INSTALL-AGENT.md`.
+3. **`bun run check`** — transitively includes `check:release-consistency` (asserts all of the above
+   agree) and `check:pack-smoke` (OA-01: build → `npm pack` → install the tarball → run every CLI verb
+   under plain `node`, from the packed artifact, never the source tree).
+4. **`npm publish`** (irreversible + public — confirm intent first). Its `prepublishOnly` re-runs
+   `bun run build`, `check:release-consistency`, and `check:pack-smoke`, so a stale, broken, or
+   undocumented artifact cannot ship even by someone bypassing step 3.
+5. **Verify from the registry, BEFORE any tag or announcement.** In a clean temp dir, under plain
+   `node`, against the actual registry (catches registry-side problems `npm pack` can't: bad publish
+   contents, dist-tag mistakes, provenance/token mishaps):
+   ```bash
+   npx --yes open-autonomy@X.Y.Z --help
+   npx --yes open-autonomy@X.Y.Z compile simple-sdlc local .
+   npx --yes open-autonomy@X.Y.Z compile self-driving gh-actions .
+   ```
+   If any of these fail: fix, publish a patch, repeat. The tag and docs must never point at a version
+   this step didn't pass.
+6. **Tag the release** — only after step 5 passes: `git tag vX.Y.Z && git push --tags`; cut the GitHub
+   release with the changelog entry. (Tagging before publish would let a failed registry verification
+   leave a tag pointing at a version that was never healthy; verifying then tagging costs only a
+   minutes-wide window where the freshest install's doc link 404s.)
+7. **Keep the existing gates going:** run planner and preflight workflows on `main`; verify the
+   committed release evidence in [`docs/PROOF_LEDGER.md`](./PROOF_LEDGER.md).
+
+### Gotchas (learned the hard way — keep the packed-artifact smoke test)
+
+- **npm strips `.gitignore`.** A file literally named `.gitignore` is omitted from every npm package,
+  even under a `files` whitelist. The `self-driving` profile therefore stores it as `gitignore` (no dot)
+  and the github compiler emits it to `.gitignore` in the installation
+  (`packages/substrate-github/src/emit.ts`). If you add another `.gitignore` resource to a profile, apply
+  the same mapping.
+- **`compile` takes a profile NAME or a path.** `npx open-autonomy compile self-driving github .`
+  resolves the bundled `profiles/self-driving` via `import.meta.url` (→ `dist/` when installed, `bin/` in
+  dev). A bare name that isn't a bundled profile and isn't a path errors with the list of bundled
+  profiles.
+- **The source tree lies about packaging.** Running from a clone always finds `profiles/` and dotfiles,
+  so a packaging bug (like the `.gitignore` strip) only shows up against a `npm pack`ed install. Always
+  run `check:pack-smoke` (step 3/4 above) before publishing — never trust a source-tree smoke test alone.
+
+### Deprecation follow-up (owner action, post-merge — NOT run by an automated build)
+
+When a fixed release ships superseding a broken one (e.g. `0.4.2` superseding `0.4.0`/`0.4.1`'s broken
+`compile`, OA-01), run `npm deprecate "open-autonomy@<=0.4.1" "0.4.0/0.4.1 crash on compile — upgrade to
+>=0.4.2"`. This closes the loop: `latest`, the docs stamp, and the newest working package become the
+same number, and anyone who lands on a broken version is told so by npm itself. This is a real-network,
+owner-run, post-publish action — it is never executed by an autonomous build (see
+`docs/adoption-fixes/OA-15-version-doc-skew-release-process.md` §5).
+
+Generated or upgraded repositories should keep their local `.open-autonomy/version.json` so runs can
+record the Open Autonomy version and profile used for each session — now enforced
+(`check:release-consistency`) to actually be current at every release, not merely present.

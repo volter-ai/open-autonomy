@@ -1,5 +1,8 @@
 # Installing Open Autonomy — a guide for the installing agent
 
+> Documentation for **open-autonomy v0.4** (`npm install open-autonomy@^0.4.1`). Older packages: use
+> the docs at that version's tag, e.g. `blob/v0.3.1/`. (Machine-checked: `bun run check:release-consistency`.)
+
 > **You are an agent installing Open Autonomy (OA) onto someone's repo for them.** This is a *guided*
 > install: you do the work, but the human owns the judgment + irreversible calls. Follow the phases —
 > **preflight** (tools + auth), then **detect** (read the repo, don't ask), **ask** (only the judgment calls,

@@ -7,8 +7,9 @@
 > **The operator/maintainer how-to doc.**
 >
 > 1. [Install & operate](#install--operate) — the model: **runner ⟂ code host**, and the three setups.
-> 2. [Local-runner quickstart](#local-runner-quickstart) — run the agents on your own machine (against
->    *either* code host: a local-git board, or auto-merging PRs on GitHub).
+> 2. [Local install checklist](#local-install-checklist) — the **canonical, ordered** path to run the
+>    agents on your own machine (against *either* code host: a local-git board, or auto-merging PRs on
+>    GitHub). `README.md` and `docs/INSTALL-AGENT.md` link into this checklist rather than duplicate it.
 > 3. [GitHub production rollout](#github-production-rollout) — the checklist before enabling OA on a repo
 >    with the **GitHub Actions** runner.
 > 4. [Release process](#release-process) — cutting a versioned Open Autonomy release.
@@ -35,8 +36,8 @@ A profile declares which combinations it supports (`targets` × `codeHost`). The
 | Setup | Runner | Code host | Profile | Read |
 |---|---|---|---|---|
 | **Hosted** | GitHub Actions | GitHub | `self-driving` (new/dedicated repo) · `simple-gh-sdlc` (your existing repo) | [GitHub production rollout](#github-production-rollout) |
-| **Local agents → GitHub PRs** | local | GitHub | `simple-gh-sdlc` | [Local-runner quickstart](#local-runner-quickstart) → *GitHub code host* |
-| **Fully local** | local | local-git | `simple-sdlc` (or `hello`) | [Local-runner quickstart](#local-runner-quickstart) → *local-git code host* |
+| **Local agents → GitHub PRs** | local | GitHub | `simple-gh-sdlc` | [Local install checklist](#local-install-checklist) → *GitHub code host* |
+| **Fully local** | local | local-git | `simple-sdlc` (or `hello`) | [Local install checklist](#local-install-checklist) → *local-git code host* |
 
 The **runner steps are identical** for both local setups (prereqs → termfleet → compile → commit → run the
 loop); only **how you feed it work and how a change lands** differ by code host. That split is exactly
@@ -65,7 +66,13 @@ steps 1–5 (shared) vs step 6 (per code host) below.
 
 ---
 
-## Local-runner quickstart
+## Local install checklist
+
+> **The canonical, ordered path — start here, follow it top to bottom.** Every load-bearing fact for a
+> local install (deps, ports/pin, the commit step, the tracker, the stop-conditions, the teardown) has
+> exactly one home in this checklist; `README.md` and `docs/INSTALL-AGENT.md` link into specific steps
+> below rather than repeating them. Read [Stop-conditions before you start](#stop-conditions-before-you-start)
+> first — each one is a reason to stop, not to proceed.
 
 Run the **agents on your own machine** — as local terminal sessions via
 [termfleet](https://www.npmjs.com/package/termfleet), using *your own* logged-in coding CLI (Claude Code
@@ -83,6 +90,28 @@ directly**). This is the **local runner**. It works against **either code host**
 **Steps 1–5 (prereqs → termfleet → compile → commit → run) are identical** for both; only **step 6 — how
 you feed work and how a change lands** — differs by code host. If you just want to *see the loop fire*
 with zero tracker setup, use the `hello` profile (a single cron agent).
+
+### Stop-conditions before you start
+
+Check these **before step 1** — each is a reason to stop and resolve first, not to proceed:
+
+- **No `package.json` in the target repo.** The runner needs JS deps (`termfleet`, `ztrack`); a repo with
+  no `package.json` (e.g. a pure Go/Python/Rust repo) can't host it as-is.
+- **A shared or lived-in box.** A termfleet provider can launch terminal sessions **as your user,
+  box-wide** — before you start your own (step 2), check whether one is already running (step 1's
+  `preflight`, step 2's `/healthz` probe), and always pin `TERMFLEET_PROVIDER_URL` (step 2, "Pin the
+  provider").
+- **A public repo.** Anyone who can open an issue or comment can put text in front of the agents — a
+  prompt injection runs with your own token (push, secrets, PRs). Don't install onto a public repo where
+  outside contributors can reach the agents unless issue/comment authorship is restricted to maintainers,
+  or you run the scoped-token **hosted** substrate instead (see [Install & operate](#install--operate)).
+- **GitHub code host, no CI that runs on PRs.** On the local runner the agents share your token, so
+  `agent-review` alone is **not** an independent gate — with no real CI in the required-checks list you'd
+  be auto-merging on the agents' own say-so. Add a real CI check that runs on pull requests first, or
+  don't enable auto-merge (step 6's GitHub-flavor gate).
+- **Not a repo admin, or a private repo on a free plan.** Classic branch protection (step 6's GitHub
+  flavor) needs `administration:write`; a free private plan's API rejects the protection `PUT`. Have an
+  org owner set it up, use GitHub rulesets, or upgrade the plan.
 
 ### 1. Prerequisites
 
@@ -584,6 +613,55 @@ that spends money on a metered account:
 ```bash
 npx open-autonomy doctor --live     # one real session, cancelled either way — costs money, run it once
 ```
+
+### Stop & teardown
+
+**Pausing (not uninstalling):** `Ctrl-C` the scheduler (or `kill` its PID if you backgrounded it). The
+termfleet console/provider from step 2 are separate background processes — stop them with `kill %1 %2` in
+the shell that started them (or `pkill -f "termfleet (console|provider)"`). Stopping the scheduler stops
+new launches; a worker session already running in tmux finishes on its own (kill it from the termfleet
+console if you need it gone now). On the local runner this is also your spend stop — there is no proxy
+cap, so a stopped loop is what bounds model billing. `touch .open-autonomy/paused` (step 5) is the softer,
+same-tick kill-switch that fences new dispatch without killing the process.
+
+**Full teardown (how you back OA out entirely):** there is no one-command uninstall; reverse what the
+install armed, in order:
+
+```bash
+# 1. stop the loop + termfleet
+pkill -f scheduler/run.mjs ; pkill -f 'termfleet (console|provider)'
+
+# 2. GitHub code host only (simple-gh-sdlc) — disarm the gate; skip for local-git, which has no gate
+gh repo edit <owner>/<repo> --enable-auto-merge=false
+gh api -X DELETE "repos/<owner>/<repo>/branches/<default-branch>/protection"
+
+# 3. remove the harness commit + runtime scratch
+git revert --no-edit <install-commit>   # or git rm the overlay paths; then push if you're on the GitHub code host
+git worktree prune ; rm -rf .worktrees .open-autonomy/runner-state
+
+# 4. (optional) uninstall the runner deps
+npm remove termfleet ztrack
+```
+
+Step 3's `git worktree prune` + removing `.worktrees` also clears the merged-issue worktrees the loop
+leaves behind under `.worktrees/agent/issue-*` — the running loop does not auto-prune these on its own, so
+do this periodically even short of a full teardown.
+
+### Fact-to-step completeness map
+
+The sync contract for future edits: every load-bearing fact below has **exactly one** home in this
+checklist. If you add or change one of these facts, edit the step it lives in — don't add a second copy in
+README or `docs/INSTALL-AGENT.md`; make them link here instead.
+
+| # | Load-bearing fact | Lives in |
+|---|---|---|
+| 1 | Commit the overlay — worktrees only see committed files | [Step 4, "Commit the harness"](#4-commit-the-harness) |
+| 2 | Repo-unique ports/prefix + check-the-port-first (never the box defaults) | [Step 2, "Start termfleet"](#2-start-termfleet-console--a-local-provider) |
+| 3 | Provider pinning (`TERMFLEET_PROVIDER_URL`) | [Step 2 → "Pin the provider"](#pin-the-provider) |
+| 4 | Teardown / how to back OA out | [Stop & teardown](#stop--teardown), above |
+| 5 | Stop-conditions (no `package.json`; shared box; public repo; no-PR-CI ⇒ never auto-merge; admin/plan) | [Stop-conditions before you start](#stop-conditions-before-you-start), above step 1 |
+| 6 | Durability/observability (loop dies on terminal close; supervisor; worktree pruning; idle spend) | [Step 5, "Run the loop"](#5-run-the-loop) (stopping note) + [Stop & teardown](#stop--teardown) |
+| 7 | Verify before declaring done | [Step 8, "Verify the install"](#8-verify-the-install) |
 
 ### What depends on the code host vs the runner
 

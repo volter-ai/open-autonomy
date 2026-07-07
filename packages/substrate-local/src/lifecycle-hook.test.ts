@@ -32,7 +32,9 @@ describe('the post-session effect is gated on EXPLICIT signals, never a capabili
   test('gated on an isolated worktree + a github code host — no code:propose anywhere in the runner', () => {
     expect(rt).toContain('recordPostSessionEffect'); // launch records a per-session effect
     expect(rt).toContain('const codeHost = manifestCodeHost();'); // read once per launch (OA-02: also gates the worktree base)
-    expect(rt).toContain("codeHost === 'github'"); // gated on the declared code-host signal
+    // pin the FULL propose-gate line — a bare `codeHost === 'github'` also matches the worktree-base gate
+    // in ensureWorktree (OA-02), so it alone would not catch a regression ungating the propose effect
+    expect(rt).toContain("if (worktree && codeHost === 'github')"); // gated on worktree + the declared code-host signal
     expect(rt).toContain("'scripts/agent-propose.ts'"); // the github code host's publish effect (git + gh)
     // the capability is GONE from the runner's behavior gating (it was a fictional local permission):
     expect(rt).not.toContain('code:propose');

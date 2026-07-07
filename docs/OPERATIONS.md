@@ -174,17 +174,22 @@ git add scripts/ scheduler/ .claude/ .codex/ .open-autonomy/ standards/
 git commit -m "Install the open-autonomy harness"
 ```
 
-The authoritative list of what the compile wrote is `.open-autonomy/generated.json` — stage from it if you
-keep any of those directories partially ignored:
+The list above is the `simple-sdlc` footprint — the exact set **varies by profile** (`hello`, for example,
+emits no `standards/`, and a pathspec matching nothing makes `git add` fail without committing anything).
+The compile prints the correct command for *your* profile in its next-steps output, and the authoritative
+list of what it wrote is `.open-autonomy/generated.json` — this form is always correct:
 
 ```bash
 git add $(node -p "JSON.parse(require('fs').readFileSync('.open-autonomy/generated.json','utf8')).files.join(' ')")
 ```
 
-Note `.claude/settings.json` is part of the harness (the ztrack drive-to-green Stop hook) and is included
-above. Re-run this step after every re-compile/upgrade. **No push is required:** on the local-git code
-host, worktrees base on your **local** trunk — committing locally is sufficient. GitHub code host installs
-(`simple-gh-sdlc`) additionally push as part of their normal PR flow.
+If any harness path is matched by your `.gitignore`, plain `git add` refuses it — use `git add -f` for
+those paths (or un-ignore them): a gitignored harness file stays untracked, so worktrees won't contain it
+either, and the loop refuses to start until every harness file is committed. Note `.claude/settings.json`
+is part of the harness (the ztrack drive-to-green Stop hook) and is included above. Re-run this step after
+every re-compile/upgrade. **No push is required:** on the local-git code host, worktrees base on your
+**local** trunk — committing locally is sufficient. GitHub code host installs (`simple-gh-sdlc`)
+additionally push as part of their normal PR flow.
 
 ### 5. Run the loop
 

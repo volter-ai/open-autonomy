@@ -137,25 +137,48 @@ if (isGitRepo && existsSync(GENERATED_MANIFEST)) {
     manifestFiles = [];
   }
   if (manifestFiles.length) {
-    // One spawn: \`git status --porcelain\` scoped to exactly the manifest's paths. Untracked (??) and
-    // modified/added (any other status) both count as "uncommitted" — this catches both the never-committed
-    // and the partially-committed harness, and nothing else (a pathspec scopes git to only these paths).
+    // Two spawns, both scoped to exactly the manifest's paths (user files are never inspected):
+    //   1. \`git status --porcelain\` -> the modified/added/deleted/untracked-unignored set ("uncommitted").
+    //   2. \`git ls-files\` -> the tracked set.
+    // A manifest path that is UNTRACKED yet ABSENT from the status output is, by elimination, GITIGNORED —
+    // \`git status\` silently omits ignored files even when named in the pathspec (and \`--ignored\` collapses
+    // an ignored dir to one '!! dir/' entry, losing the file names, so it can't name paths either). That is
+    // the worst case for this guard's purpose: a worktree will not contain the file either, so it must
+    // REFUSE too, with \`git add -f\` remediation. A path that is TRACKED (committed once, even \`add -f\`ed
+    // past an ignore rule) and unmodified is CLEAN: worktrees materialize tracked files regardless of
+    // ignore rules, so those are never nagged.
     const status = spawnSync('git', ['status', '--porcelain', '--', ...manifestFiles], { encoding: 'utf8' });
-    const dirty = (status.stdout || '')
+    const statusPaths = (status.stdout || '')
       .split('\\n')
       .filter((line) => line.trim().length > 0)
-      .map((line) => line.slice(3));
-    if (dirty.length) {
+      .map((line) => {
+        const raw = line.slice(3);
+        return raw.includes(' -> ') ? raw.slice(raw.lastIndexOf(' -> ') + 4) : raw; // a rename entry names the NEW path
+      });
+    const lsFiles = spawnSync('git', ['ls-files', '--', ...manifestFiles], { encoding: 'utf8' });
+    const tracked = new Set((lsFiles.stdout || '').split('\\n').filter((l) => l.length > 0));
+    const statusSet = new Set(statusPaths);
+    const untrackedSilent = manifestFiles.filter((f) => !tracked.has(f) && !statusSet.has(f));
+    const ignored = untrackedSilent.filter((f) => existsSync(join(here, '..', f)));
+    // Untracked + absent from status + absent from disk = never even written (a corrupted/hand-pruned
+    // install) — not committable as-is, still refuse and name it under "uncommitted".
+    const dirty = statusPaths.concat(untrackedSilent.filter((f) => !existsSync(join(here, '..', f))));
+    if (dirty.length || ignored.length) {
       const lines = [
         '[loop] the open-autonomy harness is not (fully) committed — agents run in git worktrees, which only',
         '  see committed files; launching now would produce workers that die at launch (Unknown command: /develop).',
-        '  uncommitted (' + dirty.length + '):',
-      ]
-        .concat(dirty.map((f) => '    ' + f))
-        .concat([
-          '  Fix:  git add <the paths above>  &&  git commit -m "Install the open-autonomy harness"',
-          '  (docs/OPERATIONS.md#local-runner-quickstart, step 4. Override: AUTONOMY_ALLOW_UNCOMMITTED_HARNESS=1)',
-        ]);
+      ];
+      if (dirty.length) lines.push('  uncommitted (' + dirty.length + '):', ...dirty.map((f) => '    ' + f));
+      if (ignored.length)
+        lines.push(
+          '  gitignored (' + ignored.length + ') — matched by .gitignore so NOT tracked; a worktree will not contain these either:',
+          ...ignored.map((f) => '    ' + f),
+        );
+      lines.push(
+        '  Fix:  git add ' + (ignored.length ? '-f ' : '') + '<the paths above>  &&  git commit -m "Install the open-autonomy harness"' +
+          (ignored.length ? '   (-f stages past .gitignore; or un-ignore the harness paths)' : ''),
+        '  (docs/OPERATIONS.md#local-runner-quickstart, step 4. Override: AUTONOMY_ALLOW_UNCOMMITTED_HARNESS=1)',
+      );
       if (process.env.AUTONOMY_ALLOW_UNCOMMITTED_HARNESS === '1') {
         console.error(
           ['[loop] WARNING — AUTONOMY_ALLOW_UNCOMMITTED_HARNESS=1: proceeding with an uncommitted harness.']

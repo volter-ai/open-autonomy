@@ -159,6 +159,51 @@ describe('scheduler/run.mjs --once — the uncommitted-harness guard (OA-03)', (
     }
   });
 
+  // Blocker 1 (panel): `git status --porcelain -- <files>` silently OMITS gitignored files, so a harness
+  // path matched by .gitignore used to false-pass the guard — reintroducing the exact silent zombie this
+  // guard exists to stop (the worktree won't contain a gitignored-untracked file either). Two semantics:
+  // (a) untracked-and-ignored -> REFUSE, named under a distinct "gitignored" section with `git add -f`
+  // remediation; (b) tracked-but-matching-an-ignore-pattern (previously `git add -f`ed and committed) ->
+  // CLEAN, because worktrees materialize tracked files regardless of ignore rules.
+  test('B1a: gitignored harness paths -> refuses, naming them as gitignored with `git add -f` remediation', () => {
+    const out = compileLocal(ir);
+    const dir = scaffold(out);
+    try {
+      initGitRepo(dir);
+      writeFileSync(join(dir, '.gitignore'), '.claude/\n');
+      git(dir, ['add', '-A']); // stages everything EXCEPT the ignored .claude/
+      git(dir, ['commit', '-q', '-m', 'harness-minus-ignored']);
+      const r = runOnce(dir);
+      expect(r.status).toBe(1);
+      expect(r.stderr).toContain('gitignored');
+      expect(r.stderr).toContain('.claude/skills/develop/SKILL.md'); // the exact file, not a collapsed '.claude/'
+      expect(r.stderr).toContain('git add -f');
+      // The committed paths are NOT named.
+      expect(r.stderr).not.toContain('scheduler/run.mjs');
+      expect(r.stderr).not.toContain('.codex/skills/develop/SKILL.md');
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test('B1b: tracked-but-ignore-matching harness (`git add -f` + commit) -> clean, guard silent', () => {
+    const out = compileLocal(ir);
+    const dir = scaffold(out);
+    try {
+      initGitRepo(dir);
+      writeFileSync(join(dir, '.gitignore'), '.claude/\n');
+      git(dir, ['add', '-A']);
+      git(dir, ['add', '-f', '.claude/']); // stage past the ignore rule — the guard's own remediation
+      git(dir, ['commit', '-q', '-m', 'harness']);
+      const r = runOnce(dir);
+      expect(r.status).toBe(0);
+      expect(r.stderr).not.toContain('the open-autonomy harness is not');
+      expect(r.stderr).not.toContain('gitignored');
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
   test('AC-5: AUTONOMY_ALLOW_UNCOMMITTED_HARNESS=1 warns (same path list) but proceeds', () => {
     const out = compileLocal(ir);
     const dir = scaffold(out);

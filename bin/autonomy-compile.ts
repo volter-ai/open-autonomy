@@ -158,12 +158,18 @@ if (outDir) {
     // the message every adopter sees at the moment the files land, so it can't be doc-only (docs/OPERATIONS.md
     // carries the same step in the quickstart). No push required: on the local-git code host, worktrees base
     // on the LOCAL trunk (OA-02); GitHub code host installs push as part of their normal PR flow anyway.
+    // The staging list is DERIVED from what THIS compile actually wrote (`written`, reduced to top-level
+    // dirs/files) — never hardcoded: a hardcoded list included `standards/`, which `hello` never emits, so
+    // hello's exact printed command died with `fatal: pathspec 'standards/' did not match any files` and the
+    // &&-chained commit never ran (nothing committed). Deriving per-profile keeps the printed command
+    // correct for every profile, including future ones with a different footprint.
     const commitStepNum = tracker ? 5 : 4;
     const runStepNum = tracker ? 6 : 5;
+    const stagePaths = [...new Set(written.map((p) => (p.includes('/') ? `${p.split('/')[0]}/` : p)))].sort();
     const commitStep =
       `  ${commitStepNum}. Commit the harness — agents run in git worktrees, which only see committed files\n` +
       `     (an uncommitted harness produces workers that die at launch with \`Unknown command: /develop\`):\n` +
-      `       ${cd}git add scripts/ scheduler/ .claude/ .codex/ .open-autonomy/ standards/  &&  git commit -m "Install the open-autonomy harness"\n` +
+      `       ${cd}git add ${stagePaths.join(' ')}  &&  git commit -m "Install the open-autonomy harness"\n` +
       `     (no push required on local-git; see docs/OPERATIONS.md#local-runner-quickstart, step 4)\n`;
     console.log(
       `\nNext steps (local loop):\n` +

@@ -118,6 +118,81 @@ if (needsRunner && !existsSync(join(here, '..', 'node_modules', 'termfleet'))) {
   process.exit(1);
 }
 
+// The uncommitted-harness guard (OA-03): agents launched with \`--branch\` run in git WORKTREES, which
+// materialize only COMMITTED files. If the compiled harness isn't committed, every worker dies instantly
+// inside its tmux session with \`Unknown command: /develop\` — and nothing upstream ever sees it (the dead
+// session reads as 'done'). Same shape as the termfleet guard just above: plain spawnSync, no-op when the
+// precondition doesn't apply, refuse-with-names otherwise. Runs once, before the first tick, in both
+// --once and continuous mode — the earliest point that can stop the PM (and therefore every downstream
+// zombie) with one message. The manifest (.open-autonomy/generated.json) is the authoritative, exact list
+// of what compile wrote — never a guess, never a scan of user files.
+const GENERATED_MANIFEST = join(here, '..', '.open-autonomy', 'generated.json');
+const isGitRepo = spawnSync('git', ['rev-parse', '--git-dir'], { stdio: 'ignore' }).status === 0;
+if (isGitRepo && existsSync(GENERATED_MANIFEST)) {
+  let manifestFiles = [];
+  try {
+    const manifest = JSON.parse(readFileSync(GENERATED_MANIFEST, 'utf8'));
+    manifestFiles = Array.isArray(manifest.files) ? manifest.files : [];
+  } catch {
+    manifestFiles = [];
+  }
+  if (manifestFiles.length) {
+    // Two spawns, both scoped to exactly the manifest's paths (user files are never inspected):
+    //   1. \`git status --porcelain\` -> the modified/added/deleted/untracked-unignored set ("uncommitted").
+    //   2. \`git ls-files\` -> the tracked set.
+    // A manifest path that is UNTRACKED yet ABSENT from the status output is, by elimination, GITIGNORED —
+    // \`git status\` silently omits ignored files even when named in the pathspec (and \`--ignored\` collapses
+    // an ignored dir to one '!! dir/' entry, losing the file names, so it can't name paths either). That is
+    // the worst case for this guard's purpose: a worktree will not contain the file either, so it must
+    // REFUSE too, with \`git add -f\` remediation. A path that is TRACKED (committed once, even \`add -f\`ed
+    // past an ignore rule) and unmodified is CLEAN: worktrees materialize tracked files regardless of
+    // ignore rules, so those are never nagged.
+    const status = spawnSync('git', ['status', '--porcelain', '--', ...manifestFiles], { encoding: 'utf8' });
+    const statusPaths = (status.stdout || '')
+      .split('\\n')
+      .filter((line) => line.trim().length > 0)
+      .map((line) => {
+        const raw = line.slice(3);
+        return raw.includes(' -> ') ? raw.slice(raw.lastIndexOf(' -> ') + 4) : raw; // a rename entry names the NEW path
+      });
+    const lsFiles = spawnSync('git', ['ls-files', '--', ...manifestFiles], { encoding: 'utf8' });
+    const tracked = new Set((lsFiles.stdout || '').split('\\n').filter((l) => l.length > 0));
+    const statusSet = new Set(statusPaths);
+    const untrackedSilent = manifestFiles.filter((f) => !tracked.has(f) && !statusSet.has(f));
+    const ignored = untrackedSilent.filter((f) => existsSync(join(here, '..', f)));
+    // Untracked + absent from status + absent from disk = never even written (a corrupted/hand-pruned
+    // install) — not committable as-is, still refuse and name it under "uncommitted".
+    const dirty = statusPaths.concat(untrackedSilent.filter((f) => !existsSync(join(here, '..', f))));
+    if (dirty.length || ignored.length) {
+      const lines = [
+        '[loop] the open-autonomy harness is not (fully) committed — agents run in git worktrees, which only',
+        '  see committed files; launching now would produce workers that die at launch (Unknown command: /develop).',
+      ];
+      if (dirty.length) lines.push('  uncommitted (' + dirty.length + '):', ...dirty.map((f) => '    ' + f));
+      if (ignored.length)
+        lines.push(
+          '  gitignored (' + ignored.length + ') — matched by .gitignore so NOT tracked; a worktree will not contain these either:',
+          ...ignored.map((f) => '    ' + f),
+        );
+      lines.push(
+        '  Fix:  git add ' + (ignored.length ? '-f ' : '') + '<the paths above>  &&  git commit -m "Install the open-autonomy harness"' +
+          (ignored.length ? '   (-f stages past .gitignore; or un-ignore the harness paths)' : ''),
+        '  (docs/OPERATIONS.md#local-runner-quickstart, step 4. Override: AUTONOMY_ALLOW_UNCOMMITTED_HARNESS=1)',
+      );
+      if (process.env.AUTONOMY_ALLOW_UNCOMMITTED_HARNESS === '1') {
+        console.error(
+          ['[loop] WARNING — AUTONOMY_ALLOW_UNCOMMITTED_HARNESS=1: proceeding with an uncommitted harness.']
+            .concat(lines)
+            .join('\\n'),
+        );
+      } else {
+        console.error(lines.join('\\n'));
+        process.exit(1);
+      }
+    }
+  }
+}
+
 const fireTick = () => {
   for (const command of schedule.scripts) {
     spawnSync(command, { shell: true, stdio: 'inherit', env: Object.assign({}, schedule.env, process.env) });

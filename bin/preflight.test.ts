@@ -13,14 +13,19 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
   checkDevDepInstallability,
+  checkTermfleetPorts,
+  classifyPort,
   effectiveOmit,
   ensurePtyModule,
+  occupantOf,
   omitsDev,
   pickPtyDepName,
+  portOf,
   probePtyLoad,
   resolvePtyDir,
   type DevDepIO,
   type RunFn,
+  type TermfleetPortIO,
 } from './preflight';
 
 // ── fixture builder ──────────────────────────────────────────────────────────────────────────────
@@ -345,7 +350,19 @@ describe('runPreflightCli — a pty warn fails the gate (exit 1), skips pass it 
 describe('runPreflightCli — OA-04 namespace collisions against real npm fixtures', () => {
   const REPO_ROOT = join(import.meta.dir, '..');
   const runCli = (cwd: string): { exitCode: number; stdout: string } => {
-    const r = Bun.spawnSync(['bun', join(REPO_ROOT, 'bin', 'preflight.ts')], { cwd, stdout: 'pipe', stderr: 'pipe' });
+    // OA-09: these fixtures do a REAL `npm install termfleet`, so the port/provider coexistence check
+    // (bin/preflight.ts) is live here, not skipped — and this test suite's own dev box legitimately runs
+    // termfleet as fleet infrastructure on the doc-default port, exactly the coexistence scenario OA-09
+    // exists to name (docs/adoption-fixes/OA-09-termfleet-coexistence-provider-pinning.md). Pin to an
+    // unrelated port so THAT box-wide fact — orthogonal to what THIS describe block tests (collisions) —
+    // downgrades to a caution, never a hard-fail that would make these collision assertions flaky on a
+    // dev box vs. a clean CI runner.
+    const r = Bun.spawnSync(['bun', join(REPO_ROOT, 'bin', 'preflight.ts')], {
+      cwd,
+      stdout: 'pipe',
+      stderr: 'pipe',
+      env: { ...process.env, TERMFLEET_PROVIDER_URL: 'http://127.0.0.1:18471' },
+    });
     return { exitCode: r.exitCode, stdout: r.stdout.toString('utf8') };
   };
   const npmInstall = (dir: string, ...args: string[]) => {
@@ -816,4 +833,271 @@ describe('runPreflightCli — OA-06 dev-dependency installability against a real
       rmSync(root, { recursive: true, force: true });
     }
   }, 30_000);
+});
+
+// ─────────────────────────────────────────────────────────────────────────────────────────────────
+// OA-09: termfleet port/provider coexistence — every fleet dev box already runs termfleet as
+// machine-wide infrastructure (docs/adoption-fixes/OA-09-termfleet-coexistence-provider-pinning.md).
+// These tests exercise the extracted, dependency-injected `classifyPort`/`checkTermfleetPorts` (the `io`
+// seam stands in for a real TCP connect, a real `/healthz` fetch, and a real `ss`/`lsof` shell-out) so a
+// regression back to a bare "is the port open" check, or a collapsed warn-vs-caution policy, goes red
+// here without ever binding a real socket. `classifyPort`'s shapes were verified against a REAL
+// termfleet@0.2.0 provider/console during development (not asserted here, to keep the suite offline):
+// a provider's `/healthz` answers `{"ok":true,"provider":"virtual-tmux","instanceId":"<uuid>"}` and its
+// `/` answers a plain 404 — exactly the shape `curl -fsS .../` misreads as free.
+describe('classifyPort / occupantOf — termfleet port classification (OA-09)', () => {
+  const neverHttp = async () => undefined;
+  const neverOpen = async () => false;
+  const alwaysOpen = async () => true;
+  const noRun: RunFn = () => ({ status: 1, stdout: '', stderr: 'not found' });
+
+  test('portOf: parses the port out of a URL; undefined for a portless/unparsable one', () => {
+    expect(portOf('http://127.0.0.1:7602')).toBe(7602);
+    expect(portOf('http://127.0.0.1')).toBeUndefined();
+    expect(portOf('not a url')).toBeUndefined();
+    expect(portOf(undefined)).toBeUndefined();
+  });
+
+  test('a port that refuses the TCP connect classifies free — the HTTP probe is never even attempted', async () => {
+    let httpCalled = false;
+    const io: TermfleetPortIO = {
+      tcpProbe: neverOpen,
+      httpGet: async () => {
+        httpCalled = true;
+        return undefined;
+      },
+      run: noRun,
+      existsSync: () => false,
+      readdirSync: () => [],
+      readFileSync: () => '',
+      env: {},
+      homedir: () => '/home/x',
+    };
+    const c = await classifyPort(7373, io);
+    expect(c).toEqual({ port: 7373, status: 'free' });
+    expect(httpCalled).toBe(false);
+  });
+
+  test('a real termfleet PROVIDER /healthz shape ({ok:true,provider,instanceId}) classifies termfleet-provider, naming kind + instance', async () => {
+    const io: TermfleetPortIO = {
+      tcpProbe: alwaysOpen,
+      httpGet: async () => ({ status: 200, body: JSON.stringify({ ok: true, provider: 'virtual-tmux', instanceId: 'abc-123', build: {} }) }),
+      run: noRun,
+      existsSync: () => false,
+      readdirSync: () => [],
+      readFileSync: () => '',
+      env: {},
+      homedir: () => '/home/x',
+    };
+    const c = await classifyPort(7373, io);
+    expect(c).toEqual({ port: 7373, status: 'termfleet-provider', kind: 'virtual-tmux', instanceId: 'abc-123' });
+  });
+
+  test('a real termfleet CONSOLE /healthz shape ({ok:true,service:"console"}) classifies termfleet-console', async () => {
+    const io: TermfleetPortIO = {
+      tcpProbe: alwaysOpen,
+      httpGet: async () => ({ status: 200, body: JSON.stringify({ ok: true, service: 'console' }) }),
+      run: noRun,
+      existsSync: () => false,
+      readdirSync: () => [],
+      readFileSync: () => '',
+      env: {},
+      homedir: () => '/home/x',
+    };
+    const c = await classifyPort(7373, io);
+    expect(c.status).toBe('termfleet-console');
+  });
+
+  test('a plain 404 (the exact shape `curl -fsS .../` misreads as free) classifies foreign-http, never free — the whole point of probing /healthz over the root path', async () => {
+    const io: TermfleetPortIO = {
+      tcpProbe: alwaysOpen,
+      httpGet: async () => ({ status: 404, body: 'Not Found' }),
+      run: noRun,
+      existsSync: () => false,
+      readdirSync: () => [],
+      readFileSync: () => '',
+      env: {},
+      homedir: () => '/home/x',
+    };
+    const c = await classifyPort(7373, io);
+    expect(c.status).toBe('foreign-http');
+  });
+
+  test('an occupied port whose HTTP GET never even answers (non-HTTP protocol) still classifies foreign-http via occupant naming, not free', async () => {
+    const io: TermfleetPortIO = {
+      tcpProbe: alwaysOpen,
+      httpGet: neverHttp,
+      run: (cmd) =>
+        cmd === 'ss'
+          ? { status: 0, stdout: 'LISTEN 0 511 127.0.0.1:7373 0.0.0.0:*  users:(("sshd",pid=555,fd=9))\n', stderr: '' }
+          : { status: 1, stdout: '', stderr: '' },
+      existsSync: () => false,
+      readdirSync: () => [],
+      readFileSync: () => '',
+      env: {},
+      homedir: () => '/home/x',
+    };
+    const c = await classifyPort(7373, io);
+    expect(c.status).toBe('foreign-http');
+    expect(c.occupant).toBe('pid 555 (sshd)');
+  });
+
+  test('occupantOf: names pid + command from `ss -ltnp`, matched on the LOCAL-ADDRESS column (not a coincidental peer-port match)', () => {
+    const run: RunFn = (cmd) =>
+      cmd === 'ss'
+        ? {
+            status: 0,
+            stdout: [
+              'LISTEN 0 511 127.0.0.1:9999 0.0.0.0:*  users:(("decoy",pid=1,fd=1))', // peer/unrelated line first
+              'LISTEN 0 511 127.0.0.1:7373 0.0.0.0:*  users:(("node",pid=42,fd=9))',
+            ].join('\n'),
+            stderr: '',
+          }
+        : { status: 1, stdout: '', stderr: '' };
+    expect(occupantOf(7373, run)).toBe('pid 42 (node)');
+  });
+
+  test('occupantOf: falls back to `lsof -iTCP:<port> -sTCP:LISTEN -Fpc` when `ss` is unavailable', () => {
+    const run: RunFn = (cmd) =>
+      cmd === 'lsof' ? { status: 0, stdout: 'p777\ncpython3\n', stderr: '' } : { status: 1, stdout: '', stderr: 'ss: not found' };
+    expect(occupantOf(7373, run)).toBe('pid 777 (python3)');
+  });
+
+  test('occupantOf: neither ss nor lsof available ⇒ undefined (not a throw) — the caller reports "occupant unidentified"', () => {
+    expect(occupantOf(7373, noRun)).toBeUndefined();
+  });
+});
+
+describe('checkTermfleetPorts — warn-vs-caution policy + machine-global state (OA-09)', () => {
+  // A minimal but complete fake IO builder. `occupied` maps port -> a classification outcome (via a
+  // provider/console/foreign-http fixture body); anything not listed classifies free (TCP refused).
+  function fakeIo(opts: {
+    occupied?: Record<number, { body: string } | 'foreign-non-http'>;
+    env?: Record<string, string | undefined>;
+    currentContext?: string; // if set, ~/.termfleet/current.json exists with this baseUrl (or '' for corrupt/no baseUrl)
+    advertised?: string[]; // ~/.termfleet/providers/*.json baseUrls
+  }): TermfleetPortIO {
+    const occupied = opts.occupied ?? {};
+    const home = '/home/x/.termfleet';
+    return {
+      tcpProbe: async (_h, port) => port in occupied,
+      httpGet: async (url) => {
+        const port = Number(new URL(url).port);
+        const o = occupied[port];
+        if (!o || o === 'foreign-non-http') return undefined;
+        return { status: 200, body: o.body };
+      },
+      run: () => ({ status: 1, stdout: '', stderr: '' }), // occupant-naming not under test here
+      existsSync: (p) =>
+        p === join('/repo', 'node_modules', 'termfleet', 'package.json') || // simulate "termfleet is installed" (past the skip gate)
+        (p === join(home, 'current.json') && opts.currentContext !== undefined) ||
+        (p === join(home, 'providers') && !!opts.advertised),
+      readdirSync: (p) => (p === join(home, 'providers') ? (opts.advertised ?? []).map((_u, i) => `p${i}.json`) : []),
+      readFileSync: (p) => {
+        if (p === join(home, 'current.json')) return opts.currentContext ? JSON.stringify({ baseUrl: opts.currentContext }) : '{}';
+        const m = /p(\d+)\.json$/.exec(p);
+        if (m && opts.advertised) return JSON.stringify({ baseUrl: opts.advertised[Number(m[1])] });
+        return '{}';
+      },
+      env: { ...opts.env },
+      homedir: () => '/home/x',
+    };
+  }
+  const providerBody = (kind = 'virtual-tmux', instanceId = 'abc') => ({ body: JSON.stringify({ ok: true, provider: kind, instanceId }) });
+
+  test('termfleet not yet installed in THIS repo ⇒ skip entirely (deferred to a re-run after `npm install termfleet`) — never probes a real socket for a bare scaffold', async () => {
+    let probed = false;
+    const io: TermfleetPortIO = {
+      tcpProbe: async () => {
+        probed = true;
+        return false;
+      },
+      httpGet: async () => undefined,
+      run: () => ({ status: 1, stdout: '', stderr: '' }),
+      existsSync: () => false, // no node_modules/termfleet anywhere
+      readdirSync: () => [],
+      readFileSync: () => '',
+      env: {},
+      homedir: () => '/home/x',
+    };
+    const r = await checkTermfleetPorts('/repo', io);
+    expect(r.notes.some((n) => n.includes('skip'))).toBe(true);
+    expect(r.warns).toEqual([]);
+    expect(r.failed).toBe(false);
+    expect(probed).toBe(false);
+  });
+
+  test('a clean box (both default ports free, no pin, no machine-global state) ⇒ no warns, no cautions — the no-false-alarm baseline', async () => {
+    const r = await checkTermfleetPorts('/repo', fakeIo({}));
+    expect(r.warns).toEqual([]);
+    expect(r.cautions).toEqual([]);
+    expect(r.failed).toBe(false);
+    expect(r.notes.some((n) => n.includes('7373') && n.includes('free'))).toBe(true);
+  });
+
+  test('AC-1 shape: UNPINNED + a foreign termfleet PROVIDER on the doc-default port 7373 ⇒ hard warn naming port, "termfleet provider", kind, and instanceId', async () => {
+    const r = await checkTermfleetPorts('/repo', fakeIo({ occupied: { 7373: providerBody('virtual-tmux', 'ef19-decoy') } }));
+    expect(r.failed).toBe(true);
+    const w = r.warns.join('\n');
+    expect(w).toContain('7373');
+    expect(w).toContain('termfleet provider');
+    expect(w).toContain("kind 'virtual-tmux'");
+    expect(w).toContain('ef19-decoy');
+    expect(w).toContain('TERMFLEET_PROVIDER_URL'); // prescribes the pin
+  });
+
+  test('AC-2 shape: UNPINNED + a foreign NON-termfleet service on 7373 ⇒ hard warn naming it a non-termfleet service', async () => {
+    const r = await checkTermfleetPorts('/repo', fakeIo({ occupied: { 7373: 'foreign-non-http' } }));
+    expect(r.failed).toBe(true);
+    expect(r.warns.join('\n')).toContain('non-termfleet service');
+  });
+
+  test('pinned to a DIFFERENT provider + a foreign occupant on the (unused) doc-default port ⇒ CAUTION only, never a hard warn (no-false-alarm: the operator already did the right thing)', async () => {
+    const r = await checkTermfleetPorts(
+      '/repo',
+      fakeIo({ occupied: { 7373: providerBody() }, env: { TERMFLEET_PROVIDER_URL: 'http://127.0.0.1:7602' } }),
+    );
+    expect(r.warns).toEqual([]);
+    expect(r.failed).toBe(false);
+    expect(r.cautions.some((c) => c.includes('7373'))).toBe(true);
+  });
+
+  test("the PINNED port itself is occupied by a real termfleet provider ⇒ a plain confirming note, no warn/caution", async () => {
+    const r = await checkTermfleetPorts(
+      '/repo',
+      fakeIo({ occupied: { 7602: providerBody('virtual-tmux', 'mine') }, env: { TERMFLEET_PROVIDER_URL: 'http://127.0.0.1:7602' } }),
+    );
+    expect(r.warns).toEqual([]);
+    expect(r.cautions).toEqual([]);
+    expect(r.notes.some((n) => n.includes('7602') && n.includes('pinned'))).toBe(true);
+  });
+
+  test('the PINNED port itself is occupied by something that is NOT a termfleet provider ⇒ hard warn (the pin would connect to the wrong thing)', async () => {
+    const r = await checkTermfleetPorts(
+      '/repo',
+      fakeIo({ occupied: { 7602: 'foreign-non-http' }, env: { TERMFLEET_PROVIDER_URL: 'http://127.0.0.1:7602' } }),
+    );
+    expect(r.failed).toBe(true);
+    expect(r.warns.join('\n')).toContain('not a termfleet provider');
+  });
+
+  test('~/.termfleet/current.json exists + UNPINNED ⇒ hard warn (a `termfleet use` context silently beats auto-discovery for an unpinned loop)', async () => {
+    const r = await checkTermfleetPorts('/repo', fakeIo({ currentContext: 'http://127.0.0.1:9000' }));
+    expect(r.failed).toBe(true);
+    const w = r.warns.join('\n');
+    expect(w).toContain('current.json');
+    expect(w).toContain('http://127.0.0.1:9000');
+  });
+
+  test('~/.termfleet/current.json exists + PINNED ⇒ caution only (the pin wins over current-context, so it is harmless)', async () => {
+    const r = await checkTermfleetPorts('/repo', fakeIo({ currentContext: 'http://127.0.0.1:9000', env: { TERMFLEET_PROVIDER_URL: 'http://127.0.0.1:7602' } }));
+    expect(r.warns).toEqual([]);
+    expect(r.cautions.some((c) => c.includes('current.json'))).toBe(true);
+  });
+
+  test('~/.termfleet/providers/*.json advertisements are noted (and their ports get classified too), never a hard warn purely for existing', async () => {
+    const r = await checkTermfleetPorts('/repo', fakeIo({ advertised: ['http://127.0.0.1:9500'] }));
+    expect(r.notes.some((n) => n.includes('9500'))).toBe(true);
+    expect(r.notes.some((n) => n.includes('9500') && n.includes('free'))).toBe(true); // classified, found free
+  });
 });

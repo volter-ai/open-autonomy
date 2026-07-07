@@ -129,29 +129,76 @@ local subscription/key is what's billed.
 ### 2. Start termfleet (console + a local provider)
 
 The local runner (the termfleet SDK's `ProviderClient`) talks to a termfleet **console** + **provider**
-running on your machine. Start both once (they stay up in the background); the open-autonomy runner
-auto-discovers them via the SDK's `resolveDefaultProvider` — no URL config needed (set
-`TERMFLEET_PROVIDER_URL` only to pin a specific one).
+running on your machine. **termfleet already runs as machine-wide infrastructure on many dev boxes** — the
+box's own provider may already hold the doc-default ports, and a second `serve` on a bound port fails
+*silently* behind `&`. Check first, and use a **repo-unique prefix + a free port pair**, never the box
+defaults:
 
 ```bash
-npx termfleet console serve --name dev --port 7373 &
-npx termfleet provider serve --kind virtual-tmux --prefix dev --count 1 --port 7402 &
+# pick a repo-unique prefix and a free port pair — NOT the box defaults 7373/7402
+TF_PREFIX="$(basename "$PWD")-oa"; TF_CONSOLE=7573; TF_PROVIDER=7602
+npx termfleet console serve --name "$TF_PREFIX" --port "$TF_CONSOLE" &
+npx termfleet provider serve --kind virtual-tmux --prefix "$TF_PREFIX" --count 1 --port "$TF_PROVIDER" &
+export TERMFLEET_PROVIDER_URL="http://127.0.0.1:$TF_PROVIDER"   # pin it — see "Pin the provider" below
 ```
+
+**Is a port really free?** Probe `/healthz` and read the BODY SHAPE — never the root path:
+
+```bash
+curl -sS "http://127.0.0.1:$TF_PROVIDER/healthz"
+```
+
+- `{"ok":true,"provider":"<kind>",...}` → an existing termfleet **provider** already holds that port.
+- `{"ok":true,"service":"console"}` → an existing termfleet **console** already holds it.
+- *any other* HTTP answer (including a plain 404 on `/`) → **something else** is occupying it.
+- only a **connection refused** means free.
+
+`curl -fsS http://127.0.0.1:$PORT/` (the `-f` + root-path form) **cannot** tell these apart: `-f` treats a
+provider's 404-on-`/` as failure too, so it reads an *occupied* port as *free* and a second `serve` on the
+same port then fails silently behind `&`. `npx --yes open-autonomy preflight` (step 1) runs this
+classification for you automatically, naming whatever it finds (kind + instance, or the occupying
+pid/command).
 
 Sanity-check that a session can launch (this is the same call the loop makes):
 
 ```bash
 npx termfleet claude new --prompt "say hello"
-npx termfleet sessions recent --live
 ```
 
-If that prints a session, termfleet + your agent CLI are wired correctly. Open
-<http://127.0.0.1:7373> for the optional visual console.
+`termfleet sessions recent` is **user-global** — it lists every project's sessions on this box (it reads
+the coding harness's own `~/.claude/projects` transcript index), not just yours. Filter to what you
+started, and use `--live` for the real-time view:
+
+```bash
+npx termfleet sessions recent --live --prefix "$TF_PREFIX"
+```
+
+Open `http://127.0.0.1:7573` (or whichever `$TF_CONSOLE` port you chose) for the optional visual console.
+
+#### Pin the provider
+
+`TERMFLEET_PROVIDER_URL` is not just a tiebreaker for an ambiguous auto-discovery — on a **shared or
+lived-in box it is required**. A termfleet provider can launch terminal sessions **as your user, box-wide**;
+an unpinned loop resolves its provider through a chain that can silently pick up someone else's: `--url`
+flag → `TERMFLEET_PROVIDER_URL` → a machine-global `termfleet use` context in `~/.termfleet/current.json`
+(set by **any** project on the box) → zero-config auto-discovery over every advertised local provider
+(`~/.termfleet/providers/*.json`). Export the pin as above, or make it **durable** — survives new shells,
+supervisors, and re-runs — by compiling it into the schedule:
+
+```bash
+npx open-autonomy compile simple-sdlc local . --provider-url "$TERMFLEET_PROVIDER_URL"
+```
+
+This writes the pin into `scheduler/schedule.json`'s `env`, so every tick (and every session it launches)
+carries it. An ambient `TERMFLEET_PROVIDER_URL` still **overrides** the compiled pin at runtime (the
+documented TERMFLEET_* override doctrine, unchanged) — and both the loop driver and the runner backend
+print one line naming the **effective provider URL and its source** (`env` / `schedule` / `current-context`
+/ `auto-local`) on the first tick, so a misattachment is visible immediately instead of silent.
 
 > termfleet is loopback-only by default and makes no outbound requests unless you configure a
-> registry — fine for a single closed-source machine. Keep the console/provider ports (7373/7402 above)
-> bound to loopback: anyone who can reach the provider can launch terminal sessions **as your user**, so
-> never bind or port-forward them to a non-local interface.
+> registry — fine for a single closed-source machine. Keep the console/provider ports bound to loopback:
+> anyone who can reach the provider can launch terminal sessions **as your user**, so never bind or
+> port-forward them to a non-local interface.
 
 ### 3. Compile a profile into your repo
 
@@ -456,8 +503,15 @@ The agent loop is the same everywhere; a few controls vary by **axis** (runner �
   `ztrack issue view` shows items and that they're in a state the PM can advance.
 - **Wrong agent launches** — set `TERMFLEET_AGENT=claude` or `=codex` explicitly; the default is
   `claude`.
-- **Pin a specific provider** — if auto-discovery picks the wrong one, set `TERMFLEET_PROVIDER_URL`
-  to your provider's URL before running the loop.
+- **Pin a specific provider (required on a shared/lived-in box)** — set `TERMFLEET_PROVIDER_URL` to your
+  own provider's URL before running the loop, or make it durable across shells/supervisors/re-runs with
+  `npx open-autonomy compile <profile> local . --provider-url <url>` (lands in `scheduler/schedule.json`).
+  The loop driver and the runner backend print the effective provider + its source (`env` / `schedule` /
+  `current-context` / `auto-local`) on the first tick — check that line first if you suspect misattachment.
+- **`preflight` names a foreign occupant on 7373/7402** — a pre-existing termfleet (or anything else) may
+  already hold the doc-default ports on this box; `npx --yes open-autonomy preflight` classifies each
+  candidate port (free / termfleet provider / termfleet console / foreign service) and prescribes a
+  repo-unique port + pin.
 
 ---
 

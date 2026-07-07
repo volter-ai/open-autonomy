@@ -50,7 +50,7 @@ switch (sub) {
     // bin/preflight.test.ts can import its extracted check functions directly without triggering a
     // top-level `process.exit()` as a side effect of loading the module.
     const { runPreflightCli } = await import('./preflight.ts');
-    runPreflightCli();
+    await runPreflightCli();
     break;
   }
   case 'doctor':

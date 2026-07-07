@@ -23,9 +23,23 @@ export class TermfleetRunner {
   harness = process.env.TERMFLEET_AGENT || RUNNER_DEFAULTS.harness; // claude|codex|gemini — the coding CLI, not our agent
   #clientPromise;
   #client() {
-    return (this.#clientPromise ??= resolveDefaultProvider({ url: process.env.TERMFLEET_PROVIDER_URL }).then(
-      (p) => new ProviderClient(providerRefFromUrl(p.baseUrl)),
-    ));
+    return (this.#clientPromise ??= resolveDefaultProvider({ url: process.env.TERMFLEET_PROVIDER_URL }).then((p) => {
+      // OA-09: log the effective provider + its origin on first resolve. The loop driver's own startup line
+      // (emit.ts's LOOP_DRIVER) only covers processes it launches directly; a NESTED launch (the PM's own
+      // `runner.ts launch developer ...`, or anyone driving this backend directly) resolves independently
+      // and needs its own visibility. AUTONOMY_PROVIDER_URL_SOURCE (set by the loop driver, and re-exported
+      // into every launched session's env below via the TERMFLEET_.*|AUTONOMY.* filter) distinguishes
+      // `schedule` (the durable compile-time pin) from `env` (a genuine ambient override) when
+      // TERMFLEET_PROVIDER_URL is set — both look identical here since schedule.env is already merged into
+      // process.env by the time this runs (emit.ts's fireTick), so the hint is the only way to tell them
+      // apart; `env` is the safe default when the hint is absent (e.g. this backend driven directly, outside
+      // the loop). Unpinned, the SDK's own `source` (current-context | auto-local) is used verbatim.
+      const source = process.env.TERMFLEET_PROVIDER_URL ? process.env.AUTONOMY_PROVIDER_URL_SOURCE || 'env' : p.source;
+      // stderr, never stdout — `list`/`launch`'s CLI output is a single JSON line on stdout that callers
+      // (including this repo's own tests) parse directly; a diagnostic line ahead of it would corrupt that.
+      console.error(`[runner] provider ${p.baseUrl} (${source})`);
+      return new ProviderClient(providerRefFromUrl(p.baseUrl));
+    }));
   }
 
   async launch(agent, params = {}) {

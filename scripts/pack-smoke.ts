@@ -17,7 +17,7 @@
 // SAFETY: every scratch dir here comes from `mkdtempSync` — never widen a cleanup `rm` to a raw
 // shell-interpolated variable that could resolve empty; `fs.rmSync` only ever targets a path this script
 // itself just received back from `mkdtempSync`.
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { spawnSync, type SpawnSyncReturns } from 'node:child_process';
@@ -170,6 +170,28 @@ function cli(args: string[], cwd: string): SpawnSyncReturns<string> {
   const r = cli(['compile', 'simple-gh-sdlc', 'gh-actions', '.'], dir);
   if (r.status !== 0) fail('compile simple-gh-sdlc gh-actions .', `exit ${r.status}\n${r.stdout}\n${r.stderr}`);
   else ok('compile simple-gh-sdlc gh-actions .');
+}
+
+// ---------- compile soc2-baseline gh-actions . — the RUNTIME read of dist/egress-guard.sh ----------
+// soc2-baseline is the only bundled profile that sets policy.box.gh-actions.private_egress_guard, so this
+// is the one verb in the matrix that actually READS dist/egress-guard.sh at runtime and emits it into the
+// install (the other compiles exercise only the packaging/manifest layers). A present-but-corrupt or
+// absent file fails HERE even if the tarball manifest above looked fine.
+{
+  const dir = join(installDir, 'ac-gh-soc2');
+  mkdirSync(dir, { recursive: true });
+  const r = cli(['compile', 'soc2-baseline', 'gh-actions', '.'], dir);
+  const emitted = join(dir, 'scripts', 'egress-guard.sh');
+  if (r.status !== 0) fail('compile soc2-baseline gh-actions .', `exit ${r.status}\n${r.stdout}\n${r.stderr}`);
+  else if (!existsSync(emitted)) fail('compile soc2-baseline gh-actions .', 'emitted scripts/egress-guard.sh missing');
+  else {
+    const emittedSrc = readFileSync(emitted, 'utf8');
+    const shipped = readFileSync(join(pkgRoot, 'dist', 'egress-guard.sh'), 'utf8');
+    if (!emittedSrc.trim()) fail('compile soc2-baseline gh-actions .', 'emitted scripts/egress-guard.sh is empty');
+    else if (emittedSrc !== shipped)
+      fail('compile soc2-baseline gh-actions .', 'emitted scripts/egress-guard.sh differs from the shipped dist/egress-guard.sh');
+    else ok('compile soc2-baseline gh-actions . — runtime read of dist/egress-guard.sh, emitted byte-equal');
+  }
 }
 
 // ---------- lint <bundled hello profile> ----------

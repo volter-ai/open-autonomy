@@ -79,9 +79,14 @@ try {
 } catch (e) {
   // A lazy sibling-data read (emit.ts) throws an actionable packaging-bug Error naming the missing file —
   // surface just that message, not a raw Node stack trace, so a corrupted/partial install fails LOUDLY but
-  // legibly (never a bare unhandled-exception dump).
-  console.error((e as Error).message ?? String(e));
-  process.exit(1);
+  // legibly. ONLY that known, self-describing error class gets the message-only treatment: anything else
+  // (a TypeError inside a compiler, an empty-message Error) is a genuine bug whose stack must survive for
+  // diagnosis — rethrow it unchanged.
+  if (e instanceof Error && e.message.startsWith('open-autonomy: packaging bug')) {
+    console.error(e.message);
+    process.exit(1);
+  }
+  throw e;
 }
 
 // Pre-materialize validation: every skill dir + resource file the compile will copy must exist BEFORE any

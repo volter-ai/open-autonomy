@@ -124,8 +124,11 @@ function parseJoinLiteralArgs(src: string, openParenIdx: number): string[] | und
 // INSTALL's scheduler/, not this module). Those template bodies can themselves contain the sibling-read
 // idiom (that generated script has its own, unrelated import.meta.url) — a plain text scan would mistake
 // that for a real module-scope read here. Compute the character ranges covered by backtick template
-// literal BODIES (skipping escaped backticks/`${` so an inner escaped template doesn't end the range
-// early) so matches inside them can be excluded.
+// literal BODIES so matches inside them can be excluded. Escaped backticks (\`) inside a body are skipped
+// so an escaped inner template doesn't end the range early. NOTE: `${…}` interpolations are NOT specially
+// handled — an interpolation's expression text is treated as part of the literal body (i.e. also excluded
+// from the scan). That is sufficient for the current codebase: no real sibling read lives inside a
+// template interpolation, and a nested backtick inside `${…}` would mis-split ranges — none exist today.
 function templateLiteralRanges(src: string): Array<[number, number]> {
   const ranges: Array<[number, number]> = [];
   let i = 0;

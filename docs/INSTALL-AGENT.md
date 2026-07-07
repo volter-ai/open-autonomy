@@ -434,8 +434,11 @@ Phase 4 proves *one* merge. For the loop to actually run a backlog over days, se
 ### Re-running / repairing the install (it is only partly idempotent)
 
 - **`ztrack init` is a silent no-op if `.volter/` already exists** — it will NOT (re)apply `--sync github`.
-  Never run a bare `ztrack init` first (OA's compile next-steps hint shows one); if the GitHub link is
-  missing, fix `.volter/config` directly rather than re-running init.
+  (OA's compile next-steps hint has been preset-aware since BL-29 — it never prints a bare `ztrack init` —
+  but the no-op itself is ztrack's behavior regardless of which command names the preset.) The canonical
+  statement of this caveat is the local-git quickstart's inline warning,
+  `docs/OPERATIONS.md#local-runner-quickstart` step 5 (right after its `ztrack init` line) — read it there;
+  if the GitHub link is missing, fix `.volter/config` directly rather than re-running init.
 - **Re-running `compile` regenerates the harness files** (scripts/, .claude/skills/, .open-autonomy/, …) —
   but two collision classes are now GUARDED, not silent (OA-10): (1) `.claude/settings.json` is
   **merged**, not overwritten (your `permissions` and other keys survive; only the Stop hook entry is

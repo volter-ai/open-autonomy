@@ -5,6 +5,7 @@ import { describe, expect, test } from 'bun:test';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { KNOWN_GOOD_ZTRACK } from './ztrack-preset.ts';
 
 const REPO_ROOT = join(import.meta.dir, '..');
 
@@ -152,6 +153,33 @@ describe('autonomy-compile — printed next-steps include the commit-the-harness
       // Everything the compile wrote is now committed — the working tree is clean.
       const st = Bun.spawnSync(['git', 'status', '--porcelain'], { cwd: dir, stdout: 'pipe' });
       expect(st.stdout.toString('utf8').trim()).toBe('');
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  }, 30_000);
+});
+
+// OA-12 (docs/adoption-fixes/OA-12-tracker-onboarding-docs-and-compile-hint.md, AC-4): the tracker step of
+// the printed next-steps must (a) pin the install to KNOWN_GOOD_ZTRACK instead of a bare `npm install -D
+// ztrack` (version-drift: `npx` can resolve a different major than the repo's pin), (b) never print a bare
+// non-conforming `npx ztrack issue create` (no --title/--assignee/AC body) — only a pointer at the
+// conforming form, and (c) mention the `.volter/`-exists no-op so an adopter with tracker history doesn't
+// assume a silent no-op init actually did something.
+describe('autonomy-compile — OA-12: tracker next-steps print pinned install + conforming pointer + no-op caveat', () => {
+  test('tracker profile (simple-sdlc, local): prints the pinned install, no bare issue-create, and the .volter/ caveat', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'oa12-nextsteps-sdlc-'));
+    try {
+      const r = compile(['simple-sdlc', 'local', dir]);
+      expect(r.exitCode).toBe(0);
+      expect(r.stdout).toContain(`npm install -D ztrack@${KNOWN_GOOD_ZTRACK}`);
+      // Never a bare, non-conforming create — only the conforming-fields pointer.
+      expect(r.stdout).not.toContain('`npx ztrack issue create`');
+      expect(r.stdout).toContain('a conforming issue needs --title, --assignee');
+      expect(r.stdout).toContain('## Acceptance Criteria');
+      expect(r.stdout).toContain('docs/OPERATIONS.md#local-runner-quickstart step 5');
+      // The .volter/-exists no-op caveat.
+      expect(r.stdout).toContain('.volter/ exists');
+      expect(r.stdout).toContain('.volter/config');
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }

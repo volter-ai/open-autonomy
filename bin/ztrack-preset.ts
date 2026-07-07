@@ -3,6 +3,15 @@
 // backs (bin/autonomy-compile.ts) executes on import.
 import type { AutonomyIR } from '@open-autonomy/core';
 
+// OA-12 (F-11, version drift): the ztrack version this open-autonomy release is tested against — the
+// SAME version pinned in this package's own `package.json` devDependency. Docs (docs/OPERATIONS.md) and
+// the compile next-steps hint (bin/autonomy-compile.ts) both render this constant instead of leaving a
+// bare `npm install -D ztrack` / `npx ztrack` to resolve whatever `latest` happens to be at install time
+// (the audit: `npx` fetched `ztrack@1.0.0` into a repo pinned to `0.47.1` — two majors of skew). Kept in
+// sync with `package.json`'s `ztrack` devDependency by an assertion in `bin/ztrack-preset.test.ts` — bump
+// both together.
+export const KNOWN_GOOD_ZTRACK = '1.0.0';
+
 export interface ZtrackPresetResolution {
   presetName: string;
   /** Set only when the resolution fell back to the directory basename AND that basename isn't a known

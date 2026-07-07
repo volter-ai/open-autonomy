@@ -42,7 +42,8 @@ steps 1–5 (shared) vs step 6 (per code host) below.
 > only OA-specific files (`scripts/`, `.claude/skills/`, `.claude/settings.json`, `scheduler/`,
 > `.open-autonomy/`, `standards/`, `.github/workflows/merge.yml`), so `compile … .` is purely additive — it
 > does **not** generate a `package.json`, `README`, or `.gitignore` over yours. You still merge the runner's
-> deps into your repo (`npm install termfleet`, `npm install -D ztrack`) — step 1 below. The OA files are
+> deps into your repo (`npm install termfleet`, `npm install -D ztrack@1.0.0` — pin the version this
+> open-autonomy release is tested against) — step 1 below. The OA files are
 > **committed** to the repo (the agents run in git worktrees, which only see committed files — it's how OA
 > maintains itself) — see quickstart [step 4, "Commit the harness"](#4-commit-the-harness).
 > `.claude/settings.json` wires a Claude Code Stop hook that runs in **every** Claude Code session in this
@@ -349,16 +350,45 @@ work and how a change lands depends on the code host** you compiled in step 3.
 The agents read work from a local **ztrack** board on disk:
 
 ```bash
-npm install -D ztrack                       # a PROJECT dep, not -g: the installed validation preset
+npm install -D ztrack@1.0.0                 # a PROJECT dep, not -g: the installed validation preset
                                             # `import`s `ztrack/preset-kit`, so it must resolve from the
                                             # repo — a global/npx install fails `ztrack check`.
+                                            # PINNED — the version this open-autonomy release is tested
+                                            # against; a floating `npx ztrack` may fetch a different major
+                                            # than your repo's pin (see package.json's own devDependency).
                                             # NODE_ENV=production / npm omit=dev makes this a silent no-op
-                                            # (exits 0, installs NOTHING) — use: npm install -D ztrack --include=dev
+                                            # (exits 0, installs NOTHING) — use: npm install -D ztrack@1.0.0 --include=dev
                                             # (works on every omit source; NODE_ENV=development only helps when
                                             # NODE_ENV is the cause)
 npx ztrack init --preset simple-sdlc        # the PR-free dev preset (the `default`); no remote needed
-npx ztrack issue create --title "Wire the widget"   # add a work item (repeat for each task; --title is required)
 ```
+
+> **Already has `.volter/`?** (a repo with prior tracker history.) `ztrack init` is a **silent no-op** when
+> `.volter/` already exists — it prints "Already initialized" and changes nothing, even if the existing
+> config uses a different preset. Inspect `.volter/config`: if the installed preset is not `simple-sdlc`,
+> decide deliberately (migrate the board, or fork the profile to match your preset) **before** running the
+> loop — don't assume the bare `init` above did anything. New issues may also mint a different team key
+> (e.g. `LOCAL-`) beside an existing scheme (e.g. `TF-`) — a ztrack behavior; see its docs.
+
+```bash
+# a conforming work item: the preset REQUIRES an assignee, and the body needs "## Acceptance Criteria"
+# with each AC line carrying a version marker (`dev/01 v1 …`, per standards/issue-and-evidence.md's
+# grammar — omitting it fails `ztrack check`'s wellformed_shape gate even with an assignee set).
+# (an unassigned/AC-less issue is still created but flagged non-conforming — issue_missing_assignee — and
+# the loop's gates key on conformance; see standards/issue-and-evidence.md)
+cat > issue.md <<'MD'
+## Acceptance Criteria
+- [ ] dev/01 v1 <one observable, testable outcome>
+  - status: pending
+MD
+npx ztrack issue create --title "Wire the widget" --assignee <your-login> --body-file issue.md --label oa-approved
+```
+
+> `issue_missing_assignee` means exactly what it says: the preset requires every non-canceled issue to
+> carry an assignee (`standards/issue-and-evidence.md`), and the loop's gates key on conformance — an
+> unassigned issue is created but never eligible for dispatch. Already created one without `--assignee`?
+> Fix it in place: `npx ztrack issue edit <id> --assignee <your-login>`. (`--label oa-approved` pre-clears
+> `policy.dispatch`'s allowlist below — drop the flag if your install predates it.)
 
 The `simple-sdlc` preset is **PR-free**: an issue is `done` once every AC is passed with commit-evidence
 and the reviewer approves — no pull request, so it works on a private repo with no remote. On its next
@@ -388,9 +418,9 @@ Here the board is **GitHub issues** and a change lands as an **auto-merging PR**
 
 ```bash
 # a) the tracker, linked to GitHub Issues (GitHub is the source of truth)
-npm install -D ztrack    # or: bun add -d ztrack
+npm install -D ztrack@1.0.0    # or: bun add -d ztrack@1.0.0   (pinned to the version this release is tested against)
                          # NODE_ENV=production / npm omit=dev makes this a silent no-op (exits 0, installs
-                         # NOTHING) — use: npm install -D ztrack --include=dev (works on every omit source)
+                         # NOTHING) — use: npm install -D ztrack@1.0.0 --include=dev (works on every omit source)
 npx ztrack init --preset simple-gh-sdlc --sync github --repo <owner>/<repo>
 
 # b) require the gate in branch protection (NOT auto-merge yet — that comes after a supervised first merge,

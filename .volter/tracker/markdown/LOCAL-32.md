@@ -1,13 +1,13 @@
 ---
 identifier: "LOCAL-32"
 title: "OA-03: quickstart commit-the-harness step + uncommitted-harness guard in the loop driver"
-state: "draft"
+state: "ready"
 stateType: "open"
 assignees: ["tony"]
 priority: 0
 devProgress: ""
 createdAt: "2026-07-06T12:58:16.472Z"
-updatedAt: "2026-07-06T12:58:16.472Z"
+updatedAt: "2026-07-07T06:50:51.388Z"
 url: "local://tracker/issue/LOCAL-32"
 ---
 Assignee: tony
@@ -17,7 +17,7 @@ The OPERATIONS.md local quickstart (steps 1-5) never instructs committing the co
 Spec: docs/adoption-fixes/OA-03-quickstart-commit-step-and-uncommitted-harness-guard.md — authored by Fable 5; build against it (verified file:line root cause, fix spec, alternatives, full numbered ACs).
 Priority: P0 | Fix target: open-autonomy
 Coordinate with: OA-08 (complementary last-line-of-defense), OA-16 (checklist canonicalizes the step)
-Blocked by: LOCAL-31 (OA-02 — defines that committed-locally is sufficient; else this step would have to say push)
+Unblocked 2026-07-07: LOCAL-31 (OA-02) done — committed-locally is sufficient for local-git worktrees.
 Provenance: OA-INSTALL-AUDIT-FINDINGS.md F-3 (§2 P0) + narrative §1 step 14.
 
 ## Acceptance Criteria

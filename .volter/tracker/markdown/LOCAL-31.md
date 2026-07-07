@@ -1,13 +1,13 @@
 ---
 identifier: "LOCAL-31"
 title: "OA-02: local-git worktrees must base on local trunk, never fetched origin/<trunk> (fully-local guarantee)"
-state: "ready"
-stateType: "open"
+state: "done"
+stateType: "completed"
 assignees: ["tony"]
 priority: 0
 devProgress: ""
 createdAt: "2026-07-06T12:58:14.127Z"
-updatedAt: "2026-07-06T12:58:14.127Z"
+updatedAt: "2026-07-07T06:50:20.294Z"
 url: "local://tracker/issue/LOCAL-31"
 ---
 Assignee: tony
@@ -19,10 +19,12 @@ Priority: P0 | Fix target: open-autonomy
 Provenance: OA-INSTALL-AUDIT-FINDINGS.md F-2 (§2 P0, ARCHITECTURE VIOLATION — the product-owner framing in the report is binding) + narrative §1 step 15.
 
 ## Acceptance Criteria
-- [ ] dev/01 v1 a repo WITH a GitHub remote + a simple-sdlc install whose harness is committed locally but NOT pushed: a launched worker's worktree contains the harness (fails today — the worktree bases on stale origin state)
-  - status: pending
-- [ ] dev/02 v1 every numbered criterion in the spec's Acceptance criteria section is demonstrated: each fails before the fix and passes after, with command output as evidence
-  - status: pending
+- [x] dev/01 v1 a repo WITH a GitHub remote + a simple-sdlc install whose harness is committed locally but NOT pushed: a launched worker's worktree contains the harness (fails today — the worktree bases on stale origin state)
+  - status: done — proven fail-before/pass-after (proof: /workspace/proofs/oa-02.md AC-1/AC-2); pinned by a tamper-verified integration test (worktree-base.test.ts)
+- [x] dev/02 v1 every numbered criterion in the spec's Acceptance criteria section is demonstrated: each fails before the fix and passes after, with command output as evidence
+  - status: done — spec AC-1..AC-5 all demonstrated with command output; 5-link proof (diff review, independent re-run + demo, 2-panelist skeptic review incl. revert-probe, attestation)
+
+Close-out: merged to adoption-fixes-backlog @ f78ec72 (builder commits 924fc12 + fec5bd1). worktreeBase() exported pure helper + integration test discriminate the runtime gate (suite fails if the gate is reverted).
 
 <!--tracker:comments
 []

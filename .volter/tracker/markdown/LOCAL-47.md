@@ -17,7 +17,7 @@ A new read-only 'open-autonomy doctor' verb (new bin/doctor.ts; preflight stays 
 Spec: docs/adoption-fixes/OA-18-doctor-self-verifying-install.md — authored by Fable 5; build against it (verified file:line root cause, fix spec, alternatives, full numbered ACs).
 Priority: P0-adjacent (umbrella) | Fix target: open-autonomy
 Coordinate with: consumes OA-02's ensureWorktree probe export and OA-01's pack-smoke gate; checks 1-4 and 6 buildable in parallel with stubs
-Blocked by: LOCAL-30, LOCAL-31 (OA-01 — doctor from packed artifact; OA-02 — owns the ensureWorktree probe check 5 binds to)
+Blocked by: LOCAL-30 (OA-01 — doctor from packed artifact). LOCAL-31 (OA-02) done 2026-07-07 — ensureWorktree/worktreeBase seam landed for check 5 to bind to.
 Provenance: OA-INSTALL-AUDIT-FINDINGS.md §5 verdict — the single biggest change.
 
 ## Acceptance Criteria

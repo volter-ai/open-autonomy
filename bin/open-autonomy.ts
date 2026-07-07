@@ -17,7 +17,7 @@ const HELP = `open-autonomy <command> [args]
 
   compile <profileName|profileDir> <local|gh-actions> [outDir]  compile a profile onto a substrate (dry run without outDir)
   lint <profileDir>                                             validate a profile of your own: parses + compiles to every declared target + checks skill/folder names, writes nothing
-  preflight                                                     make an adopter repo install-ready (node-pty rebuild + lockfile vs CI Node); run after installing the runner deps
+  preflight                                                     make an adopter repo install-ready (verifies termfleet's PTY module loads + lockfile vs CI Node); run after installing the runner deps
   harness-push [--repo o/r --branch b]                          push an OA harness/skill update past the enforce_admins gate (relax -> push -> restore)
   conformance <exec|termfleet|gh-actions> [probeAgent]          run the substrate conformance battery
   upgrade --profile <dir> --target <dir> [--apply]              re-compile an installation in place (dry run without --apply)
@@ -44,9 +44,14 @@ switch (sub) {
   case 'lint':
     await import('./lint-profile.ts');
     break;
-  case 'preflight':
-    await import('./preflight.ts');
+  case 'preflight': {
+    // preflight.ts wraps its driver in an exported runPreflightCli() (never auto-run on import) so
+    // bin/preflight.test.ts can import its extracted check functions directly without triggering a
+    // top-level `process.exit()` as a side effect of loading the module.
+    const { runPreflightCli } = await import('./preflight.ts');
+    runPreflightCli();
     break;
+  }
   case 'harness-push':
     await import('./harness-push.ts');
     break;

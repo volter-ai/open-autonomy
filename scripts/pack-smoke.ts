@@ -135,7 +135,12 @@ function cli(args: string[], cwd: string): SpawnSyncReturns<string> {
 {
   const r = cli(['--help'], installDir);
   if (r.status !== 0 || !(r.stdout || '').trim()) fail('--help', `exit ${r.status}\n${r.stdout}\n${r.stderr}`);
-  else ok('--help');
+  // OA-11 AC-6: the PACKED artifact's help must carry the corrected adoption hint — overlays first, the
+  // whole-repo scaffold labeled SCAFFOLD — not just the source tree. This is the one help check that would
+  // have caught 0.4.1's published tarball still shipping the pre-fix hint even after the source fix landed
+  // (a stale `dist/cli.js` built before the fix, or a build step that didn't pick it up).
+  else if (!/SCAFFOLD/.test(r.stdout || '')) fail('--help', `packed help missing "SCAFFOLD" label (OA-11):\n${r.stdout}`);
+  else ok('--help (OA-11: packed help says SCAFFOLD)');
 }
 
 // ---------- compile simple-sdlc local . — the audit's exact failing command ----------

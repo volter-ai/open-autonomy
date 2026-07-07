@@ -259,6 +259,8 @@ The agents read work from a local **ztrack** board on disk:
 npm install -D ztrack                       # a PROJECT dep, not -g: the installed validation preset
                                             # `import`s `ztrack/preset-kit`, so it must resolve from the
                                             # repo — a global/npx install fails `ztrack check`.
+                                            # NODE_ENV=production makes this a silent no-op (npm omits
+                                            # devDependencies) — use: NODE_ENV=development npm install -D ztrack
 npx ztrack init --preset simple-sdlc        # the PR-free dev preset (the `default`); no remote needed
 npx ztrack issue create --title "Wire the widget"   # add a work item (repeat for each task; --title is required)
 ```
@@ -292,6 +294,8 @@ Here the board is **GitHub issues** and a change lands as an **auto-merging PR**
 ```bash
 # a) the tracker, linked to GitHub Issues (GitHub is the source of truth)
 npm install -D ztrack    # or: bun add -d ztrack
+                         # NODE_ENV=production makes this a silent no-op (npm omits devDependencies) —
+                         # use: NODE_ENV=development npm install -D ztrack
 npx ztrack init --preset simple-gh-sdlc --sync github --repo <owner>/<repo>
 
 # b) require the gate in branch protection (NOT auto-merge yet — that comes after a supervised first merge,

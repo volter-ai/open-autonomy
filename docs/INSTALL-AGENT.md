@@ -188,11 +188,14 @@ the repo root. **Order matters: commit the harness first, wire the gate last.**
 # 1. Runner deps IN this repo (use the detected PM — do NOT npm-install into a bun/pnpm repo):
 npm install termfleet            # or: bun add termfleet
 npm install -D ztrack            # or: bun add -d ztrack    (a PROJECT dep so its preset resolves)
+#    NODE_ENV=production makes the -D install a silent no-op (npm omits devDependencies, exits 0, installs
+#    nothing) — use: NODE_ENV=development npm install -D ztrack
 #    Then make the environment install-ready — `preflight` does this STRUCTURALLY so you never hit the
 #    install-time gotchas: it verifies termfleet's PTY native module loads (rebuilding only if needed —
 #    the provider can't start otherwise), and verifies `npm ci` under the repo's *CI Node version* —
 #    regenerating package-lock.json if adding the deps desynced it (which `npm run build` won't catch
 #    locally, but the first agent PR's CI would). If it regenerates the lock, commit it (step 5 stages it).
+#    `preflight` (below) also now checks for this NODE_ENV/omit condition mechanically.
 npx --yes open-autonomy preflight
 
 # 2. The overlay — additive; generates NO package.json/README/.gitignore over the repo (`--yes` so a cold

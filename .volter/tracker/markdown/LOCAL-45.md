@@ -1,13 +1,13 @@
 ---
 identifier: "LOCAL-45"
 title: "OA-16: one canonical Local install checklist — de-strand the load-bearing facts"
-state: "draft"
+state: "ready"
 stateType: "open"
 assignees: ["tony"]
 priority: 0
 devProgress: ""
 createdAt: "2026-07-06T12:58:47.593Z"
-updatedAt: "2026-07-06T12:58:47.593Z"
+updatedAt: "2026-07-07T13:37:09.447Z"
 url: "local://tracker/issue/LOCAL-45"
 ---
 Assignee: tony
@@ -16,7 +16,7 @@ Seven load-bearing install facts each live in exactly one of three overlapping d
 
 Spec: docs/adoption-fixes/OA-16-canonical-local-install-checklist.md — authored by Fable 5; build against it (verified file:line root cause, fix spec, alternatives, full numbered ACs).
 Priority: P2 | Fix target: open-autonomy
-Blocked by: LOCAL-38, LOCAL-42, LOCAL-43 (OA-09/OA-13/OA-14 — the checklist canonicalizes their corrected text)
+Unblocked 2026-07-07: LOCAL-38 (OA-09), LOCAL-42 (OA-13), LOCAL-43 (OA-14) all done — OA-16 canonicalizes their corrected text against the finalized docs.
 Provenance: OA-INSTALL-AUDIT-FINDINGS.md F-15 (§2 P2) + narrative §1 phase 1.
 
 ## Acceptance Criteria

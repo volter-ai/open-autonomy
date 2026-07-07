@@ -253,21 +253,32 @@ function ensureRunnerPathsIgnored(): void {
   }
 }
 
-function ensureWorktree(branch: string, worktree: string): void {
+/** The base ref for a NEW agent branch: a function of the DECLARED code host (F-2/OA-02), never of repo
+ *  shape (never "does a remote exist" or "does a fetch succeed"). github + a resolvable origin/<trunk> ->
+ *  that remote-tracking ref (remote merges make local HEAD stale — see ensureWorktree's comment); every
+ *  other case (local-git, or an undeclared codeHost, or origin/<trunk> unresolved) -> local HEAD. Exported
+ *  and pure so it's unit-testable without a live termfleet stack — mirrors the `mergeInFlight` pattern. */
+export function worktreeBase(codeHost: string, originTrunkResolves: boolean, trunk: string): string {
+  return codeHost === 'github' && originTrunkResolves ? `origin/${trunk}` : 'HEAD';
+}
+
+function ensureWorktree(branch: string, worktree: string, codeHost: string): void {
   if (existsSync(worktree)) return;
   ensureRunnerPathsIgnored();
   mkdirSync(dirname(worktree), { recursive: true });
   const branchExists = git(['rev-parse', '--verify', '--quiet', branch]).status === 0;
-  // Base a NEW agent branch on the FRESHEST default branch, not the local HEAD. The local trunk goes stale as
-  // agent PRs auto-merge on the REMOTE (this loop never pulls them back), so branching from HEAD builds on
-  // outdated code and the PR conflicts with what actually merged. Fetch the trunk and branch from
-  // origin/<trunk> when a remote-tracking ref exists (a GitHub code host); fall back to HEAD for a remoteless
-  // local-git repo (where there is no such drift — the PM lands work locally).
+  // The base of a NEW agent branch is a function of the DECLARED code host (F-2/OA-02), never of whether a
+  // remote happens to exist. github: a finished branch becomes a PR and auto-merges on the REMOTE (this loop
+  // never pulls it back), so the local trunk goes stale — fetch the trunk and branch from origin/<trunk> when
+  // that remote-tracking ref resolves. local-git (or an undeclared codeHost): the PM merges worktrees into the
+  // LOCAL trunk directly, so it is the sole authoritative trunk and origin/<trunk> is at best stale, at worst
+  // foreign state — branch from local HEAD, and perform NO fetch (no network operation at all), preserving the
+  // fully-local guarantee ("GitHub is not needed") even when the repo happens to have a GitHub-shaped remote.
   let base = 'HEAD';
-  if (!branchExists) {
+  if (!branchExists && codeHost === 'github') {
     const trunk = git(['symbolic-ref', '--short', 'HEAD']).stdout.trim() || 'main';
     git(['fetch', 'origin', trunk]); // best-effort: a no-op (non-zero) without a remote
-    if (git(['rev-parse', '--verify', '--quiet', `origin/${trunk}`]).status === 0) base = `origin/${trunk}`;
+    base = worktreeBase(codeHost, git(['rev-parse', '--verify', '--quiet', `origin/${trunk}`]).status === 0, trunk);
   }
   const add = branchExists ? ['worktree', 'add', worktree, branch] : ['worktree', 'add', '-b', branch, worktree, base];
   const r = git(add);
@@ -313,7 +324,10 @@ export async function launch(agent: string, params: LaunchParams = {}): Promise<
   // ignores `--branch`, so the same PM launch is substrate-agnostic.)
   const branch = typeof params.branch === 'string' && params.branch ? params.branch : '';
   const worktree = branch ? worktreePathFor(branch) : '';
-  if (branch) ensureWorktree(branch, worktree);
+  // Read the declared code host ONCE per launch and reuse it for both decisions it gates: the worktree base
+  // (below) and the post-session propose effect (below, at the github-only branch).
+  const codeHost = manifestCodeHost();
+  if (branch) ensureWorktree(branch, worktree, codeHost);
   const names = Object.keys(params).filter((k) => k !== 'branch');
   const env: Record<string, string> = {
     ...(process.env as Record<string, string>),
@@ -328,7 +342,7 @@ export async function launch(agent: string, params: LaunchParams = {}): Promise<
   // the install's code host is `github` (where finished branches become PRs). Capture the launch output to
   // learn the session's terminalId (the join key the reaper reports back); every other launch (the PM, the
   // drafter, a local-git worker, the reviewer) stays live (stdio inherit).
-  if (worktree && manifestCodeHost() === 'github') {
+  if (worktree && codeHost === 'github') {
     const r = spawnSync('node', [join(scriptsDir, 'run-agent.mjs')], { encoding: 'utf8', env, cwd: worktree });
     if (r.stdout) process.stdout.write(r.stdout);
     if (r.stderr) process.stderr.write(r.stderr);

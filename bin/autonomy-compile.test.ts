@@ -176,10 +176,10 @@ describe('autonomy-compile — OA-12: tracker next-steps print pinned install + 
       expect(r.stdout).not.toContain('`npx ztrack issue create`');
       expect(r.stdout).toContain('a conforming issue needs --title, --assignee');
       expect(r.stdout).toContain('## Acceptance Criteria');
-      expect(r.stdout).toContain('docs/OPERATIONS.md#local-runner-quickstart step 5');
+      expect(r.stdout).toContain('docs/OPERATIONS.md#local-runner-quickstart step 6');
       // The .volter/-exists no-op caveat.
       expect(r.stdout).toContain('.volter/ exists');
-      expect(r.stdout).toContain('.volter/config');
+      expect(r.stdout).toContain('.volter/tracker-config.json');
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }

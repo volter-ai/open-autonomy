@@ -365,7 +365,7 @@ npx ztrack init --preset simple-sdlc        # the PR-free dev preset (the `defau
 
 > **Already has `.volter/`?** (a repo with prior tracker history.) `ztrack init` is a **silent no-op** when
 > `.volter/` already exists — it prints "Already initialized" and changes nothing, even if the existing
-> config uses a different preset. Inspect `.volter/config`: if the installed preset is not `simple-sdlc`,
+> config uses a different preset. Inspect `.volter/tracker-config.json`: if the installed preset is not `simple-sdlc`,
 > decide deliberately (migrate the board, or fork the profile to match your preset) **before** running the
 > loop — don't assume the bare `init` above did anything. New issues may also mint a different team key
 > (e.g. `LOCAL-`) beside an existing scheme (e.g. `TF-`) — a ztrack behavior; see its docs.

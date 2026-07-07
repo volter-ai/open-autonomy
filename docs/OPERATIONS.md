@@ -1,7 +1,8 @@
 # Operating Open Autonomy
 
-> Documentation for **open-autonomy v0.4** (`npm install open-autonomy@^0.4.1`). Older packages: use
-> the docs at that version's tag, e.g. `blob/v0.3.1/`. (Machine-checked: `bun run check:release-consistency`.)
+> Documentation for **open-autonomy v0.4** — the doc-version marker (machine-checked by
+> `bun run check:release-consistency`). npm `0.4.0`/`0.4.1` are known-broken on `compile` (OA-01/F-1);
+> install `0.4.2+` once published. Older docs: read them at their version tag, e.g. `blob/v0.4.0/`.
 
 > **The operator/maintainer how-to doc.**
 >

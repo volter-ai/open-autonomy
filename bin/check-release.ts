@@ -20,13 +20,21 @@ export interface Semver {
 }
 
 export function parseSemver(v: string): Semver | null {
-  const m = /^(\d+)\.(\d+)\.(\d+)/.exec(v.trim());
+  // $-anchored (skeptic nit b): reject anything with trailing junk (e.g. a prerelease/build suffix a
+  // release commit shouldn't carry) instead of silently capturing a leading X.Y.Z and ignoring the rest.
+  const m = /^(\d+)\.(\d+)\.(\d+)$/.exec(v.trim());
   if (!m) return null;
   return { major: Number(m[1]), minor: Number(m[2]), full: v.trim() };
 }
 
 // Docs that must carry the "written for" stamp (part 2 of the spec) — machine-checked here.
 export const STAMPED_DOCS = ['README.md', 'docs/OPERATIONS.md', 'docs/INSTALL-AGENT.md'];
+// The profile-carried version.json mirror that actually SHIPS bundled into every compiled install
+// (profiles/self-driving/.open-autonomy/version.json → dist/profiles/… in the tarball). It must be
+// gate-checked here too, not only by check:dogfood — dogfood is NOT in prepublishOnly, so without this
+// a mirror-only skew would sail through `npm publish` and ship a lying version into installs (skeptic
+// FIX 3). This IS the file OPERATIONS' "a stale artifact cannot ship" claim is about.
+export const PROFILE_MIRROR_VERSION_JSON = 'profiles/self-driving/.open-autonomy/version.json';
 const STAMP_RE = /Documentation for \*\*open-autonomy v(\d+)\.(\d+)\*\*/;
 const CHANGELOG_HEADING_RE = /^## (\d+\.\d+\.\d+)\b/m;
 
@@ -36,6 +44,7 @@ export function checkReleaseConsistencyText(files: {
   packageJson: string;
   versionFile: string;
   versionJson: string;
+  profileMirrorVersionJson?: string;
   changelog: string;
   docs: Record<string, string | undefined>;
 }): string[] {
@@ -66,8 +75,27 @@ export function checkReleaseConsistencyText(files: {
   }
   if (versionJson.version !== pkgVersion) {
     failures.push(
-      `.open-autonomy/version.json ("${versionJson.version ?? '<missing>'}") != package.json version ("${pkgVersion}") — bump it (and its dogfood mirror, profiles/self-driving/.open-autonomy/version.json) to match`,
+      `.open-autonomy/version.json ("${versionJson.version ?? '<missing>'}") != package.json version ("${pkgVersion}") — bump it (and its dogfood mirror, ${PROFILE_MIRROR_VERSION_JSON}) to match`,
     );
+  }
+
+  // The profile mirror — the file that actually ships. Checked here so prepublishOnly (which does NOT
+  // run check:dogfood) still catches a mirror-only skew before the tarball is built.
+  if (files.profileMirrorVersionJson !== undefined) {
+    let mirror: { version?: string };
+    try {
+      mirror = JSON.parse(files.profileMirrorVersionJson);
+    } catch {
+      failures.push(`${PROFILE_MIRROR_VERSION_JSON}: not valid JSON`);
+      mirror = {};
+    }
+    if (mirror.version !== pkgVersion) {
+      failures.push(
+        `${PROFILE_MIRROR_VERSION_JSON} ("${mirror.version ?? '<missing>'}") != package.json version ("${pkgVersion}") — bump the SHIPPED profile mirror to match`,
+      );
+    }
+  } else {
+    failures.push(`${PROFILE_MIRROR_VERSION_JSON}: file not found (the shipped version mirror)`);
   }
 
   const headingMatch = CHANGELOG_HEADING_RE.exec(files.changelog);
@@ -138,7 +166,15 @@ export function checkReleaseConsistency(root: string = process.cwd()): string[] 
   }
   const docs: Record<string, string | undefined> = {};
   for (const doc of STAMPED_DOCS) docs[doc] = readMaybe(doc);
-  return checkReleaseConsistencyText({ packageJson, versionFile, versionJson, changelog, docs });
+  const profileMirrorVersionJson = readMaybe(PROFILE_MIRROR_VERSION_JSON);
+  return checkReleaseConsistencyText({
+    packageJson,
+    versionFile,
+    versionJson,
+    profileMirrorVersionJson,
+    changelog,
+    docs,
+  });
 }
 
 if (import.meta.main) {

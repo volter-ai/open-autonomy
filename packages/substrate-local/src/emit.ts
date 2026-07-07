@@ -215,6 +215,55 @@ if (needsRunner) {
       process.exit(1);
     }
   }
+
+  // OA-09: log the EFFECTIVE provider URL + its ORIGIN once, before any tick fires — a misattachment (an
+  // ambient/current-context/foreign-auto-discovered provider silently taking this loop's launches) is now
+  // visible in the very first line of output instead of never. Origin is one of: \`env\` (an ambient
+  // TERMFLEET_PROVIDER_URL — beats everything else per the documented override doctrine), \`schedule\` (the
+  // durable --provider-url compile pin, this file's schedule.json env, above), \`current-context\` (a
+  // machine-global \`termfleet use\`), or \`auto-local\` (zero-config live discovery). The pin cases resolve
+  // with NO network call (mirrors resolveDefaultProvider's own \`if (url) return\` fast path below); only the
+  // unpinned branch calls the SDK's real discovery (reads ~/.termfleet + probes each candidate's /healthz).
+  //
+  // CRITICAL (skeptic-panel Blocker 2): this must be derived from the SAME effective values \`buildTickEnv\`
+  // passes to launched children, or the log LIES. A set-but-EMPTY ambient TERMFLEET_PROVIDER_URL (the
+  // \`VAR= node scheduler/run.mjs\` idiom) is falsy but was NOT unset — the old \`if (process.env.X)\` read it
+  // as "no pin -> use schedule", yet the tick's merge (\`Object.assign({}, schedule.env, process.env)\`) let
+  // that empty string OVERRIDE the schedule pin, so the child auto-discovered while this line claimed the pin
+  // held. Fix: TRIM both sides (empty/whitespace ⇒ unset), identically to buildTickEnv's normalization.
+  const ambientPin = (process.env.TERMFLEET_PROVIDER_URL || '').trim();
+  const schedulePin = ((schedule.env && schedule.env.TERMFLEET_PROVIDER_URL) || '').trim();
+  let providerUrl;
+  let providerSource;
+  if (ambientPin) {
+    providerUrl = ambientPin;
+    providerSource = 'env';
+  } else if (schedulePin) {
+    providerUrl = schedulePin;
+    providerSource = 'schedule';
+  } else {
+    try {
+      const { resolveDefaultProvider } = await import('@termfleet/core/local-providers.js');
+      const resolved = await resolveDefaultProvider({});
+      providerUrl = resolved.baseUrl;
+      providerSource = resolved.source;
+    } catch (e) {
+      console.error(\`[loop] provider: none resolved yet (\${e?.message ?? e}) — will be resolved (or fail loudly) at launch time.\`);
+    }
+  }
+  if (providerUrl) {
+    // stderr, matching this file's own convention for diagnostic lines (PAUSED/COLLISION above) — stdout
+    // here carries no structured output of its own, but keeping ALL of the loop's own log noise off stdout
+    // is what lets a future consumer safely pipe/parse this process's stdout.
+    console.error(\`[loop] provider \${providerUrl} (\${providerSource})\`);
+    // Re-export the ORIGIN as a hint (AUTONOMY_PROVIDER_URL_SOURCE) so a NESTED resolve — this tick's
+    // run-agent.mjs -> autonomy-runner.mjs, or the PM's own nested \`runner.ts launch developer ...\` —  can
+    // report the same schedule-vs-env distinction. By the time those processes run, schedule.env and
+    // process.env are already merged (fireTick below / runner-frontend.ts's own env spread), so this is the
+    // only point that still knows which side the pin came from. Matched by the AUTONOMY.* export filter in
+    // backend.mjs/runner.ts's launch(), so it also propagates transitively into launched agent sessions.
+    process.env.AUTONOMY_PROVIDER_URL_SOURCE = providerSource;
+  }
 }
 
 // The uncommitted-harness guard (OA-03): agents launched with \`--branch\` run in git WORKTREES, which
@@ -292,9 +341,26 @@ if (isGitRepo && existsSync(GENERATED_MANIFEST)) {
   }
 }
 
+// The env each tick passes to a launched command. Precedence (UNCHANGED, documented doctrine): ambient
+// process.env overrides schedule.env. One normalization (OA-09 Blocker 2): a set-but-EMPTY ambient
+// TERMFLEET_PROVIDER_URL is treated as UNSET so it can't SHADOW a real schedule pin — the SDK itself treats
+// '' as unset, and \`VAR= node scheduler/run.mjs\` is a plausible operator idiom, so an empty ambient value
+// dropping the compiled pin (and sending the child to auto-discovery) would be a silent misattachment the
+// startup log above would even MISreport. The [loop] provider line is derived from these same effective
+// values, so the two can never disagree about what the child actually receives.
+const buildTickEnv = () => {
+  const env = Object.assign({}, schedule.env, process.env);
+  if (typeof process.env.TERMFLEET_PROVIDER_URL === 'string' && process.env.TERMFLEET_PROVIDER_URL.trim() === '') {
+    if (schedule.env && schedule.env.TERMFLEET_PROVIDER_URL) env.TERMFLEET_PROVIDER_URL = schedule.env.TERMFLEET_PROVIDER_URL;
+    else delete env.TERMFLEET_PROVIDER_URL;
+  }
+  return env;
+};
+
 const fireTick = () => {
+  const env = buildTickEnv();
   for (const command of schedule.scripts) {
-    spawnSync(command, { shell: true, stdio: 'inherit', env: Object.assign({}, schedule.env, process.env) });
+    spawnSync(command, { shell: true, stdio: 'inherit', env });
   }
 };
 
@@ -439,7 +505,7 @@ function promptFiles(ir: AutonomyIR): Record<string, string> {
   return out;
 }
 
-export function compileLocal(ir: AutonomyIR, opts: { runner?: RunnerName; destDir?: string } = {}): CompileOutput {
+export function compileLocal(ir: AutonomyIR, opts: { runner?: RunnerName; destDir?: string; providerUrl?: string } = {}): CompileOutput {
   const runner = opts.runner ?? 'termfleet';
   if (!SUPPORTED_RUNNERS.includes(runner)) {
     throw new Error(`unsupported runner "${runner}"; supported: ${SUPPORTED_RUNNERS.join(', ')}`);
@@ -491,7 +557,15 @@ export function compileLocal(ir: AutonomyIR, opts: { runner?: RunnerName; destDi
   // A github code host's propose effect is NOT scheduled here — it is a per-session lifecycle effect the loop
   // driver runs when a proposer's session finishes (see LOOP_DRIVER's reconcilePendingEffects + runner.ts's
   // effect markers), mirroring github's post-skill job step. A local-git code host has no PRs (the PM merges).
-  generated['scheduler/schedule.json'] = `${JSON.stringify({ intervalSeconds, env: {}, scripts: scheduleScripts }, null, 2)}\n`;
+  //
+  // OA-09: `env` was always `{}` — nothing durable carried a TERMFLEET_PROVIDER_URL pin, so it existed only
+  // if the operator remembered to export it in the exact shell that started the loop (lost across shells,
+  // supervisors, re-runs). `--provider-url` (bin/autonomy-compile.ts) makes the pin part of the compiled
+  // artifact instead. Precedence is UNCHANGED: LOOP_DRIVER's fireTick still does
+  // `Object.assign({}, schedule.env, process.env)` — an ambient TERMFLEET_PROVIDER_URL still overrides this
+  // compiled default, matching the documented TERMFLEET_* override doctrine (runner-config.ts).
+  const env = opts.providerUrl ? { TERMFLEET_PROVIDER_URL: opts.providerUrl } : {};
+  generated['scheduler/schedule.json'] = `${JSON.stringify({ intervalSeconds, env, scripts: scheduleScripts }, null, 2)}\n`;
   Object.assign(generated, promptFiles(ir));
 
   // Copies: skill behaviors + the profile's resources at the repo root, so the agents' cwd-relative gh +

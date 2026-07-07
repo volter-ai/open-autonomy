@@ -25,13 +25,25 @@
 //      only shown) when the load probe actually fails, and success/failure is decided by a re-probe, not by
 //      npm's own "rebuilt dependencies successfully" text — so this can never again print a false FAILED
 //      next to a real success.
-//   3. lockfile — adding the runner deps under a different Node/npm than the repo's CI can desync
+//   3. termfleet port/provider coexistence — on every fleet dev box termfleet already runs as machine-wide
+//      infrastructure (F-8, docs/adoption-fixes/OA-09-termfleet-coexistence-provider-pinning.md): the
+//      documented default ports (7373/7402) may already be held by the box's OWN provider, and a naive
+//      `curl -fsS .../` probe misreads an occupied port as free (a provider answers `/` with 404). Probe
+//      each candidate port's `/healthz` + body shape (never the root path) to classify it free / termfleet
+//      provider (kind + instanceId) / termfleet console / a foreign HTTP service — naming the occupant via
+//      `ss`/`lsof` when the HTTP shape doesn't identify it — and read the machine-global
+//      `~/.termfleet/{providers/*.json,current.json}` state an UNPINNED loop's resolution chain would
+//      actually consult. Runs entirely over plain TCP/HTTP (never the termfleet SDK) so it works even
+//      before `npm install termfleet`.
+//   4. lockfile — adding the runner deps under a different Node/npm than the repo's CI can desync
 //      package-lock.json so the repo's CI `npm ci` rejects it ("package.json and package-lock.json are not in
 //      sync") — and `npm run build` passes locally (it reuses node_modules) so it only surfaces in CI, on the
 //      first agent PR. We verify `npm ci` under the repo's *CI Node version* in a throwaway copy (the repo's
 //      node_modules is never touched) and regenerate the lock under that Node if it's out of sync.
 import { existsSync, readFileSync, readdirSync, mkdtempSync, copyFileSync, rmSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
+import { createConnection } from 'node:net';
+import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { checkNamespaceCollisions } from './collision-check.ts';
 
@@ -370,7 +382,317 @@ export function ensurePtyModule(cwd: string, io: PtyIO = defaultPtyIO): PtyCheck
   return { notes, warns, failed: warns.length > 0, rebuildAttempted };
 }
 
-// ── 3. lockfile: `npm ci` under the repo's CI Node version ──────────────────────────────────────
+// ── 3. termfleet port/provider coexistence (OA-09) ───────────────────────────────────────────────
+// Extracted as a pure(ish), dependency-injected helper (bin/preflight.test.ts) — the `io` seam (a fake TCP
+// probe, a fake HTTP probe, a fake `ss`/`lsof` occupant lookup, and injectable fs/env) lets tests assert the
+// port classification and the warn-vs-caution policy without ever binding a real socket or shelling out.
+
+/** The port a termfleet URL is bound to, or undefined for an unparsable/portless URL. */
+export function portOf(url: string | undefined): number | undefined {
+  if (!url) return undefined;
+  try {
+    const p = Number(new URL(url).port);
+    return p > 0 ? p : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+export type TcpProbeFn = (host: string, port: number, timeoutMs: number) => Promise<boolean>;
+export type HttpGetFn = (url: string, timeoutMs: number) => Promise<{ status: number; body: string } | undefined>;
+
+/** A real TCP connect probe: true iff SOMETHING accepted the connection (occupied), false on refusal/timeout
+ *  (free). Never throws — every failure mode (ECONNREFUSED, ETIMEDOUT, host unreachable) resolves `false`. */
+function defaultTcpProbe(host: string, port: number, timeoutMs: number): Promise<boolean> {
+  return new Promise((resolve) => {
+    let settled = false;
+    const sock = createConnection({ host, port });
+    const finish = (v: boolean) => {
+      if (settled) return;
+      settled = true;
+      try {
+        sock.destroy();
+      } catch {
+        /* already closed */
+      }
+      resolve(v);
+    };
+    sock.setTimeout(timeoutMs);
+    sock.once('connect', () => finish(true));
+    sock.once('timeout', () => finish(false));
+    sock.once('error', () => finish(false));
+  });
+}
+
+/** A real HTTP GET, used ONLY against a port already known to be occupied (the TCP probe above) — never the
+ *  bare, `-f`-style root-path check this whole doc/check exists to replace. Returns undefined on any
+ *  failure (non-HTTP occupant, timeout) so the caller falls back to naming the occupant via ss/lsof. */
+async function defaultHttpGet(url: string, timeoutMs: number): Promise<{ status: number; body: string } | undefined> {
+  try {
+    const res = await fetch(url, { signal: AbortSignal.timeout(timeoutMs) });
+    const body = await res.text();
+    return { status: res.status, body };
+  } catch {
+    return undefined;
+  }
+}
+
+/** Name the pid/command listening on `port` — `ss -ltnp` first (Linux, no root needed for same-user
+ *  processes), falling back to `lsof -iTCP:<port> -sTCP:LISTEN` (macOS/BSD, or a Linux box without `ss`).
+ *  Matched against the LOCAL-ADDRESS column specifically (not just "line contains :<port>"), so a port that
+ *  merely appears as a PEER port on some unrelated connection is never misreported as the listener. */
+export function occupantOf(port: number, run: RunFn): string | undefined {
+  const ss = run('ss', ['-ltnp']);
+  if (ss.status === 0) {
+    for (const line of (ss.stdout ?? '').split('\n')) {
+      const fields = line.trim().split(/\s+/);
+      const local = fields[3]; // State Recv-Q Send-Q Local:Port Peer:Port Process...
+      if (!local || !local.endsWith(`:${port}`)) continue;
+      const m = /users:\(\("([^"]+)",pid=(\d+)/.exec(line);
+      if (m) return `pid ${m[2]} (${m[1]})`;
+      // The listener line matched but the process column is absent (e.g. ss ran without the privilege to
+      // read another user's process, so `users:((…))` is missing) — DON'T give up here: fall through to
+      // the lsof branch, which may still name it. Returning undefined inside this loop was the bug that
+      // both skipped lsof AND printed a false "ss/lsof unavailable".
+      break;
+    }
+  }
+  const lsof = run('lsof', ['-i', `:${port}`, '-sTCP:LISTEN', '-Fpc']);
+  if (lsof.status === 0) {
+    let pid: string | undefined;
+    let cmd: string | undefined;
+    for (const l of (lsof.stdout ?? '').split('\n')) {
+      if (l.startsWith('p')) pid = l.slice(1);
+      if (l.startsWith('c')) cmd = l.slice(1);
+    }
+    if (pid) return `pid ${pid}${cmd ? ` (${cmd})` : ''}`;
+  }
+  return undefined;
+}
+
+export type PortStatus = 'free' | 'termfleet-provider' | 'termfleet-console' | 'foreign-http';
+
+export interface PortClassification {
+  port: number;
+  status: PortStatus;
+  kind?: string;
+  instanceId?: string;
+  occupant?: string;
+}
+
+export interface TermfleetPortIO {
+  tcpProbe: TcpProbeFn;
+  httpGet: HttpGetFn;
+  run: RunFn;
+  existsSync: (p: string) => boolean;
+  readdirSync: (p: string) => string[];
+  readFileSync: (p: string) => string;
+  env: Record<string, string | undefined>;
+  homedir: () => string;
+}
+
+const defaultTermfleetPortIO: TermfleetPortIO = {
+  tcpProbe: defaultTcpProbe,
+  httpGet: defaultHttpGet,
+  run,
+  existsSync,
+  readdirSync: (p) => readdirSync(p),
+  readFileSync: (p) => readFileSync(p, 'utf8'),
+  env: process.env,
+  homedir,
+};
+
+/** Classify a single port: free / a termfleet provider (its OWN self-reported identity contract — `{ok:true,
+ *  provider:<kind>, instanceId }`) / a termfleet console (`{ok:true, service:"console"}`) / a foreign HTTP
+ *  service (anything else that answers, including a plain 404 — the exact case `curl -fsS .../` misreads as
+ *  free). Verified against a REAL termfleet@0.2.0 provider/console (npm registry): a provider's `/healthz`
+ *  returns `{"ok":true,"provider":"virtual-tmux","build":{...},"instanceId":"<uuid>"}` and its `/` returns a
+ *  plain 404 — exactly the shape this check (and the rewritten docs) rely on. */
+export async function classifyPort(port: number, io: TermfleetPortIO = defaultTermfleetPortIO): Promise<PortClassification> {
+  const open = await io.tcpProbe('127.0.0.1', port, 800);
+  if (!open) return { port, status: 'free' };
+  const http = await io.httpGet(`http://127.0.0.1:${port}/healthz`, 1500);
+  if (http) {
+    try {
+      const body = JSON.parse(http.body) as { ok?: boolean; provider?: string; instanceId?: string; service?: string };
+      if (body.ok === true && typeof body.provider === 'string') {
+        return { port, status: 'termfleet-provider', kind: body.provider, instanceId: body.instanceId };
+      }
+      if (body.ok === true && body.service === 'console') {
+        return { port, status: 'termfleet-console' };
+      }
+    } catch {
+      /* not JSON (or not the termfleet shape) — falls through to the foreign-http classification below */
+    }
+  }
+  return { port, status: 'foreign-http', occupant: occupantOf(port, io.run) };
+}
+
+export interface TermfleetPortsResult {
+  notes: string[];
+  warns: string[];
+  cautions: string[];
+  failed: boolean;
+}
+
+/** Describe an occupied port's identity for a message — always naming SOMETHING concrete (kind + instance,
+ *  or the occupying pid/command), never a bare "something is there". */
+function describeOccupant(c: PortClassification): string {
+  if (c.status === 'termfleet-provider') {
+    return `a termfleet provider (kind '${c.kind ?? 'unknown'}'${c.instanceId ? `, instance ${c.instanceId}` : ''})`;
+  }
+  if (c.status === 'termfleet-console') return 'a termfleet console';
+  return `a non-termfleet service${c.occupant ? ` (${c.occupant})` : ' (occupant unidentified — ss/lsof unavailable)'}`;
+}
+
+/** Probe the doc-default ports (7373 console, 7402 provider) plus any pinned/advertised port, classify each,
+ *  and read the machine-global termfleet state an UNPINNED loop's resolution chain would actually consult
+ *  (`~/.termfleet/current.json`, `~/.termfleet/providers/*.json`).
+ *
+ *  Output policy (skeptic-panel fix — the F-5 crying-wolf class): a live provider's `/healthz` cannot tell
+ *  us whether it is FOREIGN or the operator's OWN (the single-user box the new quickstart tells you to run
+ *  your own provider on answers identically). So "unpinned + an occupant is live" is a prominent `caution()`,
+ *  NOT a hard `warn()` (exit 1) — the occupant is still fully NAMED (kind + instance, or the pid/command) and
+ *  the pin is still prescribed, but a healthy single-user box is never failed. The ONLY hard `warn()` is a
+ *  case we can actually PROVE is broken: the operator's OWN explicit pin points at a port whose occupant is
+ *  demonstrably NOT a termfleet provider (a genuine misconfiguration, not a could-be-yours). Everything else
+ *  — an occupant on an unused default port, a `current.json` context, a pinned port that answers nothing — is
+ *  a caution the operator reviews, never a gate failure. */
+export async function checkTermfleetPorts(cwd: string, io: TermfleetPortIO = defaultTermfleetPortIO): Promise<TermfleetPortsResult> {
+  const notes: string[] = [];
+  const warns: string[] = [];
+  const cautions: string[] = [];
+  const note = (m: string) => notes.push(m);
+  const warn = (m: string) => warns.push(m);
+  const caution = (m: string) => cautions.push(m);
+
+  // Same scoping as ensurePtyModule above: until THIS repo actually depends on termfleet, nothing here
+  // would bind these ports for THIS install — deferred to a re-run after `npm install termfleet`
+  // (preflight is explicitly documented as safe/expected to re-run, docs/OPERATIONS.md step 1). This also
+  // means the check never fires probing a bare scaffold/pre-install repo dir.
+  if (!io.existsSync(join(cwd, 'node_modules', 'termfleet', 'package.json'))) {
+    note('termfleet not installed yet — skip port/provider coexistence check (run after `npm install termfleet`)');
+    return { notes, warns, cautions, failed: false };
+  }
+
+  const pinned = io.env.TERMFLEET_PROVIDER_URL?.trim() || undefined;
+  const pinnedPort = portOf(pinned);
+  const home = io.env.TERMFLEET_HOME || join(io.homedir(), '.termfleet');
+
+  // Machine-global state the resolution chain (@termfleet/core's local-providers.js) actually consults for
+  // an UNPINNED loop — read directly off disk, never through the SDK (preflight must work pre-install).
+  let currentContextUrl: string | undefined;
+  const currentContextPath = join(home, 'current.json');
+  if (io.existsSync(currentContextPath)) {
+    try {
+      const parsed = JSON.parse(io.readFileSync(currentContextPath)) as { baseUrl?: string };
+      currentContextUrl = typeof parsed.baseUrl === 'string' && parsed.baseUrl.trim() ? parsed.baseUrl : undefined;
+    } catch {
+      /* corrupt current.json — still worth flagging its mere presence below */
+    }
+    if (pinned) {
+      caution(
+        `~/.termfleet/current.json exists${currentContextUrl ? ` (points at ${currentContextUrl})` : ''} — harmless here ` +
+          `since TERMFLEET_PROVIDER_URL is pinned, which wins over it in the resolution chain.`,
+      );
+    } else {
+      // Caution, not a hard warn: a `current.json` may well be the operator's OWN `termfleet use` (we can't
+      // tell), so failing the gate here would cry wolf on a single-user box exactly the way the port-occupant
+      // case would. Still prominent — this context silently BEATS auto-discovery, which is genuinely surprising.
+      caution(
+        `~/.termfleet/current.json exists${currentContextUrl ? ` (points at ${currentContextUrl})` : ''} — this machine-global ` +
+          `\`termfleet use\` context BEATS zero-config auto-discovery for an UNPINNED install, so an unpinned loop would ` +
+          `attach its launches to it. If that context is NOT your own provider, pin explicitly: export ` +
+          `TERMFLEET_PROVIDER_URL=<your own provider's url> before running the loop (docs/OPERATIONS.md#local-runner-quickstart ` +
+          `step 2), or make it durable: \`open-autonomy compile <profile> local . --provider-url <url>\`.`,
+      );
+    }
+  }
+
+  const providersDir = join(home, 'providers');
+  const advertised: string[] = [];
+  if (io.existsSync(providersDir)) {
+    let files: string[] = [];
+    try {
+      files = io.readdirSync(providersDir).filter((f) => f.endsWith('.json'));
+    } catch {
+      files = [];
+    }
+    for (const f of files) {
+      try {
+        const rec = JSON.parse(io.readFileSync(join(providersDir, f))) as { baseUrl?: string };
+        if (typeof rec.baseUrl === 'string' && rec.baseUrl.trim()) advertised.push(rec.baseUrl);
+      } catch {
+        /* skip a corrupt advertisement record rather than fail the whole check */
+      }
+    }
+  }
+  if (advertised.length) {
+    note(
+      `${advertised.length} termfleet provider(s) advertised machine-globally (~/.termfleet/providers/): ${advertised.join(', ')} ` +
+        `— self-advertised, not necessarily still live; the port classification below confirms.`,
+    );
+  }
+
+  const candidatePorts = [...new Set([7373, 7402, pinnedPort, ...advertised.map(portOf)].filter((p): p is number => typeof p === 'number'))];
+
+  for (const port of candidatePorts) {
+    const c = await classifyPort(port, io);
+    if (c.status === 'free') {
+      if (pinnedPort === port) {
+        // MINOR (c): the operator's OWN pin points at a port where NOTHING is listening — a dead pin. Not a
+        // hard-fail (they may just not have started their provider yet), but it must not read as a clean ✓:
+        // the loop would fail to resolve a provider at launch. Caution names it explicitly.
+        caution(
+          `your pinned TERMFLEET_PROVIDER_URL points at port ${port}, but nothing is listening there — start your ` +
+            `provider on that port before running the loop, or fix the pin (otherwise provider resolution fails at launch).`,
+        );
+      } else {
+        note(`port ${port}: free`);
+      }
+      continue;
+    }
+    const identity = describeOccupant(c);
+    if (pinnedPort === port) {
+      // The pinned port itself — the one thing this install actually depends on.
+      if (c.status === 'termfleet-provider') {
+        note(`port ${port} (your pinned TERMFLEET_PROVIDER_URL) is serving ${identity} ✓`);
+      } else {
+        // The ONE hard warn: the operator EXPLICITLY pinned here, and the occupant is provably NOT a termfleet
+        // provider — a genuine misconfiguration, not a could-be-yours ambiguity. Fail the gate.
+        warn(
+          `your pinned TERMFLEET_PROVIDER_URL points at port ${port}, but it is occupied by ${identity}, not a termfleet ` +
+            `provider — the pin will connect to the wrong thing (or fail). Fix: point TERMFLEET_PROVIDER_URL at your own ` +
+            `provider's real port.`,
+        );
+      }
+      continue;
+    }
+    // An occupant on a default/advertised port that ISN'T this install's pinned one.
+    if (pinned) {
+      caution(
+        `port ${port} is occupied by ${identity} — this install is pinned to a different provider (${pinned}), so this ` +
+          `doesn't affect it; noting it in case anything here ever falls back to the doc-default ports.`,
+      );
+    } else {
+      // UNPINNED + an occupant is live. We CANNOT prove it's foreign from a /healthz probe — it could be the
+      // operator's OWN provider on a single-user box (exactly what the new quickstart tells them to start).
+      // So caution, never a hard-fail (the F-5 crying-wolf class): name the occupant + prescribe the pin, but
+      // don't exit 1 on a box that may be perfectly healthy.
+      caution(
+        `port ${port} is occupied by ${identity} and this install is UNPINNED — if this is NOT your own provider, an ` +
+          `unpinned loop could attach to it (a provider can launch terminal sessions as your user, box-wide). Either way, ` +
+          `pin explicitly: pick a repo-unique port (docs/OPERATIONS.md#local-runner-quickstart step 2) and set ` +
+          `export TERMFLEET_PROVIDER_URL=http://127.0.0.1:<your-port> (or durably: ` +
+          `\`open-autonomy compile <profile> local . --provider-url <url>\`).`,
+      );
+    }
+  }
+
+  return { notes, warns, cautions, failed: warns.length > 0 };
+}
+
+// ── 4. lockfile: `npm ci` under the repo's CI Node version ──────────────────────────────────────
 function detectCiNodeMajor(): string | null {
   if (existsSync(join(cwd, '.nvmrc'))) {
     const m = readFileSync(join(cwd, '.nvmrc'), 'utf8').match(/(\d+)/);
@@ -444,7 +766,7 @@ function verifyLock(): void {
 // triggers a top-level `process.exit()` as a side effect of loading the module. `bin/open-autonomy.ts`
 // calls `runPreflightCli()` explicitly after importing; running this file directly (`bun bin/preflight.ts`)
 // runs it too, via the `import.meta.main` guard below (matches bin/check-doc-vars.ts's convention).
-export function runPreflightCli(): void {
+export async function runPreflightCli(): Promise<void> {
   console.log('open-autonomy preflight — environment checks for a local-runner install\n');
   // Run FIRST (docs/adoption-fixes/OA-06...): a poisoned install environment (NODE_ENV=production / npm
   // omit=dev silently no-opping `npm install -D`) explains any downstream missing-module symptom the
@@ -461,6 +783,13 @@ export function runPreflightCli(): void {
   const ptyResult = ensurePtyModule(cwd);
   for (const n of ptyResult.notes) note(n);
   for (const w of ptyResult.warns) warn(w);
+  // OA-09: a foreign termfleet/HTTP occupant on the doc-default (or pinned) ports, and the machine-global
+  // `~/.termfleet` state an unpinned loop would silently defer to — named here, before compile/commit, so
+  // the coexistence hazard is caught structurally rather than discovered as a silently-dead `serve &`.
+  const portsResult = await checkTermfleetPorts(cwd);
+  for (const n of portsResult.notes) note(n);
+  for (const c of portsResult.cautions) caution(c);
+  for (const w of portsResult.warns) warn(w);
   verifyLock();
   const okSummary = cautioned
     ? '\npreflight: OK — no blocking issues, but REVIEW the caution(s) above before installing (compile + commit the harness, then prove the loop with `npx open-autonomy doctor`)'
@@ -469,4 +798,4 @@ export function runPreflightCli(): void {
   process.exit(failed ? 1 : 0);
 }
 
-if (import.meta.main) runPreflightCli();
+if (import.meta.main) await runPreflightCli();

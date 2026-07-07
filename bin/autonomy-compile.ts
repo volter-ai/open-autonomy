@@ -1,6 +1,7 @@
 #!/usr/bin/env bun
 // Compile a profile (an `autonomy.ir.v1` ir.yml) onto a substrate, producing an installation.
-//   bun bin/autonomy-compile.ts <profileName|profileDir> <local|gh-actions> [outDir] [--force]  ("github" accepted as alias)
+//   bun bin/autonomy-compile.ts <profileName|profileDir> <local|gh-actions> [outDir] [--force] [--provider-url <url>]
+//   ("github" accepted as alias for gh-actions)
 // The first arg is either a BUNDLED profile name (e.g. `self-driving`, resolved to the profiles/ shipped
 // with this package) or a path to a profile dir of your own. With no outDir, prints the installation's file
 // list (a dry run). With outDir, materializes it — refusing if that would overwrite an existing file with
@@ -8,6 +9,10 @@
 // (OA-10, see findResurrections below); --force overrides both. `.claude/settings.json` gets a structured
 // MERGE instead of a refusal (settings-merge.ts). These guards are fresh-compile only — `autonomy-upgrade.ts`
 // legitimately overwrites derived files in place (and applies the same settings.json merge strategy there).
+// --provider-url <url> (local substrate only, OA-09): emits a DURABLE TERMFLEET_PROVIDER_URL pin into
+// scheduler/schedule.json's env, so it survives new shells/supervisors/re-runs instead of depending on the
+// operator remembering to export it (docs/adoption-fixes/OA-09-termfleet-coexistence-provider-pinning.md).
+// An ambient TERMFLEET_PROVIDER_URL still overrides this compiled default at runtime (unchanged doctrine).
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { basename, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -71,15 +76,41 @@ function profileMentions(dir: string, token: string): boolean {
   return false;
 }
 
-// `--force` is a flag, not positional — filter it out before reading the three positional args.
+// `--force` and `--provider-url <url>` are flags, not positional — filter both (and the url's own token)
+// out before reading the three positional args.
 const rawArgs = process.argv.slice(2);
 const force = rawArgs.includes('--force');
-const [profileArg, substrateArg, outDir] = rawArgs.filter((a) => a !== '--force');
+const providerUrlFlagIdx = rawArgs.indexOf('--provider-url');
+const providerUrl = providerUrlFlagIdx >= 0 ? rawArgs[providerUrlFlagIdx + 1] : undefined;
+if (providerUrlFlagIdx >= 0) {
+  const usage =
+    'usage: autonomy-compile <profileName|profileDir> <local|gh-actions> [outDir] [--force] [--provider-url <url>]';
+  // A missing value, OR the next token being ANOTHER flag (`--provider-url --force` would silently swallow
+  // `--force` as the URL), OR an unparseable URL — all reject rather than emit a garbage pin into
+  // scheduler/schedule.json's env.
+  if (!providerUrl || providerUrl.startsWith('-')) {
+    console.error(`${usage}\n  --provider-url requires a <url> value (e.g. http://127.0.0.1:7602)`);
+    process.exit(2);
+  }
+  try {
+    // eslint-disable-next-line no-new
+    new URL(providerUrl);
+  } catch {
+    console.error(`${usage}\n  --provider-url value "${providerUrl}" is not a valid URL (expected e.g. http://127.0.0.1:7602)`);
+    process.exit(2);
+  }
+}
+const [profileArg, substrateArg, outDir] = rawArgs.filter(
+  (a, i) => a !== '--force' && (providerUrlFlagIdx < 0 || (i !== providerUrlFlagIdx && i !== providerUrlFlagIdx + 1)),
+);
 // `gh-actions` is the runner-substrate; accept `github` as a back-compat alias. `local` unchanged.
 const substrate = substrateArg === 'github' ? 'gh-actions' : substrateArg;
 if (!profileArg || (substrate !== 'local' && substrate !== 'gh-actions')) {
-  console.error(`usage: autonomy-compile <profileName|profileDir> <local|gh-actions> [outDir] [--force]\n  bundled profiles: ${bundledProfileNames().join(', ') || '(none found)'}`);
+  console.error(`usage: autonomy-compile <profileName|profileDir> <local|gh-actions> [outDir] [--force] [--provider-url <url>]\n  bundled profiles: ${bundledProfileNames().join(', ') || '(none found)'}`);
   process.exit(2);
+}
+if (providerUrl && substrate !== 'local') {
+  console.error(`open-autonomy: WARNING — --provider-url only applies to the "local" substrate's scheduler/schedule.json; ignored for "${substrate}".`);
 }
 
 const profileDir = resolveProfile(profileArg);
@@ -107,7 +138,7 @@ let out: CompileOutput;
 try {
   out =
     substrate === 'local'
-      ? (await import('@open-autonomy/substrate-local')).compileLocal(ir, { destDir: outDir })
+      ? (await import('@open-autonomy/substrate-local')).compileLocal(ir, { destDir: outDir, providerUrl })
       : (await import('@open-autonomy/substrate-github')).compileGithub(ir);
 } catch (e) {
   // A lazy sibling-data read (emit.ts) throws an actionable packaging-bug Error naming the missing file —
@@ -281,12 +312,18 @@ if (outDir) {
     console.log(
       `\nNext steps (local loop):\n` +
         `  1. Prereqs: Node 22.18+ (the ztrack preset is .mts), tmux. Add termfleet to this repo (the runner uses its SDK),\n` +
-        `     then run preflight (verifies termfleet's PTY native module loads, rebuilding only if needed + verifies the lockfile against your CI's Node):\n` +
+        `     then run preflight (verifies termfleet's PTY native module loads, rebuilding only if needed; checks the doc-default\n` +
+        `     ports for a foreign termfleet/other occupant + your CI's lockfile compat):\n` +
         `       ${cd}npm install termfleet  &&  npx --yes open-autonomy preflight\n` +
         `  2. Sign in to your agent CLI: run \`claude\` then \`/login\`  (or \`codex login\`)\n` +
-        `  3. Start termfleet (console + a local provider):\n` +
-        `       npx termfleet console serve --name dev --port 7373 &\n` +
-        `       npx termfleet provider serve --kind virtual-tmux --prefix dev --count 1 --port 7402 &\n` +
+        `  3. Start termfleet (console + a local provider) — a REPO-UNIQUE prefix/port pair, not the box defaults\n` +
+        `     7373/7402 (a pre-existing termfleet on this box may already hold those):\n` +
+        `       TF_PREFIX=$(basename "$PWD")-oa; TF_CONSOLE=7573; TF_PROVIDER=7602\n` +
+        `       npx termfleet console serve --name "$TF_PREFIX" --port $TF_CONSOLE &\n` +
+        `       npx termfleet provider serve --kind virtual-tmux --prefix "$TF_PREFIX" --count 1 --port $TF_PROVIDER &\n` +
+        `       export TERMFLEET_PROVIDER_URL=http://127.0.0.1:$TF_PROVIDER   # PIN — required on a shared/lived-in box.\n` +
+        `     Make the pin DURABLE (survives new shells/supervisors/re-runs) by recompiling with it:\n` +
+        `       ${cd}npx open-autonomy compile ${profileArg} local . --provider-url "$TERMFLEET_PROVIDER_URL"\n` +
         tracker +
         commitStep +
         `  ${runStepNum}. Run the loop:  ${cd}node scheduler/run.mjs --once   (one tick)  |  node scheduler/run.mjs   (continuous)\n` +

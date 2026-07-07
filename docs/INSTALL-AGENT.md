@@ -255,13 +255,23 @@ JSON
 # confirm protection took (errors on a free private plan / non-admin / under-scoped token → STOP, tell human):
 gh api "repos/<owner>/<repo>/branches/<default-branch>/protection/required_status_checks/contexts" --jq '.'
 
-# 7. Start termfleet + sign in to the coding CLI BEFORE running the loop. Re-use a running console/provider if
-#    one is up (one provider is GLOBAL across repos) — a second `serve` on a bound port fails silently behind
-#    `&`. Check first; use a repo-unique --prefix/--port if you run your own. NOTE: this curl is only a
-#    "should I start one" convenience — it does NOT verify the thing answering is YOUR provider (a foreign
-#    termfleet, or anything else, answers the same way here); Phase 4's `doctor --json` is the identity check:
-curl -fsS http://127.0.0.1:7373/ >/dev/null 2>&1 || (npx termfleet console serve --name dev --port 7373 &)
-curl -fsS http://127.0.0.1:7402/healthz >/dev/null 2>&1 || (npx termfleet provider serve --kind virtual-tmux --prefix dev --count 1 --port 7402 &)
+# 7. Start termfleet + sign in to the coding CLI BEFORE running the loop. On a shared/lived-in box, NEVER
+#    attach to a console/provider this install did not start — a termfleet provider can launch terminal
+#    sessions as YOUR user, box-wide, so re-using a foreign one hands it that reach. Run your OWN console +
+#    provider on a repo-unique prefix/port pair and PIN TERMFLEET_PROVIDER_URL to it — required on a shared
+#    box (cheap enough to always do). Re-use is defensible ONLY on a single-user box where you started that
+#    provider yourself — and even then, still pin (auto-discovery / a stray `termfleet use` can still drift).
+#    Truthful occupancy probe: /healthz + BODY-SHAPE, never a bare `curl -fsS .../` (which reads a
+#    provider's 404-on-`/` as "nothing running" and silently double-starts behind `&`) — this only tells you
+#    WHETHER something answers, never that it's YOURS; Phase 4's `doctor --json` is the identity check.
+TF_PREFIX="$(basename "$PWD")-oa"; TF_CONSOLE=7573; TF_PROVIDER=7602   # repo-unique — NOT the box defaults 7373/7402
+curl -sS "http://127.0.0.1:$TF_CONSOLE/healthz" 2>/dev/null | grep -q '"ok":true' \
+  && { echo "ABORT: port $TF_CONSOLE already answers — pick a different --port for $TF_PREFIX"; exit 1; } \
+  || (npx termfleet console serve --name "$TF_PREFIX" --port "$TF_CONSOLE" &)
+curl -sS "http://127.0.0.1:$TF_PROVIDER/healthz" 2>/dev/null | grep -q '"ok":true' \
+  && { echo "ABORT: port $TF_PROVIDER already answers — pick a different --port for $TF_PREFIX"; exit 1; } \
+  || (npx termfleet provider serve --kind virtual-tmux --prefix "$TF_PREFIX" --count 1 --port "$TF_PROVIDER" &)
+export TERMFLEET_PROVIDER_URL="http://127.0.0.1:$TF_PROVIDER"   # PIN — required in shared environments
 #   claude → /login    then sanity-check:  npx termfleet claude new --prompt "say hi"
 ```
 

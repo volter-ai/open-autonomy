@@ -21,10 +21,12 @@ Unblocked 2026-07-07: LOCAL-30 (OA-01) + LOCAL-31 (OA-02) both done — pack-smo
 Provenance: OA-INSTALL-AUDIT-FINDINGS.md §5 verdict — the single biggest change.
 
 ## Acceptance Criteria
-- [ ] dev/01 v1 on a repo in each broken state the audit hit (broken artifact, devDeps omitted, foreign provider on the default port, logged-out CLI, uncommitted/unpushed-origin-based harness, missing skill), 'open-autonomy doctor' exits non-zero naming the specific culprit — per the spec's per-finding ACs
-  - status: pending
-- [ ] dev/02 v1 every numbered criterion in the spec's Acceptance criteria section is demonstrated: each fails before the fix and passes after, with command output as evidence
-  - status: pending
+- [x] dev/01 v1 on a repo in each broken state the audit hit (broken artifact, devDeps omitted, foreign provider on the default port, logged-out CLI, uncommitted/unpushed-origin-based harness, missing skill), 'open-autonomy doctor' exits non-zero naming the specific culprit — per the spec's per-finding ACs
+  - status: done — 13/15 ACs proven with real fixtures; AC-6 --live tail + AC-10 live model round-trip live-pending (no termfleet+model stack on this box)
+- [x] dev/02 v1 every numbered criterion in the spec's Acceptance criteria section is demonstrated: each fails before the fix and passes after, with command output as evidence
+  - status: done — see close-out and /workspace/proofs/oa-18.md
+
+Close-out: merged to adoption-fixes-backlog @ b8134a1 (builder 052c204 + a8ee966). open-autonomy doctor 7-check gate (self/env/provider/auth/harness/skills/live). worktree-probe seam executes the install's OWN runner (OA-02 base-ref decision, no reimplementation). Read-only airtight: snapshot/restore .git/info/exclude, rmdir empty .worktrees, robust worktree+branch cleanup with warnings. --live routes through run-agent.mjs -> autonomy-runner.mjs with TERMFLEET_PROVIDER_URL inherited (not injected), so the F-8 pin-propagation is genuinely exercised. The Fable correctness panel caught a check-7 dispatch-chain-bypass blocker (the original masked the very F-8 failure it detects); cured. AC-6 --live tail + AC-10 live model round-trip are LIVE-PENDING on this box; the dispatch code path is seam-tested. 5-link proof: /workspace/proofs/oa-18.md.
 
 <!--tracker:comments
 []

@@ -466,19 +466,28 @@ function fakeDevDepIo(opts: {
   omit: string;
   files?: Record<string, string>;
   nodeEnv?: string;
-  installed?: string[]; // devDependency names with a node_modules/<name>/package.json present
+  installed?: string[]; // devDependency names resolvable via a node_modules/<name>/package.json (any depth)
+  omitOk?: boolean; // whether the `npm config get omit` probe itself succeeds (default true)
 }): { io: DevDepIO; calls: { cmd: string; args: string[] }[] } {
   const calls: { cmd: string; args: string[] }[] = [];
   const files = opts.files ?? {};
   const installed = new Set(opts.installed ?? []);
+  const omitOk = opts.omitOk ?? true;
   const run: RunFn = (cmd, args) => {
     calls.push({ cmd, args });
-    if (cmd === 'npm' && args.join(' ') === 'config get omit') return { status: 0, stdout: `${opts.omit}\n`, stderr: '' };
+    // The check must call it WITH `--no-workspaces` (the workspace-member ENOWORKSPACES fix) — match that
+    // exact arg vector so a tamper that drops the flag stops matching and the probe reads as failed.
+    if (cmd === 'npm' && args.join(' ') === 'config get omit --no-workspaces') {
+      return omitOk ? { status: 0, stdout: `${opts.omit}\n`, stderr: '' } : { status: 1, stdout: '', stderr: 'npm error code ENOWORKSPACES' };
+    }
     return { status: 1, stdout: '', stderr: `unexpected run() call in fakeDevDepIo: ${cmd} ${args.join(' ')}` };
   };
   const io: DevDepIO = {
     existsSync: (p) => {
       if (Object.prototype.hasOwnProperty.call(files, p)) return true;
+      // Resolvable-by-NAME at any node_modules depth — models Node's walk-up resolution (a devDep declared
+      // in a workspace member hoists to the ROOT node_modules; devDepResolvable walks up to find it). The
+      // regex intentionally matches the name regardless of directory level.
       const m = p.match(/node_modules\/(.+)\/package\.json$/);
       if (m) return installed.has(m[1]!);
       return false;
@@ -494,14 +503,22 @@ function fakeDevDepIo(opts: {
 }
 
 describe('effectiveOmit / omitsDev — parsing npm\'s single effective config value', () => {
-  test('effectiveOmit reads `npm config get omit` verbatim, trimmed', () => {
-    const run: RunFn = () => ({ status: 0, stdout: 'dev,optional\n', stderr: '' });
-    expect(effectiveOmit({ run })).toBe('dev,optional');
+  test('effectiveOmit reads `npm config get omit --no-workspaces` verbatim, trimmed, ok:true on exit 0', () => {
+    const seen: { cmd: string; args: string[] }[] = [];
+    const run: RunFn = (cmd, args) => { seen.push({ cmd, args }); return { status: 0, stdout: 'dev,optional\n', stderr: '' }; };
+    expect(effectiveOmit({ run })).toEqual({ omit: 'dev,optional', ok: true });
+    // The --no-workspaces flag is load-bearing (workspace-member ENOWORKSPACES) — pin the exact invocation.
+    expect(seen[0]).toEqual({ cmd: 'npm', args: ['config', 'get', 'omit', '--no-workspaces'] });
   });
 
-  test('effectiveOmit is empty when nothing is omitted (npm prints a blank line)', () => {
+  test('effectiveOmit is empty (ok:true) when nothing is omitted (npm prints a blank line)', () => {
     const run: RunFn = () => ({ status: 0, stdout: '\n', stderr: '' });
-    expect(effectiveOmit({ run })).toBe('');
+    expect(effectiveOmit({ run })).toEqual({ omit: '', ok: true });
+  });
+
+  test('effectiveOmit reports ok:false on a NON-zero exit (ENOWORKSPACES / npm missing) — NOT mistaken for "nothing omitted"', () => {
+    const run: RunFn = () => ({ status: 1, stdout: '', stderr: 'npm error code ENOWORKSPACES' });
+    expect(effectiveOmit({ run })).toEqual({ omit: '', ok: false });
   });
 
   test('omitsDev matches a bare "dev" value', () => expect(omitsDev('dev')).toBe(true));
@@ -550,8 +567,36 @@ describe('checkDevDepInstallability — the assembled check, DI-driven (AC-6 mat
     expect(r.cautions[0]).toContain('NODE_ENV=production');
     expect(r.cautions[0]).toContain('omit=dev');
     expect(r.cautions[0]).toContain('install NOTHING');
+    // The robust override leads with --include=dev (works on every omit source); NODE_ENV=development is
+    // offered only as a secondary note here because the cause IS the NODE_ENV default.
+    expect(r.cautions[0]).toContain('npm install -D ztrack --include=dev');
     expect(r.cautions[0]).toContain('NODE_ENV=development npm install -D ztrack');
-    expect(r.cautions[0]).toContain('--include=dev');
+  });
+
+  test('scoped devDependency (@types/node) present ⇒ caution only (the @scope/ is not stripped in the lookup)', () => {
+    const { io } = fakeDevDepIo({
+      omit: 'dev',
+      nodeEnv: 'production',
+      files: { [PKG]: JSON.stringify({ name: 'app', devDependencies: { '@types/node': '^22.0.0' } }) },
+      installed: ['@types/node'],
+    });
+    const r = checkDevDepInstallability('/repo', io);
+    expect(r.failed).toBe(false);
+    expect(r.warns).toEqual([]);
+    expect(r.cautions).toHaveLength(1);
+  });
+
+  test('scoped devDependency (@types/node) MISSING ⇒ hard fail naming the full scoped name', () => {
+    const { io } = fakeDevDepIo({
+      omit: 'dev',
+      nodeEnv: 'production',
+      files: { [PKG]: JSON.stringify({ name: 'app', devDependencies: { '@types/node': '^22.0.0' } }) },
+      installed: [],
+    });
+    const r = checkDevDepInstallability('/repo', io);
+    expect(r.failed).toBe(true);
+    expect(r.warns).toHaveLength(1);
+    expect(r.warns[0]).toContain('@types/node');
   });
 
   test('no devDependencies declared at all (omit=dev) ⇒ caution only, not failed (nothing to have no-opped yet)', () => {
@@ -562,7 +607,7 @@ describe('checkDevDepInstallability — the assembled check, DI-driven (AC-6 mat
     expect(r.cautions).toHaveLength(1);
   });
 
-  test('AC-6 case 3: omit=dev + a declared devDependency is MISSING ⇒ hard fail, names the package + override', () => {
+  test('AC-6 case 3: omit=dev + a declared devDependency is MISSING ⇒ hard fail, names the package + --include=dev override', () => {
     const { io } = fakeDevDepIo({
       omit: 'dev',
       nodeEnv: 'production',
@@ -574,7 +619,9 @@ describe('checkDevDepInstallability — the assembled check, DI-driven (AC-6 mat
     expect(r.cautions).toHaveLength(1); // the always-caution still fires
     expect(r.warns).toHaveLength(1);
     expect(r.warns[0]).toContain('ztrack');
-    expect(r.warns[0]).toContain('NODE_ENV=development npm install -D ztrack');
+    expect(r.warns[0]).toContain('npm install -D ztrack --include=dev');
+    // Softened wording — "not installed", not the unprovable "already happened".
+    expect(r.warns[0]).not.toContain('already happened');
   });
 
   test('multiple declared devDependencies, only some missing ⇒ names only the missing ones', () => {
@@ -590,13 +637,25 @@ describe('checkDevDepInstallability — the assembled check, DI-driven (AC-6 mat
     expect(r.warns[0]).not.toContain('typescript');
   });
 
-  test('omit=dev via .npmrc/npm_config_omit WITHOUT NODE_ENV=production ⇒ still cautions, cause names "omit=dev" not NODE_ENV', () => {
+  test('omit=dev via .npmrc/npm_config_omit WITHOUT NODE_ENV=production ⇒ cautions naming "omit=dev", override is --include=dev ONLY (no NODE_ENV=development, which would no-op here)', () => {
     const { io } = fakeDevDepIo({ omit: 'dev', files: { [PKG]: JSON.stringify({ name: 'app' }) } }); // no nodeEnv passed
     const r = checkDevDepInstallability('/repo', io);
     expect(r.failed).toBe(false);
     expect(r.cautions).toHaveLength(1);
     expect(r.cautions[0]).toContain('omit=dev');
     expect(r.cautions[0]).not.toContain('NODE_ENV=production');
+    expect(r.cautions[0]).toContain('npm install -D ztrack --include=dev');
+    // The .npmrc/explicit-config path must NOT prescribe NODE_ENV=development — it beats-nothing there.
+    expect(r.cautions[0]).not.toContain('NODE_ENV=development');
+  });
+
+  test('couldn\'t determine (probe exits nonzero, e.g. ENOWORKSPACES/npm missing) ⇒ a NOTE, never silent-healthy, never a caution/fail', () => {
+    const { io } = fakeDevDepIo({ omit: '', omitOk: false, nodeEnv: 'production', files: { [PKG]: JSON.stringify({ name: 'app', devDependencies: { ztrack: '^1.0.0' } }) } });
+    const r = checkDevDepInstallability('/repo', io);
+    expect(r.failed).toBe(false);
+    expect(r.cautions).toEqual([]);
+    expect(r.warns).toEqual([]);
+    expect(r.notes.some((n) => /could not determine/i.test(n) && /omit/i.test(n))).toBe(true);
   });
 
   test('unparseable package.json ⇒ notes the parse failure, never throws, never fails', () => {
@@ -650,7 +709,7 @@ describe('runPreflightCli — OA-06 dev-dependency installability against a real
       expect(r.exitCode).toBe(1);
       expect(r.stdout).toContain('ztrack');
       expect(r.stdout).toContain('declared');
-      expect(r.stdout).toContain('NODE_ENV=development npm install -D ztrack');
+      expect(r.stdout).toContain('npm install -D ztrack --include=dev');
       expect(r.stdout).toContain('preflight: FAILED');
     } finally {
       rmSync(dir, { recursive: true, force: true });
@@ -691,10 +750,70 @@ describe('runPreflightCli — OA-06 dev-dependency installability against a real
       writeFileSync(join(dir, '.npmrc'), 'omit=dev\n');
       const r = runCli(dir, CLEAN_ENV);
       expect(r.stdout).toMatch(/omit/i);
+      // The .npmrc path must lead with --include=dev and NOT prescribe the (here-broken) NODE_ENV=development.
+      expect(r.stdout).toContain('npm install -D ztrack --include=dev');
+      expect(r.stdout).not.toContain('NODE_ENV=development');
       expect(r.exitCode).toBe(0);
-      rmSync(join(dir, '.npmrc'));
+      rmSync(join(dir, '.npmrc')); // literal filename — never a variable
     } finally {
       rmSync(dir, { recursive: true, force: true });
+    }
+  }, 30_000);
+
+  // ── BLOCKER 1: npm WORKSPACE MEMBER — a first-class adopter host (this file's OA-04 header). A bare
+  // `npm config get omit` exits 1 (ENOWORKSPACES) with empty stdout in a member, so reading stdout alone
+  // would silently skip the check while the F-6 no-op fully reproduces. These run the REAL CLI from inside
+  // a member dir, so a tamper that drops `--no-workspaces` goes red (the probe fails → the check would
+  // silently skip, dropping the caution these assert). No `npm install` needed — ENOWORKSPACES fires purely
+  // from the workspace-root package.json, so these stay fast and network-free.
+  const mkWorkspace = (member: object): string => {
+    const dir = mkdtempSync(join(tmpdir(), 'oa-devdep-ws-'));
+    writeFileSync(join(dir, 'package.json'), JSON.stringify({ name: 'ws-root', version: '1.0.0', workspaces: ['packages/*'] }));
+    mkdirSync(join(dir, 'packages', 'app'), { recursive: true });
+    writeFileSync(join(dir, 'packages', 'app', 'package.json'), JSON.stringify({ name: 'app', version: '1.0.0', ...member }));
+    return dir;
+  };
+
+  test('BLOCKER-1a: NODE_ENV=production inside a workspace MEMBER ⇒ caution still emitted (--no-workspaces makes the omit probe work despite ENOWORKSPACES); no false-alarm exit', () => {
+    const root = mkWorkspace({}); // member declares no devDeps
+    const member = join(root, 'packages', 'app');
+    try {
+      const r = runCli(member, { ...CLEAN_ENV, NODE_ENV: 'production' });
+      expect(r.stdout).toContain('omit=dev');
+      expect(r.stdout).toContain('install NOTHING');
+      expect(r.exitCode).toBe(0); // caution only — the member declares nothing missing
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  }, 30_000);
+
+  test('BLOCKER-1b (RIDER): a workspace member with a devDep HOISTED to the root node_modules ⇒ CAUTION-ONLY (exit 0), never a hard-fail (the hoisted copy resolves via walk-up)', () => {
+    const root = mkWorkspace({ devDependencies: { 'left-pad': '^1.3.0' } });
+    const member = join(root, 'packages', 'app');
+    // Simulate npm's hoist: the member's devDep lands in the ROOT node_modules, NOT the member's own.
+    mkdirSync(join(root, 'node_modules', 'left-pad'), { recursive: true });
+    writeFileSync(join(root, 'node_modules', 'left-pad', 'package.json'), JSON.stringify({ name: 'left-pad', version: '1.3.0' }));
+    try {
+      const r = runCli(member, { ...CLEAN_ENV, NODE_ENV: 'production' });
+      expect(r.stdout).toContain('omit=dev'); // the caution still fires
+      expect(r.stdout).not.toContain('preflight: FAILED'); // but the hoisted devDep resolves → no hard-fail
+      expect(r.stdout).not.toContain('left-pad'); // not reported missing
+      expect(r.exitCode).toBe(0);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  }, 30_000);
+
+  test('BLOCKER-1b sibling: a workspace member whose declared devDep is missing EVERYWHERE (member + root) ⇒ hard-fail naming it (the evidence gate still fires through walk-up)', () => {
+    const root = mkWorkspace({ devDependencies: { 'left-pad': '^1.3.0' } }); // nothing installed anywhere
+    const member = join(root, 'packages', 'app');
+    try {
+      const r = runCli(member, { ...CLEAN_ENV, NODE_ENV: 'production' });
+      expect(r.exitCode).toBe(1);
+      expect(r.stdout).toContain('left-pad');
+      expect(r.stdout).toContain('preflight: FAILED');
+    } finally {
+      rmSync(root, { recursive: true, force: true });
     }
   }, 30_000);
 });

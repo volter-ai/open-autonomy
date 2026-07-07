@@ -206,6 +206,12 @@ npm install -D ztrack            # or: bun add -d ztrack    (a PROJECT dep so it
 #    regenerating package-lock.json if adding the deps desynced it (which `npm run build` won't catch
 #    locally, but the first agent PR's CI would). If it regenerates the lock, commit it (step 5 stages it).
 #    `preflight` (below) also now checks for this NODE_ENV/omit condition mechanically.
+#
+#    npm can rewrite EXISTING dependency ranges while adding these deps (it re-resolves the tree, and
+#    may re-save ranges for pre-existing direct deps it re-places — tree-shape/npm-version dependent).
+#    Inspect what the installs changed beyond adding termfleet/ztrack, and REPORT any changed
+#    pre-existing pin to the human (Phase-2 style confirmation) — do not silently commit it:
+git diff package.json
 npx --yes open-autonomy preflight
 
 # 2. The overlay — additive; generates NO package.json/README/.gitignore over the repo (`--yes` so a cold
@@ -222,13 +228,17 @@ npx ztrack init --preset simple-gh-sdlc --sync github --repo <owner>/<repo>
 #    append so a re-run doesn't duplicate it). Stage the overlay paths EXPLICITLY — never `git add -A` (it
 #    would sweep unrelated/secret files in the human's dirty tree onto the default branch) and never a glob
 #    like `*.lock*` (zsh aborts the whole `git add` on no-match; it also misses `package-lock.json`). Add only
-#    paths that exist, then HARD-STOP if nothing staged (a silent empty commit = a no-op install):
+#    paths that exist, then HARD-STOP if nothing staged (a silent empty commit = a no-op install). Before
+#    committing, diff the staged manifest (below): if it shows changes to pins that existed before the
+#    install, call them out in your report — the commit message says "install open-autonomy", and a range
+#    bump is not that:
 grep -q 'worktrees/' .gitignore || printf '\n# open-autonomy runtime\n.worktrees/\n.open-autonomy/runner-state/\n' >> .gitignore
 for p in .claude .codex .github scheduler scripts standards .open-autonomy .volter .gitignore \
          package.json package-lock.json pnpm-lock.yaml bun.lock yarn.lock; do [ -e "$p" ] && git add "$p"; done
 # HARD-STOP unless an actual harness path staged (a lone .gitignore change ≠ a real install — `compile` failed):
 git diff --cached --name-only | grep -qE '^(scripts/|\.open-autonomy/|\.claude/)' \
   || { echo "ABORT: harness not staged — did 'compile' run in this repo?"; exit 1; }
+git diff --cached package.json   # surface dep-range changes to the human before committing
 git commit -m "chore: install open-autonomy (simple-gh-sdlc, local runner)"
 git push
 # The overlay commits OA's own bun-targeted TS (scripts/*.ts). If the repo's CI lints/typechecks/tests the

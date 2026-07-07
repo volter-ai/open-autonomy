@@ -42,7 +42,8 @@ steps 1–5 (shared) vs step 6 (per code host) below.
 > only OA-specific files (`scripts/`, `.claude/skills/`, `.claude/settings.json`, `scheduler/`,
 > `.open-autonomy/`, `standards/`, `.github/workflows/merge.yml`), so `compile … .` is purely additive — it
 > does **not** generate a `package.json`, `README`, or `.gitignore` over yours. You still merge the runner's
-> deps into your repo (`npm install termfleet`, `npm install -D ztrack`) — step 1 below. The OA files are
+> deps into your repo (`npm install termfleet`, `npm install -D ztrack`) — step 1 below; npm may rewrite
+> **existing** dependency ranges while doing so — review the diff it leaves. The OA files are
 > **committed** to the repo (the agents run in git worktrees, which only see committed files — it's how OA
 > maintains itself) — see quickstart [step 4, "Commit the harness"](#4-commit-the-harness).
 > `.claude/settings.json` wires a Claude Code Stop hook that runs in **every** Claude Code session in this
@@ -99,6 +100,12 @@ passes locally but fails your CI's `npm ci` on the first agent PR):
 ```bash
 npm install termfleet  &&  npx --yes open-autonomy preflight
 ```
+
+> **`npm install termfleet` can rewrite EXISTING dependency ranges, not just add the new one.** npm
+> re-resolves the whole tree when adding a dep, and may re-save ranges for pre-existing direct deps it
+> re-places (tree-shape/npm-version dependent — e.g. an existing `@termfleet/core` range was bumped
+> `^0.2.0`→`^0.2.1` in one observed install). Review `git diff package.json package-lock.json` before you
+> commit (step 5) — don't let an unreviewed range bump ride into the "install open-autonomy" commit.
 
 > **npm workspaces / package-name collisions.** If your repo uses **npm workspaces** (a root `package.json`
 > with a `workspaces` field), check that neither the repo root nor any workspace member is named

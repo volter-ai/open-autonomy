@@ -14,7 +14,8 @@
 // operator remembering to export it (docs/adoption-fixes/OA-09-termfleet-coexistence-provider-pinning.md).
 // An ambient TERMFLEET_PROVIDER_URL still overrides this compiled default at runtime (unchanged doctrine).
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
-import { basename, join } from 'node:path';
+import { basename, dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { bundledProfileNames, profilesRoot } from './bundled-profiles.ts';
 import {
   parseIr,
@@ -39,6 +40,21 @@ import { settingsMergeStrategies, CLAUDE_SETTINGS_PATH } from './settings-merge.
 // `.claude/settings.json` or `scripts/agent.ts`, and telling the adopter "this is a whole-repo scaffold,
 // compile simple-sdlc instead" while they're compiling simple-sdlc is exactly the false claim this fixes).
 const REPO_SHELL_FILES = new Set(['README.md', 'package.json', '.gitignore', 'CHANGELOG.md']);
+
+// OA-15: the CLI's OWN version, read from its sibling package.json — the exact dual-resolution pattern
+// already used for `profilesRoot` (bundled-profiles.ts): `join(dirname(import.meta.url's path), '..',
+// 'package.json')` resolves both in the dev checkout (`bin/../package.json`) and the packed install
+// (`dist/../package.json`). Used to pin the emitted next-steps' doc link + prefix to THIS CLI's version,
+// so an old install's printed guide points at the docs snapshot that matches its own behavior instead of
+// silently drifting with whatever `main` says later (F-14, docs/adoption-fixes/OA-15-…).
+const CLI_VERSION: string = (() => {
+  try {
+    const pkgPath = join(dirname(fileURLToPath(import.meta.url)), '..', 'package.json');
+    return (JSON.parse(readFileSync(pkgPath, 'utf8')) as { version?: string }).version ?? '0.0.0';
+  } catch {
+    return '0.0.0';
+  }
+})();
 
 // profilesRoot + bundledProfileNames() moved to ./bundled-profiles.ts (OA-11) so bin/open-autonomy.ts's
 // --help can derive the same list — see that file for the resolution-in-both-dev-and-packed-install note
@@ -306,7 +322,7 @@ if (outDir) {
       `       ${cd}git add ${stagePaths.join(' ')}  &&  git commit -m "Install the open-autonomy harness"\n` +
       `     (no push required on local-git; see docs/OPERATIONS.md#local-runner-quickstart, step 4)\n`;
     console.log(
-      `\nNext steps (local loop):\n` +
+      `\nNext steps (local loop — open-autonomy v${CLI_VERSION}):\n` +
         `  1. Prereqs: Node 22.18+ (the ztrack preset is .mts), tmux. Add termfleet to this repo (the runner uses its SDK),\n` +
         `     then run preflight (verifies termfleet's PTY native module loads, rebuilding only if needed; checks the doc-default\n` +
         `     ports for a foreign termfleet/other occupant + your CI's lockfile compat):\n` +
@@ -326,7 +342,7 @@ if (outDir) {
         `  ${runStepNum + 1}. This install starts PAUSED (fresh installs start paused so a pre-existing backlog is\n` +
         `     never dispatched before you review it) — step ${runStepNum}'s first tick exits naming this.\n` +
         `     Review your tracker board (especially a pre-existing backlog), then unpause:  rm .open-autonomy/paused\n` +
-        `  Full guide: https://github.com/volter-ai/open-autonomy/blob/main/docs/OPERATIONS.md#local-runner-quickstart`,
+        `  Full guide: https://github.com/volter-ai/open-autonomy/blob/v${CLI_VERSION}/docs/OPERATIONS.md#local-runner-quickstart`,
     );
   }
 } else {

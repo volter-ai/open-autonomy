@@ -152,7 +152,20 @@ function cli(args: string[], cwd: string): SpawnSyncReturns<string> {
   else if (!existsSync(join(dir, 'scheduler', 'run.mjs'))) fail('compile simple-sdlc local .', 'scheduler/run.mjs missing');
   else if (!existsSync(join(dir, '.claude', 'skills'))) fail('compile simple-sdlc local .', '.claude/skills/ missing');
   else if (!/Next steps/.test(r.stdout || '')) fail('compile simple-sdlc local .', `"Next steps" block not printed:\n${r.stdout}`);
-  else ok('compile simple-sdlc local .');
+  else {
+    // OA-15: the PACKED artifact's emitted next-steps must be version-pinned (blob/v<version>, never
+    // blob/main) and must name its own version — this is the exact drift F-14 found (an old install's
+    // guide link silently morphing with whatever `main` says later), verified here from the actual
+    // packed tarball, never the source tree.
+    const pkgVersion = (JSON.parse(readFileSync(join(REPO_ROOT, 'package.json'), 'utf8')) as { version: string }).version;
+    if (!/blob\/v\d+\.\d+\.\d+/.test(r.stdout || '')) {
+      fail('compile simple-sdlc local .', `next-steps guide link is not version-pinned (blob/v…):\n${r.stdout}`);
+    } else if (!r.stdout?.includes(`open-autonomy v${pkgVersion}`)) {
+      fail('compile simple-sdlc local .', `next-steps doesn't name this package's own version (v${pkgVersion}):\n${r.stdout}`);
+    } else {
+      ok('compile simple-sdlc local . (OA-15: next-steps version-pinned)');
+    }
+  }
 }
 
 // ---------- compile self-driving gh-actions . ----------

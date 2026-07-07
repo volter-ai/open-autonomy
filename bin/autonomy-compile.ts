@@ -74,7 +74,7 @@ let out: CompileOutput;
 try {
   out =
     substrate === 'local'
-      ? (await import('@open-autonomy/substrate-local')).compileLocal(ir)
+      ? (await import('@open-autonomy/substrate-local')).compileLocal(ir, { destDir: outDir })
       : (await import('@open-autonomy/substrate-github')).compileGithub(ir);
 } catch (e) {
   // A lazy sibling-data read (emit.ts) throws an actionable packaging-bug Error naming the missing file —
@@ -183,6 +183,9 @@ if (outDir) {
         tracker +
         commitStep +
         `  ${runStepNum}. Run the loop:  ${cd}node scheduler/run.mjs --once   (one tick)  |  node scheduler/run.mjs   (continuous)\n` +
+        `  ${runStepNum + 1}. This install starts PAUSED (fresh installs start paused so a pre-existing backlog is\n` +
+        `     never dispatched before you review it) — step ${runStepNum}'s first tick exits naming this.\n` +
+        `     Review your tracker board (especially a pre-existing backlog), then unpause:  rm .open-autonomy/paused\n` +
         `  Full guide: https://github.com/volter-ai/open-autonomy/blob/main/docs/OPERATIONS.md#local-runner-quickstart`,
     );
   }

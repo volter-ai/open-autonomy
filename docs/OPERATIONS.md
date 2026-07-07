@@ -193,6 +193,23 @@ additionally push as part of their normal PR flow.
 
 ### 5. Run the loop
 
+**A fresh compile starts PAUSED.** Step 3 seeded `.open-autonomy/paused` (every local profile, `hello`
+included) so a repo with an existing backlog is never dispatched before you've reviewed it — the very
+first `--once` below is expected to print a `PAUSED` message and exit nonzero, not launch anything. Once
+you've looked at your board (see step 6's `policy.dispatch` allowlist for a populated tracker), unpause
+with one command:
+
+```bash
+rm .open-autonomy/paused
+```
+
+This is durable: a re-compile/upgrade of the same install never re-writes or re-adds the marker, so
+unpausing is a one-time decision. `touch .open-autonomy/paused` re-arms it at any time — the running loop
+notices on its next check and idles, no restart needed (your local kill-switch; see the stopping note
+below). Two scope notes: pausing fences **new dispatch** only — a session already running keeps running
+(and its finished worktree's propose effect still completes); and in continuous mode an unpause takes
+effect at the next tick boundary, so the first tick after `rm` can lag up to one `intervalSeconds`.
+
 ```bash
 node scheduler/run.mjs --once   # fire one tick, then exit — use this to verify end-to-end
 node scheduler/run.mjs          # run continuously, sleeping between ticks
@@ -205,8 +222,8 @@ PM then launches the workers). To use Codex instead of Claude Code:
 TERMFLEET_AGENT=codex node scheduler/run.mjs
 ```
 
-With the `hello` profile, the first `--once` tick launches a `greeter` session — you'll see it in
-`termfleet sessions recent --live` and the console. That confirms the whole local path works.
+With the `hello` profile, the first **unpaused** `--once` tick launches a `greeter` session — you'll see
+it in `termfleet sessions recent --live` and the console. That confirms the whole local path works.
 
 **Stopping the loop:** `Ctrl-C` the scheduler (or `kill` its PID if you backgrounded it). The
 termfleet console/provider from step 2 are separate background processes — stop them with `kill %1 %2`
@@ -240,6 +257,18 @@ reaches each worker as `$ZTRACK_ISSUE`. You add and inspect work entirely throug
 
 > Using a different tracker? `simple-sdlc`'s agents are just skills that call `ztrack`. Fork the profile
 > (`profiles/simple-sdlc/skills/*`), point the agents at your CLI, then compile your profile dir.
+
+**A pre-existing board?** `simple-sdlc` ships `policy.dispatch: { mode: allowlist, allow_label:
+oa-approved }` in `.open-autonomy/autonomy.yml` — with `mode: allowlist`, the PM only develops a `ready`
+issue that also carries the `oa-approved` label; every other `ready` issue is reported `fenced (no
+oa-approved)` in tick output, never dispatched. On a repo whose tracker already has a backlog, label the
+items you want the loop to work (`ztrack issue edit <id> --add-label oa-approved`, or add the label when
+you `ztrack issue create`) before unpausing; on a fresh/empty board, set `policy.dispatch.mode: open` (or
+label as you create). This is a second, independent layer from the pause above: the pause is a global
+go/no-go the operator flips once, the allowlist is a per-issue opt-in for the long tail of old work. The
+PM also now reads the full body of any issue it's about to dispatch — an explicit do-not-dispatch /
+deferred / blocked-by / on-hold note in the prose makes it ineligible regardless of `ready` state (prose
+wins over state; see `profiles/simple-sdlc/skills/pm/SKILL.md`).
 
 #### GitHub code host (`simple-gh-sdlc`) — auto-merging PRs, agents on your machine
 

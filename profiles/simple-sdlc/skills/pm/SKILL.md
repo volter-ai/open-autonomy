@@ -15,6 +15,13 @@ Before dispatching develop on an issue, consult `policy.risk.human_required_topi
 your own list): an issue on one of those topics, or whose change would land in a matching path,
 is a human decision — do not dispatch it; note it as blocked-for-human in your tick output.
 
+Also consult `policy.dispatch` in `.open-autonomy/autonomy.yml`. Under `mode: allowlist`, a `ready`
+issue **without** the label named in `allow_label` (e.g. `oa-approved`) is a day-one fence against a
+pre-existing backlog nobody has opted in yet — it is **ineligible for develop regardless of its `ready`
+state**: never dispatch it, and report it as `fenced (no <allow_label>)` in your tick output (do not treat
+it as blocked-for-human — it's not a decision, it's simply not yet opted in). Under `mode: open` (or no
+`policy.dispatch` box at all), every `ready` issue is eligible on this axis.
+
 This is an execution skill, not a status report. Do not stop after summarizing
 state. A tick is complete only after exactly one action happened (a dispatch or
 an integration), or after you verified none is eligible.
@@ -69,10 +76,24 @@ worktrees by hand.
    - **Develop**: else if no issue is `in-review`, WIP allows it, and (checking
      `bun scripts/runner.ts list develop` — there is no `develop` already running)
      an issue needs a developer — either:
-       - a `ready` issue with **no** `agent/issue-<id>` branch yet (fresh work), or
+       - a `ready` issue with **no** `agent/issue-<id>` branch yet (fresh work) **and**,
+         under `policy.dispatch.mode: allowlist`, carrying `allow_label` — or
        - an `in-progress` issue whose `agent/issue-<id>` branch **exists** but has no
-         running `develop` session (**rework** a reviewer sent back) —
-     launch the developer: `bun scripts/runner.ts launch develop --ref <id> --branch
+         running `develop` session (**rework** a reviewer sent back; already dispatched
+         once, so the allowlist gate doesn't re-apply) —
+
+     **Before launching, `ztrack issue view <id>` and read the body.** State (`ready`) says the
+     issue *can* be implemented; it says nothing about whether it *should be* right now. An
+     explicit do-not-dispatch / deferred / blocked-by / on-hold marker in the body (or a citation
+     of a decision record deferring it) makes the issue **ineligible regardless of its `ready`
+     state — prose wins over state**. Treat it exactly like the human-required case above: do not
+     dispatch; report it as blocked-for-human in tick output, and move on to the next-eligible
+     candidate this same tick (don't just stop). Re-reading the body every tick means a deferred
+     issue is refused every tick, not just the first time — there is no separate "already saw
+     this" memory to maintain.
+
+     Once a candidate clears both the allowlist gate and the body read, launch the developer:
+     `bun scripts/runner.ts launch develop --ref <id> --branch
      agent/issue-<id>` (creates the worktree for fresh work, reuses it for rework).
    - Else stop without action.
 4. After acting, `ztrack check --json`. Do not wait for a launched worker to finish.

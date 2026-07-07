@@ -25,6 +25,22 @@ describe('emitAutonomy — policy box', () => {
   test('an empty box yields an empty policy', () => {
     expect(emitAutonomy(irWithBox({})).policy).toEqual({});
   });
+
+  // OA-07: the day-one dispatch fence (profiles/simple-sdlc/ir.yml's `policy.box.dispatch`) is carried
+  // through the SAME opaque, verbatim channel as `risk`/`wip` — no core/substrate schema work needed for
+  // a new policy key. This pins that round-trip so a future manifest refactor can't silently drop it.
+  test('carries policy.dispatch (the allowlist fence) verbatim, alongside risk', () => {
+    const m = emitAutonomy(
+      irWithBox({
+        dispatch: { mode: 'allowlist', allow_label: 'oa-approved' },
+        risk: { human_required_topics: ['secrets'] },
+      }),
+    );
+    expect(m.policy).toEqual({
+      dispatch: { mode: 'allowlist', allow_label: 'oa-approved' },
+      risk: { human_required_topics: ['secrets'] },
+    });
+  });
 });
 
 describe('emitAutonomy — a kind:human actor', () => {

@@ -35,7 +35,16 @@ const have = (cmd: string) => { try { return run(cmd, ['--version']).status === 
 // top-level side effects — the `io` seam (fs reads + the spawn used for both the load probe and `npm
 // rebuild`) is what lets tests assert "probe passes ⇒ npm is never invoked" without a real install.
 
-export type RunFn = (cmd: string, args: string[], opts?: Record<string, unknown>) => { status: number | null; stdout: string; stderr: string };
+// Shaped after spawnSync's return, loosened where the runtimes disagree: when the executable is MISSING,
+// node's spawnSync returns `status: null` while bun's returns `status: undefined` with null stdout/stderr
+// (both set `error` ENOENT; neither sets `signal`) — verified empirically on node v22 / bun 1.3. Consumers
+// must use nullish (`== null`) checks, never `=== null`.
+export type RunFn = (cmd: string, args: string[], opts?: Record<string, unknown>) => {
+  status: number | null | undefined;
+  stdout: string | null | undefined;
+  stderr: string | null | undefined;
+  signal?: string | null | undefined;
+};
 
 export interface PtyIO {
   existsSync: (p: string) => boolean;
@@ -73,6 +82,14 @@ export function resolvePtyDir(cwd: string, name: string, existsFn: (p: string) =
 export interface ProbeOutcome {
   ok: boolean;
   stderr: string;
+  /** True when the probe process never RAN at all — `node` not found on PATH (spawnSync: no exit status,
+   *  no signal; node reports status null, bun status undefined — see RunFn). This is an ENVIRONMENT
+   *  problem, not a module-load failure: reporting it as "failed to load" and prescribing a rebuild +
+   *  build toolchain would be exactly the F-5 cry-wolf class this check exists to kill. A SIGNAL-killed
+   *  probe (also status null, but signal set — e.g. a corrupt `.node` segfaulting the loader) is NOT this:
+   *  that's a genuine load failure the rebuild path exists for. Callers must branch on this BEFORE
+   *  treating `!ok` as a broken module. */
+  nodeMissing: boolean;
 }
 
 /** Health = a load probe, not an artifact path. Run under `node` EXPLICITLY (never the current
@@ -82,16 +99,20 @@ export interface ProbeOutcome {
  *  reports cleanly either way. */
 export function probePtyLoad(ptyDir: string, runFn: RunFn): ProbeOutcome {
   const r = runFn('node', ['-e', 'require(process.argv[1])', ptyDir]);
-  return { ok: r.status === 0, stderr: (r.stderr ?? '').trim() };
+  // Nullish (== null) on purpose: node's spawnSync reports a missing executable as status null, bun's as
+  // status undefined (verified live — a strict === null misdiagnosed the bun path as a module failure).
+  const nodeMissing = r.status == null && r.signal == null;
+  return { ok: r.status === 0, stderr: (r.stderr ?? '').trim(), nodeMissing };
 }
 
 /** The version of the `node` binary the probe actually ran under — NOT `process.versions.node` (when
  *  preflight itself runs under bun, that reports bun's Node-compat target, not the system `node` the child
- *  probe used, which is the ABI that actually matters here). Falls back to a generic label if `node
- *  --version` can't be read for some reason (never worth failing the check over). */
+ *  probe used, which is the ABI that actually matters here). Falls back to an honest label if `node
+ *  --version` can't be read for some reason (never worth failing the check over) — the messages read
+ *  "… under node ${version}", so the fallback must not be the literal 'node' ("under node node"). */
 function realNodeVersion(runFn: RunFn): string {
   const r = runFn('node', ['--version']);
-  return (r.stdout ?? '').trim() || 'node';
+  return (r.stdout ?? '').trim() || '(version unknown)';
 }
 
 const tail = (s: string, n = 20) => s.trim().split('\n').slice(-n).join('\n');
@@ -135,6 +156,13 @@ export function ensurePtyModule(cwd: string, io: PtyIO = defaultPtyIO): PtyCheck
   const first = probePtyLoad(ptyDir, io.run);
   if (first.ok) {
     note(`${name} loads under node ${nodeVersion} (termfleet provider can start) ✓`);
+    return { notes, warns, failed: warns.length > 0, rebuildAttempted };
+  }
+  if (first.nodeMissing) {
+    // The probe never ran — `node` isn't on PATH. That's an environment gap, NOT a broken module:
+    // rebuilding can't help (npm needs node too) and prescribing a build toolchain would be a fresh
+    // false diagnosis of the exact kind this check replaces. Warn with the real remedy and stop.
+    warn('node not found on PATH — install Node 22+ (the termfleet runner and this probe run under node) and re-run `open-autonomy preflight`');
     return { notes, warns, failed: warns.length > 0, rebuildAttempted };
   }
 

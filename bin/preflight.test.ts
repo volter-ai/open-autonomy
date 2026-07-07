@@ -42,15 +42,21 @@ function fixtureRepo(depName: string | null, opts: { nested?: boolean; install?:
 // A fake `run` seam: records every invocation, answers the `node -e require(...)` probe with a scripted
 // outcome, and answers `npm rebuild` with a scripted outcome too (defaulting to npm's real-world "rebuilt
 // dependencies successfully" no-op text — the exact phrase that must never stand alone as a success signal).
+// `nodeMissing: true` models `node` absent from PATH: spawnSync returns status null (the process never ran)
+// for EVERY node invocation, including `node --version`.
 function fakeRun(opts: {
   probe: boolean | boolean[]; // one outcome, or one per successive probe call
   rebuildStdout?: string;
   rebuildStatus?: number;
+  nodeMissing?: boolean;
 }): { run: RunFn; calls: { cmd: string; args: string[] }[] } {
   const calls: { cmd: string; args: string[] }[] = [];
   const probes = Array.isArray(opts.probe) ? [...opts.probe] : [opts.probe];
   const run: RunFn = (cmd, args) => {
     calls.push({ cmd, args });
+    // bun-style ENOENT shape (status undefined, null stdio) — the shape the live CLI actually sees, since
+    // preflight runs under bun; probePtyLoad must handle node's status-null shape too (tested separately).
+    if (cmd === 'node' && opts.nodeMissing) return { status: undefined, stdout: null, stderr: null };
     if (cmd === 'node' && args[0] === '--version') return { status: 0, stdout: 'v22.22.2\n', stderr: '' };
     if (cmd === 'node') {
       const ok = probes.length > 1 ? probes.shift()! : probes[0]!;
@@ -115,7 +121,7 @@ describe('resolvePtyDir — honors nesting', () => {
 describe('probePtyLoad — a real `require` probe under node, driven by the injected run seam', () => {
   test('exit 0 ⇒ ok, no stderr required', () => {
     const { run } = fakeRun({ probe: true });
-    expect(probePtyLoad('/repo/node_modules/x', run)).toEqual({ ok: true, stderr: '' });
+    expect(probePtyLoad('/repo/node_modules/x', run)).toEqual({ ok: true, stderr: '', nodeMissing: false });
   });
 
   test('nonzero exit ⇒ not ok, carries the real loader error', () => {
@@ -135,6 +141,27 @@ describe('probePtyLoad — a real `require` probe under node, driven by the inje
     expect(calls).toHaveLength(1);
     expect(calls[0]!.cmd).toBe('node');
     expect(calls[0]!.args).toEqual(['-e', 'require(process.argv[1])', '/repo/node_modules/x']);
+  });
+
+  test('node not on PATH, node-runtime shape (status null, no signal) ⇒ nodeMissing, distinct from a load failure', () => {
+    const run: RunFn = () => ({ status: null, stdout: '', stderr: '', signal: null });
+    const r = probePtyLoad('/repo/node_modules/x', run);
+    expect(r.ok).toBe(false);
+    expect(r.nodeMissing).toBe(true);
+  });
+
+  test('node not on PATH, bun-runtime shape (status undefined, null stdio) ⇒ nodeMissing too (== null, never === null)', () => {
+    const { run } = fakeRun({ probe: true, nodeMissing: true });
+    const r = probePtyLoad('/repo/node_modules/x', run);
+    expect(r.ok).toBe(false);
+    expect(r.nodeMissing).toBe(true);
+  });
+
+  test('a SIGNAL-killed probe (status null but signal set — e.g. a corrupt .node segfaulting node) is a load failure, NOT nodeMissing', () => {
+    const run: RunFn = () => ({ status: null, stdout: '', stderr: '', signal: 'SIGSEGV' });
+    const r = probePtyLoad('/repo/node_modules/x', run);
+    expect(r.ok).toBe(false);
+    expect(r.nodeMissing).toBe(false);
   });
 });
 
@@ -227,6 +254,24 @@ describe('ensurePtyModule — the assembled check', () => {
     cleanup();
   });
 
+  test('node missing from PATH ⇒ an install-Node warn, NEVER a rebuild attempt or toolchain advice (not a false module failure)', () => {
+    const dir = mk('@homebridge/node-pty-prebuilt-multiarch');
+    const { run, calls } = fakeRun({ probe: true, nodeMissing: true });
+    const r = ensurePtyModule(dir, io(dir, run));
+    expect(r.failed).toBe(true);
+    expect(r.rebuildAttempted).toBe(false);
+    expect(calls.every((c) => c.cmd !== 'npm')).toBe(true);
+    expect(r.warns).toHaveLength(1);
+    expect(r.warns[0]).toContain('node not found on PATH');
+    expect(r.warns[0]).toContain('install Node 22+');
+    // The misdiagnosis this branch prevents: no "failed to load", no rebuild noise, no toolchain advice.
+    const all = [...r.notes, ...r.warns].join('\n');
+    expect(all).not.toContain('failed to load');
+    expect(all).not.toContain('build toolchain');
+    expect(all).not.toMatch(/rebuild/i);
+    cleanup();
+  });
+
   test('probe fails and stays failed after rebuild ⇒ exactly one FAILED block with the real loader error + toolchain advice, and NO ✓ line for this check', () => {
     const dir = mk('@homebridge/node-pty-prebuilt-multiarch');
     const { run, calls } = fakeRun({ probe: [false, false], rebuildStdout: 'rebuilt dependencies successfully\n' });
@@ -241,5 +286,41 @@ describe('ensurePtyModule — the assembled check', () => {
     // Mutual exclusivity: success and failure output for this check never coexist.
     expect(r.notes.some((n) => n.includes('✓'))).toBe(false);
     cleanup();
+  });
+});
+
+// ── the CLI driver: warn → exit 1 wiring (spawn-level, import.meta.main path) ────────────────────
+// ensurePtyModule returns notes/warns; runPreflightCli replays them through the printing note/warn
+// helpers, and `warn` is what sets `failed` → exit 1. That replay is the one seam the DI tests above
+// can't see: a mutation replaying warns as notes would keep every unit test green while the gate
+// silently stopped failing. So drive the real CLI (`bun bin/preflight.ts`, the direct-execution
+// import.meta.main path — pattern: bin/lint-profile.test.ts) against on-disk fixtures and assert the
+// exit code itself.
+describe('runPreflightCli — a pty warn fails the gate (exit 1), skips pass it (exit 0)', () => {
+  const REPO_ROOT = join(import.meta.dir, '..');
+  const runCli = (cwd: string): { exitCode: number; stdout: string } => {
+    const r = Bun.spawnSync(['bun', join(REPO_ROOT, 'bin', 'preflight.ts')], { cwd, stdout: 'pipe', stderr: 'pipe' });
+    return { exitCode: r.exitCode, stdout: r.stdout.toString('utf8') };
+  };
+
+  test('a pty warn (dep declared but installed nowhere) exits 1 and prints the preflight: ! prefix', () => {
+    // No package-lock.json in the fixture, so the lockfile check skips — the pty warn is the only
+    // failure source, isolating the warn→exit-code wiring.
+    const dir = fixtureRepo('@homebridge/node-pty-prebuilt-multiarch', { install: false });
+    const r = runCli(dir);
+    expect(r.exitCode).toBe(1);
+    expect(r.stdout).toContain('preflight: ! ');
+    expect(r.stdout).toContain('is not installed');
+    expect(r.stdout).toContain('preflight: FAILED');
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  test('the all-skip path (no termfleet, no lockfile) exits 0', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'oa-preflight-pty-'));
+    const r = runCli(dir);
+    expect(r.exitCode).toBe(0);
+    expect(r.stdout).toContain('termfleet not installed yet — skip');
+    expect(r.stdout).toContain('preflight: OK');
+    rmSync(dir, { recursive: true, force: true });
   });
 });

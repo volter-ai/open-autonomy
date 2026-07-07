@@ -1,13 +1,13 @@
 ---
 identifier: "LOCAL-38"
 title: "OA-09: coexist with existing termfleet infra — unique ports, durable provider pin, truthful probes"
-state: "ready"
-stateType: "open"
+state: "done"
+stateType: "completed"
 assignees: ["tony"]
 priority: 0
 devProgress: ""
 createdAt: "2026-07-06T12:58:30.899Z"
-updatedAt: "2026-07-06T12:58:30.899Z"
+updatedAt: "2026-07-07T12:09:43.752Z"
 url: "local://tracker/issue/LOCAL-38"
 ---
 Assignee: tony
@@ -20,10 +20,12 @@ Coordinate with: OA-16 (checklist canonicalizes the recipe), OA-05 (shared prefl
 Provenance: OA-INSTALL-AUDIT-FINDINGS.md F-8 (§2 P1) + narrative §1 steps 4, 6.
 
 ## Acceptance Criteria
-- [ ] dev/01 v1 an install on a box with a foreign provider on 7373 gets a warning naming the conflict and produces a pinned schedule.json (today: silent misattachment risk)
-  - status: pending
-- [ ] dev/02 v1 every numbered criterion in the spec's Acceptance criteria section is demonstrated: each fails before the fix and passes after, with command output as evidence
-  - status: pending
+- [x] dev/01 v1 an install on a box with a foreign provider on 7373 gets a warning naming the conflict and produces a pinned schedule.json (today: silent misattachment risk)
+  - status: done — see close-out
+- [x] dev/02 v1 every numbered criterion in the spec's Acceptance criteria section is demonstrated: each fails before the fix and passes after, with command output as evidence
+  - status: done — see close-out
+
+Close-out: merged to adoption-fixes-backlog @ 2b2bc9f (builder a26f02b + 72661e7). Preflight port/provider classification via /healthz body-shape (never curl -fsS /), --provider-url durable pin into scheduler/schedule.json, effective-provider log with source. READ-ONLY (no spend path — both Fable panelists signed off). F-5 crying-wolf cured (unpinned+occupant is a caution, not hard-fail — foreignness is unprovable from a probe); empty-string log-lie cured (env normalized + logged source derived from the real merged env, precedence-of-reality test). AC-7 misattachment live-pending (a live-agent-spend incident during build made a second live launch unwise). 5-link proof: /workspace/proofs/oa-09.md.
 
 <!--tracker:comments
 []

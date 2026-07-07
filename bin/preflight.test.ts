@@ -918,6 +918,27 @@ describe('ensureAgentAuth — DI-driven, stub `run` only (never a real claude/co
     expect(calls).toHaveLength(1); // the probe still ran — an empty string is not "set"
   });
 
+  // FIX 5: the non-interactive claude credential routes — a bearer token, or the Bedrock/Vertex cloud
+  // routes — legitimately report `loggedIn: false` on a healthy box (claude authenticates without a
+  // `/login` session), so each must bypass the probe with a note instead of hard-failing (residual F-5).
+  for (const v of ['ANTHROPIC_AUTH_TOKEN', 'CLAUDE_CODE_USE_BEDROCK', 'CLAUDE_CODE_USE_VERTEX']) {
+    test(`${v} set ⇒ pass with a note, probe NEVER invoked (a logged-out stub behind it would fail if called)`, () => {
+      const { run, calls } = fakeAuthRun({ status: 1, stdout: '{"loggedIn": false}\n' });
+      const r = ensureAgentAuth({ run, env: { [v]: '1' } });
+      expect(r.failed).toBe(false);
+      expect(r.warns).toEqual([]);
+      expect(r.notes.some((n) => n.includes(v))).toBe(true);
+      expect(calls).toHaveLength(0);
+    });
+
+    test(`an EMPTY ${v} does NOT bypass the probe (\`test -n\` semantics)`, () => {
+      const { run, calls } = fakeAuthRun({ status: 0, stdout: '{"loggedIn": true}\n' });
+      const r = ensureAgentAuth({ run, env: { [v]: '' } });
+      expect(r.failed).toBe(false);
+      expect(calls).toHaveLength(1);
+    });
+  }
+
   test('older CLI: `auth status --json` errors with no loggedIn field ⇒ a NOTE, gate stays green (feature-detect, not version-parse)', () => {
     const { run } = fakeAuthRun({ status: 1, stdout: '', stderr: "error: unknown command 'auth'\n" });
     const r = ensureAgentAuth({ run, env: {} });
@@ -989,7 +1010,19 @@ describe('runPreflightCli — OA-14 agent-auth gate, against PATH-shimmed stub `
   }
   function runCli(cwd: string, binDir: string, extraEnv: Record<string, string | undefined> = {}): { exitCode: number; stdout: string } {
     const fullEnv: Record<string, string> = {};
-    for (const [k, v] of Object.entries({ ...process.env, ...extraEnv, PATH: `${binDir}:${process.env.PATH ?? ''}` })) {
+    // Default the harness + every claude auth-bypass var UNSET (undefined → filtered out below) so ambient
+    // env on the machine running the suite can't flip AC-1/AC-3/AC-5: `TERMFLEET_AGENT=codex` would divert
+    // to the note-green branch, and any of ANTHROPIC_API_KEY / ANTHROPIC_AUTH_TOKEN / CLAUDE_CODE_USE_* set
+    // ambiently would bypass the probe entirely — all reasons unrelated to what these tests assert. A test
+    // overrides via extraEnv (AC-4 sets ANTHROPIC_API_KEY back on).
+    const cleared: Record<string, undefined> = {
+      TERMFLEET_AGENT: undefined,
+      ANTHROPIC_API_KEY: undefined,
+      ANTHROPIC_AUTH_TOKEN: undefined,
+      CLAUDE_CODE_USE_BEDROCK: undefined,
+      CLAUDE_CODE_USE_VERTEX: undefined,
+    };
+    for (const [k, v] of Object.entries({ ...process.env, ...cleared, ...extraEnv, PATH: `${binDir}:${process.env.PATH ?? ''}` })) {
       if (v !== undefined) fullEnv[k] = v;
     }
     const r = Bun.spawnSync(['bun', join(REPO_ROOT, 'bin', 'preflight.ts')], { cwd, stdout: 'pipe', stderr: 'pipe', env: fullEnv });
@@ -1041,7 +1074,11 @@ describe('runPreflightCli — OA-14 agent-auth gate, against PATH-shimmed stub `
       const r = runCli(repo, bin, { ANTHROPIC_API_KEY: undefined });
       expect(r.exitCode).toBe(0);
       expect(r.stdout).toContain('signed in');
-      expect(r.stdout).not.toContain('preflight: ! ');
+      // Narrow to the AUTH-specific warn substring, NOT the bare `preflight: ! ` prefix: OA-09's
+      // provider/port check emits `caution()` lines with that SAME prefix when a termfleet provider
+      // occupies 7373/7402 (true on a fleet dev box), which would make this go RED post-merge for a
+      // reason unrelated to agent auth. `is NOT signed in` is uniquely the auth warn (bin/preflight.ts).
+      expect(r.stdout).not.toContain('is NOT signed in');
       expect(r.stdout).toContain('preflight: OK');
     } finally {
       rmSync(repo, { recursive: true, force: true });
@@ -1070,7 +1107,8 @@ describe('runPreflightCli — OA-14 agent-auth gate, against PATH-shimmed stub `
       const r = runCli(repo, bin, { ANTHROPIC_API_KEY: 'sk-test-dummy-set' });
       expect(r.exitCode).toBe(0);
       expect(r.stdout).toContain('ANTHROPIC_API_KEY');
-      expect(r.stdout).not.toContain('preflight: ! ');
+      // Auth-specific negative (see AC-2's note) — not the bare prefix OA-09's port caution shares.
+      expect(r.stdout).not.toContain('is NOT signed in');
       expect(existsSync(join(bin, '.invoked'))).toBe(false);
     } finally {
       rmSync(repo, { recursive: true, force: true });
@@ -1096,7 +1134,8 @@ describe('runPreflightCli — OA-14 agent-auth gate, against PATH-shimmed stub `
       const r = runCli(repo, bin, { ANTHROPIC_API_KEY: undefined });
       expect(r.exitCode).toBe(0);
       expect(r.stdout).toContain('cannot verify sign-in');
-      expect(r.stdout).not.toContain('preflight: ! ');
+      // Auth-specific negative (see AC-2's note) — not the bare prefix OA-09's port caution shares.
+      expect(r.stdout).not.toContain('is NOT signed in');
       expect(r.stdout).toContain('preflight: OK');
     } finally {
       rmSync(repo, { recursive: true, force: true });
@@ -1108,20 +1147,23 @@ describe('runPreflightCli — OA-14 agent-auth gate, against PATH-shimmed stub `
     const repo = emptyRepo();
     const bin = mkdtempSync(join(tmpdir(), 'oa-preflight-auth-bin-'));
     try {
-      // A stub that EXPLODES if invoked with `-p` (would only happen if preflight regressed to the billed
-      // deep probe) but behaves normally for the documented auth-status probe.
+      // The tripwire is a MARKER FILE, not a stderr line: runCli returns only stdout, so an earlier
+      // stderr-only tripwire had NO teeth (a real `-p` call would leave the suite green). The stub touches
+      // `.p-invoked` if ever called with `-p` (a regression to the billed deep probe) and still exits
+      // nonzero; the assertion is that the marker is ABSENT — this test goes red the instant preflight
+      // shells out `claude -p`, no matter where that call's output goes. NEVER wire a real `claude -p`.
       shim(
         bin,
         'claude',
         [
-          'if [ "$1" = "-p" ]; then echo "PREFLIGHT MUST NEVER CALL claude -p" >&2; exit 99; fi',
+          `if [ "$1" = "-p" ]; then touch "${join(bin, '.p-invoked')}"; echo "PREFLIGHT MUST NEVER CALL claude -p" >&2; exit 99; fi`,
           'if [ "$1" = "auth" ] && [ "$2" = "status" ]; then echo \'{"loggedIn": true}\'; exit 0; fi',
           'exit 0',
         ].join('\n'),
       );
       const r = runCli(repo, bin, { ANTHROPIC_API_KEY: undefined });
       expect(r.exitCode).toBe(0);
-      expect(r.stdout).not.toContain('MUST NEVER CALL');
+      expect(existsSync(join(bin, '.p-invoked'))).toBe(false);
     } finally {
       rmSync(repo, { recursive: true, force: true });
       rmSync(bin, { recursive: true, force: true });

@@ -126,11 +126,12 @@ missing or logged-out CLI. So sign in *first*:
   Instead check the CLI's own auth-status introspection (free, offline, no model call) and honor the
   API-key alternative:
   ```bash
-  claude auth status --json | grep -q '"loggedIn": true' || test -n "$ANTHROPIC_API_KEY" \
+  claude auth status --json | grep -Eq '"loggedIn"[[:space:]]*:[[:space:]]*true' || test -n "$ANTHROPIC_API_KEY" \
     || echo "NOT signed in — run: claude /login"
   ```
   Parse the `loggedIn` JSON field, not the exit code — the signed-out exit code isn't a stable contract
-  across CLI versions, but the field is.
+  across CLI versions, but the field is. (The `-E` whitespace-tolerant pattern also matches compact JSON,
+  where the CLI may print `"loggedIn":true` with no space.)
 - **Codex (alternative):** run `codex login`. To use Codex instead of Claude, set
   `TERMFLEET_AGENT=codex` when you start the loop (step 5). Verify sign-in with the codex analogue of the
   probe above:

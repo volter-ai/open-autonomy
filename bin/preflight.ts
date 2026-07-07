@@ -469,22 +469,34 @@ export interface AgentAuthCheckResult {
 // `TERMFLEET_AGENT` resolution — same default 'claude'). `claude auth status --json` is verified on this
 // spec's investigation box (claude CLI 2.1.201/2.1.202): free, offline, `{"loggedIn": true|false, ...}`,
 // exit 0 signed-in (signed-out exit code observed as 1 on THIS box but is NOT trusted — see the JSON-field
-// parse below). `codex login status` is the codex analogue this spec did NOT independently verify against
-// a pinned codex CLI (none was available to probe) — it mirrors bin/doctor-checks.ts's own INTROSPECTION
-// table; update here (and there) if a live codex CLI proves the name/output contract differs.
+// parse below). Only `claude` is wired here BY DESIGN: this spec (OA-14) verified only the claude-side
+// contract, so a non-claude harness (e.g. codex) has NO entry and is handled note-green below (never a
+// fabricated, unverified probe). `bin/doctor-checks.ts`'s separately-designed `checkAuth` DOES carry a
+// `codex login status` entry (its own comment likewise doesn't claim the codex contract was verified); if
+// a live codex CLI later confirms the name/output, add a `codex` entry here to gate on it too.
 const AGENT_AUTH_PROBE: Record<string, { cmd: string; args: string[] }> = {
   claude: { cmd: 'claude', args: ['auth', 'status', '--json'] },
 };
+
+// Any of these being set means claude authenticates WITHOUT an interactive `/login` session, so
+// `auth status` legitimately reports `loggedIn: false` on a perfectly healthy box (verified: a Bedrock/
+// Vertex/token box is signed OUT of claude.ai yet launches fine). Treating that as a hard failure would be
+// exactly the F-5 cry-wolf class this file exists to kill — so any of them bypasses the probe with a note.
+// ANTHROPIC_API_KEY is the common case; ANTHROPIC_AUTH_TOKEN (a bearer token), and the
+// CLAUDE_CODE_USE_BEDROCK / CLAUDE_CODE_USE_VERTEX cloud-provider routes are the other credential paths the
+// claude CLI honors. A non-claude harness ignores this list (its own auth env is not modeled here).
+const CLAUDE_AUTH_BYPASS_VARS = ['ANTHROPIC_API_KEY', 'ANTHROPIC_AUTH_TOKEN', 'CLAUDE_CODE_USE_BEDROCK', 'CLAUDE_CODE_USE_VERTEX'] as const;
 
 const AGENT_AUTH_TIMEOUT_MS = 10_000;
 
 /** Ensure the coding CLI the loop will actually launch is signed in — the check `claude --version` never
  *  was (it exits 0 identically logged-in or logged-out). Resolves the harness the SAME way the local
- *  runner does (`TERMFLEET_AGENT`, default `claude`); an `ANTHROPIC_API_KEY` bypasses the claude probe
- *  entirely (a key-based launch works regardless of `loggedIn`). This is a HARD gate (warn ⇒ failed) when
- *  we can positively determine "signed out" — but a MISSING/older `auth status` subcommand, a `claude` not
- *  on PATH, or a probe that times out all feature-detect to a soft note and leave the gate green, since
- *  none of those are proof of a logged-out CLI. */
+ *  runner does (`TERMFLEET_AGENT`, default `claude`); a non-interactive claude credential env var
+ *  (`CLAUDE_AUTH_BYPASS_VARS` — API key, bearer token, or a Bedrock/Vertex route) bypasses the claude probe
+ *  entirely (those launches work regardless of `loggedIn`). This is a HARD gate (warn ⇒ failed) when we can
+ *  positively determine "signed out" — but a MISSING/older `auth status` subcommand, a `claude` not on
+ *  PATH, or a probe that times out all feature-detect to a soft note and leave the gate green, since none
+ *  of those are proof of a logged-out CLI. */
 export function ensureAgentAuth(io: AgentAuthIO = defaultAgentAuthIO): AgentAuthCheckResult {
   const notes: string[] = [];
   const warns: string[] = [];
@@ -493,9 +505,13 @@ export function ensureAgentAuth(io: AgentAuthIO = defaultAgentAuthIO): AgentAuth
 
   const harness = io.env.TERMFLEET_AGENT || 'claude';
 
-  if (harness === 'claude' && !!io.env.ANTHROPIC_API_KEY) {
-    note('ANTHROPIC_API_KEY is set — claude will authenticate with the key regardless of `claude /login` state ✓');
-    return { notes, warns, failed: false };
+  if (harness === 'claude') {
+    // `test -n` semantics — an EMPTY string is not "set" (mirrors the documented doc-check condition).
+    const bypass = CLAUDE_AUTH_BYPASS_VARS.find((v) => !!io.env[v]);
+    if (bypass) {
+      note(`${bypass} is set — claude will authenticate via that credential regardless of \`claude /login\` state ✓`);
+      return { notes, warns, failed: false };
+    }
   }
 
   const probe = AGENT_AUTH_PROBE[harness];

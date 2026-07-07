@@ -56,7 +56,7 @@ command -v jq >/dev/null || echo "note: jq not found (optional — the guide avo
 node -e 'const[a,b]=process.versions.node.split(".").map(Number);process.exit(a>22||(a===22&&b>=18)?0:1)' \
   || echo "Node >= 22.18 required (the installed ztrack validation preset is .mts → needs TS type-stripping)"
 gh auth status || echo "gh not authenticated"
-claude auth status --json 2>/dev/null | grep -q '"loggedIn": true' || test -n "$ANTHROPIC_API_KEY" \
+claude auth status --json 2>/dev/null | grep -Eq '"loggedIn"[[:space:]]*:[[:space:]]*true' || test -n "$ANTHROPIC_API_KEY" \
   || echo "claude not signed in — run: claude, then /login (or set ANTHROPIC_API_KEY); TERMFLEET_AGENT=codex? verify with: codex login status"
 ```
 

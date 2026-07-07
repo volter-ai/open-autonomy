@@ -55,6 +55,10 @@ function scaffold(compiled: CompileOutput): string {
   }
   mkdirSync(join(dir, 'scripts'), { recursive: true });
   writeFileSync(join(dir, 'scripts', 'sweep.ts'), 'console.log("swept");\n');
+  // This fixture proves the uncommitted-harness guard (OA-03), not the day-one pause fence (OA-07) — a
+  // fresh compileLocal() lands paused by default, and the --once pause gate runs BEFORE the harness guard,
+  // so it would mask every assertion below. Unpause exactly like an operator's `rm .open-autonomy/paused`.
+  rmSync(join(dir, '.open-autonomy', 'paused'), { force: true });
   return dir;
 }
 
@@ -215,6 +219,25 @@ describe('scheduler/run.mjs --once — the uncommitted-harness guard (OA-03)', (
       expect(r.stderr).toContain('WARNING');
       expect(r.stderr).toContain('AUTONOMY_ALLOW_UNCOMMITTED_HARNESS=1');
       expect(r.stderr).toContain('.claude/skills/develop/SKILL.md');
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test('composition (OA-07 x OA-03): paused AND uncommitted -> PAUSED wins, harness guard never speaks', () => {
+    // Ordering contract pinned at merge time: the pause gate (--once) runs before the termfleet and
+    // harness guards, so a deliberately paused install reports PAUSED as the one reason nothing ran —
+    // never a commit nag on a repo the operator has explicitly fenced.
+    const out = compileLocal(ir);
+    const dir = scaffold(out);
+    try {
+      initGitRepo(dir);
+      git(dir, ['commit', '-q', '--allow-empty', '-m', 'base']); // harness uncommitted AND paused
+      writeFileSync(join(dir, '.open-autonomy', 'paused'), 'paused for the composition test\n');
+      const r = runOnce(dir);
+      expect(r.status).toBe(1);
+      expect(r.stderr).toContain('PAUSED');
+      expect(r.stderr).not.toContain('the open-autonomy harness is not');
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }

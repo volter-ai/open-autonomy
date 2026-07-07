@@ -89,10 +89,10 @@ Install these once, on the machine that will run the loop:
 | **bun** (for `simple-sdlc`) | the orchestrator dispatches workers via `bun scripts/runner.ts launch …` | `curl -fsSL https://bun.sh/install \| bash` — not needed for the `hello` demo (Node-only) |
 | **gh** (for the GitHub code host) | `simple-gh-sdlc`'s agents and the merge reconcile shell out to the GitHub CLI (step 6's `gh api` / `gh pr` calls) | `brew install gh`, then `gh auth login` — not needed for `hello` / `simple-sdlc` |
 
-Right after installing `termfleet`, run the **`preflight`** CLI verb once — it rebuilds `node-pty` for
-your Node (termfleet's `virtual-tmux` provider ships no prebuilt for newer Node and crashes at launch
-without this) and checks your `package-lock.json` against your CI's Node version (desync there passes
-locally but fails your CI's `npm ci` on the first agent PR):
+Right after installing `termfleet`, run the **`preflight`** CLI verb once — it verifies termfleet's PTY
+native module loads under your Node (rebuilding only if needed; termfleet's `virtual-tmux` provider would
+otherwise crash at launch) and checks your `package-lock.json` against your CI's Node version (desync there
+passes locally but fails your CI's `npm ci` on the first agent PR):
 
 ```bash
 npm install termfleet  &&  npx --yes open-autonomy preflight

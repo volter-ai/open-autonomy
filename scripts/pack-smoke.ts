@@ -218,12 +218,18 @@ function cli(args: string[], cwd: string): SpawnSyncReturns<string> {
   else ok(`upgrade (bare) — controlled refusal, exit ${r.status}`);
 }
 
-// ---------- preflight — no unhandled crash; env-dependent outcome is fine ----------
+// ---------- preflight — must exit 0 here (OA-05) ----------
+// The packed throwaway project has no termfleet installed and no package-lock.json, so BOTH preflight
+// checks legitimately take their skip paths — a nonzero exit in this environment means the gate is crying
+// wolf (the exact F-5 failure mode: preflight false-failing where nothing is wrong), not that the env is
+// bad. Any-exit-accepted was the pre-OA-05 stance, kept only because the pty check itself false-failed.
 {
   const r = cli(['preflight'], installDir);
+  const out = `${r.stdout ?? ''}${r.stderr ?? ''}`;
   if (r.signal) fail('preflight', `killed by signal ${r.signal} (crash)`);
-  else if (!(r.stdout || '').trim() && !(r.stderr || '').trim()) fail('preflight', 'no diagnostic output at all (silent failure)');
-  else ok(`preflight — exit ${r.status}, no crash`);
+  else if (!out.trim()) fail('preflight', 'no diagnostic output at all (silent failure)');
+  else if (r.status !== 0) fail('preflight', `expected exit 0 on the all-skip path (no termfleet, no lockfile), got ${r.status}:\n${out}`);
+  else ok('preflight — exit 0 (skip paths, no false failure)');
 }
 
 // ---------- compile simple-sdlc local (dry run, no outDir) ----------

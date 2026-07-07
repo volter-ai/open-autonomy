@@ -82,9 +82,17 @@ function scaffoldLocalGitRepoWithStaleOrigin(): { dir: string; staleSha: string;
   // The committed-but-unpushed harness: the real emitted install (runner.ts IS runner-frontend.ts verbatim)
   // plus a marker file standing in for the profile-copied skills. run-agent.mjs is stubbed AFTER the
   // worktree seam under test — the real one imports termfleet, absent in this hermetic fixture.
-  for (const [path, content] of Object.entries(compileLocal(localGitIr).generated)) {
+  const compiled = compileLocal(localGitIr);
+  for (const [path, content] of Object.entries(compiled.generated)) {
     mkdirSync(join(dir, dirname(path)), { recursive: true });
     writeFileSync(join(dir, path), content);
+  }
+  // `develop`'s skill file must actually exist for OA-08's launch pre-check to let this launch through — this
+  // fixture is about the worktree-BASE decision, not the skill check, so a real (stub) SKILL.md at every
+  // copy path compileLocal declares is enough; it is not itself under test here (see launch-verification.test.ts).
+  for (const copy of compiled.copies) {
+    mkdirSync(join(dir, dirname(copy.to)), { recursive: true });
+    writeFileSync(join(dir, copy.to), `# stub SKILL.md for ${copy.to}\n`);
   }
   // This fixture proves the worktree-base decision (OA-02), not the day-one pause fence (OA-07) — a fresh
   // compileLocal() lands paused by default, which would refuse the launch below for an unrelated reason.

@@ -12,6 +12,7 @@
 // `launch` accepts arbitrary --key value params and passes them through verbatim; the system never
 // interprets them (a profile gives them meaning, e.g. a ztrack-using profile declares ZTRACK_ISSUE).
 import { existsSync, readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { ProviderClient, providerRefFromUrl } from 'termfleet';
 import { resolveDefaultProvider } from '@termfleet/core/local-providers.js';
 import { RUNNER_DEFAULTS } from './runner-defaults.mjs';
@@ -28,9 +29,42 @@ export class TermfleetRunner {
   }
 
   async launch(agent, params = {}) {
+    // OA-08: verify the launch's skill invocation resolves in THIS cwd BEFORE spending anything on it —
+    // deterministic and provider-independent (no termfleet call is needed to fail fast). The scheduler
+    // launches the PM straight through THIS backend (emit.ts's LOOP_DRIVER -> run-agent.mjs ->
+    // `autonomy-runner.mjs launch`), bypassing runner-frontend.ts's own pre-check entirely — so this is the
+    // ONLY guard covering a tick-launched skill agent whose skill went missing post-compile (deleted,
+    // renamed, wrong harness). The backend doesn't know the manifest's agent->behavior mapping (it stays
+    // domain/manifest-blind by design), but every emitted skill-agent prompt IS the invocation name (`/name`
+    // claude, `$name` codex — emit.ts:436-437), and the launch's prompt file is resolved right here anyway —
+    // so read it once, early, and check the corresponding skills path. A bare-name prompt (no prompt file at
+    // all — e.g. no AUTONOMY_PROMPT_DIR set) has nothing deterministic to verify: skip.
+    const promptDir = process.env.AUTONOMY_PROMPT_DIR;
+    const promptFile = promptDir ? `${promptDir}/${agent}.txt` : '';
+    const promptExists = !!promptFile && existsSync(promptFile);
+    const prompt = promptExists ? readFileSync(promptFile, 'utf8') : agent;
+    // Match the EXACT emitted skill-invocation shape (emit.ts's promptFiles: `/${behavior}\n` claude,
+    // `$${behavior}\n` codex) — a leading `/` or `$` followed by a single skill-name token and nothing else.
+    // Anchoring both ends (a lone token, valid skill-name chars only) is deliberate: a hand-authored custom
+    // AUTONOMY_PROMPT_DIR whose prompt merely STARTS with a path-like token (e.g. "/tmp/notes.md summarize")
+    // is NOT a skill invocation and must not be misread as behavior "tmp/notes.md" and false-refused — it has
+    // spaces / extra path segments, so it fails this anchored match and skips the check (nothing to verify).
+    const invocation = promptExists ? /^[/$]([A-Za-z0-9._-]+)$/.exec(prompt.trim()) : null;
+    if (invocation) {
+      const behavior = invocation[1];
+      const skillsRoot = this.harness === 'codex' ? '.codex/skills' : '.claude/skills';
+      const skillPath = join(process.cwd(), skillsRoot, behavior, 'SKILL.md');
+      if (!existsSync(skillPath)) {
+        throw new Error(
+          `[runner] launch refused: ${agent}'s skill "${behavior}" is missing at ${skillPath} — the session ` +
+            `would die at launch ("Unknown command: ${prompt.trim()}"). Commit the harness ` +
+            `(docs/OPERATIONS.md#local-runner-quickstart, "Commit the harness"), or check the skill exists ` +
+            `for harness "${this.harness}".`,
+        );
+      }
+    }
+
     const client = await this.#client();
-    // Re-export orchestration context so a nested `autonomy launch ...` reaches this provider, plus the
-    // opaque params verbatim (a profile may read e.g. $ZTRACK_ISSUE; the system doesn't).
     // Re-export orchestration context so a nested `autonomy launch ...` reaches this provider, plus the
     // opaque params verbatim (a profile may read e.g. $ZTRACK_ISSUE; the system doesn't). The runner stays
     // CODE-HOST-BLIND: it injects no github/repo identity — a code-host agent resolves its own repo through
@@ -46,9 +80,6 @@ export class TermfleetRunner {
     const setupCommand = Object.entries(exported)
       .map(([k, v]) => `export ${k}=${JSON.stringify(v ?? '')}`)
       .join('; ');
-    const promptDir = process.env.AUTONOMY_PROMPT_DIR;
-    const promptFile = promptDir ? `${promptDir}/${agent}.txt` : '';
-    const prompt = promptFile && existsSync(promptFile) ? readFileSync(promptFile, 'utf8') : agent;
     // createAgentWindow blocks until the agent's first response; give its socket ack a generous timeout
     // (TERMFLEET_CREATE_TIMEOUT_MS overrides) so a real claude cold-start doesn't time out the launch and
     // lose the terminalId — the join key the post-session effect marker + the reaper depend on.

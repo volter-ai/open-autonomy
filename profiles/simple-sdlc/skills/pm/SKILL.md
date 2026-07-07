@@ -94,9 +94,42 @@ worktrees by hand.
 
      Once a candidate clears both the allowlist gate and the body read, launch the developer:
      `bun scripts/runner.ts launch develop --ref <id> --branch
-     agent/issue-<id>` (creates the worktree for fresh work, reuses it for rework).
+     agent/issue-<id>` (creates the worktree for fresh work, reuses it for rework). Never pick an issue
+     labeled `human-required` as a Develop candidate (see "Failed launches" below for the escalation that
+     adds it); an issue labeled `launch-failed` IS still eligible — it gets exactly one retry (see below).
    - Else stop without action.
 4. After acting, `ztrack check --json`. Do not wait for a launched worker to finish.
+
+## Failed launches
+
+`bun scripts/runner.ts launch` exits **non-zero** when the launch itself failed — its skill invocation could
+not resolve in the session's cwd, or the launch call errored for any other reason. That is a **failed
+dispatch, not a claim**: the issue is not `ready`/`in-progress` because of it, and the tick's "exactly one
+action" has not happened yet by launching alone — recording the failure on the board is what completes the
+tick's action instead.
+
+- **A refused launch leaves the issue `ready` with NO branch or worktree.** The runner tears down any
+  worktree/branch it created for a launch it then refused (a frozen worktree could never see the operator's
+  fix), so a `launch-failed` issue is back to the clean "`ready`, no `agent/issue-<id>` branch" shape — it
+  stays the **retry candidate** by the Develop rule's fresh-work clause on the next tick, and it does **not**
+  consume a WIP/in-progress slot (no `agent/issue-*` worktree exists for it in `git worktree list`). So a
+  `launch-failed` issue never wedges develop dispatch; it simply gets its one retry when it comes up again.
+- **First failure:** when `launch develop --ref <id> --branch agent/issue-<id>` exits non-zero, record it
+  before ending the tick (a tick is a fresh session — the board is the **only** memory across ticks):
+  `ztrack issue edit <id> --add-label launch-failed`, and `ztrack issue comment <id> "<the runner's error
+  line>"`.
+- **An issue carrying `launch-failed` gets exactly one more attempt (N=2 total).** On a later tick, when it
+  would otherwise be the Develop candidate, dispatch it again the same way. **A successful retry clears the
+  label** (`ztrack issue edit <id> --remove-label launch-failed`) — the failure was environmental (e.g. the
+  operator committed the missing skill between ticks) and is now gone. If this second attempt **also** exits
+  non-zero: **escalate** — `ztrack issue edit <id> --add-label human-required`, comment the runner's error
+  line, and end the tick with `OUTCOME: blocked launch-failure <id>`.
+- **After escalation, hands off.** Never dispatch a `launch-failed`-labeled issue a third time, and once an
+  issue carries `human-required` never remove `launch-failed` **or** `human-required` yourself — a human
+  clears both after fixing the cause. (The "successful retry clears `launch-failed`" rule above applies only
+  **before** escalation — i.e. while the issue does not yet carry `human-required`.)
+- An issue carrying `human-required` (for this reason or any other) is never a Develop candidate — skip it
+  exactly like the risk-gated / body-deferred cases above, every tick, until a human clears the label.
 
 Launch/integrate exactly one issue per tick. Never launch review for an issue
 already labeled `ztrack:reviewing`. Use `bun scripts/runner.ts list <agent>` to

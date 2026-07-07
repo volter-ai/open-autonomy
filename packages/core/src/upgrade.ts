@@ -9,6 +9,12 @@ import { existsSync, mkdirSync, readFileSync, unlinkSync, writeFileSync } from '
 import { dirname, join } from 'node:path';
 import type { CompileOutput } from './ir';
 import { readGeneratedManifest } from './file-manifest';
+// Type-only: `MergeStrategies` is the CLI's per-path merge-policy map (OA-10, packages/core/src/
+// materialize.ts) — planUpgrade/applyUpgrade apply the SAME strategy an upgrade's fresh-compile sibling
+// uses (`.claude/settings.json`), so a merged file whose OA hook is already present reads as "up to date"
+// instead of being reverted every upgrade. Type-only import: materialize.ts has a RUNTIME import of
+// `isInstallOwned` from this file (below), so this direction must stay type-erased to avoid a real cycle.
+import type { MergeStrategies } from './materialize';
 
 // Files the INSTALL owns. `compile` produces them (from the profile's seed), but each installation
 // customizes them — its roadmap, its north-star constitution, its repo shell — so on upgrade they are
@@ -89,9 +95,10 @@ export function planUpgrade(
   out: CompileOutput,
   profileDir: string,
   targetDir: string,
-  opts: { prune?: boolean } = {},
+  opts: { prune?: boolean; mergeStrategies?: MergeStrategies } = {},
 ): UpgradePlan {
   const desired = desiredContents(out, profileDir);
+  const mergeStrategies = opts.mergeStrategies ?? {};
   const changes: UpgradeChange[] = [];
   for (const [path, content] of desired) {
     const tp = join(targetDir, path);
@@ -99,8 +106,28 @@ export function planUpgrade(
       if (!existsSync(tp)) changes.push({ path, action: 'add' }); // seed if missing; never overwrite
       continue;
     }
-    if (!existsSync(tp)) changes.push({ path, action: 'add' });
-    else if (!readFileSync(tp).equals(content)) changes.push({ path, action: 'update' });
+    if (!existsSync(tp)) {
+      changes.push({ path, action: 'add' });
+      continue;
+    }
+    const existing = readFileSync(tp);
+    if (existing.equals(content)) continue; // byte-identical — up to date
+    const strategy = mergeStrategies[path];
+    if (strategy) {
+      // A merged file whose OA-generated content is already present (e.g. the Stop hook command) counts
+      // as up to date — an upgrade must never revert an adopter's `.claude/settings.json` back to the
+      // profile's whole-file copy (that was the F-9 clobber, just re-triggered every upgrade instead of
+      // once at compile time). Only actually-new content produces an `update` (applyUpgrade re-merges).
+      const merged = strategy.merge(existing.toString('utf8'), content.toString('utf8'));
+      if (merged) {
+        if (merged.content !== existing.toString('utf8')) changes.push({ path, action: 'update' });
+        continue;
+      }
+      // Unmergeable (e.g. invalid JSON) falls through to the ordinary overwrite below — same as if no
+      // strategy applied; upgrade has no refusal concept (unlike the fresh-compile CLI), so this is the
+      // pre-OA-10 behavior for a file upgrade can't safely merge.
+    }
+    changes.push({ path, action: 'update' });
   }
   if (opts.prune) {
     // Orphans = paths the PRIOR install recorded as generated, that this compile no longer produces.
@@ -118,8 +145,18 @@ export function planUpgrade(
   return { schema: 'open-autonomy.upgrade-plan.v1', changes, notes: renderNotes(changes) };
 }
 
-/** Apply a plan: regenerate/seed from the compile output; delete orphans. */
-export function applyUpgrade(plan: UpgradePlan, out: CompileOutput, profileDir: string, targetDir: string): void {
+/** Apply a plan: regenerate/seed from the compile output; delete orphans. `mergeStrategies` (OA-10): for
+ *  an `update` on a path with a strategy, re-merge against whatever is CURRENTLY on disk (not the bytes
+ *  `planUpgrade` saw) rather than clobbering it with the raw generated content — the same policy
+ *  `findClobbers`/`materialize` apply on a fresh compile, kept in one function per path so the CLI never
+ *  hardcodes JSON shape twice. */
+export function applyUpgrade(
+  plan: UpgradePlan,
+  out: CompileOutput,
+  profileDir: string,
+  targetDir: string,
+  mergeStrategies: MergeStrategies = {},
+): void {
   const desired = desiredContents(out, profileDir);
   for (const change of plan.changes) {
     const tp = join(targetDir, change.path);
@@ -127,8 +164,13 @@ export function applyUpgrade(plan: UpgradePlan, out: CompileOutput, profileDir: 
       if (existsSync(tp)) unlinkSync(tp);
       continue;
     }
-    const content = desired.get(change.path);
+    let content = desired.get(change.path);
     if (!content) continue;
+    const strategy = mergeStrategies[change.path];
+    if (strategy && existsSync(tp)) {
+      const merged = strategy.merge(readFileSync(tp, 'utf8'), content.toString('utf8'));
+      if (merged) content = Buffer.from(merged.content);
+    }
     mkdirSync(dirname(tp), { recursive: true });
     writeFileSync(tp, content);
   }

@@ -2,7 +2,7 @@
 // underlying findClobbers unit — the AC is about `open-autonomy compile` behavior end-to-end: refuse by
 // default, --force overrides, and an additive profile never trips it).
 import { describe, expect, test } from 'bun:test';
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -313,4 +313,194 @@ describe('autonomy-compile — OA-04 namespace-collision gate', () => {
       rmSync(dir, { recursive: true, force: true });
     }
   }, 60_000);
+});
+
+// OA-10 (a): the clobber guard's REFUSAL SCOPE + MESSAGE must be profile-agnostic — the false comment/
+// message this spec fixes claimed only a whole-repo scaffold (self-driving) could ever trip the guard,
+// and told the adopter to "compile an additive profile instead" even while they were compiling one.
+describe('autonomy-compile — OA-10a: collision message is scope-correct (AC-1)', () => {
+  test('AC-1: an additive profile (simple-sdlc) colliding on scripts/ names the file and makes NO scaffold claim', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'oa10-ac1-'));
+    try {
+      mkdirSync(join(dir, 'scripts'), { recursive: true });
+      writeFileSync(join(dir, 'scripts', 'run-agent.mjs'), "console.log('the adopter\\'s own script')\n");
+      const r = compile(['simple-sdlc', 'local', dir]);
+      expect(r.exitCode).toBe(1);
+      expect(r.stdout).not.toMatch(/installed \d+ files/); // nothing written
+      expect(r.stderr).toContain('would overwrite');
+      expect(r.stderr).toContain('scripts/run-agent.mjs');
+      expect(r.stderr).toContain('--force');
+      // The false claim this spec fixes: simple-sdlc is NOT a scaffold, and must not be told to compile itself.
+      expect(r.stderr).not.toContain('whole-repo SCAFFOLD');
+      expect(r.stderr).not.toContain('compile an additive profile');
+      expect(r.stderr).not.toMatch(/is a whole-repo/);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test('a scaffold collision (self-driving, README.md) STILL gets the scaffold-specific advice', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'oa10-ac1-scaffold-'));
+    try {
+      writeFileSync(join(dir, 'README.md'), "the adopter's OWN readme\n");
+      const r = compile(['self-driving', 'gh-actions', dir]);
+      expect(r.exitCode).toBe(1);
+      expect(r.stderr).toContain('README.md');
+      expect(r.stderr).toContain('whole-repo SCAFFOLD');
+      expect(r.stderr).toContain('simple-gh-sdlc');
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+});
+
+// OA-10 (c): `.claude/settings.json` gets a structured MERGE on collision, not a refusal or a clobber.
+describe('autonomy-compile — OA-10c: .claude/settings.json merge (AC-2, AC-3)', () => {
+  test('AC-2: an existing settings.json with permissions is MERGED — permissions survive, the Stop hook is added, and it is idempotent', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'oa10-ac2-'));
+    try {
+      mkdirSync(join(dir, '.claude'), { recursive: true });
+      writeFileSync(join(dir, '.claude', 'settings.json'), JSON.stringify({ permissions: { allow: ['Bash(npm test)'] } }));
+      const r1 = compile(['simple-sdlc', 'local', dir]);
+      expect(r1.exitCode).toBe(0);
+      expect(r1.stdout).toContain('merged: .claude/settings.json');
+      const settings1 = JSON.parse(readFileSync(join(dir, '.claude', 'settings.json'), 'utf8'));
+      expect(settings1.permissions.allow).toEqual(['Bash(npm test)']); // preserved
+      expect(typeof settings1.hooks.Stop[0].hooks[0].command).toBe('string'); // the OA Stop hook landed
+      const stopLenAfterFirst = settings1.hooks.Stop.length;
+
+      // Idempotent: re-running must not duplicate the hook entry — and (nit a) must NOT print a spurious
+      // "merged" receipt line when nothing actually changed.
+      const r2 = compile(['simple-sdlc', 'local', dir]);
+      expect(r2.exitCode).toBe(0);
+      expect(r2.stdout).not.toContain('merged: .claude/settings.json'); // no-op merge prints no receipt line
+      const settings2 = JSON.parse(readFileSync(join(dir, '.claude', 'settings.json'), 'utf8'));
+      expect(settings2.hooks.Stop.length).toBe(stopLenAfterFirst);
+      expect(settings2.permissions.allow).toEqual(['Bash(npm test)']); // still preserved
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  }, 30_000);
+
+  test('the durable opt-out sentinel is honored by compile: the Stop hook is NEVER added, across re-compiles', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'oa10-optout-'));
+    try {
+      mkdirSync(join(dir, '.claude'), { recursive: true });
+      writeFileSync(
+        join(dir, '.claude', 'settings.json'),
+        JSON.stringify({ _openAutonomyStopHookOptOut: true, permissions: { allow: ['Bash(npm test)'] } }, null, 2),
+      );
+      const r1 = compile(['simple-sdlc', 'local', dir]);
+      expect(r1.exitCode).toBe(0); // not a clobber refusal — the merge succeeds as a no-op
+      expect(r1.stdout).not.toContain('merged: .claude/settings.json'); // nothing changed -> no receipt line
+      const s1 = JSON.parse(readFileSync(join(dir, '.claude', 'settings.json'), 'utf8'));
+      expect(s1.hooks).toBeUndefined(); // NO Stop hook added
+      expect(s1.permissions.allow).toEqual(['Bash(npm test)']); // untouched
+
+      // Re-compile: still honored (the whole point of "durable").
+      const r2 = compile(['simple-sdlc', 'local', dir]);
+      expect(r2.exitCode).toBe(0);
+      expect(JSON.parse(readFileSync(join(dir, '.claude', 'settings.json'), 'utf8')).hooks).toBeUndefined();
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  }, 30_000);
+
+  test('AC-3: an UNPARSEABLE existing settings.json refuses by name and explains the manual merge', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'oa10-ac3-'));
+    try {
+      mkdirSync(join(dir, '.claude'), { recursive: true });
+      writeFileSync(join(dir, '.claude', 'settings.json'), '{ this is not valid json');
+      const r = compile(['simple-sdlc', 'local', dir]);
+      expect(r.exitCode).toBe(1);
+      expect(r.stdout).not.toMatch(/installed \d+ files/); // nothing written
+      expect(r.stderr).toContain('.claude/settings.json');
+      expect(r.stderr).toContain('not valid JSON');
+      // Same generic scope fix as AC-1 — no scaffold claim for this additive profile either.
+      expect(r.stderr).not.toContain('whole-repo SCAFFOLD');
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+});
+
+// OA-10 (a)/(b): the deletion-resurrection guard + the printed receipt.
+describe('autonomy-compile — OA-10a/b: deletion-resurrection guard + printed receipt (AC-4, AC-5, AC-6)', () => {
+  test('AC-4: deleting a manifest-listed emitted file, then re-compiling, refuses and names it as operator-deleted; --force resurrects it', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'oa10-ac4-'));
+    try {
+      const first = compile(['simple-gh-sdlc', 'local', dir]);
+      expect(first.exitCode).toBe(0);
+      const securityYml = join(dir, '.github', 'workflows', 'security.yml');
+      expect(existsSync(securityYml)).toBe(true);
+      rmSync(securityYml);
+
+      const refused = compile(['simple-gh-sdlc', 'local', dir]);
+      expect(refused.exitCode).toBe(1);
+      expect(refused.stdout).not.toMatch(/installed \d+ files/); // nothing (re-)written
+      expect(refused.stderr).toContain('.github/workflows/security.yml');
+      expect(refused.stderr).toMatch(/deleted|delete/i);
+      expect(refused.stderr).toContain('--force');
+      expect(existsSync(securityYml)).toBe(false); // still not recreated
+
+      const forced = compile(['simple-gh-sdlc', 'local', dir, '--force']);
+      expect(forced.exitCode).toBe(0);
+      expect(forced.stdout).toContain('resurrected');
+      expect(forced.stdout).toContain('.github/workflows/security.yml');
+      expect(existsSync(securityYml)).toBe(true); // recreated under --force
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  }, 30_000);
+
+  // THE critical OA-07 coordination point: an operator's `rm .open-autonomy/paused` (the intended UNPAUSE)
+  // must never be flagged as a deletion to refuse on, nor resurrected — even though it is, in every other
+  // respect, exactly the shape findResurrections exists to catch (an emitted path, now absent on disk).
+  test("OA-07 exemption: 'rm .open-autonomy/paused' then re-compiling succeeds cleanly — never flagged, never resurrected", () => {
+    const dir = mkdtempSync(join(tmpdir(), 'oa10-oa07-exempt-'));
+    try {
+      const first = compile(['simple-sdlc', 'local', dir]);
+      expect(first.exitCode).toBe(0);
+      const pausedPath = join(dir, '.open-autonomy', 'paused');
+      expect(existsSync(pausedPath)).toBe(true); // fresh install starts paused (OA-07)
+
+      rmSync(pausedPath); // the operator's intended unpause
+
+      const recompiled = compile(['simple-sdlc', 'local', dir]);
+      expect(recompiled.exitCode).toBe(0); // NOT refused
+      expect(recompiled.stdout).toContain('installed'); // a normal, successful compile
+      expect(recompiled.stderr).not.toMatch(/paused/i); // never named as a deletion to reconcile
+      expect(recompiled.stdout).not.toMatch(/resurrected.*paused|paused.*resurrected/i);
+      expect(existsSync(pausedPath)).toBe(false); // still NOT resurrected — the unpause holds
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  }, 30_000);
+
+  test('AC-5: a successful compile prints the manifest pointer, a grouped summary, and the Stop-hook note', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'oa10-ac5-'));
+    try {
+      const r = compile(['simple-sdlc', 'local', dir]);
+      expect(r.exitCode).toBe(0);
+      const generatedJsonHits = (r.stdout.match(/generated\.json/g) ?? []).length;
+      expect(generatedJsonHits).toBeGreaterThanOrEqual(1);
+      const stopHookHits = (r.stdout.match(/stop hook/gi) ?? []).length;
+      expect(stopHookHits).toBeGreaterThanOrEqual(1);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  }, 30_000);
+
+  test('AC-6: every path .open-autonomy/generated.json lists actually exists on disk after compile', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'oa10-ac6-'));
+    try {
+      const r = compile(['simple-sdlc', 'local', dir]);
+      expect(r.exitCode).toBe(0);
+      const manifest = JSON.parse(readFileSync(join(dir, '.open-autonomy', 'generated.json'), 'utf8')) as { files: string[] };
+      expect(manifest.files.length).toBeGreaterThan(0);
+      for (const f of manifest.files) expect(existsSync(join(dir, f))).toBe(true);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  }, 30_000);
 });

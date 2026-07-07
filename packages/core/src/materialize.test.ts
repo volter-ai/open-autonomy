@@ -172,6 +172,19 @@ describe('findClobbers + findMerges + materialize with a merge strategy (OA-10c)
       expect(readFileSync(join(dir, 'settings.json'), 'utf8')).toBe('{"a":1}'); // raw generated content
     });
   });
+
+  // Nit (a): findMerges must NOT report a merge whose result is byte-identical to what's already on disk —
+  // an idempotent re-merge (nothing to add) or an honored opt-out is a no-op and prints no receipt line.
+  test('findMerges reports NOTHING when the merge result equals the existing bytes (no spurious "merged" line)', () => {
+    // A strategy that always returns the existing bytes unchanged (models the opt-out / already-merged case).
+    const noopStrategies: MergeStrategies = {
+      'settings.json': { merge: (existing) => ({ content: existing, note: 'already up to date' }) },
+    };
+    withTmpDir((dir) => {
+      writeFileSync(join(dir, 'settings.json'), '{"b":2}'); // differs from generated {"a":1}, but merge returns it unchanged
+      expect(findMerges(out, dir, readSource, noopStrategies)).toEqual([]);
+    });
+  });
 });
 
 describe('findResurrections (OA-10 — the deletion-resurrection guard)', () => {

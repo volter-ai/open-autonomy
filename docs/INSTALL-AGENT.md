@@ -171,7 +171,10 @@ it gates everything.**
      loop's (it self-guards, no-op unless `node_modules/ztrack/...` exists). If an existing
      `.claude/settings.json` is present, `compile` merges the hook into it rather than overwriting (keeps
      the human's own `permissions`/hooks); if it isn't valid JSON, `compile` refuses by name instead —
-     hand-merge it. Full detail: `docs/OPERATIONS.md#claude-settings`.
+     hand-merge it. The hook is **install-managed**: deleting the entry is re-added by the next
+     compile/upgrade, so a human who wants it gone must set the durable sentinel
+     `"_openAutonomyStopHookOptOut": true` in their settings.json (compile AND upgrade honor it). Full
+     detail: `docs/OPERATIONS.md#claude-settings`.
 4. **OA's Dependabot + Security workflows (net-new CI surface).** "OA also ships `.github/dependabot.yml`
    (weekly Actions-bumps → PRs the PM triages) and `.github/workflows/security.yml` (a **bun**-based
    supply-chain + workflow scan that runs on your PRs and `<default-branch>`). On a non-bun repo the
@@ -433,6 +436,11 @@ Phase 4 proves *one* merge. For the loop to actually run a backlog over days, se
   files (`.open-autonomy/paused`) are exempt from guard (2) — deleting one is a normal operator action, not
   a "deletion to undo". Stage only the harness files you actually changed (don't sweep in the `.volter/`
   sync-state churn a re-compile leaves behind).
+- **`upgrade` does NOT have guard (2)** — it is a re-compile of the derived set and **re-creates** any
+  derived file you deleted (no refusal, no `--force`), so a deletion you want to persist (e.g. removing
+  `security.yml`, or the raw Stop hook) must be **re-applied after every `upgrade`** or dropped at the
+  source (fork the profile). The Stop hook is the exception: its durable sentinel opt-out
+  (`"_openAutonomyStopHookOptOut": true` in `.claude/settings.json`) is honored by `upgrade` too.
 - **Updating the committed harness AFTER the gate is wired:** `enforce_admins:true` (correctly) blocks even
   an admin's direct push to the default branch (`GH006: N of N required status checks are expected`), so an
   operator pushing a harness/skill update can't `git push` to `main`. Use **`npx open-autonomy harness-push`**

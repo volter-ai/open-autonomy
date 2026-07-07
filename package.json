@@ -41,7 +41,7 @@
     "check:autonomy": "bunx tsc -p tsconfig.json",
     "check:core": "bun test packages/*/src/*.test.ts",
     "conformance": "bun bin/autonomy-conformance.ts",
-    "check:compile": "bun test bin/autonomy-compile.test.ts bin/ztrack-preset.test.ts && bun bin/check-compile.ts",
+    "check:compile": "bun test bin/autonomy-compile.test.ts bin/autonomy-upgrade.test.ts bin/settings-merge.test.ts bin/ztrack-preset.test.ts && bun bin/check-compile.ts",
     "check:profiles": "bun bin/check-profiles.ts && bun test bin/lint-profile.test.ts",
     "check:policy-consumers": "bun test bin/check-policy-consumers.test.ts && bun bin/check-policy-consumers.ts",
     "check:doc-vars": "bun test bin/check-doc-vars.test.ts && bun bin/check-doc-vars.ts",

@@ -369,12 +369,38 @@ describe('autonomy-compile — OA-10c: .claude/settings.json merge (AC-2, AC-3)'
       expect(typeof settings1.hooks.Stop[0].hooks[0].command).toBe('string'); // the OA Stop hook landed
       const stopLenAfterFirst = settings1.hooks.Stop.length;
 
-      // Idempotent: re-running must not duplicate the hook entry.
+      // Idempotent: re-running must not duplicate the hook entry — and (nit a) must NOT print a spurious
+      // "merged" receipt line when nothing actually changed.
       const r2 = compile(['simple-sdlc', 'local', dir]);
       expect(r2.exitCode).toBe(0);
+      expect(r2.stdout).not.toContain('merged: .claude/settings.json'); // no-op merge prints no receipt line
       const settings2 = JSON.parse(readFileSync(join(dir, '.claude', 'settings.json'), 'utf8'));
       expect(settings2.hooks.Stop.length).toBe(stopLenAfterFirst);
       expect(settings2.permissions.allow).toEqual(['Bash(npm test)']); // still preserved
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  }, 30_000);
+
+  test('the durable opt-out sentinel is honored by compile: the Stop hook is NEVER added, across re-compiles', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'oa10-optout-'));
+    try {
+      mkdirSync(join(dir, '.claude'), { recursive: true });
+      writeFileSync(
+        join(dir, '.claude', 'settings.json'),
+        JSON.stringify({ _openAutonomyStopHookOptOut: true, permissions: { allow: ['Bash(npm test)'] } }, null, 2),
+      );
+      const r1 = compile(['simple-sdlc', 'local', dir]);
+      expect(r1.exitCode).toBe(0); // not a clobber refusal — the merge succeeds as a no-op
+      expect(r1.stdout).not.toContain('merged: .claude/settings.json'); // nothing changed -> no receipt line
+      const s1 = JSON.parse(readFileSync(join(dir, '.claude', 'settings.json'), 'utf8'));
+      expect(s1.hooks).toBeUndefined(); // NO Stop hook added
+      expect(s1.permissions.allow).toEqual(['Bash(npm test)']); // untouched
+
+      // Re-compile: still honored (the whole point of "durable").
+      const r2 = compile(['simple-sdlc', 'local', dir]);
+      expect(r2.exitCode).toBe(0);
+      expect(JSON.parse(readFileSync(join(dir, '.claude', 'settings.json'), 'utf8')).hooks).toBeUndefined();
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }

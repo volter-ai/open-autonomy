@@ -50,10 +50,12 @@ export function materialize(
   return written.sort();
 }
 
-/** Paths findClobbers/materialize will actually MERGE (not overwrite) for this compile — the printed
- *  receipt's "merged: <path> (<note>)" line. Computed the SAME way materialize will actually resolve each
- *  path, so the report can never disagree with what gets written. Must be called BEFORE materialize (it
- *  reads the pre-write "existing" bytes off disk). */
+/** Paths findClobbers/materialize will actually CHANGE by merging (not overwrite) for this compile — the
+ *  printed receipt's "merged: <path> (<note>)" line. Computed the SAME way materialize will actually resolve
+ *  each path, so the report can never disagree with what gets written. Must be called BEFORE materialize (it
+ *  reads the pre-write "existing" bytes off disk). Only reports a merge whose result DIFFERS from what is
+ *  already on disk: an idempotent re-merge (nothing to add) or an honored opt-out (the merge returns the
+ *  file unchanged) is a structural no-op, so it prints no receipt line — the receipt names only real writes. */
 export function findMerges(
   out: CompileOutput,
   destDir: string,
@@ -69,7 +71,7 @@ export function findMerges(
     const existing = readFileSync(abs, 'utf8');
     if (existing === content) return; // already byte-identical — no merge needed
     const merged = strategy.merge(existing, content);
-    if (merged) merges.push({ path: rel, note: merged.note });
+    if (merged && merged.content !== existing) merges.push({ path: rel, note: merged.note });
   };
   for (const [path, content] of Object.entries(out.generated)) check(path, content);
   for (const { from, to } of out.copies) check(to, readSource(from));

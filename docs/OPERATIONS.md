@@ -198,9 +198,15 @@ overwriting (`--force` to override) — except `.claude/settings.json`, handled 
 >   `merged: .claude/settings.json (+1 Stop hook)`. Re-running never duplicates the entry. If your existing
 >   file **isn't valid JSON**, the compile refuses by name instead of guessing — fix or move it aside, then
 >   re-run.
-> - **To opt out**, delete the `hooks.Stop` entry (or the whole file) after compiling — the
->   deletion-resurrection guard ([step 4](#4-commit-the-harness)) will not silently re-add it on a later
->   re-compile.
+> - **The Stop hook is install-managed.** Simply deleting the `hooks.Stop` entry — or the whole file — is
+>   **not** a durable opt-out: the next `compile` re-appends the entry (append-if-absent), and `upgrade`
+>   re-seeds a deleted file. That is deliberate (it's how hook fixes reach every install), but it means a
+>   naive delete gets silently re-armed on the next routine re-compile/upgrade.
+> - **To opt out durably**, keep `.claude/settings.json` and add the sentinel key
+>   `"_openAutonomyStopHookOptOut": true` at its top level (you may also remove the `hooks.Stop` entry). Both
+>   `compile` and `upgrade` honor it — they will **never** re-add OA's Stop hook while the sentinel is
+>   present, and they leave the rest of your file untouched. This is the one opt-out that survives every
+>   re-compile and upgrade. (Claude Code ignores the unknown key, so it has no other effect.)
 > - `simple-gh-sdlc` ships the **same** file (byte-identical hook command) — the callout applies to both
 >   the local-git and GitHub code-host setups.
 
@@ -232,12 +238,18 @@ every re-compile/upgrade. **No push is required:** on the local-git code host, w
 **local** trunk — committing locally is sufficient. GitHub code host installs (`simple-gh-sdlc`)
 additionally push as part of their normal PR flow.
 
-**Deleted a harness file on purpose?** (e.g. you don't want `.github/workflows/security.yml`, or you
-opted out of the Stop hook above.) A re-compile **refuses** instead of silently re-creating it — it names
-the path and explains it was listed in a prior `.open-autonomy/generated.json` but is now gone from disk;
-`--force` re-creates it (reported as `resurrected:`). State/install-owned paths are exempt from this
-guard — most notably `.open-autonomy/paused` (step 5): `rm .open-autonomy/paused` is the intended
-unpause, never flagged or undone by a later compile/upgrade.
+**Deleted a harness file on purpose?** (e.g. you don't want `.github/workflows/security.yml`.) A
+**re-compile refuses** instead of silently re-creating it — it names the path and explains it was listed in
+a prior `.open-autonomy/generated.json` but is now gone from disk; `--force` re-creates it (reported as
+`resurrected:`). State/install-owned paths are exempt from this guard — most notably `.open-autonomy/paused`
+(step 5): `rm .open-autonomy/paused` is the intended unpause, never flagged or undone.
+
+> **Scope: this deletion guard is `compile`-only.** `upgrade` is a *re-compile of the derived set* — by
+> design it **re-creates** any derived file you deleted (it has no refusal/`--force` model), so a deletion
+> you want to persist across upgrades must be re-applied after each `upgrade`, or removed at the source
+> (drop it from the profile / fork). The one exception is the Stop hook, which has the durable sentinel
+> opt-out above (`upgrade` honors it too). Install-owned/state paths — `.open-autonomy/paused`, your
+> roadmap/constitution — are seed-once and never reverted by either path.
 
 ### 5. Run the loop
 

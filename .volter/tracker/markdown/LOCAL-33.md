@@ -1,13 +1,13 @@
 ---
 identifier: "LOCAL-33"
 title: "OA-04: detect npm-workspace/package-name collisions with the runner dep tree; fail loudly"
-state: "ready"
-stateType: "open"
+state: "done"
+stateType: "completed"
 assignees: ["tony"]
 priority: 0
 devProgress: ""
 createdAt: "2026-07-06T12:58:18.901Z"
-updatedAt: "2026-07-06T12:58:18.901Z"
+updatedAt: "2026-07-07T09:33:43.153Z"
 url: "local://tracker/issue/LOCAL-33"
 ---
 Assignee: tony
@@ -20,10 +20,12 @@ Coordinate with: OA-05 (same bin/preflight.ts surface — land OA-05 first), OA-
 Provenance: OA-INSTALL-AUDIT-FINDINGS.md F-4 (§2 P0) + narrative §1 steps 3, 12.
 
 ## Acceptance Criteria
-- [ ] dev/01 v1 preflight (and compile) in a repo whose package name or workspace member collides with the runner's dep tree produces a named, actionable error (today: silent shadowing, then a crash deep in the loop)
-  - status: pending
-- [ ] dev/02 v1 every numbered criterion in the spec's Acceptance criteria section is demonstrated: each fails before the fix and passes after, with command output as evidence
-  - status: pending
+- [x] dev/01 v1 preflight (and compile) in a repo whose package name or workspace member collides with the runner's dep tree produces a named, actionable error (today: silent shadowing, then a crash deep in the loop)
+  - status: done — see close-out
+- [x] dev/02 v1 every numbered criterion in the spec's Acceptance criteria section is demonstrated: each fails before the fix and passes after, with command output as evidence
+  - status: done — see close-out
+
+Close-out: merged to adoption-fixes-backlog @ d4bbe9a (builder b5e35a0 + d474203). Shared collision-check.ts (self-reference / workspace-shadow BFS / import.meta.resolve probe), wired into preflight + local-scoped compile gate + the emitted loop-driver guard (probes termfleet + @termfleet/core/local-providers.js + ztrack/preset-kit). Two F-5 false-alarm blockers (relative-outDir; open-autonomy dogfood name) caught by the Fable correctness panel and cured. 5-link proof: /workspace/proofs/oa-04.md.
 
 <!--tracker:comments
 []

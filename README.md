@@ -80,14 +80,14 @@ npx open-autonomy compile self-driving gh-actions .   # then wire repo vars/secr
 # Hosted, EXISTING repo (GitHub Actions runner, GitHub code host, additive overlay):
 npx open-autonomy compile simple-gh-sdlc gh-actions .  # generates no package.json/README/.gitignore
 
-# Local agents → GitHub PRs (local runner, GitHub code host) — step 4 of the checklist below:
+# Local agents → GitHub PRs (local runner, GitHub code host) — step 3 of the checklist below:
 npx open-autonomy compile simple-gh-sdlc local .       # agents on your machine; PRs auto-merge on GitHub
 
-# Fully local (local runner, local-git code host) — step 4 of the checklist below:
+# Fully local (local runner, local-git code host) — step 3 of the checklist below:
 npx open-autonomy compile simple-sdlc local .          # no GitHub; or `hello` for a zero-tracker demo
 ```
 
-> **The two `local` lines above are a teaser, not an entry point — they're step 4 of 8 in the ordered
+> **The two `local` lines above are a teaser, not an entry point — they're step 3 of 8 in the ordered
 > checklist.** Don't start here on a real repo: deps, sign-in, and the termfleet ports/pin come first.
 > Follow the full checklist end to end →
 > [**`docs/OPERATIONS.md#local-install-checklist`**](./docs/OPERATIONS.md#local-install-checklist).

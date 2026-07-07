@@ -234,8 +234,12 @@ npx ztrack init --preset simple-gh-sdlc --sync github --repo <owner>/<repo>
 # 4. (Phase-2 #4) if skipping OA's net-new CI surface:
 #    rm -f .github/dependabot.yml .github/workflows/security.yml
 
-# 5. Commit the harness (Phase-2 #3) to the STILL-UNPROTECTED branch. Keep runtime scratch out (guard the
-#    append so a re-run doesn't duplicate it). Stage the overlay paths EXPLICITLY — never `git add -A` (it
+# 5. Commit the harness (Phase-2 #3) to the STILL-UNPROTECTED branch. This is the canonical commit step —
+#    docs/OPERATIONS.md#4-commit-the-harness (WHY: worktrees only see committed files; the generated.json
+#    manifest is the authoritative file list) — PLUS these agent-specific deltas an unattended install needs:
+#    also stage .volter/ (the tracker config from step 3), .github/, and the lockfiles; keep runtime scratch
+#    out (guard the .gitignore append so a re-run doesn't duplicate it); and `git push` (GitHub code host).
+#    Stage the overlay paths EXPLICITLY — never `git add -A` (it
 #    would sweep unrelated/secret files in the human's dirty tree onto the default branch) and never a glob
 #    like `*.lock*` (zsh aborts the whole `git add` on no-match; it also misses `package-lock.json`). Add only
 #    paths that exist, then HARD-STOP if nothing staged (a silent empty commit = a no-op install). Before

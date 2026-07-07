@@ -47,8 +47,8 @@ steps 1–5 (shared) vs step 6 (per code host) below.
 > only OA-specific files (`scripts/`, `.claude/skills/`, `.claude/settings.json`, `scheduler/`,
 > `.open-autonomy/`, `standards/`, `.github/workflows/merge.yml`), so `compile … .` is purely additive — it
 > does **not** generate a `package.json`, `README`, or `.gitignore` over yours. You still merge the runner's
-> deps into your repo (`npm install termfleet`, `npm install -D ztrack@1.0.0` — pin the version this
-> open-autonomy release is tested against) — step 1 below; npm may rewrite **existing** dependency ranges
+> deps into your repo (`npm install termfleet` in step 1; `npm install -D ztrack@1.0.0` in step 6 — pin the
+> version this open-autonomy release is tested against); npm may rewrite **existing** dependency ranges
 > while doing so — review the diff it leaves. The OA files are
 > **committed** to the repo (the agents run in git worktrees, which only see committed files — it's how OA
 > maintains itself) — see quickstart [step 4, "Commit the harness"](#4-commit-the-harness).
@@ -66,6 +66,7 @@ steps 1–5 (shared) vs step 6 (per code host) below.
 
 ---
 
+<a id="local-runner-quickstart"></a>
 ## Local install checklist
 
 > **The canonical, ordered path — start here, follow it top to bottom.** Every load-bearing fact for a
@@ -391,12 +392,21 @@ TERMFLEET_AGENT=codex node scheduler/run.mjs
 With the `hello` profile, the first **unpaused** `--once` tick launches a `greeter` session — you'll see
 it in `termfleet sessions recent --live` and the console. That confirms the whole local path works.
 
+**Keeping it running (unattended):** a backgrounded `node scheduler/run.mjs &` **dies on terminal close,
+logout, or reboot** — so does the termfleet console/provider from step 2. For a loop that survives, run it
+under a supervisor that restarts it: a `launchd` plist (macOS), a `systemd --user` unit (Linux), or at
+minimum `nohup node scheduler/run.mjs >> ~/oa-loop.log 2>&1 &` inside a persistent `tmux`, plus a liveness
+check that the process is up. `docs/INSTALL-AGENT.md`'s
+["Durable operation, observability & re-runs"](./INSTALL-AGENT.md#durable-operation-observability--re-runs)
+has the fuller treatment (feeding the backlog, worktree housekeeping, idle spend).
+
 **Stopping the loop:** `Ctrl-C` the scheduler (or `kill` its PID if you backgrounded it). The
 termfleet console/provider from step 2 are separate background processes — stop them with `kill %1 %2`
 in the shell that started them (or `pkill -f "termfleet (console|provider)"`). Stopping the scheduler
 stops new launches; a worker session already running in tmux finishes on its own (kill it from the
 termfleet console if you need it gone now). On the local runner this is also your spend stop — there
-is no proxy cap, so a stopped loop is what bounds model billing.
+is no proxy cap, so a stopped loop is what bounds model billing. (This same stop sequence is the first
+step of a full [Stop & teardown](#stop--teardown) below.)
 
 ### 6. Give the loop work — by code host
 
@@ -616,13 +626,10 @@ npx open-autonomy doctor --live     # one real session, cancelled either way —
 
 ### Stop & teardown
 
-**Pausing (not uninstalling):** `Ctrl-C` the scheduler (or `kill` its PID if you backgrounded it). The
-termfleet console/provider from step 2 are separate background processes — stop them with `kill %1 %2` in
-the shell that started them (or `pkill -f "termfleet (console|provider)"`). Stopping the scheduler stops
-new launches; a worker session already running in tmux finishes on its own (kill it from the termfleet
-console if you need it gone now). On the local runner this is also your spend stop — there is no proxy
-cap, so a stopped loop is what bounds model billing. `touch .open-autonomy/paused` (step 5) is the softer,
-same-tick kill-switch that fences new dispatch without killing the process.
+**Pausing (not uninstalling):** to stop the loop without backing OA out, use the stop sequence in
+[step 5, "Stopping the loop"](#5-run-the-loop) (`Ctrl-C`/`kill` the scheduler + `kill %1 %2` the termfleet
+console/provider) — that's also your spend stop on the local runner. The softer, same-tick kill-switch is
+`touch .open-autonomy/paused` (step 5): it fences new dispatch without killing the process.
 
 **Full teardown (how you back OA out entirely):** there is no one-command uninstall; reverse what the
 install armed, in order:
@@ -660,7 +667,7 @@ README or `docs/INSTALL-AGENT.md`; make them link here instead.
 | 3 | Provider pinning (`TERMFLEET_PROVIDER_URL`) | [Step 2 → "Pin the provider"](#pin-the-provider) |
 | 4 | Teardown / how to back OA out | [Stop & teardown](#stop--teardown), above |
 | 5 | Stop-conditions (no `package.json`; shared box; public repo; no-PR-CI ⇒ never auto-merge; admin/plan) | [Stop-conditions before you start](#stop-conditions-before-you-start), above step 1 |
-| 6 | Durability/observability (loop dies on terminal close; supervisor; worktree pruning; idle spend) | [Step 5, "Run the loop"](#5-run-the-loop) (stopping note) + [Stop & teardown](#stop--teardown) |
+| 6 | Durability/observability (loop dies on terminal close/logout/reboot; daemonize with nohup+tmux / systemd / launchd; worktree pruning; idle spend) | [Step 5, "Keeping it running (unattended)"](#5-run-the-loop) → fuller: [`INSTALL-AGENT.md#durable-operation-observability--re-runs`](./INSTALL-AGENT.md#durable-operation-observability--re-runs) |
 | 7 | Verify before declaring done | [Step 8, "Verify the install"](#8-verify-the-install) |
 
 ### What depends on the code host vs the runner

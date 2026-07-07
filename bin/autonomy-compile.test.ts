@@ -70,3 +70,53 @@ describe('autonomy-compile — fresh-compile clobber guard (BL-14)', () => {
     }
   }, 30_000);
 });
+
+describe('autonomy-compile — printed next-steps include the commit-the-harness step (OA-03, AC-7)', () => {
+  test('no-tracker profile (hello, local): "Commit the harness" is step 4, "Run the loop" is step 5', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'oa-nextsteps-hello-'));
+    try {
+      const r = compile(['hello', 'local', dir]);
+      expect(r.exitCode).toBe(0);
+      expect(r.stdout).toContain('4. Commit the harness');
+      expect(r.stdout).toContain('5. Run the loop');
+      // The commit step must appear BEFORE the run-the-loop step.
+      expect(r.stdout.indexOf('Commit the harness')).toBeGreaterThan(0);
+      expect(r.stdout.indexOf('Commit the harness')).toBeLessThan(r.stdout.indexOf('Run the loop'));
+      // No tracker step for `hello` — numbering must not skip to 5/6.
+      expect(r.stdout).not.toContain('5. Commit the harness');
+      expect(r.stdout).not.toContain('6. Run the loop');
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  }, 30_000);
+
+  test('tracker profile (simple-sdlc, local): "Commit the harness" is step 5, "Run the loop" is step 6', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'oa-nextsteps-sdlc-'));
+    try {
+      const r = compile(['simple-sdlc', 'local', dir]);
+      expect(r.exitCode).toBe(0);
+      expect(r.stdout).toContain('4. Tracker');
+      expect(r.stdout).toContain('5. Commit the harness');
+      expect(r.stdout).toContain('6. Run the loop');
+      expect(r.stdout.indexOf('Commit the harness')).toBeLessThan(r.stdout.indexOf('Run the loop'));
+      expect(r.stdout).not.toContain('4. Commit the harness');
+      expect(r.stdout).not.toContain('5. Run the loop');
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  }, 30_000);
+
+  test('commit-the-harness text names the worktree failure mode and the exact git commands', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'oa-nextsteps-text-'));
+    try {
+      const r = compile(['hello', 'local', dir]);
+      expect(r.stdout).toContain('git worktrees');
+      expect(r.stdout).toContain('Unknown command: /develop');
+      expect(r.stdout).toContain('git add scripts/ scheduler/ .claude/ .codex/ .open-autonomy/ standards/');
+      expect(r.stdout).toContain('git commit -m "Install the open-autonomy harness"');
+      expect(r.stdout).toContain('docs/OPERATIONS.md#local-runner-quickstart');
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  }, 30_000);
+});

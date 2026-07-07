@@ -118,6 +118,58 @@ if (needsRunner && !existsSync(join(here, '..', 'node_modules', 'termfleet'))) {
   process.exit(1);
 }
 
+// The uncommitted-harness guard (OA-03): agents launched with \`--branch\` run in git WORKTREES, which
+// materialize only COMMITTED files. If the compiled harness isn't committed, every worker dies instantly
+// inside its tmux session with \`Unknown command: /develop\` — and nothing upstream ever sees it (the dead
+// session reads as 'done'). Same shape as the termfleet guard just above: plain spawnSync, no-op when the
+// precondition doesn't apply, refuse-with-names otherwise. Runs once, before the first tick, in both
+// --once and continuous mode — the earliest point that can stop the PM (and therefore every downstream
+// zombie) with one message. The manifest (.open-autonomy/generated.json) is the authoritative, exact list
+// of what compile wrote — never a guess, never a scan of user files.
+const GENERATED_MANIFEST = join(here, '..', '.open-autonomy', 'generated.json');
+const isGitRepo = spawnSync('git', ['rev-parse', '--git-dir'], { stdio: 'ignore' }).status === 0;
+if (isGitRepo && existsSync(GENERATED_MANIFEST)) {
+  let manifestFiles = [];
+  try {
+    const manifest = JSON.parse(readFileSync(GENERATED_MANIFEST, 'utf8'));
+    manifestFiles = Array.isArray(manifest.files) ? manifest.files : [];
+  } catch {
+    manifestFiles = [];
+  }
+  if (manifestFiles.length) {
+    // One spawn: \`git status --porcelain\` scoped to exactly the manifest's paths. Untracked (??) and
+    // modified/added (any other status) both count as "uncommitted" — this catches both the never-committed
+    // and the partially-committed harness, and nothing else (a pathspec scopes git to only these paths).
+    const status = spawnSync('git', ['status', '--porcelain', '--', ...manifestFiles], { encoding: 'utf8' });
+    const dirty = (status.stdout || '')
+      .split('\\n')
+      .filter((line) => line.trim().length > 0)
+      .map((line) => line.slice(3));
+    if (dirty.length) {
+      const lines = [
+        '[loop] the open-autonomy harness is not (fully) committed — agents run in git worktrees, which only',
+        '  see committed files; launching now would produce workers that die at launch (Unknown command: /develop).',
+        '  uncommitted (' + dirty.length + '):',
+      ]
+        .concat(dirty.map((f) => '    ' + f))
+        .concat([
+          '  Fix:  git add <the paths above>  &&  git commit -m "Install the open-autonomy harness"',
+          '  (docs/OPERATIONS.md#local-runner-quickstart, step 4. Override: AUTONOMY_ALLOW_UNCOMMITTED_HARNESS=1)',
+        ]);
+      if (process.env.AUTONOMY_ALLOW_UNCOMMITTED_HARNESS === '1') {
+        console.error(
+          ['[loop] WARNING — AUTONOMY_ALLOW_UNCOMMITTED_HARNESS=1: proceeding with an uncommitted harness.']
+            .concat(lines)
+            .join('\\n'),
+        );
+      } else {
+        console.error(lines.join('\\n'));
+        process.exit(1);
+      }
+    }
+  }
+}
+
 const fireTick = () => {
   for (const command of schedule.scripts) {
     spawnSync(command, { shell: true, stdio: 'inherit', env: Object.assign({}, schedule.env, process.env) });

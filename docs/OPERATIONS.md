@@ -23,7 +23,7 @@ Installing OA is **two independent choices** — the runner is orthogonal to the
   via the termfleet SDK, using your own logged-in coding CLI).
 - **Code host** — *where the code lives and how a change lands*: **GitHub** (the agent opens a PR; `ci` +
   an `agent-review` status gate **native auto-merge** — that reviewer is independently *enforced* only on
-  the hosted/scoped-token runner; see the local safety note in step 5) or **local-git** (a tracker board on
+  the hosted/scoped-token runner; see the local safety note in step 6) or **local-git** (a tracker board on
   disk, PR-free — no GitHub at all).
 
 A profile declares which combinations it supports (`targets` × `codeHost`). The three setups people use:
@@ -34,16 +34,17 @@ A profile declares which combinations it supports (`targets` × `codeHost`). The
 | **Local agents → GitHub PRs** | local | GitHub | `simple-gh-sdlc` | [Local-runner quickstart](#local-runner-quickstart) → *GitHub code host* |
 | **Fully local** | local | local-git | `simple-sdlc` (or `hello`) | [Local-runner quickstart](#local-runner-quickstart) → *local-git code host* |
 
-The **runner steps are identical** for both local setups (prereqs → termfleet → compile → run the loop);
-only **how you feed it work and how a change lands** differ by code host. That split is exactly steps 1–4
-(shared) vs step 5 (per code host) below.
+The **runner steps are identical** for both local setups (prereqs → termfleet → compile → commit → run the
+loop); only **how you feed it work and how a change lands** differ by code host. That split is exactly
+steps 1–5 (shared) vs step 6 (per code host) below.
 
 > Installing onto an **existing** repo is an *overlay*: `simple-gh-sdlc` / `simple-sdlc` / `hello` ship
 > only OA-specific files (`scripts/`, `.claude/skills/`, `scheduler/`, `.open-autonomy/`, `standards/`,
 > `.github/workflows/merge.yml`), so `compile … .` is purely additive — it does **not** generate a
 > `package.json`, `README`, or `.gitignore` over yours. You still merge the runner's deps into your repo
 > (`npm install termfleet`, `npm install -D ztrack`) — step 1 below. The OA files are **committed** to the
-> repo (the agents run in git worktrees, which only see committed files — it's how OA maintains itself).
+> repo (the agents run in git worktrees, which only see committed files — it's how OA maintains itself) —
+> see quickstart [step 4, "Commit the harness"](#4-commit-the-harness).
 >
 > **`self-driving` is the opposite: a whole-repo SCAFFOLD**, not an overlay — it carries
 > README.md/package.json/.gitignore/CHANGELOG.md as resources (this repo's own dogfood setup). It's for a
@@ -68,12 +69,12 @@ directly**). This is the **local runner**. It works against **either code host**
   all**. The path for a private project you won't push.
 - **GitHub** (`simple-gh-sdlc`) — agents run on your machine, but a change lands as an **auto-merging PR
   on GitHub** gated by `ci` + an `agent-review` status (on local the agents share your token, so that
-  status is *not* an independent reviewer — your CI is the real gate; see step 5's safety note). The path
+  status is *not* an independent reviewer — your CI is the real gate; see step 6's safety note). The path
   for a trusted repo whose agents you want on your own machine and model subscription.
 
-**Steps 1–4 (prereqs → termfleet → compile → run) are identical** for both; only **step 5 — how you feed
-work and how a change lands** — differs by code host. If you just want to *see the loop fire* with zero
-tracker setup, use the `hello` profile (a single cron agent).
+**Steps 1–5 (prereqs → termfleet → compile → commit → run) are identical** for both; only **step 6 — how
+you feed work and how a change lands** — differs by code host. If you just want to *see the loop fire*
+with zero tracker setup, use the `hello` profile (a single cron agent).
 
 ### 1. Prerequisites
 
@@ -86,7 +87,7 @@ Install these once, on the machine that will run the loop:
 | **termfleet** | the local runner drives it through its **SDK** (a `node_modules` dependency, not a PATH binary) | in your repo: `npm install termfleet` (then `npx termfleet …` runs its console/provider CLI) |
 | **A coding agent CLI, logged in** | the agent's model access | Claude Code (default) **or** Codex — see next step |
 | **bun** (for `simple-sdlc`) | the orchestrator dispatches workers via `bun scripts/runner.ts launch …` | `curl -fsSL https://bun.sh/install \| bash` — not needed for the `hello` demo (Node-only) |
-| **gh** (for the GitHub code host) | `simple-gh-sdlc`'s agents and the merge reconcile shell out to the GitHub CLI (step 5's `gh api` / `gh pr` calls) | `brew install gh`, then `gh auth login` — not needed for `hello` / `simple-sdlc` |
+| **gh** (for the GitHub code host) | `simple-gh-sdlc`'s agents and the merge reconcile shell out to the GitHub CLI (step 6's `gh api` / `gh pr` calls) | `brew install gh`, then `gh auth login` — not needed for `hello` / `simple-sdlc` |
 
 Right after installing `termfleet`, run the **`preflight`** CLI verb once — it rebuilds `node-pty` for
 your Node (termfleet's `virtual-tmux` provider ships no prebuilt for newer Node and crashes at launch
@@ -106,7 +107,7 @@ missing or logged-out CLI. So sign in *first*:
 - **Claude Code (default):** run `claude`, then `/login` (or set `ANTHROPIC_API_KEY`). Verify with
   `claude --version`.
 - **Codex (alternative):** run `codex login`. To use Codex instead of Claude, set
-  `TERMFLEET_AGENT=codex` when you start the loop (step 4).
+  `TERMFLEET_AGENT=codex` when you start the loop (step 5).
 
 There is no separate "open-autonomy login" — the agent uses your coding CLI's own session, so your
 local subscription/key is what's billed.
@@ -162,7 +163,30 @@ runner), the agent skills under `.claude/skills/` + `.codex/skills/`, `standards
 this repo is required — `npx open-autonomy …` runs the published CLI. (`self-driving` also compiles to
 `local`; `simple-sdlc` is local-git only.)
 
-### 4. Run the loop
+### 4. Commit the harness
+
+The agents run in **git worktrees, which only see committed files** — an uncommitted harness produces
+workers that die at launch with `Unknown command: /develop`. Commit everything the compile wrote before
+the first tick:
+
+```bash
+git add scripts/ scheduler/ .claude/ .codex/ .open-autonomy/ standards/
+git commit -m "Install the open-autonomy harness"
+```
+
+The authoritative list of what the compile wrote is `.open-autonomy/generated.json` — stage from it if you
+keep any of those directories partially ignored:
+
+```bash
+git add $(node -p "JSON.parse(require('fs').readFileSync('.open-autonomy/generated.json','utf8')).files.join(' ')")
+```
+
+Note `.claude/settings.json` is part of the harness (the ztrack drive-to-green Stop hook) and is included
+above. Re-run this step after every re-compile/upgrade. **No push is required:** on the local-git code
+host, worktrees base on your **local** trunk — committing locally is sufficient. GitHub code host installs
+(`simple-gh-sdlc`) additionally push as part of their normal PR flow.
+
+### 5. Run the loop
 
 ```bash
 node scheduler/run.mjs --once   # fire one tick, then exit — use this to verify end-to-end
@@ -186,7 +210,7 @@ stops new launches; a worker session already running in tmux finishes on its own
 termfleet console if you need it gone now). On the local runner this is also your spend stop — there
 is no proxy cap, so a stopped loop is what bounds model billing.
 
-### 5. Give the loop work — by code host
+### 6. Give the loop work — by code host
 
 The `hello` greeter self-fires on cron and needs no input. A real loop needs a backlog. **How you feed
 work and how a change lands depends on the code host** you compiled in step 3.
@@ -270,7 +294,7 @@ required you'd be auto-merging on the agents' own (same-token) say-so.
 > addressed to the installing agent — detect the repo, ask the human only the judgment calls (the gate,
 > identity, the first issue), run this overlay, and **verify the loop merges before declaring done**.
 
-### 6. Human-in-the-loop on the local runner
+### 7. Human-in-the-loop on the local runner
 
 A profile can declare a `kind: human` actor (`docs/SPEC.md#handoffs` — the human seam) alongside your
 agents. On the local runner this needs **no termfleet, no coding CLI, no login** — a person cannot be

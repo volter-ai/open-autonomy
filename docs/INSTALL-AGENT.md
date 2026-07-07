@@ -282,7 +282,8 @@ curl -sS "http://127.0.0.1:$TF_PROVIDER/healthz" 2>/dev/null | grep -q '"ok":tru
   && { echo "ABORT: port $TF_PROVIDER already answers — pick a different --port for $TF_PREFIX"; exit 1; } \
   || (npx termfleet provider serve --kind virtual-tmux --prefix "$TF_PREFIX" --count 1 --port "$TF_PROVIDER" &)
 export TERMFLEET_PROVIDER_URL="http://127.0.0.1:$TF_PROVIDER"   # PIN — required in shared environments
-#   claude → /login    then sanity-check:  npx termfleet claude new --prompt "say hi"
+#   claude → /login    then sanity-check:  npx termfleet claude new -y --prompt "say hi"
+#   (-y auto-approves the panel-review prompt that fires once any panel already exists)
 ```
 
 Then author + file the **first issue** (Phase-2 #6). The PM keys on the **`ready` label** (not the assignee),
@@ -398,7 +399,8 @@ proven *before* auto-merge went live. That is a proven install.
 
 - **`createAgentWindow returned no terminalId` / a launch times out** — termfleet console/provider aren't
   running, **`tmux` isn't installed** (the provider needs it), or the coding CLI isn't signed in. Re-run
-  `npx termfleet claude new --prompt hi` in isolation.
+  `npx termfleet claude new -y --prompt hi` in isolation (`-y` skips the existing-panels review prompt,
+  which fires once any panel already exists).
 - **A PR opens but never merges** — branch protection requires a check that isn't posted on PRs. Confirm
   the required `contexts` are the **exact** check-run names that run on a *pull request* (re-read from *this
   open PR's* check-runs — never a merged PR, whose head also carries push-run checks), with no leftover

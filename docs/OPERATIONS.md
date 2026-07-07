@@ -171,7 +171,9 @@ pid/command).
 Sanity-check that a session can launch (this is the same call the loop makes):
 
 ```bash
-npx termfleet claude new --prompt "say hello"
+npx termfleet claude new -y --prompt "say hello"
+# -y auto-approves the panel-review prompt that fires once any panel already exists
+# (true after your very first launch, and always true on a shared provider)
 ```
 
 `termfleet sessions recent` is **user-global** — it lists every project's sessions on this box (it reads
@@ -550,8 +552,9 @@ The agent loop is the same everywhere; a few controls vary by **axis** (runner �
 ### Troubleshooting
 
 - **`createAgentWindow returned no terminalId …`** — the console/provider (step 2) aren't running, or your
-  agent CLI isn't installed/logged in (step 1). Re-run the `npx termfleet claude new --prompt "hi"`
-  sanity check in isolation.
+  agent CLI isn't installed/logged in (step 1). Re-run the `npx termfleet claude new -y --prompt "hi"`
+  sanity check in isolation (`-y` is required here too — the panel-review guard fires once any panel exists,
+  which it will after the first sanity check).
 - **The loop does nothing each tick (`simple-sdlc`)** — there's no eligible work. Confirm
   `ztrack issue view` shows items and that they're in a state the PM can advance.
 - **Wrong agent launches** — set `TERMFLEET_AGENT=claude` or `=codex` explicitly; the default is

@@ -11,8 +11,7 @@ import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { basename, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseIr, compiledPaths, materialize, missingCopySourcesIn, findClobbers, validateSkillFrontmatterIn } from '@open-autonomy/core';
-import { compileLocal } from '@open-autonomy/substrate-local';
-import { compileGithub } from '@open-autonomy/substrate-github';
+import type { CompileOutput } from '@open-autonomy/core';
 import { resolveZtrackPreset } from './ztrack-preset.ts';
 
 // The bundled profiles ship next to this module's package root: at dist/cli.js when installed from npm
@@ -66,7 +65,29 @@ if (!ir.targets.includes(substrate)) {
   console.error(`open-autonomy: WARNING — profile "${profileArg}" declares targets: [${ir.targets.join(', ')}]; "${substrate}" is not among them (proceeding — an undeclared target may still work, just unproven for this profile).`);
 }
 
-const out = substrate === 'local' ? compileLocal(ir) : compileGithub(ir);
+// Substrate-selected DYNAMIC import (OA-01): only the chosen substrate's module is ever loaded, and only
+// after arg parsing. This is defense-in-depth over the substrates' own lazy sibling-data reads — even a
+// non-data-file init-time defect in the OTHER substrate (a syntax-level regression, a future top-level
+// await) can no longer take down a `compile <profile> local` (or vice versa). Matches the house pattern
+// bin/open-autonomy.ts already uses for verb-level delegation.
+let out: CompileOutput;
+try {
+  out =
+    substrate === 'local'
+      ? (await import('@open-autonomy/substrate-local')).compileLocal(ir)
+      : (await import('@open-autonomy/substrate-github')).compileGithub(ir);
+} catch (e) {
+  // A lazy sibling-data read (emit.ts) throws an actionable packaging-bug Error naming the missing file —
+  // surface just that message, not a raw Node stack trace, so a corrupted/partial install fails LOUDLY but
+  // legibly. ONLY that known, self-describing error class gets the message-only treatment: anything else
+  // (a TypeError inside a compiler, an empty-message Error) is a genuine bug whose stack must survive for
+  // diagnosis — rethrow it unchanged.
+  if (e instanceof Error && e.message.startsWith('open-autonomy: packaging bug')) {
+    console.error(e.message);
+    process.exit(1);
+  }
+  throw e;
+}
 
 // Pre-materialize validation: every skill dir + resource file the compile will copy must exist BEFORE any
 // file is written — a missing source used to surface as ENOENT after N files were already on disk, and

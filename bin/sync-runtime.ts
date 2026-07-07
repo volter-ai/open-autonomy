@@ -37,6 +37,9 @@ const DEV_ONLY = new Set([
   'bench-judge.ts', 'bench-coverage.ts', 'bench-coverage.test.ts', 'bench-operate.ts',
   // Packaging tooling: builds the published node CLI bundle — dev-only, never shipped into an install.
   'build-cli.ts',
+  // Release gate (OA-01): packs + installs + smoke-runs the published CLI from a throwaway tarball
+  // install — dev-only release tooling, never shipped into an install.
+  'pack-smoke.ts',
   // Operator treasury tooling: rotates the proxy admin token (worker secret + local .env) — dev-only.
   'rotate-admin-token.ts',
 ]);

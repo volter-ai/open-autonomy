@@ -9,19 +9,48 @@ import { stringify as stringifyYaml } from 'yaml';
 import { cronOf, emitAutonomy, withGeneratedManifest } from '@open-autonomy/core';
 import type { AutonomyIR, CompileOutput, IRAgent } from '@open-autonomy/core';
 
+// Lazy sibling-data reads (OA-01): these used to be module-scope `readFileSync`s, which meant merely
+// IMPORTING this module (e.g. to reach GithubRunner, or from `lint`/`conformance`, which legitimately
+// import both substrates) touched disk and could throw before any code path that actually needed the
+// data ran. A missing sibling file (a packaging bug — see docs/adoption-fixes/OA-01) used to take down
+// EVERY verb that merely imported '@open-autonomy/substrate-github', including a plain `local` compile.
+// Now the read only happens the first time the emit site that needs it actually runs, and a miss throws
+// an actionable error instead of a raw ENOENT deep in bundled code.
+function readSiblingOrThrow<T>(read: () => T, literal: string): T {
+  try {
+    return read();
+  } catch (e) {
+    throw new Error(
+      `open-autonomy: packaging bug — sibling data file '${literal}' is missing next to the substrate-github ` +
+        `module (expected beside ${import.meta.url}). This file should ship with the package; reinstall ` +
+        `open-autonomy, or file an issue: https://github.com/volter-ai/open-autonomy/issues. ` +
+        `Underlying error: ${(e as Error).message}`,
+    );
+  }
+}
+
 // The operator control plane (the github surface of the Runner contract). Single source of truth is
 // a sibling file we emit verbatim into the compiled repo as .github/agent-control.mjs.
-const AGENT_CONTROL = readFileSync(
-  join(dirname(fileURLToPath(import.meta.url)), 'control-backend.mjs'),
-  'utf8',
-);
+let _agentControl: string | undefined;
+function agentControlSrc(): string {
+  return (_agentControl ??= readSiblingOrThrow(
+    () => readFileSync(join(dirname(fileURLToPath(import.meta.url)), 'control-backend.mjs'), 'utf8'),
+    'control-backend.mjs',
+  ));
+}
 
 // The github substrate's runtime backend — the scripts every github installation runs. Domain-free,
 // injected (vendored under ./runtime, mirrored to scripts/); a profile never carries it.
-const RUNTIME_DIR = join(dirname(fileURLToPath(import.meta.url)), 'runtime');
-const RUNTIME: Record<string, string> = {};
-for (const f of readdirSync(RUNTIME_DIR)) {
-  if (f.endsWith('.ts')) RUNTIME[`scripts/${f}`] = readFileSync(join(RUNTIME_DIR, f), 'utf8');
+let _runtime: Record<string, string> | undefined;
+function runtimeSrcs(): Record<string, string> {
+  return (_runtime ??= readSiblingOrThrow(() => {
+    const dir = join(dirname(fileURLToPath(import.meta.url)), 'runtime');
+    const out: Record<string, string> = {};
+    for (const f of readdirSync(dir)) {
+      if (f.endsWith('.ts')) out[`scripts/${f}`] = readFileSync(join(dir, f), 'utf8');
+    }
+    return out;
+  }, 'runtime/'));
 }
 
 // The self-managed egress allowlist the credentialed jobs run when a profile sets
@@ -30,10 +59,13 @@ for (const f of readdirSync(RUNTIME_DIR)) {
 // (sibling source, like control-backend.mjs) and emits it TOGETHER with the job step that invokes it
 // (egressGuard()). Flag set ⇒ step + scripts/egress-guard.sh, both; unset ⇒ neither. It was previously one
 // profile's resource, so any OTHER flag-setting profile compiled to agent jobs that died on a missing file.
-const EGRESS_GUARD = readFileSync(
-  join(dirname(fileURLToPath(import.meta.url)), 'egress-guard.sh'),
-  'utf8',
-);
+let _egressGuard: string | undefined;
+function egressGuardSrc(): string {
+  return (_egressGuard ??= readSiblingOrThrow(
+    () => readFileSync(join(dirname(fileURLToPath(import.meta.url)), 'egress-guard.sh'), 'utf8'),
+    'egress-guard.sh',
+  ));
+}
 
 const CONTROL_VERBS = ['cancel', 'pause', 'resume', 'status', 'retry'];
 
@@ -492,7 +524,7 @@ function isHuman(agent: IRAgent): boolean {
 // from the shared layer without depending on the github compiler. (The runtime's eventual neutral home is
 // the coordinated relocation noted in the package readme; until then it is vendored here.)
 export function runtimeFiles(): Record<string, string> {
-  return { ...RUNTIME };
+  return { ...runtimeSrcs() };
 }
 
 export function compileGithub(ir: AutonomyIR): CompileOutput {
@@ -513,13 +545,13 @@ export function compileGithub(ir: AutonomyIR): CompileOutput {
   }
   // Agents carry the operator control plane, so emit its handler.
   if (Object.values(ir.agents).some((a) => !isHuman(a))) {
-    generated['.github/agent-control.mjs'] = AGENT_CONTROL;
+    generated['.github/agent-control.mjs'] = agentControlSrc();
   }
   // The substrate injects its runtime backend.
-  Object.assign(generated, RUNTIME);
-  // The egress-guard step and its script ship together (see EGRESS_GUARD): a flag-setting profile must
+  Object.assign(generated, runtimeSrcs());
+  // The egress-guard step and its script ship together (see egressGuardSrc): a flag-setting profile must
   // never get a job step referencing a file only some other profile carries.
-  if (githubBox(ir).private_egress_guard) generated['scripts/egress-guard.sh'] = EGRESS_GUARD;
+  if (githubBox(ir).private_egress_guard) generated['scripts/egress-guard.sh'] = egressGuardSrc();
 
   // Derived security DATA: the zizmor baseline scoped to the agent workflows THIS compile emitted (their
   // guarded patterns are the engine's, not the app's). The security.yml workflow + dependabot config that

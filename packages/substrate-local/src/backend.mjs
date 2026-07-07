@@ -43,7 +43,13 @@ export class TermfleetRunner {
     const promptFile = promptDir ? `${promptDir}/${agent}.txt` : '';
     const promptExists = !!promptFile && existsSync(promptFile);
     const prompt = promptExists ? readFileSync(promptFile, 'utf8') : agent;
-    const invocation = promptExists ? /^[/$](\S+)/.exec(prompt.trim()) : null;
+    // Match the EXACT emitted skill-invocation shape (emit.ts's promptFiles: `/${behavior}\n` claude,
+    // `$${behavior}\n` codex) — a leading `/` or `$` followed by a single skill-name token and nothing else.
+    // Anchoring both ends (a lone token, valid skill-name chars only) is deliberate: a hand-authored custom
+    // AUTONOMY_PROMPT_DIR whose prompt merely STARTS with a path-like token (e.g. "/tmp/notes.md summarize")
+    // is NOT a skill invocation and must not be misread as behavior "tmp/notes.md" and false-refused — it has
+    // spaces / extra path segments, so it fails this anchored match and skips the check (nothing to verify).
+    const invocation = promptExists ? /^[/$]([A-Za-z0-9._-]+)$/.exec(prompt.trim()) : null;
     if (invocation) {
       const behavior = invocation[1];
       const skillsRoot = this.harness === 'codex' ? '.codex/skills' : '.claude/skills';

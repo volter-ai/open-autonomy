@@ -171,6 +171,15 @@ function effectsCount(dir: string): number {
   }
 }
 
+// PIN the harness in every launch's env. Tests inherit the OUTER process.env — a CI box exporting
+// TERMFLEET_AGENT=codex would make AC-1 (which deletes only `.claude/skills/develop`, leaving the codex copy
+// intact) spuriously PASS the pre-check and fail the assertion. Pinning 'claude' makes the fixtures
+// deterministic against the paths they actually delete. (AC-6 needs AUTONOMY_PROMPT_DIR *absent* — it builds
+// its env separately.)
+function env(extra: Record<string, string> = {}): NodeJS.ProcessEnv {
+  return { ...process.env, TERMFLEET_AGENT: 'claude', ...extra };
+}
+
 // --- B. the REAL emitted scripts/runner.ts — launch()'s pre-check (AC-1, AC-2, AC-3, AC-5) --------------
 
 describe('scripts/runner.ts launch — the skill pre-check (runner-frontend.ts verbatim)', () => {
@@ -183,7 +192,7 @@ describe('scripts/runner.ts launch — the skill pre-check (runner-frontend.ts v
     const r = spawnSync('bun', ['scripts/runner.ts', 'launch', 'develop', '--ref', '7', '--branch', 'agent/issue-7'], {
       cwd: dir,
       encoding: 'utf8',
-      env: { ...process.env, OA08_SESSION_SENTINEL: sentinel },
+      env: env({ OA08_SESSION_SENTINEL: sentinel }),
     });
 
     expect(r.status).not.toBe(0);
@@ -193,13 +202,17 @@ describe('scripts/runner.ts launch — the skill pre-check (runner-frontend.ts v
     expect(r.stderr).toContain('Commit the harness'); // remediation
     expect(r.stderr).toContain('docs/OPERATIONS.md#local-runner-quickstart');
     expect(r.stderr).toContain('agent/issue-7'); // the branch, named
+    // Pin a FRONTEND-specific part of the message shape (`base <sha>`) — the backend guard's message has no
+    // base sha, so this assertion can only be satisfied by the frontend pre-check, keeping it under test even
+    // if the `toContain('agent/issue-7')` above were weakened (the panel's isolation concern).
+    expect(r.stderr).toMatch(/base [0-9a-f]{7,40}\)/); // `... base <full-or-short sha>)`
 
     expect(existsSync(sentinel)).toBe(false); // createAgentWindow was NEVER called — no session
 
     const list = spawnSync('bun', ['scripts/runner.ts', 'list', 'develop'], {
       cwd: dir,
       encoding: 'utf8',
-      env: { ...process.env, OA08_SESSION_SENTINEL: sentinel },
+      env: env({ OA08_SESSION_SENTINEL: sentinel }),
     });
     expect(JSON.parse(list.stdout || '[]')).toEqual([]); // no new session
 
@@ -215,7 +228,7 @@ describe('scripts/runner.ts launch — the skill pre-check (runner-frontend.ts v
     const r = spawnSync('bun', ['scripts/runner.ts', 'launch', 'develop', '--ref', '7'], {
       cwd: dir,
       encoding: 'utf8',
-      env: { ...process.env, OA08_SESSION_SENTINEL: sentinel },
+      env: env({ OA08_SESSION_SENTINEL: sentinel }),
     });
 
     expect(r.status).not.toBe(0);
@@ -232,12 +245,77 @@ describe('scripts/runner.ts launch — the skill pre-check (runner-frontend.ts v
     const r = spawnSync('bun', ['scripts/runner.ts', 'launch', 'develop', '--ref', '7', '--branch', 'agent/issue-7'], {
       cwd: dir,
       encoding: 'utf8',
-      env: { ...process.env, OA08_SESSION_SENTINEL: sentinel, OA08_STUB_PROVIDER_DOWN: '1' },
+      env: env({ OA08_SESSION_SENTINEL: sentinel, OA08_STUB_PROVIDER_DOWN: '1' }),
     });
 
     expect(r.status).not.toBe(0); // the thrown createAgentWindow error must reach the CLI's own exit code
     expect(r.stderr).not.toContain('launch refused'); // this is NOT the skill pre-check — the skill exists
     expect(existsSync(sentinel)).toBe(false); // the provider never got far enough to create a session
+  });
+
+  test('F1 (recoverability): refuse -> operator commits the skill on trunk -> relaunch SAME branch now SUCCEEDS', () => {
+    // The blocker: launch() runs ensureWorktree BEFORE the pre-check, and ensureWorktree early-returns on an
+    // existing worktree — so a refused --branch launch that LEFT its just-created worktree behind would
+    // re-check that same frozen (skill-less) copy on every retry, refusing forever even AFTER the operator
+    // does exactly what the message says. The fix tears down a worktree THIS launch created, so the retry
+    // rebuilds a fresh one off the fixed trunk. This test drives the full refuse -> fix -> recover arc.
+    const { dir } = scaffold();
+    const wt = join(dir, '.worktrees', 'agent-issue-7');
+    // Break develop, then attempt the launch: it must refuse AND leave NO worktree/branch behind.
+    gitOk(dir, ['rm', '-r', '.claude/skills/develop']);
+    gitOk(dir, ['commit', '-q', '-m', 'break develop']);
+    const sentinel = join(dir, 'sentinel.log');
+    const first = spawnSync('bun', ['scripts/runner.ts', 'launch', 'develop', '--ref', '7', '--branch', 'agent/issue-7'], {
+      cwd: dir,
+      encoding: 'utf8',
+      env: env({ OA08_SESSION_SENTINEL: sentinel }),
+    });
+    expect(first.status).not.toBe(0);
+    expect(first.stderr).toContain('launch refused');
+    expect(existsSync(wt)).toBe(false); // the just-created worktree was TORN DOWN (not left frozen)
+    // the branch is gone too, so `git worktree add -b` can recreate it cleanly on retry
+    expect(git(dir, ['rev-parse', '--verify', '--quiet', 'agent/issue-7']).status).not.toBe(0);
+
+    // The operator does exactly what the message says: commit the harness (skill) back onto trunk.
+    mkdirSync(join(dir, '.claude', 'skills', 'develop'), { recursive: true });
+    writeFileSync(join(dir, '.claude', 'skills', 'develop', 'SKILL.md'), `---\nname: develop\n---\n\n# develop\n`);
+    gitOk(dir, ['add', '-A']);
+    gitOk(dir, ['commit', '-q', '-m', 'restore develop skill on trunk']);
+
+    // Retry the SAME branch: a FRESH worktree is built off the now-fixed trunk HEAD, the skill resolves, and
+    // the launch SUCCEEDS — the whole point of the N=2 retry (spec :163-165) actually works now.
+    const retry = spawnSync('bun', ['scripts/runner.ts', 'launch', 'develop', '--ref', '7', '--branch', 'agent/issue-7'], {
+      cwd: dir,
+      encoding: 'utf8',
+      env: env({ OA08_SESSION_SENTINEL: sentinel }),
+    });
+    expect(retry.status).toBe(0);
+    expect(retry.stderr).not.toContain('launch refused');
+    expect(existsSync(join(wt, '.claude', 'skills', 'develop', 'SKILL.md'))).toBe(true); // fresh worktree sees the fix
+    expect(existsSync(sentinel)).toBe(true); // and a real session got created
+  });
+
+  test('F1 (scoping): a refusal never tears down a PRE-EXISTING worktree it did not create', () => {
+    // Only a worktree THIS launch created may be removed — a pre-existing one could be a legit in-progress
+    // rework worktree. Pre-create the worktree at a base WITHOUT the skill, then launch: it must still refuse,
+    // but must leave that pre-existing worktree in place (ensureWorktree returned 'existing').
+    const { dir } = scaffold();
+    gitOk(dir, ['rm', '-r', '.claude/skills/develop']);
+    gitOk(dir, ['commit', '-q', '-m', 'break develop']);
+    const wt = join(dir, '.worktrees', 'agent-issue-7');
+    gitOk(dir, ['worktree', 'add', '-b', 'agent/issue-7', wt, 'HEAD']); // pre-existing worktree, skill-less base
+    expect(existsSync(wt)).toBe(true);
+    const sentinel = join(dir, 'sentinel.log');
+
+    const r = spawnSync('bun', ['scripts/runner.ts', 'launch', 'develop', '--ref', '7', '--branch', 'agent/issue-7'], {
+      cwd: dir,
+      encoding: 'utf8',
+      env: env({ OA08_SESSION_SENTINEL: sentinel }),
+    });
+    expect(r.status).not.toBe(0);
+    expect(r.stderr).toContain('launch refused');
+    expect(existsSync(wt)).toBe(true); // the PRE-EXISTING worktree is untouched (not this launch's to remove)
+    expect(git(dir, ['rev-parse', '--verify', '--quiet', 'agent/issue-7']).status).toBe(0); // branch kept too
   });
 
   test('AC-5 (regression): skill intact -> launch still succeeds and creates a session exactly as before', () => {
@@ -247,7 +325,7 @@ describe('scripts/runner.ts launch — the skill pre-check (runner-frontend.ts v
     const r = spawnSync('bun', ['scripts/runner.ts', 'launch', 'develop', '--ref', '9', '--branch', 'agent/issue-9'], {
       cwd: dir,
       encoding: 'utf8',
-      env: { ...process.env, OA08_SESSION_SENTINEL: sentinel },
+      env: env({ OA08_SESSION_SENTINEL: sentinel }),
     });
 
     expect(r.status).toBe(0);
@@ -257,7 +335,7 @@ describe('scripts/runner.ts launch — the skill pre-check (runner-frontend.ts v
     const list = spawnSync('bun', ['scripts/runner.ts', 'list', 'develop'], {
       cwd: dir,
       encoding: 'utf8',
-      env: { ...process.env, OA08_SESSION_SENTINEL: sentinel },
+      env: env({ OA08_SESSION_SENTINEL: sentinel }),
     });
     const sessions = JSON.parse(list.stdout || '[]') as Array<{ status: string }>;
     expect(sessions.some((s) => s.status === 'running')).toBe(true); // `list` shows it running, as today
@@ -277,7 +355,7 @@ describe('scripts/autonomy-runner.mjs launch — the backend guard (backend.mjs 
     const r = spawnSync('node', ['scripts/autonomy-runner.mjs', 'launch', 'pm'], {
       cwd: dir,
       encoding: 'utf8',
-      env: { ...process.env, OA08_SESSION_SENTINEL: sentinel, AUTONOMY_PROMPT_DIR: promptDir },
+      env: env({ OA08_SESSION_SENTINEL: sentinel, AUTONOMY_PROMPT_DIR: promptDir }),
     });
 
     expect(r.status).not.toBe(0);
@@ -290,7 +368,7 @@ describe('scripts/autonomy-runner.mjs launch — the backend guard (backend.mjs 
     const list = spawnSync('node', ['scripts/autonomy-runner.mjs', 'list'], {
       cwd: dir,
       encoding: 'utf8',
-      env: { ...process.env, OA08_SESSION_SENTINEL: sentinel },
+      env: env({ OA08_SESSION_SENTINEL: sentinel }),
     });
     expect(JSON.parse(list.stdout || '[]')).toEqual([]); // no session anywhere
   });
@@ -313,7 +391,7 @@ describe('scripts/autonomy-runner.mjs launch — the backend guard (backend.mjs 
     const r = spawnSync('node', ['scheduler/run.mjs', '--once'], {
       cwd: dir,
       encoding: 'utf8',
-      env: { ...process.env, OA08_SESSION_SENTINEL: sentinel },
+      env: env({ OA08_SESSION_SENTINEL: sentinel }),
     });
 
     expect(r.stderr).toContain('launch refused');
@@ -323,7 +401,7 @@ describe('scripts/autonomy-runner.mjs launch — the backend guard (backend.mjs 
     const list = spawnSync('node', ['scripts/autonomy-runner.mjs', 'list'], {
       cwd: dir,
       encoding: 'utf8',
-      env: { ...process.env, OA08_SESSION_SENTINEL: sentinel },
+      env: env({ OA08_SESSION_SENTINEL: sentinel }),
     });
     expect(JSON.parse(list.stdout || '[]')).toEqual([]);
   });
@@ -336,7 +414,7 @@ describe('scripts/autonomy-runner.mjs launch — the backend guard (backend.mjs 
     const r = spawnSync('node', ['scripts/autonomy-runner.mjs', 'launch', 'pm'], {
       cwd: dir,
       encoding: 'utf8',
-      env: { ...process.env, OA08_SESSION_SENTINEL: sentinel, AUTONOMY_PROMPT_DIR: promptDir },
+      env: env({ OA08_SESSION_SENTINEL: sentinel, AUTONOMY_PROMPT_DIR: promptDir }),
     });
 
     expect(r.status).toBe(0);
@@ -352,11 +430,33 @@ describe('scripts/autonomy-runner.mjs launch — the backend guard (backend.mjs 
     // no prompt dir at all -> promptFile resolves to '' -> nothing to check (built via destructuring, not
     // `delete`, so a spread-of-process.env object keeps its inferred type under strict mode).
     const { AUTONOMY_PROMPT_DIR: _unset, ...envWithoutPromptDir } = process.env;
-    const env = { ...envWithoutPromptDir, OA08_SESSION_SENTINEL: sentinel };
+    const noPromptEnv = { ...envWithoutPromptDir, TERMFLEET_AGENT: 'claude', OA08_SESSION_SENTINEL: sentinel };
 
-    const r = spawnSync('node', ['scripts/autonomy-runner.mjs', 'launch', 'develop'], { cwd: dir, encoding: 'utf8', env });
+    const r = spawnSync('node', ['scripts/autonomy-runner.mjs', 'launch', 'develop'], { cwd: dir, encoding: 'utf8', env: noPromptEnv });
 
     expect(r.status).toBe(0); // proceeds straight through — the skip branch, not a false negative
+    expect(r.stderr).not.toContain('launch refused');
+    expect(existsSync(sentinel)).toBe(true);
+  });
+
+  test('a custom prompt whose text merely STARTS with a path-like token is NOT misread as an invocation', () => {
+    // Hardening: the invocation match is anchored to the exact emitted shape (`/name` or `$name`, a lone
+    // skill-name token). A hand-authored AUTONOMY_PROMPT_DIR prompt like "/tmp/notes.md summarize" starts
+    // with a `/`-token but is NOT a skill invocation — the old greedy `/^[/$](\S+)/` would have read behavior
+    // "tmp/notes.md" and false-refused. It must skip the check and launch normally.
+    const { dir } = scaffold();
+    const customPromptDir = join(dir, 'custom-prompts');
+    mkdirSync(customPromptDir, { recursive: true });
+    writeFileSync(join(customPromptDir, 'develop.txt'), '/tmp/notes.md summarize the notes\n');
+    const sentinel = join(dir, 'sentinel.log');
+
+    const r = spawnSync('node', ['scripts/autonomy-runner.mjs', 'launch', 'develop'], {
+      cwd: dir,
+      encoding: 'utf8',
+      env: env({ OA08_SESSION_SENTINEL: sentinel, AUTONOMY_PROMPT_DIR: customPromptDir }),
+    });
+
+    expect(r.status).toBe(0); // no false refusal — the anchored match rejected the path-like token
     expect(r.stderr).not.toContain('launch refused');
     expect(existsSync(sentinel)).toBe(true);
   });

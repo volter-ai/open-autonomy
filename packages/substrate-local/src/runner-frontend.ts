@@ -428,7 +428,12 @@ export async function launch(agent: string, params: LaunchParams = {}): Promise<
   // Read the declared code host ONCE per launch and reuse it for both decisions it gates: the worktree base
   // (below) and the post-session propose effect (below, at the github-only branch).
   const codeHost = manifestCodeHost();
-  if (branch) ensureWorktree(branch, worktree, codeHost);
+  // `ensureWorktree` returns 'existing' when the branch already had a worktree (idempotent reuse), otherwise
+  // the base ref it just created the worktree at ('HEAD' | 'origin/<trunk>'). Capture that so the pre-check
+  // below can tear down ONLY a worktree THIS launch created — never a pre-existing one (which may be a legit
+  // in-progress rework worktree a reviewer sent back).
+  const worktreeStatus = branch ? ensureWorktree(branch, worktree, codeHost) : '';
+  const createdWorktreeThisCall = !!branch && worktreeStatus !== 'existing';
 
   // OA-08 pre-check: does this launch's skill invocation actually resolve in the session's cwd? Applies with
   // OR without `--branch` (a trunk-checkout launch of a skill missing from the main checkout dies the exact
@@ -439,6 +444,18 @@ export async function launch(agent: string, params: LaunchParams = {}): Promise<
   const skillPath = skillPathFor(harness, behavior, cwd);
   if (!existsSync(skillPath)) {
     const baseSha = git(['rev-parse', 'HEAD'], cwd).stdout.trim() || '(unknown)';
+    // Recoverability: a worktree is frozen at the base commit it was created on, and `ensureWorktree`
+    // early-returns on an existing one — so a refused `--branch` launch that LEFT its just-created worktree
+    // behind would re-check that same frozen (skill-less) copy on every retry, refusing forever even after
+    // the operator does exactly what this message says (commit the harness on trunk). So tear down a
+    // worktree+branch THIS call created before throwing: the next retry then rebuilds a FRESH worktree off
+    // the now-fixed trunk and resolves. Scoped to `createdWorktreeThisCall` so a pre-existing (rework)
+    // worktree is never destroyed. Paths are constructed (worktreePathFor → resolve; a validated non-empty
+    // branch) — never an unguarded removal of an empty variable.
+    if (createdWorktreeThisCall && worktree) {
+      git(['worktree', 'remove', '--force', worktree]);
+      git(['branch', '-D', branch]);
+    }
     const message =
       `[runner] launch refused: ${agent}'s skill "${behavior}" is missing at\n` +
       `  ${skillPath} — the session would die at launch ("Unknown command: /${behavior}").\n` +

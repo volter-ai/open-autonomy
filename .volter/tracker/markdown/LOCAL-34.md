@@ -1,13 +1,13 @@
 ---
 identifier: "LOCAL-34"
 title: "OA-05: fix preflight's false pty failure — probe-load the real module, not a phantom artifact"
-state: "ready"
-stateType: "open"
+state: "done"
+stateType: "completed"
 assignees: ["tony"]
 priority: 0
 devProgress: ""
 createdAt: "2026-07-06T12:58:21.258Z"
-updatedAt: "2026-07-06T12:58:21.258Z"
+updatedAt: "2026-07-07T08:28:24.759Z"
 url: "local://tracker/issue/LOCAL-34"
 ---
 Assignee: tony
@@ -19,10 +19,12 @@ Priority: P1 | Fix target: open-autonomy
 Provenance: OA-INSTALL-AUDIT-FINDINGS.md F-5 (§2 P1) + narrative §1 step 2.
 
 ## Acceptance Criteria
-- [ ] dev/01 v1 preflight passes on an environment where termfleet's pty module require()s cleanly (fails today); it still fails usefully, with consistent output, when the module genuinely cannot load
-  - status: pending
-- [ ] dev/02 v1 every numbered criterion in the spec's Acceptance criteria section is demonstrated: each fails before the fix and passes after, with command output as evidence
-  - status: pending
+- [x] dev/01 v1 preflight passes on an environment where termfleet's pty module require()s cleanly (fails today); it still fails usefully, with consistent output, when the module genuinely cannot load
+  - status: done — see close-out
+- [x] dev/02 v1 every numbered criterion in the spec's Acceptance criteria section is demonstrated: each fails before the fix and passes after, with command output as evidence
+  - status: done — see close-out
+
+Close-out: merged to adoption-fixes-backlog @ 0bc06ae (builder commits 41ac020 + adcf4ce). Load-probe replaces the phantom build/Release/pty.node check; dep name discovered from termfleet package.json; rebuild only on probe failure judged by re-probe; node-ENOENT branch (bun spawnSync reports status undefined for missing exe — nullish check); 24 unit tests + spawn-level exit-code coverage; check:preflight in the gate. 5-link proof: /workspace/proofs/oa-05.md.
 
 <!--tracker:comments
 []

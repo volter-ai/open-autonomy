@@ -350,19 +350,15 @@ describe('runPreflightCli — a pty warn fails the gate (exit 1), skips pass it 
 describe('runPreflightCli — OA-04 namespace collisions against real npm fixtures', () => {
   const REPO_ROOT = join(import.meta.dir, '..');
   const runCli = (cwd: string): { exitCode: number; stdout: string } => {
-    // OA-09: these fixtures do a REAL `npm install termfleet`, so the port/provider coexistence check
-    // (bin/preflight.ts) is live here, not skipped — and this test suite's own dev box legitimately runs
-    // termfleet as fleet infrastructure on the doc-default port, exactly the coexistence scenario OA-09
-    // exists to name (docs/adoption-fixes/OA-09-termfleet-coexistence-provider-pinning.md). Pin to an
-    // unrelated port so THAT box-wide fact — orthogonal to what THIS describe block tests (collisions) —
-    // downgrades to a caution, never a hard-fail that would make these collision assertions flaky on a
-    // dev box vs. a clean CI runner.
-    const r = Bun.spawnSync(['bun', join(REPO_ROOT, 'bin', 'preflight.ts')], {
-      cwd,
-      stdout: 'pipe',
-      stderr: 'pipe',
-      env: { ...process.env, TERMFLEET_PROVIDER_URL: 'http://127.0.0.1:18471' },
-    });
+    // OA-09 (skeptic-panel Blocker 1): these fixtures do a REAL `npm install termfleet`, so the port/provider
+    // coexistence check is live here — and this suite's own dev box legitimately runs termfleet as fleet
+    // infrastructure on the doc-default port. That case is now a CAUTION (never exit 1): an unpinned live
+    // occupant can't be proven foreign, so it must not fail a healthy box. So NO test-spawn pin is needed
+    // (an earlier revision added one to mask a false-alarm exit 1 — the very F-5 crying-wolf the caution
+    // downgrade fixes; its removal here is part of the proof the downgrade works). The collision assertions
+    // below are unaffected: a caution keeps exit 0, and the COLLISION detection is a hard warn independent
+    // of the port check.
+    const r = Bun.spawnSync(['bun', join(REPO_ROOT, 'bin', 'preflight.ts')], { cwd, stdout: 'pipe', stderr: 'pipe' });
     return { exitCode: r.exitCode, stdout: r.stdout.toString('utf8') };
   };
   const npmInstall = (dir: string, ...args: string[]) => {
@@ -966,6 +962,18 @@ describe('classifyPort / occupantOf — termfleet port classification (OA-09)', 
   test('occupantOf: neither ss nor lsof available ⇒ undefined (not a throw) — the caller reports "occupant unidentified"', () => {
     expect(occupantOf(7373, noRun)).toBeUndefined();
   });
+
+  test('MINOR (b): `ss` finds the LISTENER line but without a process column (no privilege) ⇒ FALL THROUGH to lsof, not a premature undefined', () => {
+    // The listener line matches the port but has no `users:((…))` (ss ran unprivileged). The old code
+    // `return … : undefined` here skipped lsof entirely and the caller printed a false "ss/lsof unavailable".
+    const run: RunFn = (cmd) =>
+      cmd === 'ss'
+        ? { status: 0, stdout: 'LISTEN 0 511 127.0.0.1:7373 0.0.0.0:*\n', stderr: '' } // matched, but no process column
+        : cmd === 'lsof'
+          ? { status: 0, stdout: 'p888\ncnginx\n', stderr: '' }
+          : { status: 1, stdout: '', stderr: '' };
+    expect(occupantOf(7373, run)).toBe('pid 888 (nginx)');
+  });
 });
 
 describe('checkTermfleetPorts — warn-vs-caution policy + machine-global state (OA-09)', () => {
@@ -1035,27 +1043,33 @@ describe('checkTermfleetPorts — warn-vs-caution policy + machine-global state 
     expect(r.notes.some((n) => n.includes('7373') && n.includes('free'))).toBe(true);
   });
 
-  test('AC-1 shape: UNPINNED + a foreign termfleet PROVIDER on the doc-default port 7373 ⇒ hard warn naming port, "termfleet provider", kind, and instanceId', async () => {
+  test('AC-1 shape: UNPINNED + a termfleet PROVIDER on the doc-default port 7373 ⇒ CAUTION (NOT exit 1) that still names port, "termfleet provider", kind, and instanceId', async () => {
+    // Skeptic-panel Blocker 1: a live provider cannot be PROVEN foreign from /healthz (it could be the
+    // operator's own single-user provider — exactly what the new quickstart starts). So this is a prominent
+    // caution, never a hard-fail — but detection is fully preserved (occupant NAMED + pin prescribed).
     const r = await checkTermfleetPorts('/repo', fakeIo({ occupied: { 7373: providerBody('virtual-tmux', 'ef19-decoy') } }));
-    expect(r.failed).toBe(true);
-    const w = r.warns.join('\n');
-    expect(w).toContain('7373');
-    expect(w).toContain('termfleet provider');
-    expect(w).toContain("kind 'virtual-tmux'");
-    expect(w).toContain('ef19-decoy');
-    expect(w).toContain('TERMFLEET_PROVIDER_URL'); // prescribes the pin
+    expect(r.failed).toBe(false); // no exit 1 on a could-be-your-own provider — the F-5 crying-wolf fix
+    expect(r.warns).toEqual([]);
+    const c = r.cautions.join('\n');
+    expect(c).toContain('7373');
+    expect(c).toContain('termfleet provider');
+    expect(c).toContain("kind 'virtual-tmux'");
+    expect(c).toContain('ef19-decoy');
+    expect(c).toContain('TERMFLEET_PROVIDER_URL'); // still prescribes the pin
+    expect(c).toContain('if this is NOT your own provider'); // the could-be-yours framing
   });
 
-  test('AC-2 shape: UNPINNED + a foreign NON-termfleet service on 7373 ⇒ hard warn naming it a non-termfleet service', async () => {
+  test('AC-2 shape: UNPINNED + a NON-termfleet service on 7373 ⇒ CAUTION that names it a non-termfleet service (still not a hard-fail — could be anything, unprovable)', async () => {
     const r = await checkTermfleetPorts('/repo', fakeIo({ occupied: { 7373: 'foreign-non-http' } }));
-    expect(r.failed).toBe(true);
-    expect(r.warns.join('\n')).toContain('non-termfleet service');
+    expect(r.failed).toBe(false);
+    expect(r.warns).toEqual([]);
+    expect(r.cautions.join('\n')).toContain('non-termfleet service');
   });
 
-  test('pinned to a DIFFERENT provider + a foreign occupant on the (unused) doc-default port ⇒ CAUTION only, never a hard warn (no-false-alarm: the operator already did the right thing)', async () => {
+  test('pinned to a DIFFERENT provider + an occupant on the (unused) doc-default port ⇒ CAUTION only, never a hard warn (the operator already pinned)', async () => {
     const r = await checkTermfleetPorts(
       '/repo',
-      fakeIo({ occupied: { 7373: providerBody() }, env: { TERMFLEET_PROVIDER_URL: 'http://127.0.0.1:7602' } }),
+      fakeIo({ occupied: { 7373: providerBody(), 7602: providerBody('virtual-tmux', 'mine') }, env: { TERMFLEET_PROVIDER_URL: 'http://127.0.0.1:7602' } }),
     );
     expect(r.warns).toEqual([]);
     expect(r.failed).toBe(false);
@@ -1072,7 +1086,7 @@ describe('checkTermfleetPorts — warn-vs-caution policy + machine-global state 
     expect(r.notes.some((n) => n.includes('7602') && n.includes('pinned'))).toBe(true);
   });
 
-  test('the PINNED port itself is occupied by something that is NOT a termfleet provider ⇒ hard warn (the pin would connect to the wrong thing)', async () => {
+  test('the PINNED port itself is occupied by something that is NOT a termfleet provider ⇒ HARD WARN (the one provable-defect case: the operator explicitly pinned at a non-provider)', async () => {
     const r = await checkTermfleetPorts(
       '/repo',
       fakeIo({ occupied: { 7602: 'foreign-non-http' }, env: { TERMFLEET_PROVIDER_URL: 'http://127.0.0.1:7602' } }),
@@ -1081,12 +1095,24 @@ describe('checkTermfleetPorts — warn-vs-caution policy + machine-global state 
     expect(r.warns.join('\n')).toContain('not a termfleet provider');
   });
 
-  test('~/.termfleet/current.json exists + UNPINNED ⇒ hard warn (a `termfleet use` context silently beats auto-discovery for an unpinned loop)', async () => {
+  test('MINOR (c): the PINNED port answers NOTHING (connection refused / dead pin) ⇒ a caution, never a clean ✓ (provider resolution would fail at launch)', async () => {
+    // No occupant at 7602 at all ⇒ classifyPort returns free. A pinned-but-dead port must not read as a
+    // clean pass; it gets an explicit caution (not a hard-fail — they may just not have started it yet).
+    const r = await checkTermfleetPorts('/repo', fakeIo({ env: { TERMFLEET_PROVIDER_URL: 'http://127.0.0.1:7602' } }));
+    expect(r.warns).toEqual([]);
+    expect(r.failed).toBe(false);
+    expect(r.cautions.join('\n')).toContain('nothing is listening');
+    expect(r.cautions.join('\n')).toContain('7602');
+  });
+
+  test('~/.termfleet/current.json exists + UNPINNED ⇒ CAUTION (not a hard-fail — the context may be the operator\'s own `termfleet use`), still flags that it beats auto-discovery', async () => {
     const r = await checkTermfleetPorts('/repo', fakeIo({ currentContext: 'http://127.0.0.1:9000' }));
-    expect(r.failed).toBe(true);
-    const w = r.warns.join('\n');
-    expect(w).toContain('current.json');
-    expect(w).toContain('http://127.0.0.1:9000');
+    expect(r.failed).toBe(false);
+    expect(r.warns).toEqual([]);
+    const c = r.cautions.join('\n');
+    expect(c).toContain('current.json');
+    expect(c).toContain('http://127.0.0.1:9000');
+    expect(c).toContain('BEATS'); // still explains the surprising precedence
   });
 
   test('~/.termfleet/current.json exists + PINNED ⇒ caution only (the pin wins over current-context, so it is harmless)', async () => {

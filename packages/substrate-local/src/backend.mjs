@@ -34,7 +34,11 @@ export class TermfleetRunner {
       // process.env by the time this runs (emit.ts's fireTick), so the hint is the only way to tell them
       // apart; `env` is the safe default when the hint is absent (e.g. this backend driven directly, outside
       // the loop). Unpinned, the SDK's own `source` (current-context | auto-local) is used verbatim.
-      const source = process.env.TERMFLEET_PROVIDER_URL ? process.env.AUTONOMY_PROVIDER_URL_SOURCE || 'env' : p.source;
+      // TRIM (OA-09 Blocker 2): a set-but-empty/whitespace TERMFLEET_PROVIDER_URL is unset to the SDK (it
+      // trims + falsy-checks `opts.url`), so it must read as unpinned here too — otherwise this line would
+      // claim `env`/`schedule` while the SDK actually auto-discovered p.source.
+      const pinnedEnv = (process.env.TERMFLEET_PROVIDER_URL || '').trim();
+      const source = pinnedEnv ? process.env.AUTONOMY_PROVIDER_URL_SOURCE || 'env' : p.source;
       // stderr, never stdout — `list`/`launch`'s CLI output is a single JSON line on stdout that callers
       // (including this repo's own tests) parse directly; a diagnostic line ahead of it would corrupt that.
       console.error(`[runner] provider ${p.baseUrl} (${source})`);

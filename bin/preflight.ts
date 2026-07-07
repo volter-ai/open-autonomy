@@ -449,7 +449,12 @@ export function occupantOf(port: number, run: RunFn): string | undefined {
       const local = fields[3]; // State Recv-Q Send-Q Local:Port Peer:Port Process...
       if (!local || !local.endsWith(`:${port}`)) continue;
       const m = /users:\(\("([^"]+)",pid=(\d+)/.exec(line);
-      return m ? `pid ${m[2]} (${m[1]})` : undefined;
+      if (m) return `pid ${m[2]} (${m[1]})`;
+      // The listener line matched but the process column is absent (e.g. ss ran without the privilege to
+      // read another user's process, so `users:((…))` is missing) — DON'T give up here: fall through to
+      // the lsof branch, which may still name it. Returning undefined inside this loop was the bug that
+      // both skipped lsof AND printed a false "ss/lsof unavailable".
+      break;
     }
   }
   const lsof = run('lsof', ['-i', `:${port}`, '-sTCP:LISTEN', '-Fpc']);
@@ -542,11 +547,17 @@ function describeOccupant(c: PortClassification): string {
 
 /** Probe the doc-default ports (7373 console, 7402 provider) plus any pinned/advertised port, classify each,
  *  and read the machine-global termfleet state an UNPINNED loop's resolution chain would actually consult
- *  (`~/.termfleet/current.json`, `~/.termfleet/providers/*.json`). Two-tier output, same as every other
- *  check in this file: a hard `warn()` only when the install is genuinely at risk — UNPINNED with a foreign
- *  occupant live on a port the naive quickstart would use, or a `~/.termfleet/current.json` that would
- *  silently beat auto-discovery — vs a soft `caution()`/`note()` when the install is already pinned
- *  elsewhere (a foreign occupant on an UNUSED default port is informational, not a blocker). */
+ *  (`~/.termfleet/current.json`, `~/.termfleet/providers/*.json`).
+ *
+ *  Output policy (skeptic-panel fix — the F-5 crying-wolf class): a live provider's `/healthz` cannot tell
+ *  us whether it is FOREIGN or the operator's OWN (the single-user box the new quickstart tells you to run
+ *  your own provider on answers identically). So "unpinned + an occupant is live" is a prominent `caution()`,
+ *  NOT a hard `warn()` (exit 1) — the occupant is still fully NAMED (kind + instance, or the pid/command) and
+ *  the pin is still prescribed, but a healthy single-user box is never failed. The ONLY hard `warn()` is a
+ *  case we can actually PROVE is broken: the operator's OWN explicit pin points at a port whose occupant is
+ *  demonstrably NOT a termfleet provider (a genuine misconfiguration, not a could-be-yours). Everything else
+ *  — an occupant on an unused default port, a `current.json` context, a pinned port that answers nothing — is
+ *  a caution the operator reviews, never a gate failure. */
 export async function checkTermfleetPorts(cwd: string, io: TermfleetPortIO = defaultTermfleetPortIO): Promise<TermfleetPortsResult> {
   const notes: string[] = [];
   const warns: string[] = [];
@@ -585,12 +596,15 @@ export async function checkTermfleetPorts(cwd: string, io: TermfleetPortIO = def
           `since TERMFLEET_PROVIDER_URL is pinned, which wins over it in the resolution chain.`,
       );
     } else {
-      warn(
+      // Caution, not a hard warn: a `current.json` may well be the operator's OWN `termfleet use` (we can't
+      // tell), so failing the gate here would cry wolf on a single-user box exactly the way the port-occupant
+      // case would. Still prominent — this context silently BEATS auto-discovery, which is genuinely surprising.
+      caution(
         `~/.termfleet/current.json exists${currentContextUrl ? ` (points at ${currentContextUrl})` : ''} — this machine-global ` +
-          `\`termfleet use\` context BEATS zero-config auto-discovery for an UNPINNED install and would silently attach this ` +
-          `loop's launches to it. Fix: export TERMFLEET_PROVIDER_URL=<your own provider's url> before running the loop ` +
-          `(docs/OPERATIONS.md#local-runner-quickstart step 2), or make it durable: ` +
-          `\`open-autonomy compile <profile> local . --provider-url <url>\`.`,
+          `\`termfleet use\` context BEATS zero-config auto-discovery for an UNPINNED install, so an unpinned loop would ` +
+          `attach its launches to it. If that context is NOT your own provider, pin explicitly: export ` +
+          `TERMFLEET_PROVIDER_URL=<your own provider's url> before running the loop (docs/OPERATIONS.md#local-runner-quickstart ` +
+          `step 2), or make it durable: \`open-autonomy compile <profile> local . --provider-url <url>\`.`,
       );
     }
   }
@@ -625,7 +639,17 @@ export async function checkTermfleetPorts(cwd: string, io: TermfleetPortIO = def
   for (const port of candidatePorts) {
     const c = await classifyPort(port, io);
     if (c.status === 'free') {
-      note(`port ${port}: free`);
+      if (pinnedPort === port) {
+        // MINOR (c): the operator's OWN pin points at a port where NOTHING is listening — a dead pin. Not a
+        // hard-fail (they may just not have started their provider yet), but it must not read as a clean ✓:
+        // the loop would fail to resolve a provider at launch. Caution names it explicitly.
+        caution(
+          `your pinned TERMFLEET_PROVIDER_URL points at port ${port}, but nothing is listening there — start your ` +
+            `provider on that port before running the loop, or fix the pin (otherwise provider resolution fails at launch).`,
+        );
+      } else {
+        note(`port ${port}: free`);
+      }
       continue;
     }
     const identity = describeOccupant(c);
@@ -634,6 +658,8 @@ export async function checkTermfleetPorts(cwd: string, io: TermfleetPortIO = def
       if (c.status === 'termfleet-provider') {
         note(`port ${port} (your pinned TERMFLEET_PROVIDER_URL) is serving ${identity} ✓`);
       } else {
+        // The ONE hard warn: the operator EXPLICITLY pinned here, and the occupant is provably NOT a termfleet
+        // provider — a genuine misconfiguration, not a could-be-yours ambiguity. Fail the gate.
         warn(
           `your pinned TERMFLEET_PROVIDER_URL points at port ${port}, but it is occupied by ${identity}, not a termfleet ` +
             `provider — the pin will connect to the wrong thing (or fail). Fix: point TERMFLEET_PROVIDER_URL at your own ` +
@@ -642,17 +668,24 @@ export async function checkTermfleetPorts(cwd: string, io: TermfleetPortIO = def
       }
       continue;
     }
-    // An unpinned default (or advertised-but-not-pinned) port occupied by something foreign.
-    const prescribe =
-      `pick a repo-unique port (see docs/OPERATIONS.md#local-runner-quickstart step 2) and pin it: ` +
-      `export TERMFLEET_PROVIDER_URL=http://127.0.0.1:<your-port>`;
+    // An occupant on a default/advertised port that ISN'T this install's pinned one.
     if (pinned) {
       caution(
         `port ${port} is occupied by ${identity} — this install is pinned to a different provider (${pinned}), so this ` +
           `doesn't affect it; noting it in case anything here ever falls back to the doc-default ports.`,
       );
     } else {
-      warn(`port ${port} is occupied by ${identity} and this install is UNPINNED — ${prescribe}.`);
+      // UNPINNED + an occupant is live. We CANNOT prove it's foreign from a /healthz probe — it could be the
+      // operator's OWN provider on a single-user box (exactly what the new quickstart tells them to start).
+      // So caution, never a hard-fail (the F-5 crying-wolf class): name the occupant + prescribe the pin, but
+      // don't exit 1 on a box that may be perfectly healthy.
+      caution(
+        `port ${port} is occupied by ${identity} and this install is UNPINNED — if this is NOT your own provider, an ` +
+          `unpinned loop could attach to it (a provider can launch terminal sessions as your user, box-wide). Either way, ` +
+          `pin explicitly: pick a repo-unique port (docs/OPERATIONS.md#local-runner-quickstart step 2) and set ` +
+          `export TERMFLEET_PROVIDER_URL=http://127.0.0.1:<your-port> (or durably: ` +
+          `\`open-autonomy compile <profile> local . --provider-url <url>\`).`,
+      );
     }
   }
 

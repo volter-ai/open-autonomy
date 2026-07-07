@@ -50,9 +50,23 @@ const rawArgs = process.argv.slice(2);
 const force = rawArgs.includes('--force');
 const providerUrlFlagIdx = rawArgs.indexOf('--provider-url');
 const providerUrl = providerUrlFlagIdx >= 0 ? rawArgs[providerUrlFlagIdx + 1] : undefined;
-if (providerUrlFlagIdx >= 0 && !providerUrl) {
-  console.error('usage: autonomy-compile <profileName|profileDir> <local|gh-actions> [outDir] [--force] [--provider-url <url>]\n  --provider-url requires a value');
-  process.exit(2);
+if (providerUrlFlagIdx >= 0) {
+  const usage =
+    'usage: autonomy-compile <profileName|profileDir> <local|gh-actions> [outDir] [--force] [--provider-url <url>]';
+  // A missing value, OR the next token being ANOTHER flag (`--provider-url --force` would silently swallow
+  // `--force` as the URL), OR an unparseable URL — all reject rather than emit a garbage pin into
+  // scheduler/schedule.json's env.
+  if (!providerUrl || providerUrl.startsWith('-')) {
+    console.error(`${usage}\n  --provider-url requires a <url> value (e.g. http://127.0.0.1:7602)`);
+    process.exit(2);
+  }
+  try {
+    // eslint-disable-next-line no-new
+    new URL(providerUrl);
+  } catch {
+    console.error(`${usage}\n  --provider-url value "${providerUrl}" is not a valid URL (expected e.g. http://127.0.0.1:7602)`);
+    process.exit(2);
+  }
 }
 const [profileArg, substrateArg, outDir] = rawArgs.filter(
   (a, i) => a !== '--force' && (providerUrlFlagIdx < 0 || (i !== providerUrlFlagIdx && i !== providerUrlFlagIdx + 1)),

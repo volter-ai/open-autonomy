@@ -2,7 +2,7 @@
 // underlying findClobbers unit — the AC is about `open-autonomy compile` behavior end-to-end: refuse by
 // default, --force overrides, and an additive profile never trips it).
 import { describe, expect, test } from 'bun:test';
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -313,4 +313,39 @@ describe('autonomy-compile — OA-04 namespace-collision gate', () => {
       rmSync(dir, { recursive: true, force: true });
     }
   }, 60_000);
+});
+
+// OA-09: the --provider-url flag (durable TERMFLEET_PROVIDER_URL pin) — argument validation (skeptic-panel
+// MINOR a: `--provider-url --force` must not swallow `--force` as the URL) + the end-to-end pin emission.
+describe('autonomy-compile — --provider-url (OA-09)', () => {
+  test('--provider-url with a following FLAG (--force) is rejected, never swallowed as the value', () => {
+    const r = compile(['simple-sdlc', 'local', '--provider-url', '--force']);
+    expect(r.exitCode).toBe(2);
+    expect(r.stderr).toContain('--provider-url requires a <url> value');
+    expect(r.stderr).not.toContain('installed'); // nothing written
+  });
+
+  test('--provider-url as the trailing token with no value is rejected', () => {
+    const r = compile(['simple-sdlc', 'local', '--provider-url']);
+    expect(r.exitCode).toBe(2);
+    expect(r.stderr).toContain('--provider-url requires a <url> value');
+  });
+
+  test('--provider-url with an unparseable value is rejected', () => {
+    const r = compile(['simple-sdlc', 'local', 'not-a-real-out-dir-arg', '--provider-url', 'not a url']);
+    expect(r.exitCode).toBe(2);
+    expect(r.stderr).toContain('is not a valid URL');
+  });
+
+  test('--provider-url with a valid url compiles and lands the durable pin in scheduler/schedule.json', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'oa-provider-url-'));
+    try {
+      const r = compile(['simple-sdlc', 'local', dir, '--provider-url', 'http://127.0.0.1:7602']);
+      expect(r.exitCode).toBe(0);
+      const schedule = JSON.parse(readFileSync(join(dir, 'scheduler', 'schedule.json'), 'utf8')) as { env: Record<string, string> };
+      expect(schedule.env.TERMFLEET_PROVIDER_URL).toBe('http://127.0.0.1:7602');
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  }, 30_000);
 });

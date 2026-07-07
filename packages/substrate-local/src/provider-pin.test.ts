@@ -55,14 +55,27 @@ function installMinimalTermfleet(dir: string): void {
 
 // scaffold(): compile + materialize scheduler/run.mjs + schedule.json (never the full runtime — these
 // tests only need to reach the LOOP_DRIVER's own effective-provider log statement, which fires BEFORE
-// fireTick spawns anything real; a missing scripts/run-agent.mjs makes that spawn fail fast, harmlessly).
-function scaffold(providerUrl?: string): string {
+// fireTick spawns anything real). With `stubAgent: true`, ALSO writes a stub scripts/run-agent.mjs that
+// prints the effective TERMFLEET_PROVIDER_URL its process actually received — this is how the
+// precedence-of-reality tests observe what fireTick passes to a CHILD (never a real termfleet/claude
+// launch; the incident rule). The schedule's command is `… node scripts/run-agent.mjs`, so fireTick runs
+// exactly this stub with the merged tick env.
+function scaffold(providerUrl?: string, opts: { stubAgent?: boolean } = {}): string {
   const out = compileLocal(skillAgentIr, { providerUrl });
   const dir = mkdtempSync(join(tmpdir(), 'oa-provider-pin-'));
   mkdirSync(join(dir, 'scheduler'), { recursive: true });
   writeFileSync(join(dir, 'scheduler', 'run.mjs'), out.generated['scheduler/run.mjs']!);
   writeFileSync(join(dir, 'scheduler', 'schedule.json'), out.generated['scheduler/schedule.json']!);
   installMinimalTermfleet(dir);
+  if (opts.stubAgent) {
+    mkdirSync(join(dir, 'scripts'), { recursive: true });
+    // Prints to STDOUT (fireTick inherits stdio, so it reaches the parent's stdout) the exact
+    // TERMFLEET_PROVIDER_URL the child inherited — the ground truth of what the tick's merge produced.
+    writeFileSync(
+      join(dir, 'scripts', 'run-agent.mjs'),
+      `console.log('CHILD_PIN=' + (process.env.TERMFLEET_PROVIDER_URL ?? '<unset>'));\n`,
+    );
+  }
   return dir;
 }
 
@@ -157,6 +170,142 @@ describe('scheduler/run.mjs --once — the effective-provider log line (AC-4)', 
       } finally {
         rmSync(scratchHome, { recursive: true, force: true });
       }
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+});
+
+// The BACKEND's own source attribution (skeptic-panel test gap: hardcoding 'auto-local' stayed green). A
+// NESTED launch resolves the provider independently of the loop driver, so the emitted backend
+// (scripts/autonomy-runner.mjs) logs its OWN `[runner] provider … (source)` line on first resolve. Drive it
+// with a STUB termfleet SDK (never a real socket/agent — the incident rule): `list` resolves the provider,
+// logs, then returns [] over the stub client. Asserts the source is REAL (env-hint honored when pinned; the
+// SDK's own source verbatim when unpinned) — so hardcoding it goes red.
+describe('scripts/autonomy-runner.mjs (backend) — the [runner] provider source line', () => {
+  function scaffoldBackend(): string {
+    const out = compileLocal(skillAgentIr);
+    const dir = mkdtempSync(join(tmpdir(), 'oa-backend-src-'));
+    mkdirSync(join(dir, 'scripts'), { recursive: true });
+    writeFileSync(join(dir, 'scripts', 'autonomy-runner.mjs'), out.generated['scripts/autonomy-runner.mjs']!);
+    writeFileSync(join(dir, 'scripts', 'runner-defaults.mjs'), out.generated['scripts/runner-defaults.mjs']!);
+    // Stub `termfleet`: just enough for backend.list() to resolve + return [] — no socket, no agent.
+    mkdirSync(join(dir, 'node_modules', 'termfleet'), { recursive: true });
+    writeFileSync(
+      join(dir, 'node_modules', 'termfleet', 'package.json'),
+      JSON.stringify({ name: 'termfleet', version: '0.2.0', type: 'module', main: 'index.js', exports: { '.': './index.js' } }),
+    );
+    writeFileSync(
+      join(dir, 'node_modules', 'termfleet', 'index.js'),
+      `export function providerRefFromUrl(url) { return { url }; }\n` +
+        `export class ProviderClient {\n` +
+        `  constructor(ref) { this.ref = ref; }\n` +
+        `  async lifecycle() { return { sessions: [] }; }\n` +
+        `  async snapshot() { return { windows: [] }; }\n` +
+        `  disconnect() {}\n` +
+        `}\n`,
+    );
+    // Stub `@termfleet/core/local-providers.js`: mirrors the real resolution chain's shape — an explicit url
+    // returns {source:'flag:--url'}; unpinned returns a fixed live provider tagged {source:'auto-local'}.
+    mkdirSync(join(dir, 'node_modules', '@termfleet', 'core'), { recursive: true });
+    writeFileSync(
+      join(dir, 'node_modules', '@termfleet', 'core', 'package.json'),
+      JSON.stringify({ name: '@termfleet/core', version: '0.2.1', type: 'module', exports: { './local-providers.js': './local-providers.js' } }),
+    );
+    writeFileSync(
+      join(dir, 'node_modules', '@termfleet', 'core', 'local-providers.js'),
+      `export async function resolveDefaultProvider(opts) {\n` +
+        `  const url = opts && opts.url ? String(opts.url).trim() : '';\n` +
+        `  if (url) return { baseUrl: url, source: 'flag:--url' };\n` +
+        `  return { baseUrl: 'http://127.0.0.1:17999', source: 'auto-local' };\n` +
+        `}\n`,
+    );
+    return dir;
+  }
+
+  test('pinned (with the loop driver\'s AUTONOMY_PROVIDER_URL_SOURCE=schedule hint) ⇒ logs "(schedule)", and stdout stays parseable JSON (log went to stderr)', () => {
+    const dir = scaffoldBackend();
+    try {
+      const r = spawnSync('node', ['scripts/autonomy-runner.mjs', 'list'], {
+        cwd: dir,
+        encoding: 'utf8',
+        env: { ...process.env, TERMFLEET_PROVIDER_URL: 'http://127.0.0.1:7602', AUTONOMY_PROVIDER_URL_SOURCE: 'schedule' },
+      });
+      expect(r.stderr).toMatch(/\[runner\] provider http:\/\/127\.0\.0\.1:7602 \(schedule\)/);
+      expect(JSON.parse(r.stdout)).toEqual([]); // stdout is ONLY the JSON — the [runner] line is on stderr
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test('unpinned ⇒ logs the SDK\'s OWN source verbatim ("auto-local"), never a hardcoded/pin label', () => {
+    const dir = scaffoldBackend();
+    try {
+      const env = { ...process.env };
+      delete env.TERMFLEET_PROVIDER_URL;
+      delete env.AUTONOMY_PROVIDER_URL_SOURCE;
+      const r = spawnSync('node', ['scripts/autonomy-runner.mjs', 'list'], { cwd: dir, encoding: 'utf8', env });
+      expect(r.stderr).toMatch(/\[runner\] provider http:\/\/127\.0\.0\.1:17999 \(auto-local\)/);
+      expect(r.stderr).not.toContain('(schedule)');
+      expect(r.stderr).not.toContain('(env)');
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+});
+
+// The precedence-of-REALITY tests (skeptic-panel Blocker 2 + test gap). The AC-4 tests above only assert the
+// [loop] provider LOG's independent re-implementation of precedence — inverting fireTick's actual merge to
+// `Object.assign({}, process.env, schedule.env)` (schedule wins) left every substrate-local test green. These
+// spawn the emitted run.mjs with a STUB run-agent.mjs (never a real launch — the incident rule) that prints
+// the TERMFLEET_PROVIDER_URL the CHILD actually inherited, so they pin the real env the tick passes down.
+describe('scheduler/run.mjs --once — the env the tick actually passes to a launched child (Blocker 2 / test gap)', () => {
+  const childPin = (stdout: string): string | undefined => {
+    const line = stdout.split('\n').find((l) => l.startsWith('CHILD_PIN='));
+    return line?.slice('CHILD_PIN='.length);
+  };
+
+  test('compiled pin, no ambient ⇒ the CHILD inherits the schedule pin (7602)', () => {
+    const dir = scaffold('http://127.0.0.1:7602', { stubAgent: true });
+    try {
+      // Delete any ambient TERMFLEET_PROVIDER_URL so this box's own fleet env can't leak in.
+      const env = { ...process.env };
+      delete env.TERMFLEET_PROVIDER_URL;
+      const r = spawnSync('node', ['scheduler/run.mjs', '--once'], { cwd: dir, encoding: 'utf8', env });
+      expect(childPin(r.stdout)).toBe('http://127.0.0.1:7602');
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test('compiled pin + a REAL ambient override ⇒ the CHILD inherits the AMBIENT value (9999), never the pin — the documented precedence, now asserted on the REAL merged env (inverting fireTick goes red here)', () => {
+    const dir = scaffold('http://127.0.0.1:7602', { stubAgent: true });
+    try {
+      const r = spawnSync('node', ['scheduler/run.mjs', '--once'], {
+        cwd: dir,
+        encoding: 'utf8',
+        env: { ...process.env, TERMFLEET_PROVIDER_URL: 'http://127.0.0.1:9999' },
+      });
+      expect(childPin(r.stdout)).toBe('http://127.0.0.1:9999');
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test('BLOCKER 2 regression: compiled pin + a set-but-EMPTY ambient (VAR= node scheduler/run.mjs) ⇒ the CHILD still inherits the SCHEDULE pin (7602), and the [loop] log AGREES — an empty ambient must NOT shadow the pin into a silent auto-discovery', () => {
+    const dir = scaffold('http://127.0.0.1:7602', { stubAgent: true });
+    try {
+      const r = spawnSync('node', ['scheduler/run.mjs', '--once'], {
+        cwd: dir,
+        encoding: 'utf8',
+        env: { ...process.env, TERMFLEET_PROVIDER_URL: '' }, // the empty-string idiom
+      });
+      // The child must NOT see '' (which the SDK would treat as unset → auto-discover onto a foreign
+      // provider); the empty ambient is normalized away and the schedule pin shows through.
+      expect(childPin(r.stdout)).toBe('http://127.0.0.1:7602');
+      // …and the startup log must AGREE (no lie): it says (schedule), the same effective value the child got.
+      const logLine = r.stderr.split('\n').find((l) => l.includes('[loop] provider '));
+      expect(logLine).toMatch(/provider .*http:\/\/127\.0\.0\.1:7602.*\(schedule\)/);
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }

@@ -41,8 +41,10 @@ export class TermfleetRunner implements Runner {
       // sync) for the full rationale. AUTONOMY_PROVIDER_URL_SOURCE (set by the loop driver) distinguishes
       // `schedule` (the durable compile-time pin) from `env` (a genuine ambient override); `env` is the
       // default when the hint is absent (this runner driven outside the loop). Unpinned, the SDK's own
-      // `source` (current-context | auto-local) is used verbatim.
-      const source = process.env.TERMFLEET_PROVIDER_URL ? process.env.AUTONOMY_PROVIDER_URL_SOURCE || 'env' : p.source;
+      // `source` (current-context | auto-local) is used verbatim. TRIM (OA-09 Blocker 2): a set-but-
+      // empty/whitespace value is unset to the SDK, so it must read as unpinned here too.
+      const pinnedEnv = (process.env.TERMFLEET_PROVIDER_URL || '').trim();
+      const source = pinnedEnv ? process.env.AUTONOMY_PROVIDER_URL_SOURCE || 'env' : p.source;
       // stderr, never stdout — `list`/`launch`'s CLI output is a single JSON line on stdout that callers
       // (including this repo's own tests) parse directly; a diagnostic line ahead of it would corrupt that.
       console.error(`[runner] provider ${p.baseUrl} (${source})`);

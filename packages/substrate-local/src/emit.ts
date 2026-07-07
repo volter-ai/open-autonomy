@@ -224,13 +224,22 @@ if (needsRunner) {
   // machine-global \`termfleet use\`), or \`auto-local\` (zero-config live discovery). The pin cases resolve
   // with NO network call (mirrors resolveDefaultProvider's own \`if (url) return\` fast path below); only the
   // unpinned branch calls the SDK's real discovery (reads ~/.termfleet + probes each candidate's /healthz).
+  //
+  // CRITICAL (skeptic-panel Blocker 2): this must be derived from the SAME effective values \`buildTickEnv\`
+  // passes to launched children, or the log LIES. A set-but-EMPTY ambient TERMFLEET_PROVIDER_URL (the
+  // \`VAR= node scheduler/run.mjs\` idiom) is falsy but was NOT unset — the old \`if (process.env.X)\` read it
+  // as "no pin -> use schedule", yet the tick's merge (\`Object.assign({}, schedule.env, process.env)\`) let
+  // that empty string OVERRIDE the schedule pin, so the child auto-discovered while this line claimed the pin
+  // held. Fix: TRIM both sides (empty/whitespace ⇒ unset), identically to buildTickEnv's normalization.
+  const ambientPin = (process.env.TERMFLEET_PROVIDER_URL || '').trim();
+  const schedulePin = ((schedule.env && schedule.env.TERMFLEET_PROVIDER_URL) || '').trim();
   let providerUrl;
   let providerSource;
-  if (process.env.TERMFLEET_PROVIDER_URL) {
-    providerUrl = process.env.TERMFLEET_PROVIDER_URL;
+  if (ambientPin) {
+    providerUrl = ambientPin;
     providerSource = 'env';
-  } else if (schedule.env && schedule.env.TERMFLEET_PROVIDER_URL) {
-    providerUrl = schedule.env.TERMFLEET_PROVIDER_URL;
+  } else if (schedulePin) {
+    providerUrl = schedulePin;
     providerSource = 'schedule';
   } else {
     try {
@@ -332,9 +341,26 @@ if (isGitRepo && existsSync(GENERATED_MANIFEST)) {
   }
 }
 
+// The env each tick passes to a launched command. Precedence (UNCHANGED, documented doctrine): ambient
+// process.env overrides schedule.env. One normalization (OA-09 Blocker 2): a set-but-EMPTY ambient
+// TERMFLEET_PROVIDER_URL is treated as UNSET so it can't SHADOW a real schedule pin — the SDK itself treats
+// '' as unset, and \`VAR= node scheduler/run.mjs\` is a plausible operator idiom, so an empty ambient value
+// dropping the compiled pin (and sending the child to auto-discovery) would be a silent misattachment the
+// startup log above would even MISreport. The [loop] provider line is derived from these same effective
+// values, so the two can never disagree about what the child actually receives.
+const buildTickEnv = () => {
+  const env = Object.assign({}, schedule.env, process.env);
+  if (typeof process.env.TERMFLEET_PROVIDER_URL === 'string' && process.env.TERMFLEET_PROVIDER_URL.trim() === '') {
+    if (schedule.env && schedule.env.TERMFLEET_PROVIDER_URL) env.TERMFLEET_PROVIDER_URL = schedule.env.TERMFLEET_PROVIDER_URL;
+    else delete env.TERMFLEET_PROVIDER_URL;
+  }
+  return env;
+};
+
 const fireTick = () => {
+  const env = buildTickEnv();
   for (const command of schedule.scripts) {
-    spawnSync(command, { shell: true, stdio: 'inherit', env: Object.assign({}, schedule.env, process.env) });
+    spawnSync(command, { shell: true, stdio: 'inherit', env });
   }
 };
 

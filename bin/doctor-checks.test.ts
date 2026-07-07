@@ -17,11 +17,13 @@ import {
   checkAuth,
   checkEnv,
   checkHarness,
+  checkLive,
   checkSelf,
   checkSkills,
   cleanupProbe,
   parseDoctorArgs,
   runDoctor,
+  type CheckResult,
 } from './doctor-checks.ts';
 
 const REPO_ROOT = join(import.meta.dir, '..');
@@ -77,9 +79,10 @@ describe('parseDoctorArgs', () => {
     const r = parseDoctorArgs(['--bogus']);
     expect('usageError' in r).toBe(true);
   });
-  test('--help -> usage error (exit-2 shape, not a crash)', () => {
+  test('--help -> help (NOT a usage error — the CLI exits 0 on it)', () => {
     const r = parseDoctorArgs(['--help']);
-    expect('usageError' in r).toBe(true);
+    expect('help' in r).toBe(true);
+    expect('usageError' in r).toBe(false);
   });
 });
 
@@ -497,6 +500,26 @@ process.exit(1);
     }
     cleanupAll();
   });
+
+  test('CONCERN 6: a pre-OA-18 install (scripts/runner.ts has no worktree-probe verb) -> FAIL with an upgrade/recompile remediation, not a bare "unknown command"', async () => {
+    const dir = track(scaffoldSimpleSdlc());
+    // A stand-in for an OLD scripts/runner.ts: any invocation of an unknown verb exits 2 with the exact
+    // message the pre-OA-18 runCli printed (`runner.ts: unknown command "..."`).
+    writeFileSync(
+      join(dir, 'scripts', 'runner.ts'),
+      '#!/usr/bin/env bun\nconst [cmd] = process.argv.slice(2);\nconsole.error(`runner.ts: unknown command "${cmd}"`);\nprocess.exit(2);\n',
+    );
+    gitInit(dir);
+    commitAll(dir, 'harness with a pre-OA-18 runner.ts');
+    const { result } = await checkHarness(dir, 'oa-doctor');
+    cleanupProbe();
+    expect(result.status).toBe('FAIL');
+    expect(result.detail).toContain("predates the 'worktree-probe' verb");
+    expect(result.detail).toMatch(/upgrade|compile/);
+    // It must NOT surface the raw git/CLI noise as the whole finding.
+    expect(result.detail).not.toMatch(/^worktree-probe failed:/);
+    cleanupAll();
+  });
 });
 
 describe('checkSkills (AC-9, F-3) — resolution in the check-5 probe worktree', () => {
@@ -619,11 +642,164 @@ describe('read-only guarantee (AC-12) — cleanupProbe leaves the repo untouched
     const after = git(dir, ['status', '--porcelain']).stdout;
     expect(after).toBe(before);
     expect(git(dir, ['branch', '--list', 'oa-doctor/*']).stdout.trim()).toBe('');
-    // `git worktree remove` deletes the specific probe worktree directory; it does not necessarily remove
-    // the now-empty `.worktrees/` CONTAINER, so the read-only guarantee is "no probe worktree survives",
-    // not "the container directory itself is gone" (that would be a stronger claim than the spec makes).
     const worktreeList = git(dir, ['worktree', 'list']).stdout.trim().split('\n');
     expect(worktreeList.length).toBe(1); // only the main checkout
+    // CONCERN 3: doctor created .worktrees/ for the probe; since it did not pre-exist and is now empty,
+    // cleanup removes the container too — a clean run leaves NO residue.
+    expect(existsSync(join(dir, '.worktrees'))).toBe(false);
+    cleanupAll();
+  });
+
+  test('CONCERN 3: .git/info/exclude is byte-identical before and after a doctor run (the probe appends to it via OA-02; cleanup restores it verbatim)', async () => {
+    const dir = track(scaffoldSimpleSdlc());
+    gitInit(dir);
+    commitAll(dir, 'harness');
+    const excludePath = join(dir, '.git', 'info', 'exclude');
+    const before = existsSync(excludePath) ? readFileSync(excludePath) : Buffer.alloc(0);
+    await runDoctor(dir, { live: false, branchPrefix: 'oa-doctor' });
+    const after = existsSync(excludePath) ? readFileSync(excludePath) : Buffer.alloc(0);
+    expect(after.equals(before)).toBe(true);
+    // Prove the probe DID mutate it mid-run (otherwise this test is vacuous): a fresh `git init` writes the
+    // default exclude template WITHOUT the runner paths; ensureRunnerPathsIgnored would add `.worktrees/`.
+    expect(before.toString('utf8')).not.toContain('.worktrees/');
+    cleanupAll();
+  });
+
+  test('CONCERN 3 (no pre-existing exclude): a repo whose .git/info/exclude did not exist has it removed again after the run, not left behind', async () => {
+    const dir = track(scaffoldSimpleSdlc());
+    gitInit(dir);
+    commitAll(dir, 'harness');
+    const excludePath = join(dir, '.git', 'info', 'exclude');
+    rmSync(excludePath, { force: true }); // simulate a repo with no exclude file at all
+    await runDoctor(dir, { live: false, branchPrefix: 'oa-doctor' });
+    // doctor created it (via the probe) then removed it, since it did not pre-exist — no residue.
+    expect(existsSync(excludePath)).toBe(false);
+    cleanupAll();
+  });
+});
+
+describe('checkLive (BLOCKER 1, CONCERN 5) — the dispatch chain, the pin-inheritance seam, and the 5–6 gate', () => {
+  // A fixture whose scripts/run-agent.mjs + scripts/autonomy-runner.mjs are SPY STUBS: they record every
+  // invocation (argv, env, the delivered prompt) to a marker file and return a fake surviving session — so
+  // the test can prove checkLive launches through the install's OWN child-process dispatch chain
+  // (run-agent.mjs → autonomy-runner.mjs), NOT a doctor-side SDK createAgentWindow, and that the provider
+  // pin is INHERITED from the ambient env rather than injected by doctor.
+  const RUN_AGENT_SPY = `#!/usr/bin/env node
+import { spawnSync } from 'node:child_process';
+import { appendFileSync, readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+const here = dirname(fileURLToPath(import.meta.url));
+const marker = process.env.OA_DOCTOR_SEAM_MARKER;
+const agent = process.env.AUTONOMY_AGENT;
+const promptDir = process.env.AUTONOMY_PROMPT_DIR;
+let prompt = '';
+try { prompt = readFileSync(join(promptDir, agent + '.txt'), 'utf8'); } catch {}
+appendFileSync(marker, JSON.stringify({ step: 'run-agent', agent, promptDir, prompt, cwd: process.cwd(), pin: process.env.TERMFLEET_PROVIDER_URL ?? null }) + '\\n');
+// mirror the REAL run-agent.mjs: hand off to autonomy-runner.mjs launch (stdio inherited so its JSON reaches doctor)
+const r = spawnSync('node', [join(here, 'autonomy-runner.mjs'), 'launch', agent], { stdio: 'inherit', env: process.env });
+process.exit(r.status ?? 0);
+`;
+  const RUNNER_SPY = `#!/usr/bin/env node
+import { appendFileSync } from 'node:fs';
+const marker = process.env.OA_DOCTOR_SEAM_MARKER;
+const [cmd, arg] = process.argv.slice(2);
+if (cmd === 'launch') { appendFileSync(marker, JSON.stringify({ step: 'runner-launch', agent: arg }) + '\\n'); console.log(JSON.stringify({ id: 'fake-term-1', agent: arg, status: 'running' })); process.exit(0); }
+if (cmd === 'list') { console.log(JSON.stringify([{ id: 'fake-term-1', agent: 'x', status: 'running' }])); process.exit(0); }
+if (cmd === 'cancel') { appendFileSync(marker, JSON.stringify({ step: 'runner-cancel', id: arg }) + '\\n'); process.exit(0); }
+process.exit(2);
+`;
+
+  function scaffoldWithLiveSpies(): { dir: string; marker: string } {
+    const dir = track(scaffoldSimpleSdlc());
+    writeFileSync(join(dir, 'scripts', 'run-agent.mjs'), RUN_AGENT_SPY);
+    writeFileSync(join(dir, 'scripts', 'autonomy-runner.mjs'), RUNNER_SPY);
+    // termfleet must be RESOLVABLE from the fixture (checkLive's install-present pre-check) — symlink the
+    // real package this monorepo already has, never a fake.
+    const realTermfleet = join(REPO_ROOT, 'packages', 'substrate-local', 'node_modules', 'termfleet');
+    if (existsSync(realTermfleet)) {
+      mkdirSync(join(dir, 'node_modules'), { recursive: true });
+      symlinkSync(realTermfleet, join(dir, 'node_modules', 'termfleet'), 'dir');
+    }
+    gitInit(dir);
+    commitAll(dir, 'harness with live spies');
+    const marker = track(mkdtempSync(join(tmpdir(), 'oa18-live-marker-'))) + '/invocations.log';
+    writeFileSync(marker, '');
+    return { dir, marker };
+  }
+
+  test('BLOCKER 1: checkLive launches through run-agent.mjs → autonomy-runner.mjs (a child process, NOT a doctor-side SDK createAgentWindow); the pin is INHERITED, and the prompt is delivered via AUTONOMY_PROMPT_DIR', async () => {
+    if (!existsSync(join(REPO_ROOT, 'packages', 'substrate-local', 'node_modules', 'termfleet'))) {
+      console.warn('doctor-checks.test.ts: skipping checkLive seam test — no real termfleet install found');
+      return;
+    }
+    const { dir, marker } = scaffoldWithLiveSpies();
+    const harness = await checkHarness(dir, 'oa-doctor');
+    expect(harness.result.status).toBe('PASS');
+    const skills = checkSkills(harness);
+    expect(skills.status).toBe('PASS');
+
+    const savedPin = process.env.TERMFLEET_PROVIDER_URL;
+    const savedSurvive = process.env.OA_DOCTOR_LIVE_SURVIVE_MS;
+    process.env.TERMFLEET_PROVIDER_URL = 'http://inherited-pin.invalid:9999'; // the ambient pin doctor must NOT re-inject
+    process.env.OA_DOCTOR_LIVE_SURVIVE_MS = '800';
+    process.env.OA_DOCTOR_SEAM_MARKER = marker;
+    let result: CheckResult;
+    try {
+      result = await checkLive(dir, harness, skills);
+    } finally {
+      cleanupProbe();
+      if (savedPin === undefined) delete process.env.TERMFLEET_PROVIDER_URL;
+      else process.env.TERMFLEET_PROVIDER_URL = savedPin;
+      if (savedSurvive === undefined) delete process.env.OA_DOCTOR_LIVE_SURVIVE_MS;
+      else process.env.OA_DOCTOR_LIVE_SURVIVE_MS = savedSurvive;
+      delete process.env.OA_DOCTOR_SEAM_MARKER;
+    }
+
+    const events = readFileSync(marker, 'utf8').trim().split('\n').filter(Boolean).map((l) => JSON.parse(l));
+    const runAgent = events.find((e) => e.step === 'run-agent');
+    // (a) run-agent.mjs WAS invoked as a child process (the dispatch chain), proving no direct SDK launch.
+    expect(runAgent).toBeTruthy();
+    // (b) it ran in the probe worktree, with the doctor-owned prompt delivered via AUTONOMY_PROMPT_DIR.
+    expect(runAgent.cwd).toBe(harness.worktree);
+    expect(runAgent.promptDir).toBeTruthy();
+    expect(runAgent.prompt).toContain('DOCTOR-OK');
+    // (c) the pin was INHERITED from the ambient env, not injected by doctor (the F-8 property under test).
+    expect(runAgent.pin).toBe('http://inherited-pin.invalid:9999');
+    // (d) the chain continued into autonomy-runner.mjs launch, and cancel went through the install's runner.
+    expect(events.some((e) => e.step === 'runner-launch')).toBe(true);
+    expect(events.some((e) => e.step === 'runner-cancel' && e.id === 'fake-term-1')).toBe(true);
+    // (e) the session "survived" the window → PASS, and the detail names the dispatch path.
+    expect(result.status).toBe('PASS');
+    expect(result.detail).toContain('run-agent.mjs');
+    cleanupAll();
+  }, 20_000);
+
+  test('CONCERN 5 (5–6 gate 7): when the skills check did NOT pass, checkLive SKIPs — no session is ever spent on an install whose agents can\'t resolve their skills', async () => {
+    const dir = track(scaffoldSimpleSdlc());
+    // Break a skill's frontmatter so skills FAILs, but the file is still present/committed so harness PASSes.
+    const skillPath = join(dir, '.claude', 'skills', 'develop', 'SKILL.md');
+    writeFileSync(skillPath, readFileSync(skillPath, 'utf8').replace(/^name:\s*develop\s*$/m, 'name: mismatched'));
+    gitInit(dir);
+    commitAll(dir, 'harness with a broken skill');
+    const harness = await checkHarness(dir, 'oa-doctor');
+    const skills = checkSkills(harness);
+    expect(harness.result.status).toBe('PASS'); // file present + committed + byte-identical
+    expect(skills.status).toBe('FAIL'); // but the name mismatches
+    const result = await checkLive(dir, harness, skills);
+    cleanupProbe();
+    expect(result.status).toBe('SKIP');
+    expect(result.detail).toContain('skills');
+    cleanupAll();
+  });
+
+  test('5 gates 7: no probe worktree (no manifest) -> checkLive SKIPs naming harness', async () => {
+    const dir = track(mkdtempSync(join(tmpdir(), 'oa18-live-noharness-')));
+    const harness = { result: { id: 'harness' as const, status: 'FAIL' as const, detail: 'no manifest', finding: [] } };
+    const passSkills: CheckResult = { id: 'skills', status: 'PASS', detail: 'n/a', finding: [] };
+    const result = await checkLive(dir, harness, passSkills);
+    expect(result.status).toBe('SKIP');
+    expect(result.detail).toContain('harness');
     cleanupAll();
   });
 });

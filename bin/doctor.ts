@@ -9,28 +9,36 @@
 // bin/open-autonomy.ts, so a guard here would make this file's CLI body never run in real use).
 //
 //   npx open-autonomy doctor [--live] [--json] [--branch-prefix oa-doctor]
-import { parseDoctorArgs, printHuman, runDoctor } from './doctor-checks.ts';
+import { parseDoctorArgs, renderHuman, runDoctor, USAGE } from './doctor-checks.ts';
+
+// Write `text` to a stream, then exit with `code` ONLY after the write has flushed — a bare
+// `console.log(...); process.exit()` can truncate a long payload (a big FAIL detail, or --json for a
+// failing install) because stdout to a pipe is asynchronous. The explicit exit (rather than just setting
+// process.exitCode) is still needed: check 3/7's termfleet SDK client can leave a socket.io handle
+// retrying in the background even after disconnect(), which would keep the process alive past its verdict.
+function writeThenExit(stream: NodeJS.WriteStream, text: string, code: number): void {
+  stream.write(`${text}\n`, () => process.exit(code));
+}
 
 async function main(): Promise<void> {
   const parsed = parseDoctorArgs(process.argv.slice(2));
+  if ('help' in parsed) {
+    writeThenExit(process.stdout, USAGE, 0); // --help is NOT a usage error: stdout, exit 0
+    return;
+  }
   if ('usageError' in parsed) {
-    console.error(parsed.usageError);
-    process.exit(2); // explicit exit -- see the note below on why this verb never merely sets exitCode
+    writeThenExit(process.stderr, parsed.usageError, 2); // a bad/missing argument: stderr, exit 2
+    return;
   }
   const report = await runDoctor(process.cwd(), { live: parsed.live, branchPrefix: parsed.branchPrefix });
+  const code = report.verdict === 'FAIL' ? 1 : 0;
   if (parsed.json) {
     // Ordering (AC-15) is preserved: runDoctor's push order IS the audit's failure-chain order -- no
     // re-sort here, so a future accidental reorder in runDoctor is caught by the ordering test, not masked.
-    console.log(JSON.stringify({ checks: report.checks, verdict: report.verdict }, null, 2));
+    writeThenExit(process.stdout, JSON.stringify({ checks: report.checks, verdict: report.verdict }, null, 2), code);
   } else {
-    printHuman(report);
+    writeThenExit(process.stdout, renderHuman(report), code);
   }
-  // An EXPLICIT process.exit(), not `process.exitCode = …` (which merely lets the process exit naturally
-  // once the event loop drains): check 3/7's termfleet SDK client can leave a socket.io connection retrying
-  // in the background against a non-cooperating occupant even after `client.disconnect()` — that dangling
-  // handle would otherwise keep this CLI running long after its own verdict is already printed, turning a
-  // foreign-occupant FAIL (the exact case check 3 exists to catch) into a hang instead of a clean exit.
-  process.exit(report.verdict === 'FAIL' ? 1 : 0);
 }
 
 await main();

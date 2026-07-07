@@ -385,20 +385,29 @@ npx open-autonomy doctor            # read-only: no session launch, no model cal
 
 It reports `PASS | FAIL | WARN | SKIP` for seven checks — `self` (the CLI itself runs from its installed
 artifact), `env` (toolchain, devDeps, the pty module, workspace shadowing), `provider` (the configured port
-answers as *your* provider, not someone else's), `auth` (the coding CLI is actually signed in, never just
-`--version`), `harness` (every compile-owned file is committed **and** visible from a real, freshly-created
-agent worktree — the load-bearing check), `skills` (that worktree resolves every agent's launch skill), and
-`live` (see below). Exit code is `0` iff nothing `FAIL`ed; add `--json` for a machine-parseable
-`{ checks: [...], verdict }` (what `docs/INSTALL-AGENT.md`'s verify phase gates on). The **only** mutation
-doctor ever makes is a throwaway probe worktree/branch under `.worktrees/`, always removed on exit —
-including on a `FAIL`, a `Ctrl-C`, or a kill signal.
+is reachable and speaks termfleet — doctor surfaces the provider's self-reported kind/instance so you can
+confirm it's *yours*, since a bare URL pin can't prove ownership), `auth` (the coding CLI is actually signed
+in, never just `--version`), `harness` (every compile-owned file is committed **and** visible from a real,
+freshly-created agent worktree — the load-bearing check), `skills` (that worktree resolves every agent's
+launch skill), and `live` (see below). Exit code is `0` iff nothing `FAIL`ed; add `--json` for a
+machine-parseable `{ checks: [...], verdict }` (what `docs/INSTALL-AGENT.md`'s verify phase gates on).
+
+**Read-only:** the only *lasting* filesystem change doctor makes is a throwaway probe worktree/branch under
+`.worktrees/`, removed on exit — including on a `FAIL`, a `Ctrl-C`, or a kill signal — and it restores
+`.git/info/exclude` verbatim and removes the `.worktrees/` container it created, so a clean run leaves your
+`git status` untouched. (On a **github-code-host** install, the harness probe does one best-effort read-only
+`git fetch` — the same network op a real dispatch would; a fully local `simple-sdlc` install does no network
+at all.)
 
 Before leaving the loop **unattended** (`node scheduler/run.mjs &`, no one watching), spend the one real
-tick doctor's `--live` flag buys you: it launches a single doctor-owned session through the *same* path a
-PM dispatch takes, waits for it to survive (or emit a proof string), captures its terminal on failure, and
-always cancels it — the local-runner equivalent of "verify the loop merges before declaring done"
-(`docs/INSTALL-AGENT.md`'s Phase 4). This is the one doctor invocation that spends money on a metered
-account:
+tick doctor's `--live` flag buys you: it launches a single doctor-owned session through the install's **own
+dispatch chain** — `scripts/run-agent.mjs` → `scripts/autonomy-runner.mjs launch` — exactly the path a PM
+dispatch takes, delivering a `DOCTOR-OK` prompt via `AUTONOMY_PROMPT_DIR` and letting the runner **inherit**
+your `TERMFLEET_PROVIDER_URL` (so it proves the pin actually propagates to child launches, not just to
+doctor). It then polls the install's own `runner list` for survival, captures the terminal on failure, and
+always cancels through `scripts/autonomy-runner.mjs cancel` — the local-runner equivalent of "verify the
+loop merges before declaring done" (`docs/INSTALL-AGENT.md`'s Phase 4). This is the one doctor invocation
+that spends money on a metered account:
 
 ```bash
 npx open-autonomy doctor --live     # one real session, cancelled either way — costs money, run it once

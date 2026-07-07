@@ -28,12 +28,14 @@
 //     (auth) uses only each coding CLI's own non-spending introspection command, never a real prompt.
 import { createRequire } from 'node:module';
 import { spawnSync } from 'node:child_process';
-import { existsSync, readdirSync, readFileSync, realpathSync } from 'node:fs';
+import { existsSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmdirSync, rmSync, writeFileSync } from 'node:fs';
 import { createConnection } from 'node:net';
-import { dirname, join, sep } from 'node:path';
+import { tmpdir } from 'node:os';
+import { dirname, join, resolve, sep } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { parse as parseYaml } from 'yaml';
 import { GENERATED_MANIFEST_PATH, isScript, missingCopySourcesIn, parseIr, readGeneratedManifest } from '@open-autonomy/core';
+import { BUNDLE_DATA_FILES } from '../scripts/bundle-data-files.ts';
 
 // --- shared result shape -----------------------------------------------------------------------------
 export type CheckId = 'self' | 'env' | 'provider' | 'auth' | 'harness' | 'skills' | 'live';
@@ -55,10 +57,12 @@ export interface DoctorArgs {
   json: boolean;
   branchPrefix: string;
 }
-const USAGE = 'usage: open-autonomy doctor [--live] [--json] [--branch-prefix oa-doctor]\n' +
+export const USAGE = 'usage: open-autonomy doctor [--live] [--json] [--branch-prefix oa-doctor]\n' +
   '  --live spends: it launches one real coding-CLI session (check 7) — costs money on a metered account.';
 
-export function parseDoctorArgs(argv: string[]): DoctorArgs | { usageError: string } {
+// `help` (an explicit --help/-h) is NOT a usage error — it prints USAGE to stdout and exits 0; `usageError`
+// (a bad/missing argument) prints to stderr and exits 2. bin/doctor.ts branches on which key is present.
+export function parseDoctorArgs(argv: string[]): DoctorArgs | { help: true } | { usageError: string } {
   let live = false;
   let json = false;
   let branchPrefix = 'oa-doctor';
@@ -68,9 +72,9 @@ export function parseDoctorArgs(argv: string[]): DoctorArgs | { usageError: stri
     else if (a === '--json') json = true;
     else if (a === '--branch-prefix') {
       const v = argv[++i];
-      if (!v) return { usageError: USAGE };
+      if (!v) return { usageError: `open-autonomy doctor: --branch-prefix needs a value\n${USAGE}` };
       branchPrefix = v;
-    } else if (a === '--help' || a === '-h') return { usageError: USAGE };
+    } else if (a === '--help' || a === '-h') return { help: true };
     else return { usageError: `open-autonomy doctor: unrecognized argument "${a}"\n${USAGE}` };
   }
   return { live, json, branchPrefix };
@@ -179,7 +183,14 @@ function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
 // exercises a lazy sibling read a profile's OWN targets might not otherwise trigger (e.g. egress-guard.sh,
 // gated behind a profile's policy flag). Together (a)+(b) reproduce F-1 faithfully without executing any
 // verb's CLI logic.
-const REQUIRED_SIBLING_FILES = ['backend.mjs', 'runner-frontend.ts', 'control-backend.mjs', 'egress-guard.sh'];
+//
+// The expected sibling set is DERIVED from scripts/bundle-data-files.ts — the SAME declaration
+// scripts/build-cli.ts copies into dist/ — so the two can never drift: a future data file added to the
+// build's manifest is covered by this check automatically, and one FORGOTTEN there is caught here as an
+// F-1 FAIL by construction (the OA-18 skeptic-panel PROOF FIX 7). Single-file entries are asserted present
+// + readable; a `dir` entry (runtime/) is asserted to be a non-empty dir with at least one `.ts` inside.
+const REQUIRED_SIBLING_FILES = BUNDLE_DATA_FILES.filter((f) => !f.dir).map((f) => f.dest);
+const REQUIRED_SIBLING_DIRS = BUNDLE_DATA_FILES.filter((f) => f.dir).map((f) => f.dest);
 
 function ownBaseDir(): string {
   return dirname(fileURLToPath(import.meta.url));
@@ -248,13 +259,15 @@ export async function checkSelf(cwd: string, baseDirOverride?: string): Promise<
     }
     if (!ok) missingFiles.push(f);
   }
-  let runtimeOk = false;
-  try {
-    runtimeOk = readdirSync(join(base, 'runtime')).some((f) => f.endsWith('.ts'));
-  } catch {
-    /* no runtime/ next to the bundle */
+  for (const d of REQUIRED_SIBLING_DIRS) {
+    let ok = false;
+    try {
+      ok = readdirSync(join(base, d)).some((f) => f.endsWith('.ts'));
+    } catch {
+      /* the dir is absent next to the bundle */
+    }
+    if (!ok) missingFiles.push(`${d}/*.ts`);
   }
-  if (!runtimeOk) missingFiles.push('runtime/*.ts');
 
   if (missingFiles.length) {
     return FAIL(
@@ -546,15 +559,32 @@ export async function checkProvider(cwd: string): Promise<CheckResult> {
     const client = new termfleetSdk.ProviderClient(termfleetSdk.providerRefFromUrl(resolved.baseUrl));
     try {
       const snap = await withTimeout<any>(client.snapshot(), 5000);
-      const label = resolved.label ?? snap.provider;
+      // The occupant's SELF-REPORTED identity from its own snapshot — provider kind + instanceId + live
+      // session count. This is the strongest identity signal the SDK surface exposes; doctor does NOT get a
+      // cryptographic ownership proof, and this install carries no declared "expected provider prefix" to
+      // compare against, so doctor deliberately does NOT claim the provider is "yours". (AC-5 partial
+      // coverage, disclosed in the proof: a foreign termfleet provider that answers on the pinned port is
+      // reported here with its identity so the operator can eyeball the mismatch, rather than doctor
+      // asserting an ownership it can't verify.)
+      const identity = [snap.provider ? `kind '${snap.provider}'` : undefined, snap.instanceId ? `instance ${snap.instanceId}` : undefined]
+        .filter(Boolean)
+        .join(', ');
       const sessions = (snap.windows ?? []).length;
       if (pinned) {
-        return PASS('provider', `${resolved.baseUrl} answers as this install's pinned provider (${label}, ${sessions} session(s)).`, ['F-8']);
+        return PASS(
+          'provider',
+          `${resolved.baseUrl} (the pinned TERMFLEET_PROVIDER_URL) is serving a termfleet provider — ` +
+            `${identity || 'no identity fields reported'}, ${sessions} live session(s). doctor confirms it is REACHABLE and ` +
+            `speaks termfleet; it cannot verify OWNERSHIP from a bare URL pin — confirm this instance/kind is the one you ` +
+            `started, not a co-tenant's, before dispatching.`,
+          ['F-8'],
+        );
       }
       return WARN(
         'provider',
-        `no TERMFLEET_PROVIDER_URL pin — auto-discovery is in effect; it found ${resolved.baseUrl} (${label}, ${sessions} ` +
-          `session(s)), owned by whoever started it. Pin TERMFLEET_PROVIDER_URL to be certain this is yours.`,
+        `no TERMFLEET_PROVIDER_URL pin — auto-discovery is in effect; it found ${resolved.baseUrl} ` +
+          `(${resolved.label ? `${resolved.label}, ` : ''}${identity || 'no identity fields reported'}, ${sessions} live ` +
+          `session(s)), owned by whoever started it. Pin TERMFLEET_PROVIDER_URL and confirm the instance is yours.`,
         ['F-8'],
       );
     } catch {
@@ -637,18 +667,83 @@ export interface HarnessProbe {
   sha?: string;
   manifestFiles?: string[];
 }
+interface ProbeRestore {
+  excludePath?: string; // .git/info/exclude — the OA-02 ensureRunnerPathsIgnored appends to it
+  excludeExisted: boolean;
+  excludeBytes?: Buffer;
+  worktreesRoot: string; // <cwd>/.worktrees
+  worktreesPreexisted: boolean;
+}
 interface ProbeController {
   cwd: string;
   branch: string;
-  worktree?: string;
+  worktree?: string; // recorded from the child's stdout; may be undefined if a signal beat the recording
+  restore?: ProbeRestore;
 }
 let activeProbe: ProbeController | undefined;
+
+/** The worktree path the runner would have created for `branch` — path SANITIZATION only (mirrors
+ *  runner-frontend's worktreePathFor), never the base-ref DECISION the anti-drift rule protects. Used only
+ *  as a last-resort fallback for cleanup; git's own records (worktreePathForBranch) are preferred. */
+function probeWorktreePath(cwd: string, branch: string): string {
+  return join(cwd, '.worktrees', branch.replace(/[^0-9A-Za-z._-]/g, '-'));
+}
+/** Ask git itself which worktree (if any) holds `branch` — authoritative even when doctor never recorded
+ *  the path (a signal / spawn-timeout landing after `git worktree add` but before doctor read stdout). */
+function worktreePathForBranch(cwd: string, branch: string): string | undefined {
+  const r = spawnSync('git', ['worktree', 'list', '--porcelain'], { cwd, encoding: 'utf8', env: process.env });
+  if (r.status !== 0) return undefined;
+  let currentPath: string | undefined;
+  for (const line of (r.stdout || '').split('\n')) {
+    if (line.startsWith('worktree ')) currentPath = line.slice('worktree '.length).trim();
+    else if (line === `branch refs/heads/${branch}` && currentPath) return currentPath;
+  }
+  return undefined;
+}
+
 export function cleanupProbe(): void {
   if (!activeProbe) return;
-  const { cwd, branch, worktree } = activeProbe;
-  if (worktree) spawnSync('git', ['worktree', 'remove', '--force', worktree], { cwd, env: process.env });
-  spawnSync('git', ['branch', '-D', branch], { cwd, env: process.env });
-  activeProbe = undefined;
+  const { cwd, branch, worktree, restore } = activeProbe;
+  activeProbe = undefined; // clear FIRST so a re-entrant signal can't double-run this
+  const warn = (m: string) => process.stderr.write(`doctor: ${m}\n`);
+
+  // 1. Remove the probe worktree. Prefer git's own record (survives the pre-record signal window), then the
+  //    recorded path, then the derived path — a `git worktree remove --force` on a path that was never a
+  //    worktree is a harmless no-op; only a SURVIVING worktree afterward is a real leak, warned in step 3.
+  const wtPath = worktreePathForBranch(cwd, branch) ?? worktree ?? probeWorktreePath(cwd, branch);
+  const rmWt = spawnSync('git', ['worktree', 'remove', '--force', wtPath], { cwd, encoding: 'utf8', env: process.env });
+  spawnSync('git', ['worktree', 'prune'], { cwd, env: process.env }); // drop any stale admin entry
+
+  // 2. Delete the probe branch (git refuses this while the branch is checked out in a worktree — hence
+  //    strictly after step 1).
+  const rmBr = spawnSync('git', ['branch', '-D', branch], { cwd, encoding: 'utf8', env: process.env });
+
+  // 3. VERIFY both removals took; WARN loudly (never discard the status) on residue.
+  if (existsSync(wtPath)) warn(`cleanup could not remove probe worktree ${wtPath}: ${(rmWt.stderr || rmWt.stdout || '').trim() || `exit ${rmWt.status}`}`);
+  if (spawnSync('git', ['rev-parse', '--verify', '--quiet', branch], { cwd, env: process.env }).status === 0)
+    warn(`cleanup could not remove probe branch ${branch}: ${(rmBr.stderr || rmBr.stdout || '').trim() || `exit ${rmBr.status}`}`);
+
+  // 4. Restore .git/info/exclude BYTE-for-byte — the probe ran through OA-02's ensureRunnerPathsIgnored,
+  //    which appends `.worktrees/`, `node_modules`, `.open-autonomy/runner-state/` when missing; the
+  //    read-only guarantee requires verbatim restoration (read bytes → write bytes back), not a line-strip.
+  if (restore?.excludePath) {
+    try {
+      if (restore.excludeExisted && restore.excludeBytes !== undefined) writeFileSync(restore.excludePath, restore.excludeBytes);
+      else if (!restore.excludeExisted && existsSync(restore.excludePath)) rmSync(restore.excludePath); // we created it — remove it
+    } catch (e) {
+      warn(`cleanup could not restore .git/info/exclude (${restore.excludePath}): ${(e as Error).message}`);
+    }
+  }
+
+  // 5. If doctor created the .worktrees/ container and it is now empty, remove it — a clean run leaves no
+  //    residue. Guarded: only when it did NOT pre-exist AND is genuinely empty (rmdir, never a recursive rm).
+  if (restore && !restore.worktreesPreexisted && existsSync(restore.worktreesRoot)) {
+    try {
+      if (readdirSync(restore.worktreesRoot).length === 0) rmdirSync(restore.worktreesRoot);
+    } catch {
+      /* non-empty (a concurrent runner/probe artifact) or racing — leave it; git status stays clean either way */
+    }
+  }
 }
 process.on('exit', cleanupProbe);
 for (const sig of ['SIGINT', 'SIGTERM', 'SIGHUP'] as const) {
@@ -656,6 +751,22 @@ for (const sig of ['SIGINT', 'SIGTERM', 'SIGHUP'] as const) {
     cleanupProbe();
     process.exit(130);
   });
+}
+
+/** Capture the two things OA-02's ensureRunnerPathsIgnored (which the worktree-probe runs through) will
+ *  mutate, so cleanupProbe can restore them and keep doctor's read-only guarantee airtight. */
+function snapshotProbeMutations(cwd: string): ProbeRestore {
+  const commonDir = spawnSync('git', ['rev-parse', '--git-common-dir'], { cwd, encoding: 'utf8', env: process.env }).stdout.trim();
+  const excludePath = commonDir ? join(resolve(cwd, commonDir), 'info', 'exclude') : undefined;
+  const excludeExisted = excludePath ? existsSync(excludePath) : false;
+  const worktreesRoot = join(cwd, '.worktrees');
+  return {
+    excludePath,
+    excludeExisted,
+    excludeBytes: excludeExisted ? readFileSync(excludePath!) : undefined,
+    worktreesRoot,
+    worktreesPreexisted: existsSync(worktreesRoot),
+  };
 }
 
 export async function checkHarness(cwd: string, branchPrefix: string): Promise<HarnessProbe> {
@@ -728,10 +839,31 @@ export async function checkHarness(cwd: string, branchPrefix: string): Promise<H
   } else if (!runnerTsExists) {
     problems.push("scripts/runner.ts is missing — cannot probe the runner's own worktree creation (no local runner in this install?)");
   } else {
-    activeProbe = { cwd, branch }; // registered BEFORE the probe runs so a signal mid-creation still cleans up
+    // Snapshot what the probe (via OA-02's ensureRunnerPathsIgnored) is about to touch, so cleanupProbe can
+    // restore it verbatim (read-only guarantee): .git/info/exclude bytes + whether .worktrees/ pre-existed.
+    const restore = snapshotProbeMutations(cwd);
+    activeProbe = { cwd, branch, restore }; // registered BEFORE the probe runs so a signal mid-creation still cleans up
     const r = spawnSync('bun', ['scripts/runner.ts', 'worktree-probe', branch], { cwd, encoding: 'utf8', timeout: 60000, env: process.env });
+
+    // Test-only seam (never set in real use): simulate a signal landing in the window AFTER the child
+    // created the worktree on disk but BEFORE doctor records its path (activeProbe.worktree still unset) —
+    // the untested leak the panel flagged. cleanupProbe must still remove the worktree (via git's records).
+    const preRecordHoldMs = Number(process.env.OA_DOCTOR_TEST_HOLD_BEFORE_RECORD_MS || 0);
+    if (preRecordHoldMs > 0) await sleep(preRecordHoldMs);
+
     if (r.status !== 0) {
-      problems.push(`worktree-probe failed: ${(r.stderr || r.stdout || `exit ${r.status}`).trim()}`);
+      const out = (r.stderr || r.stdout || '').trim();
+      if (r.status === 2 && /unknown command/i.test(out)) {
+        // CONCERN 6: a pre-OA-18 install's scripts/runner.ts has no `worktree-probe` verb — the single most
+        // common field FAIL now that doctor is INSTALL-AGENT.md's first mechanical gate for EXISTING adopters.
+        problems.push(
+          "this install's scripts/runner.ts predates the 'worktree-probe' verb (OA-18) — its harness worktree " +
+            'integrity cannot be proven until the runner is refreshed. Re-compile/upgrade the harness ' +
+            '(npx open-autonomy compile <profile> local . , or open-autonomy upgrade), then commit and re-run doctor.',
+        );
+      } else {
+        problems.push(`worktree-probe failed: ${out || `exit ${r.status}`}`);
+      }
     } else {
       const parsed = lastJsonLine<{ branch: string; worktree: string; base: string; sha: string }>(r.stdout || '');
       if (!parsed) {
@@ -741,8 +873,8 @@ export async function checkHarness(cwd: string, branchPrefix: string): Promise<H
         activeProbe.worktree = worktree;
 
         // Test-only seam (never set in real use): holds the process here, with the probe worktree already
-        // created, for a deterministic window a test can send SIGINT/SIGTERM into — proving the read-only
-        // guarantee (AC-12: "including a kill -INT mid-run") without a timing-dependent race.
+        // created AND recorded, for a deterministic window a test can send SIGINT/SIGTERM into — proving the
+        // read-only guarantee (AC-12: "including a kill -INT mid-run") without a timing-dependent race.
         const holdMs = Number(process.env.OA_DOCTOR_TEST_HOLD_PROBE_MS || 0);
         if (holdMs > 0) await sleep(holdMs);
 
@@ -863,110 +995,144 @@ export function checkSkills(harness: HarnessProbe): CheckResult {
 // =========================================================================================================
 // CHECK 7 — --live: one real tick that launches a worker which SURVIVES launch.
 // =========================================================================================================
-export async function checkLive(cwd: string, harness: HarnessProbe): Promise<CheckResult> {
+const LIVE_FINDINGS = ['F-2', 'F-3', 'F-8', 'F-12', 'F-13'];
+
+/** The session id (terminalId) the install's own launch chain prints as its last JSON line
+ *  (autonomy-runner.mjs's `launch` → `console.log(JSON.stringify({ id, agent, ... }))`, forwarded up
+ *  through run-agent.mjs's inherited stdio). */
+function sessionIdFromLaunch(stdout: string): string | undefined {
+  const o = lastJsonLine<{ id?: unknown }>(stdout);
+  return o && typeof o.id === 'string' ? o.id : undefined;
+}
+/** Run the install's OWN runner CLI (`node scripts/autonomy-runner.mjs <verb> …`) — the same backend a PM
+ *  dispatch's list/cancel go through — in the probe worktree, with the ambient env (so the provider pin is
+ *  INHERITED, never re-injected). Returns parsed JSON or undefined. */
+function runnerCli<T>(cwd: string, worktree: string, args: string[]): T | undefined {
+  const r = spawnSync('node', [join(cwd, 'scripts', 'autonomy-runner.mjs'), ...args], {
+    cwd: worktree,
+    encoding: 'utf8',
+    timeout: 30000,
+    env: process.env,
+  });
+  try {
+    return JSON.parse(r.stdout || 'null') as T;
+  } catch {
+    return undefined;
+  }
+}
+
+export async function checkLive(cwd: string, harness: HarnessProbe, skills: CheckResult): Promise<CheckResult> {
+  // 5 gates 7: no probe worktree → nothing to launch into.
   if (!harness.worktree) {
-    return SKIP('live', `skipped — the 'harness' check could not create a probe worktree (${harness.result.detail})`, ['F-2', 'F-3', 'F-8', 'F-12', 'F-13']);
+    return SKIP('live', `skipped — the 'harness' check could not create a probe worktree (${harness.result.detail})`, LIVE_FINDINGS);
   }
-  const termfleetSdk = await importFromRepo(cwd, 'termfleet');
-  const localProviders = await importFromRepo(cwd, '@termfleet/core/local-providers.js');
-  if (!termfleetSdk || !localProviders) {
-    return FAIL('live', 'termfleet is not installed in this repo — cannot launch a real session (npm install termfleet).', ['F-2', 'F-3', 'F-8', 'F-12', 'F-13']);
+  // 6 gates 7 (spec "5–6 gate 7"): never spend a real session on an install whose agents can't even resolve
+  // their skills — that session is guaranteed to die at launch, so spending on it proves nothing new.
+  if (skills.status !== 'PASS') {
+    return SKIP('live', `skipped — the 'skills' check did not PASS (${skills.status}); a live session would spend on an install whose agents can't resolve their skills`, LIVE_FINDINGS);
   }
-  let resolvedProvider: { baseUrl: string };
-  try {
-    resolvedProvider = await localProviders.resolveDefaultProvider({ url: process.env.TERMFLEET_PROVIDER_URL });
-  } catch (e) {
-    return FAIL('live', `no termfleet provider reachable: ${(e as Error).message}`, ['F-2', 'F-3', 'F-8', 'F-12', 'F-13']);
+  // The live probe launches through the install's OWN dispatch chain (below), which needs termfleet resolvable.
+  if (!resolveFromRepo(cwd, 'termfleet')) {
+    return FAIL('live', 'termfleet is not installed in this repo — cannot launch a real session (npm install termfleet).', LIVE_FINDINGS);
   }
-  const client = new termfleetSdk.ProviderClient(termfleetSdk.providerRefFromUrl(resolvedProvider.baseUrl));
-
-  const agentName = `oa-doctor-${process.pid}`;
-  const harnessCli = process.env.TERMFLEET_AGENT || 'claude';
-  const createTimeoutMs = Number(process.env.TERMFLEET_CREATE_TIMEOUT_MS || 120000);
-
-  let ack;
-  try {
-    ack = await client.createAgentWindow(
-      {
-        agent: harnessCli,
-        name: agentName,
-        cwd: harness.worktree,
-        prompt: 'Reply with exactly DOCTOR-OK and nothing else, then stop.',
-        setupCommand: `export TERMFLEET_PROVIDER_URL=${JSON.stringify(resolvedProvider.baseUrl)}`,
-        createTimeoutMs,
-      },
-      { timeoutMs: createTimeoutMs },
-    );
-  } catch (e) {
-    return FAIL('live', `launch failed: ${(e as Error).message}`, ['F-2', 'F-3', 'F-8', 'F-12', 'F-13']);
-  }
-  const terminalId = ack.result?.terminalId;
-  if (!terminalId) {
-    return FAIL('live', `termfleet createAgentWindow returned no terminalId: ${ack.error ?? '(no error)'}`, ['F-2', 'F-3', 'F-8', 'F-12', 'F-13']);
+  const runAgent = join(cwd, 'scripts', 'run-agent.mjs');
+  if (!existsSync(runAgent)) {
+    return FAIL('live', 'scripts/run-agent.mjs is missing — this is not a local-runner install; cannot launch through the dispatch path.', LIVE_FINDINGS);
   }
 
+  // A doctor-owned agent + prompt, delivered exactly the way a real dispatch delivers one: through
+  // AUTONOMY_PROMPT_DIR (run-agent.mjs → autonomy-runner.mjs reads `${AUTONOMY_PROMPT_DIR}/<agent>.txt`).
+  const agent = `oa-doctor-probe-${process.pid}`;
+  const promptDir = mkdtempSync(join(tmpdir(), 'oa-doctor-live-prompt-'));
+  writeFileSync(join(promptDir, `${agent}.txt`), 'Reply with exactly DOCTOR-OK and nothing else, then stop.\n');
   const surviveMs = Number(process.env.OA_DOCTOR_LIVE_SURVIVE_MS || 30000);
-  const start = Date.now();
-  let alive = true;
-  let sawOk = false;
+  const launchTimeoutMs = Number(process.env.TERMFLEET_LAUNCH_TIMEOUT_MS || 180000);
+
   try {
+    // LAUNCH — through the install's real entry point (run-agent.mjs → autonomy-runner.mjs launch → the SDK),
+    // the SAME path a PM dispatch takes. Crucially, TERMFLEET_PROVIDER_URL is NOT set on a setupCommand here —
+    // it is left to be INHERITED from doctor's own ambient env by the child launch, which is exactly the F-8
+    // pin-inheritance property this check exists to prove (a doctor-injected pin would MASK that failure).
+    const env: Record<string, string> = {
+      ...(process.env as Record<string, string>),
+      AUTONOMY_AGENT: agent,
+      AUTONOMY_PROMPT_DIR: promptDir,
+    };
+    const launch = spawnSync('node', [runAgent], { cwd: harness.worktree, encoding: 'utf8', timeout: launchTimeoutMs, env });
+    const terminalId = sessionIdFromLaunch(launch.stdout || '');
+    if (!terminalId) {
+      return FAIL(
+        'live',
+        `the worker died at launch — the dispatch chain (run-agent.mjs → autonomy-runner.mjs) produced no ` +
+          `session id. Launch output:\n${((launch.stderr || launch.stdout || '') as string).trim().slice(-1500) || '(no output)'}`,
+        LIVE_FINDINGS,
+      );
+    }
+
+    // SURVIVAL — poll the install's OWN `runner list` (autonomy-runner.mjs list), the same backend a PM's
+    // WIP/dedup check reads, for the survival window. Disappearing before the window ends means it died at
+    // launch (unless it emitted DOCTOR-OK — checked via a terminal capture below).
+    const start = Date.now();
+    let alive = true;
+    const pollMs = Math.max(500, Math.min(2000, surviveMs));
     while (Date.now() - start < surviveMs) {
-      let snap;
-      try {
-        // Every SDK call here is timeout-raced (see checkProvider's withTimeout comment) -- a hung
-        // provider must never hang doctor itself past this poll interval.
-        snap = await withTimeout<any>(client.snapshot(), 5000);
-      } catch {
+      const sessions = runnerCli<Array<{ id: string }>>(cwd, harness.worktree, ['list']) ?? [];
+      if (!sessions.some((s) => s.id === terminalId)) {
         alive = false;
         break;
       }
-      const win = (snap.windows ?? []).find((w: { terminalId?: string }) => w.terminalId === terminalId);
-      if (!win) {
-        alive = false;
-        break;
-      }
-      if (typeof win.contents === 'string' && win.contents.includes('DOCTOR-OK')) {
-        sawOk = true;
-        break;
-      }
-      await sleep(2000);
+      await sleep(pollMs);
     }
-  } finally {
-    // Capture the terminal BEFORE any reaper closes it -- the evidence that today dies inside tmux.
+
+    // On a non-survivor, capture the terminal (the evidence that today dies inside tmux) to distinguish a
+    // clean "finished after emitting DOCTOR-OK" from a real death. Terminal capture is SDK-only (the runner
+    // CLI doesn't expose it) — an observe-only read, timeout-guarded, best-effort.
     let capture = '';
-    try {
-      const cap = await withTimeout<any>(client.captureTerminal(terminalId, 40), 5000);
-      capture = cap?.content ?? '';
-    } catch {
-      /* best-effort -- session may already be gone, or the provider is unresponsive */
+    let sawOk = false;
+    if (!alive) {
+      const termfleetSdk = await importFromRepo(cwd, 'termfleet');
+      const localProviders = await importFromRepo(cwd, '@termfleet/core/local-providers.js');
+      if (termfleetSdk && localProviders) {
+        try {
+          const provider = await localProviders.resolveDefaultProvider({ url: process.env.TERMFLEET_PROVIDER_URL });
+          const client = new termfleetSdk.ProviderClient(termfleetSdk.providerRefFromUrl(provider.baseUrl));
+          try {
+            const cap = await withTimeout<any>(client.captureTerminal(terminalId, 40), 5000);
+            capture = cap?.content ?? '';
+          } finally {
+            try {
+              client.disconnect();
+            } catch {
+              /* best-effort */
+            }
+          }
+        } catch {
+          /* provider unreachable / session already gone — capture stays empty */
+        }
+      }
+      sawOk = capture.includes('DOCTOR-OK');
     }
-    sawOk = sawOk || capture.includes('DOCTOR-OK');
-    // Always cancel, regardless of outcome.
-    try {
-      const snap = await withTimeout<any>(client.snapshot(), 5000);
-      const win = (snap.windows ?? []).find((w: { terminalId?: string }) => w.terminalId === terminalId);
-      if (win) await withTimeout<any>(client.closeWindow(win.id), 5000);
-    } catch {
-      /* best-effort cleanup */
-    }
-    try {
-      client.disconnect();
-    } catch {
-      /* best-effort */
-    }
+
+    // ALWAYS cancel through the install's OWN runner (autonomy-runner.mjs cancel <id>) — same path an
+    // operator/PM uses; best-effort, its own timeout.
+    runnerCli(cwd, harness.worktree, ['cancel', terminalId]);
+
     if (!alive && !sawOk) {
       return FAIL(
         'live',
-        `the worker died within ~${Math.round((Date.now() - start) / 1000)}s of launch. Terminal capture:\n${capture.slice(0, 1500)}`,
-        ['F-2', 'F-3', 'F-8', 'F-12', 'F-13'],
+        `the worker died within ~${Math.round((Date.now() - start) / 1000)}s of launch. Terminal capture:\n${capture.slice(0, 1500) || '(no capture — session already reaped)'}`,
+        LIVE_FINDINGS,
       );
     }
+    return PASS(
+      'live',
+      `session ${terminalId} ${sawOk ? 'emitted DOCTOR-OK' : `survived the ${surviveMs / 1000}s window`}; launched via ` +
+        `scripts/run-agent.mjs (the PM dispatch path, pin inherited), cancelled via scripts/autonomy-runner.mjs.`,
+      LIVE_FINDINGS,
+    );
+  } finally {
+    rmSync(promptDir, { recursive: true, force: true }); // mkdtemp path only — never a bare variable
   }
-  return PASS(
-    'live',
-    `session ${terminalId} ${sawOk ? 'emitted DOCTOR-OK' : `survived the ${surviveMs / 1000}s window`}; cancelled.`,
-    ['F-2', 'F-3', 'F-8', 'F-12', 'F-13'],
-  );
 }
 
 // =========================================================================================================
@@ -991,20 +1157,27 @@ export async function runDoctor(
   checks.push(checkAuth());
   const harness = await checkHarness(cwd, opts.branchPrefix);
   checks.push(harness.result);
-  checks.push(checkSkills(harness));
+  const skills = checkSkills(harness);
+  checks.push(skills);
   // --live is the ONLY branch that ever launches a session or makes a model call (the spend guarantee,
-  // AC-11) -- checkLive is simply never called otherwise, not merely gated inside it.
-  checks.push(opts.live ? await checkLive(cwd, harness) : SKIP('live', 'not run — pass --live to launch one real session and prove the loop end-to-end (spend guarantee: no session/model call without --live).', ['F-2', 'F-3', 'F-8', 'F-12', 'F-13']));
+  // AC-11) -- checkLive is simply never called otherwise, not merely gated inside it. When it IS called,
+  // it self-gates on 5 (harness worktree) AND 6 (skills PASS) — the spec's "5–6 gate 7".
+  checks.push(
+    opts.live
+      ? await checkLive(cwd, harness, skills)
+      : SKIP('live', 'not run — pass --live to launch one real session and prove the loop end-to-end (spend guarantee: no session/model call without --live).', ['F-2', 'F-3', 'F-8', 'F-12', 'F-13']),
+  );
   cleanupProbe();
   const verdict: DoctorReport['verdict'] = checks.some((c) => c.status === 'FAIL') ? 'FAIL' : 'PASS';
   return { checks, verdict };
 }
 
 const STATUS_GLYPH: Record<CheckStatus, string> = { PASS: '✓', FAIL: '✗', WARN: '!', SKIP: '-' };
-export function printHuman(report: DoctorReport): void {
-  console.log('open-autonomy doctor — proving the local-runner install end-to-end (audit failure-chain order)\n');
-  for (const c of report.checks) {
-    console.log(`[${STATUS_GLYPH[c.status]}] ${c.status.padEnd(4)} ${c.id.padEnd(9)} ${c.detail}`);
-  }
-  console.log(`\ndoctor: ${report.verdict === 'PASS' ? 'OK — no FAILs' : 'FAILED — fix the FAIL(s) above and re-run.'}`);
+/** Render the report as the human-readable report text (a single string, so the caller can write it and
+ *  ONLY THEN exit — a bare console.log + immediate process.exit() can truncate a long FAIL detail). */
+export function renderHuman(report: DoctorReport): string {
+  const lines = ['open-autonomy doctor — proving the local-runner install end-to-end (audit failure-chain order)\n'];
+  for (const c of report.checks) lines.push(`[${STATUS_GLYPH[c.status]}] ${c.status.padEnd(4)} ${c.id.padEnd(9)} ${c.detail}`);
+  lines.push(`\ndoctor: ${report.verdict === 'PASS' ? 'OK — no FAILs' : 'FAILED — fix the FAIL(s) above and re-run.'}`);
+  return lines.join('\n');
 }

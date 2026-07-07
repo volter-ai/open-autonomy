@@ -64,10 +64,10 @@ describe('doctor CLI — usage + exit codes', () => {
     expect(r.status).toBe(2);
   });
 
-  test('--help is a usage message (exit 2), not a crash', () => {
+  test('--help is a usage message on stdout, exit 0 (help is not a usage error)', () => {
     const r = cli(['doctor', '--help'], REPO_ROOT);
-    expect(r.status).toBe(2);
-    expect(r.stderr).toContain('doctor');
+    expect(r.status).toBe(0);
+    expect(r.stdout).toContain('doctor');
   });
 });
 
@@ -171,6 +171,39 @@ describe('doctor CLI — read-only guarantee under a kill -INT mid-run (AC-12)',
     expect(wt.length).toBe(1); // only the main checkout -- the probe worktree is gone
     // The probe DID exist mid-run (otherwise this test would trivially pass without proving anything).
     expect(worktreesDuring.trim().length).toBeGreaterThan(0);
+  }, 30_000);
+
+  test('CONCERN 2: SIGINT in the PRE-RECORD window (worktree on disk but its path not yet recorded by doctor) still cleans up worktree + branch', async () => {
+    const dir = track(scaffoldSimpleSdlc());
+    gitInit(dir);
+    commitAll(dir, 'harness');
+    const before = git(dir, ['status', '--porcelain']).stdout;
+    const excludeBefore = existsSync(join(dir, '.git', 'info', 'exclude')) ? readFileSync(join(dir, '.git', 'info', 'exclude')) : Buffer.alloc(0);
+
+    // OA_DOCTOR_TEST_HOLD_BEFORE_RECORD_MS holds AFTER the probe child created the worktree on disk but
+    // BEFORE doctor records its path (activeProbe.worktree still undefined) — the exact leak window the
+    // panel flagged. cleanupProbe must recover the worktree from git's OWN records, not the unrecorded path.
+    const proc = Bun.spawn(['node', CLI, 'doctor'], {
+      cwd: dir,
+      stdout: 'pipe',
+      stderr: 'pipe',
+      env: { ...process.env, OA_DOCTOR_TEST_HOLD_BEFORE_RECORD_MS: '6000' },
+    });
+    const worktreesRoot = join(dir, '.worktrees');
+    const deadline = Date.now() + 15000;
+    while (Date.now() < deadline && !existsSync(worktreesRoot)) {
+      await new Promise((r) => setTimeout(r, 100));
+    }
+    const worktreesDuring = existsSync(worktreesRoot) ? spawnSync('ls', [worktreesRoot], { encoding: 'utf8' }).stdout : '';
+    proc.kill('SIGINT');
+    await proc.exited;
+
+    expect(git(dir, ['status', '--porcelain']).stdout).toBe(before);
+    expect(git(dir, ['branch', '--list', 'oa-doctor/*']).stdout.trim()).toBe('');
+    expect(git(dir, ['worktree', 'list']).stdout.trim().split('\n').length).toBe(1);
+    const excludeAfter = existsSync(join(dir, '.git', 'info', 'exclude')) ? readFileSync(join(dir, '.git', 'info', 'exclude')) : Buffer.alloc(0);
+    expect(excludeAfter.equals(excludeBefore)).toBe(true); // restored even on a mid-run signal
+    expect(worktreesDuring.trim().length).toBeGreaterThan(0); // the leak window really did open
   }, 30_000);
 });
 

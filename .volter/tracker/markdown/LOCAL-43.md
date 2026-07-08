@@ -25,7 +25,7 @@ Provenance: OA-INSTALL-AUDIT-FINDINGS.md F-13 (§2 P2) + narrative §1 phase 2.
 - [x] dev/02 v1 every numbered criterion in the spec's Acceptance criteria section is demonstrated: each fails before the fix and passes after, with command output as evidence
   - status: done — see close-out
 
-Close-out: merged @ f0b607a (builder 6b16f27 + 7953d14). Sign-in verified via `claude auth status --json` loggedIn-field parse (not `--version`, not exit code); tiers: signed-out→hard warn exit 1, ANTHROPIC_API_KEY/AUTH_TOKEN/Bedrock/Vertex→note-green bypass, older/missing CLI→note-green. Both Fable panelists PASS + spend-safety sign-off (single auth-status probe, no billed -p; marker-file tripwire). Merge-resolved with OA-09 port check (both compose in preflight.ts). 5-link proof: /workspace/proofs/oa-14.md.
+Close-out: merged @ f0b607a (builder 6b16f27 + 7953d14). Sign-in verified via `claude auth status --json` loggedIn-field parse (not `--version`, not exit code); tiers: signed-out→hard warn exit 1, ANTHROPIC_API_KEY/AUTH_TOKEN/Bedrock/Vertex→note-green bypass, older/missing CLI→note-green. Both Fable panelists PASS + spend-safety sign-off (single auth-status probe, no billed -p; marker-file tripwire). Merge-resolved with OA-09 port check (both compose in preflight.ts). 5-link proof: sidecar /workspace/proofs/oa-14.md wiped (box reset); this committed close-out is the durable proof-of-record (code landed + CI-green; no in-repo proof doc was regenerated for this unit).
 
 <!--tracker:comments
 []

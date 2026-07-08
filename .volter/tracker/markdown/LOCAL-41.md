@@ -25,7 +25,7 @@ Provenance: OA-INSTALL-AUDIT-FINDINGS.md F-11 (§2 P2) + narrative §1 steps 10-
 - [x] dev/02 v1 every numbered criterion in the spec's Acceptance criteria section is demonstrated: each fails before the fix and passes after, with command output as evidence
   - status: done — see close-out
 
-Close-out: merged @ OA-12 (builder 01817e7 + orchestrator BLOCK-fix). Conforming ztrack issue-create in the quickstart (--assignee/--body-file/--label oa-approved, v1-marker AC body) verified live-clean against ztrack@1.0.0; KNOWN_GOOD_ZTRACK pinned to package.json; .volter/tracker-config.json no-op caveat; corrected compile hint. Fable panel BLOCK on two factual errors (.volter/config filename + step-5 ref) — both verified live and corrected. AC-6 (4 ztrack-repo follow-up issues) cross-repo owner action. 5-link proof: /workspace/proofs/oa-12.md.
+Close-out: merged @ OA-12 (builder 01817e7 + orchestrator BLOCK-fix). Conforming ztrack issue-create in the quickstart (--assignee/--body-file/--label oa-approved, v1-marker AC body) verified live-clean against ztrack@1.0.0; KNOWN_GOOD_ZTRACK pinned to package.json; .volter/tracker-config.json no-op caveat; corrected compile hint. Fable panel BLOCK on two factual errors (.volter/config filename + step-5 ref) — both verified live and corrected. AC-6 (4 ztrack-repo follow-up issues) cross-repo owner action. 5-link proof: sidecar /workspace/proofs/oa-12.md wiped (box reset); this committed close-out is the durable proof-of-record (code landed + CI-green; no in-repo proof doc was regenerated for this unit).
 
 <!--tracker:comments
 []

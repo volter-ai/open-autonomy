@@ -20,7 +20,7 @@ Provenance: OA-INSTALL-AUDIT-FINDINGS.md F-1 (§2 P0) + narrative §1 step 7.
 
 ## Acceptance Criteria
 - [x] dev/01 v1 npm pack + install the tarball into a clean directory: every CLI verb, including 'compile simple-sdlc local .', runs without ENOENT (fails today); a check:pack-smoke gate wired into 'bun run check' and prepublishOnly fails if any verb crashes from the packed artifact
-  - status: done — check:pack-smoke (13 steps) in `bun run check` + prepublishOnly; tamper-verified red under mutation (proof: /workspace/proofs/oa-01.md)
+  - status: done — check:pack-smoke (13 steps) in `bun run check` + prepublishOnly; tamper-verified red under mutation (sidecar /workspace/proofs/oa-01.md wiped — box reset; this committed close-out is the durable proof-of-record)
 - [x] dev/02 v1 every numbered criterion in the spec's Acceptance criteria section is demonstrated: each fails before the fix and passes after, with command output as evidence
   - status: done — ACs 1-9 fail-before/pass-after with output evidence; AC-10 (publish 0.4.2 + deprecate 0.4.0/0.4.1) is a post-merge owner action, out of this branch's scope
 

@@ -25,7 +25,7 @@ Provenance: OA-INSTALL-AUDIT-FINDINGS.md F-14 (§2 P2) + narrative §1 step 7 af
 - [x] dev/02 v1 every numbered criterion in the spec's Acceptance criteria section is demonstrated: each fails before the fix and passes after, with command output as evidence
   - status: done — see close-out
 
-Close-out: merged @ OA-15 (builder fa6807b + panel fix-up 217de5e, committed by orchestrator after builder hit session rate limit — work verified complete + green). check:release-consistency gate (package==VERSION==version.json==CHANGELOG==doc-stamps==profile-mirror), self-pinned in check+prepublishOnly; one release checklist (verify-from-registry before tag); version-pinned emitted blob/v links. Versions reconciled to 0.4.1 (source truth); stamps mark 0.4.0/0.4.1 DOA (OA-01) pointing at 0.4.2+. Both Fable panelists PASS; AC-10 (0.4.2 publish+deprecate) is OA-01 owner action. 5-link proof: /workspace/proofs/oa-15.md.
+Close-out: merged @ OA-15 (builder fa6807b + panel fix-up 217de5e, committed by orchestrator after builder hit session rate limit — work verified complete + green). check:release-consistency gate (package==VERSION==version.json==CHANGELOG==doc-stamps==profile-mirror), self-pinned in check+prepublishOnly; one release checklist (verify-from-registry before tag); version-pinned emitted blob/v links. Versions reconciled to 0.4.1 (source truth); stamps mark 0.4.0/0.4.1 DOA (OA-01) pointing at 0.4.2+. Both Fable panelists PASS; AC-10 (0.4.2 publish+deprecate) is OA-01 owner action. 5-link proof: sidecar /workspace/proofs/oa-15.md wiped (box reset); this committed close-out is the durable proof-of-record (code landed + CI-green; no in-repo proof doc was regenerated for this unit).
 
 <!--tracker:comments
 []

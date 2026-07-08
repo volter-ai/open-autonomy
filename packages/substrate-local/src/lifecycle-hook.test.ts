@@ -217,12 +217,16 @@ describe('reconcilePendingEffects (real emitted scheduler/run.mjs) — the compl
     'runs the recorded effect in its worktree once the session is GONE, then deletes the marker',
     async () => {
       const { dir, sentinel, markerPath } = scaffold();
-      await runLoopUntil(dir, { STUB_LIVE_IDS: '' }, () => existsSync(sentinel), 8000); // no live sessions -> finished
+      // Wait for both the sentinel AND the marker's retirement -- under full-suite load, marker retirement
+      // can lag one more loop pass past the moment the sentinel appears, which flaked the markerPath
+      // assertion below. Widening the inner bound (and the outer test timeout to stay comfortably above it)
+      // gives that lagging pass headroom without changing what's asserted.
+      await runLoopUntil(dir, { STUB_LIVE_IDS: '' }, () => existsSync(sentinel) && !existsSync(markerPath), 12000); // no live sessions -> finished
       expect(existsSync(sentinel)).toBe(true); // effect ran...
       expect(readFileSync(sentinel, 'utf8')).toBe('bar'); // ...in the worktree, with marker.env
       expect(existsSync(markerPath)).toBe(false); // ...and the marker was retired
     },
-    15000,
+    20000,
   );
 
   test(

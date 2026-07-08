@@ -25,7 +25,7 @@ Provenance: OA-INSTALL-AUDIT-FINDINGS.md F-17 (§2 P2) + narrative §1 step 1.
 - [x] dev/02 v1 every numbered criterion in the spec's Acceptance criteria section is demonstrated: each fails before the fix and passes after, with command output as evidence
   - status: done — see close-out
 
-Close-out: merged @ OA-17 (builder e605747 + orchestrator step-ref fix). Docs-only: npm install termfleet may rewrite EXISTING dep ranges during tree re-resolution; OPERATIONS overlay note qualified + install-line caveat with git diff; INSTALL-AGENT Phase-3 step-1 (git diff package.json + report-to-human) and step-5 (git diff --cached before commit). Composes after OA-06 NODE_ENV caveat. Both Fable panelists PASS (adjacency, honesty, actionability). AC-6 (4 ztrack-side follow-up issues) is cross-repo, owner action. 5-link proof: /workspace/proofs/oa-17.md.
+Close-out: merged @ OA-17 (builder e605747 + orchestrator step-ref fix). Docs-only: npm install termfleet may rewrite EXISTING dep ranges during tree re-resolution; OPERATIONS overlay note qualified + install-line caveat with git diff; INSTALL-AGENT Phase-3 step-1 (git diff package.json + report-to-human) and step-5 (git diff --cached before commit). Composes after OA-06 NODE_ENV caveat. Both Fable panelists PASS (adjacency, honesty, actionability). AC-6 (4 ztrack-side follow-up issues) is cross-repo, owner action. 5-link proof: sidecar /workspace/proofs/oa-17.md wiped (box reset); this committed close-out is the durable proof-of-record (code landed + CI-green; no in-repo proof doc was regenerated for this unit).
 
 <!--tracker:comments
 []

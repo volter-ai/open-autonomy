@@ -24,7 +24,7 @@ Provenance: OA-INSTALL-AUDIT-FINDINGS.md F-5 (§2 P1) + narrative §1 step 2.
 - [x] dev/02 v1 every numbered criterion in the spec's Acceptance criteria section is demonstrated: each fails before the fix and passes after, with command output as evidence
   - status: done — see close-out
 
-Close-out: merged to adoption-fixes-backlog @ 0bc06ae (builder commits 41ac020 + adcf4ce). Load-probe replaces the phantom build/Release/pty.node check; dep name discovered from termfleet package.json; rebuild only on probe failure judged by re-probe; node-ENOENT branch (bun spawnSync reports status undefined for missing exe — nullish check); 24 unit tests + spawn-level exit-code coverage; check:preflight in the gate. 5-link proof: /workspace/proofs/oa-05.md.
+Close-out: merged to adoption-fixes-backlog @ 0bc06ae (builder commits 41ac020 + adcf4ce). Load-probe replaces the phantom build/Release/pty.node check; dep name discovered from termfleet package.json; rebuild only on probe failure judged by re-probe; node-ENOENT branch (bun spawnSync reports status undefined for missing exe — nullish check); 24 unit tests + spawn-level exit-code coverage; check:preflight in the gate. 5-link proof: sidecar /workspace/proofs/oa-05.md wiped (box reset); this committed close-out is the durable proof-of-record (code landed + CI-green; no in-repo proof doc was regenerated for this unit).
 
 <!--tracker:comments
 []

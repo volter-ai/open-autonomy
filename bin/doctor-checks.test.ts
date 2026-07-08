@@ -13,6 +13,7 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { parseIr, materialize } from '@open-autonomy/core';
 import { compileLocal } from '@open-autonomy/substrate-local';
+import { installStubTermfleet } from '../packages/substrate-local/src/test-support/stub-termfleet.ts';
 import {
   checkAuth,
   checkEnv,
@@ -802,4 +803,130 @@ process.exit(2);
     expect(result.detail).toContain('harness');
     cleanupAll();
   });
+});
+
+// =========================================================================================================
+// OA-18 AC-6 / AC-10 (durable, model-free): checkLive driven end-to-end against a SHARED stub termfleet.
+// =========================================================================================================
+// Unlike the "BLOCKER 1" describe above (which spies on run-agent.mjs/autonomy-runner.mjs THEMSELVES, and
+// self-skips when this box has no real termfleet install), every test in this block drives the REAL emitted
+// dispatch chain (scripts/run-agent.mjs -> scripts/autonomy-runner.mjs -> backend.mjs's TermfleetRunner) —
+// only the termfleet SDK underneath it is a stub (packages/substrate-local/src/test-support/
+// stub-termfleet.ts, the same one OA-08's launch-verification.test.ts uses). It NEVER self-skips: the stub
+// is installed by every test, so there is no environment precondition under which these can silently no-op.
+// Zero model calls, zero spend, no real coding-CLI anywhere in this block — closing OA-18's two remaining
+// "live-pending" acceptance criteria (AC-6's --live login-prompt path, AC-10's pass/fail paths) as COMMITTED
+// DETERMINISTIC tests that survive a box wipe (see docs/adoption-fixes/proofs/oa-18.md).
+describe('OA-18 AC-6/AC-10 (durable, model-free): checkLive against a shared stub termfleet', () => {
+  function scaffoldWithStubTermfleet(): { dir: string; sessionsFile: string } {
+    const dir = track(scaffoldSimpleSdlc());
+    gitInit(dir);
+    commitAll(dir, 'harness');
+    // Installed AFTER the commit -- node_modules need not be tracked at all. Node's module resolution walks
+    // UP from any importer to the nearest ancestor node_modules on disk, independent of git; a worktree the
+    // runner creates under `dir` (e.g. dir/.worktrees/<branch>) still resolves `dir/node_modules/termfleet`
+    // by that walk, so installing the stub ONCE at the repo root covers both the main checkout and every
+    // probe worktree checkHarness creates (see stub-termfleet.ts's own header comment).
+    installStubTermfleet(dir);
+    return { dir, sessionsFile: join(dir, 'oa18-stub-sessions.log') };
+  }
+
+  // Sets env vars for the duration of an async action, then restores them -- ASYNC (awaits `fn` before
+  // restoring), unlike a bare try/finally around a synchronous mutation: checkLive reads several of these
+  // vars AFTER its first `await` (inside the survival poll loop), so restoring them before the returned
+  // promise settles would corrupt an in-flight check.
+  async function withEnv<T>(vars: Record<string, string | undefined>, fn: () => Promise<T>): Promise<T> {
+    const saved: Record<string, string | undefined> = {};
+    for (const k of Object.keys(vars)) saved[k] = process.env[k];
+    for (const [k, v] of Object.entries(vars)) {
+      if (v === undefined) delete process.env[k];
+      else process.env[k] = v;
+    }
+    try {
+      return await fn();
+    } finally {
+      for (const [k, v] of Object.entries(saved)) {
+        if (v === undefined) delete process.env[k];
+        else process.env[k] = v;
+      }
+    }
+  }
+
+  test('AC-10 pass path: a healthy install, the launched session SURVIVES the window -> checkLive PASSes naming the dispatch path', async () => {
+    const { dir, sessionsFile } = scaffoldWithStubTermfleet();
+    const harness = await checkHarness(dir, 'oa-doctor');
+    expect(harness.result.status).toBe('PASS');
+    const skills = checkSkills(harness);
+    expect(skills.status).toBe('PASS');
+
+    const result = await withEnv(
+      { OA_STUB_TF_SESSIONS_FILE: sessionsFile, OA_STUB_TF_DIE: undefined, OA_STUB_TF_CAPTURE: undefined, OA_DOCTOR_LIVE_SURVIVE_MS: '800' },
+      () => checkLive(dir, harness, skills),
+    );
+    cleanupProbe();
+
+    // A REAL createAgentWindow call actually happened (not vacuous) AND the survival mechanism (not a
+    // DOCTOR-OK shortcut, which is unset here) is what carried the PASS.
+    expect(existsSync(sessionsFile)).toBe(true);
+    expect(result.status).toBe('PASS');
+    expect(result.detail).toContain('survived');
+    expect(result.detail).toContain('run-agent.mjs');
+    expect(result.detail).toContain('scripts/autonomy-runner.mjs');
+    cleanupAll();
+  }, 20_000);
+
+  test('AC-10 pass path (alternate proof): the session dies immediately but emits DOCTOR-OK -> checkLive still PASSes, naming the captured phrase', async () => {
+    const { dir, sessionsFile } = scaffoldWithStubTermfleet();
+    const harness = await checkHarness(dir, 'oa-doctor');
+    const skills = checkSkills(harness);
+    expect(skills.status).toBe('PASS');
+
+    const result = await withEnv(
+      { OA_STUB_TF_SESSIONS_FILE: sessionsFile, OA_STUB_TF_DIE: '1', OA_STUB_TF_CAPTURE: 'DOCTOR-OK', OA_DOCTOR_LIVE_SURVIVE_MS: '500' },
+      () => checkLive(dir, harness, skills),
+    );
+    cleanupProbe();
+
+    expect(result.status).toBe('PASS');
+    expect(result.detail).toContain('DOCTOR-OK');
+    cleanupAll();
+  }, 20_000);
+
+  test('AC-10 fail path: the session dies at launch with no DOCTOR-OK -> checkLive FAILs, embedding the captured terminal contents', async () => {
+    const { dir, sessionsFile } = scaffoldWithStubTermfleet();
+    const harness = await checkHarness(dir, 'oa-doctor');
+    expect(harness.result.status).toBe('PASS');
+    const skills = checkSkills(harness);
+    expect(skills.status).toBe('PASS');
+
+    const deadTerminal = 'Unknown command: /develop\nsession terminated';
+    const result = await withEnv(
+      { OA_STUB_TF_SESSIONS_FILE: sessionsFile, OA_STUB_TF_DIE: '1', OA_STUB_TF_CAPTURE: deadTerminal, OA_DOCTOR_LIVE_SURVIVE_MS: '500' },
+      () => checkLive(dir, harness, skills),
+    );
+    cleanupProbe();
+
+    expect(result.status).toBe('FAIL');
+    // The exact evidence a real tmux reaper would otherwise have destroyed (doctor-checks.ts:1120-1125).
+    expect(result.detail).toContain(deadTerminal);
+    cleanupAll();
+  }, 20_000);
+
+  test('AC-6 (--live): a logged-out coding CLI dies at launch on a captured login prompt -> checkLive FAILs, embedding the prompt', async () => {
+    const { dir, sessionsFile } = scaffoldWithStubTermfleet();
+    const harness = await checkHarness(dir, 'oa-doctor');
+    const skills = checkSkills(harness);
+    expect(skills.status).toBe('PASS');
+
+    const loginPrompt = 'Please log in to continue.\nVisit https://claude.ai/login?code=ABC123 to authenticate.';
+    const result = await withEnv(
+      { OA_STUB_TF_SESSIONS_FILE: sessionsFile, OA_STUB_TF_DIE: '1', OA_STUB_TF_CAPTURE: loginPrompt, OA_DOCTOR_LIVE_SURVIVE_MS: '500' },
+      () => checkLive(dir, harness, skills),
+    );
+    cleanupProbe();
+
+    expect(result.status).toBe('FAIL');
+    expect(result.detail).toContain(loginPrompt);
+    cleanupAll();
+  }, 20_000);
 });

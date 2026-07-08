@@ -10,6 +10,7 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { parseIr, materialize } from '@open-autonomy/core';
 import { compileLocal } from '@open-autonomy/substrate-local';
+import { installStubTermfleet } from '../packages/substrate-local/src/test-support/stub-termfleet.ts';
 
 const REPO_ROOT = join(import.meta.dir, '..');
 const CLI = join(REPO_ROOT, 'dist', 'cli.js');
@@ -41,6 +42,18 @@ function scaffoldSimpleSdlc(): string {
 }
 function cli(args: string[], cwd: string, env: Record<string, string> = {}) {
   return spawnSync('node', [CLI, ...args], { cwd, encoding: 'utf8', env: { ...process.env, ...env } });
+}
+
+// Under concurrent full-gate load the spawned packed CLI can occasionally yield empty stdout (or an
+// outright spawn error) rather than JSON -- a bare `JSON.parse(r.stdout)` then throws an opaque
+// `Unexpected EOF`. This guard fails with a clear diagnostic (spawn error / status / signal / stderr)
+// instead, without changing the outcome of any passing assertion.
+function parseCliJson(r: ReturnType<typeof cli>) {
+  if (r.error) throw new Error(`CLI spawn error: ${r.error}`);
+  if (!r.stdout || !r.stdout.trim()) {
+    throw new Error(`CLI produced empty stdout (status=${r.status}, signal=${r.signal ?? 'none'}); stderr: ${r.stderr ?? ''}`);
+  }
+  return JSON.parse(r.stdout);
 }
 
 const tmps: string[] = [];
@@ -77,7 +90,7 @@ describe('doctor CLI — JSON shape + exit-code contract (AC-13)', () => {
     gitInit(dir);
     commitAll(dir, 'harness');
     const r = cli(['doctor', '--json'], dir);
-    const parsed = JSON.parse(r.stdout);
+    const parsed = parseCliJson(r);
     expect(Array.isArray(parsed.checks)).toBe(true);
     expect(parsed.checks.map((c: { id: string }) => c.id)).toEqual(['self', 'env', 'provider', 'auth', 'harness', 'skills', 'live']);
     for (const c of parsed.checks) {
@@ -244,7 +257,7 @@ describe('doctor CLI — provider identity (AC-5, F-8): a plain HTTP occupant is
     const port = (server.address() as { port: number }).port;
     try {
       const r = cli(['doctor', '--json'], dir, { TERMFLEET_PROVIDER_URL: `http://127.0.0.1:${port}` });
-      const parsed = JSON.parse(r.stdout);
+      const parsed = parseCliJson(r);
       const provider = parsed.checks.find((c: { id: string }) => c.id === 'provider');
       expect(provider.status).toBe('FAIL');
       // Never the SKIP-path conclusion ("no provider is running yet") -- a FAIL naming a real occupant is
@@ -259,4 +272,99 @@ describe('doctor CLI — provider identity (AC-5, F-8): a plain HTTP occupant is
       server.close();
     }
   }, 20_000);
+});
+
+describe('doctor CLI — --live (AC-6, AC-10): the real dispatch chain end-to-end, driven against a stub termfleet, zero model calls', () => {
+  // Every test here runs the REAL packed `dist/cli.js doctor --live` — the actual dispatch chain
+  // (run-agent.mjs -> autonomy-runner.mjs -> backend.mjs) — against the SAME stub termfleet
+  // (packages/substrate-local/src/test-support/stub-termfleet.ts) OA-08's launch-verification.test.ts and
+  // bin/doctor-checks.test.ts's companion describe use. There is no real termfleet provider, no real
+  // coding-CLI session, and no model call anywhere in this block — it is durable (survives a box wipe) by
+  // construction, closing OA-18's AC-6/AC-10 "live-pending" gap as a committed, deterministic CI test.
+
+  // A PATH-shim `claude` reporting a signed-in identity, so `doctor --live`'s exit code in the pass/fail
+  // tests below reflects ONLY the 'live' check under test (never an incidental FAIL from 'auth' because
+  // this box has no real claude install, or has one that happens to be logged out) — the same shim technique
+  // bin/doctor-checks.test.ts's checkAuth suite and this file's own spend-guarantee test already use.
+  function signedInClaudeShimDir(): string {
+    const dir = track(mkdtempSync(join(tmpdir(), 'oa18-live-claude-shim-')));
+    const p = join(dir, 'claude');
+    writeFileSync(p, `#!/bin/sh\nif [ "$1" = "auth" ] && [ "$2" = "status" ]; then echo "Logged in as oa18-e2e@example.com"; exit 0; fi\necho "1.2.3"; exit 0\n`);
+    spawnSync('chmod', ['+x', p]);
+    return dir;
+  }
+
+  function scaffoldWithStubTermfleet(): { dir: string; sessionsFile: string } {
+    const dir = track(scaffoldSimpleSdlc());
+    gitInit(dir);
+    commitAll(dir, 'harness');
+    // Node's module resolution walks UP from any importer to the nearest ancestor node_modules on disk,
+    // independent of git — so installing the stub once at the repo root also resolves from the probe
+    // worktree the runner creates under it (see stub-termfleet.ts's own header comment).
+    installStubTermfleet(dir);
+    return { dir, sessionsFile: join(dir, 'oa18-stub-sessions.log') };
+  }
+
+  test('AC-10 pass: a healthy install -> `doctor --live` launches exactly one (stub) session that survives, exits 0', () => {
+    const { dir, sessionsFile } = scaffoldWithStubTermfleet();
+    const shimDir = signedInClaudeShimDir();
+    const r = cli(['doctor', '--live', '--json'], dir, {
+      PATH: `${shimDir}:${process.env.PATH ?? ''}`,
+      OA_STUB_TF_SESSIONS_FILE: sessionsFile,
+      OA_DOCTOR_LIVE_SURVIVE_MS: '800',
+    });
+    const parsed = parseCliJson(r);
+    const live = parsed.checks.find((c: { id: string }) => c.id === 'live');
+    expect(live.status).toBe('PASS');
+    expect(live.detail).toContain('survived');
+    expect(live.detail).toContain('run-agent.mjs');
+    expect(parsed.verdict).toBe('PASS');
+    expect(r.status).toBe(0);
+    expect(existsSync(sessionsFile)).toBe(true); // a real (stub) createAgentWindow call actually happened
+  }, 30_000);
+
+  test('AC-10 fail: a session that dies at launch -> `doctor --live` exits non-zero, embedding the captured terminal contents', () => {
+    const { dir } = scaffoldWithStubTermfleet();
+    const shimDir = signedInClaudeShimDir();
+    const deadTerminal = 'Unknown command: /develop\nsession terminated';
+    const r = cli(['doctor', '--live', '--json'], dir, {
+      PATH: `${shimDir}:${process.env.PATH ?? ''}`,
+      OA_STUB_TF_DIE: '1',
+      OA_STUB_TF_CAPTURE: deadTerminal,
+      OA_DOCTOR_LIVE_SURVIVE_MS: '500',
+    });
+    const parsed = parseCliJson(r);
+    const live = parsed.checks.find((c: { id: string }) => c.id === 'live');
+    expect(live.status).toBe('FAIL');
+    expect(live.detail).toContain(deadTerminal); // the exact evidence a real tmux reaper would have destroyed
+    expect(parsed.verdict).toBe('FAIL');
+    expect(r.status).not.toBe(0);
+  }, 30_000);
+
+  test('AC-6: on a box where the coding CLI is signed out, `doctor --live` exits non-zero naming the captured login prompt (independently of the static auth FAIL)', () => {
+    const { dir } = scaffoldWithStubTermfleet();
+    const signedOutDir = track(mkdtempSync(join(tmpdir(), 'oa18-live-claude-signedout-')));
+    const p = join(signedOutDir, 'claude');
+    writeFileSync(p, `#!/bin/sh\nif [ "$1" = "auth" ] && [ "$2" = "status" ]; then echo "You are not logged in."; exit 1; fi\necho "1.2.3"; exit 0\n`);
+    spawnSync('chmod', ['+x', p]);
+    const loginPrompt = 'Please log in to continue.\nVisit https://claude.ai/login?code=XYZ789 to authenticate.';
+    const r = cli(['doctor', '--live', '--json'], dir, {
+      PATH: `${signedOutDir}:${process.env.PATH ?? ''}`,
+      OA_STUB_TF_DIE: '1',
+      OA_STUB_TF_CAPTURE: loginPrompt,
+      OA_DOCTOR_LIVE_SURVIVE_MS: '500',
+    });
+    expect(r.status).not.toBe(0);
+    const parsed = parseCliJson(r);
+    // (a) the static check ALSO catches it, unconditionally of --live (F-13's first line of defense) — never
+    // citing `claude --version` as evidence.
+    const auth = parsed.checks.find((c: { id: string }) => c.id === 'auth');
+    expect(auth.status).toBe('FAIL');
+    expect(auth.detail).toContain('NOT signed in');
+    // (b) --live's OWN evidence: the launched session died at a real captured login prompt.
+    const live = parsed.checks.find((c: { id: string }) => c.id === 'live');
+    expect(live.status).toBe('FAIL');
+    expect(live.detail).toContain(loginPrompt);
+    expect(parsed.verdict).toBe('FAIL');
+  }, 30_000);
 });

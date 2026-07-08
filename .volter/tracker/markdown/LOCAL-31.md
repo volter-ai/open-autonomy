@@ -20,7 +20,7 @@ Provenance: OA-INSTALL-AUDIT-FINDINGS.md F-2 (§2 P0, ARCHITECTURE VIOLATION —
 
 ## Acceptance Criteria
 - [x] dev/01 v1 a repo WITH a GitHub remote + a simple-sdlc install whose harness is committed locally but NOT pushed: a launched worker's worktree contains the harness (fails today — the worktree bases on stale origin state)
-  - status: done — proven fail-before/pass-after (proof: /workspace/proofs/oa-02.md AC-1/AC-2); pinned by a tamper-verified integration test (worktree-base.test.ts)
+  - status: done — proven fail-before/pass-after (sidecar /workspace/proofs/oa-02.md AC-1/AC-2 wiped — box reset; this committed close-out is the durable proof-of-record); pinned by a tamper-verified integration test (worktree-base.test.ts)
 - [x] dev/02 v1 every numbered criterion in the spec's Acceptance criteria section is demonstrated: each fails before the fix and passes after, with command output as evidence
   - status: done — spec AC-1..AC-5 all demonstrated with command output; 5-link proof (diff review, independent re-run + demo, 2-panelist skeptic review incl. revert-probe, attestation)
 

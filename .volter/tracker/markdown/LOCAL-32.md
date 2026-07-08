@@ -26,7 +26,7 @@ Provenance: OA-INSTALL-AUDIT-FINDINGS.md F-3 (§2 P0) + narrative §1 step 14.
 - [x] dev/02 v1 every numbered criterion in the spec's Acceptance criteria section is demonstrated: each fails before the fix and passes after, with command output as evidence
   - status: done — see close-out
 
-Close-out: merged to adoption-fixes-backlog @ 738b8ab (builder commits f1e477d + ccbfacc). Guard drives the emitted scheduler/run.mjs; gitignore-aware (untracked-ignored refuses with -f remediation; tracked-past-ignore clean); per-profile derived staging command (hello has no standards/). Composition with OA-07 pinned @ fbb85bc: paused wins over the harness nag. 5-link proof: /workspace/proofs/oa-03.md.
+Close-out: merged to adoption-fixes-backlog @ 738b8ab (builder commits f1e477d + ccbfacc). Guard drives the emitted scheduler/run.mjs; gitignore-aware (untracked-ignored refuses with -f remediation; tracked-past-ignore clean); per-profile derived staging command (hello has no standards/). Composition with OA-07 pinned @ fbb85bc: paused wins over the harness nag. 5-link proof: sidecar /workspace/proofs/oa-03.md wiped (box reset); this committed close-out is the durable proof-of-record (code landed + CI-green; no in-repo proof doc was regenerated for this unit).
 
 <!--tracker:comments
 []

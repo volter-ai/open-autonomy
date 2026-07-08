@@ -283,6 +283,56 @@ describe('OA-07 AC-7 CONTRAST (order-independent non-tautology positive control)
   }, 30_000);
 });
 
+describe('OA-07 AC-7 NEGATIVE CONTROL (order-independent fence-removal detection on independent evidence)', () => {
+  // The exact mirror of the CONTRAST positive control above, and the piece that makes fence-removal
+  // catchable by INDEPENDENT PHYSICAL EVIDENCE in EVERY board order. The main two-issue AC-7 test's
+  // independent (sessions-file/worktree) assertions only catch a fence-disable mutant when the board happens
+  // to scan the unlabeled issue FIRST: under approved-first scan order (the order the governed-CI runner
+  // actually produced), one-dispatch-per-tick means the approved issue lands the sole session with OR
+  // without the fence — the observable world is identical, so only the driver-reported `tick.fenced` note
+  // would catch the mutant, and driver-reported evidence is explicitly not accepted as proof here.
+  //
+  // A SINGLE-issue board removes that order-dependence entirely: with ONE unlabeled `ready` issue under
+  // mode:allowlist, the fence is the ONLY thing standing between it and dispatch. Fence ON → zero sessions,
+  // no worktree, no branch (asserted below on independent evidence). Fence OFF → that lone issue WOULD be
+  // dispatched, a session/worktree/branch WOULD appear, and these "no session" assertions FAIL — in ANY
+  // board order, because there is no second issue and no ordering to hide behind. That is deterministic,
+  // order-independent, independent-evidence mutation-catching (verified in docs/adoption-fixes/proofs/oa-07.md
+  // §4 by applying the fence-disable mutant under both forced board orders and watching THIS test fail on
+  // the session/worktree assertions both ways).
+  test('a lone unlabeled ready issue under mode:allowlist gets NO session/worktree/branch — on any board order', () => {
+    const { dir } = scaffold();
+
+    const id = createIssue(
+      dir,
+      'OA-07 AC-7: pre-existing backlog item (not opted in)',
+      '# Backlog item\n\nOrdinary pre-existing work.' + DEV_AC_BODY,
+    ); // NO addLabel — the single differentiator from the CONTRAST positive control above
+    gitOk(dir, ['add', '-A']);
+    gitOk(dir, ['commit', '-q', '-m', 'seed board: single ready, UNLABELED issue (negative control)']);
+
+    const sentinel = join(dir, 'sentinel.log');
+    const runEnv = env({ OA_STUB_TF_SESSIONS_FILE: sentinel });
+
+    const tick = runDispatchFenceTick({ dir, env: runEnv });
+
+    // LOAD-BEARING — INDEPENDENT PHYSICAL EVIDENCE, ASSERTED FIRST (so a fence-disable mutant is caught HERE,
+    // on physical evidence, not merely on the driver-reported note below): with the fence removed this lone
+    // issue WOULD be dispatched and each of these would flip, in ANY board order (single issue → no ordering
+    // to hide behind).
+    expect(sessionRecords(sentinel).length).toBe(0); // zero develop sessions ever created
+    expect(existsSync(join(dir, '.worktrees', `agent-issue-${id}`))).toBe(false); // no worktree
+    expect(git(dir, ['rev-parse', '--verify', '--quiet', `agent/issue-${id}`]).status).not.toBe(0); // no branch
+
+    // Driver-reported (doctrine-mandated `fenced (no <allow_label>)` note — a corroborating, NOT load-bearing,
+    // check; the physical assertions above already carry the proof).
+    expect(tick.fenced).toEqual([{ id, note: 'fenced (no oa-approved)' }]);
+    expect(tick.blockedForHuman).toEqual([]);
+    expect(tick.dispatched).toEqual([]);
+    expect(tick.launch).toBeNull(); // no subprocess spawned at all — never even attempted
+  }, 30_000);
+});
+
 describe('OA-07 AC-8: body-read defers dispatch, and the doctrine re-reads the body every tick', () => {
   test('a ready+oa-approved issue whose body says "do not dispatch" gets NO session, on tick 1 AND tick 2', () => {
     const { dir } = scaffold();

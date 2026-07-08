@@ -25,7 +25,7 @@ Provenance: OA-INSTALL-AUDIT-FINDINGS.md F-7 (§2 P1) + narrative §1 step 13.
 - [x] dev/02 v1 every numbered criterion in the spec's Acceptance criteria section is demonstrated: each fails before the fix and passes after, with command output as evidence
   - status: done — see close-out
 
-Close-out: merged to adoption-fixes-backlog @ 9f77e82 (builder commit cc5b583). Deterministic fence (marker + scheduler gate + launch seam) live-proven and tamper-verified 7/7; policy.dispatch allowlist in manifest; PM body-read doctrine in place. AC-7/8 live PM ticks pending a termfleet+model stack (doctrine verified present). OA-10 edge: resurrection guard must exempt .open-autonomy/paused (marker is manifest-exempt structurally). 5-link proof: /workspace/proofs/oa-07.md.
+Close-out: merged to adoption-fixes-backlog @ 9f77e82 (builder commit cc5b583). Deterministic fence (marker + scheduler gate + launch seam) live-proven and tamper-verified 7/7; policy.dispatch allowlist in manifest; PM body-read doctrine in place. AC-7 (allowlist fence) + AC-8 (body-read/deferral) now demonstrated by committed test `packages/substrate-local/src/pm-dispatch-fence.test.ts` (model-free stub termfleet provider; real board/policy read, real `ztrack issue view`, real launch dispatch, stub-provider session attribution); Fable-verified. Residual live-only gap: the model's actual prose-comprehension judgment of a deferral marker. OA-10 edge: resurrection guard must exempt .open-autonomy/paused (marker is manifest-exempt structurally). 5-link proof: docs/adoption-fixes/proofs/oa-07.md.
 
 <!--tracker:comments
 []

@@ -25,7 +25,7 @@ Provenance: OA-INSTALL-AUDIT-FINDINGS.md F-10 (§2 P2) + narrative §1 phase 1.
 - [x] dev/02 v1 every numbered criterion in the spec's Acceptance criteria section is demonstrated: each fails before the fix and passes after, with command output as evidence
   - status: done — see close-out
 
-Close-out: merged @ e089098 (builder be07df2 + 301d963). --help now leads with the additive overlays for existing repos; the self-driving SCAFFOLD is labeled with what it clobbers; the bundled-profiles list is derived (shared node-only helper, lazy-import preserved). The Fable panel added a static-import guard test pinning the OA-01 invariant (a substrate import at module scope goes red), tamper-verified. 5-link proof: /workspace/proofs/oa-11.md.
+Close-out: merged @ e089098 (builder be07df2 + 301d963). --help now leads with the additive overlays for existing repos; the self-driving SCAFFOLD is labeled with what it clobbers; the bundled-profiles list is derived (shared node-only helper, lazy-import preserved). The Fable panel added a static-import guard test pinning the OA-01 invariant (a substrate import at module scope goes red), tamper-verified. 5-link proof: sidecar /workspace/proofs/oa-11.md wiped (box reset); this committed close-out is the durable proof-of-record (code landed + CI-green; no in-repo proof doc was regenerated for this unit).
 
 <!--tracker:comments
 []

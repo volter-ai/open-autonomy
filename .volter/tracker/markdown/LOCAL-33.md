@@ -25,7 +25,7 @@ Provenance: OA-INSTALL-AUDIT-FINDINGS.md F-4 (§2 P0) + narrative §1 steps 3, 1
 - [x] dev/02 v1 every numbered criterion in the spec's Acceptance criteria section is demonstrated: each fails before the fix and passes after, with command output as evidence
   - status: done — see close-out
 
-Close-out: merged to adoption-fixes-backlog @ d4bbe9a (builder b5e35a0 + d474203). Shared collision-check.ts (self-reference / workspace-shadow BFS / import.meta.resolve probe), wired into preflight + local-scoped compile gate + the emitted loop-driver guard (probes termfleet + @termfleet/core/local-providers.js + ztrack/preset-kit). Two F-5 false-alarm blockers (relative-outDir; open-autonomy dogfood name) caught by the Fable correctness panel and cured. 5-link proof: /workspace/proofs/oa-04.md.
+Close-out: merged to adoption-fixes-backlog @ d4bbe9a (builder b5e35a0 + d474203). Shared collision-check.ts (self-reference / workspace-shadow BFS / import.meta.resolve probe), wired into preflight + local-scoped compile gate + the emitted loop-driver guard (probes termfleet + @termfleet/core/local-providers.js + ztrack/preset-kit). Two F-5 false-alarm blockers (relative-outDir; open-autonomy dogfood name) caught by the Fable correctness panel and cured. 5-link proof: sidecar /workspace/proofs/oa-04.md wiped (box reset); this committed close-out is the durable proof-of-record (code landed + CI-green; no in-repo proof doc was regenerated for this unit).
 
 <!--tracker:comments
 []

@@ -25,7 +25,7 @@ Provenance: OA-INSTALL-AUDIT-FINDINGS.md F-12 (§2 P2) + narrative §1 steps 5-6
 - [x] dev/02 v1 every numbered criterion in the spec's Acceptance criteria section is demonstrated: each fails before the fix and passes after, with command output as evidence
   - status: done — see close-out
 
-Close-out: merged @ OA-13 (builder cff9093). OA-owned docs part: every documented `termfleet claude new` sanity-check snippet now carries `-y` (4 sites: OPERATIONS 167/548, INSTALL-AGENT 275/392) with an inline why (the panel-review guard fires once a panel exists). Fable review PASS (4/4, no site missed). Cross-repo AC 1-3 (termfleet Linux iTerm crash) OUT OF SCOPE — owner/termfleet-repo action. 5-link proof: /workspace/proofs/oa-13.md.
+Close-out: merged @ OA-13 (builder cff9093). OA-owned docs part: every documented `termfleet claude new` sanity-check snippet now carries `-y` (4 sites: OPERATIONS 167/548, INSTALL-AGENT 275/392) with an inline why (the panel-review guard fires once a panel exists). Fable review PASS (4/4, no site missed). Cross-repo AC 1-3 (termfleet Linux iTerm crash) OUT OF SCOPE — owner/termfleet-repo action. 5-link proof: sidecar /workspace/proofs/oa-13.md wiped (box reset); this committed close-out is the durable proof-of-record (code landed + CI-green; no in-repo proof doc was regenerated for this unit).
 
 <!--tracker:comments
 []

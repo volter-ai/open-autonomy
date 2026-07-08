@@ -71,7 +71,7 @@ import { dirname, join } from 'node:path';
 import type { AutonomyIR } from '@open-autonomy/core';
 import { compileLocal } from './emit';
 import { installStubTermfleet } from './test-support/stub-termfleet';
-import { runDispatchFenceTick } from './test-support/canned-pm-dispatch-fence';
+import { readBoard, runDispatchFenceTick } from './test-support/canned-pm-dispatch-fence';
 
 const require = createRequire(import.meta.url);
 
@@ -188,20 +188,31 @@ describe('OA-07 AC-7: allowlist fence enforced over the REAL board + REAL launch
   test('one unlabeled ready issue is fenced; the oa-approved one is dispatched, and ONLY it gets a session', () => {
     const { dir } = scaffold();
 
-    // NON-TAUTOLOGICAL: the unlabeled issue is `ready`, has no branch, and is otherwise an ordinary fresh
-    // candidate — with the allowlist gate removed it WOULD be an eligible Develop candidate (the driver's
-    // pass-1/pass-2 split, see canned-pm-dispatch-fence.ts's jsdoc, means it is not merely "later in scan
-    // order than the approved one": the allowlist check is evaluated over the WHOLE ready set regardless
-    // of board-list order). The gate — not incidental ordering — is what makes only the labeled issue
-    // eligible.
-    const unlabeledId = createIssue(dir, 'OA-07 AC-7: pre-existing backlog item (not opted in)', '# Backlog item\n\nOrdinary pre-existing work.' + DEV_AC_BODY);
+    // NON-TAUTOLOGICAL — and specifically defended against the "wrong item sorts first" trap: the approved
+    // issue is created AND labeled FIRST, then the unlabeled issue is created LAST. ztrack lists
+    // most-recently-touched first, so the UNLABELED issue is the board's TOP candidate — meaning that with
+    // the allowlist gate removed, the unlabeled issue would be body-read and DISPATCHED first (it would land
+    // the one session), and the approved issue would never be reached. This reproduces the real F-7 audit
+    // scenario (a pre-existing, un-opted-in item dispatched in preference to the approved one). The gate is
+    // therefore load-bearing on the actual DISPATCH OUTCOME here, not merely on the driver's self-reported
+    // `fenced` note — the sessions-file/worktree assertions below fail if the gate is removed (verified by
+    // the §4 non-tautology probe: disabling the fence lands the session in the UNLABELED issue's worktree).
     const approvedId = createIssue(dir, 'OA-07 AC-7: opted-in item', '# Opted-in item\n\nThe operator has reviewed and approved this one.' + DEV_AC_BODY);
     addLabel(dir, approvedId, 'oa-approved');
+    const unlabeledId = createIssue(dir, 'OA-07 AC-7: pre-existing backlog item (not opted in)', '# Backlog item\n\nOrdinary pre-existing work.' + DEV_AC_BODY);
     gitOk(dir, ['add', '-A']);
-    gitOk(dir, ['commit', '-q', '-m', 'seed board: one unlabeled + one oa-approved ready issue']);
+    gitOk(dir, ['commit', '-q', '-m', 'seed board: one oa-approved (touched first) + one unlabeled (top) ready issue']);
 
     const sentinel = join(dir, 'sentinel.log');
     const runEnv = env({ OA_STUB_TF_SESSIONS_FILE: sentinel });
+
+    // Make the fixture's ordering premise EXPLICIT and regression-proof: the unlabeled issue must be the
+    // board's top candidate for this test to actually exercise the gate (see the comment above). If a future
+    // ztrack changes its list ordering, this assertion fails loudly instead of the test silently going
+    // tautological again.
+    const boardIds = readBoard(dir).map((r) => r.identifier);
+    expect(boardIds[0]).toBe(unlabeledId); // the un-opted-in item is the top / would-be-first-dispatched candidate
+    expect(boardIds).toContain(approvedId);
 
     const tick = runDispatchFenceTick({ dir, env: runEnv });
 

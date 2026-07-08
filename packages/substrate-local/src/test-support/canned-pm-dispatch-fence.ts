@@ -104,7 +104,7 @@ export function readDispatchPolicy(dir: string): DispatchPolicy {
  *  "An explicit do-not-dispatch / deferred / blocked-by / on-hold marker in the body (or a citation of a
  *  decision record deferring it)". Matched case-insensitively; several synonyms, since the doctrine's own
  *  wording is prose, not a fixed token. */
-const DEFERRAL_MARKER = /do not dispatch|deferred|blocked-by|on[- ]hold|decision record/i;
+const DEFERRAL_MARKER = /do[- ]not[- ]dispatch|deferred|blocked[- ]by|on[- ]hold|decision record/i;
 
 export interface FencedEntry {
   id: string;
@@ -162,10 +162,18 @@ export interface DispatchFenceTickArgs {
  * exercises: the single ready, allowlist-eligible candidate is blocked-for-human, so nothing is ever
  * launched).
  *
- * Deliberately NOT implemented: the rework path (pm/SKILL.md:81-83, an in-progress issue whose
- * `agent/issue-<id>` branch already exists — "already dispatched once, so the allowlist gate doesn't
- * re-apply"). AC-7/AC-8 only exercise fresh `ready` work; rework's allowlist-exempt clause is out of scope
- * for this day-one-fence demonstration.
+ * Deliberately NOT implemented (this driver is the two-gate SLICE of the Develop rule the OA-07 ACs
+ * exercise, NOT the full tick — so "1:1 off the doctrine" is scoped to the fence/defer clauses, not the
+ * whole Tick step):
+ *   - the rework path (pm/SKILL.md:81-83, an in-progress issue whose `agent/issue-<id>` branch already
+ *     exists — "already dispatched once, so the allowlist gate doesn't re-apply"); AC-7/AC-8 only exercise
+ *     fresh `ready` work;
+ *   - the fresh-work "no `agent/issue-<id>` branch yet" precondition (pm/SKILL.md:79) — the fixtures never
+ *     seed a pre-existing branch, so every `ready` candidate here is fresh work by construction;
+ *   - the higher-priority actions and WIP preconditions the real Tick applies BEFORE Develop (integrate a
+ *     `done` issue, review an `in-review` one, the "no develop already running" check, WIP ceilings —
+ *     pm/SKILL.md:60-77); the fixtures contain only fresh `ready` issues, so Develop is always the tick's
+ *     action. This driver models the fence/defer eligibility gates, not the whole priority ladder.
  */
 export function runDispatchFenceTick({ dir, env, ztrackCli = resolveZtrackCli() }: DispatchFenceTickArgs): TickOutput {
   const policy = readDispatchPolicy(dir);

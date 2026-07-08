@@ -69,11 +69,18 @@ interface ZtrackViewResult {
 }
 
 /** Real board read — pm/SKILL.md:58's own tick-step-1 command, verbatim field list. NOTE: ztrack's own
- *  list order is NOT a doctrine-defined "priority" (observed empirically to reorder on label/body edits —
- *  e.g. most-recently-touched first); the driver only relies on list order for the body-read pass (pass 2
- *  in runDispatchFenceTick), which is explicitly sequential per the doctrine's own "move on to the
- *  next-eligible candidate" phrasing. The allowlist gate (pass 1) is evaluated over the WHOLE ready set
- *  regardless of order — see that function's jsdoc. */
+ *  list order is NOT a doctrine-defined "priority", and — root-caused after a governed-CI failure where a
+ *  clean-checkout runner returned this suite's two-issue fixture in the OPPOSITE order from a local dev
+ *  box — it is not reliably "most-recently-touched first" either: for the markdown issue-per-file backend,
+ *  `ztrack issue list` returns issues in raw, UNSORTED `readdirSync(dir)` order (see `mdIds()` in ztrack's
+ *  own `dist/cli.js`), which is filesystem/environment-dependent and carries no guaranteed relationship to
+ *  creation or edit recency. Nothing in this driver, or in pm-dispatch-fence.test.ts, may depend on the
+ *  relative order of two simultaneously-`ready`-and-eligible issues. The allowlist gate (pass 1) is
+ *  evaluated over the WHOLE ready set regardless of order — see that function's jsdoc — so it is
+ *  unaffected by this. The body-read pass (pass 2) IS sequential over whatever order the board happens to
+ *  return, per the doctrine's own "move on to the next-eligible candidate" phrasing; the fixtures in
+ *  pm-dispatch-fence.test.ts are written so at most one candidate is body-read-eligible at a time (never
+ *  two simultaneously-eligible candidates racing on scan order). */
 export function readBoard(dir: string, ztrackCli: string = resolveZtrackCli()): ZtrackListRow[] {
   const out = ztrackOk(dir, ['issue', 'list', '--state', 'open', '--limit', '100', '--json', 'identifier,title,state,labels,assignee'], ztrackCli);
   return JSON.parse(out) as ZtrackListRow[];

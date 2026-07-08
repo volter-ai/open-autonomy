@@ -71,7 +71,7 @@ import { dirname, join } from 'node:path';
 import type { AutonomyIR } from '@open-autonomy/core';
 import { compileLocal } from './emit';
 import { installStubTermfleet } from './test-support/stub-termfleet';
-import { readBoard, runDispatchFenceTick } from './test-support/canned-pm-dispatch-fence';
+import { runDispatchFenceTick } from './test-support/canned-pm-dispatch-fence';
 
 const require = createRequire(import.meta.url);
 
@@ -188,31 +188,35 @@ describe('OA-07 AC-7: allowlist fence enforced over the REAL board + REAL launch
   test('one unlabeled ready issue is fenced; the oa-approved one is dispatched, and ONLY it gets a session', () => {
     const { dir } = scaffold();
 
-    // NON-TAUTOLOGICAL — and specifically defended against the "wrong item sorts first" trap: the approved
-    // issue is created AND labeled FIRST, then the unlabeled issue is created LAST. ztrack lists
-    // most-recently-touched first, so the UNLABELED issue is the board's TOP candidate — meaning that with
-    // the allowlist gate removed, the unlabeled issue would be body-read and DISPATCHED first (it would land
-    // the one session), and the approved issue would never be reached. This reproduces the real F-7 audit
-    // scenario (a pre-existing, un-opted-in item dispatched in preference to the approved one). The gate is
-    // therefore load-bearing on the actual DISPATCH OUTCOME here, not merely on the driver's self-reported
-    // `fenced` note — the sessions-file/worktree assertions below fail if the gate is removed (verified by
-    // the §4 non-tautology probe: disabling the fence lands the session in the UNLABELED issue's worktree).
+    // DETERMINISTIC ACROSS ANY BOARD ORDERING — this fixture used to also assert
+    // `readBoard(dir)[0] === unlabeledId`, reasoning that ztrack lists most-recently-touched first and so
+    // the un-opted-in issue would be the board's "top candidate" if the fence didn't exist. That assumption
+    // was FALSE (root-caused after a governed-CI failure: for the markdown issue-per-file backend, `ztrack
+    // issue list` returns issues in raw, unsorted `readdirSync` order — filesystem/environment-dependent,
+    // with no guaranteed relationship to touch recency — see canned-pm-dispatch-fence.ts's `readBoard`
+    // jsdoc). A clean-checkout CI runner returned the two issues in the OPPOSITE order from a local dev box,
+    // failing that assertion, even though the fence itself was never broken.
+    //
+    // The real invariant does NOT need board order at all: pass 1 (the allowlist gate) is evaluated over the
+    // WHOLE `ready` set unconditionally (canned-pm-dispatch-fence.ts's own pass-1 jsdoc) — every ready issue
+    // lacking `oa-approved` is fenced, regardless of where it happens to land in the board scan. So
+    // `tick.fenced`/`tick.dispatched` below, and the independent sessions-file/worktree assertions, hold no
+    // matter which of the two issues the board lists first (verified directly: `readBoard` was temporarily
+    // patched to return this fixture's two-issue board in REVERSED order and this test still passed
+    // unchanged — see docs/adoption-fixes/proofs/oa-07.md §4 for the reproduction).
+    //
+    // Non-tautology (this fixture genuinely exercises the gate, not a no-op) is now carried by the separate,
+    // ORDER-INDEPENDENT "CONTRAST" test below (a single-issue board — no relative ordering to depend on):
+    // it shows this exact unlabeled-shaped issue, given the label, DOES get dispatched — so its exclusion
+    // here is caused by the fence, not by some other property of the fixture.
     const approvedId = createIssue(dir, 'OA-07 AC-7: opted-in item', '# Opted-in item\n\nThe operator has reviewed and approved this one.' + DEV_AC_BODY);
     addLabel(dir, approvedId, 'oa-approved');
     const unlabeledId = createIssue(dir, 'OA-07 AC-7: pre-existing backlog item (not opted in)', '# Backlog item\n\nOrdinary pre-existing work.' + DEV_AC_BODY);
     gitOk(dir, ['add', '-A']);
-    gitOk(dir, ['commit', '-q', '-m', 'seed board: one oa-approved (touched first) + one unlabeled (top) ready issue']);
+    gitOk(dir, ['commit', '-q', '-m', 'seed board: one oa-approved + one unlabeled ready issue']);
 
     const sentinel = join(dir, 'sentinel.log');
     const runEnv = env({ OA_STUB_TF_SESSIONS_FILE: sentinel });
-
-    // Make the fixture's ordering premise EXPLICIT and regression-proof: the unlabeled issue must be the
-    // board's top candidate for this test to actually exercise the gate (see the comment above). If a future
-    // ztrack changes its list ordering, this assertion fails loudly instead of the test silently going
-    // tautological again.
-    const boardIds = readBoard(dir).map((r) => r.identifier);
-    expect(boardIds[0]).toBe(unlabeledId); // the un-opted-in item is the top / would-be-first-dispatched candidate
-    expect(boardIds).toContain(approvedId);
 
     const tick = runDispatchFenceTick({ dir, env: runEnv });
 
@@ -235,6 +239,47 @@ describe('OA-07 AC-7: allowlist fence enforced over the REAL board + REAL launch
     const fencedWorktree = join(dir, '.worktrees', `agent-issue-${unlabeledId}`);
     expect(existsSync(fencedWorktree)).toBe(false);
     expect(git(dir, ['rev-parse', '--verify', '--quiet', `agent/issue-${unlabeledId}`]).status).not.toBe(0);
+  }, 30_000);
+});
+
+describe('OA-07 AC-7 CONTRAST (order-independent non-tautology positive control)', () => {
+  // AC-7's main test above proves the fence is deterministic REGARDLESS of board scan order (pass 1 is
+  // unconditional over the whole `ready` set). What that determinism does NOT by itself rule out: maybe
+  // the "unlabeled" issue was never a genuine dispatch candidate to begin with — some other property of its
+  // fixture shape (title, body, absence of a branch) could in principle be quietly disqualifying it,
+  // making its exclusion vacuous no matter what the fence does. This test closes that gap WITHOUT depending
+  // on the relative order of two simultaneously-ready issues: a SINGLE-issue board has no ordering to
+  // depend on. It takes the exact same issue shape as AC-7's fenced issue, changes only the one axis the
+  // doctrine says should matter (adds the `oa-approved` label), and shows it gets dispatched — proving the
+  // exclusion in the main test above is caused BY the fence, not by anything else about the issue. Mirrors
+  // the OA-09 "CONTRAST (proves the decoy is real, not vacuous)" pattern (provider-landing.test.ts).
+  test('the SAME unlabeled-shaped backlog item, given oa-approved on its own single-issue board, gets dispatched', () => {
+    const { dir } = scaffold();
+
+    const id = createIssue(
+      dir,
+      'OA-07 AC-7: pre-existing backlog item (not opted in)',
+      '# Backlog item\n\nOrdinary pre-existing work.' + DEV_AC_BODY,
+    );
+    addLabel(dir, id, 'oa-approved'); // the ONLY change from the fenced issue in the main AC-7 test above
+    gitOk(dir, ['add', '-A']);
+    gitOk(dir, ['commit', '-q', '-m', 'seed board: single ready, oa-approved issue (positive control)']);
+
+    const sentinel = join(dir, 'sentinel.log');
+    const runEnv = env({ OA_STUB_TF_SESSIONS_FILE: sentinel });
+
+    const tick = runDispatchFenceTick({ dir, env: runEnv });
+
+    expect(tick.fenced).toEqual([]); // has the label — never a fence hit
+    expect(tick.blockedForHuman).toEqual([]);
+    expect(tick.dispatched).toEqual([id]);
+    expect(tick.launch).not.toBeNull();
+    expect(tick.launch!.status).toBe(0);
+
+    const sessions = sessionRecords(sentinel);
+    expect(sessions.length).toBe(1);
+    expect(sessions[0].agent).toBe('develop');
+    expect(sessions[0].cwd).toContain(`agent-issue-${id}`);
   }, 30_000);
 });
 

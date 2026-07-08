@@ -10,7 +10,7 @@
 //   2. A COMMITTED deletion of the develop skill (`git rm -r .claude/skills/develop && git commit`) — the
 //      same real broken-develop state AC-1/AC-2 use, and the permanent-brokenness the spec's AC-7 demo
 //      describes ("with a permanently broken develop skill").
-//   3. Three ticks driven by a CANNED PM (packages/substrate-local/src/test-support/canned-pm-escalation.mjs)
+//   3. Three ticks driven by a CANNED PM (packages/substrate-local/src/test-support/canned-pm-escalation.ts)
 //      that replays the doctrine's exact ztrack commands over the REAL, already model-free runner-refusal
 //      path (runner-frontend.ts's pre-check, proven by launch-verification.test.ts's AC-1/AC-3):
 //        tick 1: dispatch -> refused (non-zero, no session, no effect marker, worktree torn down) -> label
@@ -26,7 +26,7 @@
 // deterministically and durably (it survives a full repo wipe: nothing here depends on a live process or an
 // external service). It does NOT prove that a real-model PM, handed only SKILL.md and the board each tick,
 // independently READS the doctrine and DECIDES to take these exact actions — that judgment is canned in
-// test-support/canned-pm-escalation.mjs (its function body is a direct transcription of SKILL.md :103-132,
+// test-support/canned-pm-escalation.ts (its function body is a direct transcription of SKILL.md :103-132,
 // not independently derived). Model judgment over doctrine is inherently live-only and is NOT re-proven here,
 // consistent with the repo's existing PM-doctrine testing posture (spec AC-7's own text: "verified
 // behaviorally, not unit-tested"; CLAUDE.md's "Built vs designed" already names the sibling case —

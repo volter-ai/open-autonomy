@@ -21,19 +21,26 @@
 // sufficient — every spawnSync/Bun.spawn call in this codebase's dispatch chain builds its child env from
 // (a superset of) `process.env`, so the knob is inherited transitively all the way down.
 //
-//   OA08_SESSION_SENTINEL   — file path; every REAL createAgentWindow call appends a JSON line here
-//                              (`{id, agent, cwd}`). Read by BOTH suites: OA-08's tests assert on its
-//                              presence/absence directly; this stub's own `snapshot()` replays it into
-//                              `windows` (the "session survived" default — see OA_STUB_TF_DIE).
-//   OA08_STUB_PROVIDER_DOWN — '1' => createAgentWindow throws (OA-08's AC-3: "termfleet provider down").
-//   OA_STUB_TF_DIE          — '1' => snapshot() reports NO windows at all, regardless of the sentinel — the
+//   OA08_SESSION_SENTINEL    — file path; every REAL createAgentWindow call appends a JSON line here
+//                              (`{id, agent, cwd}`). OA-08's OWN sentinel channel — its tests assert on its
+//                              presence/absence directly, and (when set) this stub's `snapshot()` replays it
+//                              into `windows` too. Left unset by OA-18's tests (see OA_STUB_TF_SESSIONS_FILE
+//                              below) so the two suites' bookkeeping never entangles.
+//   OA08_STUB_PROVIDER_DOWN  — '1' => createAgentWindow throws (OA-08's AC-3: "termfleet provider down").
+//   OA_STUB_TF_SESSIONS_FILE — file path; a SECOND, independent sentinel channel every REAL
+//                              createAgentWindow call ALSO appends a JSON line to (regardless of whether
+//                              OA08_SESSION_SENTINEL is set) — OA-18's OWN bookkeeping channel, so its tests
+//                              never have to adopt OA-08's naming/semantics. `snapshot()` replays entries
+//                              from EITHER channel that is set (deduped by id) into `windows` — this is the
+//                              "the launched terminal survives" default.
+//   OA_STUB_TF_DIE           — '1' => snapshot() reports NO windows at all, from EITHER channel — the
 //                              session "died at launch" (OA-18 AC-10's fail-path / AC-6's login-prompt
 //                              path: the launch chain still gets a terminalId back from createAgentWindow,
 //                              but the FIRST poll of `runner list` already finds it gone).
-//                              Unset/'0' => snapshot() reports every window the sentinel recorded — the
-//                              session "survives" (OA-08's existing behavior, unchanged; OA-18 AC-10's pass
-//                              path).
-//   OA_STUB_TF_CAPTURE      — the exact string captureTerminal() returns as `.content` — e.g. "DOCTOR-OK",
+//                              Unset/'0' => snapshot() reports every window a set sentinel channel recorded
+//                              — the session "survives" (OA-08's existing behavior, unchanged; OA-18 AC-10's
+//                              pass path).
+//   OA_STUB_TF_CAPTURE       — the exact string captureTerminal() returns as `.content` — e.g. "DOCTOR-OK",
 //                              a captured login-prompt blob, or arbitrary dead-terminal contents. Unset =>
 //                              ''.
 //   OA_STUB_TF_PROVIDER_SINK — file path; every resolveDefaultProvider() call appends the URL it resolved
@@ -52,25 +59,26 @@ export class ProviderClient {
   async createAgentWindow(opts) {
     if (process.env.OA08_STUB_PROVIDER_DOWN === '1') throw new Error('OA stub: termfleet provider unreachable (simulated)');
     const id = 'stub-terminal-' + (++counter) + '-' + Date.now();
-    const sentinel = process.env.OA08_SESSION_SENTINEL;
-    if (sentinel) {
+    const rec = JSON.stringify({ id, agent: opts.name, cwd: opts.cwd }) + '\\n';
+    for (const sentinel of [process.env.OA08_SESSION_SENTINEL, process.env.OA_STUB_TF_SESSIONS_FILE]) {
+      if (!sentinel) continue;
       mkdirSync(dirname(sentinel), { recursive: true });
-      appendFileSync(sentinel, JSON.stringify({ id, agent: opts.name, cwd: opts.cwd }) + '\\n');
+      appendFileSync(sentinel, rec);
     }
     return { result: { terminalId: id } };
   }
   async lifecycle() { return { sessions: [] }; }
   async snapshot() {
     if (process.env.OA_STUB_TF_DIE === '1') return { windows: [] };
-    const sentinel = process.env.OA08_SESSION_SENTINEL;
-    let windows = [];
-    if (sentinel && existsSync(sentinel)) {
-      windows = readFileSync(sentinel, 'utf8').trim().split('\\n').filter(Boolean).map((l) => {
+    const byId = new Map();
+    for (const sentinel of [process.env.OA08_SESSION_SENTINEL, process.env.OA_STUB_TF_SESSIONS_FILE]) {
+      if (!sentinel || !existsSync(sentinel)) continue;
+      for (const l of readFileSync(sentinel, 'utf8').trim().split('\\n').filter(Boolean)) {
         const rec = JSON.parse(l);
-        return { id: 0, name: rec.agent, terminalId: rec.id, lifecycle: {} };
-      });
+        byId.set(rec.id, { id: 0, name: rec.agent, terminalId: rec.id, lifecycle: {} });
+      }
     }
-    return { windows };
+    return { windows: [...byId.values()] };
   }
   async captureTerminal(_terminalId, _lines) {
     return { content: process.env.OA_STUB_TF_CAPTURE || '' };

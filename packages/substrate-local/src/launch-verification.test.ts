@@ -28,6 +28,7 @@ import { dirname, join } from 'node:path';
 import type { AutonomyIR } from '@open-autonomy/core';
 import { compileLocal } from './emit';
 import { skillPathFor } from './runner-frontend';
+import { installStubTermfleet } from './test-support/stub-termfleet';
 
 // --- A. skillPathFor — the pure truth table (AC-6) -----------------------------------------------------
 
@@ -77,60 +78,11 @@ function gitOk(dir: string, args: string[]): string {
   return r.stdout.trim();
 }
 
-// A minimal but functionally REAL `termfleet` + `@termfleet/core` pair — satisfies backend.mjs's exact
-// import surface. createAgentWindow only succeeds (and only writes the OA08_SESSION_SENTINEL sentinel) when
-// actually called; OA08_STUB_PROVIDER_DOWN simulates AC-3's "termfleet's provider down" scenario.
-function installStubTermfleet(dir: string): void {
-  const nm = join(dir, 'node_modules');
-  mkdirSync(join(nm, 'termfleet'), { recursive: true });
-  writeFileSync(
-    join(nm, 'termfleet', 'package.json'),
-    JSON.stringify({ name: 'termfleet', version: '0.0.0-stub', type: 'module', main: './index.js', exports: { '.': './index.js' } }),
-  );
-  writeFileSync(
-    join(nm, 'termfleet', 'index.js'),
-    `import { appendFileSync, existsSync, mkdirSync, readFileSync } from 'node:fs';
-import { dirname } from 'node:path';
-export function providerRefFromUrl(url) { return { url }; }
-let counter = 0;
-export class ProviderClient {
-  constructor(ref) { this.ref = ref; }
-  async createAgentWindow(opts) {
-    if (process.env.OA08_STUB_PROVIDER_DOWN === '1') throw new Error('OA08 stub: termfleet provider unreachable (simulated)');
-    const id = 'stub-terminal-' + (++counter) + '-' + Date.now();
-    const sentinel = process.env.OA08_SESSION_SENTINEL;
-    if (sentinel) {
-      mkdirSync(dirname(sentinel), { recursive: true });
-      appendFileSync(sentinel, JSON.stringify({ id, agent: opts.name, cwd: opts.cwd }) + '\\n');
-    }
-    return { result: { terminalId: id } };
-  }
-  async lifecycle() { return { sessions: [] }; }
-  async snapshot() {
-    const sentinel = process.env.OA08_SESSION_SENTINEL;
-    let windows = [];
-    if (sentinel && existsSync(sentinel)) {
-      windows = readFileSync(sentinel, 'utf8').trim().split('\\n').filter(Boolean).map((l) => {
-        const rec = JSON.parse(l);
-        return { id: 0, name: rec.agent, terminalId: rec.id, lifecycle: {} };
-      });
-    }
-    return { windows };
-  }
-  async closeWindow() { return { ok: true }; }
-}
-`,
-  );
-  mkdirSync(join(nm, '@termfleet', 'core'), { recursive: true });
-  writeFileSync(
-    join(nm, '@termfleet', 'core', 'package.json'),
-    JSON.stringify({ name: '@termfleet/core', version: '0.0.0-stub', type: 'module', exports: { './local-providers.js': './local-providers.js' } }),
-  );
-  writeFileSync(
-    join(nm, '@termfleet', 'core', 'local-providers.js'),
-    `export async function resolveDefaultProvider() { return { baseUrl: 'http://127.0.0.1:0' }; }\n`,
-  );
-}
+// installStubTermfleet is now shared (packages/substrate-local/src/test-support/stub-termfleet.ts, imported
+// above) — OA-18's doctor --live tests need the identical stub with extra knobs (dead-vs-survives,
+// captureTerminal content), so it was extracted rather than re-hand-rolled. Calling it with no extra env
+// vars set (as every test in this file does) reproduces the ORIGINAL always-survives, empty-capture
+// behavior exactly — every test below is unchanged.
 
 const tmps: string[] = [];
 afterEach(() => {

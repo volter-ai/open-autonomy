@@ -62,6 +62,14 @@ policy:
   box:
     # (the WIP ceiling — one develop in flight, one in review — is the PM doctrine in standards/workflow.md;
     # policy.maxConcurrent is the enforced runner cap. No component reads a wip.* key.)
+    # gh-actions runner config. The base profile SHIPS a security scan (security.yml) but, before this,
+    # never made it a required merge gate: a bot PR fires no pull_request (GITHUB_TOKEN anti-recursion), so
+    # security.yml never ran on the agent-PR path and a security finding could never block a merge. Mirrors
+    # soc2-baseline's propose_dispatch_checks: the proposer effect dispatches security-gate.yml (the
+    # dispatched, blocking realization of security.yml) with the PR head sha so its `security` status posts
+    # and native auto-merge waits for it. model/proxy/bot fall back to defaults.
+    gh-actions:
+      propose_dispatch_checks: [security-gate.yml]
     tracker:
       # bin/autonomy-compile.ts's local-runner "next steps" print resolves the ztrack preset name from
       # THIS key first, falling back to the profile directory's basename only if it's absent (a bundled
@@ -79,15 +87,15 @@ policy:
       # standards/risk-and-review.md (the file the develop/reviewer skills actually enforce). Scoped to OA's
       # OWN files by name — NOT broad globs like `scripts/**`, which would block an adopter's own scripts.
       # In an ADOPTER repo, all of scripts/ is OA's INJECTED harness (not the adopter's product), so EVERY
-      # OA-shipped file under scripts/ must be here — incl. the ones merge.yml/security.yml execute
-      # (reconcile-merged-issues.ts, rearm-auto-merge.ts, check-supply-chain.ts) and scripts/prompts/** (the
+      # OA-shipped file under scripts/ must be here — incl. the ones merge.yml/security.yml/security-gate.yml
+      # execute (reconcile-merged-issues.ts, rearm-auto-merge.ts, check-supply-chain.ts) and scripts/prompts/** (the
       # launch→skill mapping) — or an in-scope issue could auto-merge a rewrite of that privileged machinery.
       # Listed by name (NOT scripts/**) so an adopter's own scripts/ isn't blocked. Mirrors
       # standards/risk-and-review.md, which the skills read.
       #
       # BL-29 dev/02 — FORK INSTRUCTION (kept manual, not automated; decision recorded in BACKLOG.md):
       # if you add a script to this profile's `resources:` list above that a carried workflow (merge.yml /
-      # security.yml) EXECUTES, add its path here too, or an in-scope agent PR could auto-merge a rewrite
+      # security.yml / security-gate.yml) EXECUTES, add its path here too, or an in-scope agent PR could auto-merge a rewrite
       # of that privileged machinery through the very gate it's supposed to enforce. A generic "every
       # scripts/ resource must be listed here" check was considered and REJECTED: this repo's own
       # self-driving profile legitimately ships scripts/ resources that are NOT gated here (e.g.
@@ -98,6 +106,9 @@ policy:
       # per-script security judgment call, which is why this stays a documented, human-authored list.
       # MUST be kept complete by hand when OA adds a script.
       human_required_paths:
+        # .github/workflows/** already covers .github/workflows/security-gate.yml (the new dispatched
+        # required-check gate) — same as security.yml, which is likewise not listed by name; both are OA
+        # harness the loop must never auto-merge a rewrite of.
         - .github/workflows/**
         - .codex/skills/**
         - .claude/skills/**
@@ -131,6 +142,7 @@ resources:
   - .claude/settings.json
   - .github/workflows/merge.yml
   - .github/workflows/security.yml
+  - .github/workflows/security-gate.yml   # dispatched, blocking realization of security.yml on bot PRs — posts `security`
   - .github/dependabot.yml
   # the gate scripts those carried workflows call — shared standards, byte-identical across carrying
   # profiles (docs/CODE_HOST_RESOURCES.md)

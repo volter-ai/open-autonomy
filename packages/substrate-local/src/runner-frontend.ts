@@ -154,6 +154,23 @@ function manifestCodeHost(): string {
   return m.codeHost ?? '';
 }
 
+// The profile's `policy.box.gh-actions` config (emitAutonomy carries `ir.policy.box` verbatim into the
+// manifest's `policy` field, keyed by runner name — see packages/core/src/manifest.ts). The github substrate
+// reads the SAME key (packages/substrate-github/src/emit.ts's `githubBox`, with a `.github` alias fallback)
+// to learn a profile's EXTRA required-check/reviewer gates (e.g. soc2-baseline's `supply-chain` + `codeql`
+// gates, or simple-gh-sdlc's `security` gate); the local runner mirrors that lookup so the SAME declared
+// policy also threads through the local propose effect, not just github's.
+function manifestGhActionsBox(): { propose_dispatch_checks?: string[]; propose_dispatch_reviews?: string[] } {
+  const path = '.open-autonomy/autonomy.yml';
+  if (!existsSync(path)) return {};
+  const m = Bun.YAML.parse(readFileSync(path, 'utf8')) as { policy?: Record<string, unknown> };
+  const box = (m.policy?.['gh-actions'] ?? m.policy?.github ?? {}) as {
+    propose_dispatch_checks?: string[];
+    propose_dispatch_reviews?: string[];
+  };
+  return box;
+}
+
 // --- the HUMAN route: a kind:human actor cannot be executed or watched -------------------------------------
 // This is the THIRD launch realization (beside script-via-bun and skill-via-termfleet): a person. `launch`
 // PARKS a session instead of running anything, and it NEVER auto-completes — completion is an external
@@ -487,6 +504,7 @@ export async function launch(agent: string, params: LaunchParams = {}): Promise<
     if (r.stderr) process.stderr.write(r.stderr);
     const id = terminalIdFromLaunch(r.stdout ?? '');
     if (id) {
+      const ghBox = manifestGhActionsBox();
       recordPostSessionEffect({
         id,
         agent,
@@ -504,6 +522,18 @@ export async function launch(agent: string, params: LaunchParams = {}): Promise<
           // (local -> a termfleet reviewer session). github instead carries REVIEW_WORKFLOW; both resolve to
           // "launch the reviewer for this PR", the substrate-correct realization of develop's `review:` edge.
           REVIEW_AGENT: review,
+          // Profile-declared EXTRA required-check/reviewer workflows (e.g. simple-gh-sdlc's `security` gate,
+          // soc2-baseline's `supply-chain` + `codeql` gates) — agent-propose.ts dispatches each via `gh
+          // workflow run` exactly as it does on github (packages/substrate-github/src/emit.ts:363-367), since
+          // these ARE github workflows (they run on Actions regardless of which substrate launched the agent
+          // — runner ⟂ code host). Empty/absent unless the profile declares
+          // policy.box.gh-actions.propose_dispatch_checks/_reviews, so this is a no-op everywhere else.
+          ...(ghBox.propose_dispatch_checks?.length
+            ? { EXTRA_CHECK_WORKFLOWS: ghBox.propose_dispatch_checks.join(',') }
+            : {}),
+          ...(ghBox.propose_dispatch_reviews?.length
+            ? { EXTRA_REVIEW_WORKFLOWS: ghBox.propose_dispatch_reviews.join(',') }
+            : {}),
           // The runner injects no repo identity: the effect resolves its own repo from the remote
           // (gh `{owner}/{repo}`), keeping the runner code-host-blind.
         },

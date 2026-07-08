@@ -93,6 +93,21 @@ describe('the review edge is realized through the runner seam (Blocker 2)', () =
   });
 });
 
+describe('profile-declared EXTRA required-check/reviewer workflows thread through the LOCAL propose effect too', () => {
+  // Mirrors the REVIEW_AGENT test above: runner-frontend.ts is emitted VERBATIM (no per-IR templating —
+  // it reads .open-autonomy/autonomy.yml at RUNTIME via manifestGhActionsBox), so the assertion is on the
+  // shipped source reading the same `policy.box.gh-actions` key the github substrate reads (emit.ts:363-367)
+  // and recording it in the marker env exactly like REVIEW_AGENT, not on per-compile output differing.
+  test('local runner.ts records EXTRA_CHECK_WORKFLOWS/EXTRA_REVIEW_WORKFLOWS in the marker, read from policy.box.gh-actions', () => {
+    const rt = compileLocal(ghLocalIr).generated['scripts/runner.ts'];
+    expect(rt).toContain('manifestGhActionsBox'); // reads the same policy.box.gh-actions key the github substrate reads
+    expect(rt).toContain("m.policy?.['gh-actions'] ?? m.policy?.github"); // same key + alias fallback as githubBox
+    expect(rt).toContain('EXTRA_CHECK_WORKFLOWS: ghBox.propose_dispatch_checks.join'); // recorded in the marker env
+    expect(rt).toContain('EXTRA_REVIEW_WORKFLOWS: ghBox.propose_dispatch_reviews.join');
+    expect(rt).toContain('ghBox.propose_dispatch_checks?.length'); // no-op (key absent) unless the profile declares it
+  });
+});
+
 describe('mergeInFlight — a finished-but-unproposed session stays in-flight (no duplicate PR)', () => {
   const marker = (id: string, agent: string, ref = '') => ({ id, agent, ref, worktree: `/wt/${id}`, effect: 'scripts/agent-propose.ts', env: {} });
 

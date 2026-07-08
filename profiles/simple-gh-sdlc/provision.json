@@ -1,0 +1,13 @@
+{
+  "$comment": "simple-gh-sdlc provisioning manifest (scripts/provision-target-repo.ts). PROFILE-DERIVED branch-protection control: `security` (the dispatched, blocking realization of security.yml — .github/workflows/security-gate.yml, wired via policy.box.gh-actions.propose_dispatch_checks) joins `ci` + `agent-review` as a default REQUIRED merge gate, so an agent-authored PR can never land while a security finding (zizmor high+ or a supply-chain failure) is red. Kept MINIMAL relative to soc2-baseline's manifest: no enforce_admins/required_reviews/required_signatures hardening, no compliance labels, no model-proxy variables — this is the generic profile's floor, not the SOC 2 baseline.",
+  "description": "open-autonomy simple-gh-sdlc install",
+  "private": true,
+  "required_secrets": [],
+  "variables": [],
+  "labels": [],
+  "branch_protection": {
+    "branch": "main",
+    "required_checks": ["ci", "agent-review", "security"],
+    "enforce_admins": true
+  }
+}

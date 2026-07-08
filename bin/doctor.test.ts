@@ -44,6 +44,18 @@ function cli(args: string[], cwd: string, env: Record<string, string> = {}) {
   return spawnSync('node', [CLI, ...args], { cwd, encoding: 'utf8', env: { ...process.env, ...env } });
 }
 
+// Under concurrent full-gate load the spawned packed CLI can occasionally yield empty stdout (or an
+// outright spawn error) rather than JSON -- a bare `JSON.parse(r.stdout)` then throws an opaque
+// `Unexpected EOF`. This guard fails with a clear diagnostic (spawn error / status / signal / stderr)
+// instead, without changing the outcome of any passing assertion.
+function parseCliJson(r: ReturnType<typeof cli>) {
+  if (r.error) throw new Error(`CLI spawn error: ${r.error}`);
+  if (!r.stdout || !r.stdout.trim()) {
+    throw new Error(`CLI produced empty stdout (status=${r.status}, signal=${r.signal ?? 'none'}); stderr: ${r.stderr ?? ''}`);
+  }
+  return JSON.parse(r.stdout);
+}
+
 const tmps: string[] = [];
 function track(dir: string): string {
   tmps.push(dir);
@@ -78,7 +90,7 @@ describe('doctor CLI — JSON shape + exit-code contract (AC-13)', () => {
     gitInit(dir);
     commitAll(dir, 'harness');
     const r = cli(['doctor', '--json'], dir);
-    const parsed = JSON.parse(r.stdout);
+    const parsed = parseCliJson(r);
     expect(Array.isArray(parsed.checks)).toBe(true);
     expect(parsed.checks.map((c: { id: string }) => c.id)).toEqual(['self', 'env', 'provider', 'auth', 'harness', 'skills', 'live']);
     for (const c of parsed.checks) {
@@ -245,7 +257,7 @@ describe('doctor CLI — provider identity (AC-5, F-8): a plain HTTP occupant is
     const port = (server.address() as { port: number }).port;
     try {
       const r = cli(['doctor', '--json'], dir, { TERMFLEET_PROVIDER_URL: `http://127.0.0.1:${port}` });
-      const parsed = JSON.parse(r.stdout);
+      const parsed = parseCliJson(r);
       const provider = parsed.checks.find((c: { id: string }) => c.id === 'provider');
       expect(provider.status).toBe('FAIL');
       // Never the SKIP-path conclusion ("no provider is running yet") -- a FAIL naming a real occupant is
@@ -301,7 +313,7 @@ describe('doctor CLI — --live (AC-6, AC-10): the real dispatch chain end-to-en
       OA_STUB_TF_SESSIONS_FILE: sessionsFile,
       OA_DOCTOR_LIVE_SURVIVE_MS: '800',
     });
-    const parsed = JSON.parse(r.stdout);
+    const parsed = parseCliJson(r);
     const live = parsed.checks.find((c: { id: string }) => c.id === 'live');
     expect(live.status).toBe('PASS');
     expect(live.detail).toContain('survived');
@@ -321,7 +333,7 @@ describe('doctor CLI — --live (AC-6, AC-10): the real dispatch chain end-to-en
       OA_STUB_TF_CAPTURE: deadTerminal,
       OA_DOCTOR_LIVE_SURVIVE_MS: '500',
     });
-    const parsed = JSON.parse(r.stdout);
+    const parsed = parseCliJson(r);
     const live = parsed.checks.find((c: { id: string }) => c.id === 'live');
     expect(live.status).toBe('FAIL');
     expect(live.detail).toContain(deadTerminal); // the exact evidence a real tmux reaper would have destroyed
@@ -343,7 +355,7 @@ describe('doctor CLI — --live (AC-6, AC-10): the real dispatch chain end-to-en
       OA_DOCTOR_LIVE_SURVIVE_MS: '500',
     });
     expect(r.status).not.toBe(0);
-    const parsed = JSON.parse(r.stdout);
+    const parsed = parseCliJson(r);
     // (a) the static check ALSO catches it, unconditionally of --live (F-13's first line of defense) — never
     // citing `claude --version` as evidence.
     const auth = parsed.checks.find((c: { id: string }) => c.id === 'auth');

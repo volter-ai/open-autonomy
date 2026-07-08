@@ -198,7 +198,7 @@ describe('AC-7: a REAL tick lands a REAL (stub) session on the PINNED provider â
     const sink = join(dir, 'oa09-provider-sink.log');
     const sessions = join(dir, 'oa09-sessions.log');
     try {
-      const env = { ...process.env };
+      const env: Record<string, string | undefined> = { ...process.env };
       delete env.TERMFLEET_PROVIDER_URL; // this dev box's own ambient pin (if any) must not leak in
       delete env.AUTONOMY_PROVIDER_URL_SOURCE;
       env.TERMFLEET_HOME = home; // isolates ~/.termfleet/current.json to our staged decoy
@@ -240,7 +240,7 @@ describe('AC-7: a REAL tick lands a REAL (stub) session on the PINNED provider â
     const sink = join(dir, 'oa09-provider-sink.log');
     const sessions = join(dir, 'oa09-sessions.log');
     try {
-      const env = { ...process.env };
+      const env: Record<string, string | undefined> = { ...process.env };
       delete env.TERMFLEET_PROVIDER_URL;
       delete env.AUTONOMY_PROVIDER_URL_SOURCE;
       env.TERMFLEET_HOME = home;
@@ -278,7 +278,7 @@ describe('AC-7 strengthening: precedence, asserted on the REAL landed session (n
     const sessions = join(dir, 'oa09-sessions.log');
     const ambientUrl = 'http://127.0.0.1:9999';
     try {
-      const env = { ...process.env, TERMFLEET_PROVIDER_URL: ambientUrl };
+      const env: Record<string, string | undefined> = { ...process.env, TERMFLEET_PROVIDER_URL: ambientUrl };
       delete env.AUTONOMY_PROVIDER_URL_SOURCE;
       env.TERMFLEET_HOME = home;
       env.OA_STUB_TF_PROVIDER_SINK = sink;
@@ -307,7 +307,7 @@ describe('AC-7 strengthening: precedence, asserted on the REAL landed session (n
     const sink = join(dir, 'oa09-provider-sink.log');
     const sessions = join(dir, 'oa09-sessions.log');
     try {
-      const env = { ...process.env, TERMFLEET_PROVIDER_URL: '' }; // the `VAR= node scheduler/run.mjs` idiom
+      const env: Record<string, string | undefined> = { ...process.env, TERMFLEET_PROVIDER_URL: '' }; // the `VAR= node scheduler/run.mjs` idiom
       delete env.AUTONOMY_PROVIDER_URL_SOURCE;
       env.TERMFLEET_HOME = home;
       env.OA_STUB_TF_PROVIDER_SINK = sink;

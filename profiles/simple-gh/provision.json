@@ -1,0 +1,13 @@
+{
+  "$comment": "simple-gh provisioning manifest (scripts/provision-target-repo.ts). This preset carries NO agent-review status and NO auto-merge — the deterministic merge gate is the repo's OWN real CI, required + enforce_admins:true (docs/INSTALL-AGENT.md's ranking: 'your real CI in the gate' is #1). `required_checks` below is a PLACEHOLDER: replace \"ci\" with your repo's actual PR CI check-run name(s) (e.g. the job name(s) your workflow posts) before provisioning a real target repo — the manager's merge doctrine (SKILL.md §5) refuses to merge unless every required check here is green, so this list must match what your CI actually posts. No model-selection variables (check:provision forbids PUBLIC_AGENT_*_MODEL/_PROVIDER/_MODELS here — the model tiers are abstract labels owned by skills/manager/SKILL.md, never a repo variable).",
+  "description": "simple-gh install — repo CI is the required merge gate; NO auto-merge; the manager merges each green+reviewed PR",
+  "private": true,
+  "required_secrets": [],
+  "variables": [],
+  "labels": [],
+  "branch_protection": {
+    "branch": "main",
+    "required_checks": ["ci"],
+    "enforce_admins": true
+  }
+}

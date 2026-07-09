@@ -205,7 +205,10 @@ the repo root. **Order matters: commit the harness first, wire the gate last.**
 
 ```bash
 # 1. Runner deps IN this repo (use the detected PM — do NOT npm-install into a bun/pnpm repo):
-npm install termfleet            # or: bun add termfleet
+npm install termfleet @termfleet/core            # or: bun add termfleet @termfleet/core
+#    BOTH packages are required — the emitted local-runner backend bare-imports
+#    @termfleet/core/local-providers.js (packages/substrate-local/src/backend.mjs:8,16-17); termfleet
+#    alone leaves that import unresolved (OA-19).
 npm install -D ztrack            # or: bun add -d ztrack    (a PROJECT dep so its preset resolves)
 #    NODE_ENV=production / npm omit=dev makes the -D install a silent no-op (exits 0, installs nothing) —
 #    use: npm install -D ztrack --include=dev (works on every omit source; NODE_ENV=development only helps

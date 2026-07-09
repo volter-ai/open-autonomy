@@ -270,6 +270,28 @@ bun bin/autonomy-compile.ts profiles/hello gh-actions /tmp/hello-gh
   the permission split, native auto-merge, done = merged PR (self-driving's merge model on a generic
   ztrack SDLC). Targets **`gh-actions` + `local`** (runner ⟂ code host — agents on Actions *or* your
   machine, auto-merging PRs on GitHub either way); uses the ztrack `simple-gh-sdlc` preset.
+- **`simple-gh/`** — the **single-manager** GitHub PR loop. ONE agent (`manager`, `cron: */30 * * * *`) —
+  research/plan/review/implementation are harness-native **subagents** it dispatches in-session
+  (per-dispatch `model` override + worktree isolation), not separate OA actors;
+  `policy.box.models.{research,implement}` are abstract tier labels the SKILL.md maps to concrete models.
+  Plans are **docs** registered as ztrack document sources, not hand-authored issues. The merge boundary
+  drops the auto-merge/`agent-review` pair entirely: the manager itself opens and **merges** each PR
+  (`code:propose` only — no `code:review`, no `code:merge`), but only once every required repo CI check
+  is green **and** a freshly-dispatched review subagent has recorded a `pass` verdict on the current head
+  SHA — twin's owner-decided landing model (a human merges every green PR by hand), agent-executed as the
+  operator's deputy. Targets **`local` only**, `codeHost: github`. Honesty (see
+  `profiles/simple-gh/README.md`): on a shared local credential there is no independent reviewer identity,
+  so the *deterministic* gate is branch protection (real CI required + `enforce_admins: true`), not agent
+  independence; and the model tiering works only on the Claude Code harness — `TERMFLEET_AGENT=codex`
+  degrades it to one model. Contrast with `simple-gh-sdlc`: that profile auto-merges behind an
+  `agent-review` check (a self-check on local, but a real independent gate on `gh-actions`); `simple-gh`
+  never auto-merges and never claims an independent review identity — it claims exactly the
+  real-CI-plus-recorded-verdict gate it enforces, nothing more. Contrast with `soc2-baseline`: that
+  profile is `simple-gh-sdlc` plus a full deterministic compliance control layer (SBOM, CodeQL, signed
+  commits, per-SHA human approval); `simple-gh` carries none of that — it is deliberately the simplicity
+  floor, not a compliance posture. `merge.yml` / `reconcile-merged-issues.ts` and the security/dependabot
+  surface are deliberately not carried by default (GitHub-Issues-only machinery and adopter opt-in,
+  respectively — see the profile README's re-add condition).
 - **`soc2-baseline/`** — `simple-gh-sdlc` + a **deterministic SOC 2 control layer**. Same 4-agent PR loop,
   but every install ships the SOC 2-relevant controls baked in as CI / config / branch-protection / policy
   files (not agent behavior): the merge boundary + a per-head-SHA human-approval gate, `supply-chain` +

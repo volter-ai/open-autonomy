@@ -1,5 +1,63 @@
 # Changelog
 
+## 0.4.2
+
+**The fixed npx install path.** `0.4.0`/`0.4.1` published DOA on `compile` (OA-01: a missing
+`dist/egress-guard.sh` crashed `compile`/`lint`/`upgrade`/`conformance` on the packed tarball) — every
+adopter since has had to clone `main` instead of running `npx open-autonomy`. This release folds in the
+full 18-item adoption-fixes backlog (OA-01..OA-18) that closed that gap, the `simple-gh-sdlc` security-gate
+hardening, and a new bundled profile for locally-run agents landing PRs on GitHub.
+
+### Fixed
+- **Broken npm publish (OA-01).** `prepublishOnly` now runs `check:release-consistency` +
+  `check:pack-smoke` — the packed tarball is installed into a throwaway project and every CLI verb is run
+  under plain `node`, from the packed artifact, never the source tree — so a repeat of the missing-file
+  publish is caught before it ships, not after.
+- **Install guards against the failure modes that silently corrupted or froze fresh installs:** an
+  overlay collision now refuses by name with a printed receipt instead of clobbering (`.claude/settings.json`
+  gets a structured merge, OA-10); a fresh install lands **paused** so a pre-existing backlog is never
+  dispatched before the operator reviews it, and the loop driver hard-stops on an uncommitted harness
+  instead of producing zombie workers that die at launch (OA-03/OA-07); `NODE_ENV=production` (or any
+  `omit=dev`-equivalent) devDep no-op installs are now detected by `preflight` instead of silently
+  installing nothing (OA-06); `preflight` also detects npm-workspace/package-name collisions with the
+  runner's own dependency tree before they shadow a bare `import` several process-hops deep (OA-04).
+- **termfleet coexistence.** A shared/lived-in box's existing termfleet console or provider is now
+  correctly classified instead of misread as "free" (`preflight`'s port probe reads the real body shape,
+  not just an HTTP status); the resolved provider is pinned **durably** into `scheduler/schedule.json` via
+  `compile --provider-url`, surviving new shells/supervisors/re-runs, so an unpinned loop can no longer
+  silently attach to someone else's fleet (OA-09).
+- **`open-autonomy doctor --json`** (OA-18): a 7-check, read-only, end-to-end install-evidence gate
+  (`self`/`env`/`provider`/`auth`/`harness`/`skills`/`live`) that verifies the install would actually run
+  before anyone leaves the loop unattended — replacing hand-rolled probes (a bare curl misreading a
+  foreign provider, `--version` misread as a sign-in check, etc.) with one machine-parseable verdict.
+- **One canonical Local install checklist** (OA-16, plus the doc-consolidator fixes it absorbed —
+  OA-05/OA-11/OA-12/OA-13/OA-14/OA-17): every load-bearing local-install fact (deps, ports/pin, the commit
+  step, the tracker, the stop-conditions, teardown) now has exactly one home in
+  `docs/OPERATIONS.md#local-install-checklist`, with `docs/INSTALL-AGENT.md` walking an installing agent
+  through it step by step instead of duplicating (or drifting from) it.
+- **`simple-gh-sdlc`'s security scan is now a required, blocking merge gate** (#122), not advisory-only: a
+  dispatched `security-gate.yml` posts a blocking `security` commit status for bot-authored PRs (which fire
+  no `pull_request`), `provision.json` requires it in branch protection alongside `ci` + `agent-review`, and
+  the reviewer skill now treats a red `security` check as a hard blocker (`agent-review=failure`,
+  `human-required`) rather than a non-gating signal. Closes a hole where a security-flagged agent PR was
+  mergeable with the check red.
+
+### Added
+- **`profiles/simple-gh`** (#129): a bundled profile for running agents on your own machine (local
+  runner) while landing changes as **manually-merged PRs on GitHub** (code host) — one declared `manager`
+  agent (`code:propose` + `tasks:author` + `tasks:converse`) that dispatches model-tiered in-session
+  subagents for research/plan/implement/review on isolated git worktrees, lands plans as ztrack document
+  sources, and merges each PR itself only once every required CI check is green **and** a fresh,
+  sha-pinned review verdict is recorded — never native auto-merge. See `profiles/README.md`'s gallery
+  entry for the honesty section (single credential, real-CI-as-gate, Claude-harness-only model tiering)
+  and the contrast with `simple-gh-sdlc`.
+
+### Migration notes
+- Compiled installs on the local runner: re-compile with `--provider-url` to pick up the durable provider
+  pin (OA-09), and run `npx open-autonomy doctor --json` once to confirm the 7-check gate passes before
+  leaving the loop unattended.
+- No breaking changes to existing compiled profiles; `simple-gh` is additive (new profile name only).
+
 ## 0.4.1
 
 Security patch for the `human-approval` gate shipped in 0.4.0's profile resources — upgrade compiled

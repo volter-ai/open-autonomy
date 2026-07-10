@@ -77,14 +77,17 @@ fast (stronger than last-gen frontier), so fix the prompt/tool, never route arou
 
 ### `profiles/self-driving/` — the dogfood org (compiles to this repo's root)
 
-- `ir.yml` — the **roster** (pm, developer, reviewer, planner, strategist, strategy_reviewer), their `kind`,
-  capabilities, crons, review gates; the **policy box** (`risk.human_required_paths`/topics, merge rules,
-  `maintainer_block_labels`, planner label prefixes); the **`resources:`** list (files carried verbatim).
+- `ir.yml` — the **roster** (pm, draft, develop, reviewer, planner, strategist, strategy_reviewer, and the
+  `kind: human` maintainer), their `kind`, capabilities, crons, review gates; the **policy box**
+  (`risk.human_required_paths`/topics, merge rules, `maintainer_block_labels`, planner label prefixes,
+  `tracker.ztrackPreset`); the **`resources:`** list (files carried verbatim).
 - `skills/<agent>/SKILL.md` — each agent's doctrine (prose behavior).
 - `.open-autonomy/` — compiled `autonomy.yml`, `roadmap.yml` (the two-layer roadmap), `review-rubric.yml`,
   `strategy-rubric.yml`, `strategist-sources.json`.
-- `.github/workflows/` — hand-written profile workflows: `ci.yml`, `human-approval.yml`,
-  `open-autonomy-preflight.yml` (the per-agent `developer.yml`/`pm.yml`/… are **generated**, not here).
+- `.github/workflows/` — hand-written profile workflows: `human-approval.yml`, `security.yml`,
+  `security-gate.yml`, `merge.yml`, `open-autonomy-preflight.yml` (the per-agent `develop.yml`/`pm.yml`/…
+  are **generated**, not here; `ci.yml`/`codeql.yml`/`deploy.yml` are REPO-owned since the U5 sdlc rebase —
+  they live only at root, not in the profile).
 - `AGENTS.md` — fleet-facing guidance (the agent-doctrine mirror of this file).
 
 ### `scripts/` + `bin/` — the runtime backend + CLIs

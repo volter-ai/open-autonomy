@@ -15,7 +15,7 @@
 `compileGithub` was doing two jobs. Separate them by what *generates* the file:
 
 - **Emit** — only what the engine **derives from the IR**:
-  - the agent-runner workflows (`developer.yml`, … — derived from `ir.agents`; vanish on the local substrate)
+  - the agent-runner workflows (`develop.yml`, … — derived from `ir.agents`; vanish on the local substrate)
   - security **DATA** materializations: `.github/zizmor.yml` (the guarded agent-workflow names) and
     `.open-autonomy/human-required-paths.json` (`policy.box.risk.human_required_paths`). Not authored logic —
     the IR projected into a runtime-readable form.
@@ -55,7 +55,7 @@ leaking into the agent runners; it's now a resource, decoupled from any agent ru
 ## Where each file lives (current, after the split)
 
 **Emitted (derived from the IR):**
-- `developer/pm/planner/reviewer/strategist/strategy_reviewer.yml`, `.github/agent-control.mjs`
+- `draft/develop/pm/planner/reviewer/strategist/strategy_reviewer.yml`, `.github/agent-control.mjs`
   - a `code:propose` agent's workflow materializes the actor's output (push the branch + open the PR) and
     then *dispatches* the code-host resources it can't fire itself (`ci`, `agent-review`, `human-approval`,
     `merge`) — it no longer arms auto-merge inline.

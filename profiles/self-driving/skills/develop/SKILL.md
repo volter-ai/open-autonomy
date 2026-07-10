@@ -37,9 +37,19 @@ the PR, request review, or merge.
    **EDIT `$ISSUE_MD` in place — never rebuild it from scratch.** A loose-file `ztrack check` reads the
    `Assignee: <login>` line at the top of the body as the issue's owner; drop it and `check` fails
    `issue_missing_assignee` even with perfect evidence. Preserve that line (and the existing AC ids) verbatim.
-3. Judge whether the work is clear-cut given the issue + the constitution + the roadmap item it may belong
-   to. If completing it requires a decision you are not authorized to make (see Escalate), stop and escalate
-   rather than proceed.
+   **Then read the CONTEXT, not just the body — on a rework, the body alone is not the spec.** Fetch the
+   issue's **comments** (`gh issue view "$ZTRACK_ISSUE" --json comments`) and read them: the PM's dispatch
+   comment (an `oa-rework: <k>` marker means this is a RE-develop, and that comment states the exact failure
+   you were relaunched to fix — fixing it IS the task, on top of the ACs), maintainer clarifications and
+   recorded decisions, and your own prior notes. If a prior PR exists for this issue's branch
+   (`gh pr list --head "agent/issue-$ZTRACK_ISSUE" --state all --json number,state`), read the **reviewer's
+   findings** (`gh pr view <pr> --json comments,reviews` + the failing check's description) and the **CI
+   failure** (`gh pr checks <pr>`, `gh run view <run-id> --log-failed`) so you fix the actual defect instead
+   of re-proposing the same change. Read the relevant source files and current CI/review context (use `gh`
+   as needed) before writing code.
+3. Judge whether the work is clear-cut given the issue + its comment/review history + the constitution + the
+   roadmap item it may belong to. If completing it requires a decision you are not authorized to make (see
+   Escalate), stop and escalate rather than proceed.
 4. Make sure your commits land on `agent/issue-$ZTRACK_ISSUE` so they become the PR. The runner may already
    have placed you on it (a local runner gives you an isolated worktree already on that branch); create it
    only if needed — don't fail if you're already there:

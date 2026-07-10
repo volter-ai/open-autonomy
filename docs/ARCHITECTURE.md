@@ -72,7 +72,7 @@ enforcement is structural: the capability/permission split + branch protection +
 There are two normal ways work starts:
 
 - Maintainer-directed: a maintainer comments `/agent <agent>` to launch one by name
-  (`/agent developer`, `/agent reviewer`) or `/agent pause`, `/agent status`, etc. Only a
+  (`/agent develop`, `/agent reviewer`) or `/agent pause`, `/agent status`, etc. Only a
   maintainer (OWNER/MEMBER/COLLABORATOR) can drive these; other commenters are ignored.
 - PM-directed: the scheduled or manual PM workflow sweeps eligible issues,
   writes a visible status or command comment, and dispatches the matching
@@ -223,9 +223,9 @@ docs/
     security.md
 .github/
   workflows/
-    developer.yml … strategy_reviewer.yml      # GENERATED per agent (runner substrate)
-    ci.yml  human-approval.yml  security.yml    # code-host RESOURCES (carried, like docs/standards)
-    codeql.yml  deploy.yml  open-autonomy-preflight.yml
+    draft.yml develop.yml … strategy_reviewer.yml  # GENERATED per agent (runner substrate)
+    human-approval.yml  security.yml  security-gate.yml  open-autonomy-preflight.yml  # code-host RESOURCES (carried, like docs/standards)
+    ci.yml  codeql.yml  deploy.yml               # REPO-OWNED (this repo's own CI/SAST/deploy — not profile content since the U5 sdlc rebase)
   zizmor.yml                                    # GENERATED (derived: the agent-workflow baseline)
   dependabot.yml                                # code-host RESOURCE
   agent-control.mjs                             # GENERATED (operator control plane)

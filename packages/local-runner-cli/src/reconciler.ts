@@ -19,6 +19,7 @@ import { buildTickEnv } from './env.ts';
 import { type EligibilityVariant, makeEligibilityCheck } from './eligibility.ts';
 import { defaultSessionRunner, listSessionsBestEffort } from './sessions.ts';
 import { recordFire } from './status.ts';
+import { runPreflight } from './preflight.ts';
 
 const FAST_DEATH_MS = 60_000; // "ended within 60s of launch" (II.6.1 change 3, verbatim)
 const BACKOFF_CAP_MS = 30 * 60 * 1000; // cap 30 min (verbatim)
@@ -31,9 +32,11 @@ interface ReconcilerState {
   eligible: () => boolean;
 }
 
-/** 2x per consecutive fast-death (verbatim), engaging once the 3rd consecutive fast death is observed.
- *  Base unit is the script's OWN min-gap floor so the safety scales with whatever cadence is configured. */
-function backoffMsFor(n: number, intervalMs: number): number {
+/** 2x per consecutive fast-death (verbatim), engaging once the 3rd consecutive fast death is observed
+ *  (n=3 → 2x, n=4 → 4x, n=5 → 8x, …, capped at 30 min). Base unit is the script's OWN min-gap floor so
+ *  the safety scales with whatever cadence is configured. Exported for direct unit-testing of the
+ *  escalation curve (driving 4+ real fast-death cycles through the heartbeat would be slow and flaky). */
+export function backoffMsFor(n: number, intervalMs: number): number {
   if (n < 3) return 0;
   return Math.min(intervalMs * 2 ** (n - 2), BACKOFF_CAP_MS);
 }
@@ -60,6 +63,14 @@ export interface StartOptions {
   pollMs?: number;
   idleReapMs?: number;
   sessionRunnerFactory?: (cwd: string) => Promise<SessionRunner | null>;
+  /** the env object OA-09's AUTONOMY_PROVIDER_URL_SOURCE export is written into and every tick env is
+   *  built from (default process.env). Tests inject their own to observe the export. */
+  ambient?: NodeJS.ProcessEnv;
+  /** OA-09 auto-discovery hook forwarded to the preflight (see preflight.ts). */
+  resolveDefault?: () => Promise<{ baseUrl: string; source: string }>;
+  /** test hook — the fast-death threshold (default 60s, run.mjs verbatim). Only tests shrink this: the
+   *  healthy-lifetime reset path is otherwise untestable without a real 60s session. */
+  fastDeathMs?: number;
   /** test hook — called once per heartbeat after all work is done for that iteration. */
   onHeartbeat?: (n: number) => void;
 }
@@ -67,13 +78,27 @@ export interface StartOptions {
 export async function start(opts: StartOptions = {}): Promise<void> {
   const cwd = opts.cwd ?? process.cwd();
   const proc = opts.proc ?? defaultProc;
+  const ambient = opts.ambient ?? process.env;
   const signal = opts.signal;
   const pollMs = Math.max(1000, opts.pollMs ?? Number(process.env.AUTONOMY_REAP_POLL_MS ?? 20000));
   const idleReapMs = opts.idleReapMs ?? Number(process.env.AUTONOMY_IDLE_REAP_MS ?? 60000);
+  const fastDeathMs = opts.fastDeathMs ?? FAST_DEATH_MS;
 
   const schedule: NormalizedSchedule = loadSchedule(cwd);
   const reconciled = reconciledScriptsOf(schedule);
   const others = otherScriptsOf(schedule);
+
+  // The full run.mjs guard chain (termfleet-installed / OA-04 collision probe / OA-09 provider-origin
+  // log + AUTONOMY_PROVIDER_URL_SOURCE export / OA-03 uncommitted-harness) — run BEFORE the heartbeat
+  // loop, exactly like run.mjs ran it top-level before both modes. Shared with `oa once` via runPreflight
+  // so the two modes can never drift apart on what they refuse.
+  const pre = await runPreflight(schedule, {
+    cwd,
+    proc,
+    ambient,
+    ...(opts.resolveDefault ? { resolveDefault: opts.resolveDefault } : {}),
+  });
+  if (!pre.ok) throw new Error(pre.message ?? '[oa] start: preflight failed — see errors above');
 
   const harness = process.env.TERMFLEET_AGENT || 'claude';
   let agents = new Set<string>();
@@ -128,9 +153,9 @@ export async function start(opts: StartOptions = {}): Promise<void> {
       if (st.launchedAt && !inFlight) {
         const lifetimeMs = now - st.launchedAt;
         st.launchedAt = 0;
-        if (lifetimeMs < FAST_DEATH_MS) {
+        if (lifetimeMs < fastDeathMs) {
           st.consecutiveFastDeaths += 1;
-          console.error(`[oa] ${label}: session ended after ${lifetimeMs}ms (< ${FAST_DEATH_MS}ms) — consecutive fast-deaths now ${st.consecutiveFastDeaths}`);
+          console.error(`[oa] ${label}: session ended after ${lifetimeMs}ms (< ${fastDeathMs}ms) — consecutive fast-deaths now ${st.consecutiveFastDeaths}`);
           if (st.consecutiveFastDeaths >= 3) {
             st.backoffUntil = now + backoffMsFor(st.consecutiveFastDeaths, intervalMs);
             console.error(`[oa] ${label}: CRASH-LOOP BACKOFF engaged (${st.consecutiveFastDeaths} consecutive fast deaths) — next attempt not before ${new Date(st.backoffUntil).toISOString()}`);
@@ -153,7 +178,7 @@ export async function start(opts: StartOptions = {}): Promise<void> {
         // inside the min-gap floor — no log (would spam every heartbeat).
       } else if (st.eligible()) {
         console.error(`[oa] ${label}: firing (eligible, min-gap elapsed, not in flight, no backoff)`);
-        const env = buildTickEnv(schedule.env);
+        const env = buildTickEnv(schedule.env, ambient);
         const result = proc(script.cmd, [], { shell: true, stdio: 'inherit', env });
         // Last ACTUAL fire — deliberately NOT advanced while paused/in-flight/backed-off/ineligible, so
         // that unpausing (or backoff/eligibility clearing) lets it fire on the very NEXT heartbeat rather
@@ -182,7 +207,7 @@ export async function start(opts: StartOptions = {}): Promise<void> {
       const last = otherLastFire.get(key) ?? 0;
       const intervalMs = script.intervalSeconds * 1000;
       if (now - last >= intervalMs) {
-        if (!paused) proc(script.cmd, [], { shell: true, stdio: 'inherit', env: buildTickEnv(schedule.env) });
+        if (!paused) proc(script.cmd, [], { shell: true, stdio: 'inherit', env: buildTickEnv(schedule.env, ambient) });
         otherLastFire.set(key, now); // advances even while paused — matches pre-U4 behavior
       }
     }

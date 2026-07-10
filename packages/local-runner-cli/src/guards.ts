@@ -1,7 +1,9 @@
 // Preflight guards ported verbatim from run.mjs (S6/T6, unchanged in either fork): the termfleet
 // dependency check, the OA-04 dep-integrity collision probe (RUNNER_SPECS), and the OA-03
-// uncommitted-harness guard. `doctor` folds the termfleet + OA-04 checks in as one of its checks; `start`/
-// `once` run them as hard preflight gates before the schedule ever fires, exactly like run.mjs did.
+// uncommitted-harness guard. `doctor` folds the termfleet + OA-04 checks in as one of its checks; `start`
+// and `once` BOTH run the full chain as hard preflight gates before the schedule ever fires — via the
+// shared runPreflight (src/preflight.ts, which also carries the OA-09 provider-origin log/export), so the
+// two modes can never drift apart on what they refuse. Exactly like run.mjs's own top-level sequence.
 import { existsSync, readFileSync, realpathSync } from 'node:fs';
 import { join, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';

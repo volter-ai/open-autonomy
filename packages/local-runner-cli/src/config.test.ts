@@ -85,3 +85,78 @@ describe('normalizeSchedule — new per-script object shape', () => {
     expect(s.scripts[1]!.reconciled).toBe(true);
   });
 });
+
+describe('normalizeSchedule — identity-aware eligibility defaults (MEDIUM-2: legacy twin schedules)', () => {
+  test('legacy string[] manager line defaults to ztrack (S6, supercode)', () => {
+    const s = normalizeSchedule({ intervalSeconds: 1800, scripts: ['AUTONOMY_AGENT=manager AUTONOMY_SINGLETON=1 node scripts/run-agent.mjs'] });
+    expect(s.scripts[0]!.reconciled).toBe(true);
+    expect(s.scripts[0]!.eligibility).toBe('ztrack');
+  });
+
+  test('legacy string[] pm line defaults to gh-issues (T6, twin) — NEVER ztrack probes on a twin-shaped install', () => {
+    const s = normalizeSchedule({ intervalSeconds: 900, scripts: ['AUTONOMY_AGENT=pm AUTONOMY_SINGLETON=1 node scripts/run-agent.mjs'] });
+    expect(s.scripts[0]!.reconciled).toBe(true);
+    expect(s.scripts[0]!.eligibility).toBe('gh-issues');
+  });
+
+  test('object shape without explicit eligibility inherits the identity default too (manager -> ztrack, pm -> gh-issues)', () => {
+    const s = normalizeSchedule({
+      scripts: [
+        { cmd: 'AUTONOMY_AGENT=manager node scripts/run-agent.mjs', reconciled: true },
+        { cmd: 'AUTONOMY_AGENT=pm node scripts/run-agent.mjs', reconciled: true },
+      ],
+    });
+    expect(s.scripts[0]!.eligibility).toBe('ztrack');
+    expect(s.scripts[1]!.eligibility).toBe('gh-issues');
+  });
+
+  test('an explicit eligibility key always beats the identity default', () => {
+    const s = normalizeSchedule({ scripts: [{ cmd: 'AUTONOMY_AGENT=pm node scripts/run-agent.mjs', reconciled: true, eligibility: 'ztrack' }] });
+    expect(s.scripts[0]!.eligibility).toBe('ztrack');
+  });
+
+  test('a reconciled agent that is neither manager nor pm and has NO explicit eligibility throws a loud config error', () => {
+    expect(() => normalizeSchedule({ scripts: [{ cmd: 'AUTONOMY_AGENT=strategist node scripts/run-agent.mjs', reconciled: true }] })).toThrow(
+      /no eligibility variant and no proven default/,
+    );
+  });
+});
+
+describe('normalizeSchedule — reconciled-script validation (MEDIUM-3)', () => {
+  test('reconciled:true with NO resolvable agent identity throws at load (the in-flight filter could never match)', () => {
+    expect(() => normalizeSchedule({ scripts: [{ cmd: 'some-wrapper.sh', reconciled: true, eligibility: 'ztrack' }] })).toThrow(
+      /no resolvable agent identity/,
+    );
+  });
+
+  test('two reconciled scripts sharing one agent identity throw at load (state-key collapse)', () => {
+    expect(() =>
+      normalizeSchedule({
+        scripts: [
+          { cmd: 'AUTONOMY_AGENT=manager node scripts/run-agent.mjs', reconciled: true },
+          { cmd: 'AUTONOMY_AGENT=manager node other.mjs', reconciled: true },
+        ],
+      }),
+    ).toThrow(/same agent "manager"/);
+  });
+
+  test('two NON-reconciled scripts sharing an agent are fine (no reconciler state to collapse)', () => {
+    const s = normalizeSchedule({
+      scripts: [
+        { cmd: 'AUTONOMY_AGENT=sweeper bun scripts/a.ts' },
+        { cmd: 'AUTONOMY_AGENT=sweeper bun scripts/b.ts' },
+      ],
+    });
+    expect(s.scripts).toHaveLength(2);
+  });
+
+  test('a reconciled + a non-reconciled script sharing an agent are fine too', () => {
+    const s = normalizeSchedule({
+      scripts: [
+        { cmd: 'AUTONOMY_AGENT=manager node scripts/run-agent.mjs', reconciled: true },
+        { cmd: 'AUTONOMY_AGENT=manager bun scripts/nightly-report.ts', reconciled: false },
+      ],
+    });
+    expect(s.scripts.filter((x) => x.reconciled)).toHaveLength(1);
+  });
+});

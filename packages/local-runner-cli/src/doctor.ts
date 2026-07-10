@@ -81,9 +81,17 @@ export async function doctor(opts: { cwd?: string; proc?: ProcRunner; fetchImpl?
     checks.push({ name: 'dep-integrity', ok: true, detail: 'schedule is script-only — runner dependency not required' });
   }
 
-  // 4. provider /healthz reachability. Precedence matches OA-09 (buildTickEnv): ambient overrides schedule.
-  const providerUrl = (ambient.TERMFLEET_PROVIDER_URL || schedule.env.TERMFLEET_PROVIDER_URL || '').trim() || undefined;
-  if (needsRunner(cmds)) checks.push(await checkProviderHealth(providerUrl, opts.fetchImpl));
+  // 4. provider /healthz reachability — gated behind --live (the one check that goes over the network; a
+  //    default doctor run stays fully offline, so it can be scripted anywhere including a box where the
+  //    provider is intentionally down). Precedence matches OA-09 (buildTickEnv): ambient overrides schedule.
+  if (needsRunner(cmds)) {
+    if (opts.live) {
+      const providerUrl = (ambient.TERMFLEET_PROVIDER_URL || schedule.env.TERMFLEET_PROVIDER_URL || '').trim() || undefined;
+      checks.push(await checkProviderHealth(providerUrl, opts.fetchImpl));
+    } else {
+      checks.push({ name: 'provider-health', ok: true, detail: 'skipped (offline mode — pass --live to probe the provider /healthz over the network)' });
+    }
+  }
 
   // 5. prompts/skills existence per declared agent
   const harnesses = ['claude', 'codex'];

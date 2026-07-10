@@ -16,12 +16,12 @@ function tmpRepo(schedule: object): string {
 }
 
 describe('oa once — fires the FULL schedule unconditionally, no state-gating', () => {
-  test('PAUSED is checked FIRST — before even the termfleet dependency check — so paused reports PAUSED, never masked by an unrelated failure', () => {
+  test('PAUSED is checked FIRST — before even the termfleet dependency check — so paused reports PAUSED, never masked by an unrelated failure', async () => {
     const dir = tmpRepo({ intervalSeconds: 900, scripts: ['AUTONOMY_AGENT=manager node scripts/run-agent.mjs'] });
     try {
       pause({ cwd: dir });
       const stub = new StubProc(); // no handlers registered — a termfleet-missing check would also fail, but PAUSED must win
-      const r = once({ cwd: dir, proc: stub.runner });
+      const r = await once({ cwd: dir, proc: stub.runner });
       expect(r.ok).toBe(false);
       expect(r.reason).toContain('PAUSED');
       expect(stub.calls).toHaveLength(0); // never even reached the termfleet/OA-04/OA-03 guards
@@ -30,13 +30,13 @@ describe('oa once — fires the FULL schedule unconditionally, no state-gating',
     }
   });
 
-  test('a script-only schedule (no run-agent.mjs) fires every command, needing no termfleet/OA-04 probe', () => {
+  test('a script-only schedule (no run-agent.mjs) fires every command, needing no termfleet/OA-04 probe', async () => {
     const dir = tmpRepo({ intervalSeconds: 900, scripts: ['bun scripts/a.ts', 'bun scripts/b.ts'] });
     try {
       const stub = new StubProc()
         .on((c) => c === 'git', () => ok('')) // rev-parse --git-dir (OA-03) probe
         .on((c) => c.startsWith('bun '), () => ok('')); // fireCommands passes the FULL line as `cmd` (shell:true, args:[])
-      const r = once({ cwd: dir, proc: stub.runner });
+      const r = await once({ cwd: dir, proc: stub.runner });
       expect(r.ok).toBe(true);
       expect(r.fired).toBe(2);
       expect(stub.calls.filter((c) => c.cmd.startsWith('bun ')).length).toBe(2);
@@ -45,11 +45,11 @@ describe('oa once — fires the FULL schedule unconditionally, no state-gating',
     }
   });
 
-  test('a schedule needing the runner, but termfleet not installed, fails naming the fix and fires NOTHING', () => {
+  test('a schedule needing the runner, but termfleet not installed, fails naming the fix and fires NOTHING', async () => {
     const dir = tmpRepo({ intervalSeconds: 900, scripts: ['AUTONOMY_AGENT=manager node scripts/run-agent.mjs'] });
     try {
       const stub = new StubProc();
-      const r = once({ cwd: dir, proc: stub.runner });
+      const r = await once({ cwd: dir, proc: stub.runner });
       expect(r.ok).toBe(false);
       expect(r.reason).toContain('npm install termfleet');
       expect(r.fired).toBe(0);
@@ -58,7 +58,7 @@ describe('oa once — fires the FULL schedule unconditionally, no state-gating',
     }
   });
 
-  test('a schedule needing the runner, termfleet installed cleanly, fires (real subprocess node probe for OA-04 + real git probe for OA-03)', () => {
+  test('a schedule needing the runner, termfleet installed cleanly, fires (real subprocess node probe for OA-04 + real git probe for OA-03)', async () => {
     const dir = tmpRepo({ intervalSeconds: 900, scripts: ['AUTONOMY_AGENT=manager node scripts/run-agent.mjs'] });
     try {
       mkdirSync(join(dir, 'node_modules', 'termfleet'), { recursive: true });
@@ -72,9 +72,13 @@ describe('oa once — fires the FULL schedule unconditionally, no state-gating',
         if (cmd === 'AUTONOMY_AGENT=manager node scripts/run-agent.mjs') return ok('');
         return defaultProc(cmd, args, opts);
       };
-      const r = once({ cwd: dir, proc });
+      // A pinned ambient makes OA-09 resolve deterministically ('env' fast path — never a network/dynamic-
+      // import discovery) AND lets this test assert the origin export lands in the tick env's source object.
+      const ambient: NodeJS.ProcessEnv = { ...process.env, TERMFLEET_PROVIDER_URL: 'http://127.0.0.1:7999' };
+      const r = await once({ cwd: dir, proc, ambient });
       expect(r.ok).toBe(true);
       expect(r.fired).toBe(1);
+      expect(ambient.AUTONOMY_PROVIDER_URL_SOURCE).toBe('env'); // OA-09 origin export ran in --once mode too
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }

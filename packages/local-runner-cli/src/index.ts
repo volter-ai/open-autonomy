@@ -44,7 +44,8 @@ const HELP = `oa <command> [args]  (@volter/oa v${pkgVersion()}) — the local o
   oa resume                     remove .open-autonomy/paused — the operator's act, re-arms the reconciler
   oa status                     fence state + live sessions + last-fire info
   oa dispatch <agent>           fire exactly the one schedule line for <agent> now, bypassing the fence
-  oa doctor [--live] [--json]   dep-integrity + provider health + fence + schedule.json + prompts/skills checks
+  oa doctor [--live] [--json]   offline checks: dep-integrity + fence + schedule.json + prompts/skills;
+                                --live additionally probes the termfleet provider's /healthz over the network
 
 The '.open-autonomy/paused' marker file is the source of truth; this CLI is ergonomics over the file, never
 a daemon holding its own state. schedule.json/autonomy.yml/prompts are read from the current working
@@ -59,11 +60,18 @@ export async function runCli(argv: string[]): Promise<number> {
   const cwd = process.cwd();
 
   if (!cmd || cmd === 'start') {
-    await start({ cwd });
-    return 0;
+    try {
+      await start({ cwd });
+      return 0;
+    } catch (e) {
+      // A preflight failure already printed its guard message inside runPreflight; surface the summary +
+      // exit nonzero — the exact behavior run.mjs had (process.exit(1) after the guard's console.error).
+      console.error((e as Error)?.message ?? e);
+      return 1;
+    }
   }
   if (cmd === '--once' || cmd === 'once') {
-    const r = once({ cwd });
+    const r = await once({ cwd });
     return r.ok ? 0 : 1;
   }
   if (cmd === 'pause') {

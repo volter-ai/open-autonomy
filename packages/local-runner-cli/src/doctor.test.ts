@@ -76,7 +76,7 @@ describe('oa doctor', () => {
     }
   });
 
-  test('provider-health check reports reachable when fetchImpl resolves ok', async () => {
+  test('provider-health (--live) reports reachable when fetchImpl resolves ok', async () => {
     const dir = tmpRepo();
     writeSchedule(dir, { intervalSeconds: 900, env: { TERMFLEET_PROVIDER_URL: 'http://127.0.0.1:7602' }, scripts: ['AUTONOMY_AGENT=manager node scripts/run-agent.mjs'] });
     mkdirSync(join(dir, 'node_modules', 'termfleet'), { recursive: true });
@@ -88,7 +88,7 @@ describe('oa doctor', () => {
         calledUrl = String(url);
         return new Response('', { status: 200 });
       }) as unknown as typeof fetch;
-      const r = await doctor({ cwd: dir, proc: defaultProc, fetchImpl, env: {} });
+      const r = await doctor({ cwd: dir, proc: defaultProc, fetchImpl, env: {}, live: true });
       const health = r.checks.find((c) => c.name === 'provider-health');
       expect(health!.ok).toBe(true);
       expect(calledUrl).toBe('http://127.0.0.1:7602/healthz');
@@ -97,7 +97,7 @@ describe('oa doctor', () => {
     }
   });
 
-  test('provider-health check reports unreachable when fetchImpl rejects', async () => {
+  test('provider-health (--live) reports unreachable when fetchImpl rejects', async () => {
     const dir = tmpRepo();
     writeSchedule(dir, { intervalSeconds: 900, env: { TERMFLEET_PROVIDER_URL: 'http://127.0.0.1:7602' }, scripts: ['AUTONOMY_AGENT=manager node scripts/run-agent.mjs'] });
     mkdirSync(join(dir, 'node_modules', 'termfleet'), { recursive: true });
@@ -107,7 +107,7 @@ describe('oa doctor', () => {
       const fetchImpl = (async () => {
         throw new Error('ECONNREFUSED');
       }) as unknown as typeof fetch;
-      const r = await doctor({ cwd: dir, proc: defaultProc, fetchImpl, env: {} });
+      const r = await doctor({ cwd: dir, proc: defaultProc, fetchImpl, env: {}, live: true });
       const health = r.checks.find((c) => c.name === 'provider-health');
       expect(health!.ok).toBe(false);
       expect(health!.detail).toContain('unreachable');
@@ -165,6 +165,31 @@ describe('oa doctor', () => {
       const text = formatDoctorReport(r);
       expect(text).toContain('OK  ');
       expect(text).toContain('all checks passed');
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+});
+
+describe('oa doctor — the --live gate (MEDIUM-1: the network probe must be opt-in)', () => {
+  test('WITHOUT --live: the /healthz probe is skipped (fetch never called), reported as an informational OK check', async () => {
+    const dir = tmpRepo();
+    writeSchedule(dir, { intervalSeconds: 900, env: { TERMFLEET_PROVIDER_URL: 'http://127.0.0.1:7602' }, scripts: ['AUTONOMY_AGENT=manager node scripts/run-agent.mjs'] });
+    mkdirSync(join(dir, 'node_modules', 'termfleet'), { recursive: true });
+    writeFileSync(join(dir, 'node_modules', 'termfleet', 'package.json'), JSON.stringify({ name: 'termfleet', type: 'module', exports: { '.': './i.js' } }));
+    writeFileSync(join(dir, 'node_modules', 'termfleet', 'i.js'), 'export default 1;\n');
+    try {
+      let fetchCalls = 0;
+      const fetchImpl = (async () => {
+        fetchCalls += 1;
+        return new Response('', { status: 200 });
+      }) as unknown as typeof fetch;
+      const r = await doctor({ cwd: dir, proc: defaultProc, fetchImpl, env: {} }); // no live
+      const health = r.checks.find((c) => c.name === 'provider-health');
+      expect(health!.ok).toBe(true);
+      expect(health!.detail).toContain('skipped');
+      expect(health!.detail).toContain('--live');
+      expect(fetchCalls).toBe(0); // the network probe genuinely never ran
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }

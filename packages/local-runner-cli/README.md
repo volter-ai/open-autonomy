@@ -57,9 +57,12 @@ compiles every bundled profile and would fail on any drift.
 
 **How supercode/twin migrate:** each repo's own `scheduler/run.mjs` (S6/T6) becomes a fork this package
 retires — swap in the CLI opt-in at the next `open-autonomy upgrade`, delete the hand-maintained
-`.mjs`, add `@volter/oa` to `package.json`, and the S6-vs-T6 divergence (manager/ztrack vs pm/gh-issues)
-collapses into one `eligibility:` config key per install. Until that migration lands, S6/T6 keep running
-unmodified — this package changes nothing for an install that hasn't opted in.
+`.mjs`, add `@volter/oa` to `package.json`. **Neither install has to touch `schedule.json`:** the
+eligibility default is identity-aware (`manager` -> ztrack, `pm` -> gh-issues — each fork's own proven
+variant), so both legacy string[] schedules run correctly as-is; the `eligibility:` key only needs
+writing when an install departs from its identity's default (or reconciles a new agent name). Until that
+migration lands, S6/T6 keep running unmodified — this package changes nothing for an install that hasn't
+opted in.
 
 ## Verbs
 
@@ -71,7 +74,7 @@ unmodified — this package changes nothing for an install that hasn't opted in.
 | `oa resume` | remove `.open-autonomy/paused` — the operator's act (a human ran the CLI); re-arms the reconciler within one heartbeat | `rm .open-autonomy/paused` |
 | `oa status` | fence state + rationale, live sessions (via the runner SDK), last-fire info per reconciled agent | — (new) |
 | `oa dispatch <agent>` | fire exactly the one schedule line for `<agent>` now, bypassing the fence (the documented first-run-while-paused workaround) | `AUTONOMY_AGENT=<agent> node scripts/run-agent.mjs` |
-| `oa doctor [--live] [--json]` | OA-04 dep-integrity probe + provider `/healthz` + fence state + `schedule.json` parse + prompts/skills existence per declared agent | — (new; folds in checks that used to live only in `bin/doctor.ts`/`bin/collision-check.ts`) |
+| `oa doctor [--live] [--json]` | offline: OA-04 dep-integrity probe + fence state + `schedule.json` parse + prompts/skills existence per declared agent; `--live` additionally probes the provider `/healthz` over the network | — (new; folds in checks that used to live only in `bin/doctor.ts`/`bin/collision-check.ts`) |
 
 ## Design contract (unchanged, honored throughout)
 
@@ -98,13 +101,28 @@ unmodified — this package changes nothing for an install that hasn't opted in.
 
   `reconciled` marks which script gets the eligibility-driven reconciler treatment (default: detected via
   the same `AUTONOMY_AGENT=manager|pm` regexes S6/T6 hardcoded, kept as the fallback when the flag is
-  absent). Every reconciled script gets its **own** independent backoff/min-gap/last-fire state — this is
-  the per-agent-cadence generalization that closes the shared-single-interval limitation both forks
-  inherited from the original `run.mjs` (a second reconciled agent, e.g. a scheduled strategist, no longer
-  has to share cadence with the first).
-- **Governance = OA-04 + doctor.** The dep-integrity collision probe (a workspace member shadowing
-  `termfleet`/`@termfleet/core`/`ztrack`) is ported verbatim and folds into both `oa start`/`oa once`
-  preflight and `oa doctor`.
+  absent). **Eligibility defaults are identity-aware** — each maps to the variant its proven fork actually
+  shipped with: `manager` -> `"ztrack"` (S6/supercode), `pm` -> `"gh-issues"` (T6/twin) — so a legacy
+  string[] schedule carried over from **either** install probes the right board with zero config changes
+  (a twin-shaped `pm` line never gets ztrack probes that would fail loudly forever). A reconciled script
+  for any *other* agent must declare `eligibility` explicitly, or `schedule.json` loading fails with a
+  loud config error. Two more load-time validations: `reconciled: true` **requires** a resolvable agent
+  identity (parsed `AUTONOMY_AGENT` or an explicit `agent:` key — an agent-less reconciled script would
+  break the singleton check and register false fast-deaths), and two reconciled scripts must not share
+  one agent (their reconciler state would silently collapse into one machine).
+
+  Every reconciled script gets its **own** independent backoff/min-gap/last-fire state — this is the
+  per-agent-cadence generalization that closes the shared-single-interval limitation both forks inherited
+  from the original `run.mjs` (a second reconciled agent, e.g. a scheduled strategist, no longer has to
+  share cadence with the first).
+- **The full run.mjs guard chain runs in BOTH modes.** `oa start` and `oa once` share one preflight
+  (`src/preflight.ts`) that runs before any tick, in run.mjs's exact order: termfleet-installed refusal ->
+  the OA-04 dep-integrity collision probe (a workspace member shadowing
+  `termfleet`/`@termfleet/core`/`ztrack`) -> the OA-09 provider-origin log + `AUTONOMY_PROVIDER_URL_SOURCE`
+  export (propagated into every launched session via the tick env) -> the OA-03 uncommitted-harness
+  refusal. `oa doctor` additionally folds the OA-04 probe into its offline checks; its provider `/healthz`
+  probe is the one networked check and runs **only under `--live`** (a default doctor run is fully
+  offline, scriptable on a box where the provider is intentionally down).
 
 ## Testing
 

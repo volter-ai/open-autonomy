@@ -122,7 +122,7 @@ If DERIVE found drift or a starving board:
    project's tracker config file — additive only, nothing else on disk changes.
 
 3. Commit **both** the plan doc and the tracker-config change `--register` produced, on a new branch
-   `plan/plan-<date>`, and open a **docs-only PR** — titled something like `plan <date>: <one-line
+   `plan/<date>`, and open a **docs-only PR** — titled something like `plan <date>: <one-line
    summary of what's being added>`. **Never push to main** (classic branch protection means a
    direct-to-main commit can mechanically never earn a green check — the same GH006 reasoning that
    governs every other write this profile makes; docs-only content still goes through the PR seam

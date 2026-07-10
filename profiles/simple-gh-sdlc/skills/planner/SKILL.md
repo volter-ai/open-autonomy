@@ -106,10 +106,12 @@ sufficient — this profile has no PR-merge step for issue creation to route aro
   candidate turns out to duplicate something already open, don't file it (say so in your run summary
   instead).
 - **Never** dispatch `draft`, `develop`, or anything else, and never open a PR — you hold no
-  `code:propose` capability and no `agent:launch` capability; issue-creation (`tasks:author`) is your
-  entire authority.
+  `code:propose` capability and no `agent:launch` capability; issue-creation plus comments
+  (`tasks:author` + `tasks:converse`) are your entire authority.
 - **Never** file more than 1-3 issues in a single run, and never file at all when either self-throttle
   check trips.
-- `.open-autonomy/paused` does not block you — mirror the rest of this profile's fence-respect: you
-  only ever run when scheduled, and everything you produce is a plain GitHub issue for a human (or a
-  later `draft`/`pm` tick) to act on, never a direct code change, never a live dispatch.
+- `.open-autonomy/paused` does not block you, and needs no special handling: on the local runner a
+  paused install's driver never fires your cron in the first place, so you will simply not run. If a
+  human dispatches you manually while the install is paused, filing draft issues remains permissible —
+  everything you produce is a plain GitHub issue for a human (or a later `draft`/`pm` tick) to act on,
+  never a direct code change, never a live dispatch, so nothing you do routes around the fence.

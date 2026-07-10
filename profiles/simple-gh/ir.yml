@@ -104,7 +104,9 @@ agents:
         params: { TARGET_REF: subject.ref }   # optional: an issue/PR the one-line summary comment lands on
 
 policy:
-  maxConcurrent: 1               # one manager session; its subagent fan-out is doctrine-capped, not IR-capped
+  maxConcurrent: 1               # one agent session at a time — manager tick OR planner tick, never both
+                                 # (their crons are offset by design; the throttle serializes any collision);
+                                 # the manager's subagent fan-out is doctrine-capped, not IR-capped
   box:
     tracker:
       ztrackPreset: simple-gh-sdlc   # BL-29: tracker PRESET name, not a profile reference — no preset

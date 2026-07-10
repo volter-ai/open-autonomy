@@ -67,7 +67,7 @@ agents:
   # D3: originates new draft (unlabeled) issues from the vision when the board is starving — the one
   # thing nothing else in this loop does. No `code:propose` (it never touches code or opens a PR — issue
   # creation is not a merge here, unlike twin's file-based roadmap) and no `agent:launch` (it never
-  # dispatches `draft`/`develop` itself). `tasks:author` is its entire authority. See
+  # dispatches `draft`/`develop` itself). `tasks:author` + `tasks:converse` are its entire authority. See
   # `skills/planner/SKILL.md`'s "Why no ratification step" for why this doesn't need twin's PR-merge gate.
   planner:
     behavior: planner

@@ -5,6 +5,7 @@
   ".open-autonomy/architecture-invariants.yml",
   ".codex/skills/**",
   ".claude/skills/**",
+  "profiles/**/skills/**",
   "**/bun.lock",
   "scripts/human-approval-gate.ts",
   "scripts/rearm-auto-merge.ts",

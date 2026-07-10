@@ -108,6 +108,20 @@ profile + roadmap rollup), `platform-html.tsx`/`project-docs.tsx`/`ui/` (server-
 Deploy with `bunx wrangler deploy`. **The proxy ledger's `consumed_usd_cents` is the authoritative cost — NOT
 the CLI's `total_cost_usd`** (which mis-prices proxied models ~40×).
 
+**Reviewer doctrine for this surface (repo-local — U5 rebase note, supercode study §II.8.1 row 6):** this
+paragraph used to live inside `profiles/self-driving/skills/reviewer/SKILL.md`; it moved here because it is
+this repo's own operational knowledge (proxy auth/admin/funding), not something that should template onto an
+adopter's install of the self-driving profile. It still reaches the `reviewer` agent's context the same way
+this whole file does (every session in this repo loads `CLAUDE.md`), so nothing was lost by moving it —
+**security-critical paths get the higher bar — scrutiny, not an automatic stop.** Any change to the model
+proxy's auth/admin (`AGENT_PROXY_ADMIN_TOKEN`), OIDC/JWKS validation, HMAC verification
+(`AGENT_PROXY_HMAC_SECRET`), spend-cap (`MAX_*`) enforcement, or the funding ledger demands real rigor: a
+plausible-looking logic flip there (a `||` that should be `&&`, an off-by-one in a bound, the wrong field
+compared) is the costliest miss and the hardest to see — so **fail** if you can't confidently verify it's
+correct. But don't reflexively mark it `human-required`: merging proxy code is inert (it doesn't deploy), and
+the human checkpoint already lives at the gated deploy (below). Review it on the merits and pass if sound, so
+the fleet can iterate on the proxy autonomously.
+
 ### `bench/` — the eval harness
 
 Disposable funded testbed cells (`profile × substrate × workload`). `bun bin/bench.ts` →

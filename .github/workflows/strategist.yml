@@ -109,6 +109,7 @@ jobs:
           AGENT_BOT_NAME: volter-agent
           AGENT_BOT_EMAIL: volter-agent@users.noreply.github.com
           REVIEW_WORKFLOW: strategy_reviewer.yml
+          EXTRA_CHECK_WORKFLOWS: security-gate.yml
         run: bun scripts/agent-propose.ts
       - name: Save the agent run result (durable transcript artifact)
         if: always()

@@ -46,8 +46,18 @@ export const INSTALL_OWNED_PATHS = [
   'docs/ARCHITECTURE.md',
   'provision.json', // the install's branch-protection/required-checks manifest — the adopter tunes it to
   //   their product (e.g. their own `ci` context, their reviewer count); seed-once so upgrade never reverts it.
-  //   OPTIONAL: a profile need not ship a seed (self-driving doesn't — provision-target-repo takes --manifest /
-  //   defaults); the entry exists so that when an install DOES write one, upgrade never clobbers it.
+  //   OPTIONAL: a profile need not ship a seed (provision-target-repo takes --manifest / defaults when one
+  //   isn't provided); the entry exists so that when an install DOES write one, upgrade never clobbers it.
+  // U5 rebase (supercode study §II.8.1 row 6 — "mothership content out of the profile"): these three left
+  // profiles/self-driving/'s `resources:` — they are OA-repo-specific tooling (this repo's OWN `bun run
+  // check` CI pipeline, its OWN CodeQL setup, its OWN model-proxy deploy workflow), not generic template
+  // content an adopter's install should receive. They still exist at root (this repo owns them directly,
+  // unconditionally now), so listing them here means `--prune` never deletes them just because no profile
+  // produces them anymore — the same seed-once/never-clobbered/never-pruned contract as every other
+  // repo-owned file.
+  '.github/workflows/ci.yml',
+  '.github/workflows/codeql.yml',
+  '.github/workflows/deploy.yml',
 ];
 const installOwned = new Set(INSTALL_OWNED_PATHS);
 // Path PREFIXES the install owns. Unlike the exact paths above, these cover a whole tree an installation

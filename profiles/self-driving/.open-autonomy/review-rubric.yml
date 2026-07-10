@@ -19,7 +19,7 @@ criteria:
   - id: portability
     title: OSS portability
     pass: Behavior works in a newly scaffolded repository with documented setup.
-    fail: Behavior depends on private Volter-only code or uncommitted local state.
+    fail: Behavior depends on private mothership-only code or uncommitted local state.
   - id: architecture
     title: Architecture invariants (the immune system)
     # Enforce the project's declared architecture invariants. This criterion is FASTIDIOUS by construction:

@@ -1,0 +1,23 @@
+{
+  "$comment": "self-driving provisioning manifest (scripts/provision-target-repo.ts). Row 5 of the supercode study's §II.8.1 disposition table: self-driving takes BOTH governance choices — sdlc's `security` required check (the dispatched, blocking realization of security.yml — .github/workflows/security-gate.yml, wired via policy.box.gh-actions.propose_dispatch_checks) joins `ci` + `agent-review` + this profile's own `human-approval` seam as required merge gates. `provision.json` is install-owned (seed-once, never overwritten by upgrade — packages/core/src/upgrade.ts's INSTALL_OWNED_PATHS) so an adopter tunes it freely after the initial seed.",
+  "description": "open-autonomy self-driving install",
+  "private": true,
+  "required_secrets": [],
+  "variables": [],
+  "labels": [
+    { "name": "agent-paused", "color": "fbca04", "description": "Issue-level autonomy is paused" },
+    { "name": "agent-repo-paused", "color": "b60205", "description": "Repo-level autonomy pause fallback" },
+    { "name": "agent-blocked", "color": "d93f0b", "description": "Agent work is blocked" },
+    { "name": "human-required", "color": "b60205", "description": "A maintainer decision is required" },
+    { "name": "needs-info", "color": "fbca04", "description": "Waiting on clarifying information" },
+    { "name": "do-not-merge", "color": "b60205", "description": "Maintainer merge block" },
+    { "name": "ready", "color": "0e8a16", "description": "Shaped by draft or a maintainer; develop may pick it up" },
+    { "name": "origin:roadmap-planner", "color": "1d76db", "description": "Created by the roadmap planner" },
+    { "name": "origin:strategist", "color": "5319e7", "description": "Roadmap proposal authored by the strategist" }
+  ],
+  "branch_protection": {
+    "branch": "main",
+    "required_checks": ["ci", "agent-review", "security", "human-approval"],
+    "enforce_admins": false
+  }
+}

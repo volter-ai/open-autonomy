@@ -4,7 +4,8 @@
 rules:
   dangerous-triggers:
     ignore:
-      - developer.yml
+      - draft.yml
+      - develop.yml
       - pm.yml
       - reviewer.yml
       - planner.yml
@@ -12,7 +13,8 @@ rules:
       - strategy_reviewer.yml
   template-injection:
     ignore:
-      - developer.yml
+      - draft.yml
+      - develop.yml
       - pm.yml
       - reviewer.yml
       - planner.yml

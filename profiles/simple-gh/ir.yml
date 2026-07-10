@@ -73,9 +73,10 @@ policy:
 
 resources:
   # Deliberately minimal — NO merge.yml / reconcile-merged-issues.ts (GitHub-Issues-only machinery; the
-  # manager flips ztrack state post-merge itself — see README's re-add-if-sync-github note) and no
-  # security/dependabot surface by default (adopter opt-in, per INSTALL-AGENT ask #4). Every entry below
-  # has a physical copy source in this profile directory (lint/compile fail on a missing one).
+  # manager flips ztrack state post-merge itself, landed via the board-PR path — SKILL.md §7 — never a
+  # direct push; see README's re-add-if-sync-github note) and no security/dependabot surface by default
+  # (adopter opt-in, per INSTALL-AGENT ask #4). Every entry below has a physical copy source in this
+  # profile directory (lint/compile fail on a missing one).
   - .claude/settings.json
   - standards/workflow.md
   - standards/issue-and-evidence.md

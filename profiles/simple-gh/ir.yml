@@ -104,9 +104,11 @@ agents:
         params: { TARGET_REF: subject.ref }   # optional: an issue/PR the one-line summary comment lands on
 
 policy:
-  maxConcurrent: 1               # one agent session at a time — manager tick OR planner tick, never both
-                                 # (their crons are offset by design; the throttle serializes any collision);
-                                 # the manager's subagent fan-out is doctrine-capped, not IR-capped
+  maxConcurrent: 1               # declared intent, not mechanically enforced (conformance/status surface
+                                 # only): the local driver fires every cron agent each shared tick and the
+                                 # singleton guard is per-agent — a planner session CAN overlap a manager
+                                 # tick; the planner's SKILL self-throttle keeps that overlap a no-op.
+                                 # Manager's subagent fan-out is doctrine-capped, not IR-capped
   box:
     tracker:
       ztrackPreset: simple-gh-sdlc   # BL-29: tracker PRESET name, not a profile reference — no preset

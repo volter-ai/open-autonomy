@@ -41,6 +41,10 @@ documents:
     - scripts/reconcile-merged-issues.ts
     - scripts/human-approval-gate.ts
     - scripts/check-supply-chain.ts
+  roles:
+    vision: docs/VISION.md
+    constitution: docs/CONSTITUTION.md
+    roadmap: .open-autonomy/roadmap.yml
 skills:
   developer: .codex/skills/developer
   pm: .codex/skills/pm
@@ -174,6 +178,7 @@ policy:
       - profiles/self-driving/scripts/rearm-auto-merge.ts
       - profiles/self-driving/scripts/reconcile-merged-issues.ts
       - profiles/self-driving/scripts/check-supply-chain.ts
+      - docs/VISION.md
     human_required_topics:
       - auth
       - secrets

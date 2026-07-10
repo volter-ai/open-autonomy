@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import { validateIR, irShape, type AutonomyIR, type IRAgent } from './ir';
-import { parseIr } from './ir-yaml';
+import { parseIr, applyDocumentAutoGate } from './ir-yaml';
 
 describe('parseIr — runner alias normalization (github → gh-actions)', () => {
   // The runner-substrate is `gh-actions`; `github` (which conflated runner with code host) is accepted as a
@@ -235,5 +235,116 @@ describe('irShape', () => {
     expect(triggers).toContain('dispatch');
     expect(triggers).toContain('cron:0 0 * * *');
     expect(triggers.some((t) => t.startsWith('event:'))).toBe(false);
+  });
+});
+
+// U2 (supercode study §II.9.1) — the `documents.roles` role map: vision/constitution/roadmap declared by
+// altitude, never a hardcoded filename. Additive: an IR with no `documents` block is untouched by any of this.
+describe('validateIR — documents.roles', () => {
+  test('an IR with no documents block validates exactly as before (additive, back-compat)', () => {
+    const a = agent();
+    expect(validateIR(ir({ a }))).toEqual([]);
+  });
+
+  test('rejects documents.roles missing vision — declaring the block without the measuring stick is not allowed', () => {
+    const a = agent();
+    const withDocs: AutonomyIR = { ...ir({ a }), documents: { roles: { constitution: 'docs/CONSTITUTION.md' } as never } };
+    expect(validateIR(withDocs).some((e) => e.includes('documents.roles.vision is required'))).toBe(true);
+  });
+
+  test('rejects a bare `documents: {}` (no roles key at all)', () => {
+    const a = agent();
+    const withDocs: AutonomyIR = { ...ir({ a }), documents: {} as never };
+    expect(validateIR(withDocs).some((e) => e.includes('documents.roles is required'))).toBe(true);
+  });
+
+  test('accepts vision alone (constitution/roadmap independently optional)', () => {
+    const a = agent();
+    const withDocs: AutonomyIR = { ...ir({ a }), documents: { roles: { vision: 'docs/VISION.md' } } };
+    expect(validateIR(withDocs)).toEqual([]);
+  });
+
+  test('accepts the full role map', () => {
+    const a = agent();
+    const withDocs: AutonomyIR = {
+      ...ir({ a }),
+      documents: { roles: { vision: 'docs/VISION.md', constitution: 'docs/CONSTITUTION.md', roadmap: '.open-autonomy/roadmap.yml' } },
+    };
+    expect(validateIR(withDocs)).toEqual([]);
+  });
+
+  test('rejects a glob in a role path — roles are literal paths, one file per role', () => {
+    const a = agent();
+    const withDocs: AutonomyIR = { ...ir({ a }), documents: { roles: { vision: 'docs/*.md' } } };
+    expect(validateIR(withDocs).some((e) => e.includes('must be a literal path, not a glob'))).toBe(true);
+  });
+
+  test('rejects a non-string / empty role value', () => {
+    const a = agent();
+    const withDocs: AutonomyIR = { ...ir({ a }), documents: { roles: { vision: 'docs/VISION.md', constitution: '' } } };
+    expect(validateIR(withDocs).some((e) => e.includes('documents.roles.constitution must be a non-empty path string'))).toBe(true);
+  });
+});
+
+describe('applyDocumentAutoGate — the §II.9.1 keystone', () => {
+  const baseIr = (documents?: AutonomyIR['documents'], riskPaths?: string[]): AutonomyIR => ({
+    schema: 'autonomy.ir.v1',
+    targets: ['gh-actions'],
+    agents: { pm: agent() },
+    policy: { box: riskPaths ? { risk: { human_required_paths: riskPaths } } : {} },
+    resources: [],
+    ...(documents ? { documents } : {}),
+  });
+
+  test('no documents block → policy.box is untouched (no spurious risk/human_required_paths key)', () => {
+    const irNoDocs = baseIr();
+    applyDocumentAutoGate(irNoDocs);
+    expect(irNoDocs.policy.box).toEqual({});
+  });
+
+  test('adds exactly vision + constitution to human_required_paths — never roadmap (the strategist\'s medium)', () => {
+    const irWithRoles = baseIr({ roles: { vision: 'docs/VISION.md', constitution: 'docs/CONSTITUTION.md', roadmap: '.open-autonomy/roadmap.yml' } });
+    applyDocumentAutoGate(irWithRoles);
+    const paths = (irWithRoles.policy.box.risk as { human_required_paths: string[] }).human_required_paths;
+    expect(paths.sort()).toEqual(['docs/CONSTITUTION.md', 'docs/VISION.md']);
+    expect(paths).not.toContain('.open-autonomy/roadmap.yml');
+  });
+
+  test('vision alone (no constitution) gates only vision', () => {
+    const irVisionOnly = baseIr({ roles: { vision: 'docs/VISION.md' } });
+    applyDocumentAutoGate(irVisionOnly);
+    expect((irVisionOnly.policy.box.risk as { human_required_paths: string[] }).human_required_paths).toEqual(['docs/VISION.md']);
+  });
+
+  test('no-dup: a role path already present in human_required_paths is not duplicated', () => {
+    const irAlreadyGated = baseIr(
+      { roles: { vision: 'docs/VISION.md', constitution: 'docs/CONSTITUTION.md' } },
+      ['docs/CONSTITUTION.md', 'some/other/path.ts'],
+    );
+    applyDocumentAutoGate(irAlreadyGated);
+    const paths = (irAlreadyGated.policy.box.risk as { human_required_paths: string[] }).human_required_paths;
+    expect(paths.filter((p) => p === 'docs/CONSTITUTION.md')).toHaveLength(1);
+    expect(paths.sort()).toEqual(['docs/CONSTITUTION.md', 'docs/VISION.md', 'some/other/path.ts'].sort());
+  });
+
+  test('parseIr wires the auto-gate in automatically for any real compile path', () => {
+    const parsed = parseIr(
+      [
+        'schema: autonomy.ir.v1',
+        'targets: [gh-actions]',
+        'agents:',
+        '  pm: { behavior: skills/pm, capabilities: [tasks:converse], triggers: [{ cron: "0 0 * * *" }] }',
+        'documents:',
+        '  roles:',
+        '    vision: docs/VISION.md',
+        '    constitution: docs/CONSTITUTION.md',
+        'policy: { box: {} }',
+        'resources: []',
+      ].join('\n'),
+    );
+    expect((parsed.policy.box.risk as { human_required_paths: string[] }).human_required_paths.sort()).toEqual([
+      'docs/CONSTITUTION.md',
+      'docs/VISION.md',
+    ]);
   });
 });

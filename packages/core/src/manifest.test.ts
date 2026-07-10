@@ -73,3 +73,37 @@ describe('emitAutonomy — a kind:human actor', () => {
     expect(m.skills?.maintainer).toBeUndefined(); // the substrate copies no skill file for a person
   });
 });
+
+// U2 (supercode study §II.9.1) — `documents.roles` rides ALONGSIDE `documents.resources`, nested under
+// `roles` so a documents-flattener that has never heard of roles (ingest-manifest.ts's collectDocPaths)
+// still treats each role path as an ordinary doc path — see ingest-manifest.test.ts for that side.
+describe('emitAutonomy — documents.roles (additive alongside resources)', () => {
+  const irWith = (documents?: AutonomyIR['documents'], resources: string[] = ['README.md']): AutonomyIR => ({
+    schema: 'autonomy.ir.v1',
+    targets: ['gh-actions'],
+    agents: { pm: { behavior: 'pm', capabilities: ['tasks:converse'], triggers: [{ cron: '* * * * *' }] } },
+    policy: { box: {} },
+    resources,
+    ...(documents ? { documents } : {}),
+  });
+
+  test('no documents block on the IR → manifest.documents carries resources only (unchanged shape)', () => {
+    const m = emitAutonomy(irWith());
+    expect(m.documents).toEqual({ resources: ['README.md'] });
+  });
+
+  test('declared roles emit alongside resources, nested under `roles`', () => {
+    const m = emitAutonomy(
+      irWith({ roles: { vision: 'docs/VISION.md', constitution: 'docs/CONSTITUTION.md', roadmap: '.open-autonomy/roadmap.yml' } }),
+    );
+    expect(m.documents).toEqual({
+      resources: ['README.md'],
+      roles: { vision: 'docs/VISION.md', constitution: 'docs/CONSTITUTION.md', roadmap: '.open-autonomy/roadmap.yml' },
+    });
+  });
+
+  test('a partial role map (vision only) emits only the declared keys', () => {
+    const m = emitAutonomy(irWith({ roles: { vision: 'docs/VISION.md' } }));
+    expect(m.documents).toEqual({ resources: ['README.md'], roles: { vision: 'docs/VISION.md' } });
+  });
+});

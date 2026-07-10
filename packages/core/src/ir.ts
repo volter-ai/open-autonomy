@@ -77,6 +77,23 @@ export interface AutonomyIR {
   agents: Record<string, IRAgent>;
   policy: IRPolicy;
   resources: string[];
+  // Declared document ROLES — by altitude, never filename (supercode study §II.9.1). Additive + optional:
+  // an IR with no `documents` block validates and compiles exactly as before. `vision` is the measuring
+  // stick every agent's proposal is judged against, so declaring the block at all REQUIRES it; `constitution`
+  // (inviolable rules) and `roadmap` (the strategist's medium) are each independently optional — a profile
+  // may declare zero, one, or both. See ir-yaml.ts's applyDocumentAutoGate for what `vision`/`constitution`
+  // being declared here causes (the roadmap is deliberately NOT auto-gated).
+  documents?: { roles: DocumentRoles };
+}
+
+// A role → path map. Every value is a single literal path (never a glob — one file per role, so the
+// auto-gate and preflight both have an unambiguous file to check), relative to the installed repo root
+// (NOT the profile dir — unlike `resources`, a role names a file the ADOPTER's repo carries, typically
+// authored outside the profile, e.g. their own docs/VISION.md).
+export interface DocumentRoles {
+  vision: string; // REQUIRED once the block is declared — the measuring stick (docs/SPEC.md; supercode §II.9.1)
+  constitution?: string; // inviolable rules — optional; a profile may operate without one
+  roadmap?: string; // the strategist's medium — optional, and NEVER auto-gated (see applyDocumentAutoGate)
 }
 
 /** The output of a full compile: files the compiler writes, plus profile files copied verbatim. */
@@ -112,6 +129,26 @@ export function validateIR(ir: AutonomyIR): string[] {
   else if (typeof ir.policy.box !== 'object') errors.push('policy.box must be an object');
   if (ir.resources === undefined || ir.resources === null) errors.push('missing resources (add "resources: []" if the profile carries no verbatim files)');
   else if (!Array.isArray(ir.resources)) errors.push('resources must be an array');
+  // `documents` is entirely optional — an IR with none of it validates unchanged. But once a profile opts
+  // in, `roles` (and `roles.vision` within it) are required: a bare `documents: {}` or a roles block with
+  // no vision is a mistake worth naming here rather than silently compiling into a manifest with a role map
+  // nobody can preflight-check (docs/SPEC.md; supercode study §II.9.1 — vision REQUIRED, roadmap/constitution
+  // OPTIONAL).
+  if (ir.documents !== undefined) {
+    if (typeof ir.documents !== 'object' || ir.documents === null)
+      errors.push('documents must be an object (e.g. "documents: { roles: { vision: docs/VISION.md } }")');
+    else if (ir.documents.roles === undefined || ir.documents.roles === null || typeof ir.documents.roles !== 'object')
+      errors.push('documents.roles is required when documents is declared (e.g. "documents: { roles: { vision: docs/VISION.md } }")');
+    else {
+      const roles = ir.documents.roles as unknown as Record<string, unknown>;
+      if (!roles.vision) errors.push('documents.roles.vision is required — declaring the role map without a vision is not allowed (it is the measuring stick the map exists to name)');
+      for (const [role, p] of Object.entries(roles)) {
+        if (p === undefined || p === null) continue;
+        if (typeof p !== 'string' || p.length === 0) errors.push(`documents.roles.${role} must be a non-empty path string`);
+        else if (p.includes('*') || p.includes('?')) errors.push(`documents.roles.${role} must be a literal path, not a glob ('${p}')`);
+      }
+    }
+  }
   for (const [name, a] of Object.entries(ir.agents ?? {})) {
     if (!a.behavior) errors.push(`agent ${name}: missing behavior`);
     if (!Array.isArray(a.capabilities)) errors.push(`agent ${name}: capabilities must be an array`);

@@ -40,10 +40,20 @@ export function readAutonomyConfig(root = '.'): AutonomyConfig {
 }
 
 export function parseAutonomyConfig(text: string): AutonomyConfig {
-  const manifest = (Bun.YAML.parse(text) ?? {}) as { skills?: Record<string, string> };
+  const manifest = (Bun.YAML.parse(text) ?? {}) as {
+    skills?: Record<string, string>;
+    documents?: { roles?: Partial<Record<string, string>> };
+  };
+  // U2 (supercode study §II.9.1) — a role the profile DECLARED wins over GOVERNANCE_DOCS's hardcoded path
+  // guess for the same key (`constitution`/`roadmap` already have a guess here; `vision` has none — OA's
+  // fixed layout never guessed a vision path, so it appears only when a role declares it). No roles
+  // declared (or no manifest) → this is byte-identical to pre-U2 behavior, the guesses alone.
+  const declaredRoles: Record<string, string> = {};
+  for (const [role, path] of Object.entries(manifest.documents?.roles ?? {}))
+    if (typeof path === 'string' && path.length > 0) declaredRoles[role] = path;
   // Skills come from the manifest (the source of truth — no hardcoded list that can drift); the
-  // governance doc/standard layout is OA's fixed structure.
-  return { documents: { ...GOVERNANCE_DOCS }, standards: { ...STANDARDS }, skills: manifest.skills ?? {} };
+  // governance doc/standard layout is OA's fixed structure, overridden per-key by a declared role.
+  return { documents: { ...GOVERNANCE_DOCS, ...declaredRoles }, standards: { ...STANDARDS }, skills: manifest.skills ?? {} };
 }
 
 export function referencedAutonomyPaths(config: AutonomyConfig): string[] {

@@ -279,6 +279,29 @@ describe('validateIR — documents.roles', () => {
     expect(validateIR(withDocs).some((e) => e.includes('must be a literal path, not a glob'))).toBe(true);
   });
 
+  test('rejects a Bun.Glob character class ([) in a role path — downstream consumers interpret it as a pattern', () => {
+    const a = agent();
+    const withDocs: AutonomyIR = { ...ir({ a }), documents: { roles: { vision: 'docs/VISION[01].md' } } };
+    expect(validateIR(withDocs).some((e) => e.includes('must be a literal path, not a glob'))).toBe(true);
+  });
+
+  test('rejects Bun.Glob brace expansion ({) in a role path', () => {
+    const a = agent();
+    const withDocs: AutonomyIR = { ...ir({ a }), documents: { roles: { vision: 'docs/{VISION,MISSION}.md' } } };
+    expect(validateIR(withDocs).some((e) => e.includes('must be a literal path, not a glob'))).toBe(true);
+  });
+
+  test('rejects an unknown role key — the role set is closed (exactly vision/constitution/roadmap)', () => {
+    const a = agent();
+    const withDocs: AutonomyIR = {
+      ...ir({ a }),
+      documents: { roles: { vision: 'docs/VISION.md', mission: 'docs/MISSION.md' } as never },
+    };
+    expect(
+      validateIR(withDocs).some((e) => e.includes('documents.roles.mission: unknown role') && e.includes('vision, constitution, roadmap')),
+    ).toBe(true);
+  });
+
   test('rejects a non-string / empty role value', () => {
     const a = agent();
     const withDocs: AutonomyIR = { ...ir({ a }), documents: { roles: { vision: 'docs/VISION.md', constitution: '' } } };

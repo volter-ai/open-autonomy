@@ -143,9 +143,22 @@ export function validateIR(ir: AutonomyIR): string[] {
       const roles = ir.documents.roles as unknown as Record<string, unknown>;
       if (!roles.vision) errors.push('documents.roles.vision is required — declaring the role map without a vision is not allowed (it is the measuring stick the map exists to name)');
       for (const [role, p] of Object.entries(roles)) {
+        // The role set is CLOSED: exactly the three named altitudes (the design's whole point is roles by
+        // altitude, and these are the altitudes). An unknown key (`mission:`, a typo like `visoin:`) must
+        // fail loud here — silently accepting it would flow an unvetted key straight into every role-map
+        // consumer (GOVERNANCE_DOCS overlay, preflight existence checks) with no compile-time signal.
+        if (!KNOWN_DOCUMENT_ROLES.has(role)) {
+          errors.push(`documents.roles.${role}: unknown role (the role set is: ${[...KNOWN_DOCUMENT_ROLES].join(', ')})`);
+          continue;
+        }
         if (p === undefined || p === null) continue;
         if (typeof p !== 'string' || p.length === 0) errors.push(`documents.roles.${role} must be a non-empty path string`);
-        else if (p.includes('*') || p.includes('?')) errors.push(`documents.roles.${role} must be a literal path, not a glob ('${p}')`);
+        // No pattern characters of any kind: `*`/`?` plus `[`/`{` — Bun.Glob metacharacters (character
+        // classes, brace expansion) that downstream consumers actively interpret as patterns (e.g.
+        // human-approval-gate.ts matching PR files against human_required_paths, which auto-gating feeds).
+        // One role = one literal file.
+        else if (p.includes('*') || p.includes('?') || p.includes('[') || p.includes('{'))
+          errors.push(`documents.roles.${role} must be a literal path, not a glob ('${p}')`);
       }
     }
   }
@@ -224,6 +237,10 @@ const KNOWN_CAPABILITIES = new Set([
 // The trigger-param source catalog (docs/SPEC.md#trigger-params): what a trigger can forward to an
 // agent. Additive-only, like the capability catalog above.
 const KNOWN_TRIGGER_SOURCES = new Set(['subject.ref', 'subject.actor', 'subject.actorRole', 'subject.text', 'trigger.kind']);
+
+// The document-role catalog (U2, supercode study §II.9.1): the three named altitudes, and nothing else.
+// Additive-only like the catalogs above — a new role is added here first, then given consumers.
+const KNOWN_DOCUMENT_ROLES = new Set(['vision', 'constitution', 'roadmap']);
 
 /** A compact structural fingerprint for comparing two IRs (the universality smoke test). */
 export function irShape(ir: AutonomyIR) {

@@ -140,9 +140,9 @@ This is where `simple-gh` differs from every auto-merging profile in this repo �
 **Reconciliation (F1):** "never push directly to the default branch" above is absolute for every PR
 landed under this section — but it doesn't, by itself, say how §6's board-state flips ever reach
 `main`. They don't reach it by pushing: branch protection mechanically rejects any direct-to-main push
-(a bare commit has no check-runs at push time — GitHub's GH006), and the repo's required CI fires only
-on `push: main` + `pull_request`, so a direct board commit can never earn the required green check
-either. §7 below is the landing path for those flips — same "always a PR, never a push" rule as this
+(a bare commit has no check-runs at push time — GitHub's GH006), and the repo's required CI typically
+fires only on `push: main` + `pull_request`, so a direct board commit can never earn the required green
+check either. §7 below is the landing path for those flips — same "always a PR, never a push" rule as this
 section, just with a narrow, scoped self-merge carve-out for diffs that are pure board state.
 
 ## 6. Close
@@ -158,8 +158,8 @@ see §7 for how. Never commit them straight to `main` yourself (§5 step 5's rul
 
 **Why this section exists (F1):** branch protection's required status check makes a direct push to
 `main` mechanically unlandable (a bare commit has no check-runs at push time — GitHub's GH006), and the
-repo's required CI fires only on `push: main` + `pull_request`, so a board-state commit made straight to
-`main` can never earn the green check the protection demands. Every board mutation §2–§6 asks you to
+repo's required CI typically fires only on `push: main` + `pull_request`, so a board-state commit made
+straight to `main` can never earn the green check the protection demands. Every board mutation §2–§6 asks you to
 make — ztrack state flips, `PR:` lines, board snapshots, paused re-arm — is therefore mechanically dead
 on `main` outside a PR. This section is that PR's landing path, not a new kind of action: you still do
 the things §2–§6 describe, you just land them here instead of pushing them straight to `main`.
@@ -207,8 +207,8 @@ green-CI PR, never an admin override, and it never extends to a code path.
 **Wave-latency.** The flip usually lands within the same tick — open the board PR, wait for green,
 merge, all in one tick. If CI is slow, it's fine to end the tick with the board PR open rather than
 wait on it; that's a valid wait-state, not a stall. The next tick's first action is then landing that
-PR before dispatching anything new — the same shape as the ensured runner's eligibility probe, which
-is designed to treat a PR with concluded checks (not just fully-merged ones) as actionable.
+PR before dispatching anything new — a PR with concluded checks (not just a fully-merged one) is
+actionable work for a tick.
 
 **Plan docs: eligibility vs review depth.** A docs-plans-only diff IS carve-out-eligible — that is why
 `docs/plans/**` is in the list; a plan doc is board state in document form. The distinction the

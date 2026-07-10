@@ -1,8 +1,14 @@
-# simple-gh — the single-manager GitHub PR loop. ONE agent identity: a cron `manager` session on a
-# capable model that (a) dispatches strongest-model research/plan/review subagents in-session,
+# simple-gh — the single-manager GitHub PR loop. ONE SCHEDULED agent identity: a cron `manager` session
+# on a capable model that (a) dispatches strongest-model research/plan/review subagents in-session,
 # (b) writes plans as docs registered as ztrack document sources, (c) dispatches weaker-model
 # implementation subagents on isolated git worktrees, and (d) LANDS work by merging each PR itself —
 # but ONLY after every required CI check is green and a fresh review-subagent pass is recorded.
+#
+# A second agent, `audit`, is declared below — but it carries NO cron trigger, ever. It is
+# dispatch-only: a read-only conformance auditor of the install itself (never the product it builds),
+# invoked on demand by the operator or by the manager as a subagent brief, never scheduled. Its presence
+# does not contradict the "one scheduled actor" identity above — `manager` remains the loop's only
+# continuously-ticking process (see skills/audit/SKILL.md's identity section).
 #
 # Landing model = twin-sdlc's owner-decided merge (no auto-merge, ever), with the manager as the
 # operator's deputy. Honesty: on `local` all of this runs on ONE credential — the deterministic gate is
@@ -17,9 +23,12 @@
 # One unit: an agent = behavior + capabilities + triggers(+params). See docs/SPEC.md#the-ir,
 # docs/SPEC.md#the-runner, docs/SPEC.md#capabilities (the merge boundary: no agent may hold both
 # code:propose and code:review, and code:merge is gate-only — never granted to any agent. This profile
-# resolves that constraint by declaring `code:propose` ONLY on `manager`; review is a harness subagent
-# dispatch, not a second IR actor, and merge is a human-credential act the manager performs as the
-# operator's deputy, never a granted capability).
+# resolves that constraint by declaring unscoped `code:propose` ONLY on `manager` — `audit` holds a
+# narrowly SCOPED `code:propose@docs/audits` for its own dated report PR only, never product code (the
+# scope is a doctrinal constraint, not a mechanically enforced one, per docs/SPEC.md's "Scope (optional)"
+# note — see skills/audit/SKILL.md's Hard rails). Review is a harness subagent dispatch, not a second IR
+# actor for `manager`'s own PRs, and merge — of any PR, including `audit`'s own — is a human-credential
+# act the manager or the operator performs, never a capability `audit` holds).
 schema: autonomy.ir.v1
 
 # The pattern is a person's machine + their gh credential: there is no meaningful gh-actions realization
@@ -29,7 +38,7 @@ targets: [local]
 codeHost: github
 
 agents:
-  # The ONLY declared actor. Research/plan/review/implementation workers are harness-native SUBAGENTS
+  # The ONLY SCHEDULED actor. Research/plan/review/implementation workers are harness-native SUBAGENTS
   # inside this one session (Claude Code's Agent tool: per-dispatch `model` override + `isolation:
   # "worktree"), never separate OA actors — see README.md's harness-assumption note.
   manager:
@@ -37,6 +46,19 @@ agents:
     capabilities: [code:propose, tasks:author, tasks:converse]
     triggers:
       - cron: "*/30 * * * *"     # AUTONOMY_SINGLETON dedups overlapping ticks (scripts/run-agent.mjs)
+
+  # Dispatch-only conformance auditor of THIS INSTALL (not the product it builds) — verifies changes made
+  # to it aren't inconsistent, contradictory, or against OA's own philosophy/structure (§II.10 of the OA
+  # self-dev architecture study). Read-only against the install with exactly one write: composing and
+  # opening its own dated report PR under docs/audits/ — never a fix, never a merge, never another
+  # dispatch (no agent:launch). NEVER carries a cron trigger — see skills/audit/SKILL.md's identity
+  # section for why a second declared agent here doesn't break the "one scheduled actor" model above.
+  audit:
+    behavior: audit
+    capabilities: [tasks:converse, code:propose@docs/audits]
+    triggers:
+      - dispatch: true
+        params: { TARGET_REF: subject.ref }   # optional: an issue/PR the one-line summary comment lands on
 
 policy:
   maxConcurrent: 1               # one manager session; its subagent fan-out is doctrine-capped, not IR-capped

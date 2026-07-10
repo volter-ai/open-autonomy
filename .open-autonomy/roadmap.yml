@@ -93,8 +93,34 @@ items:
     acceptance:
       - A new repo can be scaffolded from the template and run checks.
       - Setup docs explain secrets, variables, and first issue flow.
-  - id: durable-state-index
+  - id: hosted-adopter-path
     phase: 10
+    priority: high
+    planned: true
+    # Ratified by the maintainer 2026-07-06 (proposed removed): make hosted adoption genuinely
+    # self-serve, not dogfood-only. The planner decomposes from BACKLOG.md BL-13/BL-18/BL-24.
+    title: Hosted GitHub Adoption Is Real For Non-Maintainers
+    intent: >
+      The 2026-07-06 adopter-docs audit found the hosted (gh-actions) path effectively
+      maintainer-only: compiled installs default to the maintainer's closed model proxy
+      (BL-13), the proposer's CI dispatch contract is undocumented and simple-gh-sdlc
+      ships without its ci.yml so every agent PR wedges (BL-18), and there is no hosted
+      step-by-step install path → labels, repo settings, and branch protection are never
+      seeded or listed (BL-24). The strategic question this intent forces: either make
+      hosted adoption genuinely self-serve (own-proxy deploy guide, no volter defaults,
+      numbered install path, seeded vocabulary) or honestly scope the docs to
+      "hosted is dogfood-only for now". BACKLOG.md BL-13/BL-18/BL-24 hold the full
+      per-finding spec (files, lines, fix shapes) for the planner to decompose.
+    # Gate id `external-hosted-install` → declared as a real gate key + PROOF_LEDGER row at proof
+    # time. check:proof requires every ratified item carrying a gate key to already cite done
+    # evidence (and its regex reads comments too, so even naming the key here would arm it); the
+    # actor-model-human-handoffs ratification followed the same order: gate recorded when proven.
+    acceptance:
+      - A repo outside the maintainer's org completes the documented hosted install path end to end (compile → settings → labels → branch protection → proxy → preflight ready) → or adopter-facing docs explicitly scope hosted to dogfood-only.
+      - No compiled install carries a maintainer endpoint as a silent default.
+      - An agent PR on that install reaches a posted ci/agent-review/human-approval verdict (no wedge); run IDs recorded in the ledger.
+  - id: durable-state-index
+    phase: 11
     priority: medium
     proposed: true
     title: Durable State And Audit Trail
@@ -104,7 +130,7 @@ items:
       - Decision index summarizes latest state by issue and PR (from the run-ledger).
       - Status commands can use reconstructed state.
   - id: repair-loops
-    phase: 11
+    phase: 12
     priority: medium
     planned: true
     title: PM-Directed Repair (not auto-repair)
@@ -116,7 +142,7 @@ items:
       - The PM feeds the reviewer's findings to the next developer attempt when it judges them addressable.
       - Repeated/unclear findings escalate to a human rather than re-attempting indefinitely.
   - id: maintainer-governance
-    phase: 12
+    phase: 13
     priority: medium
     planned: true
     title: Maintainer Governance
@@ -125,7 +151,7 @@ items:
       - Maintainer holds stop merge even when CI and review pass.
       - Repo mode can be paused or constrained without code changes.
   - id: public-oss-readiness
-    phase: 13
+    phase: 14
     priority: medium
     planned: true
     title: Public OSS Readiness
@@ -134,7 +160,7 @@ items:
       - Cookbook examples are pushable repos with local docs and root roadmap links.
       - Release evidence is reproducible from committed artifacts.
   - id: strategist-roadmap-research
-    phase: 14
+    phase: 15
     priority: high
     proposed: true
     title: Strategist Roadmap Research Loop
@@ -144,7 +170,7 @@ items:
       - Propose roadmap items as a human-ratified pull request, never merging its own proposal.
       - Treat the north star, merit criteria, and proof gates as read-only; recommend amendments in prose only.
   - id: actor-model-human-handoffs
-    phase: 15
+    phase: 16
     priority: high
     planned: true
     title: Actor Model And Explicit Human Handoffs
@@ -154,7 +180,7 @@ items:
       - A required review is satisfiable by the AI reviewer OR a native human Approve on the current head SHA.
       - Proven by a live testbed run where a native human Approve merges a bot-authored PR; run IDs recorded in the ledger.
   - id: bench-autonomy-ratio
-    phase: 16
+    phase: 17
     priority: medium
     proposed: true
     title: Bench Autonomy Ratio From Live Runs
@@ -164,7 +190,7 @@ items:
       - The human simulator is labeled a test double and is never used as proof of a live capability.
       - Proven against decision records emitted by a live testbed run; run IDs recorded in the ledger.
   - id: develop-oa-through-oa
-    phase: 17
+    phase: 18
     priority: high
     proposed: true
     title: Develop OA Through OA (close the manual loophole)
@@ -174,7 +200,7 @@ items:
       - Manual driving of canonical is scoped to the bootstrap substrate only, and even bootstrap work cites live-run evidence.
       - Significant changes trace to a roadmap item and a satisfied proof gate; proven by the pipeline shipping at least one OA feature end to end.
   - id: multi-provider-model-routing
-    phase: 18
+    phase: 19
     priority: medium
     proposed: true
     title: Multi-Provider Model Routing For Loop Roles
@@ -189,7 +215,7 @@ items:
       - The compute-unit or model-proxy handles provider-agnostic credential management across an execution group.
       - Proven by a live testbed run where at least two different providers serve different roles; run IDs in the ledger.
   - id: quality-benchmark-gate
-    phase: 19
+    phase: 20
     priority: medium
     proposed: true
     title: Output Quality Benchmark Gate (proof beyond process)
@@ -206,7 +232,7 @@ items:
       - The benchmark fixture is deterministic or uses a fixed-cost testbed; no model spend for the gate itself.
       - Proven by at least one benchmark-evaluated run with result recorded in the ledger.
   - id: substrate-complexity-reduction
-    phase: 20
+    phase: 21
     priority: medium
     proposed: true
     title: Substrate Complexity Reduction For Adopter Portability
@@ -267,31 +293,6 @@ items:
         is possible by querying the standardized format without per-run schema knowledge.
       - Proven by a testbed run that exports a trajectory and replays it through the fixture;
         run IDs in the ledger.
-  - id: hosted-adopter-path
-    priority: high
-    planned: true
-    # Ratified by the maintainer 2026-07-06 (proposed removed): make hosted adoption genuinely
-    # self-serve, not dogfood-only. The planner decomposes from BACKLOG.md BL-13/BL-18/BL-24.
-    title: Hosted GitHub Adoption Is Real For Non-Maintainers
-    intent: >
-      The 2026-07-06 adopter-docs audit found the hosted (gh-actions) path effectively
-      maintainer-only: compiled installs default to the maintainer's closed model proxy
-      (BL-13), the proposer's CI dispatch contract is undocumented and simple-gh-sdlc
-      ships without its ci.yml so every agent PR wedges (BL-18), and there is no hosted
-      step-by-step install path — labels, repo settings, and branch protection are never
-      seeded or listed (BL-24). The strategic question this intent forces: either make
-      hosted adoption genuinely self-serve (own-proxy deploy guide, no volter defaults,
-      numbered install path, seeded vocabulary) or honestly scope the docs to
-      "hosted is dogfood-only for now". BACKLOG.md BL-13/BL-18/BL-24 hold the full
-      per-finding spec (files, lines, fix shapes) for the planner to decompose.
-    # Gate id `external-hosted-install` — declared as a real gate key + PROOF_LEDGER row at proof
-    # time. check:proof requires every ratified item carrying a gate key to already cite done
-    # evidence (and its regex reads comments too, so even naming the key here would arm it); the
-    # actor-model-human-handoffs ratification followed the same order: gate recorded when proven.
-    acceptance:
-      - A repo outside the maintainer's org completes the documented hosted install path end to end (compile → settings → labels → branch protection → proxy → preflight ready) — or adopter-facing docs explicitly scope hosted to dogfood-only.
-      - No compiled install carries a maintainer endpoint as a silent default.
-      - An agent PR on that install reaches a posted ci/agent-review/human-approval verdict (no wedge); run IDs recorded in the ledger.
   - id: self-improving-prompt-evolution
     priority: low
     proposed: true

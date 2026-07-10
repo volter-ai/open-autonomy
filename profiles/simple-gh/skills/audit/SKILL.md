@@ -17,12 +17,14 @@ invariants.
 Read `profiles/simple-gh/skills/manager/SKILL.md` first — the manager is the ONLY **scheduled** actor in
 this profile (`cron: */30 * * * *`), and nothing here changes that. You are a second declared agent, but
 you carry **no cron trigger** — you exist only as `dispatch: true` in `ir.yml`, fired on demand (locally:
-`AUTONOMY_AGENT=audit node scripts/run-agent.mjs`, mirroring the same manual-dispatch pattern the
-planner's first run uses; on a `gh-actions` target the substrate-native equivalent is
-`workflow_dispatch`). A tick never launches you, the loop driver never schedules you, and you never
-re-dispatch yourself. This preserves the profile's real identity claim — one continuously running
-process, the manager's cron tick — while adding an on-demand check the operator (or the manager, dispatched
-like any other subagent brief) can invoke whenever they want a second opinion on the install's own health.
+`AUTONOMY_AGENT=audit node scripts/run-agent.mjs`; on a `gh-actions` target the substrate-native
+equivalent is `workflow_dispatch`). A tick never launches you, the loop driver never schedules you, and
+you never re-dispatch yourself. This preserves the profile's real identity claim — one continuously
+running process, the manager's cron tick — while adding an on-demand check for a second opinion on the
+install's own health. **Who invokes you:** the `audit` IR actor is **operator-dispatched only** — the
+manager holds no `agent:launch` and cannot fire you through the substrate. (The manager may run this
+file's checklist itself as an ordinary in-session read-only research brief when it wants the same second
+opinion mid-tick; that is a subagent reading a doctrine file, not a dispatch of this actor.)
 
 **Why this skill exists at all:** the architecture study that produced this profile's governance doctrine
 was, itself, a manual execution of exactly this audit — and it caught a real defect that the study's own
@@ -88,6 +90,16 @@ read for every verdict — a verdict with no cited evidence is not a valid findi
    actually enforced live is exactly the class of gap a doctrinal-only merge gate creates — flag it as a
    FAIL even if nothing has yet exploited it.
 
+   **The 404 trap:** the `/protection` endpoint is **admin-only** — on a non-admin credential it returns
+   404 *even when protection is fully configured*. **A 404 from the `/protection` endpoint is never
+   evidence of absence — it is credential masking.** On a 404, fall back to the endpoint every read
+   credential can see: `gh api repos/<owner>/<repo>/branches/<default-branch>` and read `.protected`
+   (boolean) plus `.protection.required_status_checks` (its `enforcement_level: "everyone"` is the
+   non-admin rendering of `enforce_admins: true`; `contexts` lists the required check names). Compare
+   *those* against the prescription. Only if the fallback also shows `.protected: false` may you record
+   "no live protection" — and if the fallback itself is unreadable (no credential at all), the check is
+   **blocked**, not FAIL and not PASS (see OUTCOME).
+
 4. **Manifest integrity.** Read `.open-autonomy/generated.json` (`schema:
    open-autonomy.generated.v1`) and confirm every listed file exists on disk. Separately, if this
    install's profile tree is a **vendored fork** of an upstream profile (carried into a target repo rather
@@ -145,5 +157,8 @@ dispatch that invoked you carried a target (an issue or PR reference in `TARGET_
 the report, nothing more; the report itself carries the detail.
 
 End with `OUTCOME: audited <N passes>/<N fails>/<N n-a> — report <PR URL>` or `OUTCOME: blocked <reason>`
-if you could not complete a check (e.g. no `gh` credential for check 3) — a blocked check is reported as
-such in the report, never silently skipped.
+if you could not complete a check — e.g. no `gh` credential for check 3, **or a valid but non-admin
+credential where the `/protection` endpoint 404s AND the branch fallback endpoint is also unreadable**
+(a 404 alone with a working fallback is not blocked — run the fallback per check 3). A blocked check is
+reported as such in the report, never silently skipped, and never converted into a PASS or FAIL you
+didn't actually observe.

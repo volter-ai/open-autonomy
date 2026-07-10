@@ -6,9 +6,10 @@
 #
 # A second agent, `audit`, is declared below — but it carries NO cron trigger, ever. It is
 # dispatch-only: a read-only conformance auditor of the install itself (never the product it builds),
-# invoked on demand by the operator or by the manager as a subagent brief, never scheduled. Its presence
-# does not contradict the "one scheduled actor" identity above — `manager` remains the loop's only
-# continuously-ticking process (see skills/audit/SKILL.md's identity section).
+# never scheduled, and OPERATOR-dispatched only — the manager holds no agent:launch, so it cannot fire
+# this actor through the substrate (it may at most run the audit checklist as an in-session read-only
+# research brief). Its presence does not contradict the "one scheduled actor" identity above — `manager`
+# remains the loop's only continuously-ticking process (see skills/audit/SKILL.md's identity section).
 #
 # Landing model = twin-sdlc's owner-decided merge (no auto-merge, ever), with the manager as the
 # operator's deputy. Honesty: on `local` all of this runs on ONE credential — the deterministic gate is

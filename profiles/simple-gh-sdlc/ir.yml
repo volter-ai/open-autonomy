@@ -4,6 +4,13 @@
 # status (the code:review / code:propose permission split), not the local reviewer's verdict. Uses the
 # ztrack `simple-gh-sdlc` preset (PR at in-review, merged PR for done). One unit: an agent = behavior +
 # capabilities + triggers(+params) (+ review edge). See docs/SPEC.md#the-ir, docs/SPEC.md#the-runner.
+#
+# Plus a scheduled `planner` (D3): the board (GitHub issues) only ever shrinks under pm/draft/develop/
+# reviewer's normal operation — nothing in that loop ORIGINATES new issues, only shapes/works ones that
+# already exist. `planner` reads the repo's declared vision and files new draft (unlabeled) issues when
+# the board is starving, self-throttled, never touching the `ready` label itself — see
+# `skills/planner/SKILL.md`. Exists because a seed-only board empties (D8); twin's own roadmap-candidate
+# planner (`twin/profiles/twin-sdlc/skills/planner/SKILL.md`) is this shape's proven precedent.
 schema: autonomy.ir.v1
 # Runs on EITHER runner over a GitHub code host (runner ⟂ code host): `gh-actions` (agents run as Actions
 # jobs) or `local` (agents run on your machine via termfleet, still opening auto-merging PRs on GitHub).
@@ -56,6 +63,18 @@ agents:
       - event: pull_request_target
         config: { types: [opened, synchronize, reopened, ready_for_review] }
     timeout: 20
+
+  # D3: originates new draft (unlabeled) issues from the vision when the board is starving — the one
+  # thing nothing else in this loop does. No `code:propose` (it never touches code or opens a PR — issue
+  # creation is not a merge here, unlike twin's file-based roadmap) and no `agent:launch` (it never
+  # dispatches `draft`/`develop` itself). `tasks:author` is its entire authority. See
+  # `skills/planner/SKILL.md`'s "Why no ratification step" for why this doesn't need twin's PR-merge gate.
+  planner:
+    behavior: planner
+    capabilities: [tasks:author, tasks:converse]
+    triggers:
+      - cron: "37 6 * * *"       # daily-style; SELF-THROTTLE (SKILL.md) is the real cadence control
+                                  # until per-agent cadence exists (see U4)
 
 policy:
   maxConcurrent: 2   # the WIP ceiling: at most one in-progress + one in-review at a time

@@ -1,7 +1,7 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { describe, expect, test } from 'bun:test';
 
-// Production wiring after the agent-model migration: a model-interpreted agent (developer) compiles to
+// Production wiring after the agent-model migration: a model-interpreted agent (develop) compiles to
 // the privilege-separated wrapper; a deterministic agent compiles to a one-step job that runs a
 // self-contained scripts/agent-<role>.ts orchestrator. So the wiring these tests guard now lives in the
 // entry scripts (and the wrapper), not in hand-written workflow shell — assert it at its new home, plus
@@ -14,7 +14,8 @@ describe('public agent production readiness', () => {
   test('workflows opt into Node 24 JavaScript actions', () => {
     for (const name of [
       'ci.yml',
-      'developer.yml',
+      'draft.yml',
+      'develop.yml',
       'pm.yml',
       'reviewer.yml',
       'planner.yml',
@@ -25,7 +26,7 @@ describe('public agent production readiness', () => {
   });
 
   test('operator controls run as a separate job, before any model work', () => {
-    const text = workflow('developer.yml');
+    const text = workflow('develop.yml');
     // A `/agent ` comment routes to the control job (the vendored control plane), not the model path.
     expect(text).toContain('node .github/agent-control.mjs');
     expect(text).toContain("startsWith(github.event.comment.body, '/agent ')");
@@ -52,7 +53,7 @@ describe('public agent production readiness', () => {
     // pull_request_target agent run requires a same-repo PR or a maintainer author. A plain comment
     // launches nothing. These are the merge-boundary / control-plane guards — encoded as a check so they
     // can never silently regress (the deep-review found both missing).
-    for (const wf of ['developer.yml', 'reviewer.yml', 'pm.yml', 'planner.yml', 'strategist.yml', 'strategy_reviewer.yml']) {
+    for (const wf of ['draft.yml', 'develop.yml', 'reviewer.yml', 'pm.yml', 'planner.yml', 'strategist.yml', 'strategy_reviewer.yml']) {
       const text = workflow(wf);
       // control job: maintainer-gated
       expect(text).toContain('contains(fromJSON(\'["OWNER","MEMBER","COLLABORATOR"]\'), github.event.comment.author_association)');
@@ -73,8 +74,8 @@ describe('public agent production readiness', () => {
     // Routing is mechanical wiring — the proposer's effect (the agent-owned scripts/agent-propose.ts)
     // dispatches its independent reviewer when the PR opens. The workflow passes the reviewer to the effect via
     // REVIEW_WORKFLOW; the script does the deterministic dispatch. Encoded so routing never depends on a model.
-    expect(workflow('developer.yml')).toContain('REVIEW_WORKFLOW: reviewer.yml');
-    expect(workflow('developer.yml')).toContain('bun scripts/agent-propose.ts');
+    expect(workflow('develop.yml')).toContain('REVIEW_WORKFLOW: reviewer.yml');
+    expect(workflow('develop.yml')).toContain('bun scripts/agent-propose.ts');
     expect(workflow('strategist.yml')).toContain('REVIEW_WORKFLOW: strategy_reviewer.yml');
     expect(script('agent-propose.ts')).toContain('REVIEW_WORKFLOW'); // the effect dispatches the review
     // The PM no longer carries a PR-routing step (it owns triage + capacity + close, all judgments/sweeps).
@@ -91,7 +92,7 @@ describe('public agent production readiness', () => {
     expect(workflow('merge.yml')).toContain('rearm-auto-merge.ts');
     expect(workflow('pm.yml')).not.toContain('reconcile-merged-issues.ts'); // moved out of the agent run
     expect(workflow('pm.yml')).toContain("vars.PUBLIC_AGENT_REPO_PAUSED != 'true'");
-    expect(workflow('developer.yml')).toContain("vars.PUBLIC_AGENT_REPO_PAUSED != 'true'");
+    expect(workflow('develop.yml')).toContain("vars.PUBLIC_AGENT_REPO_PAUSED != 'true'");
     expect(workflow('reviewer.yml')).not.toContain('reconcile-merged-issues.ts');
   });
 
@@ -99,7 +100,7 @@ describe('public agent production readiness', () => {
     // The model output is otherwise written to gitignored scratch that dies with the runner. Each agent
     // run must upload .agent-run/ (transcript + pr.md + subject) as an artifact (if: always, so failures are
     // captured) AND echo the transcript into the run log — so no agent call's result is ever lost.
-    for (const wf of ['developer.yml', 'reviewer.yml', 'pm.yml', 'planner.yml', 'strategist.yml', 'strategy_reviewer.yml']) {
+    for (const wf of ['draft.yml', 'develop.yml', 'reviewer.yml', 'pm.yml', 'planner.yml', 'strategist.yml', 'strategy_reviewer.yml']) {
       const text = workflow(wf);
       expect(text).toContain('actions/upload-artifact@'); // SHA-pinned; assert the action, not the ref
       expect(text).toContain('path: .agent-run/');
@@ -111,7 +112,7 @@ describe('public agent production readiness', () => {
     // The agent runs untrusted-derived work with a scoped GH_TOKEN + bounded model token in env. Every
     // agent workflow must block egress (harden-runner) so a prompt-injected agent can't ship a token to an
     // attacker host. Encoded as a check so the lockdown can't silently regress.
-    for (const wf of ['developer.yml', 'reviewer.yml', 'pm.yml', 'planner.yml', 'strategist.yml', 'strategy_reviewer.yml']) {
+    for (const wf of ['draft.yml', 'develop.yml', 'reviewer.yml', 'pm.yml', 'planner.yml', 'strategist.yml', 'strategy_reviewer.yml']) {
       const text = workflow(wf);
       expect(text).toContain('step-security/harden-runner');
       expect(text).toContain('egress-policy: block');
@@ -119,7 +120,7 @@ describe('public agent production readiness', () => {
   });
 
   test('the agent job is credentialed (scoped to its capabilities); it proposes its own auto-merging PR', () => {
-    const text = workflow('developer.yml');
+    const text = workflow('develop.yml');
     // developer = code:propose + tasks:converse → contents/pull-requests/actions/issues:write + id-token.
     expect(text).toContain('pull-requests: write');
     expect(text).toContain('contents: write');

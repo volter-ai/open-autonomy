@@ -84,17 +84,17 @@ async function opPauseResume(repo: string, n: number): Promise<OpResult> {
 
 async function opCancel(repo: string, n: number): Promise<OpResult> {
   // Need an in-flight run to cancel: launch the developer on this issue, wait until it is running, cancel it.
-  ghOk(['workflow', 'run', 'developer.yml', '-R', repo, '-f', `issue_number=${n}`]);
+  ghOk(['workflow', 'run', 'develop.yml', '-R', repo, '-f', `issue_number=${n}`]);
   let running = false;
   for (let i = 0; i < 14 && !running; i++) {
     await sleep(15000);
-    running = gh(['run', 'list', '-R', repo, '--workflow', 'developer.yml', '--limit', '1', '--json', 'status', '--jq', '.[0].status']) ===
+    running = gh(['run', 'list', '-R', repo, '--workflow', 'develop.yml', '--limit', '1', '--json', 'status', '--jq', '.[0].status']) ===
       'in_progress';
   }
   comment(repo, n, '/agent cancel');
   await sleep(55000);
   const cancelComment = /cancel/i.test(recentComments(repo, n, 3));
-  const runState = gh(['run', 'list', '-R', repo, '--workflow', 'developer.yml', '--limit', '1', '--json', 'conclusion', '--jq', '.[0].conclusion']);
+  const runState = gh(['run', 'list', '-R', repo, '--workflow', 'develop.yml', '--limit', '1', '--json', 'conclusion', '--jq', '.[0].conclusion']);
   const ok = cancelComment && (runState === 'cancelled' || !running);
   return {
     scenario: 'operator-cancel',
@@ -110,10 +110,10 @@ async function opRepoPause(repo: string, n: number): Promise<OpResult> {
   // not the PM model noticing a label; then clear it.
   ghOk(['variable', 'set', 'PUBLIC_AGENT_REPO_PAUSED', '-R', repo, '--body', 'true']);
   await sleep(8000);
-  ghOk(['workflow', 'run', 'developer.yml', '-R', repo, '-f', `issue_number=${n}`]);
+  ghOk(['workflow', 'run', 'develop.yml', '-R', repo, '-f', `issue_number=${n}`]);
   await sleep(70000); // the dispatch registers and the if: evaluates (a skipped job needs no runner)
   const conclusion = gh([
-    'run', 'list', '-R', repo, '--workflow', 'developer.yml', '--event', 'workflow_dispatch', '--limit', '1', '--json', 'conclusion', '--jq', '.[0].conclusion',
+    'run', 'list', '-R', repo, '--workflow', 'develop.yml', '--event', 'workflow_dispatch', '--limit', '1', '--json', 'conclusion', '--jq', '.[0].conclusion',
   ]);
   ghOk(['variable', 'set', 'PUBLIC_AGENT_REPO_PAUSED', '-R', repo, '--body', 'false']);
   const ok = conclusion === 'skipped';
@@ -145,9 +145,9 @@ async function developAndWaitForPr(repo: string, n: number): Promise<number> {
   // skipped ~1.4h after the var was last set to false). A skipped run produces no PR ever, so detect it and
   // re-dispatch once — a transient gate flake must not fail a develop scenario.
   for (let attempt = 1; attempt <= 2; attempt++) {
-    ghOk(['workflow', 'run', 'developer.yml', '-R', repo, '-f', `issue_number=${n}`]);
+    ghOk(['workflow', 'run', 'develop.yml', '-R', repo, '-f', `issue_number=${n}`]);
     await sleep(20000); // let the run register + the if: evaluate
-    const skipped = gh(['run', 'list', '-R', repo, '--workflow', 'developer.yml', '--event', 'workflow_dispatch', '--limit', '1', '--json', 'conclusion', '--jq', '.[0].conclusion']) === 'skipped';
+    const skipped = gh(['run', 'list', '-R', repo, '--workflow', 'develop.yml', '--event', 'workflow_dispatch', '--limit', '1', '--json', 'conclusion', '--jq', '.[0].conclusion']) === 'skipped';
     if (skipped && attempt < 2) continue; // transient gate skip → re-dispatch
     for (let i = 0; i < 17; i++) {
       await sleep(30000);
@@ -224,13 +224,13 @@ async function verifyPmDecidedFromHistory(repo: string, n: number, pr: number, s
   // escalated (the human-required label). Plus the PR must not have merged.
   const since = new Date().toISOString();
   // The PM re-dispatches by launching the developer via workflow_dispatch — its run is created AFTER we start.
-  // (workflow_dispatch developer runs all share displayTitle "developer", so we can't match by issue title; and
+  // (workflow_dispatch developer runs all share displayTitle "develop", so we can't match by issue title; and
   // operate runs serially with the operator-sim NOT dispatching developers during this window, so a new
   // workflow_dispatch developer run here is the PM's re-dispatch for this failed PR.) Counts even if the run is
   // then vars-gate-skipped — the DECISION to launch is what's tested. Escalate is the human-required label.
   const reDispatchedSince = (): boolean => {
     try {
-      const runs = JSON.parse(gh(['run', 'list', '-R', repo, '--workflow', 'developer.yml', '--event', 'workflow_dispatch', '--limit', '20', '--json', 'createdAt']) || '[]') as { createdAt?: string }[];
+      const runs = JSON.parse(gh(['run', 'list', '-R', repo, '--workflow', 'develop.yml', '--event', 'workflow_dispatch', '--limit', '20', '--json', 'createdAt']) || '[]') as { createdAt?: string }[];
       return runs.some((r) => (r.createdAt ?? '') > since);
     } catch { return false; }
   };
@@ -308,7 +308,7 @@ async function opWorkflowEditForbidden(repo: string, n: number): Promise<OpResul
 async function opFollowUpAfterNeedsInfo(repo: string, n: number): Promise<OpResult> {
   // PM should mark it needs-info; after a human clarifies, the PM must act on the clarification (re-triage /
   // develop), not repeat the same needs-info — the agentic PM's "needs-info + human replied → re-triage" rule.
-  const devRuns = () => Number(gh(['run', 'list', '-R', repo, '--workflow', 'developer.yml', '--limit', '100', '--json', 'databaseId', '--jq', 'length']) || '0');
+  const devRuns = () => Number(gh(['run', 'list', '-R', repo, '--workflow', 'develop.yml', '--limit', '100', '--json', 'databaseId', '--jq', 'length']) || '0');
   ghOk(['workflow', 'run', 'pm.yml', '-R', repo]);
   // Poll for the PM to apply needs-info rather than assuming one fixed sweep duration.
   let gotNeedsInfo = false;
@@ -373,7 +373,7 @@ async function opRiskyApproval(repo: string, n: number): Promise<OpResult> {
   if (!pr) {
     const title = gh(['issue', 'view', String(n), '-R', repo, '--json', 'title', '--jq', '.title']) || `#${n}`;
     try {
-      const runs = JSON.parse(gh(['run', 'list', '-R', repo, '--workflow', 'developer.yml', '--limit', '40', '--json', 'displayTitle,conclusion,createdAt']) || '[]') as { displayTitle?: string; conclusion?: string; createdAt?: string }[];
+      const runs = JSON.parse(gh(['run', 'list', '-R', repo, '--workflow', 'develop.yml', '--limit', '40', '--json', 'displayTitle,conclusion,createdAt']) || '[]') as { displayTitle?: string; conclusion?: string; createdAt?: string }[];
       const mine = runs.filter((r) => (r.displayTitle ?? '').includes(title)).sort((a, b) => (b.createdAt ?? '').localeCompare(a.createdAt ?? ''));
       escalatedCleanly = mine[0]?.conclusion === 'success';
     } catch { escalatedCleanly = false; }
@@ -402,7 +402,7 @@ async function opPlannerIssues(repo: string, n: number): Promise<OpResult> {
 async function opOpenPrReview(repo: string, n: number): Promise<OpResult> {
   // The scenario needs an OPEN agent PR that the PM routes to review → it merges. The DRIVE phase's developer
   // already opens one. CRITICAL: do NOT re-develop when a PR already exists — the developer force-pushes the
-  // branch (developer.yml `git push --force`), which RESETS the head and its ci/agent-review statuses, and a
+  // branch (develop.yml `git push --force`), which RESETS the head and its ci/agent-review statuses, and a
   // failed re-run then leaves a status-less head that can never auto-merge (this exact clobber stalled the
   // scenario). So: find the existing PR (already-merged = pass; else the open one); only develop if there is
   // none at all. Then DRIVE the merge of that PR — the developer pushes via GITHUB_TOKEN, so the head's

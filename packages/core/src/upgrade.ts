@@ -46,8 +46,22 @@ export const INSTALL_OWNED_PATHS = [
   'docs/ARCHITECTURE.md',
   'provision.json', // the install's branch-protection/required-checks manifest — the adopter tunes it to
   //   their product (e.g. their own `ci` context, their reviewer count); seed-once so upgrade never reverts it.
-  //   OPTIONAL: a profile need not ship a seed (self-driving doesn't — provision-target-repo takes --manifest /
-  //   defaults); the entry exists so that when an install DOES write one, upgrade never clobbers it.
+  //   OPTIONAL: a profile need not ship a seed (provision-target-repo takes --manifest / defaults when one
+  //   isn't provided); the entry exists so that when an install DOES write one, upgrade never clobbers it.
+  // U5 rebase (supercode study §II.8.1 row 6 — "mothership content out of the profile"): these two left
+  // profiles/self-driving/'s `resources:` — they are OA-repo-specific tooling (this repo's OWN `bun run
+  // check` CI pipeline, its OWN model-proxy deploy workflow), not generic template content an adopter's
+  // install should receive — and NO bundled profile ships either anymore. Listing them here means `--prune`
+  // never deletes them just because no profile produces them — the same seed-once/never-clobbered/never-
+  // pruned contract as every other repo-owned file.
+  // codeql.yml is deliberately NOT listed: soc2-baseline still SHIPS it as a managed resource (its ir.yml,
+  // "C8 SAST monitoring"), and this list is GLOBAL — install-owning codeql.yml would make it seed-once on
+  // every soc2 install, silently stopping SAST control-improvement pushes on upgrade (contradicting the
+  // "Security CI stays derived, so upgrades keep pushing control improvements" note below). OA root's own
+  // copy needs no entry: the U5 regen dropped it from `.open-autonomy/generated.json`, and prune is
+  // manifest-scoped — a file the manifest no longer records can never be treated as an orphan.
+  '.github/workflows/ci.yml',
+  '.github/workflows/deploy.yml',
 ];
 const installOwned = new Set(INSTALL_OWNED_PATHS);
 // Path PREFIXES the install owns. Unlike the exact paths above, these cover a whole tree an installation

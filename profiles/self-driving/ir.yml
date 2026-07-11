@@ -4,6 +4,12 @@
 # CREDENTIALED job whose token is scoped to its capabilities; the agent acts directly. Guards =
 # capabilities + budget. The merge boundary is the code:review (statuses:write) / code:propose
 # (contents:write) permission split + native auto-merge — no agent holds both, none can land unreviewed code.
+#
+# THIS PROFILE = the sdlc core (board = GitHub issues, ztrack as grammar/validation, draft+develop+reviewer
+# doctrine) PLUS the roadmap trio (strategist/planner/strategy_reviewer) PLUS the human seam (maintainer).
+# Per the owner's monolithic-profiles decision (supercode study §II.8.1) this is one hand-woven doctrine
+# family, not a composition of simple-gh-sdlc + packs — but it is DERIVED from simple-gh-sdlc's text: read
+# that profile's skills first if you want the "undecorated" base this one adds roadmap-awareness onto.
 schema: autonomy.ir.v1
 # Runs on gh-actions (its production home) AND a local runner — the PM dispatches through the substrate-
 # agnostic Runner seam, so the same profile drives github Actions or a local termfleet loop over a github
@@ -28,13 +34,30 @@ documents:
     roadmap: .open-autonomy/roadmap.yml
 
 agents:
-  # Developer: edits code in its credentialed sandbox; the effect step proposes its change as an
-  # auto-merging PR (landed only after ci + an independent agent-review). PM-gated: it runs when the PM
-  # dispatches it (workflow_dispatch) or a MAINTAINER comments `/agent developer` (issue_comment) — NOT on
-  # plain comments or raw issue labels, which would bypass triage + the concurrency throttle. The substrate
-  # gates the comment surface on author_association (no drive-by launch); see emit.ts agentRunIf/controlIf.
-  developer:
-    behavior: developer
+  # Draft: turns an untriaged, human-filed request into a verifiable Ready issue (adopted from sdlc —
+  # supercode study §II.8.1 row 2: self-driving keeps BOTH intake paths. Roadmap items arrive PRE-shaped
+  # from the planner (tasks:author, straight to well-formed issues with ACs); draft exists for the OTHER
+  # path — a human filing a raw issue that needs shaping before `develop` can pick it up. Only PM launches
+  # it, and only on an explicit human ask this tick (never from a scheduled sweep) — see the pm skill.
+  draft:
+    behavior: draft
+    capabilities: [tasks:author, tasks:converse]
+    triggers:
+      - dispatch: true
+        params: { ZTRACK_ISSUE: subject.ref }
+    timeout: 15
+
+  # Develop (renamed from `developer` — sdlc's name, adopted for the converged agent roster; the fork
+  # header/CHANGELOG record the rename): edits code in its credentialed sandbox; the effect step proposes
+  # its change as an auto-merging PR (landed only after ci + security + an independent agent-review). PM-
+  # gated: it runs when the PM dispatches it (workflow_dispatch, via the Runner) or a MAINTAINER comments
+  # `/agent develop` (issue_comment) — NOT on plain comments or raw issue labels, which would bypass triage
+  # + the concurrency throttle. The substrate gates the comment surface on author_association (no drive-by
+  # launch); see emit.ts agentRunIf/controlIf. Its acceptance criteria + evidence are graded with ztrack —
+  # the `tracker.ztrackPreset` policy key below (supercode study §II.8.1 row 3: the dogfood finally uses
+  # its own tracker grammar, same as sdlc).
+  develop:
+    behavior: develop
     capabilities: [code:propose, tasks:converse]
     # Its proposals are reviewed by `reviewer` — the effect step triggers that review deterministically when
     # the PR opens (no PM/model routing). The reviewer holds code:review; the merge boundary is intact.
@@ -42,12 +65,15 @@ agents:
     triggers:
       - event: issue_comment
         config: { types: [created] }
-        params: { ISSUE_REF: subject.ref }
+        params: { ZTRACK_ISSUE: subject.ref }
     timeout: 90
 
   # PM: the orchestrator. Each sweep it builds a full picture of EVERY open issue (with history) and every
   # running agent + session (the runner: agent:list/launch/cancel), then decides per its skill doctrine —
-  # develop, re-develop-with-context, escalate, wait, or cancel a stuck run. Comments + labels; changes no code.
+  # develop, re-develop-with-context, escalate, wait, or cancel a stuck run. Comments + labels; changes no
+  # code. Roster-tolerant: it triages roadmap-originated issues (the planner's `origin:roadmap-planner` +
+  # `roadmap:<id>` labels) exactly like any other issue on the same board — it never dispatches the trio
+  # itself (planner/strategist/strategy_reviewer run on their own crons, independent of the PM sweep).
   pm:
     behavior: pm
     capabilities: [tasks:converse, tasks:author, agent:launch, agent:list, agent:cancel]
@@ -57,8 +83,10 @@ agents:
 
   # Reviewer: a skill agent that reviews an agent PR and posts its verdict as the `agent-review` status
   # (code:review = statuses:write). It holds NO contents:write, so it cannot merge; GitHub auto-merge lands
-  # the PR once `ci` + `agent-review` are both green (docs/SPEC.md#capabilities, the merge boundary). The PR
-  # number arrives as TARGET_REF; the skill fetches the diff + CI itself via gh.
+  # the PR once `ci` + `security` + `agent-review` are all green (docs/SPEC.md#capabilities, the merge
+  # boundary). The PR number arrives as TARGET_REF; the skill fetches the diff + CI itself via gh. Exits
+  # without posting a status on a roadmap-only PR (that's strategy_reviewer's job — the scope guard in the
+  # skill keeps the two review lanes from colliding on the same `agent-review` context).
   reviewer:
     behavior: reviewer
     capabilities: [code:review, tasks:converse]
@@ -77,7 +105,8 @@ agents:
   # issues (1 item → many, linked by `roadmap:<id>`) via tasks:author, and keeps the roadmap current/ordered
   # (decompose marks `planned`, reprioritize, split/merge) via code:propose@roadmap. Its roadmap edits are
   # proposed as an auto-merging PR blessed by strategy_reviewer (operational-edit path) — it never merges.
-  # Execution status is derived from child issues, never written here.
+  # Execution status is derived from child issues, never written here. UNCHANGED by this rebase (supercode
+  # study §II.8.1 row 1: the roadmap trio is the legitimate delta — kept untouched in substance).
   planner:
     behavior: planner
     capabilities: [tasks:converse, tasks:author, code:propose@roadmap]
@@ -92,7 +121,8 @@ agents:
 
   # Strategist: a skill agent that researches outside the repo and edits roadmap.yml to propose items.
   # The effect step proposes its edit as an auto-merging PR and deterministically triggers its review by
-  # strategy_reviewer, which blesses it. Scoped to roadmap files (code:propose@roadmap); proposes, never merges.
+  # strategy_reviewer, which blesses it. Scoped to roadmap files (code:propose@roadmap); proposes, never
+  # merges. UNCHANGED by this rebase (row 1 — the legitimate delta).
   strategist:
     behavior: strategist
     capabilities: [code:propose@roadmap]
@@ -105,7 +135,8 @@ agents:
   # merit rubric and posts its verdict as the `agent-review` status (code:review). No contents:write, so it
   # cannot merge; auto-merge lands the proposal once ci + agent-review are green. A maintainer "/agent
   # ratify" is the human override (a native approval), outside the agent's authority. Triggers on the
-  # strategist's PR (pull_request_target) and on an explicit comment; its skill reviews only roadmap-only PRs.
+  # strategist's PR (pull_request_target) and on an explicit comment; its skill reviews only roadmap-only
+  # PRs. UNCHANGED by this rebase (row 1 — the legitimate delta).
   strategy_reviewer:
     behavior: strategy-reviewer
     capabilities: [code:review, tasks:converse]
@@ -126,7 +157,9 @@ agents:
   # actor. The github realization of "engage a human" is github-native (the gh runner owns its own engage):
   # assign + request-review/@mention → GitHub notifies the person (out-of-band, via their GitHub
   # notifications/email), escalate on SLA, and resume on the authorized resolution (a native Approve that the
-  # human-approval gate verifies, or `/agent decide`). It blesses (code:review) and converses; it never merges.
+  # human-approval gate verifies, or `/agent decide`). It blesses (code:review) and converses; it never
+  # merges. Row 5/6 disposition: sdlc has no human seam at all — self-driving KEEPS its own (arguably every
+  # profile should have one; this profile is the worked example).
   maintainer:
     kind: human
     behavior: maintainer
@@ -135,20 +168,48 @@ agents:
       - dispatch: true
 
 policy:
+  # Row 7 (knobs — kept at self-driving's current values, owner-tunable):
   maxConcurrent: 5
   box:
-    # gh-actions RUNNER config (read by substrate-github/emit.ts; the engine bakes in no org identity). The key
-    # is the runner name (gh-actions), NOT the github code host. Each value is the emitted `vars.*` fallback, so
-    # the install works without setting variables. Another org declares its own here — nothing volter in the engine.
+    # Row 3: the ztrack preset — adopted from sdlc so the dogfood finally runs its own tracker's grammar.
+    # This is IR POLICY consumed at COMPILE-TIME only (bin/autonomy-compile.ts's local-runner "next steps"
+    # print resolves the preset name from this key). The BOARD SUBSTRATE story stays exactly what it already
+    # is in both gh-actions profiles: the board IS GitHub issues; ztrack is grammar/validation over an
+    # issue's body (`ztrack check` on a loose temp-file export of the issue), never a separate store. Nothing
+    # here creates a `.volter/tracker/` local database for self-driving — see the develop/reviewer skills.
+    tracker:
+      ztrackPreset: simple-gh-sdlc
+    # gh-actions RUNNER config (read by substrate-github/emit.ts; the engine bakes in no org identity). The
+    # key is the runner name (gh-actions), NOT the github code host. Each value is the emitted `vars.*`
+    # fallback, so the install works without setting variables. Another org declares its own here — nothing
+    # volter in the engine.
+    #
+    # MOTHERSHIP-LOCAL — strip on adoption. proxy_host/oidc_audience/bot_name/bot_email below are this
+    # repo's OWN operational values (volter's model proxy + bot identity), not generic engine defaults.
+    # `compile` has NO install-local override layer for what fallback string gets BAKED into the emitted
+    # workflow (the only override that exists is a RUNTIME one: an adopter can set the `PUBLIC_AGENT_
+    # PROXY_HOST` / `MODEL_PROXY_OIDC_AUDIENCE` repo variable, which the emitted `vars.X || 'fallback'`
+    # expression prefers over the compiled fallback at run time — but the fallback string itself still comes
+    # from THIS ir.yml, because ir.yml is the only compile-time input). Since there is no separate "install
+    # config" layer to move these into (verified: packages/substrate-github/src/emit.ts's `varOr` takes its
+    # fallback straight from `policy.box['gh-actions']`, nothing else), the honest minimum is: leave them
+    # here, marked, and an adopter forking this profile replaces them with their own before compiling (or
+    # simply sets the repo variables and never touches this file at all — the runtime override already
+    # works without editing ir.yml).
     gh-actions:
       proxy_host: volter-agent-model-proxy.aaron-0ed.workers.dev   # PUBLIC_AGENT_PROXY_HOST fallback (egress allowlist)
       oidc_audience: volter-agent-model-proxy                      # MODEL_PROXY_OIDC_AUDIENCE fallback
       model: deepseek/deepseek-v4-flash                            # PUBLIC_AGENT_MODEL fallback
       bot_name: volter-agent                                       # git author for agent-proposed commits
       bot_email: volter-agent@users.noreply.github.com
+      # Row 5: the security required check is DISPATCHED (a bot PR fires no `pull_request`, so the proposer
+      # effect must kick this explicitly, same reasoning as ci/agent-review/human-approval — see
+      # security-gate.yml's header comment). Adopted verbatim from simple-gh-sdlc's mechanism.
+      propose_dispatch_checks: [security-gate.yml]
     # NOTE: the deploy gate is NOT here. The deploy WORKFLOW (.github/workflows/deploy.yml) declares its own
     # gate — `environment:` + `on: push: tags:` — so provision-deploy.ts derives it from there; policy.box is
-    # opaque governance, not deploy config.
+    # opaque governance, not deploy config. (deploy.yml itself is repo-owned, not a profile resource — see
+    # the resources list below and the PR body's row-6 note.)
     # Every key here is a PARAMETER WITH A READER — deterministic (emit/runtime script) or agent-at-runtime
     # (a skill instructs reading the key from .open-autonomy/autonomy.yml). A norm with no reader is prose
     # and lives in the owning skill/doc instead; `bun run check:policy-consumers` enforces this.
@@ -172,6 +233,7 @@ policy:
         - .open-autonomy/architecture-invariants.yml   # the measuring stick — amending it is human-owned (no agent re-architects)
         - .codex/skills/**
         - .claude/skills/**
+        - profiles/**/skills/**
         # NOT services/** — merging proxy code is inert (nothing deploys on merge); the deploy is gated
         # separately (human-cut deploy-v* tag + required-reviewer environment). The fleet iterates on the
         # proxy autonomously; the human checkpoint is at deploy, not merge.
@@ -193,8 +255,10 @@ policy:
         - profiles/self-driving/scripts/check-supply-chain.ts
       human_required_topics: [auth, secrets, billing, deployment, destructive data migration, dependency trust]
     merge:
-      # (ci/agent-review/human-approval being required, and per-head-SHA re-earn, are the seam CONTRACT —
-      # enforced by branch protection + the gate, described in docs/SPEC.md, not tunable parameters here)
+      # (ci/agent-review/security/human-approval being required, and per-head-SHA re-earn, are the seam
+      # CONTRACT — enforced by branch protection + the gates, described in docs/SPEC.md, not tunable
+      # parameters here. Row 5: both governance choices are taken — security joins the required-checks list
+      # alongside the pre-existing human-approval seam; see provision.json.)
       # The ONE declaration of the hold vocabulary. Read at runtime by the rearm sweep (a labeled PR is
       # never re-armed) and consulted by the pm/reviewer skills — no component keeps its own copy.
       # `agent-paused` is applied by the control plane's pause verb; listing it here is what makes the
@@ -209,15 +273,31 @@ policy:
 
 # Repo-owned + substrate-infra files carried verbatim (NOT agents): repo CI, the model-proxy admin
 # control plane, the governance report and preflight jobs, issue templates, control docs, rubrics.
+#
+# Row 6 removed from this list (mothership content that either already exists independently at repo root,
+# or was OA-repo-specific tooling never meant to template onto an adopter's own install — verified per file,
+# nothing is lost by dropping them from the profile; see the PR body):
+#   - .github/workflows/deploy.yml       (the proxy's production deploy — repo-owned; root already has it
+#                                          byte-identical, so the profile copy was pure duplication)
+#   - .github/workflows/ci.yml           (runs `bun run check` — THIS repo's own giant check pipeline,
+#                                          including SOC2/proof/agent-proxy sub-checks that only make sense
+#                                          for open-autonomy itself; an adopter brings their own CI, exactly
+#                                          like simple-gh-sdlc never ships one)
+#   - .github/workflows/codeql.yml       ("Semantic static analysis of our own TS" — OA-repo-specific
+#                                          (hardcoded javascript-typescript); an adopter's product may not
+#                                          even be TypeScript)
+#   - docs/ARCHITECTURE.md               (describes OA's OWN repo layout — bench/, services/agent-model-
+#                                          proxy, "canonical OSS implementation and first dogfooding
+#                                          target" — unlike CONSTITUTION/PROJECT/ROADMAP.md, which already
+#                                          carry `<!-- REPLACE THIS for your project. -->` generic templates,
+#                                          this file was never adopter-editable seed content)
 resources:
   - .github/ISSUE_TEMPLATE/bug_report.yml
   - .github/ISSUE_TEMPLATE/public_agent_session.yml
-  - .github/workflows/ci.yml
   - .github/workflows/merge.yml
   - .github/workflows/human-approval.yml
   - .github/workflows/security.yml
-  - .github/workflows/codeql.yml
-  - .github/workflows/deploy.yml
+  - .github/workflows/security-gate.yml   # row 5: sdlc's dispatched, blocking realization of security.yml
   - .github/workflows/open-autonomy-preflight.yml
   - .github/dependabot.yml
   - .gitattributes
@@ -233,7 +313,6 @@ resources:
   - README.md
   - VERSION
   - bun.lock
-  - docs/ARCHITECTURE.md
   - docs/CONSTITUTION.md
   - docs/PROJECT.md
   - docs/ROADMAP.md
@@ -241,6 +320,13 @@ resources:
   - docs/standards/docs.md
   - docs/standards/security.md
   - docs/standards/tests.md
+  # Row 3/4: the ztrack AC + evidence grammar (converged from simple-gh-sdlc's `standards/issue-and-
+  # evidence.md`). Kept at a self-driving-specific path (docs/standards/, not the bare `standards/` sdlc
+  # uses) so it does NOT collide on install path with simple-gh-sdlc's copy — the two doctrines legitimately
+  # differ in wording (this one names self-driving's own skills), and `check:profiles` enforces byte-
+  # identity for any install path 2+ github profiles carry. If the wording ever fully converges, renaming
+  # both to the same path is a deliberate follow-up, not an accident.
+  - docs/standards/issue-and-evidence.md
   - package.json
   # self-driving's OWN maintainer/preflight tooling. These are PROFILE content, not substrate runtime —
   # they live in profiles/self-driving/scripts/ and ship only with this profile (the github mirror carries
@@ -250,10 +336,10 @@ resources:
   - scripts/open-autonomy-preflight.ts
   - scripts/open-autonomy-upgrade-cli.ts
   # Code-host GATE scripts — the deterministic logic behind the carried workflows (merge.yml,
-  # human-approval.yml, security.yml). Code-host behavior, not substrate machinery (substrate = the actor
-  # runner only), so they travel with the workflows that call them, as resources — NOT via the runtime
-  # mirror (docs/CODE_HOST_RESOURCES.md). Shared standards: byte-identical across every carrying profile
-  # (check:profiles enforces).
+  # human-approval.yml, security.yml, security-gate.yml). Code-host behavior, not substrate machinery
+  # (substrate = the actor runner only), so they travel with the workflows that call them, as resources —
+  # NOT via the runtime mirror (docs/CODE_HOST_RESOURCES.md). Shared standards: byte-identical across every
+  # carrying profile (check:profiles enforces).
   - scripts/rearm-auto-merge.ts
   - scripts/reconcile-merged-issues.ts
   - scripts/human-approval-gate.ts

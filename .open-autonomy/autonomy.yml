@@ -4,12 +4,10 @@ documents:
   resources:
     - .github/ISSUE_TEMPLATE/bug_report.yml
     - .github/ISSUE_TEMPLATE/public_agent_session.yml
-    - .github/workflows/ci.yml
     - .github/workflows/merge.yml
     - .github/workflows/human-approval.yml
     - .github/workflows/security.yml
-    - .github/workflows/codeql.yml
-    - .github/workflows/deploy.yml
+    - .github/workflows/security-gate.yml
     - .github/workflows/open-autonomy-preflight.yml
     - .github/dependabot.yml
     - .gitattributes
@@ -25,7 +23,6 @@ documents:
     - README.md
     - VERSION
     - bun.lock
-    - docs/ARCHITECTURE.md
     - docs/CONSTITUTION.md
     - docs/PROJECT.md
     - docs/ROADMAP.md
@@ -33,6 +30,7 @@ documents:
     - docs/standards/docs.md
     - docs/standards/security.md
     - docs/standards/tests.md
+    - docs/standards/issue-and-evidence.md
     - package.json
     - scripts/open-autonomy-config.ts
     - scripts/open-autonomy-preflight.ts
@@ -46,18 +44,30 @@ documents:
     constitution: docs/CONSTITUTION.md
     roadmap: .open-autonomy/roadmap.yml
 skills:
-  developer: .codex/skills/developer
+  draft: .codex/skills/draft
+  develop: .codex/skills/develop
   pm: .codex/skills/pm
   reviewer: .codex/skills/reviewer
   planner: .codex/skills/planner
   strategist: .codex/skills/strategist
   strategy_reviewer: .codex/skills/strategy-reviewer
 agents:
-  developer:
-    skill: developer
-    workflowFile: developer.yml
+  draft:
+    skill: draft
+    workflowFile: draft.yml
     params:
-      ISSUE_REF: subject.ref
+      ZTRACK_ISSUE: subject.ref
+    triggers:
+      dispatch: true
+    timeout: 15
+    capabilities:
+      - tasks:author
+      - tasks:converse
+  develop:
+    skill: develop
+    workflowFile: develop.yml
+    params:
+      ZTRACK_ISSUE: subject.ref
     triggers:
       issue_comment:
         types:
@@ -149,12 +159,16 @@ agents:
       - tasks:converse
       - code:review
 policy:
+  tracker:
+    ztrackPreset: simple-gh-sdlc
   gh-actions:
     proxy_host: volter-agent-model-proxy.aaron-0ed.workers.dev
     oidc_audience: volter-agent-model-proxy
     model: deepseek/deepseek-v4-flash
     bot_name: volter-agent
     bot_email: volter-agent@users.noreply.github.com
+    propose_dispatch_checks:
+      - security-gate.yml
   autonomy:
     max_open_agent_prs: 5
     max_develop_attempts: 2
@@ -169,6 +183,7 @@ policy:
       - .open-autonomy/architecture-invariants.yml
       - .codex/skills/**
       - .claude/skills/**
+      - profiles/**/skills/**
       - "**/bun.lock"
       - scripts/human-approval-gate.ts
       - scripts/rearm-auto-merge.ts

@@ -77,14 +77,17 @@ fast (stronger than last-gen frontier), so fix the prompt/tool, never route arou
 
 ### `profiles/self-driving/` — the dogfood org (compiles to this repo's root)
 
-- `ir.yml` — the **roster** (pm, developer, reviewer, planner, strategist, strategy_reviewer), their `kind`,
-  capabilities, crons, review gates; the **policy box** (`risk.human_required_paths`/topics, merge rules,
-  `maintainer_block_labels`, planner label prefixes); the **`resources:`** list (files carried verbatim).
+- `ir.yml` — the **roster** (pm, draft, develop, reviewer, planner, strategist, strategy_reviewer, and the
+  `kind: human` maintainer), their `kind`, capabilities, crons, review gates; the **policy box**
+  (`risk.human_required_paths`/topics, merge rules, `maintainer_block_labels`, planner label prefixes,
+  `tracker.ztrackPreset`); the **`resources:`** list (files carried verbatim).
 - `skills/<agent>/SKILL.md` — each agent's doctrine (prose behavior).
 - `.open-autonomy/` — compiled `autonomy.yml`, `roadmap.yml` (the two-layer roadmap), `review-rubric.yml`,
   `strategy-rubric.yml`, `strategist-sources.json`.
-- `.github/workflows/` — hand-written profile workflows: `ci.yml`, `human-approval.yml`,
-  `open-autonomy-preflight.yml` (the per-agent `developer.yml`/`pm.yml`/… are **generated**, not here).
+- `.github/workflows/` — hand-written profile workflows: `human-approval.yml`, `security.yml`,
+  `security-gate.yml`, `merge.yml`, `open-autonomy-preflight.yml` (the per-agent `develop.yml`/`pm.yml`/…
+  are **generated**, not here; `ci.yml`/`codeql.yml`/`deploy.yml` are REPO-owned since the U5 sdlc rebase —
+  they live only at root, not in the profile).
 - `AGENTS.md` — fleet-facing guidance (the agent-doctrine mirror of this file).
 
 ### `scripts/` + `bin/` — the runtime backend + CLIs
@@ -107,6 +110,20 @@ Objects: per-run + global spend ledger, run slots, profiles, `recent_runs`), `gi
 profile + roadmap rollup), `platform-html.tsx`/`project-docs.tsx`/`ui/` (server-rendered funding page).
 Deploy with `bunx wrangler deploy`. **The proxy ledger's `consumed_usd_cents` is the authoritative cost — NOT
 the CLI's `total_cost_usd`** (which mis-prices proxied models ~40×).
+
+**Reviewer doctrine for this surface (repo-local — U5 rebase note, supercode study §II.8.1 row 6):** this
+paragraph used to live inside `profiles/self-driving/skills/reviewer/SKILL.md`; it moved here because it is
+this repo's own operational knowledge (proxy auth/admin/funding), not something that should template onto an
+adopter's install of the self-driving profile. It still reaches the `reviewer` agent's context the same way
+this whole file does (every session in this repo loads `CLAUDE.md`), so nothing was lost by moving it —
+**security-critical paths get the higher bar — scrutiny, not an automatic stop.** Any change to the model
+proxy's auth/admin (`AGENT_PROXY_ADMIN_TOKEN`), OIDC/JWKS validation, HMAC verification
+(`AGENT_PROXY_HMAC_SECRET`), spend-cap (`MAX_*`) enforcement, or the funding ledger demands real rigor: a
+plausible-looking logic flip there (a `||` that should be `&&`, an off-by-one in a bound, the wrong field
+compared) is the costliest miss and the hardest to see — so **fail** if you can't confidently verify it's
+correct. But don't reflexively mark it `human-required`: merging proxy code is inert (it doesn't deploy), and
+the human checkpoint already lives at the gated deploy (below). Review it on the merits and pass if sound, so
+the fleet can iterate on the proxy autonomously.
 
 ### `bench/` — the eval harness
 

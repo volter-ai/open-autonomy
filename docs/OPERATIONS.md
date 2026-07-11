@@ -526,8 +526,8 @@ gh repo edit <owner>/<repo> --enable-auto-merge
 > local agents run as (with it `false`, an agent could `gh pr merge --admin` / push to the branch and
 > bypass the gate). See the safety section in [`INSTALL-AGENT.md`](./INSTALL-AGENT.md#the-merge-boundary-and-what-it-does-not-give-you-on-local).
 
-On its next tick the PM sweeps GitHub, and for a `ready` issue **launches the developer in an isolated
-worktree** (`runner.ts launch developer --ref <n> --branch agent/issue-<n>`). The developer commits, the
+On its next tick the PM sweeps GitHub, and for a `ready` issue **launches `develop` in an isolated
+worktree** (`runner.ts launch develop --ref <n> --branch agent/issue-<n>`). The develop agent commits, the
 runner opens the PR, the **reviewer** posts `agent-review`, and once **your CI (`ci`/`build`/…) + `security` +
 `agent-review`** are all green the PR is mergeable — **merge the first one yourself** to prove the gate, then
 arm auto-merge (above) so later PRs land via **native auto-merge**. With `enforce_admins:true` no agent
@@ -763,7 +763,7 @@ GitHub repository:
 
 Start with a narrow allowed surface:
 
-- trusted maintainers only for manual `/agent developer`
+- trusted maintainers only for manual `/agent develop`
 - a PM sweep limit of 1–3 issues and a conservative path scope — both are **profile policy**
   (`policy:` in the profile's ir.yml, compiled into `.open-autonomy/autonomy.yml`), not repo variables
 - low per-run spend caps (`PUBLIC_AGENT_MAX_USD_CENTS` / `PUBLIC_AGENT_MAX_REQUESTS`)
@@ -778,7 +778,7 @@ reviewer high-risk verdicts.
 Before opening broader access, verify these in the target repo:
 
 - `/agent pause` applies `agent-paused`.
-- `/agent developer` on a paused issue stops before model minting.
+- `/agent develop` on a paused issue stops before model minting.
 - `/agent status` comments the 5 most recent runs of that agent's workflow (id, status,
   conclusion, started-at).
 - `/agent resume` clears `agent-paused`.
@@ -806,7 +806,7 @@ These live trial runs are the baseline acceptance evidence as of
   `run-receipt.json` and `transcript.md` promoted into
   `agent-sessions/run_966fe8ea-2e22-4752-89dd-25db8fcd0e82/`.
 - Phase 7 operator controls: issue #70 live-tested `/agent pause`, a paused
-  `/agent developer` policy block before model minting, `/agent status`, and
+  `/agent develop` policy block before model minting, `/agent status`, and
   `/agent resume`.
 - Push CI for operator controls: run `27633520672`.
 - Push CI for production rollout checks: run `27633852289`.

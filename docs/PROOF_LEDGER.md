@@ -9,7 +9,7 @@ model run less reliable than the gate being tested.
 | --- | --- | --- |
 | `retry-ci-failure` | `.codex/skills/pm/SKILL.md` (PM decides a failed PR from history — re-develop-with-context under `max_develop_attempts`, else escalate; no auto-loop), `docs/SPEC.md` (ci gates the merge) | done |
 | `pm-open-pr-review` | `.codex/skills/pm/SKILL.md` (PM sweep + backpressure + launch routing) | done |
-| `developer-context-review-fix` | `.codex/skills/developer/SKILL.md` (reads issue/CI/review context; escalates) | done |
+| `developer-context-review-fix` | `.codex/skills/develop/SKILL.md` (reads issue/CI/review context; escalates — renamed from `developer` to `develop` in the U5 sdlc rebase) | done |
 | `head-changed-before-merge` | `docs/SPEC.md` (native auto-merge: required checks re-run on the current head) | done |
 | `operator-pause-resume` | live `self-driving-conformance` run, issue [#5](https://github.com/volter-ai/open-autonomy-testbed/issues/5) (pause/status/develop-blocked/resume), Public Agent Session runs `27701483508` and `27704897971` | done |
 | `five-issue-dogfood` | live `self-driving-conformance` run, issues #29-#33 → merged PRs #34-#38 with native auto-merge sessions `27701701974`, `27702036215`, and `27702212582`; canonical repo issue [#10](https://github.com/volter-ai/open-autonomy/issues/10) — first low-risk docs fix on canonical repo (fix incomplete sentence in `docs/OSS_AGENT_RUNBOOK.md`), all checks green (41 tests, 173 expectations, conformance pass, TypeScript clean); canonical repo issue [#115](https://github.com/volter-ai/open-autonomy/issues/115) — second low-risk docs fix (fix "three catalogs" → "four catalogs" in `docs/SPEC.md`), all 233+ tests green, 9 profiles compile OK, dogfood OK | done |

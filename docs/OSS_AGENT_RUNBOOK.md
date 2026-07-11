@@ -39,7 +39,7 @@ what turns that into an auto-merging PR.
 OSS_AGENT_TASK_DIR=/tmp/agent-101 \
 MODEL_PROXY_URL=... MODEL_PROXY_TOKEN=... \
 bun scripts/claude-agent-run.ts \
-  --skill .codex/skills/developer/SKILL.md \
+  --skill .codex/skills/develop/SKILL.md \
   --issue /tmp/volter-issue.json
 ```
 
@@ -73,7 +73,7 @@ The command must write one terminal artifact in `artifacts/`:
 1. Push changes to `main`.
 2. Confirm `ci` passes.
 3. Open or reuse a low-risk issue.
-4. Comment `/agent developer`, or trigger the `pm` workflow.
+4. Comment `/agent develop`, or trigger the `pm` workflow.
 5. Verify the run uses `scripts/claude-agent-run.ts`, exchanges GitHub OIDC for a
    bounded model token, edits code, and opens its own PR with auto-merge queued.
 6. Verify the PR diff, the reviewer's `agent-review` status, and native auto-merge once `ci` + `agent-review` are green.

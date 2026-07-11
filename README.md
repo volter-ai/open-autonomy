@@ -105,7 +105,7 @@ Full step-by-step for the **hosted** GitHub Actions runner (repo vars/secrets, b
 ## What it does (the GitHub substrate)
 
 ```text
-issue or PM sweep -> developer (a credentialed skill agent, bounded model token)
+issue or PM sweep -> develop (a credentialed skill agent, bounded model token)
   -> the agent edits code + opens its own PR with auto-merge queued
   -> CI + an independent reviewer post the required `ci` + `agent-review` statuses
   -> GitHub native auto-merge lands it (no agent can merge), or human-required escalation
@@ -187,7 +187,7 @@ fleet with termfleet directly and the tracker instead — see
 Operator commands work only for maintainers (repo OWNER/MEMBER/COLLABORATOR); a comment from anyone
 else is ignored. To launch an agent by comment, name it: `/agent <agent>` (the workflow name).
 
-- `/agent developer` — ask the developer to work on the issue.
+- `/agent develop` — ask the developer to work on the issue.
 - `/agent reviewer` — run the reviewer on an agent PR.
 - `/agent pause` / `/agent resume` — pause or resume issue-level work (the `agent-paused` label).
 - `/agent status` — comment the recent runs of that agent's workflow.

@@ -24,7 +24,7 @@ The org engages you when a task enters human-required scope — either of:
   architecture invariants, skills, `bun.lock`, the boundary gate scripts themselves — the declared list
   in `policy.risk.human_required_paths`; `services/**` is deliberately NOT gated, see below) or carries
   the `human-required` label. The `human-approval` gate parks it: beyond
-  `ci` + `agent-review` it needs **your Approve on the current commit** before it can merge.
+  `ci` + `security` + `agent-review` it needs **your Approve on the current commit** before it can merge.
 - an **issue** the PM routed to `human-required` (out-of-scope, risky, or repeatedly failing) or to
   `needs-info` (it needs a clarification only a human can give).
 
@@ -58,4 +58,4 @@ OWNER / MEMBER / COLLABORATOR):
 
 Until then the task stays parked and is escalated on the SLA. You are an untrusted, opaque actor like any
 agent: the org verifies your **effect** (the Approve / the recorded decision), never the claim. Uphold the
-merge boundary — your Approve is the human bless; you never bypass `ci` + `agent-review`.
+merge boundary — your Approve is the human bless; you never bypass `ci` + `security` + `agent-review`.

@@ -31,7 +31,7 @@ You are the only agent this profile declares. Before anything else:
   - `manager.merge_policy` — must read `manual-after-review`; if it doesn't, stop and escalate
     (a changed merge policy is itself a `human-required` change to this profile's governance).
   - `manager.max_rework_attempts` — the per-issue rework cap before you escalate `human-required`.
-  - `risk.human_required_paths` / `risk.human_required_topics` — see §7.
+  - `risk.human_required_paths` / `risk.human_required_topics` — see §8.
   - `tracker.ztrackPreset` — the ztrack validation preset this board is declared against
     (`simple-gh-sdlc`); informational for you, consumed by tooling.
 
@@ -77,6 +77,10 @@ npx ztrack import docs/plans/<topic>.md --register
 so its issues join the board. See `standards/issue-and-evidence.md` for the full grammar and the
 document-source recipe. A research/plan subagent never touches files outside `docs/plans/` and never
 sets an issue to `ready` itself — that is your call, informed by its output.
+
+**Landing path (F1):** the plan doc and its registration changes are committed on a branch and land
+via a PR — the author's own branch PR, or this tick's board PR (§7) — never a direct push to `main`
+(GH006 rejects it mechanically; see §7).
 
 ## 4. Implement
 
@@ -126,12 +130,20 @@ This is where `simple-gh` differs from every auto-merging profile in this repo �
      your own prior markers, never guess). Allowed while the count is **below**
      `manager.max_rework_attempts`.
    - **Escalate**: at or above `manager.max_rework_attempts`, or the failure is unclear/repeating — stop,
-     label the issue `human-required`, and engage the operator (§7). Never loop past the cap.
+     label the issue `human-required`, and engage the operator (§8). Never loop past the cap.
 5. **Never `gh pr merge --admin`.** Never push directly to the default branch. The merge you perform is
    the operator-credential act you carry out **as the operator's deputy** — it is legal only because
    branch protection + `enforce_admins: true` make a red check a mechanical, deterministic block on it
    (see README.md's honesty section for exactly what this does and doesn't guarantee on a single shared
    credential).
+
+**Reconciliation (F1):** "never push directly to the default branch" above is absolute for every PR
+landed under this section — but it doesn't, by itself, say how §6's board-state flips ever reach
+`main`. They don't reach it by pushing: branch protection mechanically rejects any direct-to-main push
+(a bare commit has no check-runs at push time — GitHub's GH006), and the repo's required CI typically
+fires only on `push: main` + `pull_request`, so a direct board commit can never earn the required green
+check either. §7 below is the landing path for those flips — same "always a PR, never a push" rule as this
+section, just with a narrow, scoped self-merge carve-out for diffs that are pure board state.
 
 ## 6. Close
 
@@ -139,7 +151,74 @@ Done = merged PR. Once merged: set the issue's `PR:` line and flip its ztrack st
 no reconcile-merged-issues.ts sweep in this profile (it is GitHub-Issues-only machinery this preset
 doesn't carry; see README.md). Run `npx ztrack check` to prove the transition is valid before moving on.
 
-## 7. Risk
+These are local edits the moment you make them; they still need to land on `main` like anything else —
+see §7 for how. Never commit them straight to `main` yourself (§5 step 5's rule applies here too).
+
+## 7. Board-PR landing (the F1 carve-out)
+
+**Why this section exists (F1):** branch protection's required status check makes a direct push to
+`main` mechanically unlandable (a bare commit has no check-runs at push time — GitHub's GH006), and the
+repo's required CI typically fires only on `push: main` + `pull_request`, so a board-state commit made
+straight to `main` can never earn the green check the protection demands. Every board mutation §2–§6 asks you to
+make — ztrack state flips, `PR:` lines, board snapshots, paused re-arm — is therefore mechanically dead
+on `main` outside a PR. This section is that PR's landing path, not a new kind of action: you still do
+the things §2–§6 describe, you just land them here instead of pushing them straight to `main`.
+
+**Batch per tick.** Collect every board mutation from this tick — ztrack state flips, `PR:` line
+updates, plan-doc **registration** changes (registering issues that a research/plan subagent's doc
+already added — see the plan-docs note below for how the doc itself lands), board snapshots, and paused
+re-arm — into ONE commit (or a short stack) on branch `board/<date>-<short>`. Push it and
+`gh pr create`.
+
+**Wait for green**, exactly as §5 step 2: every required check must be green on the current head SHA. A
+pending or red check is not landable — do not merge past this point.
+
+**Scoped carve-out.** Iff the PR's entire diff touches ONLY these paths:
+
+- `.volter/tracker/markdown/**`
+- `docs/plans/**`
+- `.open-autonomy/board-*`
+- `.open-autonomy/paused`
+
+merge it yourself (`gh pr merge --squash`) once the required check is green, and record
+`npx ztrack check` **green** in the PR body IN LIEU OF an `oa-review:` dispatch — no review subagent is
+needed for a diff that is pure recorded state. Rationale in one line: F1/GH006 forces every board flip
+through a PR regardless of content, so for a diff that touches nothing but tracker/plan/board state,
+the deterministic CI run plus a recorded `ztrack check` already ARE the review gate; a second opinion
+from an oa-review subagent adds nothing a human reviewer would catch either.
+
+**Paused-fence exclusion (absolute).** Deletion or emptying of `.open-autonomy/paused` is NEVER
+carve-out-eligible — un-pausing is exclusively the operator's act (the §1 fence; the operator's own
+`rm` at resume). A board PR may only CREATE or update the fence file (re-arm), never remove it. If a
+batched branch ever contains a `paused` deletion, the carve-out is void and you must not merge that PR
+at all — stop and engage the operator.
+
+**Scope vs §8 (human_required_paths).** This carve-out is the SCOPED exception to exactly two
+`human_required_paths` entries — `.open-autonomy/board-*` and `.open-autonomy/paused` (create/update
+only, per the exclusion above) — and to nothing else under `.open-autonomy/**`; §8's stop-and-escalate
+rule governs everything beyond those two.
+
+**The carve-out is void the moment the diff touches anything else** — code, the harness, this skill
+file, `autonomy.yml`, or any path not in the list above. In that case the full §5 landing discipline
+applies without exception: `oa-review` subagent dispatch, sha-pinned verdict, the works. "Never `gh pr
+merge --admin`" (§5 step 5) stays absolute here too — this carve-out is a self-merge allowance for a
+green-CI PR, never an admin override, and it never extends to a code path.
+
+**Wave-latency.** The flip usually lands within the same tick — open the board PR, wait for green,
+merge, all in one tick. If CI is slow, it's fine to end the tick with the board PR open rather than
+wait on it; that's a valid wait-state, not a stall. The next tick's first action is then landing that
+PR before dispatching anything new — a PR with concluded checks (not just a fully-merged one) is
+actionable work for a tick.
+
+**Plan docs: eligibility vs review depth.** A docs-plans-only diff IS carve-out-eligible — that is why
+`docs/plans/**` is in the list; a plan doc is board state in document form. The distinction the
+carve-out draws is about REVIEW DEPTH, not eligibility: the `ztrack check` gate validates the doc's
+grammar and registration, not its judgment content — judgment review of plan content happens when its
+items are promoted to `ready` and dispatched (§2/§3), not at landing. Research/plan agents land their
+own docs via their own branch PRs (§3's landing path); once a scheduled planner agent exists in this
+profile, its skill is the concrete instance of that rule.
+
+## 8. Risk
 
 Any change touching a path in `risk.human_required_paths` or a topic in `risk.human_required_topics`
 (read both from `.open-autonomy/autonomy.yml`, never your own copy): **stop**, label the issue

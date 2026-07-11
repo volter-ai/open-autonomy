@@ -75,6 +75,9 @@ opted in.
 | `oa status` | fence state + rationale, live sessions (via the runner SDK), last-fire info per reconciled agent | — (new) |
 | `oa dispatch <agent>` | fire exactly the one schedule line for `<agent>` now, bypassing the fence (the documented first-run-while-paused workaround) | `AUTONOMY_AGENT=<agent> node scripts/run-agent.mjs` |
 | `oa doctor [--live] [--json]` | offline: OA-04 dep-integrity probe + fence state + `schedule.json` parse + prompts/skills existence per declared agent; `--live` additionally probes the provider `/healthz` over the network | — (new; folds in checks that used to live only in `bin/doctor.ts`/`bin/collision-check.ts`) |
+| `oa provider up` | (TG.1) bring up a termfleet console+provider on a repo-unique, genuinely-free port pair (never the box defaults 7373/7402/7620/7621); verify the thing that answered is REALLY termfleet (never a foreign occupant); pin `TERMFLEET_PROVIDER_URL` durably into `scheduler/schedule.json`'s `env`. Idempotent: no-ops on a healthy pin, restarts a dead one on the SAME pinned ports. | — (new) |
+| `oa provider status` | report whether the pinned provider (and console) are up and really answering as termfleet | — (new) |
+| `oa provider down` | stop the provider/console this install brought up (best-effort SIGTERM to the whole process tree — `npx` forks the real server rather than exec-replacing itself) | — (new) |
 
 ## Design contract (unchanged, honored throughout)
 

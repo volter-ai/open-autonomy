@@ -17,6 +17,8 @@ export { loadSchedule, normalizeSchedule, agentOf, reconciledScripts, otherScrip
 export { hasDispatchableWork, resolveBoardKind, readMaturitySignals } from './board-readiness.ts';
 export type { DispatchableWorkOptions, DispatchableWorkVerdict, BoardKind, BoardKindSource } from './board-readiness.ts';
 export type { NormalizedSchedule, NormalizedScript } from './types.ts';
+export { bringUpProvider, providerStatus, providerDown } from './provider.ts';
+export type { BringUpOptions, BringUpResult, ProviderState, ProviderStatusResult, ProviderDownResult } from './provider.ts';
 
 import { readFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
@@ -27,6 +29,7 @@ import { pause, resume } from './pause.ts';
 import { status, formatStatus } from './status.ts';
 import { dispatch } from './dispatch.ts';
 import { doctor, formatDoctorReport } from './doctor.ts';
+import { bringUpProvider, providerStatus, providerDown } from './provider.ts';
 
 function pkgVersion(): string {
   try {
@@ -48,6 +51,11 @@ const HELP = `oa <command> [args]  (@volter/oa v${pkgVersion()}) — the local o
   oa dispatch <agent>           fire exactly the one schedule line for <agent> now, bypassing the fence
   oa doctor [--live] [--json]   offline checks: dep-integrity + fence + schedule.json + prompts/skills;
                                 --live additionally probes the termfleet provider's /healthz over the network
+  oa provider up                 bring up a repo-unique-port termfleet console+provider, verify its
+                                identity, and pin TERMFLEET_PROVIDER_URL durably into schedule.json's env
+                                (idempotent: no-ops on a healthy pin, restarts a dead one on the same ports)
+  oa provider status             report whether the pinned provider is up and really answering as termfleet
+  oa provider down                stop the provider/console this install brought up (best-effort SIGTERM)
 
 The '.open-autonomy/paused' marker file is the source of truth; this CLI is ergonomics over the file, never
 a daemon holding its own state. schedule.json/autonomy.yml/prompts are read from the current working
@@ -107,6 +115,26 @@ export async function runCli(argv: string[]): Promise<number> {
     const r = await doctor({ cwd, live });
     console.log(json ? JSON.stringify(r, null, 2) : formatDoctorReport(r));
     return r.ok ? 0 : 1;
+  }
+  if (cmd === 'provider') {
+    const sub = rest[0];
+    if (sub === 'up') {
+      const r = await bringUpProvider({ cwd });
+      console.log(`[oa] provider up: ${r.action} — ${r.detail}`);
+      return r.action === 'foreign-occupant-refused' ? 1 : 0;
+    }
+    if (sub === 'status') {
+      const r = await providerStatus({ cwd });
+      console.log(`[oa] provider status: ${r.detail}`);
+      return r.running ? 0 : 1;
+    }
+    if (sub === 'down') {
+      const r = providerDown({ cwd });
+      console.log(`[oa] provider down: ${r.action} — ${r.detail}`);
+      return 0;
+    }
+    console.error(`[oa] provider: unknown subcommand "${sub}" — usage: oa provider up|status|down`);
+    return 1;
   }
   if (cmd === '--help' || cmd === 'help' || cmd === '-h') {
     console.log(HELP);

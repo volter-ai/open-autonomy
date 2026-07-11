@@ -150,6 +150,8 @@ async function resolveRepo(installDir: string, ctx: MissionAdvancingContext, pro
 interface CheckEntry {
   name: string;
   ok: boolean;
+  /** how the gate detail cites this context: 'success' | 'PENDING' (not yet concluded) | 'FAIL'. */
+  label: string;
 }
 
 // Normalizes `gh pr view/list --json statusCheckRollup` entries. GitHub reports two different shapes on
@@ -157,20 +159,25 @@ interface CheckEntry {
 // (`{context, state}`, e.g. `agent-review`/`human-approval`, which post via the effect step's dispatched
 // `gh api statuses`, not a workflow — CLAUDE.md's "GITHUB_TOKEN anti-recursion" note). Both are "a required
 // context is green" the same way to a required-status-checks gate, so both normalize into one CheckEntry.
+// A still-running/not-yet-posted context (StatusContext PENDING/EXPECTED, a check-run still QUEUED/
+// IN_PROGRESS with a null conclusion) is labeled PENDING in the gate detail, not FAIL — the gate verdict is
+// the same (not green), but the evidence must not claim a check failed when it merely hasn't concluded.
+const PENDING_STATES = new Set(['PENDING', 'EXPECTED', 'QUEUED', 'IN_PROGRESS', '']);
+
 function normalizeStatusRollup(raw: unknown): CheckEntry[] {
   if (!Array.isArray(raw)) return [];
   return raw.map((e) => {
     const entry = e as { context?: string; name?: string; state?: string; conclusion?: string };
     const name = entry.context ?? entry.name ?? '(unnamed)';
     const state = (entry.state ?? entry.conclusion ?? '').toString().toUpperCase();
-    return { name, ok: state === 'SUCCESS' };
+    return { name, ok: state === 'SUCCESS', label: state === 'SUCCESS' ? 'success' : PENDING_STATES.has(state) ? 'PENDING' : 'FAIL' };
   });
 }
 
 function evaluateGate(requiredChecks: string[], checks: CheckEntry[]): { ok: boolean; detail: string } {
-  const byName = new Map(checks.map((c) => [c.name, c.ok]));
-  const results = requiredChecks.map((rc) => `${rc}=${byName.has(rc) ? (byName.get(rc) ? 'success' : 'FAIL') : 'MISSING'}`);
-  const ok = requiredChecks.length > 0 && requiredChecks.every((rc) => byName.get(rc) === true);
+  const byName = new Map(checks.map((c) => [c.name, c]));
+  const results = requiredChecks.map((rc) => `${rc}=${byName.has(rc) ? byName.get(rc)!.label : 'MISSING'}`);
+  const ok = requiredChecks.length > 0 && requiredChecks.every((rc) => byName.get(rc)?.ok === true);
   return { ok, detail: `required=[${requiredChecks.join(',')}] found=[${results.join(',')}]` };
 }
 
@@ -184,6 +191,12 @@ interface ClosingPr {
 interface AuthErr {
   authError: string;
 }
+/** A PR was named as the closer (by a comment marker / body line) but is NOT actually MERGED — a green-but-
+ *  open PR (the normal pre-auto-merge state) or a closed-without-merge PR must never read as a merged one. */
+interface NotMergedPr {
+  notMergedNumber: number;
+  prState: string;
+}
 
 /** Find the merged PR that closed `issueNumber`, mirroring THIS REPO'S OWN linking convention exactly
  *  (`scripts/reconcile-merged-issues.ts:24-26`: GitHub's `closedByPullRequestsReferences` does NOT reliably
@@ -193,7 +206,7 @@ interface AuthErr {
  *  `undefined` (not an error) when genuinely no merged PR closed the issue at all — the exact weak-proxy
  *  failure mode this unit exists to catch (an issue closed by administrative/roadmap-reconciliation
  *  prose, no gated merge behind it). */
-async function findClosingMergedPr(repo: string, issueNumber: string, proc: ProcRunner, env: NodeJS.ProcessEnv | undefined): Promise<ClosingPr | AuthErr | undefined> {
+async function findClosingMergedPr(repo: string, issueNumber: string, proc: ProcRunner, env: NodeJS.ProcessEnv | undefined): Promise<ClosingPr | AuthErr | NotMergedPr | undefined> {
   const byBranch = proc('gh', ['pr', 'list', '-R', repo, '--head', `agent/issue-${issueNumber}`, '--state', 'merged', '--json', 'number,statusCheckRollup,headRefOid'], { env });
   if (byBranch.status !== 0) {
     if (isAuthError(byBranch.stderr)) return { authError: firstLine(byBranch.stderr) };
@@ -224,13 +237,19 @@ async function findClosingMergedPr(repo: string, issueNumber: string, proc: Proc
   const m = /Resolved by #(\d+) \(merged\)/.exec(joined);
   if (!m || !m[1]) return undefined;
   const prNumber = m[1];
-  const pv = proc('gh', ['pr', 'view', prNumber, '-R', repo, '--json', 'number,statusCheckRollup,headRefOid'], { env });
+  // The comment marker is prose ANY commenter could have written — never trust it as proof of a merge.
+  // Verify state==MERGED on the PR itself; a green-but-OPEN PR (the normal pre-auto-merge state) or a
+  // closed-without-merge PR must be reported as not-merged, not counted as the closing merged PR.
+  const pv = proc('gh', ['pr', 'view', prNumber, '-R', repo, '--json', 'number,state,mergedAt,statusCheckRollup,headRefOid'], { env });
   if (pv.status !== 0) {
     if (isAuthError(pv.stderr)) return { authError: firstLine(pv.stderr) };
     return undefined;
   }
   try {
-    const row = JSON.parse(pv.stdout) as { number: number; statusCheckRollup?: unknown; headRefOid?: string };
+    const row = JSON.parse(pv.stdout) as { number: number; state?: string; mergedAt?: string | null; statusCheckRollup?: unknown; headRefOid?: string };
+    if ((row.state ?? '').toUpperCase() !== 'MERGED') {
+      return { notMergedNumber: row.number, prState: (row.state ?? '(unknown)').toUpperCase() };
+    }
     return { number: row.number, headSha: row.headRefOid ?? '(unknown)', checks: normalizeStatusRollup(row.statusCheckRollup) };
   } catch {
     return undefined;
@@ -274,6 +293,12 @@ async function evaluateGhIssue(repo: string, issueNumber: string, facts: PackFac
   const pr = await findClosingMergedPr(repo, issueNumber, proc, env);
   if (pr && 'authError' in pr) {
     return { present: false, evidence: `unverifiable: gh not authenticated (${pr.authError})`, authAbort: true };
+  }
+  if (pr && 'notMergedNumber' in pr) {
+    return {
+      present: false,
+      evidence: `#${issueNumber}: closed, and a reconcile comment names PR #${pr.notMergedNumber} — but PR #${pr.notMergedNumber} is ${pr.prState}, not merged; no gated merge stands behind this close`,
+    };
   }
   if (!pr) {
     return {
@@ -340,12 +365,23 @@ async function ghIssuesBoardPrSignal(installDir: string, ctx: MissionAdvancingCo
 
 // --- ztrack board leg (simple-gh: PR-based, but the BOARD is a local ztrack store — m6_signal=per-issue) --
 
-async function listZtrackDoneIds(installDir: string, proc: ProcRunner, env: NodeJS.ProcessEnv | undefined, limit: number): Promise<string[]> {
-  const r = proc('npx', ['ztrack', 'issue', 'list', '--state', 'done', '--json', 'identifier', '--limit', String(limit)], { cwd: installDir, env });
+interface ZtrackDoneItem {
+  id: string;
+  source: string;
+}
+
+/** List `done` items WITH their owning `source` — the source is only emitted by `issue list --json`
+ *  (probed against the vendored ztrack@1.0.0: `issue view` IGNORES its `--json` field list and its output
+ *  object has NO `source` key at all, so source MUST come from the list call, never from view). Order note
+ *  (see the callers' evidence wording): ztrack's list order is store/filesystem order, NOT recency — its
+ *  `updatedAt` is empty (`""`) for document-source items, so a client-side recency sort would be a lie too;
+ *  the scan is bounded, not most-recent-first, and the evidence says exactly that. */
+async function listZtrackDone(installDir: string, proc: ProcRunner, env: NodeJS.ProcessEnv | undefined, limit: number): Promise<ZtrackDoneItem[]> {
+  const r = proc('npx', ['ztrack', 'issue', 'list', '--state', 'done', '--json', 'identifier,source', '--limit', String(limit)], { cwd: installDir, env });
   if (r.status !== 0) return [];
   try {
-    const rows = JSON.parse(r.stdout || '[]') as Array<{ identifier?: string }>;
-    return rows.filter((row): row is { identifier: string } => !!row.identifier).map((row) => row.identifier);
+    const rows = JSON.parse(r.stdout || '[]') as Array<{ identifier?: string; source?: string }>;
+    return rows.filter((row): row is { identifier: string; source?: string } => !!row.identifier).map((row) => ({ id: row.identifier, source: row.source ?? '' }));
   } catch {
     return [];
   }
@@ -358,22 +394,27 @@ async function ztrackBoardPrSignal(installDir: string, ctx: MissionAdvancingCont
   if (typeof repo !== 'string') return repo;
 
   const scanLimit = ctx.scanLimit ?? 20;
-  const candidates = ctx.workItemId ? [ctx.workItemId] : await listZtrackDoneIds(installDir, proc, ctx.env, scanLimit);
+  // The done list is ALSO the source-of-truth for each item's `source` (see listZtrackDone's header), so
+  // even a pinned workItemId goes through it — which additionally verifies the item really is `done`.
+  const done = await listZtrackDone(installDir, proc, ctx.env, scanLimit);
+  const candidates = ctx.workItemId ? done.filter((d) => d.id === ctx.workItemId) : done;
   if (candidates.length === 0) {
-    return {
-      present: false,
-      evidence: `no ztrack 'done' item found in ${installDir} (checked ${ctx.workItemId ? `item '${ctx.workItemId}'` : `up to ${scanLimit} recently-done items`}) — nothing to prove M6 against yet`,
-    };
+    if (ctx.workItemId) {
+      return { present: false, evidence: `ztrack item '${ctx.workItemId}' is not in the 'done' list (${done.length} done item(s) found in ${installDir}) — only a done item can prove M6` };
+    }
+    return { present: false, evidence: `no ztrack 'done' item found in ${installDir} (checked up to ${scanLimit} done items, store order) — nothing to prove M6 against yet` };
   }
 
   const checked: string[] = [];
-  for (const id of candidates) {
-    const view = proc('npx', ['ztrack', 'issue', 'view', id, '--json', 'identifier,body,source,state'], { cwd: installDir, env: ctx.env });
+  for (const { id, source } of candidates) {
+    // The body (for the `PR:` line) still comes from `issue view` — the real CLI emits the full issue
+    // object (including `body`) regardless of the field list; only `source` is missing from it.
+    const view = proc('npx', ['ztrack', 'issue', 'view', id, '--json', 'identifier,body,state'], { cwd: installDir, env: ctx.env });
     if (view.status !== 0) {
       checked.push(`${id}: ztrack issue view failed (${firstLine(view.stderr)})`);
       continue;
     }
-    let parsed: { body?: string; source?: unknown };
+    let parsed: { body?: string };
     try {
       parsed = JSON.parse(view.stdout);
     } catch {
@@ -381,13 +422,13 @@ async function ztrackBoardPrSignal(installDir: string, ctx: MissionAdvancingCont
       continue;
     }
     const body = parsed.body ?? '';
-    const source = typeof parsed.source === 'string' ? parsed.source : '';
 
-    // linkage: the item's declared plan-doc source. board_seed_recipe.originator_skill=planner,
-    // import_verb='ztrack import --register' (profiles/simple-gh/setup-pack.yml) — a plan doc registered
-    // from the vision (docs/plans/<topic>.md, skills/manager/SKILL.md's "Plans-as-docs recipe"). ztrack's
-    // own un-registered fallback source name is literally 'default' — that does NOT count as plan-doc-linked
-    // (an issue with no declared `--source` is an ad hoc one, not one traced back to a vision-derived plan).
+    // linkage: the item's declared plan-doc source (from the LIST call, above). board_seed_recipe.
+    // originator_skill=planner, import_verb='ztrack import --register' (profiles/simple-gh/setup-pack.yml) —
+    // a plan doc registered from the vision (docs/plans/<topic>.md, skills/manager/SKILL.md's "Plans-as-docs
+    // recipe"). ztrack's own un-registered fallback source name is literally 'default' — that does NOT count
+    // as plan-doc-linked (an issue with no declared source is an ad hoc one, not one traced back to a
+    // vision-derived plan).
     const linked = source !== '' && source !== 'default';
     const linkageDetail = linked ? `plan-doc-linked (source="${source}")` : `not plan-doc-linked (source="${source || '(none)'}")`;
 
@@ -399,17 +440,25 @@ async function ztrackBoardPrSignal(installDir: string, ctx: MissionAdvancingCont
       continue;
     }
     const prNumber = prMatch[1];
-    const pv = proc('gh', ['pr', 'view', prNumber, '-R', repo, '--json', 'number,statusCheckRollup,headRefOid'], { env: ctx.env });
+    const pv = proc('gh', ['pr', 'view', prNumber, '-R', repo, '--json', 'number,state,mergedAt,statusCheckRollup,headRefOid'], { env: ctx.env });
     if (pv.status !== 0) {
       if (isAuthError(pv.stderr)) return { present: false, evidence: `unverifiable: gh not authenticated (gh pr view #${prNumber}: ${firstLine(pv.stderr)})` };
       checked.push(`${id}: gh pr view #${prNumber} failed (${firstLine(pv.stderr)})`);
       continue;
     }
-    let prRow: { number: number; statusCheckRollup?: unknown; headRefOid?: string };
+    let prRow: { number: number; state?: string; mergedAt?: string | null; statusCheckRollup?: unknown; headRefOid?: string };
     try {
       prRow = JSON.parse(pv.stdout);
     } catch {
       checked.push(`${id}: unparseable gh pr view #${prNumber} output`);
+      continue;
+    }
+    // The `PR:` body line is prose the manager wrote — never trust it as proof of a merge. Require
+    // state==MERGED: a done item pointing at a green-but-OPEN PR (the normal pre-merge state) or a
+    // closed-without-merge PR has no gated merge behind it.
+    const prState = (prRow.state ?? '(unknown)').toUpperCase();
+    if (prState !== 'MERGED') {
+      checked.push(`${id}: body names PR #${prNumber}, but PR #${prNumber} is ${prState}, not merged — no gated merge stands behind this done state`);
       continue;
     }
     const gate = evaluateGate(requiredChecks, normalizeStatusRollup(prRow.statusCheckRollup));
@@ -417,10 +466,10 @@ async function ztrackBoardPrSignal(installDir: string, ctx: MissionAdvancingCont
     if (present) {
       return {
         present: true,
-        evidence: `ztrack '${id}' done, closed by merged PR #${prNumber} (sha=${(prRow.headRefOid ?? '(unknown)').slice(0, 10)}): gate PASSED (${gate.detail}); ${linkageDetail}`,
+        evidence: `ztrack '${id}' done, closed by merged PR #${prNumber} (sha=${(prRow.headRefOid ?? '(unknown)').slice(0, 10)}, mergedAt=${prRow.mergedAt ?? '(unknown)'}): gate PASSED (${gate.detail}); ${linkageDetail}`,
       };
     }
-    checked.push(`${id}: PR #${prNumber} gate ${gate.ok ? 'PASSED' : 'FAILED'} (${gate.detail}); ${linkageDetail}`);
+    checked.push(`${id}: merged PR #${prNumber} gate ${gate.ok ? 'PASSED' : 'FAILED'} (${gate.detail}); ${linkageDetail}`);
   }
   return {
     present: false,
@@ -432,11 +481,11 @@ async function ztrackBoardPrSignal(installDir: string, ctx: MissionAdvancingCont
 
 async function prFreeSignal(installDir: string, ctx: MissionAdvancingContext, proc: ProcRunner): Promise<Signal> {
   const scanLimit = ctx.scanLimit ?? 20;
-  const candidates = ctx.workItemId ? [ctx.workItemId] : await listZtrackDoneIds(installDir, proc, ctx.env, scanLimit);
+  const candidates = ctx.workItemId ? [ctx.workItemId] : (await listZtrackDone(installDir, proc, ctx.env, scanLimit)).map((d) => d.id);
   if (candidates.length === 0) {
     return {
       present: false,
-      evidence: `no ztrack 'done' item found in ${installDir} (checked ${ctx.workItemId ? `item '${ctx.workItemId}'` : `up to ${scanLimit} recently-done items`}) — nothing to prove M6 against yet`,
+      evidence: `no ztrack 'done' item found in ${installDir} (checked ${ctx.workItemId ? `item '${ctx.workItemId}'` : `up to ${scanLimit} done items, store order`}) — nothing to prove M6 against yet`,
     };
   }
 

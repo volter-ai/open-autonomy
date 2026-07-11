@@ -244,10 +244,28 @@ const POSITIONING_FIXED_CANDIDATES = ['README.md', 'AGENTS.md'];
 const MIN_READABLE_CHARS = 200;
 const MIN_PROSE_LINE_CHARS = 40;
 
+function stripMarkdownComments(raw: string): string {
+  // Strip `<!-- ... -->` markdown comments to a FIXED POINT (repeat until a pass changes nothing), not a
+  // single pass. A single pass is an incomplete multi-character sanitization (CodeQL
+  // js/incomplete-multi-character-sanitization): an adversarial nested/overlapping input such as
+  // `<!-<!-- comment -->- text -->` has its inner `<!-- comment -->` removed by one pass, but the leftover
+  // fragments `<!-` + `- text -->` then RE-FORM a new complete `<!-- text -->` comment that the single pass
+  // never rescans, leaking `text` (and a stray `-->`) into the output as if it were authored prose. Looping
+  // to a fixed point closes that class: each remaining `<!--...-->` pair — however it was formed — gets
+  // stripped too, until nothing changes between passes.
+  let prev: string;
+  let cur = raw;
+  do {
+    prev = cur;
+    cur = prev.replace(/<!--[\s\S]*?-->/g, '');
+  } while (cur !== prev);
+  return cur;
+}
+
 function stripNonContent(raw: string): string {
   // strip markdown comments (incl. the shipped `<!-- REPLACE THIS ... -->` seeds) and badge/shield-image
   // lines (`[![...`, `![...`) — neither counts as authored prose.
-  const noComments = raw.replace(/<!--[\s\S]*?-->/g, '');
+  const noComments = stripMarkdownComments(raw);
   return noComments
     .split('\n')
     .filter((line) => !/^\s*\[?!\[/.test(line))

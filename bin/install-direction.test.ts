@@ -175,6 +175,33 @@ describe('isReadablePositioning — the concrete bar', () => {
     const r = isReadablePositioning(commentOnly);
     expect(r.readable).toBe(false);
   });
+
+  // Regression for GitHub CodeQL js/incomplete-multi-character-sanitization: a single-pass
+  // `raw.replace(/<!--[\s\S]*?-->/g, '')` mis-strips an adversarial NESTED comment. Input
+  // `<!-<!-- comment -->- <padding> -->` has its inner `<!-- comment -->` removed by one pass, but the
+  // leftover fragments `<!-` + `- <padding> -->` then RE-FORM a brand-new `<!-- <padding> -->` comment
+  // that a single pass never rescans — so the single-pass version leaks the padding text (well over the
+  // 200-char floor) into the "stripped" output as if it were authored prose, wrongly calling this
+  // "readable positioning". The fix loops the strip to a fixed point, so it must be fully gone instead.
+  test('nested/overlapping markdown comment is fully stripped (single-pass leaks it through as fake readable positioning)', () => {
+    const padding =
+      'This sentence is deliberately long padding text so that if it leaks through unstripped it will ' +
+      'clearly exceed the two hundred non whitespace character floor used by the readable positioning ' +
+      'heuristic implemented in this file, quite comfortably indeed.';
+    const nested = `# Title\n\n<!-<!-- comment -->- ${padding} -->\n`;
+
+    // Prove the bug class exists: naive single-pass stripping leaves the padding (>200 chars) exposed —
+    // exactly the shape that would make the OLD (single-pass) stripNonContent wrongly call this readable.
+    const singlePassStripped = nested.replace(/<!--[\s\S]*?-->/g, '');
+    expect(singlePassStripped).toContain('-->');
+    expect(singlePassStripped.replace(/\s/g, '').length).toBeGreaterThan(200);
+
+    // The actual (fixed) function must strip it fully to just "# Title" and correctly report "too sparse".
+    const r = isReadablePositioning(nested);
+    expect(r.readable).toBe(false);
+    expect(r.reason).toMatch(/too sparse/);
+    expect(r.chars).toBeLessThan(200);
+  });
 });
 
 describe('checkOperatorPositioning — candidate discovery', () => {

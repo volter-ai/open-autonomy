@@ -37,6 +37,10 @@ export {
   collectImmSignals,
 } from './imm-signals.ts';
 export type { Signal, SignalFn, SignalContext } from './imm-signals.ts';
+export { IMM_SIGNAL_IDS, signalSetFor } from './signal-sets.ts';
+export type { ImmSignalId, SignalId, SignalSet, SignalSetPack, SkippedSignal, InstallTarget } from './signal-sets.ts';
+export { computeMaturity, directionContentSignal, STAGE_NAMES, STAGE_ORDER, INSTALL_JSON_REL } from './maturity.ts';
+export type { Stage, InstallRecord, InstallSignalEntry, InstallSkipEntry, MaturityOptions, PackInfo } from './maturity.ts';
 
 import { readFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
@@ -48,6 +52,9 @@ import { status, formatStatus } from './status.ts';
 import { dispatch } from './dispatch.ts';
 import { doctor, formatDoctorReport } from './doctor.ts';
 import { bringUpProvider, providerStatus, providerDown } from './provider.ts';
+import { computeMaturity } from './maturity.ts';
+import type { MaturityOptions } from './maturity.ts';
+import type { InstallTarget } from './signal-sets.ts';
 
 function pkgVersion(): string {
   try {
@@ -69,6 +76,15 @@ const HELP = `oa <command> [args]  (@volter/oa v${pkgVersion()}) — the local o
   oa dispatch <agent>           fire exactly the one schedule line for <agent> now, bypassing the fence
   oa doctor [--live] [--json]   offline checks: dep-integrity + fence + schedule.json + prompts/skills;
                                 --live additionally probes the termfleet provider's /healthz over the network
+  oa maturity [--json] [--profile-dir <path>] [--profile <name>] [--target local|gh-actions]
+                                [--repo <owner/name>] [--actor <name>] [--work-item <id>]
+                                [--preflight-bin <path>] [--gh-preflight-script <path>]
+                                composes the IMM stage verdict (M0..M6, DESIGN §Q1) from every deterministic
+                                signal + the mission-advancing check and writes .open-autonomy/install.json
+                                (idempotent overwrite every run). --profile-dir points at the SOURCE profile
+                                (e.g. profiles/simple-sdlc) — without it, only the universal signal set runs
+                                and profile-specific rungs report honestly unresolved. A report verb (like
+                                'oa status'): always exits 0 — the stage itself is the payload.
   oa provider up                 bring up a repo-unique-port termfleet console+provider, verify its
                                 identity, and pin TERMFLEET_PROVIDER_URL durably into schedule.json's env
                                 (idempotent: no-ops on a healthy pin, restarts a dead one on the same ports)
@@ -133,6 +149,43 @@ export async function runCli(argv: string[]): Promise<number> {
     const r = await doctor({ cwd, live });
     console.log(json ? JSON.stringify(r, null, 2) : formatDoctorReport(r));
     return r.ok ? 0 : 1;
+  }
+  if (cmd === 'maturity') {
+    const json = rest.includes('--json');
+    const flag = (name: string): string | undefined => {
+      const i = rest.indexOf(name);
+      return i >= 0 && i + 1 < rest.length ? rest[i + 1] : undefined;
+    };
+    const profileDir = flag('--profile-dir');
+    const profile = flag('--profile');
+    const targetFlag = flag('--target');
+    const repo = flag('--repo');
+    const actor = flag('--actor');
+    const workItemId = flag('--work-item');
+    const preflightBin = flag('--preflight-bin');
+    const ghPreflightScript = flag('--gh-preflight-script');
+
+    const mOpts: MaturityOptions = { cwd };
+    if (profileDir) mOpts.profileDir = profileDir;
+    if (profile) mOpts.profile = profile;
+    if (targetFlag === 'local' || targetFlag === 'gh-actions') mOpts.target = targetFlag as InstallTarget;
+    if (repo) mOpts.repo = repo;
+    if (actor) mOpts.actor = actor;
+    if (workItemId) mOpts.workItemId = workItemId;
+    if (preflightBin) mOpts.preflightBin = preflightBin;
+    if (ghPreflightScript) mOpts.ghPreflightScript = ghPreflightScript;
+
+    const record = await computeMaturity(mOpts);
+    if (json) {
+      console.log(JSON.stringify(record, null, 2));
+    } else {
+      console.log(`[oa] maturity: ${record.stage}/${record.stageName} (profile=${record.profile ?? '(unknown)'}, substrate=${record.substrate ?? '(unknown)'})`);
+      for (const b of record.blockers) console.log(`[oa]   ${b}`);
+      console.log(`[oa]   wrote ${join(cwd, '.open-autonomy', 'install.json')}`);
+    }
+    // A report verb, like `oa status` — the stage/blockers are the payload; the invocation itself never
+    // "fails" just because the install isn't fully mature yet.
+    return 0;
   }
   if (cmd === 'provider') {
     const sub = rest[0];

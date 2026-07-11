@@ -16,6 +16,8 @@ export type { DoctorReport, DoctorCheck } from './doctor.ts';
 export { loadSchedule, normalizeSchedule, agentOf, reconciledScripts, otherScripts } from './config.ts';
 export { hasDispatchableWork, resolveBoardKind, readMaturitySignals } from './board-readiness.ts';
 export type { DispatchableWorkOptions, DispatchableWorkVerdict, BoardKind, BoardKindSource } from './board-readiness.ts';
+export { missionAdvancingSignal } from './m6-signal.ts';
+export type { Signal as MissionAdvancingSignal, MissionAdvancingContext, MissionAdvancingSignalFn } from './m6-signal.ts';
 export type { NormalizedSchedule, NormalizedScript } from './types.ts';
 export { bringUpProvider, providerStatus, providerDown } from './provider.ts';
 export type { BringUpOptions, BringUpResult, ProviderState, ProviderStatusResult, ProviderDownResult } from './provider.ts';

@@ -18,16 +18,19 @@
 // standalone to an adopter's repo with zero dependencies and cannot take this dependency.
 //
 // TD.2 REUSE DECISION (per the STANDING RULE — "reuse detectGhAdmin from TD.2/#152 if merged, else
-// mirror it"): at the time of this build, PR #152 (TD.2, `bin/recommend-profile.ts`) is OPEN, not merged
-// — `git log --oneline -1 origin/main` does not contain it, and `packages/core/src/index.ts` on `main`
-// does NOT yet re-export `./recommend` (that re-export is itself part of #152's diff). So this file does
-// NOT import from `bin/recommend-profile.ts` (an unmerged branch is not a dependency this file can take).
-// Instead, `detectOnGitHub`/`detectPopulated`/`detectGhAdmin` below are a DELIBERATE MIRROR of TD.2's own
-// functions of the same name (same algorithm, same "never coerce an admin-probe error/404 to a definite
-// negative" doctrine, same injectable `ProcFn` seam) — cited inline at each function. TODO SEAM: once
-// #152 merges and `@open-autonomy/core` re-exports `REPO_SHELL_FILES`/`RepoFacts`, replace this file's
-// three mirrored functions + its local `REPO_SHELL_FILES` copy with a direct import from
-// `bin/recommend-profile.ts` (it already exports all three) to remove the duplication.
+// mirror it"): PR #152 (TD.2, `bin/recommend-profile.ts`) merged to `main` (f401fa4) partway through this
+// unit's build — REUSED, not mirrored. `onGitHub`/`populated`/`ghAdmin` (incl. the "never coerce an
+// admin-probe error/404 to a definite negative" doctrine) are now sourced from a single call to TD.2's own
+// exported `detectRepoFacts()` below — not re-derived. `ProcFn`/`defaultProc` are also imported straight
+// from `bin/recommend-profile.ts` rather than re-declared, so both files share one injectable subprocess
+// seam. What is NOT reused, and why: `detectRepoFacts()`'s own git/ghAdmin helpers
+// (`detectOnGitHub`/`detectPopulated`/`detectGhAdmin`/`resolveOwnerRepo`) are module-PRIVATE in
+// `bin/recommend-profile.ts` (not `export`ed) — only the composed `detectRepoFacts()` is public, and it
+// intentionally returns booleans + prose notes, not the richer facts this DETECT REPORT also needs
+// (`remoteUrl`, `defaultBranch`, `trackedFileCount`, gh `visibility`/`plan`/`login` — none of which TD.1's
+// recommender consumes, so TD.2 never computes them). Below, `detectGitFacts` calls `detectRepoFacts` for
+// the authoritative onGitHub/populated/ghAdmin booleans, then adds a few small, non-duplicative extra
+// `git`/`gh` reads for those extra fields — it does not re-derive TD.2's own ambiguity-handling logic.
 //
 // DOCTOR REUSE (mirrors, not reimplements, "oa doctor"'s own env/auth/provider checks — exactly what the
 // task brief asks for): `checkEnv`/`checkAuth`/`checkProvider` are imported verbatim from
@@ -50,24 +53,12 @@ import { join } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { GENERATED_MANIFEST_PATH, readGeneratedManifest } from '@open-autonomy/core';
 import { checkAuth, checkEnv, checkProvider, type CheckResult } from './doctor-checks.ts';
+import { defaultProc, detectRepoFacts, type ProcFn } from './recommend-profile.ts';
 
-// =========================================================================================================
-// Injectable subprocess seam — mirrors TD.2's `ProcFn`/`defaultProc` idiom (bin/recommend-profile.ts) and
-// packages/local-runner-cli/src/imm-signals.ts's `SignalContext.proc`: tests stub `gh`-dependent probes
-// deterministically; `git`-only probes always run for real (offline, no auth, safe against any tmp repo).
-// =========================================================================================================
-export interface ProcResult {
-  status: number;
-  stdout: string;
-  stderr: string;
-}
-export type ProcFn = (cmd: string, args: string[], cwd?: string) => ProcResult;
-
-export const defaultProc: ProcFn = (cmd, args, cwd) => {
-  const r = spawnSync(cmd, args, { cwd, encoding: 'utf8' });
-  if (r.error) return { status: 1, stdout: '', stderr: String((r.error as Error).message ?? r.error) };
-  return { status: r.status ?? 1, stdout: r.stdout ?? '', stderr: r.stderr ?? '' };
-};
+// Re-export the shared injectable subprocess seam (TD.2's `ProcFn`/`defaultProc`, bin/recommend-profile.ts)
+// so this file's own tests/CLI can import it from one place — packages/local-runner-cli/src/imm-
+// signals.ts's `SignalContext.proc` is the same idiom in a different package.
+export { defaultProc, type ProcFn };
 
 function firstLine(s: string): string {
   return s.trim().split('\n')[0] ?? '';
@@ -131,12 +122,6 @@ export function detectLanguageAndBuild(repoDir: string): RepoBuildFacts {
   return { hasPackageJson, language: language ?? 'unknown', buildFiles, packageManager, notes };
 }
 
-// Mirrors bin/autonomy-compile.ts's REPO_SHELL_FILES / TD.1's packages/core/src/recommend.ts's own copy
-// of the same constant (see this file's header "TD.2 REUSE DECISION" — TD.1 IS merged, but its constant
-// is not yet importable through `@open-autonomy/core`'s barrel either, since that export line is part of
-// the SAME unmerged #152 diff that adds `./recommend`). Kept here as a plain literal, not re-derived.
-const REPO_SHELL_FILES = new Set(['README.md', 'package.json', '.gitignore', 'CHANGELOG.md']);
-
 export interface GitFacts {
   isGitRepo: boolean;
   onGitHub: boolean;
@@ -147,72 +132,33 @@ export interface GitFacts {
   notes: string[];
 }
 
-/** Mirrors TD.2's `detectOnGitHub` (bin/recommend-profile.ts) — see this file's header "TD.2 REUSE
- *  DECISION". A repo with no `.git` at all, or with remotes that don't point at github.com, both read as
- *  `onGitHub: false` — a plain existence check, never ambiguous. */
-function detectOnGitHub(repoDir: string, proc: ProcFn): { onGitHub: boolean; remoteUrl?: string; note: string } {
-  if (!existsSync(join(repoDir, '.git'))) {
-    return { onGitHub: false, note: 'onGitHub=false — no .git directory at all (not a git repository)' };
-  }
-  const r = proc('git', ['-C', repoDir, 'remote', '-v'], repoDir);
-  if (r.status !== 0 || !r.stdout.trim()) {
-    return { onGitHub: false, note: 'onGitHub=false — git repository with no remotes configured (git remote -v: empty)' };
-  }
-  const onGitHub = /github\.com/i.test(r.stdout);
-  const remoteUrl = firstLine(r.stdout).split(/\s+/)[1];
-  return {
-    onGitHub,
-    remoteUrl,
-    note: onGitHub
-      ? `onGitHub=true — git remote -v shows a github.com remote ("${firstLine(r.stdout)}")`
-      : `onGitHub=false — git remote -v shows remote(s), none pointing at github.com ("${firstLine(r.stdout)}")`,
-  };
-}
+/** onGitHub + populated: sourced from TD.2's own `detectRepoFacts()` (bin/recommend-profile.ts) — see
+ *  this file's header "TD.2 REUSE DECISION". `remoteUrl`/`defaultBranch`/`trackedFileCount` are extra
+ *  facts TD.1's recommender never needed and TD.2 never computes; they're added here via small, plain
+ *  `git` reads (no ambiguity handling to re-derive — `detectRepoFacts` already owns that). */
+export function detectGitFacts(repoDir: string, proc: ProcFn = defaultProc): GitFacts {
+  const isGitRepo = existsSync(join(repoDir, '.git'));
+  const { repoFacts, notes } = detectRepoFacts(repoDir, {}, proc);
 
-/** Mirrors TD.2's `detectPopulated` (bin/recommend-profile.ts) — see this file's header "TD.2 REUSE
- *  DECISION". Prefers `git ls-files` (untracked/gitignored cruft never counts as "populated"); falls back
- *  to a plain directory listing only when there is no usable git-tracked file list at all (never
- *  `git init`-ed), so an empty scratch dir still reads as unpopulated. */
-function detectPopulated(repoDir: string, proc: ProcFn): { populated: boolean; trackedFileCount: number; note: string } {
-  if (existsSync(join(repoDir, '.git'))) {
-    const r = proc('git', ['-C', repoDir, 'ls-files'], repoDir);
-    if (r.status === 0) {
-      const files = r.stdout.split('\n').map((s) => s.trim()).filter(Boolean);
-      const beyond = files.filter((f) => !REPO_SHELL_FILES.has(f));
-      return {
-        populated: beyond.length > 0,
-        trackedFileCount: files.length,
-        note: `populated=${beyond.length > 0} — git ls-files: ${files.length} tracked file(s), ${beyond.length} beyond the scaffold set [${[...REPO_SHELL_FILES].join(', ')}]`,
-      };
+  let remoteUrl: string | undefined;
+  let defaultBranch: string | undefined;
+  let trackedFileCount = 0;
+  if (isGitRepo) {
+    const remoteR = proc('git', ['-C', repoDir, 'remote', '-v'], repoDir);
+    if (remoteR.status === 0 && remoteR.stdout.trim()) remoteUrl = firstLine(remoteR.stdout).split(/\s+/)[1];
+    const branchR = proc('git', ['-C', repoDir, 'symbolic-ref', '--short', 'HEAD'], repoDir);
+    if (branchR.status === 0 && branchR.stdout.trim()) defaultBranch = branchR.stdout.trim();
+    const lsR = proc('git', ['-C', repoDir, 'ls-files'], repoDir);
+    if (lsR.status === 0) trackedFileCount = lsR.stdout.split('\n').map((s) => s.trim()).filter(Boolean).length;
+  } else {
+    try {
+      trackedFileCount = readdirSync(repoDir).filter((e) => e !== '.git' && e !== 'node_modules' && !e.startsWith('.')).length;
+    } catch {
+      trackedFileCount = 0;
     }
   }
-  let entries: string[] = [];
-  try {
-    entries = readdirSync(repoDir).filter((e) => e !== '.git' && e !== 'node_modules' && !e.startsWith('.'));
-  } catch {
-    entries = [];
-  }
-  const beyond = entries.filter((e) => !REPO_SHELL_FILES.has(e));
-  return {
-    populated: beyond.length > 0,
-    trackedFileCount: entries.length,
-    note: `populated=${beyond.length > 0} — no usable git-tracked file list; fell back to a top-level directory listing: ${entries.length} entries, ${beyond.length} beyond the scaffold set`,
-  };
-}
 
-export function detectGitFacts(repoDir: string, proc: ProcFn = defaultProc): GitFacts {
-  const notes: string[] = [];
-  const isGitRepo = existsSync(join(repoDir, '.git'));
-  const gh = detectOnGitHub(repoDir, proc);
-  notes.push(gh.note);
-  const pop = detectPopulated(repoDir, proc);
-  notes.push(pop.note);
-  let defaultBranch: string | undefined;
-  if (isGitRepo) {
-    const r = proc('git', ['-C', repoDir, 'symbolic-ref', '--short', 'HEAD'], repoDir);
-    if (r.status === 0 && r.stdout.trim()) defaultBranch = r.stdout.trim();
-  }
-  return { isGitRepo, onGitHub: gh.onGitHub, remoteUrl: gh.remoteUrl, defaultBranch, populated: pop.populated, trackedFileCount: pop.trackedFileCount, notes };
+  return { isGitRepo, onGitHub: repoFacts.onGitHub, remoteUrl, defaultBranch, populated: repoFacts.populated, trackedFileCount, notes };
 }
 
 // =========================================================================================================
@@ -232,7 +178,11 @@ export interface GhFacts {
   notes: string[];
 }
 
-/** Resolve `<owner>/<repo>` for the ghAdmin probe — mirrors TD.2's `resolveOwnerRepo`. */
+/** Resolve `<owner>/<repo>` for the visibility probe. TD.2's own `resolveOwnerRepo` (bin/recommend-
+ *  profile.ts) does the identical resolution for its ghAdmin probe, but it is module-private (not
+ *  exported) and TD.2 never needs visibility — so this is a small, low-risk, intentionally-duplicated
+ *  helper (see this file's header "TD.2 REUSE DECISION"), not a re-derivation of the actual admin-probe
+ *  ambiguity handling (that part IS reused, via `detectRepoFacts` below). */
 function resolveOwnerRepo(repoDir: string, proc: ProcFn): string | undefined {
   const viaGh = proc('gh', ['repo', 'view', '--json', 'nameWithOwner', '--jq', '.nameWithOwner'], repoDir);
   if (viaGh.status === 0 && viaGh.stdout.trim()) return viaGh.stdout.trim();
@@ -242,44 +192,6 @@ function resolveOwnerRepo(repoDir: string, proc: ProcFn): string | undefined {
     if (m) return m[1];
   }
   return undefined;
-}
-
-/** ghAdmin: does the operator's `gh` token hold repo-admin on this repo?
- *
- *  STANDING RULE (this unit's brief): a GitHub admin-ish endpoint 404ing (or otherwise erroring) for a
- *  non-admin token is NEVER read as a definite "no", only "unknown" — mirrors the documented gotcha in
- *  packages/local-runner-cli/src/imm-signals.ts:397-400 (branches/<b>/protection 404s even on a
- *  PROTECTED branch for a non-admin token) and TD.2's `detectGhAdmin` (bin/recommend-profile.ts, PR
- *  #152, unmerged — mirrored here per this file's header "TD.2 REUSE DECISION").
- *
- *  VERIFIED LIVE on this box against volter-ai/open-autonomy (2026-07-11, `gh` 2.95.0, token identity
- *  otto-runhuman): `gh api repos/<owner>/<repo> --jq .permissions.admin` is a DIFFERENT endpoint from
- *  `branches/<b>/protection` and does NOT share that 404-ambiguity — it returned a clean, exit-0
- *  `{"admin":false,...}` for this genuinely non-admin token, because telling a caller their OWN
- *  permission level on a repo they can already read is not itself an admin-gated operation. So: a
- *  non-zero exit, empty output, or anything that doesn't parse as exactly "true"/"false" is `undefined`
- *  ("unknown") — never coerced to false; a clean "false" IS treated as a confirmed negative. */
-function detectGhAdmin(repoDir: string, proc: ProcFn): { admin?: boolean; note: string } {
-  const repo = resolveOwnerRepo(repoDir, proc);
-  if (!repo) {
-    return { admin: undefined, note: 'ghAdmin=unknown — could not resolve <owner>/<repo> (gh repo view and git remote get-url origin both failed)' };
-  }
-  const r = proc('gh', ['api', `repos/${repo}`, '--jq', '.permissions.admin'], repoDir);
-  if (r.status !== 0) {
-    return {
-      admin: undefined,
-      note: `ghAdmin=unknown — gh api repos/${repo} --jq .permissions.admin failed (${firstLine(r.stderr) || `exit ${r.status}`}); a failed/unauthenticated admin-ish probe is never read as a negative`,
-    };
-  }
-  const out = r.stdout.trim();
-  if (out === 'true') return { admin: true, note: `ghAdmin=true — gh api repos/${repo} --jq .permissions.admin -> true (confirmed admin)` };
-  if (out === 'false') {
-    return {
-      admin: false,
-      note: `ghAdmin=false — gh api repos/${repo} --jq .permissions.admin -> false (exit 0, a clean read, NOT a 404) — confirmed negative, not "unknown" (see this function's doc comment).`,
-    };
-  }
-  return { admin: undefined, note: `ghAdmin=unknown — gh api repos/${repo} --jq .permissions.admin returned an unparseable value (${JSON.stringify(out)})` };
 }
 
 export function detectGhFacts(repoDir: string, onGitHub: boolean, proc: ProcFn = defaultProc): GhFacts {
@@ -306,8 +218,18 @@ export function detectGhFacts(repoDir: string, onGitHub: boolean, proc: ProcFn =
     return { ghInstalled: true, authStatus: 'authenticated', login, adminBasis: 'not-applicable — repo has no github.com remote, admin rights are moot', notes };
   }
 
-  const admin = detectGhAdmin(repoDir, proc);
-  notes.push(admin.note);
+  // ghAdmin (STANDING RULE: a 404/error on an admin-ish endpoint is NEVER a confirmed negative, only
+  // "unknown" — mirrors packages/local-runner-cli/src/imm-signals.ts:397-400's documented branches/<b>/
+  // protection gotcha) — sourced from TD.2's own `detectRepoFacts()` (bin/recommend-profile.ts, REUSED,
+  // see this file's header), not re-derived. VERIFIED LIVE against volter-ai/open-autonomy (2026-07-11,
+  // `gh` 2.95.0, token identity otto-runhuman): `gh api repos/<owner>/<repo> --jq .permissions.admin`
+  // returned a clean, exit-0 `{"admin":false,...}` for this genuinely non-admin token — a confirmed
+  // negative, not a 404-ambiguous ANY. `detectRepoFacts` only invokes this probe when `onGitHub` is true,
+  // matching this function's own `if (!onGitHub) return …` short-circuit above.
+  const { repoFacts: adminFacts, notes: adminNotes } = detectRepoFacts(repoDir, {}, proc);
+  const admin = adminFacts.ghAdmin;
+  const adminNote = adminNotes.find((n) => n.startsWith('ghAdmin=')) ?? 'ghAdmin=unknown (no admin note produced by detectRepoFacts)';
+  notes.push(adminNote);
 
   let visibility: string | undefined;
   const repo = resolveOwnerRepo(repoDir, proc);
@@ -333,7 +255,7 @@ export function detectGhFacts(repoDir: string, onGitHub: boolean, proc: ProcFn =
     notes.push('plan=unknown — gh api user --jq .plan.name returned nothing (common for org-owned repos; the token holder is not the org)');
   }
 
-  return { ghInstalled: true, authStatus: 'authenticated', login, admin: admin.admin, adminBasis: admin.note, visibility, plan, notes };
+  return { ghInstalled: true, authStatus: 'authenticated', login, admin, adminBasis: adminNote, visibility, plan, notes };
 }
 
 // =========================================================================================================

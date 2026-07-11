@@ -181,6 +181,22 @@ describe('detectGhFacts', () => {
     };
   }
 
+  // detectGhFacts delegates the ghAdmin probe to TD.2's own `detectRepoFacts()` (bin/recommend-
+  // profile.ts) — its onGitHub check ALWAYS runs the real `git` binary against the literal repoDir (per
+  // that module's own "git-only detection always uses the real subprocess runner" doctrine, never
+  // stubbable), independent of the `onGitHub` boolean this test passes into `detectGhFacts` itself. So any
+  // test that needs the admin probe to actually fire must use a REAL git repo with a REAL github.com
+  // remote — a bare string path like '/tmp/whatever' reads as onGitHub=false internally and short-
+  // circuits the probe regardless of what's stubbed.
+  function realGithubRepoDir(): string {
+    const dir = track(mkdtempSync(join(tmpdir(), 'te1-ghadmin-')));
+    gitInit(dir);
+    writeFileSync(join(dir, 'a.txt'), 'x');
+    commitAll(dir, 'init');
+    git(dir, ['remote', 'add', 'origin', 'https://github.com/acme/widget.git']);
+    return dir;
+  }
+
   test('gh not installed -> gh-not-installed, no further probes', () => {
     const proc = stub({ 'gh --version': () => ({ status: 1, stdout: '', stderr: 'command not found' }) });
     const r = detectGhFacts('/tmp/whatever', true, proc);
@@ -226,7 +242,7 @@ describe('detectGhFacts', () => {
         return { status: 1, stdout: '', stderr: 'unstubbed gh repo' };
       },
     });
-    const r = detectGhFacts('/tmp/whatever', true, proc);
+    const r = detectGhFacts(realGithubRepoDir(), true, proc);
     expect(r.admin).toBe(true);
     expect(r.visibility).toBe('PRIVATE');
   });
@@ -246,7 +262,7 @@ describe('detectGhFacts', () => {
         return { status: 1, stdout: '', stderr: 'unstubbed gh repo' };
       },
     });
-    const r = detectGhFacts('/tmp/whatever', true, proc);
+    const r = detectGhFacts(realGithubRepoDir(), true, proc);
     expect(r.admin).toBe(false); // a confirmed negative, per the STANDING RULE — not "unknown"
   });
 
@@ -265,7 +281,7 @@ describe('detectGhFacts', () => {
         return { status: 1, stdout: '', stderr: 'unstubbed gh repo' };
       },
     });
-    const r = detectGhFacts('/tmp/whatever', true, proc);
+    const r = detectGhFacts(realGithubRepoDir(), true, proc);
     expect(r.admin).toBeUndefined();
     expect(r.adminBasis).toContain('unknown');
     expect(r.adminBasis).not.toContain('false');
@@ -285,7 +301,7 @@ describe('detectGhFacts', () => {
         return { status: 1, stdout: '', stderr: 'boom' };
       },
     });
-    const r = detectGhFacts('/tmp/whatever', true, proc);
+    const r = detectGhFacts(realGithubRepoDir(), true, proc);
     expect(r.admin).toBeUndefined();
   });
 });

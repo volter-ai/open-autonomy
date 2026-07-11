@@ -1,0 +1,44 @@
+# simple-sdlc's hand-authored SetupPack facts (TS.1/TP.4 — "the simplest one-shot path", proven early per
+# the task list's own sequencing note). Everything NOT here (targets, codeHost, roster) is a VIEW computed
+# from ir.yml by packages/core/src/setup-pack.ts's getSetupPack. This profile ships NO `provision.json` —
+# it is `targets: [local]` / `codeHost: local-git`, so every GitHub-only pack field (required_checks,
+# check_realizations, enforce_admins, labels) is simply absent, and validates OK absent (TS.1 acceptance).
+#
+# landing_mode: PR-FREE. `develop` pushes commits directly (code:propose, no github codeHost is realized as
+# a PR here); `review` verifies one In-Review change over commit-evidence and moves it to Done or back for
+# rework — there is no pull request, no auto-merge, no manual-merge deputy (ir.yml's header: "PR-free —
+# review = the reviewer's verdict over commit-evidence, no pull request").
+landing_mode: pr-free
+
+# check_realizations: deliberately OMITTED — a PR-free profile has no required-check/merge-gate concept at
+# all (there is no PR for a check to gate). See bin/check-setup-pack.ts's drift guard, which fails if a
+# `pr-free` pack ever declares check_realizations/required_checks.
+
+# board_seed_recipe: no `planner` agent exists in this profile (ir.yml's roster is pm/draft/develop/review
+# only) — `draft` is the only originator, turning an untriaged raw request into a verifiable Ready issue.
+# The board is a ztrack store; promotion is a ztrack STATE transition to `ready`, gated by the day-one
+# dispatch fence: `policy.box.dispatch.mode: allowlist` + `allow_label: oa-approved` (ir.yml) — the PM may
+# only dispatch a `ready` issue that ALSO carries the `oa-approved` label (see maturity_signals.
+# m4_allowlist_label below). There is no PR/merge machinery at all in this profile, so seeding always lands
+# DIRECTLY (a local ztrack/git commit, never a landing path through GitHub).
+board_seed_recipe:
+  originator_skill: draft
+  promotion_fence: state
+  import_verb: "ztrack issue add"
+  landing_path: direct
+
+# direction_spec: omitted — ir.yml declares no `documents.roles` block (this profile's governance is
+# `standards/*.md`, not a vision/constitution doc — DESIGN §Q1's "no vision rung" note), so getSetupPack
+# derives `operator`.
+
+maturity_signals:
+  m3_tool: doctor
+  m4_predicate: ztrack
+  m4_allowlist_label: oa-approved   # the day-one dispatch fence (OA-07) — a `ready` item alone is NOT
+                                     # enough; it must also carry this label (ir.yml's policy.box.dispatch)
+  m6_signal: per-issue              # no merged PR exists on this profile at all — M6 is a ztrack `done` +
+                                     # AC-evidence trace read per issue, not a PR-close or roadmap rollup
+
+extra_rungs: []                     # no rungs beyond the common M0-M5 spine
+
+terminal_stage: M5                  # one-shot terminal target; M6 is aspirational on this profile (DESIGN §Q1)

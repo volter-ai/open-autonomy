@@ -1,0 +1,45 @@
+# simple-gh's hand-authored SetupPack facts (TS.1/TP.2). Everything NOT here (targets, codeHost, roster,
+# required_checks, enforce_admins, labels) is a VIEW computed from ir.yml + provision.json by
+# packages/core/src/setup-pack.ts's getSetupPack — see that file for the schema + what each field means.
+#
+# landing_mode: no `agent-review` status exists in this profile at all (ir.yml's header: "there is no
+# independent agent-review status here — that would be a self-check on a shared token") — the `manager`
+# merges each PR itself only after real CI is green + a fresh review-subagent verdict is recorded
+# (skills/manager/SKILL.md §5, policy.box.manager.merge_policy: manual-after-review in ir.yml).
+landing_mode: manual-after-review
+
+# check_realizations: `ci` is the repo's OWN real CI — this profile ships no workflow of its own (the
+# adopter's CI is the gate, provision.json's `required_checks: ["ci"]` is a placeholder to be replaced with
+# the adopter's real check name(s) before provisioning a real target repo). No `agent-review`/`security`
+# entries — this landing_mode deliberately carries neither.
+check_realizations:
+  - check: ci
+    via: authored-workflow
+
+# board_seed_recipe: the board is ztrack (local machine store). `planner` (D3) is the originator — it reads
+# the declared vision/constitution and, only when the board is starving, authors + registers a plan doc
+# (`ztrack import --register`, skills/planner/SKILL.md OUTPUT §2). Promotion to a dispatchable item is a
+# ztrack STATE transition (to `ready`) the manager makes after judging the plan doc — never a GitHub label
+# (this profile has no GitHub-issue board). Because branch protection + enforce_admins:true make a direct
+# board-state push to `main` mechanically unlandable (no check-runs at push time — GH006), every board
+# mutation (ztrack state flips, plan-doc registration, paused re-arm) lands through the SCOPED self-merge
+# carve-out described in skills/manager/SKILL.md §7 (the F1 carve-out) — the installer itself needs this
+# exact path when it seeds a fresh board.
+board_seed_recipe:
+  originator_skill: planner
+  promotion_fence: state
+  import_verb: "ztrack import --register"
+  landing_path: board-pr-carveout
+
+# direction_spec: omitted — ir.yml declares no `documents.roles` block, so getSetupPack derives `operator`
+# (this profile's positioning lives in the repo the operator brings, per README's operator-as-direction
+# framing; TE.3 only authors an anchor when the repo genuinely lacks readable positioning).
+
+maturity_signals:
+  m3_tool: doctor          # local-only profile — no gh-preflight rung
+  m4_predicate: ztrack     # the board IS a ztrack store, not GitHub issues
+  m6_signal: per-issue     # the manager flips ztrack state itself on each landed PR (no roadmap rollup)
+
+extra_rungs: []             # simple-gh's ladder has no rungs beyond the common M0-M5 spine
+
+terminal_stage: M5          # one-shot target; this profile has no M6 rollup signal (per-issue only)

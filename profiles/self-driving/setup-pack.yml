@@ -1,0 +1,67 @@
+# self-driving's hand-authored SetupPack facts (TS.1/TP.3 — the profile with the most rungs). Everything
+# NOT here (targets, codeHost, roster, required_checks, enforce_admins, labels) is a VIEW computed from
+# ir.yml + provision.json by packages/core/src/setup-pack.ts's getSetupPack.
+#
+# landing_mode: STILL auto-merge — `human-approval` (provision.json's branch_protection.required_checks)
+# is a REQUIRED CHECK (a per-SHA maintainer gate), never a fourth landing mode (DESIGN §Q0's explicit
+# correction: "self-driving is auto-merge, not a fourth mode"). See check_realizations below for how it
+# posts, and bin/check-setup-pack.ts's drift guard, which fails if `human-approval` is ever declared here
+# as `landing_mode` instead of a required check.
+landing_mode: auto-merge
+
+# check_realizations: `ci` and `human-approval` each need their OWN standing, authored workflow file (this
+# profile carries `.github/workflows/human-approval.yml` as a resource — ir.yml) — a required check with no
+# workflow behind it wedges every PR forever (TA.3). `agent-review` posts NATIVELY from the independent
+# `reviewer` actor's own job. `security` is the dispatched, blocking realization of security.yml
+# (security-gate.yml), same mechanism as simple-gh-sdlc — `policy.box['gh-actions'].propose_dispatch_checks`
+# in ir.yml.
+check_realizations:
+  - check: ci
+    via: authored-workflow
+  - check: agent-review
+    via: native
+  - check: security
+    via: propose_dispatch_checks
+  - check: human-approval
+    via: authored-workflow
+
+# board_seed_recipe: the board IS GitHub issues, same substrate as simple-gh-sdlc, but this profile carries
+# the roadmap trio (strategist -> strategy_reviewer -> planner). `planner` converts each RATIFIED roadmap.yml
+# item into tracking issues via tasks:author, filed ALREADY `ready` (origin:roadmap-planner +
+# roadmap:<id> labels + real ACs in the body from the moment they're filed — skills/pm/SKILL.md: "ready is
+# set by draft, the planner, or a maintainer" for roadmap-derived issues). The fence that actually promotes
+# these items isn't a label toggle a human applies later — it's that the roadmap PARENT item already passed
+# the strategist -> strategy_reviewer ratification loop (a merged, reviewed roadmap PR) before the planner
+# ever files the child issue. (A human-filed raw request still goes through `draft` + the ordinary `ready`
+# label — but the roadmap path, this profile's OWN delta over simple-gh-sdlc, is upstream-ratified.) Filing
+# an issue via tasks:author is not a merge, so seeding lands DIRECTLY.
+board_seed_recipe:
+  originator_skill: planner
+  promotion_fence: upstream-ratified
+  import_verb: tasks:author
+  landing_path: direct
+
+# direction_spec: omitted — ir.yml DOES declare `documents.roles` (vision/constitution/roadmap), so
+# getSetupPack derives `documents.roles` mode with the three REPLACE-THIS-seeded template paths
+# automatically (docs/VISION.md, docs/CONSTITUTION.md, .open-autonomy/roadmap.yml) — no need to re-list them
+# here by hand.
+
+maturity_signals:
+  m3_tool: gh-preflight       # the hosted (gh-actions) target has NO `doctor` — proven by gh-preflight +
+                               # a first workflow run instead (ir.yml's own note + DESIGN §Q1)
+  m4_predicate: gh-issues
+  m6_signal: roadmap-rollup   # the roadmap:<id> rollup increments via a human-approved, gated merge
+                               # (services/agent-model-proxy/src/github-sync.ts)
+
+# extra_rungs: self-driving carries rungs no other profile has — a funded, OIDC-allowlisted model proxy
+# (M3.p), filled direction docs with no REPLACE-THIS markers left (M4.d), and a provisioned `maintainer`
+# kind:human + PUBLIC_AGENT_MAINTAINERS (M4.h). DESIGN §Q1's own ladder for this profile.
+extra_rungs:
+  - proxy-ready
+  - direction-present
+  - human-seam-wired
+
+# terminal_stage: the one-shot IN-SESSION target is still M5 — WITHOUT a funded, allowlisted proxy this
+# profile honestly stops at M3/M4 (DESIGN §Q3's "honest terminal reachability"), which is a RUNTIME outcome
+# the maturity validator reports, not a different static value for this field.
+terminal_stage: M5

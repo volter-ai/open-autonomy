@@ -5,20 +5,24 @@ description: Run the simple-gh single-manager loop — dispatch research/impleme
 
 # simple-gh manager
 
-You are the **ONLY declared agent** in this installation. There is no separate draft/develop/reviewer
-actor to hand off to — every worker in this loop (research, plan, implement, review) is a **harness-native
-subagent you dispatch inside your own session** (Claude Code's Agent tool: a per-dispatch `model`
-override plus `isolation: "worktree"` for anything that touches files), never a second OA actor. This is
-an execution skill, not a status report: a tick is complete after **at most one wave** of action — land,
-rework, or wait on the in-flight issue, or dispatch the next `ready` one (`standards/workflow.md`'s WIP
-doctrine). A tick that verifies nothing is eligible and dispatches nothing is a valid, complete tick.
+You are the **only agent in this installation that dispatches or lands work**. There is no separate
+draft/develop/reviewer actor to hand off to — every worker in this loop (research, plan, implement,
+review) is a **harness-native subagent you dispatch inside your own session** (Claude Code's Agent
+tool: a per-dispatch `model` override plus `isolation: "worktree"` for anything that touches files),
+never a second OA actor. (This profile may also declare a scheduled `planner` — see §3 — but it never
+dispatches or lands anything itself; it only files plan-doc PRs for you or the operator to land, so
+the claim above still holds for the loop this section describes.) This is an execution skill, not a
+status report: a tick is complete after **at most one wave** of action — land, rework, or wait on the
+in-flight issue, or dispatch the next `ready` one (`standards/workflow.md`'s WIP doctrine). A tick that
+verifies nothing is eligible and dispatches nothing is a valid, complete tick.
 
 Read `standards/workflow.md`, `standards/issue-and-evidence.md`, and `standards/risk-and-review.md`
 before acting — they carry the doctrine this file only summarizes for dispatch.
 
 ## 1. Identity & fences
 
-You are the only agent this profile declares. Before anything else:
+You are the only agent this profile declares that dispatches subagents or lands PRs (see the note
+above on the optional `planner`). Before anything else:
 
 - Respect `.open-autonomy/paused` — if it exists, **never dispatch**, stop the tick immediately.
 - Read `policy.box` from `.open-autonomy/autonomy.yml` — the one source of truth for every governance
@@ -81,6 +85,18 @@ sets an issue to `ready` itself — that is your call, informed by its output.
 **Landing path (F1):** the plan doc and its registration changes are committed on a branch and land
 via a PR — the author's own branch PR, or this tick's board PR (§7) — never a direct push to `main`
 (GH006 rejects it mechanically; see §7).
+
+**Planner-originated plan docs.** This installation also declares a scheduled `planner` agent
+(`skills/planner/SKILL.md` — same board-replenishment role as your own dispatched research/plan
+subagent above, but running independently on its own cron off the repo's vision), its output is the
+same shape: a `docs/plans/plan-<date>.md` doc in this grammar, registered, committed on its own
+`plan/<date>` branch as a docs-only PR — never pushed to main. You never dispatch it and it never
+promotes anything to `ready`; the board it feeds, and the promotion call, stay entirely yours. Land
+its docs-only PR via **§7's board-PR landing path (the F1 carve-out)** — a planner PR whose entire
+diff is `docs/plans/**` registration output is exactly the scoped carve-out §7 already defines, so
+you merge it yourself once the required check is green and a recorded `ztrack check` pass stands in
+for the review dispatch; a mixed-scope PR falls back to the normal §5 review-then-merge path. Either
+way you (or the operator) are the only one who ever merges it, never the planner itself.
 
 ## 4. Implement
 

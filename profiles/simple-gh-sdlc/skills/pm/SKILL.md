@@ -91,3 +91,10 @@ without you.
 Never implement, review, or mark ACs passed yourself — develop and reviewer do that.
 Never launch `draft` from a scheduled tick unless a human explicitly asked this tick
 to draft new work; when they do: `bun scripts/runner.ts launch draft --ref <number>`.
+
+**Planner-originated issues.** If this installation also declares a scheduled `planner` agent
+(`skills/planner/SKILL.md`), fresh open issues with no `ready` label may appear on your board without
+any human having filed them — it originates new draft issues from the vision on its own cron when the
+board is starving. Treat one exactly like any other untriaged issue: it is not `ready`, so it is not in
+your dispatch set (step 3 above); do not launch `draft` on it from a scheduled tick any more than you
+would for a human-filed one — the "only on explicit request" rule is unchanged.

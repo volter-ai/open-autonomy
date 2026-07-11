@@ -36,8 +36,19 @@ board_seed_recipe:
 
 # direction_spec: omitted — ir.yml declares no `documents.roles` block, so getSetupPack derives `operator`.
 
+# maturity_signals.m3_tool: the pack schema carries exactly ONE m3_tool slot (packages/core/src/setup-pack.ts's
+# `M3Tool` union), so this declares the PRIMARY/local tool. This profile's `targets: [gh-actions, local]` is
+# genuinely dual (unlike simple-gh/simple-sdlc, which never offer gh-actions at all), so `oa maturity`'s
+# composer (packages/local-runner-cli/src/maturity.ts, TP.1 fix) falls back to gh-preflight (A12) for M3
+# whenever the CURRENT run's target has no local process for `doctor` to probe (target != 'local' — TB.3's
+# signalSetFor already excludes A8/A10 from that run's applicable set) — matching DESIGN §Q1's literal
+# "m3_tool: doctor(local)/gh-preflight(hosted)" split for THIS profile without widening the schema to a
+# per-target map. This differs from self-driving's setup-pack.yml, which declares the single, target-invariant
+# `gh-preflight` (self-driving's repo is truthfully GitHub-hosted on every target it ships; see that file's
+# own comment) — simple-gh-sdlc's declared `doctor` is the one value that ALSO drives this unit's live
+# acceptance (a local-target scratch install proven via a real `oa doctor` run, never a real GitHub repo).
 maturity_signals:
-  m3_tool: doctor            # local target; hosted (gh-actions) target has gh-preflight as the real proof
+  m3_tool: doctor            # PRIMARY = local; the composer falls back to gh-preflight on a hosted run (see above)
   m4_predicate: gh-issues    # the board is GitHub issues, gated on ready + AC body (skills/pm/SKILL.md)
   m6_signal: pr-close        # reconcile-merged-issues.ts closes the linked issue on a merged agent/issue-<n> PR
 

@@ -214,3 +214,71 @@ describe('TS.1 acceptance — the four real baseline packs', () => {
     expect(maintainer?.kind).toBe('human');
   });
 });
+
+// --- TP.1 acceptance — the simple-gh-sdlc pack asserted field-by-field against DESIGN §Q1's ladder ------
+// ("`M3` adds required checks ci+agent-review+security with an independent reviewer posting agent-review
+// (ir.yml:44-49) and auto-merge armed only after a supervised first merge -> M4 vision anchor (added) +
+// >=1 GitHub issue with ready label + AC body (skills/pm/SKILL.md:18-24) -> M5 pm tick dispatches develop
+// -> M6 a merged PR that passed ci+agent-review+security closed a ready issue
+// (scripts/reconcile-merged-issues.ts:25-29). m3_tool: doctor(local)/gh-preflight(hosted) - m4_predicate:
+// gh-issues - m6_signal: merged-PR->issue-close. Terminal one-shot: M5; M6 observable.")
+describe('TP.1 acceptance — simple-gh-sdlc pack vs DESIGN §Q1 (the simple-gh-sdlc ladder)', () => {
+  const pack = getSetupPack('profiles/simple-gh-sdlc');
+
+  test('landing_mode: auto-merge (GitHub native, gated on ci+agent-review+security)', () => {
+    expect(pack.landing_mode).toBe('auto-merge');
+  });
+
+  test('required_checks (provision.json view): exactly ci, agent-review, security', () => {
+    expect(pack.required_checks).toEqual(['ci', 'agent-review', 'security']);
+  });
+
+  test('check_realizations: ci->authored-workflow, agent-review->native, security->propose_dispatch_checks (names don\'t self-realize)', () => {
+    const byCheck = Object.fromEntries((pack.check_realizations ?? []).map((cr) => [cr.check, cr.via]));
+    expect(byCheck).toEqual({ ci: 'authored-workflow', 'agent-review': 'native', security: 'propose_dispatch_checks' });
+  });
+
+  test('board_seed_recipe: planner originates, `ready` LABEL is the promotion fence, tasks:author files directly (no PR — planner holds no code:propose)', () => {
+    expect(pack.board_seed_recipe).toEqual({
+      originator_skill: 'planner',
+      promotion_fence: 'label',
+      import_verb: 'tasks:author',
+      landing_path: 'direct',
+    });
+  });
+
+  test('direction_spec: operator (ir.yml declares no documents.roles block for this profile)', () => {
+    expect(pack.direction_spec.mode).toBe('operator');
+  });
+
+  test('maturity_signals: m4_predicate=gh-issues, m6_signal=pr-close (merged-PR -> issue-close, reconcile-merged-issues.ts)', () => {
+    expect(pack.maturity_signals.m4_predicate).toBe('gh-issues');
+    expect(pack.maturity_signals.m6_signal).toBe('pr-close');
+  });
+
+  test("maturity_signals.m3_tool: 'doctor' — this profile's ONE declared (schema-singular) value; the LOCAL leg of DESIGN's \"doctor(local)/gh-preflight(hosted)\" split. The hosted leg is mechanized by the composer's target-aware fallback (maturity.test.ts's dual-target fixture), not by a second pack field.", () => {
+    expect(pack.maturity_signals.m3_tool).toBe('doctor');
+  });
+
+  test('extra_rungs: none — the common M0-M5 spine only (no self-driving-style extra rungs for this profile)', () => {
+    expect(pack.extra_rungs).toEqual([]);
+  });
+
+  test('terminal_stage: M5 (one-shot terminal target; M6 merged-PR->issue-close is observable, async)', () => {
+    expect(pack.terminal_stage).toBe('M5');
+  });
+
+  test('enforce_admins: true (provision.json view — only human admins can direct-push; agents forced through gated PRs)', () => {
+    expect(pack.enforce_admins).toBe(true);
+  });
+
+  test('codeHost=github, targets include BOTH gh-actions and local (dual-target — the m3_tool split reason)', () => {
+    expect(pack.codeHost).toBe('github');
+    expect(pack.targets).toContain('gh-actions');
+    expect(pack.targets).toContain('local');
+  });
+
+  test('the pack validates structurally with zero errors (drift-vs-ir.yml/provision.json/skills is bin/check-setup-pack.test.ts\'s own coverage, not duplicated here)', () => {
+    expect(validateSetupPack(pack)).toEqual([]);
+  });
+});

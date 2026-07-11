@@ -38,6 +38,17 @@
 //   A13 (branch-protection-applied) is HARD wherever `codeHost==='github'`, independent of target — a
 //   `present:false` OR an `unverifiable:` A13 both block equally (never waved through; standing rule).
 //
+//   TP.1 FIX — the m3_tool field is singular but DESIGN §Q1 declares simple-gh-sdlc's m3_tool as a genuine
+//   PER-TARGET split ("doctor(local)/gh-preflight(hosted)"), unlike self-driving's single, target-invariant
+//   "gh-preflight" (self-driving's repo is truthfully GitHub-hosted on every target it ships, so gh-preflight
+//   stays authoritative regardless of which target is running the scheduler — signal-sets.ts's own A12/A13
+//   comment). Rather than widen the pack SCHEMA to a per-target map (a bigger, unproven cross-profile change),
+//   the m3_tool='doctor' branch now falls back to A12/gh-preflight when A8 is not in this run's `applicable`
+//   set (i.e. target != 'local', per TB.3's own target-driven selection) AND this profile is still
+//   codeHost=github (A12 IS applicable) — exactly simple-gh-sdlc's declared dual-target intent, without
+//   touching self-driving's or the local-only profiles' (simple-gh/simple-sdlc) existing, already-tested
+//   behavior (A8 stays applicable — and is used — for every target THEY ship). See the M3 gate below.
+//
 //   A11 (local `bin/preflight.ts`) and A12 (`scripts/open-autonomy-preflight.ts`) are SOFTENED on their own
 //   `doctor-unavailable:`-prefixed evidence (the script literally isn't resolvable in this deployment shape
 //   — both scripts ship ONLY inside a full open-autonomy source checkout, never into a compiled install or
@@ -639,13 +650,40 @@ export async function computeMaturity(opts: MaturityOptions = {}): Promise<Insta
       m3ToolOk = false;
       reasons.push("no --profile-dir supplied — cannot resolve this profile's m3_tool (doctor vs gh-preflight)");
     } else if (packInfo.pack.maturity_signals.m3_tool === 'gh-preflight') {
+      // TARGET-INVARIANT: this profile's pack names gh-preflight as its ONE authoritative M3 proof on
+      // every target it ships (self-driving's posture — its repo is genuinely GitHub-hosted truth-wise
+      // even when the `local` target just controls where the scheduler loop runs, DESIGN §Q1/§Q2's "no
+      // hosted doctor... proven by gh-preflight" — signal-sets.ts's own A12/A13 comment: "the repo is
+      // still hosted on GitHub... even when the scheduler happens to run on the operator's own machine").
       const a12 = sig('A12');
       m3ToolOk = softOk(a12);
       if (!m3ToolOk) reasons.push(`A12 (m3_tool=gh-preflight) failed: ${a12.evidence}`);
     } else {
-      const a8 = sig('A8');
-      m3ToolOk = a8.present;
-      if (!m3ToolOk) reasons.push(`A8/A10 (m3_tool=doctor) failed: ${a8.evidence}`);
+      // TARGET-AWARE FALLBACK (TP.1 fix — simple-gh-sdlc's own DESIGN §Q1 line: "m3_tool: doctor(local)/
+      // gh-preflight(hosted)", a genuine PER-TARGET split unlike self-driving's single always-gh-preflight
+      // value). The pack schema carries exactly ONE `m3_tool` slot (never a per-target map — see
+      // packages/core/src/setup-pack.ts's `M3Tool` union), so 'doctor' names this profile's PRIMARY/local
+      // tool; when the CURRENT run's target has no local process to probe (TB.3's signalSetFor already
+      // excludes A8/A10 from `applicable` whenever target !== 'local' — 'A8' simply will not be in
+      // `applicable` here), fall back to A12/gh-preflight whenever this profile is still codeHost=github
+      // (i.e. 'A12' IS in `applicable`) rather than reporting an unconditional, permanently-unreachable M3
+      // block on every hosted run of a dual-target, m3_tool=doctor profile. On a target that has NEITHER
+      // (a local-git profile like simple-sdlc/simple-gh, which only ever ships `targets: [local]`) 'A8' is
+      // always applicable, so this fallback branch is never reached for them — no behavior change.
+      const a8Applicable = applicable.includes('A8');
+      if (a8Applicable) {
+        const a8 = sig('A8');
+        m3ToolOk = a8.present;
+        if (!m3ToolOk) reasons.push(`A8/A10 (m3_tool=doctor) failed: ${a8.evidence}`);
+      } else if (applicable.includes('A12')) {
+        const a12 = sig('A12');
+        m3ToolOk = softOk(a12);
+        if (!m3ToolOk) reasons.push(`A12 (m3_tool=doctor, target has no local process — falling back to gh-preflight since codeHost=github) failed: ${a12.evidence}`);
+      } else {
+        const a8 = sig('A8');
+        m3ToolOk = false;
+        reasons.push(`A8/A10 (m3_tool=doctor) not applicable for this target and no gh-preflight fallback available (codeHost != github): ${a8.evidence}`);
+      }
     }
 
     let a13Ok = true;

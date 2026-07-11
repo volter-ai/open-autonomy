@@ -1,5 +1,7 @@
 name: audit
 on:
+  schedule:
+    - cron: "51 9 * * 0"
   workflow_dispatch:
     inputs:
       issue_number: { description: "issue/PR number to act on", required: false, type: string }
@@ -57,7 +59,13 @@ jobs:
         run: |
           mkdir -p .agent-run
           ref="${TARGET_REF}"
-          if [ -z "$ref" ]; then echo "no subject.ref forwarded by the trigger"; exit 1; fi
+          if [ -z "$ref" ]; then
+            if [ "${{ github.event_name }}" = "schedule" ]; then
+              printf '{"number":0,"title":"audit","body":""}\n' > .agent-run/issue.json
+              exit 0
+            fi
+            echo "no subject.ref forwarded by the trigger"; exit 1
+          fi
           gh api "repos/${{ github.repository }}/issues/$ref" --jq '{number,title,body,user:{login:.user.login},labels:[.labels[].name]}' > .agent-run/issue.json
       - name: Mint bounded model token
         run: bun scripts/model-proxy-mint.ts --run-id "ir-audit-${{ github.run_id }}" --models "${{ vars.PUBLIC_AGENT_MODEL || 'deepseek/deepseek-v4-flash' }}" --max-usd-cents "${{ vars.PUBLIC_AGENT_MAX_USD_CENTS || '200' }}" --max-requests "${{ vars.PUBLIC_AGENT_MAX_REQUESTS || '250' }}" --issue .agent-run/issue.json
@@ -99,7 +107,13 @@ jobs:
         run: |
           mkdir -p .agent-run
           ref="${TARGET_REF}"
-          if [ -z "$ref" ]; then echo "no subject.ref forwarded by the trigger"; exit 1; fi
+          if [ -z "$ref" ]; then
+            if [ "${{ github.event_name }}" = "schedule" ]; then
+              printf '{"number":0,"title":"audit","body":""}\n' > .agent-run/issue.json
+              exit 0
+            fi
+            echo "no subject.ref forwarded by the trigger"; exit 1
+          fi
           gh api "repos/${{ github.repository }}/issues/$ref" --jq '{number,title,body,user:{login:.user.login},labels:[.labels[].name]}' > .agent-run/issue.json
       - name: Exchange OIDC for the bounded token
         run: bun scripts/model-proxy-exchange.ts --run-id "ir-audit-${{ github.run_id }}" --audience "$MODEL_PROXY_OIDC_AUDIENCE"

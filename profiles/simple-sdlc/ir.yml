@@ -54,21 +54,31 @@ agents:
       - dispatch: true
         params: { ZTRACK_ISSUE: subject.ref }
 
-  # Dispatch-only conformance auditor of THIS INSTALL (not the product it builds) — verifies changes made
-  # to it aren't inconsistent, contradictory, or against OA's own philosophy/structure. Read-only against
+  # Conformance auditor of THIS INSTALL (not the product it builds) — verifies changes made to it
+  # aren't inconsistent, contradictory, or against OA's own philosophy/structure. Read-only against
   # the install with exactly one write: composing and landing its own dated report under docs/audits/ —
   # never a fix, never a merge (this profile is PR-free, so "land" means a commit on its own branch, left
-  # for the PM to integrate — see skills/audit/SKILL.md § Output). Never a cron trigger — see
-  # skills/audit/SKILL.md's identity section: the PM holds `agent:launch` for its own architecture
-  # (launching draft/develop/review), so the "operator-dispatched only" guarantee here is DOCTRINAL (the
-  # PM's own SKILL.md never names `audit` as something it launches), not structural the way simple-gh's
-  # subagent-fanout manager is — the skill documents this distinction itself.
+  # for the PM to integrate — see skills/audit/SKILL.md § Output). Fires on an explicit operator
+  # `dispatch` (unchanged since TC.1) AND, as of TC.3, its own weekly `cron` for ongoing drift auditing —
+  # see skills/audit/SKILL.md's identity section: the PM holds `agent:launch` for its own architecture
+  # (launching draft/develop/review), so the "operator-dispatched only" guarantee for the DISPATCH path
+  # is DOCTRINAL (the PM's own SKILL.md never names `audit` as something it launches), not structural the
+  # way simple-gh's subagent-fanout manager is — the skill documents this distinction itself. The cron
+  # path doesn't weaken that: `audit` itself holds no `agent:launch`, so a cron-fired run can still only
+  # ever re-run its own read-only checklist, never dispatch anything else — self-throttled per
+  # skills/audit/SKILL.md so the shared local tick (which fires every declared cron agent, PM included)
+  # doesn't turn "weekly" into "every pm tick."
   audit:
     behavior: audit
     capabilities: [tasks:converse, code:propose@docs/audits]
     triggers:
       - dispatch: true
         params: { TARGET_REF: subject.ref }   # optional: an issue this run's one-line summary lands on
+      # TC.3: low-frequency drift-mode cron, Sunday 09:51 UTC — see profiles/simple-gh/ir.yml's audit
+      # actor for the full cadence rationale (self-driving's weekly strategist precedent). This profile
+      # has no other daily/weekly cron to offset from (only pm's */15), so the same weekly slot is used
+      # for consistency across all four profiles. No params: a cron-fired run is always drift mode.
+      - cron: "51 9 * * 0"
 
 policy:
   maxConcurrent: 2   # the WIP ceiling: at most one in-progress + one in-review at a time

@@ -362,6 +362,30 @@ function wrapperYml(name: string, agent: IRAgent, gh: GithubBox, isControlPrimar
   // deeper context itself (it is credentialed — it has gh + read).
   const refParam = subjectRefParam(agent);
   const branchExpr = refParam ? `agent/issue-\${${refParam}}` : `agent/${RID}`;
+  // TC.3: an agent can now legitimately carry BOTH a subject.ref-bearing dispatch trigger AND a cron
+  // trigger (audit: dispatch for an operator-targeted run, cron for a repo-wide drift sweep with no
+  // subject at all). `subjectRefParam` is agent-wide (it doesn't know which trigger actually fired this
+  // run), so on a REAL `schedule` firing, `$ref` is legitimately empty — that must NOT be treated as the
+  // "no subject.ref forwarded" caller error the exit-1 below exists to catch. Scope the schedule carve-out
+  // to agents that actually declare a cron (cronOf(agent)) so every other dispatch-only agent's emitted
+  // step is BYTE-IDENTICAL to before this change — `github.event_name` can only ever BE `schedule` for an
+  // agent whose `on:` block declares a `schedule:` trigger in the first place, so the extra branch is inert
+  // (never reachable) on every agent that doesn't.
+  const hasCron = !!cronOf(agent);
+  // The empty-ref guard line ITSELF must stay byte-identical to before this change for every agent that
+  // doesn't declare a cron (the reviewer's own requirement) — only an agent that actually carries a cron
+  // trigger gets the extra schedule-aware branch; everyone else keeps the original single-line form.
+  const emptyRefGuard = hasCron
+    ? [
+        `          if [ -z "$ref" ]; then`,
+        `            if [ "\${{ github.event_name }}" = "schedule" ]; then`,
+        `              printf '{"number":0,"title":${JSON.stringify(name)},"body":""}\\n' > .agent-run/issue.json`,
+        `              exit 0`,
+        `            fi`,
+        `            echo "no subject.ref forwarded by the trigger"; exit 1`,
+        `          fi`,
+      ]
+    : [`          if [ -z "$ref" ]; then echo "no subject.ref forwarded by the trigger"; exit 1; fi`];
   const buildIssue = refParam
     ? [
         `      - name: Provide subject`,
@@ -370,7 +394,7 @@ function wrapperYml(name: string, agent: IRAgent, gh: GithubBox, isControlPrimar
         `        run: |`,
         `          mkdir -p .agent-run`,
         `          ref="\${${refParam}}"`,
-        `          if [ -z "$ref" ]; then echo "no subject.ref forwarded by the trigger"; exit 1; fi`,
+        ...emptyRefGuard,
         `          gh api "repos/\${{ github.repository }}/issues/$ref" --jq '{number,title,body,user:{login:.user.login},labels:[.labels[].name]}' > .agent-run/issue.json`,
       ]
     : [

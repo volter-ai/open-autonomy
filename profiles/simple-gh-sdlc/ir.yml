@@ -76,20 +76,30 @@ agents:
       - cron: "37 6 * * *"       # daily-style; SELF-THROTTLE (SKILL.md) is the real cadence control
                                   # until per-agent cadence exists (see U4)
 
-  # Dispatch-only conformance auditor of THIS INSTALL (not the product it builds) — verifies changes made
-  # to it aren't inconsistent, contradictory, or against OA's own philosophy/structure. Read-only against
+  # Conformance auditor of THIS INSTALL (not the product it builds) — verifies changes made to it
+  # aren't inconsistent, contradictory, or against OA's own philosophy/structure. Read-only against
   # the install with exactly one write: composing and opening its own dated report PR under docs/audits/ —
-  # never a fix, never a merge, never another dispatch (no agent:launch). NEVER carries a cron trigger —
+  # never a fix, never a merge, never another dispatch (no agent:launch). Fires on an explicit operator
+  # `dispatch` (unchanged since TC.1) AND, as of TC.3, its own weekly `cron` for ongoing drift auditing —
   # see skills/audit/SKILL.md's identity section: `pm` here holds `agent:launch` for its own architecture
-  # (launching draft/develop against the board), so the "operator-dispatched only" guarantee for this
-  # actor is DOCTRINAL (pm's own SKILL.md never names `audit` as something it launches), not structural —
-  # the skill documents this distinction itself.
+  # (launching draft/develop against the board), so the "operator-dispatched only" guarantee for the
+  # DISPATCH path is DOCTRINAL (pm's own SKILL.md never names `audit` as something it launches), not
+  # structural — the skill documents this distinction itself. The cron path doesn't weaken that: `audit`
+  # itself holds no `agent:launch`, so a cron-fired run can still only ever re-run its own read-only
+  # checklist, never dispatch anything else — self-throttled per skills/audit/SKILL.md so the shared local
+  # tick (which fires every declared cron agent, `pm` and `planner` included) doesn't turn "weekly" into
+  # "every pm tick."
   audit:
     behavior: audit
     capabilities: [tasks:converse, code:propose@docs/audits]
     triggers:
       - dispatch: true
         params: { TARGET_REF: subject.ref }   # optional: an issue/PR the one-line summary comment lands on
+      # TC.3: low-frequency drift-mode cron, Sunday 09:51 UTC — see profiles/simple-gh/ir.yml's audit
+      # actor for the full cadence rationale (self-driving's weekly strategist precedent, offset from
+      # this profile's own pm */15 and planner daily 06:37 ticks). No params: cron never carries MODE or
+      # TARGET_REF, so a cron-fired run is always drift mode (skills/audit/SKILL.md's existing default).
+      - cron: "51 9 * * 0"
 
 policy:
   maxConcurrent: 2   # the WIP ceiling: at most one in-progress + one in-review at a time

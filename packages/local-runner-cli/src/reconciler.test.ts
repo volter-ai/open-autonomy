@@ -173,6 +173,47 @@ describe('reconciler — state-gated fire (paused / in-flight / eligibility)', (
   });
 });
 
+// D2 (post-review, TC.3): the reconciler's own automatic heartbeat is the ONE place a fire should ever be
+// tagged AUTONOMY_TRIGGER_KIND=cron — a launched skill (e.g. a low-frequency cron-throttled audit) needs a
+// signal that is true ONLY on this automatic fire, never on `oa dispatch <agent>` (dispatch.test.ts proves
+// that verb tags 'dispatch' instead, even though it fires the identical schedule-line string).
+describe('reconciler — D2: the automatic heartbeat tags every fire AUTONOMY_TRIGGER_KIND=cron', () => {
+  test('a reconciled (state-gated) automatic fire carries AUTONOMY_TRIGGER_KIND=cron', async () => {
+    // "manager" carries a proven default eligibility variant (S6/T6 — config.ts); the tag being asserted
+    // here is generic to every reconciled agent, so no agent-specific eligibility config is needed.
+    const dir = tmpRepo({ scripts: [{ cmd: 'AUTONOMY_AGENT=manager AUTONOMY_SINGLETON=1 node scripts/run-agent.mjs', reconciled: true, intervalSeconds: 3600 }] });
+    try {
+      const stub = eligibleAlwaysProc().on((c) => c.includes('run-agent.mjs'), () => ok(''));
+      const sessionRunner = new StubSessionRunner();
+      const ac = new AbortController();
+      const p = start({ cwd: dir, ambient: pinnedAmbient(), proc: stub.runner, signal: ac.signal, pollMs: 30, sessionRunnerFactory: async () => sessionRunner });
+      await waitUntil(() => stub.calls.some((c) => c.cmd.includes('run-agent.mjs')));
+      ac.abort();
+      await p;
+      const fire = stub.calls.find((c) => c.cmd.includes('run-agent.mjs'));
+      expect(fire?.env?.AUTONOMY_TRIGGER_KIND).toBe('cron');
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test('a non-reconciled (self-throttling) automatic fire ALSO carries AUTONOMY_TRIGGER_KIND=cron', async () => {
+    const dir = tmpRepo({ scripts: [{ cmd: 'bun scripts/sweep.ts', reconciled: false, intervalSeconds: 0 }] });
+    try {
+      const stub = new StubProc().on((c) => c.includes('sweep.ts'), () => ok(''));
+      const ac = new AbortController();
+      const p = start({ cwd: dir, ambient: pinnedAmbient(), proc: stub.runner, signal: ac.signal, pollMs: 30, sessionRunnerFactory: async () => new StubSessionRunner() });
+      await waitUntil(() => stub.calls.some((c) => c.cmd.includes('sweep.ts')));
+      ac.abort();
+      await p;
+      const fire = stub.calls.find((c) => c.cmd.includes('sweep.ts'));
+      expect(fire?.env?.AUTONOMY_TRIGGER_KIND).toBe('cron');
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+});
+
 describe('reconciler — crash-loop backoff', () => {
   test('3 consecutive fast deaths (< 60s lifetime) engage backoff; no further fire happens inside the backoff window', async () => {
     // min-gap 100ms -> backoffMsFor(3 deaths, 100ms) = min(100*2, cap) = 200ms, giving a comfortable

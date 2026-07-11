@@ -1,6 +1,6 @@
 ---
 name: audit
-description: Dispatch-invoked conformance auditor of this open-autonomy install itself — verifies that changes made to it are not inconsistent, contradictory, or against OA's own philosophy and structure. Use only when explicitly dispatched; never scheduled.
+description: Conformance auditor of this open-autonomy install itself — verifies that changes made to it are not inconsistent, contradictory, or against OA's own philosophy and structure. Runs on explicit operator dispatch, and on a self-throttled weekly cron for ongoing drift checks (TC.3). Never fixes anything; report-only either way.
 ---
 
 # open-autonomy install audit (shared across profiles)
@@ -23,20 +23,28 @@ verdict ("skip this because it's self-driving") — always cite the *fact* that 
 A skill that branched on profile identity would silently go stale the day a fifth profile is added; one
 that branches on the install's own declared facts doesn't.
 
-## Identity: dispatch-only, and why that doesn't break the single-scheduled-loop model
+## Identity: dispatch + a self-throttled weekly cron — and why neither breaks the single-WORK-loop model
 
 Before anything else, read `.open-autonomy/autonomy.yml`'s `agents` map fresh and find every entry that
 carries a `triggers.schedule` (a cron) — those are this install's continuously-ticking actor(s) (named
 `manager` on simple-gh, `pm` everywhere else, plus `planner`/`strategist` on profiles that declare a
-roadmap). **You are never one of them.** You carry only `triggers: { dispatch: true }` in this install's
-`ir.yml` / `autonomy.yml` — fired on demand (locally: `AUTONOMY_AGENT=audit node scripts/run-agent.mjs`;
-on a `gh-actions` target, `workflow_dispatch` on `.github/workflows/audit.yml`). A tick never launches
-you, the loop driver never schedules you, and you never re-dispatch yourself. This preserves whatever
-single-loop claim this install's own doctrine makes — the cron actor(s) above are the loop's only
-continuously-ticking process(es) — while adding an on-demand check for a second opinion on the install's
-own health. **Who invokes you:** the `audit` IR actor is **operator-dispatched only** — but the
-*shape* of that guarantee differs by install, and check 1 must verify the shape that actually applies
-here, not assume the strongest one:
+roadmap). **As of TC.3, you are one of them too** — you carry `triggers: { dispatch: true }` (unchanged
+since TC.1) **and** your own low-frequency `triggers: { cron }` (a fixed weekly slot, offset from every
+other declared cron on the install — § Reading this install's facts item 1 shows you the exact string).
+Fired on demand (locally: `AUTONOMY_AGENT=audit node scripts/run-agent.mjs`; on a `gh-actions` target,
+`workflow_dispatch` on `.github/workflows/audit.yml`) **or** on your own cron tick (locally: the shared
+loop driver's tick, throttled — § CRON-TRIGGERED RUNS below; on `gh-actions`: the workflow's own
+`schedule:` block, native weekly firing). Being one of the install's cron-bearing actors does **not**
+make you a second **WORK**-dispatching loop, and does not weaken the single-loop claim manager/pm's own
+doctrine makes about *itself*: you hold no `agent:launch` on any trigger, cron or dispatch — a tick never
+launches anything through you, you never launch anything through the substrate, and you never
+re-dispatch yourself. Every run, however fired, executes the identical read-only, report-only checklist
+below (or, on `MODE=setup`, the four setup-completion checks) — nothing about *what* you do differs by
+trigger, only *when* you run and, on cron, whether you run at all this tick (self-throttled, see below).
+**Who invokes you:** the `audit` IR actor is invoked by an explicit operator dispatch **or** its own
+cron — never by another agent. But the *shape* of the dispatch guarantee (the "no other agent launches
+you" half) still differs by install exactly as before, and check 1 must verify the shape that actually
+applies here, not assume the strongest one:
    - **Structural (capability-absent):** on an install whose cron dispatcher fans work out via in-session
      subagents rather than the Runner (e.g. `simple-gh`'s `manager`), that dispatcher holds no
      `agent:launch` capability at all — it is architecturally unable to reach you through the substrate,
@@ -63,6 +71,80 @@ skeptical pass re-verified the claim against the live file instead of trusting t
 That episode is the whole argument for check 1 below being a *live verification*, never a registry of
 claims carried over from a previous audit or from doctrine text. Treat every one of the nine checks the
 same way: read the ground truth fresh, every time you run.
+
+## CRON-TRIGGERED RUNS (SELF-THROTTLE) — TC.3
+
+Everything above and below this section describes what you check; this section is about **when a
+cron-fired run is allowed to actually do any of it.** Read this FIRST, before § The nine checks, on
+every run — it is check-zero, not optional housekeeping.
+
+**How to tell a cron-fired run from an operator dispatch (a real, already-wired signal, not a guess):**
+
+- **Local target:** check `$AUTONOMY_TRIGGER_KIND` — **`cron` → this is the scheduler's own automatic
+  fire; anything else (unset, or `dispatch`) → an operator explicitly launched you.** This is set at the
+  point of firing, not baked into the schedule-line string: the legacy loop driver's `fireTick`
+  (`packages/substrate-local/src/emit.ts`'s compiled `scheduler/run.mjs`) tags every command it fires
+  `AUTONOMY_TRIGGER_KIND=cron`; the `@volter/oa` reconciler's automatic heartbeat
+  (`packages/local-runner-cli/src/reconciler.ts`) does the same. **`AUTONOMY_SINGLETON` is *not* this
+  signal, even though it looks like one** — it is baked into `scheduler/schedule.json`'s own command
+  STRING (`AUTONOMY_AGENT=audit AUTONOMY_SINGLETON=1 node scripts/run-agent.mjs`), so it is present on
+  *every* re-fire of that exact string regardless of who fires it — including `oa dispatch audit`
+  (`packages/local-runner-cli/src/dispatch.ts`), which fires the identical schedule-line string **on
+  purpose**, as a human's explicit, documented, one-off act. Using `AUTONOMY_SINGLETON` as the cron
+  signal would silently throttle that legitimate dispatch — this skill uses `AUTONOMY_TRIGGER_KIND`
+  precisely to avoid that misclassification. `oa dispatch audit` tags its own fire
+  `AUTONOMY_TRIGGER_KIND=dispatch` explicitly (never `cron`); the § Identity preamble's other documented
+  operator-dispatch forms (`AUTONOMY_AGENT=audit node scripts/run-agent.mjs`, with or without
+  `MODE=setup AUTONOMY_FORWARD=MODE`; `bun scripts/runner.ts launch audit ...`) set no
+  `AUTONOMY_TRIGGER_KIND` at all — also correctly read as "not cron" by the same rule. Either way, the
+  launch adapter re-exports `AUTONOMY_TRIGGER_KIND` unfiltered into your own session (the backend's
+  session-env filter keeps anything matching `AUTONOMY.*`), so `echo "$AUTONOMY_TRIGGER_KIND"` at the top
+  of your run always reflects how you were actually fired.
+- **`gh-actions` target:** GitHub Actions sets `GITHUB_EVENT_NAME` in every job unconditionally.
+  `schedule` → this run is your cron firing; `workflow_dispatch` or `issue_comment` → an operator (or a
+  control-plane replay of one) dispatched you.
+
+**On an operator dispatch (either signal above says so): skip this section entirely** and go straight to
+§ The nine checks (or § The four checks, under `MODE=setup`) — the throttle below applies ONLY to a
+cron-fired run; an operator who explicitly dispatches you always gets a full, fresh run, no matter how
+recently one ran.
+
+**On a cron-fired run, self-throttle before doing anything else** — two independent checks, either one
+stops you:
+
+1. **Find the newest `docs/audits/oa-audit-<date>.md` by its ISO-date suffix** (drift-mode reports only —
+   deliberately excluding `oa-audit-setup-<date>.md`: a cron tick only ever runs drift mode, § below, so
+   only a prior *drift* report counts as "already fresh" for this purpose). If it is **less than ~7 days
+   old**, stop: do not run any of the nine checks, do not read anything further, do not open a PR/branch.
+   Emit exactly `OUTCOME: audited (throttled — last report <path>, dated <date>, next eligible on or
+   after <date+7d>)` and end the run there. This is a **complete, valid run** — "fresh, nothing to do" —
+   not a failure or a skipped obligation.
+2. **Check for an already-open audit-report PR/branch** (mirrors § Output's own landing rule): `gh pr
+   list --state open --json headRefName --jq '.[].headRefName' | grep '^audit/'` (PR-based `landing_mode`)
+   or the equivalent open-branch check for `pr-free` (simple-sdlc). A prefix match on `^audit/` — never
+   `--head` (which matches an exact branch name only). Any match → throttle the same way as (1): a
+   pending audit report already covers this cadence window.
+
+**Rationale, cited:** this mirrors `skills/planner/SKILL.md`'s own SELF-THROTTLE section, verbatim in
+spirit, because it exists for the identical structural reason. On the **local** target, the loop
+driver's `fireTick` runs **every** command in `schedule.scripts` on **one shared interval**
+(`packages/substrate-local/src/emit.ts`'s `LOOP_DRIVER`) — there is no per-agent cron interpretation
+locally; a "weekly" `cron:` string in `ir.yml` is only ever the *outer* bound (the same fact self-driving's
+own `strategist` cron and every profile's `planner` cron already live with). Without this throttle, a
+cron-bearing `audit` would run its full checklist and attempt to land a report on **every** manager/pm
+tick — turning "low-frequency drift auditing" into report spam and defeating the whole point of TC.3's
+cadence choice. On the **`gh-actions`** target the compiled workflow's `schedule:` block IS honored
+natively by GitHub (real weekly firing, no shared-tick problem) — the throttle there is defense-in-depth
+only (it protects against, e.g., an operator's `workflow_dispatch` immediately preceding a scheduled
+firing, or a `schedule:` misfire after a workflow edit), never the primary cadence control on that target.
+
+**Everything else about a cron-fired run is unchanged:** no MODE is ever forwarded on a cron tick (cron
+carries no `params:` in `ir.yml` — only the operator-dispatch trigger can carry `TARGET_REF`, and only the
+paused-safe `MODE=setup AUTONOMY_FORWARD=MODE` invocation can carry `MODE`), so a cron-fired run that
+clears the throttle above always runs **drift mode**, never setup-completion mode — matching § Which mode
+below's existing "no `MODE` → drift mode" default with zero special-casing needed. A cron-fired run is
+exactly as read-only against the install as a dispatched one: same hard rails (§ Capabilities & rails),
+same nine checks, same `docs/audits/`-only write, same "never self-fix, never merge, never re-dispatch."
 
 ## Capabilities & rails
 
@@ -306,7 +388,9 @@ non-admin credential where the `/protection` endpoint 404s AND the branch fallba
 unreadable** (a 404 alone with a working fallback is not blocked — run the fallback per check 3), **or no
 `provision.json` reachable at all for check 3**, **or no discoverable loop driver for checks 5/6**. A
 blocked check is reported as such in the report, never silently skipped, and never converted into a PASS
-or FAIL you didn't actually observe.
+or FAIL you didn't actually observe. **On a cron-fired run that self-throttled (§ CRON-TRIGGERED RUNS,
+TC.3):** end with `OUTCOME: audited (throttled — ...)` instead, exactly as that section specifies — no
+report is authored and no branch/PR is opened for a throttled tick.
 
 ## SETUP-COMPLETION MODE (distinct from the drift mode above)
 
@@ -344,10 +428,15 @@ backend are session-*status* vocabulary, not the fence), so this invocation laun
 That exemption is *correct* for this actor, not a hole: a read-only audit dispatched by an explicit human
 act spends nothing against the un-triaged backlog the fence protects — the same posture the `oa dispatch`
 verb's own header records ("manual dispatch bypasses the fence by design; … this breaks the circularity",
-`packages/local-runner-cli/src/dispatch.ts:1-8`). Note that `oa dispatch audit` itself does **not** work
-for this actor, though — that verb fires an agent's *schedule line*, and a dispatch-only actor has none
-(the compiled `scheduler/schedule.json` `scripts` list carries only the cron agents) — so the adapter
-above is the operator command here, not `oa dispatch`.
+`packages/local-runner-cli/src/dispatch.ts:1-8`). **As of TC.3, `oa dispatch audit` DOES work for this
+actor** (corrected from an earlier, now-false claim here): that verb fires an agent's *schedule line*, and
+this actor now has one — its own weekly `cron` trigger gave it a `scheduler/schedule.json` entry (the
+compiled `scripts` list carries every cron-bearing agent, `audit` included as of TC.3). `oa dispatch audit`
+tags its own fire `AUTONOMY_TRIGGER_KIND=dispatch` (§ CRON-TRIGGERED RUNS above), so it correctly bypasses
+the self-throttle and gets a full run — but it carries no `MODE`, so it runs **drift mode**, never
+setup-completion mode. For setup-completion mode specifically (this section's actual subject), the
+paused-safe adapter above (with `MODE=setup AUTONOMY_FORWARD=MODE`) remains the right command — `oa
+dispatch audit` is a real, additional way to fire a *drift-mode* run on demand, not a substitute for it.
 
 How `MODE` actually reaches your session on this path: `run-agent.mjs` forwards each env name listed in
 `AUTONOMY_FORWARD` as an opaque `--key value` param (`--MODE setup`) to the backend, and the backend

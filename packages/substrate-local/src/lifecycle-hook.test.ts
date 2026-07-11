@@ -74,6 +74,109 @@ describe('the post-session effect is gated on EXPLICIT signals, never a capabili
   });
 });
 
+// TC.3: an actor (audit) can declare BOTH a `cron` trigger and a `dispatch` trigger at once — the schema
+// already supports it (packages/core/src/ir.ts's Trigger union + `cronOf`, "the first cron trigger across
+// an agent's triggers") and the local compiler needs no change to realize it: `cronOf(a)` is truthy the
+// moment ANY of an agent's triggers carries a cron, regardless of how many other triggers it also has.
+const dualTriggerIr: AutonomyIR = {
+  schema: 'autonomy.ir.v1',
+  targets: ['local'],
+  codeHost: 'github',
+  agents: {
+    pm: { behavior: 'pm', capabilities: ['agent:launch'], triggers: [{ cron: '*/15 * * * *' }] },
+    // audit: dispatch (unchanged, TC.1) + a low-frequency weekly cron (TC.3) — declared in that order,
+    // matching every profile's real ir.yml (dispatch first, cron appended below it).
+    audit: {
+      behavior: 'audit',
+      capabilities: ['tasks:converse', 'code:propose@docs/audits'],
+      triggers: [{ dispatch: true, params: { TARGET_REF: 'subject.ref' } }, { cron: '51 9 * * 0' }],
+    },
+  },
+  policy: { box: {} },
+  resources: [],
+};
+
+describe('TC.3 — an actor with BOTH cron and dispatch triggers (audit)', () => {
+  test('the cron-bearing dispatch actor IS scheduled locally (appears in schedule.scripts)', () => {
+    const out = compileLocal(dualTriggerIr);
+    const schedule = JSON.parse(out.generated['scheduler/schedule.json']) as { scripts: string[] };
+    // a prose (non-script) cron agent is launched through run-agent.mjs with AUTONOMY_SINGLETON=1, exactly
+    // like every other cron-bearing prose agent (pm here) — dispatch:true alongside cron changes nothing
+    // about how the cron half is realized.
+    expect(schedule.scripts.some((s) => s === 'AUTONOMY_AGENT=audit AUTONOMY_SINGLETON=1 node scripts/run-agent.mjs')).toBe(true);
+    // exactly one schedule entry for audit — the dispatch trigger contributes nothing extra to the local
+    // schedule (dispatch has no local realization of its own; it is fired ad hoc via the same run-agent
+    // adapter, never through scheduler/schedule.json).
+    expect(schedule.scripts.filter((s) => s.includes('AUTONOMY_AGENT=audit')).length).toBe(1);
+  });
+
+  test("the actor's declared cron string round-trips into the compiled manifest unchanged", () => {
+    const out = compileLocal(dualTriggerIr);
+    const manifest = out.generated['.open-autonomy/autonomy.yml'] ?? '';
+    expect(manifest).toContain('51 9 * * 0'); // the low-frequency weekly slot survives compile
+    expect(manifest).toContain('dispatch: true'); // the pre-existing dispatch trigger is UNCHANGED
+  });
+});
+
+// D2 (post-review, TC.3): this is the DEFAULT local runtime for every profile that doesn't opt into
+// policy.box.local.runner:"cli" (all 4 TC.3 profiles included) — the byte-copied LOOP_DRIVER template
+// (compileLocal's compiled scheduler/run.mjs), not packages/local-runner-cli's reconciler. Its OWN
+// fireTick must independently tag AUTONOMY_TRIGGER_KIND=cron, proven here against the REAL emitted
+// subprocess (not a unit-level assertion on the template string) — mirroring the house pattern
+// (pause-gate.test.ts's own header: "matching the house convention ... drives the real emitted run.mjs").
+describe('D2 — the REAL emitted scheduler/run.mjs (LOOP_DRIVER) tags every fired command AUTONOMY_TRIGGER_KIND=cron', () => {
+  const scriptCronIr: AutonomyIR = {
+    schema: 'autonomy.ir.v1',
+    targets: ['local'],
+    agents: { sweep: { behavior: 'scripts/sweep.ts', capabilities: ['tasks:converse'], triggers: [{ cron: '*/15 * * * *' }] } },
+    policy: { box: {} },
+    resources: [],
+  };
+
+  function scaffold(): { dir: string; envDump: string } {
+    const out = compileLocal(scriptCronIr);
+    delete out.generated['.open-autonomy/paused']; // this test fires --once; the fence is a separate concern (pause-gate.test.ts)
+    const dir = mkdtempSync(join(tmpdir(), 'oa-d2-looptrigger-'));
+    for (const [path, content] of Object.entries(out.generated)) {
+      mkdirSync(join(dir, path.split('/').slice(0, -1).join('/')), { recursive: true });
+      writeFileSync(join(dir, path), content);
+    }
+    const envDump = join(dir, 'env-dump.json');
+    // The agent's own script observes + records what it was actually launched with — no assumption about
+    // the LOOP_DRIVER's internals, just the effective child env a real fired command receives.
+    writeFileSync(
+      join(dir, 'scripts', 'sweep.ts'),
+      `import { writeFileSync } from 'node:fs';\nwriteFileSync(${JSON.stringify(envDump)}, JSON.stringify({ AUTONOMY_TRIGGER_KIND: process.env.AUTONOMY_TRIGGER_KIND ?? null }));\n`,
+    );
+    return { dir, envDump };
+  }
+
+  test('--once: the fired script sees AUTONOMY_TRIGGER_KIND=cron in its own env', () => {
+    const { dir, envDump } = scaffold();
+    try {
+      const r = Bun.spawnSync(['node', 'scheduler/run.mjs', '--once'], { cwd: dir });
+      expect(r.exitCode).toBe(0);
+      expect(existsSync(envDump)).toBe(true);
+      expect(JSON.parse(readFileSync(envDump, 'utf8'))).toEqual({ AUTONOMY_TRIGGER_KIND: 'cron' });
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test('an operator hand-typing the documented manual form (no loop driver involved) gets NO AUTONOMY_TRIGGER_KIND at all — never misread as cron', () => {
+    // The exact manual invocation shape profiles/*/skills/audit/SKILL.md documents for an operator dispatch
+    // — run directly, bypassing scheduler/run.mjs entirely (no fireTick in this call path at all).
+    const { dir, envDump } = scaffold();
+    try {
+      const r = Bun.spawnSync(['node', 'scripts/sweep.ts'], { cwd: dir });
+      expect(r.exitCode).toBe(0);
+      expect(JSON.parse(readFileSync(envDump, 'utf8'))).toEqual({ AUTONOMY_TRIGGER_KIND: null });
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+});
+
 describe('the manifest carries codeHost — a first-class IR signal the runner reads (not a capability)', () => {
   test('emitAutonomy serializes ir.codeHost; the local runner reads it to gate the propose effect', () => {
     expect((emitAutonomy(ghLocalIr) as { codeHost?: string }).codeHost).toBe('github');

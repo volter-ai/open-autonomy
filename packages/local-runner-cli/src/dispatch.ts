@@ -31,6 +31,10 @@ export function dispatch(agentName: string, opts: { cwd?: string; proc?: ProcRun
     console.error(`[oa] dispatch: install is PAUSED — dispatching "${agentName}" anyway (manual dispatch bypasses the fence by design; the reconciler will not pick up further work until unpaused).`);
   }
   console.error(`[oa] dispatch: firing ${agentName} -> ${script.cmd}`);
-  const result = proc(script.cmd, [], { shell: true, stdio: 'inherit', env: buildTickEnv(schedule.env) });
+  // D2 (post-review, TC.3): tag this fire AUTONOMY_TRIGGER_KIND=dispatch — this is a human's explicit,
+  // one-off act (this file's own header comment), never the reconciler's automatic heartbeat, even though
+  // it fires the exact same schedule-line STRING (which may itself carry AUTONOMY_SINGLETON=1 baked in —
+  // that alone is not a "this was automatic" signal; see env.ts's own doc comment on buildTickEnv).
+  const result = proc(script.cmd, [], { shell: true, stdio: 'inherit', env: buildTickEnv(schedule.env, process.env, 'dispatch') });
   return { ok: result.status === 0 && !result.error, matched: script.cmd, result };
 }

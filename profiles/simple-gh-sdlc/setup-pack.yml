@@ -1,0 +1,47 @@
+# simple-gh-sdlc's hand-authored SetupPack facts (TS.1/TP.1 — the core the other GitHub profiles derive
+# from). Everything NOT here (targets, codeHost, roster, required_checks, enforce_admins, labels) is a VIEW
+# computed from ir.yml + provision.json by packages/core/src/setup-pack.ts's getSetupPack.
+#
+# landing_mode: GitHub native auto-merge, gated on `ci` + `agent-review` + `security` (provision.json's
+# branch_protection.required_checks) — an independent `reviewer` agent posts `agent-review`
+# (code:review, never held by the same agent as code:propose — ir.yml's `develop`/`reviewer` split).
+landing_mode: auto-merge
+
+# check_realizations: `ci` needs a real, standing CI workflow (TA.3) or a required check with nothing
+# behind it wedges every PR forever. `agent-review` is posted NATIVELY by the independent `reviewer`
+# actor's own credentialed job when it runs (event-triggered on the PR) — no separate dispatched workflow
+# involved. `security` is the dispatched, blocking realization of security.yml
+# (.github/workflows/security-gate.yml) — a bot-opened PR fires no `pull_request`
+# (GITHUB_TOKEN anti-recursion), so the proposer's effect step explicitly workflow_dispatches it, per
+# `policy.box['gh-actions'].propose_dispatch_checks: [security-gate.yml]` in ir.yml.
+check_realizations:
+  - check: ci
+    via: authored-workflow
+  - check: agent-review
+    via: native
+  - check: security
+    via: propose_dispatch_checks
+
+# board_seed_recipe: the board IS GitHub issues. `planner` (D3) originates new DRAFT (unlabeled) issues
+# from the vision when the board is starving — the only thing in this loop that originates work
+# (skills/planner/SKILL.md). Promotion to `ready` is a LABEL (applied by draft/a maintainer, or already
+# present on a roadmap-derived issue — this profile carries no roadmap trio, so every issue here needs the
+# ordinary label promotion). Filing an issue via `tasks:author` is NOT a merge (the planner holds no
+# `code:propose` at all — ir.yml), so seeding lands DIRECTLY, no PR involved.
+board_seed_recipe:
+  originator_skill: planner
+  promotion_fence: label
+  import_verb: tasks:author
+  landing_path: direct
+
+# direction_spec: omitted — ir.yml declares no `documents.roles` block, so getSetupPack derives `operator`.
+
+maturity_signals:
+  m3_tool: doctor            # local target; hosted (gh-actions) target has gh-preflight as the real proof
+  m4_predicate: gh-issues    # the board is GitHub issues, gated on ready + AC body (skills/pm/SKILL.md)
+  m6_signal: pr-close        # reconcile-merged-issues.ts closes the linked issue on a merged agent/issue-<n> PR
+
+extra_rungs: []               # no rungs beyond the common M0-M5 spine (M6 is OBSERVABLE, not part of the
+                               # one-shot terminal target — see terminal_stage below)
+
+terminal_stage: M5            # one-shot terminal target; M6 (merged-PR -> issue-close) is observable async

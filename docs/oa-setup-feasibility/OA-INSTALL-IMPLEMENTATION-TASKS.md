@@ -1,6 +1,11 @@
 # OA One-Shot Agent-Assisted Install — Implementation Task List (builder-ready)
 
-**For the implementer.** This is the sequenced build plan for the one-shot, agent-assisted OA install designed in `OA-AGENT-ASSISTED-INSTALL-DESIGN.md` (same directory; call it **DESIGN**). Each task is self-contained: **scope · acceptance (live proof) · provenance (DESIGN section + OA `file:line`) · deps/order**. You should not need to re-derive the design. Read DESIGN §Q1 (the maturity model M0–M6) and §Q3 (the seven-phase flow) once for orientation, then execute tasks in dependency order.
+**For the implementer.** This is the sequenced build plan for the one-shot, agent-assisted OA install designed in `OA-AGENT-ASSISTED-INSTALL-DESIGN.md` (same directory; call it **DESIGN**). Each task is self-contained: **scope · acceptance (live proof) · provenance (DESIGN section + OA `file:line`) · deps/order**. You should not need to re-derive the design. Read DESIGN §Q0 (the two-layer architecture), §Q1 (the per-profile maturity ladders), and §Q3 (the seven-phase flow) once for orientation, then execute tasks in dependency order.
+
+**Two-layer shape (read first — it organizes every track).** The install system is **one common scaffold that specializes per profile via a declarative `SetupPack`** (DESIGN §Q0). Do **not** build three installers.
+- **Layer 1 — common scaffold (profile-agnostic):** Track S (the `SetupPack` interface), Track D (recommender), Track B (`oa maturity` composer + `install.json`), Track C (audit shell), Track G (provider bring-up), Track E (the phase-spine install agent), Track F (M6 signal), plus the distribution/vision-gate enablers (Track 0 / TA.1). These read the pack; they never branch on profile name.
+- **Layer 2 — per-profile setup packs (Track P):** one `SetupPack` per profile supplying `{targets, codeHost, roster, landing_mode, required_checks, enforce_admins, labels, board_seed_recipe, direction_spec, human_gates, maturity_signals, extra_rungs, terminal_stage}`. **Each profile's setup system and maturity ladder IS its pack.** The one field that must be *declared* (not reverse-engineered) is `landing_mode ∈ {auto-merge, manual-after-review, pr-free}`.
+Evidence that this is viable (not forced): `findings-G-common-scaffold.md` — the substrate machinery is already profile-blind and pr-141 performed the doctrinal convergence (`profiles/self-driving/ir.yml:8-12`#pr-141).
 
 **Handoff context.** The implementer is the `supercode-oa-selfdev-study` session (built PRs #137–#141), which has the deepest OA context. This list assumes that background but stays explicit.
 
@@ -27,6 +32,32 @@
 - **Acceptance:** `git grep -l "documents" packages/core/src/ir.ts` shows the role map; `packages/local-runner-cli/` exists on main; `profiles/simple-gh/skills/audit/SKILL.md` exists; `profiles/self-driving/provision.json` exists.
 - **Provenance:** `findings-E-prs-137-141.md`.
 - **Order:** Before Tracks A/B/C/E tasks marked `[BUILT-ON …]`.
+
+---
+
+## Track S — The two-layer seam (the `SetupPack` interface + per-profile packs)  `[build early; Tracks B/D/E all read it]`
+
+### TS.1 — Define + validate the `SetupPack` schema (common scaffold's input contract)
+- **Scope:** Add a `packages/core`-validated schema `SetupPack = {targets, codeHost, roster:[...], landing_mode: 'auto-merge'|'manual-after-review'|'pr-free' (exactly 3 — human-approval is a required_check, NOT a mode), required_checks?:[...], check_realizations?:[{check, via:'propose_dispatch_checks'|'authored-workflow'|'native'}], enforce_admins?:bool, labels?:[...], board_seed_recipe:{originator_skill, promotion_fence:'label'|'state'|'upstream-ratified', import_verb, landing_path:'direct'|'board-pr-carveout'}, direction_spec:{mode:'none'|'operator'|'documents.roles', templates?}, human_gates:[...], maturity_signals:{m3_tool:'doctor'|'gh-preflight', m4_predicate:'ztrack'|'gh-issues', m4_allowlist_label?, m6_signal:'per-issue'|'pr-close'|'roadmap-rollup'}, extra_rungs:[...], terminal_stage:'M5'|'M6'}`. **GitHub-only fields are OPTIONAL** (simple-sdlc ships no provision.json). Derive most fields as a **view** over `ir.yml`/`provision.json`; three fields are new/hand-authored: **`landing_mode`** (implied today by `agent-review` presence + `merge_policy` + `codeHost`), **`check_realizations`** (names don't self-realize — `security` posts via `propose_dispatch_checks:[security-gate.yml]` `profiles/simple-gh-sdlc/ir.yml:72`; `ci` needs an authored workflow (TA.3); `human-approval` via its gate workflow), and the `board_seed_recipe`/`maturity_signals`/`extra_rungs`/`terminal_stage` prose-mirrors.
+- **Acceptance (live):** `getSetupPack(profileDir)` returns a validated pack for each of the 4 profiles; unit tests assert `landing_mode` = `manual-after-review`(simple-gh, from `ir.yml:54`), `auto-merge`(simple-gh-sdlc **and** self-driving), `pr-free`(simple-sdlc); self-driving's `human-approval` appears in `required_checks` not as a mode; simple-gh's `board_seed_recipe.landing_path='board-pr-carveout'`; self-driving's `promotion_fence='upstream-ratified'`; a missing/invalid `landing_mode` fails validation; GitHub fields absent for simple-sdlc validate OK. Round-trips through compile without changing `check:dogfood`.
+- **DRIFT GUARD (required):** extend the `check:policy-consumers` precedent (`package.json`) with a `check:setup-pack` that fails CI when a pack's hand-authored field contradicts the profile's SKILL/ir prose (e.g. pack says `auto-merge` but ir.yml has no `agent-review`).
+- **Provenance:** DESIGN §Q0 (SetupPack, 3-value landing_mode, check_realizations, landing_path, drift guard); `findings-G` §C; third-skeptic fixes #1/#4/#5; `profiles/simple-gh/ir.yml:10-13,54`+`README.md:63-79`; `skills/manager/SKILL.md:157-187` (§7 carve-out); `pr-141:profiles/self-driving/skills/pm/SKILL.md:38-43` (ready-from-birth); `eligibility.ts:3-9`#pr-140.
+- **Deps/order:** ⟶ T0.2. **Build before Track B/D/E consumers.**
+
+### TS.2 — Wire consumers to read the pack (no profile-name branching)
+- **Scope:** Recommender (TD.1), `oa maturity` (TB.2/TB.3), and the install agent phases (TE.*) read `getSetupPack()` instead of re-deriving parameters. Enforce a lint/test that no scaffold code branches on a literal profile name.
+- **Acceptance:** grep/test shows scaffold code paths key off pack fields, not `if (profile === 'self-driving')`; each consumer's tests pass against all 4 packs.
+- **Provenance:** DESIGN §Q0 Layer 1; §Q3 ("one install agent, parameterized by the pack").
+- **Deps/order:** ⟶ TS.1, and the respective consumer tasks.
+
+## Track P — Per-profile setup packs (Layer 2; one deliverable per profile)
+> Each pack = that profile's *entire* specialized setup+maturity definition. Author + prove one at a time; simple-gh-sdlc first (the core the others derive from), then simple-gh, then self-driving (most rungs), then simple-sdlc.
+
+### TP.1 — `simple-gh-sdlc` pack  ·  ### TP.2 — `simple-gh` pack  ·  ### TP.3 — `self-driving` pack  ·  ### TP.4 — `simple-sdlc` pack
+- **Scope (each):** Populate the `SetupPack` for the profile and its **maturity ladder** exactly as DESIGN §Q1 specifies: **TP.1** auto-merge / `ci+agent-review+security` (+`check_realizations:security→propose_dispatch_checks`) / gh-issues+`ready` / direction_spec `operator` / terminal M5(M6 observable); **TP.2** manual-after-review / real-check-names (replace `["ci"]` placeholder) / plans-as-docs+ztrack-import, **`landing_path:board-pr-carveout`** / direction_spec `operator` (anchor only if repo lacks positioning — see TE.3) / terminal M5; **TP.3** auto-merge with `human-approval` **as a required_check (not a 4th mode)** / `enforce_admins:false` / board_seed `promotion_fence:upstream-ratified` / `documents.roles`×3 + REPLACE templates / **extra_rungs: [proxy-ready (M3.p), direction-present (M4.d = REPLACE-markers-absent), human-seam-wired (M4.h)]**; **`M4.b` pre-unpause = a maintainer-seeded `ready` issue** (`pr-141:skills/pm/SKILL.md:33`), NOT the strategist ratification loop (that needs the loop running → proven at M6) / m3_tool gh-preflight (hosted) / m6 roadmap-rollup / terminal "stops at M3/M4 without proxy"; **TP.4** pr-free / no GitHub fields / ztrack+`oa-approved` allowlist / m6 AC-evidence.
+- **Acceptance (live, each):** `oa maturity` driven against a real compiled install of that profile walks *its* ladder correctly (TP.3 reports "M3 blocked: proxy not allowlisted" on a hosted self-driving with no proxy, and M4.b satisfied by a maintainer-seeded ready issue *without* requiring a running strategist loop; TP.2 never demands `agent-review` and seeds board state via the carve-out path; TP.4 never demands branch protection); the pack passes the TS.1 drift guard.
+- **Provenance:** DESIGN §Q1 per-profile ladders + §Q0; third-skeptic fixes #1/#2/#3; `findings-G` table (simple-gh landing `skills/manager/SKILL.md:120-138,157-187`; self-driving `provision.json:20-21`#pr-141, proxy `ir.yml:184-201`#pr-141, direction `ir.yml:27-30`#pr-141, ready-by "draft/planner/maintainer" `skills/pm/SKILL.md:33`#pr-141).
+- **Deps/order:** ⟶ TS.1; each consumes TA.1/TA.2/TB.*/TC.*/TF.1 for its rungs. **Author order TP.1 → TP.2 → TP.3 (derivation-sound), but prove TP.4 (simple-sdlc — the easiest one-shot) early/in-parallel** so the simplest end-to-end path is validated first.
 
 ---
 
@@ -122,16 +153,16 @@
 - **Provenance:** DESIGN §Phase 0 + hardening #8; `docs/INSTALL-AGENT.md:84-139`; env checks `bin/doctor-checks.ts:382-489,622-657`.
 - **Deps/order:** none.
 
-### TE.2 — Phase 1 RECOMMEND / CONFIRM PROFILE (G1)
-- **Scope:** Call TD.1/TD.2; if the user pre-picked, validate; else present the recommendation and **ask once**.
-- **Acceptance (live):** end-to-end on two fixtures (one where it recommends, one where it validates a pre-pick) yields the right profile+substrate and exactly one user question.
-- **Provenance:** DESIGN §Phase 1, G1.
-- **Deps/order:** ⟶ TD.2, TE.1.
+### TE.2 — Phase 1 RECOMMEND / CONFIRM PROFILE (G1) + **instantiate the SetupPack**
+- **Scope:** Call TD.1/TD.2; if the user pre-picked, validate; else present the recommendation and **ask once**. On confirmation, **load the chosen profile's `SetupPack` (TS.1)** — this is the instantiation point where the common scaffold binds to Layer 2; every later phase reads the pack (not the profile name).
+- **Acceptance (live):** end-to-end on two fixtures (one recommend, one validate-a-pre-pick) yields the right profile+substrate, exactly one user question, and a loaded pack whose `landing_mode`/`maturity_signals` match the chosen profile.
+- **Provenance:** DESIGN §Phase 1, G1; §Q0 (instantiation seam); §Q3 ("at Phase 1 it instantiates the chosen profile's setup pack").
+- **Deps/order:** ⟶ TD.2, TE.1, TS.1.
 
-### TE.3 — Phase 2 CAPTURE DIRECTION (G2) — **UNCONDITIONAL, every profile, before any planner dispatch**
-- **Scope:** Draft a proposed North Star + merit criteria from the repo's README/docs, ask the user to approve/edit, and **write the filled content** into a vision path **and declare it** via `documents.roles.vision` — **for every profile, not only self-driving.** simple-gh/-sdlc ship no `documents:` block, but their planners resolve the mission anchor by reading the repo's positioning (`pr-139:profiles/simple-gh/skills/planner/SKILL.md:20-31`); on an **empty repo there is nothing to read**, so the planner (TE.5 seed) stalls or hallucinates and the board never fills. Capturing + declaring a real vision here is the prerequisite that makes Phase-4 planner-seeding produce anything. The mission is the user's; agent proposes, never decides.
-- **Acceptance (live):** after this phase, TA.1's content gate emits no unedited-template WARN, the vision is declared in `documents.roles` and appears in `human_required_paths` (auto-gated by #138, `packages/core/src/ir-yaml.ts:36-46`#pr-138); and a subsequent planner dispatch (TE.5) against the now-populated vision produces ≥1 draft item (not "nothing to do").
-- **Provenance:** DESIGN §Phase 2, G2 + hardening #3; `CLAUDE.md` (constitution human-owned); `pr-139:.../planner/SKILL.md:20-31`.
+### TE.3 — Phase 2 CAPTURE DIRECTION (G2) — **CONDITIONAL + existing-doc-first** (not a forced vision on every profile)
+- **Scope:** *(Corrected by the third skeptic — do NOT force a vision doc on the operator-as-direction profiles.)* Behavior depends on the pack's `direction_spec.mode`: **(a) `documents.roles` (self-driving)** — fill the shipped REPLACE-THIS templates (required); **(b) `operator` (simple-gh/-sdlc/simple-sdlc)** — capture direction **only when the repo lacks readable positioning** (empty/sparse repo). When needed, **prefer role-mapping an existing doc** (README/AGENTS.md via `direction_spec`) over authoring a new `docs/VISION.md`; declaring `documents.roles.vision` on these profiles hard-FAILs preflight on a missing file and auto-gates the path into `human_required_paths` (`packages/core/src/ir-yaml.ts:36-46`#pr-138), silently mutating their risk surface — so do it only if positioning is genuinely absent. The invariant to satisfy before TE.5's planner dispatch: **some readable positioning exists** (found or, if truly absent, authored). The mission is the user's; agent proposes, never decides.
+- **Acceptance (live):** self-driving — templates filled, TA.1 emits no unedited-template WARN. Operator profiles on a repo WITH positioning — no new vision file created, no `human_required_paths` mutation, and the planner (TE.5) still produces ≥1 draft by reading existing positioning (`pr-139:.../planner/SKILL.md:24-31`). Operator profiles on an EMPTY repo — an anchor is created/role-mapped and the planner then produces ≥1 draft (not "nothing to do").
+- **Provenance:** DESIGN §Phase 2, G2 + hardening #3 (refined); third-skeptic fix #3; `pr-139:.../planner/SKILL.md:24-31` (planner handles anchor-less); `profiles/simple-gh/README.md` (operator-as-direction).
 - **Deps/order:** ⟶ TA.1, TE.2. **Blocks TE.5 planner-seeding.**
 
 ### TE.4 — Phase 3 AUTHORIZE (G3, batched) — incl. the probe-PR check-name discovery
@@ -184,30 +215,35 @@
 
 ```
 T0.1 (distribution: 0.4.2 + @volter/oa, owner) ─┐
-T0.2 (#137-141 merged) ──────────────────────────┼──► TA.1 (vision gate) ─► TE.3
-                                                  ├──► TA.2 (board predicate) ─► TB.1 ─► TB.3 ─► TB.2 (oa maturity, hard protection/proxy)
+T0.2 (#137-141 merged) ──────────────────────────┼──► TS.1 (SetupPack schema + landing_mode) ─► TS.2 (wire consumers)
+                                                  │        └─► TP.1 (sdlc pack) ─► TP.2 (gh) ─► TP.3 (self-driving) ─► TP.4 (sdlc-local)
+                                                  ├──► TA.1 (vision gate) ─► TE.3
+                                                  ├──► TA.2 (board predicate) ─► TB.1 ─► TB.3 ─► TB.2 (oa maturity, reads pack, hard protection/proxy)
                                                   ├──► TA.3 (CI-workflow scaffold) ─► TE.4/TE.5
                                                   ├──► TG.1 (provider bring-up)
                                                   └──► TC.1 (audit generalize) ─► TC.2 (completion mode) ─► TC.3
-TD.1 (recommender fn) ─► TD.2 ─► TE.2                      (TD.1 can start with no deps)
+TD.1 (recommender fn, reads pack) ─► TD.2 ─► TE.2
 TF.1 (M6 signal) ── build BEFORE the agent ──────────────► TE.7
-TE.1 DETECT ─► TE.2 ─► TE.3 (unconditional direction) ─► TE.4 ─► TE.5 (needs TA.1,TA.2,TA.3,TB.2,TC.2,TG.1) ─► TE.6 (G4a/G4b) ─► TE.7 (needs TF.1)
+TE.1 DETECT ─► TE.2 SELECT+instantiate pack ─► TE.3 (unconditional direction) ─► TE.4 ─► TE.5 (needs TA.1,TA.2,TA.3,TB.2,TC.2,TG.1) ─► TE.6 (G4a/G4b) ─► TE.7 (needs TF.1)
 ```
-**Critical path:** T0.2 → TA.2 → TB.1 → TB.3 → TB.2 → (TC.2) → TE.3 → TE.5 → TE.6 → TE.7. **Parallelizable early:** TD.1 (no deps), TA.1, TA.3, TG.1, TF.1 (TF.1 must land before TE.7 so Phase 7 can prove its terminal claim). **Terminal-claim discipline:** the in-session flow ends at **M5/RUNNING** (G4a); **M6/ADVANCING is an async follow-up** proven by TF.1 + a scheduled `oa maturity`/audit — do not gate the "install done" report on M6.
+**Critical path:** T0.2 → **TS.1** → TB.2 (via TA.2→TB.1→TB.3) → (TC.2) → **TP.1** → TE.3 → TE.5 → TE.6 → TE.7. **Parallelizable early:** TD.1, TA.1, TA.3, TG.1, TF.1; the four TP packs are authored serially (TP.1→TP.4) but each proves independently. **Two-layer discipline:** TS.1 lands before any consumer; scaffold code reads the pack, never branches on profile name (TS.2 enforces). **Terminal-claim discipline:** the in-session flow ends at **M5/RUNNING** (G4a); **M6/ADVANCING is an async follow-up** proven by TF.1 + a scheduled `oa maturity`/audit — do not gate the "install done" report on M6; self-driving's terminal without a proxy is honestly **M3/M4**, not M5.
 
 ## Per-profile coverage matrix (which tasks each profile needs to reach its terminal stage)
 
 | Task | simple-sdlc | simple-gh | simple-gh-sdlc | self-driving |
 |---|---|---|---|---|
-| TA.1 vision gate | — (no vision) | — (no vision) | — (no vision) | **required** |
-| TA.2 board predicate (+oa-approved) | **required** (allowlist) | required | required | required |
-| TB.* maturity (per-profile set) | required (no GH rung) | required | required | required (hosted: no doctor) |
-| TC.* audit completion | required | required | required | **required** (+proxy-allowlist check) |
+| **Pack (Track P)** | TP.4 | TP.2 | TP.1 | TP.3 |
+| **`landing_mode`** | **pr-free** | **manual-after-review** | **auto-merge** | **auto-merge + human-approval** |
+| TA.1 vision gate | — | only if anchor authored | only if anchor authored | **required** (shipped templates) |
+| TE.3 direction capture | operator; anchor only if empty repo | **operator; existing-doc-first, author only if no positioning** | operator; existing-doc-first | `documents.roles`; fill templates |
+| TA.2 board predicate | **required** (+`oa-approved`) | required (ztrack) | required (gh-issues) | required (gh-issues) |
+| TB.* maturity (its ladder) | no GH rung | +protection rung | +checks rung | **+proxy/direction/human-seam rungs; hosted: no doctor** |
+| TC.* audit completion | required | required | required | **required** (+proxy-allowlist) |
 | TD.* recommender | applies | applies | applies | applies |
 | TE.4 provision | — (no GitHub) | required (real check names) | required | required (+`human-approval`) |
-| TG.1 provider bring-up | required (local) | required (local) | required (local target) | required only on local target |
-| TF.1 M6 signal | AC-evidence trace | AC-evidence trace | +merged-PR link | **roadmap:<id> rollup** |
-| **Proxy sub-project (out of scope of "~4 gates")** | no | no | only on gh-actions target | **YES — deploy+fund+allowlist** |
+| TG.1 provider bring-up | required (local) | required (local) | required (local target) | only on local target |
+| TF.1 M6 signal | AC-evidence trace | per-issue (manager flips) | +merged-PR link | **roadmap:<id> rollup** |
+| **Proxy sub-project** | no | no | only on gh-actions target | **YES — deploy+fund+allowlist** |
 
 **Honest terminal reachability** (see DESIGN §Q3 asterisks): simple-sdlc / simple-gh(-sdlc)-on-local are genuinely "~4 gates → running". **self-driving is not a one-shot** in the same sense — its G3 "proxy" line is a deploy-and-fund sub-project; the install agent should detect the proxy prerequisite and, if unmet, stop at M3/M4 with a clear "hosted self-driving needs a funded, allowlisted model proxy" blocker rather than pretending to reach M5.
 

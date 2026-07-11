@@ -101,7 +101,7 @@ describe('recommendProfile — decision tree over repo-shape fixtures', () => {
     expect(rec.reasons.join(' ')).toMatch(/gh-admin/);
   });
 
-  // --- The scaffold clobber guard (bin/autonomy-compile.ts:~239-257): a whole-repo-scaffold profile
+  // --- The scaffold clobber guard (bin/autonomy-compile.ts:~233-257): a whole-repo-scaffold profile
   // (self-driving, soc2-baseline) must NEVER be recommended for a populated repo — not by the mechanical
   // tree, and not even via an explicit override. This is the acceptance-critical guard TD.1 must honor. ---
   describe('scaffold clobber guard — never recommend a whole-repo scaffold onto a populated repo', () => {

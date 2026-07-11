@@ -335,6 +335,17 @@ resources:
   - docs/CONSTITUTION.md
   - docs/PROJECT.md
   - docs/ROADMAP.md
+  # docs/VISION.md — the TP.3 fix (the "fleet gap"): `documents.roles.vision` above (line 32) DECLARES
+  # this path as a role the adopter's repo carries (ir.ts:91-92 — a role names a file "typically authored
+  # outside the profile"), but until this line, this profile shipped NO seed template for it — every fresh
+  # self-driving install was born preflight-blocked (exit 78, `scripts/open-autonomy-preflight.ts`'s
+  # `autonomy-ref:docs/VISION.md` FAIL) before TA.1's unedited-template WARN could even apply, since WARN
+  # only fires once the file EXISTS. Carrying it here (REPLACE-THIS-seeded, mirroring CONSTITUTION.md's
+  # marker style) makes a fresh install born WARNED, not born BLOCKED. NON-CLOBBER: `docs/VISION.md` is
+  # also added to `packages/core/src/upgrade.ts`'s `INSTALL_OWNED_PATHS` (seed-once, never overwritten by
+  # upgrade) — OA's OWN root `docs/VISION.md` already carries real, edited content, so an upgrade re-compile
+  # must never regress it back to this seed (proven by the PR's before/after regen diff).
+  - docs/VISION.md
   - docs/standards/code.md
   - docs/standards/docs.md
   - docs/standards/security.md

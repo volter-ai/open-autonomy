@@ -44,6 +44,14 @@ export const INSTALL_OWNED_PATHS = [
   'docs/PROJECT.md',
   'docs/ROADMAP.md',
   'docs/ARCHITECTURE.md',
+  // TP.3 fix: `docs/VISION.md` is a `documents.roles.vision`-declared file self-driving now ships as a
+  // REPLACE-THIS-seeded template (profiles/self-driving/docs/VISION.md, carried via `resources:` —
+  // ir.yml). Like CONSTITUTION/PROJECT/ROADMAP above, the ADOPTER edits it to their own mission — seed
+  // ONLY if missing, never overwritten. OA's OWN root `docs/VISION.md` already carries real, ratified
+  // content (`docs/VISION.md` — mission, merit criteria, horizons H1-H5); listing it here is what keeps a
+  // `bun scripts/open-autonomy-upgrade-cli.ts` regen from ever regressing it back to the seed (proven by
+  // the byte-identical before/after regen diff in the PR that added this line).
+  'docs/VISION.md',
   'provision.json', // the install's branch-protection/required-checks manifest — the adopter tunes it to
   //   their product (e.g. their own `ci` context, their reviewer count); seed-once so upgrade never reverts it.
   //   OPTIONAL: a profile need not ship a seed (provision-target-repo takes --manifest / defaults when one

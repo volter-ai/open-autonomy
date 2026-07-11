@@ -9,6 +9,12 @@ export interface AutonomyConfig {
   documents: Record<string, string>;
   standards: Record<string, string>;
   skills: Record<string, string>;
+  // TA.1 — the RAW declared `documents.roles` map (unmerged with GOVERNANCE_DOCS's path guesses),
+  // limited to the two content-gated altitudes (`vision`/`constitution`; `roadmap` deliberately excluded
+  // — see open-autonomy-preflight.ts's content-gate check). Unlike `documents` above (which always carries
+  // a `constitution` guess even when nothing was declared), this is empty unless the profile's `ir.yml`
+  // actually declared the role — the content gate must only ever fire on a role the profile opted into.
+  documentRoles: Partial<Record<'vision' | 'constitution', string>>;
 }
 
 // OA's governance LAYOUT — the fixed paths of the docs/standards the agents reference. This is part of
@@ -35,7 +41,7 @@ export function readAutonomyConfig(root = '.'): AutonomyConfig {
   // A missing manifest yields EMPTY skills — nothing invented. (Validators like preflight then report
   // the missing manifest honestly instead of crashing.) The opposite of a stale baked-in default: it
   // declares no skills rather than fabricating a frozen set.
-  if (!existsSync(path)) return { documents: { ...GOVERNANCE_DOCS }, standards: { ...STANDARDS }, skills: {} };
+  if (!existsSync(path)) return { documents: { ...GOVERNANCE_DOCS }, standards: { ...STANDARDS }, skills: {}, documentRoles: {} };
   return parseAutonomyConfig(readFileSync(path, 'utf8'));
 }
 
@@ -51,9 +57,20 @@ export function parseAutonomyConfig(text: string): AutonomyConfig {
   const declaredRoles: Record<string, string> = {};
   for (const [role, path] of Object.entries(manifest.documents?.roles ?? {}))
     if (typeof path === 'string' && path.length > 0) declaredRoles[role] = path;
+  // TA.1 — the content gate's input: ONLY the two altitudes it gates, and ONLY if actually declared (never
+  // defaulted from GOVERNANCE_DOCS) — `roadmap` is deliberately excluded (machine-groomed, not authored
+  // content; see ir-yaml.ts's applyDocumentAutoGate, which gates the same pair for the same reason).
+  const documentRoles: AutonomyConfig['documentRoles'] = {};
+  if (declaredRoles.vision) documentRoles.vision = declaredRoles.vision;
+  if (declaredRoles.constitution) documentRoles.constitution = declaredRoles.constitution;
   // Skills come from the manifest (the source of truth — no hardcoded list that can drift); the
   // governance doc/standard layout is OA's fixed structure, overridden per-key by a declared role.
-  return { documents: { ...GOVERNANCE_DOCS, ...declaredRoles }, standards: { ...STANDARDS }, skills: manifest.skills ?? {} };
+  return {
+    documents: { ...GOVERNANCE_DOCS, ...declaredRoles },
+    standards: { ...STANDARDS },
+    skills: manifest.skills ?? {},
+    documentRoles,
+  };
 }
 
 export function referencedAutonomyPaths(config: AutonomyConfig): string[] {

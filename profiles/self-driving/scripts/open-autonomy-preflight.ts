@@ -23,6 +23,11 @@ export interface PreflightReport {
   missing: string[];
 }
 
+// TA.1 — the shipped templates' literal seed marker (cf `profiles/self-driving/docs/CONSTITUTION.md`).
+// Exported so the content-gate's unit tests (and bin/preflight.ts's analogous local-preflight check) can
+// reference the same literal instead of re-typing it.
+export const UNEDITED_TEMPLATE_MARKER = 'REPLACE THIS';
+
 interface Options {
   root: string;
   labels?: string;
@@ -148,6 +153,25 @@ export function buildPreflightReport(input: PreflightInput = {}): PreflightRepor
       status: existsSync(`${root}/${path}`) ? 'pass' : 'fail',
       message: existsSync(`${root}/${path}`) ? `found referenced asset ${path}` : `missing referenced asset ${path}`,
     });
+  }
+
+  // TA.1 content gate: a DECLARED `vision`/`constitution` role (config.documentRoles — the raw declared
+  // map, never the GOVERNANCE_DOCS-defaulted `config.documents`) whose file EXISTS but still carries the
+  // shipped template's `REPLACE THIS` marker is a WARN, never a FAIL — content quality is a judgment call
+  // OA deliberately leaves to agents (unlike the file's mere EXISTENCE, hard-FAILed just above via
+  // `autonomy-ref:<path>`). `roadmap` is intentionally excluded — it's the strategist's machine-groomed
+  // medium, not authored content (mirrors ir-yaml.ts's applyDocumentAutoGate, which gates the same pair
+  // for the same reason). A profile with no `documents` block declares no roles here at all, so this loop
+  // is a no-op for it (neither warn nor fail) — see open-autonomy-config.ts's `documentRoles`.
+  for (const path of Object.values(config.documentRoles)) {
+    if (!path || !existsSync(`${root}/${path}`)) continue; // missing is the FAIL above, not this check's job
+    if (readFileSync(`${root}/${path}`, 'utf8').includes(UNEDITED_TEMPLATE_MARKER)) {
+      checks.push({
+        id: `content-gate:${path}`,
+        status: 'warn',
+        message: `WARN: ${path} is an unedited template (${UNEDITED_TEMPLATE_MARKER} marker present)`,
+      });
+    }
   }
 
   // A local runner never mints a model token through the proxy (ambient/local model access instead —

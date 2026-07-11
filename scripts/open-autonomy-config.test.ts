@@ -39,3 +39,46 @@ describe('parseAutonomyConfig — documents.roles override GOVERNANCE_DOCS guess
     expect(config.skills.pm).toBe('.codex/skills/pm');
   });
 });
+
+// TA.1 — `documentRoles` is the content gate's input: the RAW declared role map, never the
+// GOVERNANCE_DOCS-defaulted `documents` (which always carries a `constitution` guess even when nothing
+// was declared) — and limited to the two altitudes the content gate cares about (`roadmap` excluded).
+describe('parseAutonomyConfig — documentRoles (TA.1 content-gate input)', () => {
+  test('no manifest documents.roles → documentRoles is empty (no default guesses leak in)', () => {
+    const config = parseAutonomyConfig('skills: {}\n');
+    expect(config.documentRoles).toEqual({});
+  });
+
+  test('a declared vision role appears in documentRoles', () => {
+    const config = parseAutonomyConfig(['documents:', '  roles:', '    vision: docs/VISION.md', ''].join('\n'));
+    expect(config.documentRoles).toEqual({ vision: 'docs/VISION.md' });
+  });
+
+  test('a declared constitution role appears in documentRoles', () => {
+    const config = parseAutonomyConfig(
+      ['documents:', '  roles:', '    constitution: profiles/acme/docs/OUR_CONSTITUTION.md', ''].join('\n'),
+    );
+    expect(config.documentRoles).toEqual({ constitution: 'profiles/acme/docs/OUR_CONSTITUTION.md' });
+  });
+
+  test('a declared roadmap role is EXCLUDED from documentRoles (machine-groomed, never content-gated)', () => {
+    const config = parseAutonomyConfig(
+      ['documents:', '  roles:', '    vision: docs/VISION.md', '    roadmap: plans/roadmap.yml', ''].join('\n'),
+    );
+    expect(config.documentRoles).toEqual({ vision: 'docs/VISION.md' });
+    expect(config.documentRoles).not.toHaveProperty('roadmap');
+  });
+
+  test('all three roles declared → documentRoles carries vision+constitution only', () => {
+    const config = parseAutonomyConfig(
+      [
+        'documents:', '  roles:',
+        '    vision: docs/VISION.md',
+        '    constitution: docs/CONSTITUTION.md',
+        '    roadmap: .open-autonomy/roadmap.yml',
+        '',
+      ].join('\n'),
+    );
+    expect(config.documentRoles).toEqual({ vision: 'docs/VISION.md', constitution: 'docs/CONSTITUTION.md' });
+  });
+});

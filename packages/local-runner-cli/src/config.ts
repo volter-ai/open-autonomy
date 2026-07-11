@@ -19,7 +19,11 @@ const DEFAULT_RECONCILED_AGENT_RES: RegExp[] = [/(?:^|\s)AUTONOMY_AGENT=manager(
  *  schedule carried over from either install therefore probes the RIGHT board with zero config changes —
  *  a twin-shaped `AUTONOMY_AGENT=pm` line must never default to ztrack probes that fail loudly on every
  *  cycle (that repo has no ztrack board to ask). */
-const DEFAULT_ELIGIBILITY_BY_AGENT: Record<string, 'ztrack' | 'gh-issues'> = {
+// Exported (additive — was module-private) so board-readiness.ts's `hasDispatchableWork` can reuse the
+// SAME identity-default map as its documented fallback (TA.2: "keep the identity defaults only as
+// fallback" once a profile's actual board type is known via setup-pack.yml) instead of hand-copying it —
+// a copy would silently drift the moment a third reconciled identity is proven.
+export const DEFAULT_ELIGIBILITY_BY_AGENT: Record<string, 'ztrack' | 'gh-issues'> = {
   manager: 'ztrack', // S6 (supercode)
   pm: 'gh-issues', // T6 (twin)
 };

@@ -14,6 +14,8 @@ export type { DispatchResult } from './dispatch.ts';
 export { doctor, formatDoctorReport } from './doctor.ts';
 export type { DoctorReport, DoctorCheck } from './doctor.ts';
 export { loadSchedule, normalizeSchedule, agentOf, reconciledScripts, otherScripts } from './config.ts';
+export { hasDispatchableWork, resolveBoardKind, readMaturitySignals } from './board-readiness.ts';
+export type { DispatchableWorkOptions, DispatchableWorkVerdict, BoardKind, BoardKindSource } from './board-readiness.ts';
 export type { NormalizedSchedule, NormalizedScript } from './types.ts';
 
 import { readFileSync } from 'node:fs';

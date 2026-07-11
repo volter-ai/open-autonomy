@@ -270,8 +270,8 @@ bun bin/autonomy-compile.ts profiles/hello gh-actions /tmp/hello-gh
   the permission split, native auto-merge, done = merged PR (self-driving's merge model on a generic
   ztrack SDLC). Targets **`gh-actions` + `local`** (runner ⟂ code host — agents on Actions *or* your
   machine, auto-merging PRs on GitHub either way); uses the ztrack `simple-gh-sdlc` preset.
-- **`simple-gh/`** — the **single-manager** GitHub PR loop. ONE agent (`manager`, `cron: */30 * * * *`) —
-  research/plan/review/implementation are harness-native **subagents** it dispatches in-session
+- **`simple-gh/`** — the **single-manager** GitHub PR loop. ONE **scheduled** agent (`manager`, `cron: */30
+  * * * *`) — research/plan/review/implementation are harness-native **subagents** it dispatches in-session
   (per-dispatch `model` override + worktree isolation), not separate OA actors;
   `policy.box.models.{research,implement}` are abstract tier labels the SKILL.md maps to concrete models.
   Plans are **docs** registered as ztrack document sources, not hand-authored issues. The merge boundary
@@ -279,7 +279,10 @@ bun bin/autonomy-compile.ts profiles/hello gh-actions /tmp/hello-gh
   (`code:propose` only — no `code:review`, no `code:merge`), but only once every required repo CI check
   is green **and** a freshly-dispatched review subagent has recorded a `pass` verdict on the current head
   SHA — twin's owner-decided landing model (a human merges every green PR by hand), agent-executed as the
-  operator's deputy. Targets **`local` only**, `codeHost: github`. Honesty (see
+  operator's deputy. A second declared agent, `audit`, is dispatch-only (no cron, ever) — a read-only
+  conformance auditor of the install itself, filing a dated report PR under `docs/audits/` on demand; it
+  does not add a second scheduled actor (`profiles/simple-gh/skills/audit/SKILL.md`). Targets **`local`
+  only**, `codeHost: github`. Honesty (see
   `profiles/simple-gh/README.md`): on a shared local credential there is no independent reviewer identity,
   so the *deterministic* gate is branch protection (real CI required + `enforce_admins: true`), not agent
   independence; and the model tiering works only on the Claude Code harness — `TERMFLEET_AGENT=codex`

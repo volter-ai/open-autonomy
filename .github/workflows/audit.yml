@@ -1,0 +1,133 @@
+name: audit
+on:
+  workflow_dispatch:
+    inputs:
+      issue_number: { description: "issue/PR number to act on", required: false, type: string }
+  issue_comment:
+    types: [created]
+permissions: {}
+concurrency:
+  group: >-
+    audit-${{ github.event.issue.number || inputs.issue_number }}${{
+    (startsWith(github.event.comment.body || '', '/agent cancel') || startsWith(github.event.comment.body || '', '/agent pause') || startsWith(github.event.comment.body || '', '/agent resume') || startsWith(github.event.comment.body || '', '/agent status') || startsWith(github.event.comment.body || '', '/agent retry')) && '-control' || '' }}
+  cancel-in-progress: false
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+jobs:
+  control:
+    if: github.event_name == 'issue_comment' && startsWith(github.event.comment.body, '/agent ') && !startsWith(github.event.comment.body, '/agent audit') && contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.comment.author_association)
+    runs-on: ubuntu-latest
+    permissions: { contents: read, issues: write, actions: write }
+    env:
+      GH_TOKEN: ${{ github.token }}
+      CONTROL_WORKFLOW: audit.yml
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+      - run: node .github/agent-control.mjs
+  setup:
+    if: vars.PUBLIC_AGENT_REPO_PAUSED != 'true' && ((github.event_name != 'issue_comment' && github.event_name != 'pull_request_target' && github.event_name != 'issues') || (github.event_name == 'issues' && github.event.action == 'labeled') || (github.event_name == 'pull_request_target' && (github.event.pull_request.head.repo.full_name == github.repository || contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.pull_request.author_association))) || (github.event_name == 'issue_comment' && startsWith(github.event.comment.body, '/agent audit') && contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.comment.author_association)))
+    runs-on: ubuntu-latest
+    permissions: { contents: read, issues: read, pull-requests: read, id-token: write }
+    env:
+      GH_TOKEN: ${{ github.token }}
+      MODEL_PROXY_URL: ${{ vars.MODEL_PROXY_URL }}
+      MODEL_PROXY_OIDC_AUDIENCE: ${{ vars.MODEL_PROXY_OIDC_AUDIENCE || 'volter-agent-model-proxy' }}
+      TARGET_REF: ${{ github.event.issue.number || github.event.inputs.issue_number || github.event.pull_request.number }}
+    steps:
+      - name: Lock down egress (block token exfiltration from untrusted-derived work)
+        uses: step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411 # v2.19.4
+        with:
+          egress-policy: block
+          allowed-endpoints: >
+            api.github.com:443
+            github.com:443
+            codeload.github.com:443
+            objects.githubusercontent.com:443
+            release-assets.githubusercontent.com:443
+            registry.npmjs.org:443
+            agent.api.stepsecurity.io:443
+            prod.app-api.stepsecurity.io:443
+            ${{ vars.PUBLIC_AGENT_PROXY_HOST || 'volter-agent-model-proxy.aaron-0ed.workers.dev' }}:443
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+      - run: bun install --frozen-lockfile
+      - name: Provide subject
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p .agent-run
+          ref="${TARGET_REF}"
+          if [ -z "$ref" ]; then echo "no subject.ref forwarded by the trigger"; exit 1; fi
+          gh api "repos/${{ github.repository }}/issues/$ref" --jq '{number,title,body,user:{login:.user.login},labels:[.labels[].name]}' > .agent-run/issue.json
+      - name: Mint bounded model token
+        run: bun scripts/model-proxy-mint.ts --run-id "ir-audit-${{ github.run_id }}" --models "${{ vars.PUBLIC_AGENT_MODEL || 'deepseek/deepseek-v4-flash' }}" --max-usd-cents "${{ vars.PUBLIC_AGENT_MAX_USD_CENTS || '200' }}" --max-requests "${{ vars.PUBLIC_AGENT_MAX_REQUESTS || '250' }}" --issue .agent-run/issue.json
+  audit:
+    needs: setup
+    runs-on: ubuntu-latest
+    permissions: { contents: write, issues: write, pull-requests: write, id-token: write, actions: write }
+    env:
+      MODEL_PROXY_URL: ${{ vars.MODEL_PROXY_URL }}
+      MODEL_PROXY_OIDC_AUDIENCE: ${{ vars.MODEL_PROXY_OIDC_AUDIENCE || 'volter-agent-model-proxy' }}
+      PUBLIC_AGENT_MODEL: ${{ vars.PUBLIC_AGENT_MODEL || 'deepseek/deepseek-v4-flash' }}
+      PUBLIC_AGENT_CITED_VERSION: ${{ vars.PUBLIC_AGENT_CLAUDE_CODE_VERSION }}
+      GH_TOKEN: ${{ github.token }}
+      MAINTAINERS: ${{ vars.PUBLIC_AGENT_MAINTAINERS }}
+      TARGET_REF: ${{ github.event.issue.number || github.event.inputs.issue_number || github.event.pull_request.number }}
+    steps:
+      - name: Lock down egress (block token exfiltration from untrusted-derived work)
+        uses: step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411 # v2.19.4
+        with:
+          egress-policy: block
+          allowed-endpoints: >
+            api.github.com:443
+            github.com:443
+            codeload.github.com:443
+            objects.githubusercontent.com:443
+            release-assets.githubusercontent.com:443
+            registry.npmjs.org:443
+            agent.api.stepsecurity.io:443
+            prod.app-api.stepsecurity.io:443
+            ${{ vars.PUBLIC_AGENT_PROXY_HOST || 'volter-agent-model-proxy.aaron-0ed.workers.dev' }}:443
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+      - run: bun install --frozen-lockfile
+      - name: install Claude Code CLI
+        run: npm install -g "@anthropic-ai/claude-code@${PUBLIC_AGENT_CITED_VERSION:-latest}" && claude --version
+      - name: Provide subject
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p .agent-run
+          ref="${TARGET_REF}"
+          if [ -z "$ref" ]; then echo "no subject.ref forwarded by the trigger"; exit 1; fi
+          gh api "repos/${{ github.repository }}/issues/$ref" --jq '{number,title,body,user:{login:.user.login},labels:[.labels[].name]}' > .agent-run/issue.json
+      - name: Exchange OIDC for the bounded token
+        run: bun scripts/model-proxy-exchange.ts --run-id "ir-audit-${{ github.run_id }}" --audience "$MODEL_PROXY_OIDC_AUDIENCE"
+      - name: Run agent (Claude Code + skill)
+        env:
+          OSS_AGENT_TASK_DIR: .agent-run
+          OSS_AGENT_ISSUE_PATH: .agent-run/issue.json
+        run: |
+          bun scripts/claude-agent-run.ts --skill .codex/skills/audit/SKILL.md --run-id "ir-audit-${{ github.run_id }}"; rc=$?; bun scripts/agent-visual-verify.ts || true; echo "::group::agent transcript (ir-audit-${{ github.run_id }})"; cat .agent-run/artifacts/transcript.md 2>/dev/null || true; echo "::endgroup::"; exit $rc
+      - name: Effect — propose the change as an auto-merging PR (if the tree changed)
+        env:
+          GH_TOKEN: ${{ github.token }}
+          AGENT_NAME: audit
+          AGENT_BOT_NAME: volter-agent
+          AGENT_BOT_EMAIL: volter-agent@users.noreply.github.com
+          EXTRA_CHECK_WORKFLOWS: security-gate.yml
+        run: bun scripts/agent-propose.ts
+      - name: Save the agent run result (durable transcript artifact)
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: agent-run-audit
+          path: .agent-run/
+          include-hidden-files: true
+          retention-days: 30
+          if-no-files-found: ignore
+      - name: Release the run slot (revoke minted token)
+        if: always()
+        run: |
+          for i in 1 2 3 4 5; do bun scripts/model-proxy-revoke.ts --run-id "ir-audit-${{ github.run_id }}" && exit 0 || sleep 3; done
+          echo "::warning::run-slot revoke failed after retries for ir-audit-${{ github.run_id }}; slot will auto-reap at token TTL"

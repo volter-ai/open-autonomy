@@ -307,3 +307,187 @@ unreadable** (a 404 alone with a working fallback is not blocked — run the fal
 `provision.json` reachable at all for check 3**, **or no discoverable loop driver for checks 5/6**. A
 blocked check is reported as such in the report, never silently skipped, and never converted into a PASS
 or FAIL you didn't actually observe.
+
+## SETUP-COMPLETION MODE (distinct from the drift mode above)
+
+Everything above (the nine checks, § Output) is **drift mode** — it assumes a *running* install: check 6
+reads a live schedule/provider, check 9 assumes a board with `ready` items already flowing through
+develop→review. Drift mode's assumptions are wrong for a install that has just been compiled, provisioned,
+and paused — nothing has ticked yet. **Setup-completion mode** is the other half of this skill's job: four
+checks, scoped so every one of them reads correctly against a **paused, pre-first-tick** install where an
+absent schedule/board/protection/first-fire is the *expected* state, not a defect.
+
+### Which mode: the `MODE` dispatch parameter, and why this is the mechanism that works TODAY
+
+**The mechanism, cited:** a trigger's `params:` map (§ above, `docs/SPEC.md#trigger-params`) only resolves
+a **closed catalog** of sources (`subject.ref`/`subject.actor`/`subject.actorRole`/`subject.text`/
+`trigger.kind`) — `mode` is not one of them, and adding a sixth source is a core/spec change this skill-text
+unit does not make. So `MODE` does not travel as a *declared* trigger param the way `TARGET_REF` does.
+It travels through a **different, already-real, profile-blind channel**: on the **local** target, the
+runner-facing launch CLI forwards **any** `--key value` flag verbatim into the launched session's
+environment, regardless of whether that key is declared anywhere in `ir.yml` — this is not a proposal, it's
+what `packages/substrate-local/src/runner-frontend.ts`'s `launch()` already does today for every skill
+agent: `names = Object.keys(params).filter((k) => k !== 'branch')` then spreads
+`Object.fromEntries(names.map((k) => [k, String(params[k])]))` straight into the child process's `env`
+(`runner-frontend.ts:487-492`; compiled into every install as `scripts/runner.ts`, same `runCli`/`parseFlags`
+contract, `scripts/runner.ts:74-109`). `--ref` is the one flag this file special-cases (remapped onto the
+target's own declared `subject.ref` param name, e.g. `TARGET_REF`); every other flag passes through
+untouched. So:
+
+```
+bun scripts/runner.ts launch audit --MODE setup [--ref <issue-or-PR-if-you-have-one>]
+```
+
+sets `MODE=setup` in the session's env, on any of the four profiles, with **zero** IR/core changes — the
+exact same channel TARGET_REF rides, generalized to an operator-chosen key. Read it the same way you
+already read `TARGET_REF`: `echo "$MODE"` (or equivalent) at the top of your run. **No `MODE` (or
+`MODE=drift`) → drift mode** (§ above) — this preserves every existing dispatch of this skill unchanged;
+`MODE=setup` is strictly additive.
+
+**On a `gh-actions` target**, `workflow_dispatch` on `.github/workflows/audit.yml` declares exactly one
+input, `issue_number` (`audit.yml:3-5`) — there is no wired `mode` input today, and adding one is a
+`packages/substrate-github/src/emit.ts` change (compiler/Track-E territory, out of scope for this prose-only
+unit). Until that lands (a natural TC.3/TS follow-up), a hosted dispatch has two honest options, in order of
+preference: **(1)** if you were dispatched *in-session* by another agent that already controls its own
+environment (e.g. the future install agent, TE.5, mid-Phase-5-VALIDATE) — it can simply set `MODE=setup`
+itself before invoking this skill's checklist as a research read, the same way the § Identity preamble
+already sanctions "a subagent reading a doctrine file" as *not* a dispatch of the scheduled `audit` actor;
+**(2)** for a genuine `workflow_dispatch`/`issue_comment` firing with no env control, read the dispatching
+subject's own body for a literal `MODE: setup` line — `.agent-run/issue.json` (written by the *already-
+wired* "Provide subject" step, `audit.yml:54-61`/`96-103`) carries the target's `title`/`body` verbatim, so
+a throwaway issue titled or bodied with `MODE: setup` is a real, TODAY-readable channel, just a weaker one
+(it requires the operator to author that marker) — cite which of the two you used; never guess `MODE` from
+context. Absent both, hosted dispatch is drift mode.
+
+### The four checks
+
+Run all four, in order, whenever `MODE=setup`. Same evidence discipline as the nine checks above: cite the
+file/command you actually read, mark **PASS**, **FAIL**, or **N/A** (citing the fact that makes it not
+apply) — plus, for check (c) only, the same **credential-scoped honesty** the drift mode's check 3 already
+uses (never silently PASS on an unprovable credential state, never silently treat "can't prove" as FAIL).
+
+**(a) Direction filled.** Consumes **TA.1's content-gate**, never re-judges content yourself from scratch:
+
+- Read the live `autonomy.yml`'s `documents.roles` the same way check 1 does. If **present** (this
+  install's `direction_spec.mode` is `documents.roles` — self-driving today): run (or read the freshest
+  `.agent-run/preflight.json` from) `bun scripts/open-autonomy-preflight.ts --root . --out
+  .agent-run/preflight.json` and inspect its `checks[]` for the declared vision/constitution paths:
+  - a `file:<path>`/`autonomy-ref:<path>` entry with `status: fail` → **FAIL**, naming the missing file
+    (`scripts/open-autonomy-preflight.ts:141-156`).
+  - a `content-gate:<path>` entry with `status: warn` (the file exists but still carries the shipped
+    `REPLACE THIS` marker, `UNEDITED_TEMPLATE_MARKER`, `open-autonomy-preflight.ts:29,158-175`) → **FAIL**
+    for setup-completion purposes — drift mode's check 1 treats an unedited template as a live-report WARN
+    because content quality is normally a judgment call on a *running* install; setup-completion is
+    stricter, because "direction filled" is the literal thing this rung asserts, and a WARN here means it
+    demonstrably is not. Cite the warn message verbatim.
+  - neither present → **PASS**, citing the preflight report you read.
+- If **absent** (`direction_spec.mode` is `operator` — simple-gh, simple-gh-sdlc, simple-sdlc): TA.1's
+  content-gate does not run here (no declared role to gate) — apply the **planner's own anchor doctrine**
+  instead (`profiles/simple-gh/skills/planner/SKILL.md:20-30`, byte-identical prose to the other operator
+  planners): "positioning exists" means an anchor is actually **readable** — `AGENTS.md`'s stated mission,
+  `docs/VISION.md` if one exists, or whatever anchor document(s) this install's own doctrine names. PASS if
+  such a document exists on disk with non-trivial content; FAIL if you find no readable positioning
+  anywhere (the same "board would starve with nothing to self-direct from" failure check 1's operator
+  branch already names). This is the same distinction check 1 draws between the *presence* sub-check
+  (never N/A) and the *self-protection* sub-check (N/A on operator profiles, since `documents.roles` was
+  never auto-gated for them) — setup-completion only needs the presence half.
+
+**(b) Board seeded with ≥1 draft.** **Deliberately not TA.2's `hasDispatchableWork`** — that predicate
+answers "is there ≥1 *actionable, ready, not-already-in-flight* item," gated by the day-one allowlist fence
+and the fresh-work filter (`packages/local-runner-cli/src/board-readiness.ts`'s header: "does this
+profile's board hold >=1 actionable item *right now*?"). A paused, pre-first-tick install by design has
+**zero** `ready` items — Phase 4 EXECUTE seeds **drafts only** and "must NOT self-promote items to
+ready/oa-approved" (DESIGN §Phase 4; `profiles/simple-sdlc/ir.yml:80-83`; pr-139's planners "file drafts,
+never ready — the missing ready label IS the gate"). Running `hasDispatchableWork` here would report
+`actionable: false` on a **correctly-seeded** install and misname a PASS as a FAIL. So this check reads
+board state **directly**, at the draft rung, never through the ready-gate:
+
+- Resolve which board this install uses the same fact-driven way check 9 does (its own `setup-pack.yml`
+  `maturity_signals.m4_predicate`, or the identity default) — never guess.
+- **ztrack board:** `npx ztrack issue list --state draft --json identifier,state` (`draft` is a first-class
+  ztrack issue state — the planner's own doctrine files new items at exactly this state,
+  `profiles/simple-gh/skills/planner/SKILL.md:103`: "Every item lands `Status: draft` — never `ready`").
+  ≥1 row → **PASS**, citing the count and one identifier. Zero rows → **FAIL**: "board seeded with 0 draft
+  items."
+- **GitHub-issues board:** a draft item is an **open issue carrying no `ready` label** (and not parked —
+  same `PARKED_LABELS` exclusion `board-readiness.ts` applies): `gh issue list --state open --json
+  number,labels --limit 100`, filter out rows whose labels include `ready` or a parked label
+  (`agent-paused`/`needs-info`/`agent-blocked`). ≥1 remaining row → **PASS**. Zero → **FAIL**.
+- This sub-check applies to every profile (all four route through one of these two boards, same as check
+  9) — never N/A. Unlike (a), there is no operator/documents-role branch here: a draft is a draft
+  regardless of where the profile's direction lives.
+
+**(c) Provision matches live protection where `codeHost: github`.** **N/A immediately when `codeHost` is
+`local-git`** (simple-sdlc) — identical citation to check 3: no code-host protection concept exists here.
+Otherwise: **prefer TB.2's own recorded evidence over re-probing.** Read `.open-autonomy/install.json`
+(`InstallRecord`, `packages/local-runner-cli/src/maturity.ts:126-150`, `INSTALL_JSON_REL`) if it exists, and
+find the `signals[]` entry with `id: "A13"` (`imm-signals.ts:422-507`, "provision.json's declared
+required_checks == LIVE branch protection"). If found, cite it **verbatim** — never re-run the `gh api`
+probe A13 already ran; that would waste a call and risk a different point-in-time answer for what should be
+one fact:
+  - `present: true` → **PASS**, citing the evidence string (it already names the matched contexts).
+  - `present: false` **and** `evidence` starts with `unverifiable:` (A13's own hard-signal doctrine: "an
+    unauthenticated/non-admin credential NEVER silently reads as true" — `imm-signals.ts:392-402,459-466`)
+    → **N/A (unverifiable)**, citing the evidence string. This is deliberately not FAIL: A13 could not prove
+    the negative either (no admin token on this box, or no `gh` auth at all), so recording a hard FAIL here
+    would be exactly the "silently converted into a verdict you didn't actually observe" mistake the drift
+    mode's own OUTCOME grammar forbids. A setup-completion install with an honestly-unverifiable A13 is
+    still reported **N/A**, not blocked — matching this file's own precedent that a credential gap is a
+    distinct, non-punitive outcome, never folded into a false PASS or a false FAIL.
+  - `present: false` and `evidence` is a **proven** negative (starts with `protection NOT applied` or
+    names `missing required check(s)`) → **FAIL**, citing the evidence string (it already names the
+    missing checks).
+  - No `install.json`, or no `A13` entry in it → **instruct the probe**: run `bun
+    packages/local-runner-cli/src/index.ts maturity` (or this repo's compiled `oa maturity`) to populate
+    `install.json` first, or fall back to drift mode's own check 3 procedure (the `gh api
+    branches/<b>/protection` + 404-fallback dance) directly. Record which path you took.
+
+**(d) First-tick smoke record.** For a **paused, pre-first-tick** install, this is **expected absent** —
+recording it as a failure would contradict the whole premise of setup-completion mode ("MUST run correctly
+against a paused, pre-first-tick install"). Read two sources, both read-only, neither ever written by you:
+  - `.open-autonomy/install.json`'s `stage` field (same file as check c) — a `stage` of `M0`-`M4` is
+    consistent with "no first tick yet" (the ladder is cumulative and M5 specifically requires "the fence
+    lifted AND a real profile-agent session/fire" — `maturity.ts`'s own M5 commentary). A `stage` of `M5`
+    or `M6` means a first tick (or more) already happened — see below.
+  - `.open-autonomy/runner-state/last-fire/<agent>.json` (local target only; `status.ts:19-36`) — absent
+    (no directory, or empty) is the expected state pre-first-tick: cite `status.ts`'s own rationale text,
+    `"last-fire: no reconciled fire recorded yet (either \`oa start\` hasn't run, or nothing has been
+    eligible yet)."` (`status.ts:76`). On a `gh-actions` target there is no local last-fire file at all —
+    the analogous evidence is the workflow's own run history (`gh run list --workflow <agent>.yml`), empty
+    for the same reason.
+  - **Verdict:** both sources showing "nothing yet" (or a `stage` ≤ M4) → **N/A — first-tick smoke has not
+    happened yet, which is correct for a paused, pre-first-tick install; this is not a setup blocker.**
+    If either source shows a real fire/M5+ stage, this install is no longer pre-first-tick — record
+    **PASS** (a smoke record exists) and note that setup-completion mode's premise (paused, pre-first-tick)
+    no longer strictly holds for this install; drift mode is likely the more appropriate mode going
+    forward.
+
+### Setup-completion verdict + re-scoped drift checks
+
+**Overall verdict:** *setup-complete* iff no check above reports **FAIL** — an **N/A** (including check
+(c)'s honest-unverifiable case and check (d)'s expected-absent case) is never a blocker, mirroring drift
+mode's own tallying (only FAIL rows are named as blockers). *Setup-incomplete* otherwise, naming every FAIL
+verbatim (never summarized away).
+
+**Drift-mode checks 6 and 9 are superseded, not merely skipped, when `MODE=setup`:** check 6 assumes a live
+schedule/provider to probe (§ above, "confirm the pinned provider... is reachable with a read-only probe")
+— on a paused, pre-first-tick install there is nothing live to probe, and that absence is exactly what
+check (d) above already covers with N/A-not-FAIL semantics; do not additionally run check 6's live-probe
+language and report a FAIL for "provider unreachable" on an install that was never started. Check 9 assumes
+a `ready`-labeled dispatch set — check (b) above is its pre-first-tick replacement (drafts, not ready
+items). **Checks 1–5, 7, and 8 are unaffected by mode** — they inspect static structure (manifest,
+doctrine text, naming, misplaced content) that is equally valid to check on a paused install; run them
+too if you want the fuller picture, but they are not part of the four setup-completion checks above and
+their PASS/FAIL does not gate the setup-completion verdict.
+
+### Output (setup-completion mode)
+
+Author a dated report at `docs/audits/oa-audit-setup-<date>.md` (ISO date) — a **distinct filename** from
+drift mode's `oa-audit-<date>.md`, so a directory listing never conflates a drift snapshot with a
+setup-completion checklist run. Land it exactly the way § Output above lands a drift report (same
+`landing_mode` branches, same PR-vs-branch-vs-never-merge-yourself rules — nothing about landing changes
+between modes). Record the per-check table (a)-(d), the overall setup-complete/incomplete verdict, and
+which of the two `MODE` channels (§ above) you were actually invoked through. End with `OUTCOME:
+audited-setup <N pass>/<N fail>/<N n-a> — <complete|incomplete: blockers: ...> — report <PR URL or branch
+ref>`, or `OUTCOME: blocked <reason>` under the same conditions § Output already defines (extended to check
+(c)'s "no install.json and no gh credential to probe with either" case).

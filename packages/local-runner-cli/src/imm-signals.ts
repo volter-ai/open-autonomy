@@ -215,21 +215,64 @@ export async function a5PausedAbsent(installDir: string, _ctx: SignalContext = {
 // (packages/substrate-local/src/emit.ts:269-342's LOOP_DRIVER template — this reuses this package's own
 // port of that exact guard, guards.ts's `checkUncommittedHarness`, rather than re-implementing the
 // git-porcelain-parsing a third time.)
+//
+// EVIDENCE HONESTY (fix-round D2): the guard's `ok: true` covers THREE distinct realities, and the
+// evidence must name which one actually happened — never assert git output the guard didn't produce:
+//   1. git genuinely ran and found 0 dirty / 0 gitignored          -> the real "harness fully committed";
+//   2. AUTONOMY_ALLOW_UNCOMMITTED_HARNESS=1 override: git ran and FOUND dirt, but the guard downgrades
+//      to ok+warning (guards.ts:147-149) — `present` stays true (this signal mirrors the scheduler's own
+//      launch semantics, and the scheduler WILL launch under the override), but the evidence must carry
+//      the real dirty count from the warning, never claim "0 dirty";
+//   3. not-a-git-repo (or no manifest): the guard early-returns ok WITHOUT running git at all
+//      (guards.ts:106) — a vacuous ok. For a manifest-carrying install dir that is not a git repo,
+//      "harness-committed" is not establishable (there is nothing to be committed INTO), so this signal
+//      reports present:false with the vacuity named — fail-closed, matching the unit's never-fake rule.
 
 export async function a6HarnessCommitted(installDir: string, ctx: SignalContext = {}): Promise<Signal> {
   const proc = ctx.proc ?? defaultProc;
   const env = ctx.env ?? process.env;
+  const { path, parsed } = readGeneratedManifestRaw(installDir);
+  const count = Array.isArray(parsed?.files) ? parsed!.files.length : 0;
+
+  // Same probe the guard itself opens with (guards.ts:105) — run it HERE too, so the guard's
+  // early-return-ok on a non-repo is never dressed up as git evidence (fix-round D2b).
+  const isGitRepo = proc('git', ['rev-parse', '--git-dir'], { cwd: installDir }).status === 0;
+  if (!isGitRepo) {
+    if (count > 0) {
+      return {
+        present: false,
+        evidence: `${installDir} is not a git repository (git rev-parse --git-dir failed) — checkUncommittedHarness's ok would be vacuous (guard skipped, git never ran); a harness cannot be committed outside a git repo, so this signal fails closed. Manifest ${path} lists ${count} paths.`,
+      };
+    }
+    return {
+      present: true,
+      evidence: `${path}: no manifest and ${installDir} is not a git repository — nothing compiled here for this guard to check (vacuous ok; git never ran)`,
+    };
+  }
+
   const result = checkUncommittedHarness(installDir, proc, env);
   if (!result.ok) {
     return { present: false, evidence: (result.message ?? 'harness not fully committed').split('\n').join(' / ') };
   }
-  const { path, parsed } = readGeneratedManifestRaw(installDir);
-  const count = Array.isArray(parsed?.files) ? parsed!.files.length : 0;
+  // ok:true WITH a message == the AUTONOMY_ALLOW_UNCOMMITTED_HARNESS=1 override path (guards.ts:147-149):
+  // git DID find dirt; the guard downgraded to a warning. Surface the real counts (fix-round D2a).
+  if (result.message) {
+    const dirtyMatch = /uncommitted \((\d+)\)/.exec(result.message);
+    const ignoredMatch = /gitignored \((\d+)\)/.exec(result.message);
+    const dirtyCount = dirtyMatch ? dirtyMatch[1] : '≥1';
+    const ignoredNote = ignoredMatch ? ` + ${ignoredMatch[1]} gitignored` : '';
+    return {
+      present: true,
+      evidence:
+        `override AUTONOMY_ALLOW_UNCOMMITTED_HARNESS=1 active: git reported ${dirtyCount} dirty${ignoredNote} of the ${count} paths in ${path} (bypassed, NOT a clean status) — ` +
+        `the scheduler will launch under this override, so present mirrors its semantics, but the harness is NOT fully committed. Guard warning: ${(result.message.split('\n')[0] ?? '').trim()}`,
+    };
+  }
   return {
     present: true,
     evidence: count
       ? `git status --porcelain / git ls-files against the ${count} paths in ${path} report 0 dirty and 0 gitignored — harness fully committed`
-      : `${path}: no manifest (or ${installDir} is not a git repo) — checkUncommittedHarness has nothing to check, reports ok`,
+      : `${path}: no manifest — checkUncommittedHarness has nothing to check in this git repo, reports ok (vacuous; git never ran against a manifest)`,
   };
 }
 
@@ -348,6 +391,15 @@ function mktempSafe(): string {
 // against `gh api branches/<branch>/protection`, never trusted from provisioning's own exit code. A HARD
 // signal per spec: an unauthenticated/non-admin `gh` NEVER silently reads as true — it reports
 // `present: false` with evidence text starting `unverifiable: <why>`.
+//
+// EMPIRICAL GOTCHA (fix-round D1 — verified live): GitHub answers a NON-ADMIN token's GET on
+// `branches/<b>/protection` with **HTTP 404 "Not Found"** — NOT 403 — even when the branch IS protected
+// (verified: a token with `.permissions.admin == false` on volter-ai/open-autonomy, whose `main` is
+// protected, gets a plain 404; same on torvalds/linux). So a bare 404 is AMBIGUOUS: it means either
+// "genuinely unprotected" or "you can't see it". This function therefore pre-probes
+// `gh api repos/<owner>/<repo> --jq .permissions.admin` FIRST and only interprets a protection-endpoint
+// 404 as the genuine negative ("protection NOT applied") when the token is admin-confirmed; a non-admin
+// token short-circuits to `unverifiable:` without ever touching the protection endpoint.
 
 interface ProvisionBranchProtection {
   branch: string;
@@ -392,20 +444,40 @@ export async function a13ProvisionMatchesLiveProtection(installDir: string, ctx:
   }
   if (!repo) return { present: false, evidence: 'unverifiable: gh repo view returned an empty nameWithOwner' };
 
+  // Admin pre-probe (fix-round D1 — see this section's header): GitHub 404s the protection endpoint for a
+  // NON-ADMIN token even on a protected branch, so admin must be established BEFORE a 404 can be read as
+  // "genuinely unprotected". A non-admin/unreadable-permissions token is `unverifiable:`, never a negative.
+  const adminProbe = proc('gh', ['api', `repos/${repo}`, '--jq', '.permissions.admin'], { cwd: installDir });
+  if (adminProbe.status !== 0) {
+    const stderr = firstLine(adminProbe.stderr);
+    if (/not logged in|authentication|HTTP 401|gh auth login/i.test(stderr)) {
+      return { present: false, evidence: `unverifiable: gh not authenticated (gh api repos/${repo} --jq .permissions.admin: ${stderr})` };
+    }
+    return { present: false, evidence: `unverifiable: cannot read this token's repo permissions (gh api repos/${repo} --jq .permissions.admin: ${stderr})` };
+  }
+  const admin = adminProbe.stdout.trim();
+  if (admin !== 'true') {
+    return {
+      present: false,
+      evidence:
+        `unverifiable: token lacks repo admin on ${repo} (gh api repos/${repo} --jq .permissions.admin=${admin || '(empty)'}) — ` +
+        `GitHub answers a non-admin token's GET on branches/${branch}/protection with 404 even when the branch IS protected, so live protection cannot be read with this token`,
+    };
+  }
+
   const api = proc('gh', ['api', `repos/${repo}/branches/${branch}/protection`], { cwd: installDir });
   if (api.status !== 0) {
     const stderr = firstLine(api.stderr);
     if (/not logged in|authentication|HTTP 401|gh auth login/i.test(stderr)) {
       return { present: false, evidence: `unverifiable: gh not authenticated (gh api branches/${branch}/protection: ${stderr})` };
     }
+    // 404 with an ADMIN-CONFIRMED token (the pre-probe above returned .permissions.admin=true) is the
+    // genuine negative: the branch really has no protection rule ("Branch not protected").
     if (/HTTP 404|Not Found|Branch not protected/i.test(stderr)) {
       return {
         present: false,
-        evidence: `protection NOT applied on ${repo}@${branch} (gh api branches/${branch}/protection -> 404) — ${provisionPath} requires [${required.join(', ')}]`,
+        evidence: `protection NOT applied on ${repo}@${branch} (admin-confirmed token: .permissions.admin=true; gh api branches/${branch}/protection -> 404 "${stderr}") — ${provisionPath} requires [${required.join(', ')}]`,
       };
-    }
-    if (/HTTP 403|Resource not accessible|must have admin/i.test(stderr)) {
-      return { present: false, evidence: `unverifiable: token lacks admin rights on ${repo} (gh api branches/${branch}/protection: ${stderr})` };
     }
     return { present: false, evidence: `unverifiable: gh api branches/${branch}/protection failed (${stderr})` };
   }

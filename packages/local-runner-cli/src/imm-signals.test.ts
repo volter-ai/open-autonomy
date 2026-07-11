@@ -341,6 +341,58 @@ describe('A6 — harness-committed (real git status/ls-files against generated.j
       rmSync(dir, { recursive: true, force: true });
     }
   });
+
+  test('D2a: AUTONOMY_ALLOW_UNCOMMITTED_HARNESS=1 with a genuinely dirty generated file -> present true (mirrors the scheduler, which WILL launch under the override) but the evidence carries the REAL dirty count and the override, never "0 dirty"', async () => {
+    const dir = tmpRepo();
+    try {
+      gitInit(dir);
+      mkdirSync(join(dir, 'scheduler'), { recursive: true });
+      writeFileSync(join(dir, 'scheduler', 'run.mjs'), '// stub\n');
+      writeGenerated(dir, ['scheduler/run.mjs']);
+      // NOT committed — git genuinely reports 1 dirty; the override downgrades the guard to ok+warning.
+      const s = await a6HarnessCommitted(dir, { proc: defaultProc, env: { ...process.env, AUTONOMY_ALLOW_UNCOMMITTED_HARNESS: '1' } });
+      expect(s.present).toBe(true);
+      expect(s.evidence).toContain('override AUTONOMY_ALLOW_UNCOMMITTED_HARNESS=1 active');
+      expect(s.evidence).toContain('git reported 1 dirty');
+      expect(s.evidence).toContain('bypassed');
+      expect(s.evidence).not.toContain('0 dirty');
+      expect(s.evidence).not.toContain('harness fully committed'); // the clean-status claim must be absent (the text says "NOT fully committed")
+      expect(s.evidence).toContain('NOT fully committed');
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test('D2b: a NON-git dir carrying a manifest -> present false with the vacuity NAMED ("not a git repository", guard skipped) — never fabricated git output', async () => {
+    const dir = tmpRepo();
+    try {
+      // No gitInit — deliberately not a git repo, but a manifest with files exists.
+      mkdirSync(join(dir, 'scheduler'), { recursive: true });
+      writeFileSync(join(dir, 'scheduler', 'run.mjs'), '// stub\n');
+      writeGenerated(dir, ['scheduler/run.mjs']);
+      const s = await a6HarnessCommitted(dir, { proc: defaultProc });
+      expect(s.present).toBe(false);
+      expect(s.evidence).toContain('not a git repository');
+      expect(s.evidence).toContain('vacuous');
+      expect(s.evidence).not.toContain('0 dirty');
+      expect(s.evidence).not.toContain('git status --porcelain');
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test('D2b corollary: a NON-git dir with NO manifest -> vacuous ok stays true, but the evidence SAYS vacuous + names the non-repo (never fabricated git output)', async () => {
+    const dir = tmpRepo();
+    try {
+      const s = await a6HarnessCommitted(dir, { proc: defaultProc });
+      expect(s.present).toBe(true);
+      expect(s.evidence).toContain('not a git repository');
+      expect(s.evidence).toContain('vacuous');
+      expect(s.evidence).not.toContain('0 dirty');
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
 });
 
 // ============================================================================================
@@ -606,13 +658,13 @@ describe('A13 — provision == live-protection (HARD signal: unauthenticated/no-
     }
   });
 
-  test('gh api returns 401 (not authenticated) -> unverifiable, never true', async () => {
+  test('admin pre-probe fails 401 (not authenticated) -> unverifiable, never true', async () => {
     const profileDir = tmpRepo('oa-imm-profile-');
     try {
       provisionProfileDir(profileDir, { branch: 'main', required_checks: ['ci'] });
       const stub = new StubProc()
         .onArgs('gh', ['repo', 'view'], () => ok('acme/widgets\n'))
-        .onArgs('gh', ['api', 'repos/acme/widgets/branches/main/protection'], () => fail('gh: HTTP 401: Bad credentials (authentication)', 1));
+        .onArgs('gh', ['api', 'repos/acme/widgets', '--jq'], () => fail('gh: HTTP 401: Bad credentials (authentication)', 1));
       const s = await a13ProvisionMatchesLiveProtection('/any/install', { profileDir, proc: stub.runner });
       expect(s.present).toBe(false);
       expect(s.evidence).toContain('unverifiable');
@@ -622,34 +674,58 @@ describe('A13 — provision == live-protection (HARD signal: unauthenticated/no-
     }
   });
 
-  test('gh api returns 403 (non-admin token) -> unverifiable, never true', async () => {
+  test('D1 (the REAL GitHub model, verified live): a NON-ADMIN token gets 404 from the protection endpoint even on a PROTECTED branch — admin=false must short-circuit to unverifiable WITHOUT touching the protection endpoint, never a confident "NOT applied"', async () => {
     const profileDir = tmpRepo('oa-imm-profile-');
     try {
       provisionProfileDir(profileDir, { branch: 'main', required_checks: ['ci'] });
       const stub = new StubProc()
         .onArgs('gh', ['repo', 'view'], () => ok('acme/widgets\n'))
-        .onArgs('gh', ['api', 'repos/acme/widgets/branches/main/protection'], () =>
-          fail('gh: Resource not accessible by integration (HTTP 403) — must have admin rights', 1),
-        );
+        .onArgs('gh', ['api', 'repos/acme/widgets', '--jq'], () => ok('false\n'))
+        // Registered deliberately: if the implementation regressed to probing the protection endpoint with
+        // a non-admin token, real GitHub answers 404 (verified live on a repo that IS protected) — and the
+        // old code would emit the false "protection NOT applied" verdict, failing the asserts below.
+        .onArgs('gh', ['api', 'repos/acme/widgets/branches/main/protection'], () => fail('gh: Not Found (HTTP 404)', 1));
       const s = await a13ProvisionMatchesLiveProtection('/any/install', { profileDir, proc: stub.runner });
       expect(s.present).toBe(false);
       expect(s.evidence).toContain('unverifiable');
-      expect(s.evidence).toContain('admin');
+      expect(s.evidence).toContain('lacks repo admin');
+      expect(s.evidence).not.toContain('NOT applied');
+      // The protection endpoint must never have been queried — its 404 is meaningless for this token.
+      expect(stub.calls.some((c) => c.cmd === 'gh' && (c.args[1] ?? '').includes('/protection'))).toBe(false);
     } finally {
       rmSync(profileDir, { recursive: true, force: true });
     }
   });
 
-  test('gh api returns 404 (protection genuinely not applied) -> false, NAMED as unprotected, not "unverifiable"', async () => {
+  test('admin pre-probe unreadable (network error) -> unverifiable, never a negative', async () => {
     const profileDir = tmpRepo('oa-imm-profile-');
     try {
       provisionProfileDir(profileDir, { branch: 'main', required_checks: ['ci'] });
       const stub = new StubProc()
         .onArgs('gh', ['repo', 'view'], () => ok('acme/widgets\n'))
+        .onArgs('gh', ['api', 'repos/acme/widgets', '--jq'], () => fail('gh: error connecting to api.github.com', 1));
+      const s = await a13ProvisionMatchesLiveProtection('/any/install', { profileDir, proc: stub.runner });
+      expect(s.present).toBe(false);
+      expect(s.evidence).toContain('unverifiable');
+      expect(s.evidence).toContain('permissions');
+    } finally {
+      rmSync(profileDir, { recursive: true, force: true });
+    }
+  });
+
+  test('admin=true + protection endpoint 404 -> the GENUINE negative "protection NOT applied", citing the admin confirmation', async () => {
+    const profileDir = tmpRepo('oa-imm-profile-');
+    try {
+      provisionProfileDir(profileDir, { branch: 'main', required_checks: ['ci'] });
+      const stub = new StubProc()
+        .onArgs('gh', ['repo', 'view'], () => ok('acme/widgets\n'))
+        .onArgs('gh', ['api', 'repos/acme/widgets', '--jq'], () => ok('true\n'))
         .onArgs('gh', ['api', 'repos/acme/widgets/branches/main/protection'], () => fail('gh: Branch not protected (HTTP 404: Not Found)', 1));
       const s = await a13ProvisionMatchesLiveProtection('/any/install', { profileDir, proc: stub.runner });
       expect(s.present).toBe(false);
       expect(s.evidence).toContain('protection NOT applied');
+      expect(s.evidence).toContain('admin-confirmed');
+      expect(s.evidence).not.toContain('unverifiable');
     } finally {
       rmSync(profileDir, { recursive: true, force: true });
     }
@@ -661,6 +737,7 @@ describe('A13 — provision == live-protection (HARD signal: unauthenticated/no-
       provisionProfileDir(profileDir, { branch: 'main', required_checks: ['ci', 'agent-review', 'security'] });
       const stub = new StubProc()
         .onArgs('gh', ['repo', 'view'], () => ok('acme/widgets\n'))
+        .onArgs('gh', ['api', 'repos/acme/widgets', '--jq'], () => ok('true\n'))
         .onArgs('gh', ['api', 'repos/acme/widgets/branches/main/protection'], () =>
           ok(JSON.stringify({ required_status_checks: { contexts: ['ci', 'agent-review'] } })),
         );
@@ -678,6 +755,7 @@ describe('A13 — provision == live-protection (HARD signal: unauthenticated/no-
       provisionProfileDir(profileDir, { branch: 'main', required_checks: ['ci'] });
       const stub = new StubProc()
         .onArgs('gh', ['repo', 'view'], () => ok('acme/widgets\n'))
+        .onArgs('gh', ['api', 'repos/acme/widgets', '--jq'], () => ok('true\n'))
         .onArgs('gh', ['api', 'repos/acme/widgets/branches/main/protection'], () => ok(JSON.stringify({ required_status_checks: { contexts: ['ci'] } })));
       const s = await a13ProvisionMatchesLiveProtection('/any/install', { profileDir, proc: stub.runner });
       expect(s.present).toBe(true);
@@ -691,9 +769,11 @@ describe('A13 — provision == live-protection (HARD signal: unauthenticated/no-
     const profileDir = tmpRepo('oa-imm-profile-');
     try {
       provisionProfileDir(profileDir, { branch: 'main', required_checks: ['ci'] });
-      const stub = new StubProc().onArgs('gh', ['api', 'repos/acme/pinned/branches/main/protection'], () =>
-        ok(JSON.stringify({ required_status_checks: { contexts: ['ci'] } })),
-      );
+      const stub = new StubProc()
+        .onArgs('gh', ['api', 'repos/acme/pinned', '--jq'], () => ok('true\n'))
+        .onArgs('gh', ['api', 'repos/acme/pinned/branches/main/protection'], () =>
+          ok(JSON.stringify({ required_status_checks: { contexts: ['ci'] } })),
+        );
       const s = await a13ProvisionMatchesLiveProtection('/any/install', { profileDir, proc: stub.runner, repo: 'acme/pinned' });
       expect(s.present).toBe(true);
       expect(stub.calls.some((c) => c.cmd === 'gh' && c.args[0] === 'repo')).toBe(false);

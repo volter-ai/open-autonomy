@@ -948,3 +948,162 @@ describe('computeMaturity — ran-and-failed checker semantics (D3)', () => {
     }
   });
 });
+
+// ============================================================================================
+// TP.1 acceptance — ladder fixture tests driven against the REAL `profiles/simple-gh-sdlc` pack
+// (getSetupPack/checkPackDrift's own real-catalog subject, not a synthetic mirror), proving the
+// M3(A13-blocked)/M4/M5 boundaries with this pack's actual field values — the "upper rungs" evidence a
+// local scratch install (no real GitHub repo, per the standing ⛔ no-real-repo rule) cannot itself reach
+// live. Companion to the PR's live transcript (a real `compile` + `oa doctor` run against a scratch dir).
+// ============================================================================================
+describe('computeMaturity — TP.1 ladder fixtures (real profiles/simple-gh-sdlc pack)', () => {
+  const REAL_PROFILE_DIR = 'profiles/simple-gh-sdlc';
+
+  function committedGithubInstall(dir: string, opts: { pin?: string } = {}): void {
+    writeGenerated(dir, ['.open-autonomy/autonomy.yml', '.open-autonomy/generated.json', 'scheduler/schedule.json']);
+    writeAutonomyYml(dir, { codeHost: 'github' });
+    writeSchedule(dir, opts);
+    gitInit(dir);
+    gitCommitAll(dir);
+  }
+
+  /** gh stubbed fully green for simple-gh-sdlc's REAL provision.json required_checks
+   *  (['ci','agent-review','security']) + a `ready`-labeled gh-issue on the board (m4_predicate=gh-issues)
+   *  + no open PRs (nothing in flight). */
+  function ghGreenStubForRealPack(): StubProc {
+    return baseStub()
+      .onArgs('gh', ['repo', 'view'], () => ok('acme/widgets'))
+      .onArgs('gh', ['api', 'repos/acme/widgets'], () => ok('true'))
+      .onArgs('gh', ['api', 'repos/acme/widgets/branches/main/protection'], () =>
+        ok(JSON.stringify({ required_status_checks: { contexts: ['ci', 'agent-review', 'security'] } })),
+      )
+      .onArgs('gh', ['issue', 'list', '--state', 'open'], () => ok(JSON.stringify([{ number: 9, labels: [{ name: 'ready' }] }])))
+      .onArgs('gh', ['pr', 'list', '--state', 'open'], () => ok('[]'));
+  }
+
+  test('M3(A13-blocked): local target, no real GitHub repo (gh not logged in) -> honest M2, A13 unverifiable — the exact live-acceptance scenario for a github-codeHost profile on a local scratch install', async () => {
+    const dir = tmpDir();
+    try {
+      committedGithubInstall(dir);
+      const record = await computeMaturity({
+        cwd: dir,
+        profileDir: REAL_PROFILE_DIR,
+        target: 'local',
+        proc: withRealGit(baseStub()), // baseStub's catch-all: any `gh …` -> "not logged in"
+        preflightBin: NO_PREFLIGHT,
+        ghPreflightScript: NO_GH_PREFLIGHT,
+      });
+      expect(record.stage).toBe('M2');
+      expect(record.substrate).toBe('local');
+      expect(record.blockers[0]).toMatch(/^M3 blocked:/);
+      expect(record.blockers[0]).toContain('A13 branch-protection HARD signal failed');
+      expect(record.blockers[0]).toContain('unverifiable');
+      const a13 = record.signals.find((s) => s.id === 'A13')!;
+      expect(a13.present).toBe(false);
+      expect(a13.evidence).toMatch(/^unverifiable:/);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test("m3_tool dual-target decision (TP.1 fix): target='gh-actions' against the real pack's literal m3_tool='doctor' falls back to A12/gh-preflight — A8 is correctly ABSENT from applicable (TB.3's own target-driven selection), and the M3 gate no longer permanently blocks on a signal that was never evaluated", async () => {
+    const dir = tmpDir();
+    try {
+      committedGithubInstall(dir);
+      const record = await computeMaturity({
+        cwd: dir,
+        profileDir: REAL_PROFILE_DIR,
+        target: 'gh-actions',
+        proc: withRealGit(ghGreenStubForRealPack()),
+        preflightBin: NO_PREFLIGHT,
+        ghPreflightScript: NO_GH_PREFLIGHT, // softened -> A12 doctor-unavailable counts as OK
+      });
+      // A8/A10 were never evaluated for this target — TB.3 already excludes them (signal-sets.test.ts's
+      // own 'gh-actions target: A12/A13 present, doctor SKIPPED' acceptance) — so they carry no entry here.
+      expect(record.signals.find((s) => s.id === 'A8')).toBeUndefined();
+      expect(record.skipped.some((s) => s.id === 'A8' && /gh-actions/.test(s.reason))).toBe(true);
+      // A12 (softened doctor-unavailable) + A13 (green) together satisfy the fallback M3 gate.
+      const a13 = record.signals.find((s) => s.id === 'A13')!;
+      expect(a13.present).toBe(true);
+      expect(record.stage === 'M3' || record.stage === 'M4').toBe(true); // M3 reached (not permanently capped at M2)
+      expect(record.blockers.every((b) => !b.includes('A8/A10 (m3_tool=doctor) failed'))).toBe(true);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test('M4 boundary: a ready-labeled gh-issue (m4_predicate=gh-issues, this pack\'s real value) -> A14 true, M4/ARMED reached, blocked at M5 (still paused)', async () => {
+    const dir = tmpDir();
+    try {
+      committedGithubInstall(dir);
+      writeFileSync(join(dir, '.open-autonomy', 'paused'), 'fresh install\n'); // fence still down
+      const record = await computeMaturity({
+        cwd: dir,
+        profileDir: REAL_PROFILE_DIR,
+        target: 'gh-actions',
+        proc: withRealGit(ghGreenStubForRealPack()),
+        preflightBin: NO_PREFLIGHT,
+        ghPreflightScript: NO_GH_PREFLIGHT,
+      });
+      expect(record.stage).toBe('M4');
+      expect(record.stageName).toBe('ARMED');
+      expect(record.blockers[0]).toMatch(/^M5 blocked:/);
+      expect(record.blockers[0]).toContain('A5 fence not lifted');
+      const a14 = record.signals.find((s) => s.id === 'A14')!;
+      expect(a14.present).toBe(true);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test('M5 boundary: fence lifted but no install-scoped provider pin -> honest M4 cap, session evidence "unknown" (never a foreign/ambient guess) — DESIGN §Q1 M5 requires a profile agent to have ACTUALLY fired', async () => {
+    const dir = tmpDir();
+    try {
+      committedGithubInstall(dir);
+      rmSync(join(dir, '.open-autonomy', 'paused'), { force: true }); // fence lifted (A5 true), but no provider pin
+      const record = await computeMaturity({
+        cwd: dir,
+        profileDir: REAL_PROFILE_DIR,
+        target: 'gh-actions',
+        proc: withRealGit(ghGreenStubForRealPack()),
+        preflightBin: NO_PREFLIGHT,
+        ghPreflightScript: NO_GH_PREFLIGHT,
+      });
+      expect(record.stage).toBe('M4');
+      expect(record.blockers[0]).toMatch(/^M5 blocked:/);
+      expect(record.blockers[0]).toContain('no real profile-agent session/fire evidence');
+      expect(record.blockers[0]).toContain('no install-scoped provider pin');
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test('M5 boundary: fence lifted + an install-scoped session belonging to a declared agent -> M5/RUNNING reached', async () => {
+    const dir = tmpDir();
+    try {
+      committedGithubInstall(dir, { pin: 'http://pinned.test' }); // TG.1's durable schedule.json provider pin
+      rmSync(join(dir, '.open-autonomy', 'paused'), { force: true });
+      const fakeProbe: SessionProbe = async (_cwd, pinnedProviderUrl) => {
+        expect(pinnedProviderUrl).toBe('http://pinned.test');
+        return [{ agent: 'pm', status: 'running' } as Session];
+      };
+      const record = await computeMaturity({
+        cwd: dir,
+        profileDir: REAL_PROFILE_DIR,
+        target: 'gh-actions',
+        proc: withRealGit(ghGreenStubForRealPack()),
+        preflightBin: NO_PREFLIGHT,
+        ghPreflightScript: NO_GH_PREFLIGHT,
+        sessionProbe: fakeProbe,
+      });
+      expect(record.stage).toBe('M5');
+      expect(record.stageName).toBe('RUNNING');
+      // M5 reached; M6 (ADVANCING) is a separate, OBSERVABLE-not-required rung for this profile
+      // (terminal_stage: M5 — see setup-pack.yml) — an honest "nothing to prove M6 against yet" is
+      // expected here, never a fabricated M6 pass.
+      expect(record.blockers[0]).toMatch(/^M6 blocked:/);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+});

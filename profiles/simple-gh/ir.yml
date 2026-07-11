@@ -42,7 +42,11 @@ policy:
   maxConcurrent: 1               # one manager session; its subagent fan-out is doctrine-capped, not IR-capped
   box:
     tracker:
-      ztrackPreset: simple-gh-sdlc   # BL-29: declare explicitly — `simple-gh` is NOT itself a bundled ztrack preset
+      ztrackPreset: simple-gh-sdlc   # BL-29: tracker PRESET name, not a profile reference — no preset
+                                     # named 'simple-gh' exists; the value names the simple-gh-sdlc PRESET
+                                     # (ztrack), which merely shares its name with the unrelated bundled
+                                     # simple-gh-sdlc PROFILE (../simple-gh-sdlc/) — an install may run a
+                                     # different preset (e.g. simple-sdlc)
     models:                      # read by skills/manager/SKILL.md at runtime (check:policy-consumers)
       research: strongest        # research / plan / review subagents (model-tier label, not a model id)
       implement: capable         # implementation subagents on worktrees (model-tier label, not a model id)

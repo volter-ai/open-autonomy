@@ -58,12 +58,28 @@
 //   passes (nothing to warn about) — exactly TB.3's own "operator mode has no REPLACE-THIS-seeded template"
 //   posture, mirrored onto M4's gate instead of merely the signal-set SELECTION.
 //
-//   M5 RUNNING requires BOTH the fence lifted (A5) AND real, READABLE profile-agent session/fire evidence
-//   (`oa status`'s live sessions + its durable last-fire telemetry) — DESIGN §Q1's own caution: "the fence
-//   is lifted and a profile agent actually fired (not merely 'the loop is up')". A5 alone is NEVER enough;
-//   this unit's own acceptance proves the honest "unpaused but nothing has fired yet" case reports BLOCKED
-//   at M5, never a false M5. `status()` is read-only (a probe + a telemetry read) — this composer never
-//   dispatches/launches anything to manufacture that evidence (the ⛔ never-launch-agents rule).
+//   M5 RUNNING requires BOTH the fence lifted (A5) AND real, READABLE, INSTALL-SCOPED profile-agent
+//   session/fire evidence — DESIGN §Q1's own caution: "the fence is lifted and a profile agent actually
+//   fired (not merely 'the loop is up')". A5 alone is NEVER enough. FIX-ROUND D1 (HIGH): the naive probe
+//   (`status()` -> the install's own TermfleetRunner) resolves its provider from AMBIENT
+//   TERMFLEET_PROVIDER_URL or SDK auto-discovery (backend.mjs's `resolveDefaultProvider({url: process.env
+//   .TERMFLEET_PROVIDER_URL})`), and its `list()` returns EVERY window on that provider unfiltered — on a
+//   shared dev box that read a FOREIGN loop's sessions as this install's own M5 evidence (reproduced live:
+//   a virgin M4 install reported M5/RUNNING off two sessions belonging to unrelated installs). The gate
+//   must reflect the INSTALL, not the shell, so session evidence is now scoped BOTH ways:
+//     (1) the probe's provider comes from the install's OWN scheduler/schedule.json
+//         `env.TERMFLEET_PROVIDER_URL` pin (TG.1's durable artifact, via provider.ts's readSchedulePin —
+//         the exact field doctor.ts's own provider check already consults) and NEVER from ambient env or
+//         auto-discovery. No pin => session evidence = 'unknown: no install-scoped provider pin' and M5
+//         blocks honestly.
+//     (2) listed sessions are filtered to the agent names this install's own compiled autonomy.yml +
+//         schedule.json declare — the same name-set scoping backend.mjs's reapIdle already applies ("a
+//         human's own terminal or another loop's session is never touched"). A foreign session on the
+//         pinned provider is cited as IGNORED, never counted as evidence.
+//   The install's own durable last-fire telemetry (.open-autonomy/runner-state/last-fire/, written ONLY by
+//   this install's own reconciler on an actual state-gated fire — status.ts's recordFire) is inherently
+//   install-scoped and stays valid M5 evidence as-is. Everything here is read-only — this composer never
+//   dispatches/launches anything to manufacture evidence (the ⛔ never-launch-agents rule).
 //
 //   M6 ADVANCING delegates WHOLESALE to TF.1's `missionAdvancingSignal` — this file never re-derives
 //   board-specific gate/linkage logic TF.1 already owns.
@@ -82,9 +98,12 @@ import { IMM_SIGNAL_IDS, signalSetFor } from './signal-sets.ts';
 import type { InstallTarget, SignalId, SignalSetPack, SkippedSignal } from './signal-sets.ts';
 import { missionAdvancingSignal } from './m6-signal.ts';
 import type { MissionAdvancingContext } from './m6-signal.ts';
-import { status } from './status.ts';
+import { readLastFires } from './status.ts';
+import { defaultSessionRunner, listSessionsBestEffort } from './sessions.ts';
+import { readSchedulePin } from './provider.ts';
+import { loadSchedule } from './config.ts';
 import { defaultProc } from './proc.ts';
-import type { ProcRunner } from './types.ts';
+import type { ProcRunner, Session } from './types.ts';
 
 // ============================================================================================
 // Stage vocabulary (DESIGN §Q1)
@@ -259,13 +278,15 @@ export function directionContentSignal(installDir: string): Signal {
 // ============================================================================================
 // The other two extra rungs (self-driving only, today): 'proxy-ready' (M3.p) and 'human-seam-wired' (M4.h).
 // Both are best-effort, HONEST, bounded checks — never a fabricated pass. Neither is exercised by this
-// unit's live acceptance (simple-sdlc ships no extra_rungs); both are proven by fixture unit tests instead.
+// unit's live acceptance (simple-sdlc ships no extra_rungs); both are exported and proven by
+// maturity.test.ts's dedicated fixture suites ('extra rungs — direct signal tests' + the self-driving-like
+// computeMaturity fixtures: proxy-ready-blocks-M3, human-seam-wired-gates-M4, unrecognized-rung fail-closed).
 // ============================================================================================
 
 /** M3.p — a funded, OIDC-allowlisted model proxy. This can only mechanically confirm REACHABILITY (a
  *  bounded GET, matching doctor.ts's own provider-health pattern) — it can NEVER confirm funding/allowlist
  *  status from here, so a reachable proxy is reported honestly as reachability-only, not full "ready". */
-async function proxyReadySignal(env: NodeJS.ProcessEnv, fetchImpl: typeof fetch): Promise<Signal> {
+export async function proxyReadySignal(env: NodeJS.ProcessEnv, fetchImpl: typeof fetch): Promise<Signal> {
   const url = env.MODEL_PROXY_URL;
   if (!url) {
     return {
@@ -290,7 +311,7 @@ async function proxyReadySignal(env: NodeJS.ProcessEnv, fetchImpl: typeof fetch)
 }
 
 /** M4.h — a provisioned `kind:human` maintainer actor + a non-empty `PUBLIC_AGENT_MAINTAINERS`. */
-function humanSeamWiredSignal(installDir: string, env: NodeJS.ProcessEnv): Signal {
+export function humanSeamWiredSignal(installDir: string, env: NodeJS.ProcessEnv): Signal {
   const manifestPath = join(installDir, '.open-autonomy', 'autonomy.yml');
   if (!existsSync(manifestPath)) {
     return { present: false, evidence: `${manifestPath}: does not exist — cannot check for a kind:human maintainer actor` };
@@ -322,7 +343,7 @@ function rungStage(id: string): Stage {
   return RUNG_STAGE[id] ?? 'M4';
 }
 
-async function evaluateExtraRung(id: string, installDir: string, env: NodeJS.ProcessEnv, fetchImpl: typeof fetch): Promise<Signal> {
+export async function evaluateExtraRung(id: string, installDir: string, env: NodeJS.ProcessEnv, fetchImpl: typeof fetch): Promise<Signal> {
   if (id === 'proxy-ready') return proxyReadySignal(env, fetchImpl);
   if (id === 'direction-present') return directionContentSignal(installDir);
   if (id === 'human-seam-wired') return humanSeamWiredSignal(installDir, env);
@@ -337,6 +358,103 @@ async function evaluateExtraRung(id: string, installDir: string, env: NodeJS.Pro
  *  adopter install). A genuine `present:false` that RAN and failed is never softened. */
 function softOk(s: Signal): boolean {
   return s.present || /^doctor-unavailable:/.test(s.evidence);
+}
+
+// ============================================================================================
+// M5 session evidence — INSTALL-SCOPED (fix-round D1, HIGH). See this file's header for the full failure
+// story. Two scoping rules, both mandatory:
+//   (1) the provider comes from the install's OWN scheduler/schedule.json env.TERMFLEET_PROVIDER_URL pin
+//       (readSchedulePin — TG.1's durable artifact), never from ambient env or SDK auto-discovery;
+//   (2) sessions count as evidence only when their `agent` (window name) is one this install's own compiled
+//       autonomy.yml/schedule.json declares — backend.mjs reapIdle's own name-set scoping precedent.
+// ============================================================================================
+
+/** The injectable probe seam (tests): given the install dir + its OWN pinned provider URL, return that
+ *  provider's live sessions (null = probe unavailable). Only ever CALLED when a pin exists — an unpinned
+ *  install's session evidence is 'unknown' without any probe. */
+export type SessionProbe = (cwd: string, pinnedProviderUrl: string) => Promise<Session[] | null>;
+
+/** Default probe: drive the install's own vendored runner (scripts/autonomy-runner.mjs's TermfleetRunner)
+ *  exactly the way `oa status` does, but with TERMFLEET_PROVIDER_URL FORCED to the install's schedule pin
+ *  for the probe's duration — the runner's backend reads `process.env.TERMFLEET_PROVIDER_URL` lazily on its
+ *  first list() (backend.mjs's #client()), so pinning the env var around the call is the ONE seam that
+ *  reaches both its SDK path and listSessionsBestEffort's `node scripts/autonomy-runner.mjs list` CLI
+ *  fallback (a subprocess inherits the same env). AUTONOMY_PROVIDER_URL_SOURCE='schedule' keeps the
+ *  backend's own OA-09 provenance log line truthful about where the URL came from. Restored in `finally`. */
+async function defaultInstallScopedSessionProbe(cwd: string, pinnedProviderUrl: string): Promise<Session[] | null> {
+  const savedUrl = process.env.TERMFLEET_PROVIDER_URL;
+  const savedSource = process.env.AUTONOMY_PROVIDER_URL_SOURCE;
+  process.env.TERMFLEET_PROVIDER_URL = pinnedProviderUrl;
+  process.env.AUTONOMY_PROVIDER_URL_SOURCE = 'schedule';
+  try {
+    const runner = await defaultSessionRunner(cwd);
+    return await listSessionsBestEffort(cwd, runner);
+  } finally {
+    if (savedUrl === undefined) delete process.env.TERMFLEET_PROVIDER_URL;
+    else process.env.TERMFLEET_PROVIDER_URL = savedUrl;
+    if (savedSource === undefined) delete process.env.AUTONOMY_PROVIDER_URL_SOURCE;
+    else process.env.AUTONOMY_PROVIDER_URL_SOURCE = savedSource;
+  }
+}
+
+/** The agent names THIS install declares — the union of the compiled autonomy.yml's `agents:` keys and the
+ *  schedule.json script identities (AUTONOMY_AGENT=<name> / explicit `agent:` keys, via loadSchedule). A
+ *  session whose window name is not in this set belongs to some OTHER loop/human on the same provider. */
+export function declaredAgentNames(cwd: string): Set<string> {
+  const names = new Set<string>();
+  const manifestPath = join(cwd, '.open-autonomy', 'autonomy.yml');
+  if (existsSync(manifestPath)) {
+    try {
+      const doc = (parseYaml(readFileSync(manifestPath, 'utf8')) ?? {}) as { agents?: Record<string, unknown> };
+      for (const name of Object.keys(doc.agents ?? {})) names.add(name);
+    } catch {
+      /* an unreadable manifest is A3's finding, not this helper's */
+    }
+  }
+  try {
+    for (const s of loadSchedule(cwd).scripts) if (s.agent) names.add(s.agent);
+  } catch {
+    /* a missing/invalid schedule is A8/A10's finding, not this helper's */
+  }
+  return names;
+}
+
+interface SessionEvidence {
+  ok: boolean;
+  note: string;
+}
+
+async function installScopedSessionEvidence(cwd: string, probe: SessionProbe): Promise<SessionEvidence> {
+  const pin = readSchedulePin(cwd);
+  if (!pin) {
+    return {
+      ok: false,
+      note:
+        'sessions unknown: no install-scoped provider pin (scheduler/schedule.json env.TERMFLEET_PROVIDER_URL unset) — ' +
+        'ambient TERMFLEET_PROVIDER_URL / SDK auto-discovery are deliberately NOT consulted (the M5 gate reflects the install, not the shell; run `oa provider up` to pin one)',
+    };
+  }
+  let sessions: Session[] | null;
+  try {
+    sessions = await probe(cwd, pin);
+  } catch (e) {
+    return { ok: false, note: `sessions unknown: probe threw against pinned ${pin} (${(e as Error)?.message ?? e})` };
+  }
+  if (sessions === null) {
+    return { ok: false, note: `sessions unknown: probe unavailable against pinned ${pin} (is the runner installed / the pinned provider up?)` };
+  }
+  const declared = declaredAgentNames(cwd);
+  const own = sessions.filter((s) => declared.has(s.agent));
+  const foreignCount = sessions.length - own.length;
+  const declaredList = [...declared].sort().join(', ') || '(none declared)';
+  const foreignNote = foreignCount > 0 ? `; ${foreignCount} foreign session(s) on the same provider IGNORED (window name not one of this install's declared agents [${declaredList}])` : '';
+  if (own.length > 0) {
+    return {
+      ok: true,
+      note: `${own.length} live session(s) on this install's pinned provider ${pin} belong to its own declared agents: ${own.map((s) => `${s.agent}:${s.status}`).join(', ')}${foreignNote}`,
+    };
+  }
+  return { ok: false, note: `0 of ${sessions.length} live session(s) on pinned ${pin} belong to this install's declared agents [${declaredList}]${foreignNote}` };
 }
 
 // ============================================================================================
@@ -392,6 +510,10 @@ export interface MaturityOptions {
    *  (e.g. a future dry-run flag; every unit test that asserts `install.json` shape leaves this at its
    *  default so the write path itself is exercised). */
   write?: boolean;
+  /** injectable M5 session-probe seam (tests) — see `SessionProbe`. Defaults to the real install-scoped
+   *  probe (the install's own runner, forced onto its own schedule.json provider pin). Only ever called
+   *  when a pin exists. */
+  sessionProbe?: SessionProbe;
 }
 
 export async function computeMaturity(opts: MaturityOptions = {}): Promise<InstallRecord> {
@@ -469,15 +591,14 @@ export async function computeMaturity(opts: MaturityOptions = {}): Promise<Insta
   if (opts.scanLimit) m6Ctx.scanLimit = opts.scanLimit;
   const m6Signal = await missionAdvancingSignal(cwd, m6Ctx);
 
-  // --- M5 session evidence (read-only — never dispatches anything) ----------------------------------
-  const statusReport = await status({ cwd });
-  const liveSessionCount = statusReport.sessions?.length ?? 0;
-  const fireCount = statusReport.lastFires.length;
-  const sessionEvidenceOk = liveSessionCount > 0 || fireCount > 0;
-  const sessionEvidenceNote =
-    statusReport.sessions === null
-      ? `oa status: sessions unknown (probe unavailable), last-fire records=${fireCount}`
-      : `oa status: live sessions=${liveSessionCount}, last-fire records=${fireCount}`;
+  // --- M5 session evidence (INSTALL-SCOPED, fix-round D1 — read-only, never dispatches anything). Two
+  // independent legs: (a) live sessions belonging to this install's own declared agents on ITS OWN pinned
+  // provider (never ambient, never a foreign loop's windows — see installScopedSessionEvidence's header);
+  // (b) the install's own durable last-fire telemetry, written only by this install's reconciler.
+  const fireCount = readLastFires(cwd).length;
+  const sessionEvidence = await installScopedSessionEvidence(cwd, opts.sessionProbe ?? defaultInstallScopedSessionProbe);
+  const sessionEvidenceOk = sessionEvidence.ok || fireCount > 0;
+  const sessionEvidenceNote = `${sessionEvidence.note}; install-scoped last-fire records=${fireCount}`;
 
   // ============================================================================================
   // Stage composition (cumulative walk — see file header for the rationale behind each gate).

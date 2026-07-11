@@ -11,10 +11,20 @@ import { execFileSync } from 'node:child_process';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { basename, join } from 'node:path';
-import { computeMaturity, directionContentSignal, INSTALL_JSON_REL, STAGE_NAMES } from './maturity.ts';
+import {
+  computeMaturity,
+  declaredAgentNames,
+  directionContentSignal,
+  evaluateExtraRung,
+  humanSeamWiredSignal,
+  proxyReadySignal,
+  INSTALL_JSON_REL,
+  STAGE_NAMES,
+} from './maturity.ts';
+import type { SessionProbe } from './maturity.ts';
 import { StubProc, fail, ok } from './test-support/stub-proc.ts';
 import { defaultProc } from './proc.ts';
-import type { ProcRunner } from './types.ts';
+import type { ProcRunner, Session } from './types.ts';
 
 // A11/A12 both softened on `doctor-unavailable:` (see maturity.ts's own header) — point them at a
 // path that genuinely does not exist so this suite tests STAGE COMPOSITION, not TB.1's own A11/A12
@@ -49,11 +59,14 @@ function writeAutonomyYml(dir: string, opts: { codeHost?: string; agents?: Recor
   writeFileSync(join(dir, '.open-autonomy', 'autonomy.yml'), JSON.stringify(body));
 }
 
-function writeSchedule(dir: string): void {
+function writeSchedule(dir: string, opts: { pin?: string } = {}): void {
   // script-only, no runner/provider needed — the same trick imm-signals.test.ts's A8/A10 suite uses to get
-  // a real, honest doctor() PASS without a termfleet provider on the box.
+  // a real, honest doctor() PASS without a termfleet provider on the box. `pin` writes the install-scoped
+  // env.TERMFLEET_PROVIDER_URL pin (TG.1's durable artifact) the M5 session-evidence gate keys on.
   mkdirSync(join(dir, 'scheduler'), { recursive: true });
-  writeFileSync(join(dir, 'scheduler', 'schedule.json'), JSON.stringify({ intervalSeconds: 900, scripts: ['bun scripts/sweep.ts'] }));
+  const body: Record<string, unknown> = { intervalSeconds: 900, scripts: ['bun scripts/sweep.ts'] };
+  if (opts.pin) body.env = { TERMFLEET_PROVIDER_URL: opts.pin };
+  writeFileSync(join(dir, 'scheduler', 'schedule.json'), JSON.stringify(body));
 }
 
 function gitInit(dir: string): void {
@@ -363,6 +376,110 @@ describe('computeMaturity — M5 boundary: fence lifted AND real session/fire ev
     }
   });
 
+  // --- fix-round D1 (HIGH): session evidence must be INSTALL-SCOPED — pin-scoped provider AND
+  //     declared-agent-name-filtered sessions, never ambient/box-global state. -----------------------
+
+  test('D1: NO schedule.json pin + ambient TERMFLEET_PROVIDER_URL set -> session probe NEVER called, M5 blocked "no install-scoped provider pin"', async () => {
+    const dir = tmpDir();
+    const profileDir = tmpDir('oa-maturity-profile-');
+    const savedAmbient = process.env.TERMFLEET_PROVIDER_URL;
+    try {
+      writeLocalGitProfile(profileDir);
+      armedInstall(dir); // writeSchedule with NO pin
+      // The exact live failure mode: a box-global provider sits in ambient env, teeming with sessions.
+      process.env.TERMFLEET_PROVIDER_URL = 'http://127.0.0.1:7373';
+      let probeCalls = 0;
+      const probe: SessionProbe = async () => {
+        probeCalls++;
+        return [{ id: 't1', agent: 'pm', status: 'running' }] as Session[]; // would be "evidence" if consulted
+      };
+      const stub = baseStub().onArgs('npx', ['ztrack', 'issue', 'list'], () => ok(JSON.stringify([{ identifier: 'A-1', labels: ['oa-approved'] }])));
+      const record = await computeMaturity({ cwd: dir, profileDir, proc: withRealGit(stub), preflightBin: NO_PREFLIGHT, ghPreflightScript: NO_GH_PREFLIGHT, sessionProbe: probe });
+      expect(probeCalls).toBe(0); // an unpinned install NEVER probes — ambient is not the install
+      expect(record.stage).toBe('M4');
+      expect(record.blockers[0]).toMatch(/^M5 blocked:/);
+      expect(record.blockers[0]).toContain('no install-scoped provider pin');
+    } finally {
+      if (savedAmbient === undefined) delete process.env.TERMFLEET_PROVIDER_URL;
+      else process.env.TERMFLEET_PROVIDER_URL = savedAmbient;
+      rmSync(dir, { recursive: true, force: true });
+      rmSync(profileDir, { recursive: true, force: true });
+    }
+  });
+
+  test('D1: pinned provider carrying ONLY FOREIGN sessions -> not evidence, M5 blocked citing the ignored foreigners', async () => {
+    const dir = tmpDir();
+    const profileDir = tmpDir('oa-maturity-profile-');
+    try {
+      writeLocalGitProfile(profileDir);
+      writeGenerated(dir, ['.open-autonomy/autonomy.yml', '.open-autonomy/generated.json', 'scheduler/schedule.json']);
+      writeAutonomyYml(dir); // declares agents: {pm}
+      writeSchedule(dir, { pin: 'http://127.0.0.1:59999' });
+      gitInit(dir);
+      gitCommitAll(dir);
+      // The reviewer's exact repro shape: two sessions belonging to OTHER installs on the same provider.
+      const probe: SessionProbe = async (_cwd, pinnedUrl) => {
+        expect(pinnedUrl).toBe('http://127.0.0.1:59999'); // the probe gets the INSTALL's pin, nothing else
+        return [
+          { id: 't1', agent: 'supercode-oa-selfdev-study', status: 'running' },
+          { id: 't2', agent: 'supercode-composable', status: 'running' },
+        ] as Session[];
+      };
+      const stub = baseStub().onArgs('npx', ['ztrack', 'issue', 'list'], () => ok(JSON.stringify([{ identifier: 'A-1', labels: ['oa-approved'] }])));
+      const record = await computeMaturity({ cwd: dir, profileDir, proc: withRealGit(stub), preflightBin: NO_PREFLIGHT, ghPreflightScript: NO_GH_PREFLIGHT, sessionProbe: probe });
+      expect(record.stage).toBe('M4'); // NOT M5 — a foreign loop's sessions are never this install's evidence
+      expect(record.blockers[0]).toMatch(/^M5 blocked:/);
+      expect(record.blockers[0]).toContain('0 of 2 live session(s)');
+      expect(record.blockers[0]).toContain('foreign session(s) on the same provider IGNORED');
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+      rmSync(profileDir, { recursive: true, force: true });
+    }
+  });
+
+  test("D1: pinned provider with a session belonging to one of the install's OWN declared agents -> evidence, M5 reached", async () => {
+    const dir = tmpDir();
+    const profileDir = tmpDir('oa-maturity-profile-');
+    try {
+      writeLocalGitProfile(profileDir);
+      writeGenerated(dir, ['.open-autonomy/autonomy.yml', '.open-autonomy/generated.json', 'scheduler/schedule.json']);
+      writeAutonomyYml(dir); // declares agents: {pm}
+      writeSchedule(dir, { pin: 'http://127.0.0.1:59999' });
+      gitInit(dir);
+      gitCommitAll(dir);
+      const probe: SessionProbe = async () => [{ id: 't1', agent: 'pm', status: 'running' }] as Session[];
+      const stub = baseStub().onArgs('npx', ['ztrack', 'issue', 'list'], () => ok(JSON.stringify([{ identifier: 'A-1', labels: ['oa-approved'] }])));
+      const record = await computeMaturity({ cwd: dir, profileDir, proc: withRealGit(stub), preflightBin: NO_PREFLIGHT, ghPreflightScript: NO_GH_PREFLIGHT, sessionProbe: probe });
+      expect(record.stage).toBe('M5');
+      expect(record.stageName).toBe('RUNNING');
+      expect(record.blockers[0]).toMatch(/^M6 blocked:/);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+      rmSync(profileDir, { recursive: true, force: true });
+    }
+  });
+
+  test('D1: pinned but probe unavailable (null) -> sessions unknown, M5 blocked honestly', async () => {
+    const dir = tmpDir();
+    const profileDir = tmpDir('oa-maturity-profile-');
+    try {
+      writeLocalGitProfile(profileDir);
+      writeGenerated(dir, ['.open-autonomy/autonomy.yml', '.open-autonomy/generated.json', 'scheduler/schedule.json']);
+      writeAutonomyYml(dir);
+      writeSchedule(dir, { pin: 'http://127.0.0.1:59999' });
+      gitInit(dir);
+      gitCommitAll(dir);
+      const probe: SessionProbe = async () => null;
+      const stub = baseStub().onArgs('npx', ['ztrack', 'issue', 'list'], () => ok(JSON.stringify([{ identifier: 'A-1', labels: ['oa-approved'] }])));
+      const record = await computeMaturity({ cwd: dir, profileDir, proc: withRealGit(stub), preflightBin: NO_PREFLIGHT, ghPreflightScript: NO_GH_PREFLIGHT, sessionProbe: probe });
+      expect(record.stage).toBe('M4');
+      expect(record.blockers[0]).toContain('probe unavailable against pinned http://127.0.0.1:59999');
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+      rmSync(profileDir, { recursive: true, force: true });
+    }
+  });
+
   test('unpaused WITH a recorded last-fire -> M5/RUNNING reached, blocked at M6 (no mission-advancing evidence)', async () => {
     const dir = tmpDir();
     const profileDir = tmpDir('oa-maturity-profile-');
@@ -492,6 +609,342 @@ describe('directionContentSignal — the M4 direction rung in isolation', () => 
       expect(s.present).toBe(true);
     } finally {
       rmSync(dir, { recursive: true, force: true });
+    }
+  });
+});
+
+// ============================================================================================
+// Fix-round D2: the extra-rung signals (proxy-ready / human-seam-wired) + the unrecognized-rung
+// fail-closed path + their M3.p/M4.h stage gating — direct signal tests first, then full
+// computeMaturity fixtures against a self-driving-like profile.
+// ============================================================================================
+
+describe('extra rungs — direct signal tests (D2)', () => {
+  const fetch200 = (async () => ({ ok: true, status: 200 })) as unknown as typeof fetch;
+  const fetch503 = (async () => ({ ok: false, status: 503 })) as unknown as typeof fetch;
+  const fetchThrows = (async () => {
+    throw new Error('connect ECONNREFUSED');
+  }) as unknown as typeof fetch;
+
+  test('proxy-ready: MODEL_PROXY_URL unset -> unverifiable, never a guess', async () => {
+    const s = await proxyReadySignal({}, fetch200);
+    expect(s.present).toBe(false);
+    expect(s.evidence).toMatch(/^unverifiable: MODEL_PROXY_URL not set/);
+  });
+
+  test('proxy-ready: set + healthz 200 -> present, wording stays reachability-only (never claims funded/allowlisted)', async () => {
+    const s = await proxyReadySignal({ MODEL_PROXY_URL: 'http://proxy.test' }, fetch200);
+    expect(s.present).toBe(true);
+    expect(s.evidence).toContain('HTTP 200');
+    expect(s.evidence).toContain('reachability only, NOT proof of funding/allowlist status');
+  });
+
+  test('proxy-ready: set + healthz 503 -> false, cites the status', async () => {
+    const s = await proxyReadySignal({ MODEL_PROXY_URL: 'http://proxy.test' }, fetch503);
+    expect(s.present).toBe(false);
+    expect(s.evidence).toContain('HTTP 503');
+  });
+
+  test('proxy-ready: set but unreachable -> false, cites the transport error', async () => {
+    const s = await proxyReadySignal({ MODEL_PROXY_URL: 'http://proxy.test' }, fetchThrows);
+    expect(s.present).toBe(false);
+    expect(s.evidence).toContain('unreachable');
+    expect(s.evidence).toContain('ECONNREFUSED');
+  });
+
+  test('human-seam-wired: no manifest -> false', () => {
+    const dir = tmpDir();
+    try {
+      const s = humanSeamWiredSignal(dir, { PUBLIC_AGENT_MAINTAINERS: 'brennan' });
+      expect(s.present).toBe(false);
+      expect(s.evidence).toContain('does not exist');
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test('human-seam-wired: manifest without a kind:human actor -> false', () => {
+    const dir = tmpDir();
+    try {
+      mkdirSync(join(dir, '.open-autonomy'), { recursive: true });
+      writeFileSync(join(dir, '.open-autonomy', 'autonomy.yml'), 'schema: open-autonomy.autonomy.v1\ncodeHost: github\nagents:\n  pm:\n    skill: pm\n');
+      const s = humanSeamWiredSignal(dir, { PUBLIC_AGENT_MAINTAINERS: 'brennan' });
+      expect(s.present).toBe(false);
+      expect(s.evidence).toContain('no agent declares "kind: human"');
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test('human-seam-wired: kind:human present but PUBLIC_AGENT_MAINTAINERS unset -> false, names the missing var', () => {
+    const dir = tmpDir();
+    try {
+      mkdirSync(join(dir, '.open-autonomy'), { recursive: true });
+      writeFileSync(join(dir, '.open-autonomy', 'autonomy.yml'), 'schema: open-autonomy.autonomy.v1\ncodeHost: github\nagents:\n  maintainer:\n    kind: human\n');
+      const s = humanSeamWiredSignal(dir, {});
+      expect(s.present).toBe(false);
+      expect(s.evidence).toContain('PUBLIC_AGENT_MAINTAINERS is unset/empty');
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test('human-seam-wired: kind:human + PUBLIC_AGENT_MAINTAINERS set -> true', () => {
+    const dir = tmpDir();
+    try {
+      mkdirSync(join(dir, '.open-autonomy'), { recursive: true });
+      writeFileSync(join(dir, '.open-autonomy', 'autonomy.yml'), 'schema: open-autonomy.autonomy.v1\ncodeHost: github\nagents:\n  maintainer:\n    kind: human\n');
+      const s = humanSeamWiredSignal(dir, { PUBLIC_AGENT_MAINTAINERS: 'brennan' });
+      expect(s.present).toBe(true);
+      expect(s.evidence).toContain('PUBLIC_AGENT_MAINTAINERS="brennan"');
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test('evaluateExtraRung: an unrecognized rung name fails CLOSED with a named reason, never waved through', async () => {
+    const s = await evaluateExtraRung('quantum-flux', '/nonexistent', {}, fetch200);
+    expect(s.present).toBe(false);
+    expect(s.evidence).toContain('unverifiable: no signal implementation for extra rung "quantum-flux"');
+  });
+});
+
+// ============================================================================================
+// Fix-round D2, second half: the M3.p / M4.h stage GATING through computeMaturity, against a
+// self-driving-like fixture (codeHost github, m3_tool gh-preflight, documents.roles, all three
+// extra rungs) — values mirroring profiles/self-driving's real ir.yml/setup-pack.yml leaf facts.
+// ============================================================================================
+
+describe('computeMaturity — extra-rung stage gating (self-driving-like fixture, D2)', () => {
+  const fetch200 = (async () => ({ ok: true, status: 200 })) as unknown as typeof fetch;
+
+  function writeSelfDrivingLikeProfile(profileDir: string): void {
+    mkdirSync(profileDir, { recursive: true });
+    writeFileSync(
+      join(profileDir, 'ir.yml'),
+      'targets: [gh-actions, local]\ncodeHost: github\ndocuments:\n  roles:\n    vision: docs/VISION.md\n    constitution: docs/CONSTITUTION.md\n',
+    );
+    writeFileSync(
+      join(profileDir, 'setup-pack.yml'),
+      [
+        'landing_mode: auto-merge',
+        'board_seed_recipe: {originator_skill: planner, promotion_fence: upstream-ratified, import_verb: tasks:author, landing_path: direct}',
+        'direction_spec: {mode: documents.roles}',
+        'maturity_signals: {m3_tool: gh-preflight, m4_predicate: gh-issues, m6_signal: roadmap-rollup}',
+        'extra_rungs: [proxy-ready, direction-present, human-seam-wired]',
+        'terminal_stage: M5',
+        '',
+      ].join('\n'),
+    );
+    writeFileSync(join(profileDir, 'provision.json'), JSON.stringify({ branch_protection: { branch: 'main', required_checks: ['ci', 'agent-review', 'security', 'human-approval'] } }));
+  }
+
+  /** Writes a committed github-substrate install with filled (marker-free) direction docs; `withHuman`
+   *  adds the kind:human maintainer actor line humanSeamWiredSignal keys on. */
+  function writeSelfDrivingLikeInstall(dir: string, opts: { withHuman?: boolean } = {}): void {
+    mkdirSync(join(dir, '.open-autonomy'), { recursive: true });
+    const humanBlock = opts.withHuman ? '  maintainer:\n    kind: human\n' : '';
+    writeFileSync(
+      join(dir, '.open-autonomy', 'autonomy.yml'),
+      `schema: open-autonomy.autonomy.v1\ncodeHost: github\ndocuments:\n  roles:\n    vision: docs/VISION.md\n    constitution: docs/CONSTITUTION.md\nagents:\n  pm:\n    skill: pm\n    triggers:\n      schedule: "*/15 * * * *"\n${humanBlock}`,
+    );
+    writeGenerated(dir, ['.open-autonomy/autonomy.yml', '.open-autonomy/generated.json', 'scheduler/schedule.json', 'docs/VISION.md', 'docs/CONSTITUTION.md']);
+    writeSchedule(dir);
+    mkdirSync(join(dir, 'docs'), { recursive: true });
+    writeFileSync(join(dir, 'docs', 'VISION.md'), 'A real, edited north star.\n');
+    writeFileSync(join(dir, 'docs', 'CONSTITUTION.md'), 'Real, edited operating rules.\n');
+    gitInit(dir);
+    gitCommitAll(dir);
+  }
+
+  /** gh fully stubbed green: repo resolvable, admin token, live protection matching provision.json,
+   *  one ready gh-issue on the board, no open PRs, no closed issues (M6 scan comes up honestly empty). */
+  function ghGreenStub(): StubProc {
+    return new StubProc()
+      .onArgs('gh', [], () => fail('gh: not logged in', 1))
+      .onArgs('gh', ['repo', 'view'], () => ok('acme/widgets'))
+      .onArgs('gh', ['api', 'repos/acme/widgets'], () => ok('true'))
+      .onArgs('gh', ['api', 'repos/acme/widgets/branches/main/protection'], () =>
+        ok(JSON.stringify({ required_status_checks: { contexts: ['ci', 'agent-review', 'security', 'human-approval'] } })),
+      )
+      .onArgs('gh', ['issue', 'list', '--state', 'open'], () => ok(JSON.stringify([{ number: 7, labels: [{ name: 'ready' }] }])))
+      .onArgs('gh', ['pr', 'list', '--state', 'open'], () => ok('[]'))
+      .onArgs('gh', ['issue', 'list', '-R'], () => ok('[]'));
+  }
+
+  function envWithout(...names: string[]): NodeJS.ProcessEnv {
+    const env = { ...process.env };
+    for (const n of names) delete env[n];
+    return env;
+  }
+
+  test("D2: proxy-ready (M3.p) BLOCKS M3 on a self-driving-like install when MODEL_PROXY_URL is unset — DESIGN §Q3's honest 'stops at M3/M4' terminal", async () => {
+    const dir = tmpDir();
+    const profileDir = tmpDir('oa-maturity-sd-profile-');
+    try {
+      writeSelfDrivingLikeProfile(profileDir);
+      writeSelfDrivingLikeInstall(dir, { withHuman: true });
+      const record = await computeMaturity({
+        cwd: dir,
+        profileDir,
+        proc: withRealGit(ghGreenStub()),
+        env: envWithout('MODEL_PROXY_URL'),
+        fetchImpl: fetch200,
+        preflightBin: NO_PREFLIGHT,
+        ghPreflightScript: NO_GH_PREFLIGHT,
+      });
+      expect(record.stage).toBe('M2'); // A13 green, gh-preflight softened — proxy-ready is the ONLY M3 blocker
+      expect(record.blockers[0]).toMatch(/^M3 blocked:/);
+      expect(record.blockers[0]).toContain("extra rung 'proxy-ready' (M3) failed");
+      expect(record.blockers[0]).toContain('MODEL_PROXY_URL not set');
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+      rmSync(profileDir, { recursive: true, force: true });
+    }
+  });
+
+  test('D2: human-seam-wired (M4.h) BLOCKS M4 when the manifest has no kind:human actor (proxy reachable, board ready, direction filled)', async () => {
+    const dir = tmpDir();
+    const profileDir = tmpDir('oa-maturity-sd-profile-');
+    try {
+      writeSelfDrivingLikeProfile(profileDir);
+      writeSelfDrivingLikeInstall(dir, { withHuman: false });
+      const env = envWithout('PUBLIC_AGENT_MAINTAINERS');
+      env.MODEL_PROXY_URL = 'http://proxy.test';
+      const record = await computeMaturity({
+        cwd: dir,
+        profileDir,
+        proc: withRealGit(ghGreenStub()),
+        env,
+        fetchImpl: fetch200,
+        preflightBin: NO_PREFLIGHT,
+        ghPreflightScript: NO_GH_PREFLIGHT,
+      });
+      expect(record.stage).toBe('M3'); // proxy rung green now — M3 reached; M4 blocked on the human seam
+      expect(record.blockers[0]).toMatch(/^M4 blocked:/);
+      expect(record.blockers[0]).toContain("extra rung 'human-seam-wired' (M4) failed");
+      expect(record.blockers[0]).toContain('no agent declares "kind: human"');
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+      rmSync(profileDir, { recursive: true, force: true });
+    }
+  });
+
+  test('D2: all three rungs satisfied (proxy reachable + direction filled + human seam wired) -> M4/ARMED reached, blocked at M5', async () => {
+    const dir = tmpDir();
+    const profileDir = tmpDir('oa-maturity-sd-profile-');
+    try {
+      writeSelfDrivingLikeProfile(profileDir);
+      writeSelfDrivingLikeInstall(dir, { withHuman: true });
+      const env = { ...process.env, MODEL_PROXY_URL: 'http://proxy.test', PUBLIC_AGENT_MAINTAINERS: 'brennan' };
+      const record = await computeMaturity({
+        cwd: dir,
+        profileDir,
+        proc: withRealGit(ghGreenStub()),
+        env,
+        fetchImpl: fetch200,
+        preflightBin: NO_PREFLIGHT,
+        ghPreflightScript: NO_GH_PREFLIGHT,
+      });
+      expect(record.stage).toBe('M4');
+      expect(record.stageName).toBe('ARMED');
+      expect(record.blockers[0]).toMatch(/^M5 blocked:/);
+      const proxyRung = record.signals.find((s) => s.id === 'proxy-ready')!;
+      expect(proxyRung.present).toBe(true);
+      const seamRung = record.signals.find((s) => s.id === 'human-seam-wired')!;
+      expect(seamRung.present).toBe(true);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+      rmSync(profileDir, { recursive: true, force: true });
+    }
+  });
+
+  test('D2: an UNRECOGNIZED extra rung fails closed and blocks its assumed stage (M4), never silently waved through', async () => {
+    const dir = tmpDir();
+    const profileDir = tmpDir('oa-maturity-profile-');
+    try {
+      // A local-git fixture whose pack declares a rung name this composer does not implement.
+      mkdirSync(profileDir, { recursive: true });
+      writeFileSync(join(profileDir, 'ir.yml'), 'targets: [local]\ncodeHost: local-git\n');
+      writeFileSync(
+        join(profileDir, 'setup-pack.yml'),
+        'landing_mode: pr-free\nboard_seed_recipe: {originator_skill: draft, promotion_fence: state, import_verb: "ztrack issue add", landing_path: direct}\nmaturity_signals: {m3_tool: doctor, m4_predicate: ztrack, m4_allowlist_label: oa-approved, m6_signal: per-issue}\nextra_rungs: [custom-gate]\nterminal_stage: M5\n',
+      );
+      writeGenerated(dir, ['.open-autonomy/autonomy.yml', '.open-autonomy/generated.json', 'scheduler/schedule.json']);
+      writeAutonomyYml(dir);
+      writeSchedule(dir);
+      gitInit(dir);
+      gitCommitAll(dir);
+      const stub = baseStub().onArgs('npx', ['ztrack', 'issue', 'list'], () => ok(JSON.stringify([{ identifier: 'A-1', labels: ['oa-approved'] }])));
+      const record = await computeMaturity({ cwd: dir, profileDir, proc: withRealGit(stub), preflightBin: NO_PREFLIGHT, ghPreflightScript: NO_GH_PREFLIGHT });
+      expect(record.stage).toBe('M3');
+      expect(record.blockers[0]).toMatch(/^M4 blocked:/);
+      expect(record.blockers[0]).toContain('no signal implementation for extra rung "custom-gate"');
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+      rmSync(profileDir, { recursive: true, force: true });
+    }
+  });
+});
+
+// ============================================================================================
+// Fix-round D3: ran-and-FAILED external checkers are never softened — only the
+// doctor-unavailable (checker-not-resolvable) case is.
+// ============================================================================================
+
+describe('computeMaturity — ran-and-failed checker semantics (D3)', () => {
+  test('D3: A11 preflight that RAN and exited nonzero BLOCKS M3 (softening covers only doctor-unavailable, never a real failure)', async () => {
+    const dir = tmpDir();
+    const profileDir = tmpDir('oa-maturity-profile-');
+    try {
+      writeLocalGitProfile(profileDir);
+      writeGenerated(dir, ['.open-autonomy/autonomy.yml', '.open-autonomy/generated.json', 'scheduler/schedule.json']);
+      writeAutonomyYml(dir);
+      writeSchedule(dir);
+      gitInit(dir);
+      gitCommitAll(dir);
+      // A REAL, existing file as the preflight bin (so existsSync passes and A11 actually runs it via the
+      // proc seam), with the `bun <bin>` invocation stubbed to a genuine nonzero exit.
+      const realExistingBin = join(profileDir, 'ir.yml');
+      const stub = baseStub()
+        .onArgs('npx', ['ztrack', 'issue', 'list'], () => ok(JSON.stringify([{ identifier: 'A-1', labels: ['oa-approved'] }])))
+        .onArgs('bun', [realExistingBin], () => fail('preflight: FAIL — 2 blocking issue(s) found', 1));
+      const record = await computeMaturity({ cwd: dir, profileDir, proc: withRealGit(stub), preflightBin: realExistingBin, ghPreflightScript: NO_GH_PREFLIGHT });
+      expect(record.stage).toBe('M2');
+      expect(record.blockers[0]).toMatch(/^M3 blocked:/);
+      expect(record.blockers[0]).toContain('A11 local preflight failed');
+      expect(record.blockers[0]).toContain('exited 1');
+      expect(record.blockers[0]).not.toContain('doctor-unavailable');
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+      rmSync(profileDir, { recursive: true, force: true });
+    }
+  });
+
+  test('D3: A13 admin-confirmed 404 is the GENUINE negative ("protection NOT applied") and blocks M3 — distinct from unverifiable', async () => {
+    const dir = tmpDir();
+    const profileDir = tmpDir('oa-maturity-profile-');
+    try {
+      writeGithubProfile(profileDir);
+      writeGenerated(dir, ['.open-autonomy/autonomy.yml', '.open-autonomy/generated.json', 'scheduler/schedule.json']);
+      writeAutonomyYml(dir, { codeHost: 'github' });
+      writeSchedule(dir);
+      gitInit(dir);
+      gitCommitAll(dir);
+      const stub = baseStub()
+        .onArgs('gh', ['repo', 'view'], () => ok('acme/widgets'))
+        .onArgs('gh', ['api', 'repos/acme/widgets'], () => ok('true')) // admin CONFIRMED
+        .onArgs('gh', ['api', 'repos/acme/widgets/branches/main/protection'], () => fail('HTTP 404: Branch not protected (https://api.github.com/repos/acme/widgets/branches/main/protection)', 1));
+      const record = await computeMaturity({ cwd: dir, profileDir, proc: withRealGit(stub), preflightBin: NO_PREFLIGHT, ghPreflightScript: NO_GH_PREFLIGHT });
+      expect(record.stage).toBe('M2');
+      expect(record.blockers[0]).toMatch(/^M3 blocked:/);
+      expect(record.blockers[0]).toContain('protection NOT applied on acme/widgets@main');
+      const a13 = record.signals.find((s) => s.id === 'A13')!;
+      expect(a13.present).toBe(false);
+      expect(a13.evidence).not.toMatch(/^unverifiable:/); // the admin-confirmed 404 is a definite negative
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+      rmSync(profileDir, { recursive: true, force: true });
     }
   });
 });

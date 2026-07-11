@@ -39,8 +39,18 @@ export {
 export type { Signal, SignalFn, SignalContext } from './imm-signals.ts';
 export { IMM_SIGNAL_IDS, signalSetFor } from './signal-sets.ts';
 export type { ImmSignalId, SignalId, SignalSet, SignalSetPack, SkippedSignal, InstallTarget } from './signal-sets.ts';
-export { computeMaturity, directionContentSignal, STAGE_NAMES, STAGE_ORDER, INSTALL_JSON_REL } from './maturity.ts';
-export type { Stage, InstallRecord, InstallSignalEntry, InstallSkipEntry, MaturityOptions, PackInfo } from './maturity.ts';
+export {
+  computeMaturity,
+  directionContentSignal,
+  proxyReadySignal,
+  humanSeamWiredSignal,
+  evaluateExtraRung,
+  declaredAgentNames,
+  STAGE_NAMES,
+  STAGE_ORDER,
+  INSTALL_JSON_REL,
+} from './maturity.ts';
+export type { Stage, InstallRecord, InstallSignalEntry, InstallSkipEntry, MaturityOptions, PackInfo, SessionProbe } from './maturity.ts';
 
 import { readFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';

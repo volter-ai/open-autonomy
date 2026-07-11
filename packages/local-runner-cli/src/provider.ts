@@ -127,21 +127,32 @@ export interface IdentityCheck {
   body?: unknown;
 }
 
-async function fetchHealthz(url: string, fetchImpl: typeof fetch, timeoutMs: number): Promise<{ ok: boolean; body?: unknown; error?: string }> {
+/** Three-way healthz probe (fix D2). The distinction that matters — and that bin/doctor-checks.ts's
+ *  checkProvider enforces ("port occupied but NOT answering as this install's termfleet provider") — is
+ *  between a port that is DEAD (connection refused / timed out: nothing there, safe to [re]spawn onto)
+ *  and a port that ANSWERED anything at all over HTTP (something LIVE holds it — if the answer isn't
+ *  termfleet-shaped, it is a FOREIGN occupant that must never be killed-by-recorded-pid, spawned onto,
+ *  or pinned). A plain `python3 -m http.server` 404s /healthz; a non-JSON banner is equally foreign.
+ *  Only a transport-level failure means "nothing is listening". */
+async function fetchHealthz(
+  url: string,
+  fetchImpl: typeof fetch,
+  timeoutMs: number,
+): Promise<{ kind: 'unreachable'; error: string } | { kind: 'answered'; body?: unknown; note?: string }> {
   const controller = new AbortController();
   const t = setTimeout(() => controller.abort(), timeoutMs);
   try {
     const res = await fetchImpl(`${url.replace(/\/$/, '')}/healthz`, { signal: controller.signal });
     clearTimeout(t);
-    if (!res.ok) return { ok: false, error: `HTTP ${res.status}` };
+    if (!res.ok) return { kind: 'answered', note: `HTTP ${res.status}` };
     try {
-      return { ok: true, body: await res.json() };
+      return { kind: 'answered', body: await res.json() };
     } catch {
-      return { ok: false, error: 'response was not valid JSON' };
+      return { kind: 'answered', note: 'HTTP 200 but the body was not valid JSON' };
     }
   } catch (e) {
     clearTimeout(t);
-    return { ok: false, error: (e as Error)?.message ?? String(e) };
+    return { kind: 'unreachable', error: (e as Error)?.message ?? String(e) };
   }
 }
 
@@ -160,19 +171,24 @@ export function isTermfleetProviderBody(body: unknown): boolean {
 
 export async function verifyConsoleIdentity(url: string, fetchImpl: typeof fetch = fetch, timeoutMs = 3000): Promise<IdentityCheck> {
   const r = await fetchHealthz(url, fetchImpl, timeoutMs);
-  if (!r.ok) return { reachable: false, isTermfleet: false, detail: r.error ?? 'unreachable' };
+  if (r.kind === 'unreachable') return { reachable: false, isTermfleet: false, detail: r.error };
   const ok = isTermfleetConsoleBody(r.body);
-  return { reachable: true, isTermfleet: ok, detail: ok ? 'termfleet console' : `answered but NOT a termfleet console (body: ${JSON.stringify(r.body)})`, body: r.body };
+  return {
+    reachable: true,
+    isTermfleet: ok,
+    detail: ok ? 'termfleet console' : `answered but NOT a termfleet console (${r.note ?? `body: ${JSON.stringify(r.body)}`})`,
+    body: r.body,
+  };
 }
 export async function verifyProviderIdentity(url: string, fetchImpl: typeof fetch = fetch, timeoutMs = 3000): Promise<IdentityCheck> {
   const r = await fetchHealthz(url, fetchImpl, timeoutMs);
-  if (!r.ok) return { reachable: false, isTermfleet: false, detail: r.error ?? 'unreachable' };
+  if (r.kind === 'unreachable') return { reachable: false, isTermfleet: false, detail: r.error };
   const ok = isTermfleetProviderBody(r.body);
   const kind = ok ? (r.body as Record<string, unknown>).provider : undefined;
   return {
     reachable: true,
     isTermfleet: ok,
-    detail: ok ? `termfleet provider (kind '${kind}')` : `answered but NOT a termfleet provider (body: ${JSON.stringify(r.body)})`,
+    detail: ok ? `termfleet provider (kind '${kind}')` : `answered but NOT a termfleet provider (${r.note ?? `body: ${JSON.stringify(r.body)}`})`,
     body: r.body,
   };
 }
@@ -305,11 +321,16 @@ class ForeignOccupantError extends Error {
   readonly foreignOccupant = true as const;
 }
 
+/** The one process-KILLING seam (fix D1) — mirrors the SpawnImpl seam so tests can record/deny kills
+ *  without real processes. Default: `killProcessTree` (group-kill, see below). */
+export type KillImpl = (pid: number, signal: NodeJS.Signals) => void;
+
 export interface BringUpOptions {
   cwd?: string;
   fetchImpl?: typeof fetch;
   isPortFree?: PortFreeProbe;
   spawnImpl?: SpawnImpl;
+  kill?: KillImpl;
   rangeStart?: number;
   rangeEnd?: number;
   forbidden?: number[];
@@ -331,6 +352,7 @@ export interface BringUpResult {
 interface StartCtx {
   fetchImpl: typeof fetch;
   spawnImpl: SpawnImpl;
+  kill: KillImpl;
   npxCmd: string;
   pollTimeoutMs: number;
   pollIntervalMs: number;
@@ -360,55 +382,65 @@ async function startOn(cwd: string, prefix: string, consolePort: number, provide
   );
   providerChild.unref?.();
 
-  const [consoleId, providerId] = await Promise.all([
-    pollForIdentity(consoleUrl, 'console', ctx.fetchImpl, ctx.pollTimeoutMs, ctx.pollIntervalMs),
-    pollForIdentity(providerUrl, 'provider', ctx.fetchImpl, ctx.pollTimeoutMs, ctx.pollIntervalMs),
-  ]);
+  // Fix D1: from here on, ANY throw (foreign occupant, poll timeout, a failed pin write) leaves two live
+  // detached process trees this call just spawned, that no state record tracks and no later `down` can
+  // therefore ever clean. Group-kill BOTH just-spawned trees before letting the error propagate — this is
+  // the error-path mirror of providerDown's own npx-forks-the-real-server tree-kill.
+  try {
+    const [consoleId, providerId] = await Promise.all([
+      pollForIdentity(consoleUrl, 'console', ctx.fetchImpl, ctx.pollTimeoutMs, ctx.pollIntervalMs),
+      pollForIdentity(providerUrl, 'provider', ctx.fetchImpl, ctx.pollTimeoutMs, ctx.pollIntervalMs),
+    ]);
 
-  // The PROVIDER is the one thing TERMFLEET_PROVIDER_URL ever points at — a foreign occupant there must
-  // never be pinned. (A foreign console is logged but non-fatal: nothing downstream reads a console pin.)
-  if (providerId.reachable && !providerId.isTermfleet) {
-    throw new ForeignOccupantError(
-      `port ${providerPort} answered but NOT as a termfleet provider — ${providerId.detail}. Refusing to pin a foreign occupant; never launched here.`,
-    );
+    // The PROVIDER is the one thing TERMFLEET_PROVIDER_URL ever points at — a foreign occupant there must
+    // never be pinned. (A foreign console is logged but non-fatal: nothing downstream reads a console pin.)
+    if (providerId.reachable && !providerId.isTermfleet) {
+      throw new ForeignOccupantError(
+        `port ${providerPort} answered but NOT as a termfleet provider — ${providerId.detail}. Refusing to pin a foreign occupant; never launched here.`,
+      );
+    }
+    if (!providerId.reachable) {
+      throw new Error(
+        `[oa] provider: launched \`termfleet provider serve\` on port ${providerPort} but it never answered /healthz within ` +
+          `${ctx.pollTimeoutMs}ms (${providerId.detail}). See .open-autonomy/runner-state/provider/provider.log.`,
+      );
+    }
+
+    pinScheduleProviderUrl(cwd, providerUrl);
+
+    const state: ProviderState = {
+      repoPath: cwd,
+      prefix,
+      consolePort,
+      providerPort,
+      consoleUrl,
+      providerUrl,
+      consolePid: consoleChild.pid,
+      providerPid: providerChild.pid,
+      startedAt: ctx.now(),
+    };
+    writeProviderState(cwd, state);
+
+    const consoleNote =
+      consoleId.reachable && !consoleId.isTermfleet
+        ? `FOREIGN occupant, ignored (${consoleId.detail})`
+        : consoleId.isTermfleet
+          ? 'OK'
+          : `not healthy (${consoleId.detail})`;
+    return {
+      action: ctx.action,
+      state,
+      providerUrl,
+      consoleUrl,
+      detail:
+        `${ctx.action} termfleet on repo-unique ports — console ${consoleUrl} (${consoleNote}), provider ${providerUrl} ` +
+        `(${providerId.detail}). Pinned scheduler/schedule.json env.TERMFLEET_PROVIDER_URL="${providerUrl}".`,
+    };
+  } catch (e) {
+    bestEffortKill(consoleChild.pid, ctx.kill);
+    bestEffortKill(providerChild.pid, ctx.kill);
+    throw e;
   }
-  if (!providerId.reachable) {
-    throw new Error(
-      `[oa] provider: launched \`termfleet provider serve\` on port ${providerPort} but it never answered /healthz within ` +
-        `${ctx.pollTimeoutMs}ms (${providerId.detail}). See .open-autonomy/runner-state/provider/provider.log.`,
-    );
-  }
-
-  pinScheduleProviderUrl(cwd, providerUrl);
-
-  const state: ProviderState = {
-    repoPath: cwd,
-    prefix,
-    consolePort,
-    providerPort,
-    consoleUrl,
-    providerUrl,
-    consolePid: consoleChild.pid,
-    providerPid: providerChild.pid,
-    startedAt: ctx.now(),
-  };
-  writeProviderState(cwd, state);
-
-  const consoleNote =
-    consoleId.reachable && !consoleId.isTermfleet
-      ? `FOREIGN occupant, ignored (${consoleId.detail})`
-      : consoleId.isTermfleet
-        ? 'OK'
-        : `not healthy (${consoleId.detail})`;
-  return {
-    action: ctx.action,
-    state,
-    providerUrl,
-    consoleUrl,
-    detail:
-      `${ctx.action} termfleet on repo-unique ports — console ${consoleUrl} (${consoleNote}), provider ${providerUrl} ` +
-      `(${providerId.detail}). Pinned scheduler/schedule.json env.TERMFLEET_PROVIDER_URL="${providerUrl}".`,
-  };
 }
 
 /** `spawn(..., { detached: true })` makes `pid` its OWN process-group leader — but what we actually spawn
@@ -425,10 +457,10 @@ function killProcessTree(pid: number, signal: NodeJS.Signals): void {
   }
 }
 
-function bestEffortKill(pid: number | undefined): void {
+function bestEffortKill(pid: number | undefined, kill: KillImpl = killProcessTree): void {
   if (!pid) return;
   try {
-    killProcessTree(pid, 'SIGTERM');
+    kill(pid, 'SIGTERM');
   } catch {
     /* already dead — nothing to do */
   }
@@ -441,11 +473,12 @@ export async function bringUpProvider(opts: BringUpOptions = {}): Promise<BringU
   const fetchImpl = opts.fetchImpl ?? fetch;
   const isPortFree = opts.isPortFree ?? defaultIsPortFree;
   const spawnImpl = opts.spawnImpl ?? defaultSpawn;
+  const kill = opts.kill ?? killProcessTree;
   const npxCmd = opts.npxCmd ?? 'npx';
   const pollTimeoutMs = opts.pollTimeoutMs ?? 15000;
   const pollIntervalMs = opts.pollIntervalMs ?? 250;
   const now = opts.now ?? (() => new Date().toISOString());
-  const ctxBase = { fetchImpl, spawnImpl, npxCmd, pollTimeoutMs, pollIntervalMs, now };
+  const ctxBase = { fetchImpl, spawnImpl, kill, npxCmd, pollTimeoutMs, pollIntervalMs, now };
 
   const existing = readProviderState(cwd);
   if (existing) {
@@ -480,9 +513,11 @@ export async function bringUpProvider(opts: BringUpOptions = {}): Promise<BringU
       };
     }
 
-    // Provider unreachable (dead) -> restart on the SAME pinned ports, never re-derive.
-    bestEffortKill(existing.consolePid);
-    bestEffortKill(existing.providerPid);
+    // Provider port genuinely DEAD (transport-level refusal — fix D2 guarantees a port that answered
+    // ANYTHING, even a 404, took the foreign-occupant branch above and never reaches this SIGTERM) ->
+    // reap this install's own recorded pids and restart on the SAME pinned ports, never re-derive.
+    bestEffortKill(existing.consolePid, kill);
+    bestEffortKill(existing.providerPid, kill);
     try {
       return await startOn(cwd, existing.prefix, existing.consolePort, existing.providerPort, { ...ctxBase, action: 'restarted' });
     } catch (e) {

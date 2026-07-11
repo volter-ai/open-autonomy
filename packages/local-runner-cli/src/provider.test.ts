@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'bun:test';
+import { spawn, spawnSync } from 'node:child_process';
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -13,8 +14,9 @@ import {
   providerDown,
   providerStatus,
   readSchedulePin,
+  verifyProviderIdentity,
 } from './provider.ts';
-import type { SpawnedProcess } from './provider.ts';
+import type { SpawnImpl, SpawnedProcess } from './provider.ts';
 
 function tmpRepo(): string {
   const dir = mkdtempSync(join(tmpdir(), 'oa-provider-'));
@@ -314,6 +316,193 @@ describe('bringUpProvider', () => {
       const r = await bringUpProvider({ cwd: dir, isPortFree: () => true, fetchImpl: stubFetch(), spawnImpl: fakeSpawn, pollTimeoutMs: 1000, pollIntervalMs: 10 });
       const port = Number(new URL(r.providerUrl!).port);
       expect(DEFAULT_FORBIDDEN_PORTS).not.toContain(port);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+});
+
+describe('fix round: D1/D2/D3 regressions', () => {
+  test('D1: a throw AFTER spawn (poll timeout) group-kills both just-spawned trees before propagating', async () => {
+    const dir = tmpRepo();
+    try {
+      let nextPid = 100;
+      const spawned: number[] = [];
+      const spawnRecorder = (): SpawnedProcess => {
+        const pid = nextPid++;
+        spawned.push(pid);
+        return { pid, unref: () => {} };
+      };
+      const killed: number[] = [];
+      const deadFetch = (async () => {
+        throw new Error('connect ECONNREFUSED 127.0.0.1'); // nothing ever answers -> provider poll times out
+      }) as unknown as typeof fetch;
+
+      await expect(
+        bringUpProvider({
+          cwd: dir,
+          isPortFree: () => true,
+          fetchImpl: deadFetch,
+          spawnImpl: spawnRecorder,
+          kill: (pid) => killed.push(pid),
+          pollTimeoutMs: 50,
+          pollIntervalMs: 10,
+        }),
+      ).rejects.toThrow(/never answered/);
+
+      expect(spawned.length).toBe(2); // one console + one provider spawn, single attempt (non-foreign error rethrows)
+      expect([...killed].sort()).toEqual([...spawned].sort()); // BOTH just-spawned trees killed on the error path
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test("D1: the fresh-bring-up refusal loop kills each refused attempt's spawns before advancing (no leak across >=2 refusals)", async () => {
+    const dir = tmpRepo();
+    try {
+      // Pre-compute the first two candidate pairs the derivation will visit (mirroring the loop's own
+      // exclude-and-re-derive behavior) and plant a plain-http foreign occupant (404s /healthz — the
+      // python3 -m http.server shape) on BOTH provider ports.
+      const pair1 = await pickProviderPorts({ repoPath: dir, isPortFree: () => true });
+      const busy1 = new Set([pair1.consolePort, pair1.providerPort]);
+      const pair2 = await pickProviderPorts({ repoPath: dir, isPortFree: (p) => !busy1.has(p) });
+      const foreign = new Set([`http://127.0.0.1:${pair1.providerPort}/healthz`, `http://127.0.0.1:${pair2.providerPort}/healthz`]);
+
+      const fetchImpl = (async (url: unknown) => {
+        const u = String(url);
+        if (foreign.has(u)) {
+          return { ok: false, status: 404, json: async () => ({}) } as unknown as Response;
+        }
+        return { ok: true, status: 200, json: async () => GENERIC_HEALTHY } as unknown as Response;
+      }) as unknown as typeof fetch;
+
+      let nextPid = 500;
+      const spawned: number[] = [];
+      const spawnRecorder = (): SpawnedProcess => {
+        const pid = nextPid++;
+        spawned.push(pid);
+        return { pid, unref: () => {} };
+      };
+      const killed: number[] = [];
+
+      const r = await bringUpProvider({
+        cwd: dir,
+        isPortFree: () => true,
+        fetchImpl,
+        spawnImpl: spawnRecorder,
+        kill: (pid) => killed.push(pid),
+        pollTimeoutMs: 1000,
+        pollIntervalMs: 10,
+      });
+
+      expect(r.action).toBe('started'); // third candidate pair succeeded
+      expect(spawned.length).toBe(6); // 3 attempts x (console + provider)
+      // Every spawn of the two REFUSED attempts was killed before advancing; the successful pair was not.
+      const refusedPids = spawned.slice(0, 4);
+      const successPids = spawned.slice(4);
+      expect([...killed].sort()).toEqual([...refusedPids].sort());
+      for (const pid of successPids) expect(killed).not.toContain(pid);
+      // And neither foreign provider port was ever pinned.
+      expect(readSchedulePin(dir)).toBe(r.providerUrl);
+      expect(r.providerUrl).not.toBe(`http://127.0.0.1:${pair1.providerPort}`);
+      expect(r.providerUrl).not.toBe(`http://127.0.0.1:${pair2.providerPort}`);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test('D2: a pinned port occupied by a plain-http foreigner (404 on /healthz) is FOREIGN-refused — no SIGTERM of recorded pids, no spawn onto it', async () => {
+    const dir = tmpRepo();
+    try {
+      const fetchImpl = stubFetch();
+      const first = await bringUpProvider({ cwd: dir, isPortFree: () => true, fetchImpl, spawnImpl: fakeSpawn, pollTimeoutMs: 1000, pollIntervalMs: 10 });
+      expect(first.action).toBe('started');
+      const pinnedUrl = first.providerUrl!;
+
+      const foreign404Fetch = (async (url: unknown) => {
+        const u = String(url);
+        if (u === `${pinnedUrl}/healthz`) {
+          return { ok: false, status: 404, json: async () => ({}) } as unknown as Response; // python3 -m http.server shape
+        }
+        return { ok: true, status: 200, json: async () => GENERIC_HEALTHY } as unknown as Response;
+      }) as unknown as typeof fetch;
+
+      const killed: number[] = [];
+      let spawns = 0;
+      const second = await bringUpProvider({
+        cwd: dir,
+        isPortFree: () => true,
+        fetchImpl: foreign404Fetch,
+        spawnImpl: () => {
+          spawns++;
+          return fakeSpawn();
+        },
+        kill: (pid) => killed.push(pid),
+        pollTimeoutMs: 1000,
+        pollIntervalMs: 10,
+      });
+
+      expect(second.action).toBe('foreign-occupant-refused');
+      expect(killed).toEqual([]); // never SIGTERMed the recorded pids for a port something else now holds
+      expect(spawns).toBe(0); // never spawned onto the occupied port
+      expect(readSchedulePin(dir)).toBe(pinnedUrl); // pin untouched
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test('D2: classification — any HTTP answer (404, 200-non-JSON) is FOREIGN/answered; only transport failure is dead', async () => {
+    const nonJson = (async () => ({
+      ok: true,
+      status: 200,
+      json: async () => {
+        throw new Error('not json');
+      },
+    })) as unknown as typeof fetch;
+    const rNonJson = await verifyProviderIdentity('http://127.0.0.1:1', nonJson);
+    expect(rNonJson.reachable).toBe(true);
+    expect(rNonJson.isTermfleet).toBe(false);
+
+    const r404 = await verifyProviderIdentity('http://127.0.0.1:1', (async () => ({ ok: false, status: 404, json: async () => ({}) })) as unknown as typeof fetch);
+    expect(r404.reachable).toBe(true);
+    expect(r404.isTermfleet).toBe(false);
+
+    const dead = await verifyProviderIdentity(
+      'http://127.0.0.1:1',
+      (async () => {
+        throw new Error('connect ECONNREFUSED');
+      }) as unknown as typeof fetch,
+    );
+    expect(dead.reachable).toBe(false);
+  });
+
+  test('D3: after a successful up, the state-recorded pids are ALIVE and own their process group; down reaps them', async () => {
+    const dir = tmpRepo();
+    try {
+      // Real detached spawns (harmless long-sleep node processes standing in for the npx trees) so the
+      // recorded pids are real, alive, group-leader processes — the invariant D3's zombie corrupted.
+      const realSpawn: SpawnImpl = () => {
+        const child = spawn('node', ['-e', 'setTimeout(() => {}, 30000)'], { detached: true, stdio: 'ignore' });
+        child.unref();
+        return { pid: child.pid, unref: () => {} };
+      };
+      const r = await bringUpProvider({ cwd: dir, isPortFree: () => true, fetchImpl: stubFetch(), spawnImpl: realSpawn, pollTimeoutMs: 2000, pollIntervalMs: 10 });
+      expect(r.action).toBe('started');
+      const pids = [r.state!.consolePid!, r.state!.providerPid!];
+      try {
+        for (const pid of pids) {
+          expect(() => process.kill(pid, 0)).not.toThrow(); // alive right after up
+          const pgid = spawnSync('ps', ['-o', 'pgid=', '-p', String(pid)], { encoding: 'utf8' }).stdout.trim();
+          expect(pgid).toBe(String(pid)); // detached spawn => its own process-group leader (ours to kill)
+        }
+      } finally {
+        const down = providerDown({ cwd: dir }); // real default kill (group-kill)
+        expect(down.action).toBe('stopped');
+      }
+      await new Promise((resolve) => setTimeout(resolve, 300));
+      for (const pid of pids) {
+        expect(() => process.kill(pid, 0)).toThrow(); // dead after down — nothing leaked
+      }
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }

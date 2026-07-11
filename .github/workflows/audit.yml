@@ -1,5 +1,7 @@
 name: audit
 on:
+  schedule:
+    - cron: "51 9 * * 0"
   workflow_dispatch:
     inputs:
       issue_number: { description: "issue/PR number to act on", required: false, type: string }

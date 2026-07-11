@@ -1,6 +1,7 @@
 # simple-gh — the single-manager GitHub PR loop, plus a scheduled `planner` (D3) that keeps the
 # board fed from the vision. THREE DECLARED AGENTS — `manager` and `planner` scheduled (manager the
-# only one that dispatches or lands; planner file-only), `audit` dispatch-only, never cron. The cron
+# only one that dispatches or lands; planner file-only), plus `audit` — operator-dispatched AND (TC.3)
+# a low-frequency weekly cron for drift auditing (see below; still never a second WORK loop). The cron
 # `manager` session on a capable model (a) dispatches strongest-model research/plan/review subagents
 # in-session, (b) writes plans as docs registered as ztrack document sources, (c) dispatches
 # weaker-model implementation subagents on isolated git worktrees, and (d) LANDS work by merging each
@@ -12,13 +13,20 @@
 # doctrine was extracted from — supercode's parity board and twin's new-twin roadmap queue — drained
 # to zero before a planner existed to refill them.
 #
-# The third agent, `audit`, is declared below — but it carries NO cron trigger, ever. It is
-# dispatch-only: a read-only conformance auditor of the install itself (never the product it builds),
-# never scheduled, and OPERATOR-dispatched only — neither `manager` nor `planner` holds `agent:launch`,
-# so neither can fire this actor through the substrate (a scheduled agent may at most run the audit
-# checklist as an in-session read-only research brief). Its presence does not add a second scheduled
-# actor to the loop's ticking cadence — `manager` and `planner` are the loop's only continuously-ticking
-# processes, on their own independent crons (see skills/audit/SKILL.md's identity section).
+# The third agent, `audit`, is declared below — it is OPERATOR-dispatched (`dispatch: true`, unchanged
+# since TC.1) AND, as of TC.3, carries its own weekly `cron` trigger for ongoing drift auditing. Neither
+# `manager` nor `planner` holds `agent:launch`, so neither can ever fire this actor THROUGH THE
+# SUBSTRATE (a scheduled agent may at most run the audit checklist as an in-session read-only research
+# brief) — an explicit operator dispatch or audit's own cron tick are the only two things that ever
+# launch it. The cron addition does NOT make this a second WORK-dispatching loop: `audit` still holds no
+# `agent:launch` of its own, and a cron-fired run executes the exact same read-only, report-only
+# checklist a dispatch-fired run does — never launches another agent/session, never merges, never fixes
+# — self-throttled against redundant runs within its own cadence window (see
+# skills/audit/SKILL.md's SELF-THROTTLE section, the same shape as `planner`'s own self-throttle above,
+# needed for the identical reason: the local loop driver fires every declared cron script on ONE shared
+# tick interval, so a weekly IR cron string is only the outer bound on that substrate). `manager` and
+# `planner` remain the loop's only continuously-ticking WORK actors; `audit`'s cron is a much slower,
+# independent self-check cadence layered on top — see skills/audit/SKILL.md's identity section.
 #
 # Landing model = twin-sdlc's owner-decided merge (no auto-merge, ever), with the manager as the
 # operator's deputy. Honesty: on `local` all of this runs on ONE credential — the deterministic gate is
@@ -89,19 +97,29 @@ agents:
       - cron: "13 5 * * *"       # daily-style, offset from manager's tick; SELF-THROTTLE (SKILL.md) is
                                   # the real cadence control until per-agent cadence exists (see U4)
 
-  # Dispatch-only conformance auditor of THIS INSTALL (not the product it builds) — verifies changes made
-  # to it aren't inconsistent, contradictory, or against OA's own philosophy/structure (§II.10 of the OA
+  # Conformance auditor of THIS INSTALL (not the product it builds) — verifies changes made to it
+  # aren't inconsistent, contradictory, or against OA's own philosophy/structure (§II.10 of the OA
   # self-dev architecture study). Read-only against the install with exactly one write: composing and
   # opening its own dated report PR under docs/audits/ — never a fix, never a merge, never another
-  # dispatch (no agent:launch). NEVER carries a cron trigger — see skills/audit/SKILL.md's identity
-  # section for why a third declared agent here doesn't add a third scheduled actor: only `manager` and
-  # `planner`, above, tick on their own crons.
+  # dispatch (no agent:launch). Fires on an explicit operator `dispatch` (unchanged since TC.1) AND, as
+  # of TC.3, its own weekly `cron` for ongoing drift auditing — see skills/audit/SKILL.md's identity
+  # section for why a third declared agent here still doesn't add a third WORK-ticking actor: only
+  # `manager` and `planner`, above, hold `agent:launch`/dispatch other agents on their crons; `audit`'s
+  # cron only ever re-runs its own read-only checklist, self-throttled per skills/audit/SKILL.md.
   audit:
     behavior: audit
     capabilities: [tasks:converse, code:propose@docs/audits]
     triggers:
       - dispatch: true
         params: { TARGET_REF: subject.ref }   # optional: an issue/PR the one-line summary comment lands on
+      # TC.3: low-frequency drift-mode cron. Sunday 09:51 UTC — a fixed WEEKLY slot (this repo's own
+      # precedent for "low frequency," self-driving's strategist `23 7 * * 1`,
+      # profiles/self-driving/ir.yml) chosen off every other cron this profile declares (manager's
+      # */30, planner's daily 05:13) so it never collides with a higher-frequency tick. A cron-fired run
+      # carries no params (never TARGET_REF, never MODE) — always drift mode, per skills/audit/
+      # SKILL.md's existing "no MODE -> drift mode" default; the operator-dispatch form above is
+      # unchanged and still the only path to setup-completion mode or a TARGET_REF comment.
+      - cron: "51 9 * * 0"
 
 policy:
   maxConcurrent: 1               # declared intent, not mechanically enforced (conformance/status surface

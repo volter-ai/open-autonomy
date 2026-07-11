@@ -276,7 +276,8 @@ bun bin/autonomy-compile.ts profiles/hello gh-actions /tmp/hello-gh
   auto-merging PRs on GitHub either way); uses the ztrack `simple-gh-sdlc` preset.
 - **`simple-gh/`** — the **single-manager** GitHub PR loop, plus a scheduled `planner` (D3). Three
   declared agents — `manager` and `planner` scheduled (manager the only one that dispatches or lands;
-  planner file-only), `audit` dispatch-only, never cron. `manager` (`cron: */30 * * * *`) is still the
+  planner file-only), plus `audit` — operator-dispatched AND (TC.3) a low-frequency weekly cron for
+  drift auditing, never a second WORK-dispatching loop. `manager` (`cron: */30 * * * *`) is still the
   only agent that dispatches or lands anything — research/plan/review/implementation are harness-native
   **subagents** it dispatches in-session
   (per-dispatch `model` override + worktree isolation), not separate OA actors;
@@ -293,10 +294,11 @@ bun bin/autonomy-compile.ts profiles/hello gh-actions /tmp/hello-gh
   (`code:propose` only — no `code:review`, no `code:merge`), but only once every required repo CI check
   is green **and** a freshly-dispatched review subagent has recorded a `pass` verdict on the current head
   SHA — twin's owner-decided landing model (a human merges every green PR by hand), agent-executed as the
-  operator's deputy. The third declared agent, `audit`, is dispatch-only (no cron, ever) — a read-only
-  conformance auditor of the install itself, filing a dated report PR under `docs/audits/` on demand; it
-  does not add a third scheduled actor — only `manager` and `planner` tick on their own crons
-  (`profiles/simple-gh/skills/audit/SKILL.md`). Targets **`local`
+  operator's deputy. The third declared agent, `audit`, is a read-only conformance auditor of the install
+  itself, filing a dated report PR under `docs/audits/` on an explicit operator dispatch **and**, as of
+  TC.3, its own self-throttled low-frequency weekly cron; it does not add a third WORK-dispatching
+  actor — it holds no `agent:launch` on either trigger, so only `manager` and `planner` ever launch
+  anything on their own crons (`profiles/simple-gh/skills/audit/SKILL.md`). Targets **`local`
   only**, `codeHost: github`. Honesty (see
   `profiles/simple-gh/README.md`): on a shared local credential there is no independent reviewer identity,
   so the *deterministic* gate is branch protection (real CI required + `enforce_admins: true`), not agent

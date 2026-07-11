@@ -156,6 +156,28 @@ describe('compileGithub — dispatch trigger realization', () => {
   });
 });
 
+// TC.3: an actor (audit) can carry BOTH `dispatch` and `cron` — the hosted realization (`renderOn`) already
+// appends a `schedule:` block whenever `cronOf(agent)` is truthy, INDEPENDENT of whether `dispatch` is also
+// declared (workflow_dispatch is always emitted regardless; `cronOf` just adds `schedule:` on top). No
+// compiler change was needed for this unit — this test proves the existing behavior for the combined case.
+describe('compileGithub — TC.3: a cron trigger coexists with dispatch on the SAME actor', () => {
+  test('the compiled workflow gets BOTH `schedule:` (the cron) and `workflow_dispatch:` (unchanged)', () => {
+    const wfs = workflows(compileGithub(irWith([{ dispatch: true, params: { TARGET_REF: 'subject.ref' } }, { cron: '51 9 * * 0' }])));
+    expect(wfs.length).toBe(1);
+    const onBlock = wfs[0]!.slice(wfs[0]!.indexOf('\non:'), wfs[0]!.indexOf('\njobs:'));
+    expect(onBlock).toContain('schedule:');
+    expect(onBlock).toContain('cron: "51 9 * * 0"');
+    expect(onBlock).toContain('workflow_dispatch:'); // dispatch:true is UNCHANGED by adding a cron alongside it
+    expect(onBlock.includes('\n  issues:')).toBe(false); // still no extra label-watch event
+  });
+
+  test('trigger declaration ORDER does not matter — cron-first emits identically to dispatch-first', () => {
+    const cronFirst = workflows(compileGithub(irWith([{ cron: '51 9 * * 0' }, { dispatch: true }])))[0]!;
+    const dispatchFirst = workflows(compileGithub(irWith([{ dispatch: true }, { cron: '51 9 * * 0' }])))[0]!;
+    expect(cronFirst).toBe(dispatchFirst);
+  });
+});
+
 describe('compileGithub — kind: human is declared, not job-realized', () => {
   // A person needs no runner job: the durable "await a human" block is the existing label + merge boundary,
   // and how a person is notified/assigned/escalated is config the search varies, not a frozen template.

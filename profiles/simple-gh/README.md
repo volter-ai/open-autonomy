@@ -1,9 +1,10 @@
 # simple-gh
 
 The single-manager GitHub PR loop, plus a scheduled `planner`. Three declared agents — `manager` and
-`planner` scheduled (manager the only one that dispatches or lands; planner file-only), `audit`
-dispatch-only, never cron. `manager`, on a `cron: */30 * * * *` trigger, is still the only agent that
-dispatches or lands anything:
+`planner` scheduled (manager the only one that dispatches or lands; planner file-only), plus `audit` —
+operator-dispatched AND (TC.3) a low-frequency weekly cron for drift auditing, never a second
+WORK-dispatching loop (see below). `manager`, on a `cron: */30 * * * *` trigger, is still the only agent
+that dispatches or lands anything:
 
 1. dispatches **strongest-model** research/plan/review subagents in-session (harness-native, not OA
    actors),
@@ -20,11 +21,14 @@ and never promotes anything to `ready` itself; see `skills/planner/SKILL.md`. It
 seed-only board empties (D8) — proven live in both downstream instances this doctrine is extracted
 from before either had a planner.
 
-The third agent, `audit`, carries **no cron trigger** — it is dispatch-only: a read-only conformance
-auditor of the install itself (not the product it builds), invoked on demand (locally: `AUTONOMY_AGENT=audit
-node scripts/run-agent.mjs`) to verify the install hasn't drifted into something inconsistent, contradictory,
-or against OA's own philosophy/structure. Its one write is opening its own dated report PR under
-`docs/audits/` — never a fix, never a merge, never another dispatch. See `skills/audit/SKILL.md`.
+The third agent, `audit`, is a read-only conformance auditor of the install itself (not the product it
+builds), invoked on an explicit operator dispatch (locally: `AUTONOMY_AGENT=audit node
+scripts/run-agent.mjs`) **and**, as of TC.3, its own low-frequency weekly `cron` for ongoing drift
+auditing (self-throttled — see `skills/audit/SKILL.md`'s § CRON-TRIGGERED RUNS) — to verify the install
+hasn't drifted into something inconsistent, contradictory, or against OA's own philosophy/structure.
+Neither trigger grants it `agent:launch`: it never launches anything, cron-fired or dispatched. Its one
+write is opening its own dated report PR under `docs/audits/` — never a fix, never a merge, never another
+dispatch. See `skills/audit/SKILL.md`.
 
 This is the pattern strong operators already run agent fleets with today (one capable session, tiered
 subagent dispatch, worktree isolation, human-shaped review before landing, plus an on-demand self-check)
@@ -36,7 +40,7 @@ the OA self-dev architecture study §II.10 (the audit agent's design).
 
 ```
 profiles/simple-gh/
-  ir.yml                       # the profile: `manager` (scheduled) + `planner` (scheduled, file-only) + `audit` (dispatch-only), no merge.yml/reconcile
+  ir.yml                       # the profile: `manager` (scheduled) + `planner` (scheduled, file-only) + `audit` (dispatch + weekly cron), no merge.yml/reconcile
   README.md                    # this file
   provision.json                # branch-protection floor: real CI required, enforce_admins, no auto-merge
   skills/manager/SKILL.md      # the manager's whole doctrine

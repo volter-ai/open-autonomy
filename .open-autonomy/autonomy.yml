@@ -167,6 +167,7 @@ agents:
       TARGET_REF: subject.ref
     triggers:
       dispatch: true
+      schedule: 51 9 * * 0
     capabilities:
       - tasks:converse
       - code:propose@docs/audits

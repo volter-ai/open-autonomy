@@ -22,9 +22,19 @@
 //
 // ONE-QUESTION BOOKKEEPING (acceptance (ii)): each invocation emits AT MOST one question:
 //   - recommend flow, invocation 1 (no --confirm/--override): emits exactly 1 question, NO record.
-//   - recommend flow, invocation 2 (--confirm or --override): emits 0 NEW questions (the record's `g1`
-//     field documents the question that WAS asked in invocation 1 + the answer given here) — a record IS
-//     emitted.
+//   - recommend flow, invocation 2 (--confirm <profile> or --override <profile>): emits 0 NEW questions
+//     (the record's `g1` field documents the question that WAS asked in invocation 1 + the answer given
+//     here) — a record IS emitted.
+//
+// CONFIRM-DRIFT GUARD (review round D1): because the two invocations are stateless, the repo can change
+// between them — and a bare "yes" flag would then silently bind whatever the SECOND derivation happens to
+// recommend, fabricating a g1 record for a question the human never saw (live repro: empty repo asked
+// "simple-sdlc?", repo gained content + a GitHub remote, bare --confirm bound simple-gh-sdlc and flipped
+// landing_mode pr-free→auto-merge). So `--confirm` REQUIRES the profile name the human actually confirmed
+// (invocation 1's question names it): the second invocation re-derives the recommendation and HARD-ERRORS
+// on any mismatch ("recommendation drifted since the question was asked … re-ask G1") — it never binds a
+// profile the human did not see, and `g1.answer` records exactly what the human confirmed. A bare
+// `--confirm` is a loud usage error (no silent legacy path).
 //   - pre-pick flow, validated OK: emits 0 questions — the human's pre-pick + a clean validation together
 //     already constitute G1's answer; a record is emitted immediately, no re-ask.
 //   - pre-pick flow, BLOCKED: emits exactly 1 question (the blocker doubles as "pick something else?") —
@@ -177,7 +187,8 @@ interface CliOptions {
   out?: string;
   pick?: string;
   substrate?: Substrate;
-  confirm: boolean;
+  /** The profile name the human confirmed (D1: --confirm REQUIRES the name — never a bare boolean). */
+  confirm?: string;
   override?: string;
   hostedRunner?: boolean;
   preferNoAutoMerge?: boolean;
@@ -187,33 +198,79 @@ interface CliOptions {
   profilesRoot?: string;
 }
 
-export function parseArgs(argv: string[]): CliOptions {
-  const opts: CliOptions = { json: false, confirm: false };
+/** parseArgs result: `error` is set on any malformed invocation — unknown flags and value-taking flags
+ *  with a missing value are LOUD errors (review round D2/D3), never silently dropped/undefined (a typo'd
+ *  `--comfirm` must not silently re-ask; a dangling `--pick` must not silently switch flows). */
+export interface ParsedArgs {
+  opts: CliOptions;
+  error?: string;
+}
+
+export function parseArgs(argv: string[]): ParsedArgs {
+  const opts: CliOptions = { json: false };
   const positional: string[] = [];
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
+    // D3: a value-taking flag whose value is absent (end of argv) or looks like another flag is a loud
+    // error — never a silent `undefined` that changes which flow runs.
+    const takeValue = (flag: string): string | undefined => {
+      const v = argv[i + 1];
+      if (v === undefined || v.startsWith('--')) return undefined;
+      i++;
+      return v;
+    };
     switch (a) {
-      case '--detect':
-        opts.detectFile = argv[++i];
+      case '--detect': {
+        const v = takeValue(a);
+        if (v === undefined) return { opts, error: `error: ${a} requires a value (a TE.1 detect-report JSON file path)` };
+        opts.detectFile = v;
         break;
+      }
       case '--json':
         opts.json = true;
         break;
-      case '--out':
-        opts.out = argv[++i];
+      case '--out': {
+        const v = takeValue(a);
+        if (v === undefined) return { opts, error: `error: ${a} requires a value (the file path to write the selection record to)` };
+        opts.out = v;
         break;
-      case '--pick':
-        opts.pick = argv[++i];
+      }
+      case '--pick': {
+        const v = takeValue(a);
+        if (v === undefined) return { opts, error: `error: ${a} requires a value (the pre-picked profile name)` };
+        opts.pick = v;
         break;
-      case '--substrate':
-        opts.substrate = argv[++i] as Substrate;
+      }
+      case '--substrate': {
+        const v = takeValue(a);
+        if (v === undefined) return { opts, error: `error: ${a} requires a value ('local' or 'gh-actions')` };
+        opts.substrate = v as Substrate;
         break;
-      case '--confirm':
-        opts.confirm = true;
+      }
+      case '--confirm': {
+        // D1: --confirm REQUIRES the profile name being confirmed (invocation 1's question names it).
+        // A bare --confirm is refused loudly so a drifted recommendation can never be silently bound.
+        const v = takeValue(a);
+        if (v === undefined) {
+          return {
+            opts,
+            error:
+              'error: --confirm requires the profile name being confirmed, e.g. --confirm simple-sdlc ' +
+              '(invocation 1\'s G1 question names it). A bare --confirm is refused: this CLI is stateless, ' +
+              'so the repo may have changed since the question was asked — the confirmed name is what lets ' +
+              'the second invocation detect recommendation drift instead of silently binding a profile the ' +
+              'human never saw.',
+          };
+        }
+        opts.confirm = v;
         break;
-      case '--override':
-        opts.override = argv[++i];
+      }
+      case '--override': {
+        const v = takeValue(a);
+        if (v === undefined) return { opts, error: `error: ${a} requires a value (the profile name to select instead of the recommendation)` };
+        opts.override = v;
         break;
+      }
       case '--hosted-runner':
         opts.hostedRunner = true;
         break;
@@ -235,30 +292,39 @@ export function parseArgs(argv: string[]): CliOptions {
       case '--soc2':
         opts.wantsSOC2 = true;
         break;
-      case '--profiles-root':
-        opts.profilesRoot = argv[++i];
+      case '--profiles-root': {
+        const v = takeValue(a);
+        if (v === undefined) return { opts, error: `error: ${a} requires a value (a profiles directory)` };
+        opts.profilesRoot = v;
         break;
+      }
       default:
-        if (!a.startsWith('--')) positional.push(a);
+        // D2: unknown flags are a loud error, never silently dropped (a typo'd `--comfirm` silently
+        // re-asking the question is exactly the confusion this exists to prevent).
+        if (a.startsWith('--')) return { opts, error: `error: unknown flag "${a}"` };
+        positional.push(a);
         break;
     }
   }
   opts.repoDir = positional[0];
-  return opts;
+  return { opts };
 }
 
 const USAGE = [
   'usage: bun bin/install-select.ts <repoDir> [--detect <detect-report.json>] [--json] [--out <file>]',
   '                                  [--pick <profileName> [--substrate local|gh-actions]]',
-  '                                  [--confirm | --override <profileName>]',
+  '                                  [--confirm <profileName> | --override <profileName>]',
   '                                  [--hosted-runner|--no-hosted-runner] [--prefer-no-auto-merge]',
   '                                  [--can-fund-proxy|--cannot-fund-proxy] [--demo] [--soc2]',
   '                                  [--profiles-root <dir>]',
   '',
   'Two flows:',
   '  (a) no --pick: RECOMMEND. First invocation (no --confirm/--override) emits the G1 question.',
-  '      Second invocation, same args + --confirm (accept) or --override <profile> (reject + choose),',
-  '      re-derives the recommendation (stateless) and emits the SELECTION RECORD.',
+  '      Second invocation, same args + --confirm <profile> (accept — pass the profile the question named)',
+  '      or --override <profile> (reject + choose), re-derives the recommendation (stateless) and emits',
+  '      the SELECTION RECORD. If the re-derived recommendation no longer matches the confirmed profile',
+  '      (the repo changed between invocations), the CLI hard-errors and G1 must be re-asked — it never',
+  '      binds a profile the human did not see.',
   '  (b) --pick <profile>: VALIDATE. Validates the pre-pick against the repo. If OK, emits the SELECTION',
   '      RECORD immediately (no question). If BLOCKED, emits the ONE blocker question, no record.',
 ].join('\n');
@@ -299,7 +365,9 @@ function emitRecord(record: SelectionRecord, opts: CliOptions): string {
 }
 
 export async function run(argv: string[], profilesRootDefault: string, proc: ProcFn = defaultProc): Promise<RunResult> {
-  const opts = parseArgs(argv);
+  const parsed = parseArgs(argv);
+  if (parsed.error) return { ok: false, output: `${parsed.error}\n\n${USAGE}`, asked: false };
+  const opts = parsed.opts;
   if (!opts.repoDir) return { ok: false, output: USAGE, asked: false };
   if (opts.substrate && opts.substrate !== 'local' && opts.substrate !== 'gh-actions') {
     return { ok: false, output: `error: --substrate must be 'local' or 'gh-actions', got "${opts.substrate}"\n\n${USAGE}`, asked: false };
@@ -370,7 +438,7 @@ export async function run(argv: string[], profilesRootDefault: string, proc: Pro
     // Invocation 1: emit THE ONE G1 QUESTION. No record — nothing is instantiated until the human answers.
     const output = opts.json
       ? JSON.stringify({ mode: 'recommend', asked: true, question, recommendation: rec, detect: detectRef }, null, 2)
-      : [question, '', 'Why:', ...rec.reasons.map((r) => `  - ${r}`), '', 'Answer on a second invocation (same repoDir/--detect args — this CLI is stateless):', '  --confirm                    accept the recommendation', '  --override <profileName>     choose a different profile instead'].join('\n');
+      : [question, '', 'Why:', ...rec.reasons.map((r) => `  - ${r}`), '', 'Answer on a second invocation (same repoDir/--detect args — this CLI is stateless):', `  --confirm ${rec.profile.padEnd(18)} accept the recommendation (pass the profile this question named)`, '  --override <profileName>     choose a different profile instead'].join('\n');
     return { ok: true, output, asked: true };
   }
 
@@ -379,7 +447,23 @@ export async function run(argv: string[], profilesRootDefault: string, proc: Pro
   let chosenSubstrate = rec.substrate;
   let answer: string;
   if (opts.confirm) {
-    answer = `confirmed "${rec.profile}" @ ${rec.substrate}`;
+    // CONFIRM-DRIFT GUARD (D1): the human confirmed a NAMED profile — the one invocation 1's question put
+    // to them. If re-deriving now recommends something else, the repo's facts changed between the two
+    // stateless invocations and this "confirmation" answers a question that was never asked. HARD-ERROR:
+    // never bind the drifted profile, never fabricate a g1 record for it — G1 must be re-asked.
+    if (opts.confirm !== rec.profile) {
+      const f = detectRef.repoFacts;
+      const factsNow = `onGitHub=${f.onGitHub}, populated=${f.populated}, ghAdmin=${f.ghAdmin === undefined ? 'unknown' : f.ghAdmin}`;
+      return {
+        ok: false,
+        output:
+          `error: recommendation drifted since the question was asked (was "${opts.confirm}", now "${rec.profile}" @ ${rec.substrate}` +
+          ` — repo facts changed: the facts NOW read ${factsNow}, which drive: ${rec.reasons.join('; ')}); ` +
+          `re-ask G1: re-run without --confirm to emit the current question, and confirm THAT recommendation.`,
+        asked: false,
+      };
+    }
+    answer = `confirmed "${opts.confirm}" @ ${rec.substrate}`;
   } else {
     // --override <profile>: never blindly trust an override into a clobber — validate it through the
     // SAME eligibility path a pre-pick goes through (reuses TD.2's validatePrePick, not re-derived).

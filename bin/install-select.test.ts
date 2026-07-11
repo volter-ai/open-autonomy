@@ -186,13 +186,14 @@ describe('Fixture 1 — RECOMMEND flow (empty, non-GitHub repo)', () => {
     cleanupAll();
   });
 
-  test('invocation 2 (--confirm): zero NEW questions, emits a SELECTION RECORD whose pack byte-matches getSetupPack', async () => {
+  test('invocation 2 (--confirm <profile>): zero NEW questions, emits a SELECTION RECORD whose pack byte-matches getSetupPack', async () => {
     const dir = track(mkdtempSync(join(tmpdir(), 'oa-select-recommend-confirm-')));
     gitInit(dir);
 
-    // Stateless re-derivation: same repoDir/args as invocation 1, plus --confirm. No session file exists
-    // between the two calls — this whole test only runs invocation 2, proving statelessness works alone.
-    const result = await run([dir, '--json', '--confirm'], PROFILES_ROOT, offlineGhProc);
+    // Stateless re-derivation: same repoDir/args as invocation 1, plus --confirm <the profile invocation
+    // 1's question named>. No session file exists between the two calls — this whole test only runs
+    // invocation 2, proving statelessness works alone.
+    const result = await run([dir, '--json', '--confirm', 'simple-sdlc'], PROFILES_ROOT, offlineGhProc);
     expect(result.ok).toBe(true);
     expect(result.asked).toBe(false); // no NEW question this invocation
     expect(result.record).toBeDefined();
@@ -213,6 +214,63 @@ describe('Fixture 1 — RECOMMEND flow (empty, non-GitHub repo)', () => {
     // detect ref present.
     expect(record.detect.repoDir).toBe(dir);
     expect(record.detect.repoFacts.onGitHub).toBe(false);
+
+    cleanupAll();
+  });
+
+  test('CONFIRM-DRIFT GUARD (D1): repo changed between invocations -> --confirm <old profile> HARD-ERRORS naming both profiles + the changed facts, binds NOTHING', async () => {
+    // The reviewer's live repro, as a test: invocation 1 on an EMPTY, non-GitHub repo asks
+    // "I recommend simple-sdlc on local ... confirm or override?" — then the repo mutates (real content +
+    // a GitHub remote) BEFORE the human's answer lands. The stateless re-derivation now recommends
+    // simple-gh-sdlc; a bare "yes" would silently flip landing_mode pr-free -> auto-merge. The guard must
+    // refuse: hard error, both profile names, the changed facts, no record, exit-worthy.
+    const dir = track(mkdtempSync(join(tmpdir(), 'oa-select-drift-')));
+    gitInit(dir);
+
+    const inv1 = await run([dir, '--json'], PROFILES_ROOT, offlineGhProc);
+    expect(JSON.parse(inv1.output).recommendation.profile).toBe('simple-sdlc');
+
+    // The repo mutates between the two stateless invocations.
+    git(dir, ['remote', 'add', 'origin', 'https://github.com/example-org/example-repo.git']);
+    mkdirSync(join(dir, 'src'), { recursive: true });
+    writeFileSync(join(dir, 'src', 'app.js'), 'module.exports = {}\n');
+    commitAll(dir, 'real app content');
+
+    const inv2 = await run([dir, '--json', '--confirm', 'simple-sdlc'], PROFILES_ROOT, offlineGhProc);
+    expect(inv2.ok).toBe(false);
+    expect(inv2.asked).toBe(false);
+    expect(inv2.record).toBeUndefined(); // nothing bound, no record, no pack instantiated
+    expect(inv2.output).toMatch(/recommendation drifted since the question was asked/);
+    expect(inv2.output).toMatch(/was "simple-sdlc", now "simple-gh-sdlc"/); // both profiles named
+    expect(inv2.output).toMatch(/onGitHub=true/); // the changed fact, cited
+    expect(inv2.output).toMatch(/populated=true/); // the changed fact, cited
+    expect(inv2.output).toMatch(/re-ask G1/);
+
+    cleanupAll();
+  });
+
+  test('no-drift --confirm <profile>: the confirmed name matches the re-derivation -> record, g1.answer records exactly what the human confirmed', async () => {
+    const dir = track(mkdtempSync(join(tmpdir(), 'oa-select-nodrift-')));
+    gitInit(dir);
+
+    const result = await run([dir, '--confirm', 'simple-sdlc'], PROFILES_ROOT, offlineGhProc);
+    expect(result.ok).toBe(true);
+    expect(result.record!.profile).toBe('simple-sdlc');
+    expect(result.record!.g1.answer).toBe('confirmed "simple-sdlc" @ local');
+
+    cleanupAll();
+  });
+
+  test('bare --confirm (no profile name) -> loud usage error pointing at the required syntax, never a silent bind', async () => {
+    const dir = track(mkdtempSync(join(tmpdir(), 'oa-select-bareconfirm-')));
+    gitInit(dir);
+
+    const result = await run([dir, '--confirm'], PROFILES_ROOT, offlineGhProc);
+    expect(result.ok).toBe(false);
+    expect(result.record).toBeUndefined();
+    expect(result.output).toMatch(/--confirm requires the profile name being confirmed/);
+    expect(result.output).toMatch(/--confirm simple-sdlc/); // the example syntax
+    expect(result.output).toMatch(/usage:/);
 
     cleanupAll();
   });
@@ -288,7 +346,7 @@ describe('Fixture 1 — RECOMMEND flow (empty, non-GitHub repo)', () => {
     const outFile = join(dir, '..', 'selection-record.json');
     track(outFile);
 
-    const result = await run([dir, '--confirm', '--out', outFile], PROFILES_ROOT, offlineGhProc);
+    const result = await run([dir, '--confirm', 'simple-sdlc', '--out', outFile], PROFILES_ROOT, offlineGhProc);
     expect(result.ok).toBe(true);
     const written = JSON.parse(readFileSync(outFile, 'utf8'));
     expect(written.profile).toBe('simple-sdlc');
@@ -378,7 +436,7 @@ describe('one-question invariant — count question emissions per flow, zero re-
     gitInit(dir);
 
     const inv1 = await run([dir], PROFILES_ROOT, offlineGhProc);
-    const inv2 = await run([dir, '--confirm'], PROFILES_ROOT, offlineGhProc);
+    const inv2 = await run([dir, '--confirm', 'simple-sdlc'], PROFILES_ROOT, offlineGhProc);
     const questionCount = [inv1, inv2].filter((r) => r.asked).length;
     expect(questionCount).toBe(1);
     expect(inv1.asked).toBe(true);
@@ -422,7 +480,8 @@ describe('one-question invariant — count question emissions per flow, zero re-
 
 describe('parseArgs', () => {
   test('parses the repoDir positional plus flags', () => {
-    const opts = parseArgs(['/tmp/some-repo', '--json', '--detect', '/tmp/d.json', '--pick', 'self-driving', '--substrate', 'gh-actions', '--out', '/tmp/out.json']);
+    const { opts, error } = parseArgs(['/tmp/some-repo', '--json', '--detect', '/tmp/d.json', '--pick', 'self-driving', '--substrate', 'gh-actions', '--out', '/tmp/out.json']);
+    expect(error).toBeUndefined();
     expect(opts.repoDir).toBe('/tmp/some-repo');
     expect(opts.json).toBe(true);
     expect(opts.detectFile).toBe('/tmp/d.json');
@@ -431,9 +490,35 @@ describe('parseArgs', () => {
     expect(opts.out).toBe('/tmp/out.json');
   });
 
-  test('--confirm and --override parse independently', () => {
-    expect(parseArgs(['/tmp/x', '--confirm']).confirm).toBe(true);
-    expect(parseArgs(['/tmp/x', '--override', 'simple-gh']).override).toBe('simple-gh');
+  test('--confirm <profile> and --override <profile> parse independently', () => {
+    expect(parseArgs(['/tmp/x', '--confirm', 'simple-sdlc']).opts.confirm).toBe('simple-sdlc');
+    expect(parseArgs(['/tmp/x', '--override', 'simple-gh']).opts.override).toBe('simple-gh');
+  });
+
+  test('D2: an unknown flag (e.g. a typo\'d --comfirm) -> loud error, never silently dropped', () => {
+    const { error } = parseArgs(['/tmp/x', '--comfirm', 'simple-sdlc']);
+    expect(error).toBeDefined();
+    expect(error).toMatch(/unknown flag "--comfirm"/);
+  });
+
+  test('D3: a value-taking flag at end of argv -> loud error, never a silent undefined', () => {
+    for (const flag of ['--pick', '--override', '--detect', '--out', '--substrate', '--profiles-root']) {
+      const { error } = parseArgs(['/tmp/x', flag]);
+      expect(error).toBeDefined();
+      expect(error).toMatch(new RegExp(`${flag} requires a value`));
+    }
+  });
+
+  test('D3: a value-taking flag whose "value" is another flag -> loud error (the value was omitted, not "--json")', () => {
+    const { error } = parseArgs(['/tmp/x', '--pick', '--json']);
+    expect(error).toBeDefined();
+    expect(error).toMatch(/--pick requires a value/);
+  });
+
+  test('D1: bare --confirm -> loud error demanding the confirmed profile name', () => {
+    const { error } = parseArgs(['/tmp/x', '--confirm']);
+    expect(error).toBeDefined();
+    expect(error).toMatch(/--confirm requires the profile name being confirmed/);
   });
 });
 
@@ -456,7 +541,7 @@ describe('run() — error paths', () => {
   test('--pick combined with --confirm -> rejected (the two flows are mutually exclusive)', async () => {
     const dir = track(mkdtempSync(join(tmpdir(), 'oa-select-mixedflags-')));
     gitInit(dir);
-    const result = await run([dir, '--pick', 'simple-sdlc', '--confirm'], PROFILES_ROOT, offlineGhProc);
+    const result = await run([dir, '--pick', 'simple-sdlc', '--confirm', 'simple-sdlc'], PROFILES_ROOT, offlineGhProc);
     expect(result.ok).toBe(false);
     expect(result.output).toMatch(/cannot be combined/);
     cleanupAll();
@@ -465,7 +550,7 @@ describe('run() — error paths', () => {
   test('--confirm and --override together -> rejected', async () => {
     const dir = track(mkdtempSync(join(tmpdir(), 'oa-select-mixedflags2-')));
     gitInit(dir);
-    const result = await run([dir, '--confirm', '--override', 'simple-gh'], PROFILES_ROOT, offlineGhProc);
+    const result = await run([dir, '--confirm', 'simple-sdlc', '--override', 'simple-gh'], PROFILES_ROOT, offlineGhProc);
     expect(result.ok).toBe(false);
     expect(result.output).toMatch(/mutually exclusive/);
     cleanupAll();
@@ -475,5 +560,27 @@ describe('run() — error paths', () => {
     const result = await run(['/definitely/not/a/real/path/oa-select-test'], PROFILES_ROOT, offlineGhProc);
     expect(result.ok).toBe(false);
     expect(result.output).toMatch(/does not exist/);
+  });
+
+  test('D2 end-to-end: run() with a typo\'d flag -> loud usage error, exit-worthy, never a silent re-ask', async () => {
+    const dir = track(mkdtempSync(join(tmpdir(), 'oa-select-typo-')));
+    gitInit(dir);
+    const result = await run([dir, '--comfirm', 'simple-sdlc'], PROFILES_ROOT, offlineGhProc);
+    expect(result.ok).toBe(false);
+    expect(result.asked).toBe(false); // the typo did NOT silently fall through to the question-emitting flow
+    expect(result.output).toMatch(/unknown flag "--comfirm"/);
+    expect(result.output).toMatch(/usage:/);
+    cleanupAll();
+  });
+
+  test('D3 end-to-end: run() with a dangling --pick -> loud usage error, never a silent flow switch', async () => {
+    const dir = track(mkdtempSync(join(tmpdir(), 'oa-select-dangling-')));
+    gitInit(dir);
+    const result = await run([dir, '--pick'], PROFILES_ROOT, offlineGhProc);
+    expect(result.ok).toBe(false);
+    expect(result.asked).toBe(false); // did NOT silently become the recommend flow
+    expect(result.output).toMatch(/--pick requires a value/);
+    expect(result.output).toMatch(/usage:/);
+    cleanupAll();
   });
 });

@@ -12,6 +12,16 @@ landing_mode: manual-after-review
 # adopter's CI is the gate, provision.json's `required_checks: ["ci"]` is a placeholder to be replaced with
 # the adopter's real check name(s) before provisioning a real target repo). No `agent-review`/`security`
 # entries — this landing_mode deliberately carries neither.
+#
+# TP.2 reconciliation (required_checks IS the profile's PRESCRIPTION, not adopter-discovered fact): the
+# `required_checks` pack field (see packages/core/src/setup-pack.ts's field comment) is a VIEW over THIS
+# provision.json — on this profile that view is literally `["ci"]`, the shipped placeholder. That is not a
+# bug the pack needs to "fix" by guessing a real name; the pack's job is to state what the profile
+# prescribes, and this profile prescribes "your own CI, however it's named." Discovering the adopter's real
+# check-run name(s) for a specific target repo is TE.4's job (an install-time probe-PR step, not built by
+# this unit) — it reads the pack's prescription, discovers the live names, and overrides them before
+# `provision-target-repo` runs. This pack stays `["ci"]` until TE.4 exists; nothing here should hand-edit it
+# per adopter.
 check_realizations:
   - check: ci
     via: authored-workflow

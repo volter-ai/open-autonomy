@@ -1107,3 +1107,281 @@ describe('computeMaturity — TP.1 ladder fixtures (real profiles/simple-gh-sdlc
     }
   });
 });
+
+// ============================================================================================
+// TP.2 acceptance — ladder fixture tests driven against the REAL `profiles/simple-gh` pack. Companion to
+// the PR's live transcript (a real `compile` + `oa provider up` + `oa doctor --live` run against a scratch
+// dir, reaching the honest M2-capped/M3-blocked-only-on-A13 terminal — the exact same shape TP.1 reached
+// for simple-gh-sdlc). This profile's distinctive rungs vs TP.1's: board is ZTRACK (m4_predicate=ztrack,
+// unlike simple-gh-sdlc's gh-issues) even though its PRs land on GitHub (codeHost=github); NO extra_rungs;
+// NO gh-actions target (targets=[local] only, so there is no m3_tool dual-target fixture to add here).
+// ============================================================================================
+describe('computeMaturity — TP.2 ladder fixtures (real profiles/simple-gh pack)', () => {
+  const REAL_PROFILE_DIR = 'profiles/simple-gh';
+
+  function committedGithubInstall(dir: string, opts: { pin?: string } = {}): void {
+    writeGenerated(dir, ['.open-autonomy/autonomy.yml', '.open-autonomy/generated.json', 'scheduler/schedule.json']);
+    writeAutonomyYml(dir, { codeHost: 'github', agents: { manager: { skill: 'manager', triggers: { schedule: '*/30 * * * *' } }, planner: { skill: 'planner', triggers: { schedule: '13 5 * * *' } } } });
+    writeSchedule(dir, opts);
+    gitInit(dir);
+    gitCommitAll(dir);
+  }
+
+  /** gh stubbed admin+green for simple-gh's REAL provision.json required_checks (['ci']) + ztrack stubbed
+   *  with one `ready` item, no allowlist label (this pack declares none) — the ztrack-board-but-
+   *  github-codeHost shape this profile actually has (A13 must pass so the M4/M5 fixtures below can walk
+   *  PAST the M3 A13 HARD gate, which every codeHost=github profile carries regardless of board type). */
+  function ztrackReadyStub(): StubProc {
+    return baseStub()
+      .onArgs('npx', ['ztrack', 'issue', 'list', '--state', 'ready'], () => ok(JSON.stringify([{ identifier: 'SUP-1', labels: [] }])))
+      .onArgs('gh', ['repo', 'view'], () => ok('acme/widgets'))
+      .onArgs('gh', ['api', 'repos/acme/widgets'], () => ok('true'))
+      .onArgs('gh', ['api', 'repos/acme/widgets/branches/main/protection'], () => ok(JSON.stringify({ required_status_checks: { contexts: ['ci'] } })));
+  }
+
+  test('M2 boundary: fresh compile, nothing committed yet -> M2/SCAFFOLDED (the exact live-acceptance first rung)', async () => {
+    const dir = tmpDir();
+    try {
+      writeGenerated(dir, ['.open-autonomy/autonomy.yml', '.open-autonomy/generated.json']);
+      writeAutonomyYml(dir, { codeHost: 'github' });
+      gitInit(dir);
+      const record = await computeMaturity({
+        cwd: dir,
+        profileDir: REAL_PROFILE_DIR,
+        target: 'local',
+        proc: withRealGit(baseStub()),
+        preflightBin: NO_PREFLIGHT,
+        ghPreflightScript: NO_GH_PREFLIGHT,
+      });
+      expect(record.stage).toBe('M2');
+      expect(record.blockers[0]).toMatch(/^M3 blocked:/);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test('M3(A13-blocked): local target, harness committed, no real GitHub repo (gh not logged in) -> honest M2, A13 unverifiable — the exact live-acceptance scenario for this github-codeHost, ztrack-board profile on a local scratch install', async () => {
+    const dir = tmpDir();
+    try {
+      committedGithubInstall(dir);
+      const record = await computeMaturity({
+        cwd: dir,
+        profileDir: REAL_PROFILE_DIR,
+        target: 'local',
+        proc: withRealGit(baseStub()),
+        preflightBin: NO_PREFLIGHT,
+        ghPreflightScript: NO_GH_PREFLIGHT,
+      });
+      expect(record.stage).toBe('M2');
+      expect(record.blockers[0]).toMatch(/^M3 blocked:/);
+      expect(record.blockers[0]).toContain('A13 branch-protection HARD signal failed');
+      expect(record.blockers[0]).toContain('unverifiable');
+      const a13 = record.signals.find((s) => s.id === 'A13')!;
+      expect(a13.present).toBe(false);
+      // This profile's board is ztrack (m4_predicate=ztrack) even though codeHost=github — A14 must probe
+      // ztrack, never gh (board-readiness.test.ts's own "codeHost must never be used as a board-type proxy"
+      // acceptance, re-verified here through the FULL composer, not just hasDispatchableWork in isolation).
+      const a14 = record.signals.find((s) => s.id === 'A14')!;
+      expect(a14.evidence).toContain('variant=ztrack');
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test('M4 boundary: a ready ztrack item (m4_predicate=ztrack, this pack\'s real value, NO allowlist label — simple-gh declares none) -> A14 true, M4/ARMED reached, blocked at M5 (still paused)', async () => {
+    const dir = tmpDir();
+    try {
+      committedGithubInstall(dir);
+      writeFileSync(join(dir, '.open-autonomy', 'paused'), 'fresh install\n'); // fence still down
+      const record = await computeMaturity({
+        cwd: dir,
+        profileDir: REAL_PROFILE_DIR,
+        target: 'local',
+        proc: withRealGit(ztrackReadyStub()),
+        preflightBin: NO_PREFLIGHT,
+        ghPreflightScript: NO_GH_PREFLIGHT,
+      });
+      expect(record.stage).toBe('M4');
+      expect(record.stageName).toBe('ARMED');
+      expect(record.blockers[0]).toMatch(/^M5 blocked:/);
+      expect(record.blockers[0]).toContain('A5 fence not lifted');
+      const a14 = record.signals.find((s) => s.id === 'A14')!;
+      expect(a14.present).toBe(true);
+      expect(a14.evidence).toContain('variant=ztrack');
+      expect(a14.evidence).not.toContain('allowlist='); // no m4_allowlist_label on this pack
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test('M5 boundary: fence lifted + an install-scoped session belonging to a declared agent (`manager`) -> M5/RUNNING reached', async () => {
+    const dir = tmpDir();
+    try {
+      committedGithubInstall(dir, { pin: 'http://pinned.test' });
+      rmSync(join(dir, '.open-autonomy', 'paused'), { force: true });
+      const fakeProbe: SessionProbe = async (_cwd, pinnedProviderUrl) => {
+        expect(pinnedProviderUrl).toBe('http://pinned.test');
+        return [{ agent: 'manager', status: 'running' } as Session];
+      };
+      const record = await computeMaturity({
+        cwd: dir,
+        profileDir: REAL_PROFILE_DIR,
+        target: 'local',
+        proc: withRealGit(ztrackReadyStub()),
+        preflightBin: NO_PREFLIGHT,
+        ghPreflightScript: NO_GH_PREFLIGHT,
+        sessionProbe: fakeProbe,
+      });
+      expect(record.stage).toBe('M5');
+      expect(record.stageName).toBe('RUNNING');
+      // terminal_stage: M5 for this pack — M6 stays honestly unproven by this synthetic fixture (the real
+      // per-issue/plan-doc-linkage leg is m6-signal.test.ts's own 'ztrack board, plan-doc linkage
+      // (simple-gh)' suite, driven against this SAME real profileDir — not re-proven here).
+      expect(record.blockers[0]).toMatch(/^M6 blocked:/);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+});
+
+// ============================================================================================
+// TP.4 acceptance — ladder fixture tests driven against the REAL `profiles/simple-sdlc` pack, walking the
+// FULL END-TO-END ladder this pack's own terminal_stage:M5 promises — the "easiest one-shot" DESIGN §Q1
+// calls out. Companion to the PR's live transcript (a real `compile` + `oa provider up` + `oa doctor --live`
+// + a REAL `npx ztrack issue create`/`edit --add-label oa-approved` walk against a scratch dir, reaching
+// every rung below live). Distinctive rungs vs every other profile: NO GitHub relationship at all
+// (codeHost=local-git — A12/A13 both not-applicable, never blocking); the `oa-approved` DAY-ONE ALLOWLIST
+// FENCE (a `ready` item alone is NOT enough for A14/M4).
+// ============================================================================================
+describe('computeMaturity — TP.4 ladder fixtures (real profiles/simple-sdlc pack, END-TO-END)', () => {
+  const REAL_PROFILE_DIR = 'profiles/simple-sdlc';
+
+  function committedLocalGitInstall(dir: string, opts: { pin?: string } = {}): void {
+    writeGenerated(dir, ['.open-autonomy/autonomy.yml', '.open-autonomy/generated.json', 'scheduler/schedule.json']);
+    writeAutonomyYml(dir, { codeHost: 'local-git', agents: { pm: { skill: 'pm', triggers: { schedule: '*/15 * * * *' } } } });
+    writeSchedule(dir, opts);
+    gitInit(dir);
+    gitCommitAll(dir);
+  }
+
+  test('M2 boundary: fresh compile, nothing committed yet -> M2/SCAFFOLDED', async () => {
+    const dir = tmpDir();
+    try {
+      writeGenerated(dir, ['.open-autonomy/autonomy.yml', '.open-autonomy/generated.json']);
+      writeAutonomyYml(dir, { codeHost: 'local-git' });
+      gitInit(dir);
+      const record = await computeMaturity({
+        cwd: dir,
+        profileDir: REAL_PROFILE_DIR,
+        target: 'local',
+        proc: withRealGit(baseStub()),
+        preflightBin: NO_PREFLIGHT,
+        ghPreflightScript: NO_GH_PREFLIGHT,
+      });
+      expect(record.stage).toBe('M2');
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test('M3 boundary: harness committed + doctor green (m3_tool=doctor) -> M3/INSTALLED reached, A12/A13 correctly ABSENT/not-applicable (codeHost=local-git — signalSetFor never adds them, and the composer never gates on them for this pack)', async () => {
+    const dir = tmpDir();
+    try {
+      committedLocalGitInstall(dir, { pin: 'http://pinned.test' });
+      const record = await computeMaturity({
+        cwd: dir,
+        profileDir: REAL_PROFILE_DIR,
+        target: 'local',
+        proc: withRealGit(baseStub()), // empty ztrack board -> A14 false, caps at M3
+        preflightBin: NO_PREFLIGHT,
+        ghPreflightScript: NO_GH_PREFLIGHT,
+      });
+      expect(record.stage).toBe('M3');
+      expect(record.stageName).toBe('INSTALLED');
+      expect(record.signals.find((s) => s.id === 'A12')).toBeUndefined();
+      expect(record.signals.find((s) => s.id === 'A13')).toBeUndefined();
+      expect(record.skipped.some((s) => s.id === 'A13' && /not-applicable/.test(s.reason))).toBe(true);
+      expect(record.blockers[0]).toMatch(/^M4 blocked:/);
+      expect(record.blockers[0]).toContain('A14 board has no dispatchable work');
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test('M4 STILL blocked: a `ready` ztrack item WITHOUT the `oa-approved` label -> the allowlist fence holds (A14 false, board not empty — "ready items exist but none pass the allowlist")', async () => {
+    const dir = tmpDir();
+    try {
+      committedLocalGitInstall(dir, { pin: 'http://pinned.test' });
+      const stub = baseStub().onArgs('npx', ['ztrack', 'issue', 'list', '--state', 'ready'], () => ok(JSON.stringify([{ identifier: 'LOCAL-1', labels: [] }])));
+      const record = await computeMaturity({
+        cwd: dir,
+        profileDir: REAL_PROFILE_DIR,
+        target: 'local',
+        proc: withRealGit(stub),
+        preflightBin: NO_PREFLIGHT,
+        ghPreflightScript: NO_GH_PREFLIGHT,
+      });
+      expect(record.stage).toBe('M3');
+      const a14 = record.signals.find((s) => s.id === 'A14')!;
+      expect(a14.present).toBe(false);
+      expect(a14.evidence).toContain("none pass the 'oa-approved' allowlist");
+      expect(record.blockers[0]).toContain("none pass the 'oa-approved' allowlist");
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test('M4/ARMED: the SAME item now carrying `oa-approved` -> A14 true, M4 reached, blocked at M5 (still paused)', async () => {
+    const dir = tmpDir();
+    try {
+      committedLocalGitInstall(dir, { pin: 'http://pinned.test' });
+      writeFileSync(join(dir, '.open-autonomy', 'paused'), 'fresh install\n');
+      const stub = baseStub().onArgs('npx', ['ztrack', 'issue', 'list', '--state', 'ready'], () => ok(JSON.stringify([{ identifier: 'LOCAL-1', labels: ['oa-approved'] }])));
+      const record = await computeMaturity({
+        cwd: dir,
+        profileDir: REAL_PROFILE_DIR,
+        target: 'local',
+        proc: withRealGit(stub),
+        preflightBin: NO_PREFLIGHT,
+        ghPreflightScript: NO_GH_PREFLIGHT,
+      });
+      expect(record.stage).toBe('M4');
+      expect(record.stageName).toBe('ARMED');
+      const a14 = record.signals.find((s) => s.id === 'A14')!;
+      expect(a14.present).toBe(true);
+      expect(a14.evidence).toContain('allowlist=oa-approved');
+      expect(record.blockers[0]).toMatch(/^M5 blocked:/);
+      expect(record.blockers[0]).toContain('A5 fence not lifted');
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test('M5 STILL honestly blocked: fence removed (rm paused) but NO session ever fired -> A5 true, but no session/fire evidence -> M4 remains the reached stage (never a foreign/ambient guess) — the exact live-acceptance terminal (⛔ no-agent-launch rule: this walk never launches a real agent, so this IS the honest ceiling)', async () => {
+    const dir = tmpDir();
+    try {
+      committedLocalGitInstall(dir, { pin: 'http://pinned.test' });
+      // paused already absent from committedLocalGitInstall's writeGenerated list (never written) — assert directly.
+      expect(existsSync(join(dir, '.open-autonomy', 'paused'))).toBe(false);
+      const stub = baseStub().onArgs('npx', ['ztrack', 'issue', 'list', '--state', 'ready'], () => ok(JSON.stringify([{ identifier: 'LOCAL-1', labels: ['oa-approved'] }])));
+      const fakeProbe: SessionProbe = async (_cwd, pinnedProviderUrl) => {
+        expect(pinnedProviderUrl).toBe('http://pinned.test');
+        return []; // no live session anywhere on the pinned provider — nothing ever fired
+      };
+      const record = await computeMaturity({
+        cwd: dir,
+        profileDir: REAL_PROFILE_DIR,
+        target: 'local',
+        proc: withRealGit(stub),
+        preflightBin: NO_PREFLIGHT,
+        ghPreflightScript: NO_GH_PREFLIGHT,
+        sessionProbe: fakeProbe,
+      });
+      expect(record.stage).toBe('M4');
+      expect(record.blockers[0]).toMatch(/^M5 blocked:/);
+      expect(record.blockers[0]).toContain('no real profile-agent session/fire evidence found');
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+});

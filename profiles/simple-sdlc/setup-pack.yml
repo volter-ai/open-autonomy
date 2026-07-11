@@ -36,8 +36,23 @@ maturity_signals:
   m4_predicate: ztrack
   m4_allowlist_label: oa-approved   # the day-one dispatch fence (OA-07) — a `ready` item alone is NOT
                                      # enough; it must also carry this label (ir.yml's policy.box.dispatch)
-  m6_signal: per-issue              # no merged PR exists on this profile at all — M6 is a ztrack `done` +
-                                     # AC-evidence trace read per issue, not a PR-close or roadmap rollup
+  # m6_signal (TP.4 reconciliation — task list "check the schema token... align with what m6-signal.ts
+  # actually branches on for pr-free"): the schema's M6Signal enum (packages/core/src/setup-pack.ts) has
+  # exactly three tokens — per-issue|pr-close|roadmap-rollup — none of them spelled "ac-evidence", because
+  # DESIGN §Q1 never named a fourth token for the pr-free leg (its own prose just says "ztrack done +
+  # AC-evidence trace"). VERIFIED against packages/local-runner-cli/src/m6-signal.ts's actual branch order:
+  # `missionAdvancingSignal` checks `facts.landingMode === 'pr-free'` FIRST and, when true, calls
+  # `prFreeSignal` UNCONDITIONALLY — it never reads `m6_signal`'s value to pick that branch (m6_signal is
+  # only consulted for a PR-based profile's ghIssuesBoardPrSignal/ztrackBoardPrSignal linkage choice, which
+  # this profile never reaches). So `per-issue` here is NOT a claim that per-issue reconcile-merged-issues-
+  # style linkage applies to this profile (it explicitly doesn't — there is no merged PR at all, see
+  # m6-signal.ts's own header); it is the closest-fit existing token (a done state read PER ZTRACK ISSUE,
+  # not a rollup/PR-close linkage) chosen because `readPackFacts` requires m6_signal to be NON-EMPTY to
+  # parse this pack's facts at all (`if (!landingMode || !m6Signal) return undefined` — an empty/missing
+  # value here would make the WHOLE M6 check report unverifiable, not just the linkage half). Coherence is
+  # proven by m6-signal.test.ts's "m6_signal token is not consulted for landing_mode=pr-free" case: varying
+  # this field's value while landing_mode stays pr-free produces byte-identical prFreeSignal evidence.
+  m6_signal: per-issue
 
 extra_rungs: []                     # no rungs beyond the common M0-M5 spine
 

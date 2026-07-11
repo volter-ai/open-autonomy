@@ -110,6 +110,64 @@ describe('missionAdvancingSignal — pr-free leg (simple-sdlc: ztrack done + AC-
   });
 });
 
+// --- TP.4 reconciliation: m6_signal's ENUM VALUE is not consulted on the pr-free leg ------------------------
+// (profiles/simple-sdlc/setup-pack.yml's own comment on `m6_signal: per-issue`) — `missionAdvancingSignal`
+// branches on `facts.landingMode === 'pr-free'` FIRST and unconditionally calls `prFreeSignal`; m6_signal's
+// value is read only far enough to make `readPackFacts` succeed (it must be non-empty), never to select
+// between prFreeSignal/ghIssuesBoardPrSignal/ztrackBoardPrSignal on this leg. Proven here by holding
+// landing_mode=pr-free fixed and varying m6_signal across ALL THREE schema tokens: the produced Signal must
+// be byte-identical every time (same present, same evidence) — if the code ever started reading m6_signal
+// on this leg, this test would immediately diverge.
+describe('missionAdvancingSignal — m6_signal token is NOT consulted for landing_mode=pr-free (TP.4 pack+code coherence)', () => {
+  function prFreePackDir(m6Signal: string): string {
+    const dir = mkdtempSync(join(tmpdir(), 'm6-token-coherence-'));
+    writeFileSync(
+      join(dir, 'setup-pack.yml'),
+      `landing_mode: pr-free\nmaturity_signals:\n  m4_predicate: ztrack\n  m4_allowlist_label: oa-approved\n  m6_signal: ${m6Signal}\n`,
+    );
+    return dir;
+  }
+
+  test('per-issue / pr-close / roadmap-rollup all produce the IDENTICAL prFreeSignal result on a pr-free pack', async () => {
+    const stub = new StubProc().onArgs('npx', ['ztrack', 'check', 'TOK-1'], () => ok('all checks passed'));
+    const results: Array<{ present: boolean; evidence: string }> = [];
+    for (const token of ['per-issue', 'pr-close', 'roadmap-rollup']) {
+      const dir = prFreePackDir(token);
+      try {
+        results.push(await missionAdvancingSignal(CWD, { profileDir: dir, workItemId: 'TOK-1', proc: stub.runner }));
+      } finally {
+        rmSync(dir, { recursive: true, force: true });
+      }
+    }
+    expect(results[0]).toEqual(results[1]);
+    expect(results[1]).toEqual(results[2]);
+    expect(results[0]!.present).toBe(true);
+    expect(results[0]!.evidence).toMatch(/TOK-1.*AC-evidence trace green/);
+  });
+
+  test('an EMPTY/missing m6_signal on an otherwise-pr-free pack still fails readPackFacts (the field is required to PARSE, even though its value never SELECTS the pr-free branch)', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'm6-token-empty-'));
+    try {
+      writeFileSync(join(dir, 'setup-pack.yml'), 'landing_mode: pr-free\nmaturity_signals:\n  m4_predicate: ztrack\n');
+      const s = await missionAdvancingSignal(CWD, { profileDir: dir, workItemId: 'TOK-1' });
+      expect(s.present).toBe(false);
+      expect(s.evidence).toMatch(/unverifiable:.*setup-pack\.yml/);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test("the REAL profiles/simple-sdlc pack's m6_signal='per-issue' is exactly this non-selecting case — asserted against the real file", async () => {
+    const stub = new StubProc().onArgs('npx', ['ztrack', 'check', 'REAL-1'], () => ok('all checks passed'));
+    const s = await missionAdvancingSignal(CWD, { profileDir: 'profiles/simple-sdlc', workItemId: 'REAL-1', proc: stub.runner });
+    expect(s.present).toBe(true);
+    // prFreeSignal's own evidence shape (never a ghIssuesBoardPrSignal/ztrackBoardPrSignal shape, which
+    // would cite a merged PR / gate / linkage instead — this profile has neither).
+    expect(s.evidence).toMatch(/REAL-1.*AC-evidence trace green/);
+    expect(s.evidence).not.toMatch(/merged PR/);
+  });
+});
+
 // --- gh-issues board — roadmap-rollup (self-driving) --------------------------------------------------------
 
 const SELF_DRIVING_REPO = 'volter-ai/open-autonomy';

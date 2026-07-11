@@ -101,6 +101,18 @@ export interface SetupPack {
   landing_mode: LandingMode;
 
   // --- GitHub-only, optional ---
+  // `required_checks` (TP.2 reconciliation, task list "Reconcile honestly"): this is a VIEW over the
+  // profile's OWN `provision.json` — i.e. what THIS PROFILE PRESCRIBES as its merge gate (e.g. simple-gh's
+  // shipped `["ci"]`). On a profile whose `provision.json` still carries a placeholder name (simple-gh's own
+  // provision.json comment: "replace 'ci' with your repo's actual PR CI check-run name(s)"), the pack is
+  // NOT claiming that placeholder is what any real target repo's CI actually posts — it is documenting the
+  // profile's prescription. The adopter's REAL check names are an INSTALL-TIME fact, discovered by TE.4's
+  // throwaway-probe-PR step (OA-INSTALL-IMPLEMENTATION-TASKS.md TE.4 — "do NOT guess required-check names on
+  // a PR-less repo; open a probe PR, read the actual check contexts GitHub reports") and then OVERRIDE this
+  // field's value before `provision-target-repo` ever runs against that repo. So: pack-declared
+  // `required_checks` = the profile's prescription (this VIEW, mechanically re-derivable, drift-guarded
+  // against provision.json by bin/check-setup-pack.ts); the adopter's live required checks = TE.4's
+  // discovery, which is a DIFFERENT, later, install-time act this field does not and cannot perform.
   required_checks?: string[];
   check_realizations?: CheckRealization[];
   enforce_admins?: boolean;

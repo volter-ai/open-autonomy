@@ -2,7 +2,7 @@
 // (`bun test packages/*/src/*.test.ts`), cwd = repo root, so profile paths below are repo-root-relative —
 // same convention as bin/lint-profile.test.ts's `lint('profiles/hello')`.
 import { describe, expect, test } from 'bun:test';
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, readFileSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { getSetupPack, validateSetupPack } from './setup-pack';
@@ -279,6 +279,139 @@ describe('TP.1 acceptance — simple-gh-sdlc pack vs DESIGN §Q1 (the simple-gh-
   });
 
   test('the pack validates structurally with zero errors (drift-vs-ir.yml/provision.json/skills is bin/check-setup-pack.test.ts\'s own coverage, not duplicated here)', () => {
+    expect(validateSetupPack(pack)).toEqual([]);
+  });
+});
+
+// --- TP.2 acceptance — the simple-gh pack asserted field-by-field against DESIGN §Q1's ladder -----------
+// ("simple-gh ladder (landing_mode = manual-after-review; local; 1 manager): M2 generated.json -> M3
+// harness committed + oa doctor green + branch protection with the operator's REAL check names applied and
+// verified live (the shipped ["ci"] is a placeholder) -> M4 a written+declared vision anchor and >=1 ztrack
+// `ready` item from a plans-as-docs cycle -> M5 unpaused + manager tick fires -> M6 a plan-derived issue
+// reached `done` via a deputy merge after green CI + sha-pinned `oa-review: pass`. m3_tool: doctor -
+// m4_predicate: ztrack - m6_signal: per-issue (manager flips state). Terminal one-shot: M5.")
+describe('TP.2 acceptance — simple-gh pack vs DESIGN §Q1 (the simple-gh ladder)', () => {
+  const pack = getSetupPack('profiles/simple-gh');
+
+  test('landing_mode: manual-after-review (no independent agent-review status — a self-check on one shared token would be dishonest, ir.yml header)', () => {
+    expect(pack.landing_mode).toBe('manual-after-review');
+  });
+
+  test('required_checks (provision.json view): ["ci"] — this profile\'s PRESCRIPTION, not an adopter-discovered fact (see setup-pack.yml\'s TP.2 reconciliation note + setup-pack.ts\'s required_checks field doc: TE.4 discovers/overrides the REAL name(s) at install time via a probe PR — this pack never guesses one)', () => {
+    expect(pack.required_checks).toEqual(['ci']);
+  });
+
+  test('check_realizations: ci->authored-workflow ONLY — no agent-review/security entries (this landing_mode deliberately carries neither)', () => {
+    const byCheck = Object.fromEntries((pack.check_realizations ?? []).map((cr) => [cr.check, cr.via]));
+    expect(byCheck).toEqual({ ci: 'authored-workflow' });
+  });
+
+  test('board_seed_recipe: planner originates via plans-as-docs (ztrack import --register, skills/planner/SKILL.md), `ready` ztrack STATE is the promotion fence (manager flips it), landing_path is the §7 board-PR carve-out (skills/manager/SKILL.md §7, the F1 carve-out) — branch protection makes a direct board push mechanically unlandable', () => {
+    expect(pack.board_seed_recipe).toEqual({
+      originator_skill: 'planner',
+      promotion_fence: 'state',
+      import_verb: 'ztrack import --register',
+      landing_path: 'board-pr-carveout',
+    });
+  });
+
+  test('direction_spec: operator (ir.yml declares no documents.roles block; README\'s operator-as-direction framing — TE.3 only anchors when the repo genuinely lacks positioning)', () => {
+    expect(pack.direction_spec.mode).toBe('operator');
+  });
+
+  test('maturity_signals: m3_tool=doctor (local-only profile, no gh-preflight rung), m4_predicate=ztrack (the board IS a ztrack store), m6_signal=per-issue (the manager flips ztrack state itself on each landed PR — no roadmap rollup)', () => {
+    expect(pack.maturity_signals).toEqual({ m3_tool: 'doctor', m4_predicate: 'ztrack', m6_signal: 'per-issue' });
+  });
+
+  test('extra_rungs: none — the common M0-M5 spine only', () => {
+    expect(pack.extra_rungs).toEqual([]);
+  });
+
+  test('terminal_stage: M5 (one-shot terminal target; this profile has no M6 rollup signal, per-issue only)', () => {
+    expect(pack.terminal_stage).toBe('M5');
+  });
+
+  test('enforce_admins: true (provision.json view — repo CI required + enforce_admins:true IS the deterministic gate on a single shared credential, README HONESTY section)', () => {
+    expect(pack.enforce_admins).toBe(true);
+  });
+
+  test('codeHost=github, targets=[local] ONLY — no meaningful gh-actions realization of "the manager merges with the operator token" (ir.yml header)', () => {
+    expect(pack.codeHost).toBe('github');
+    expect(pack.targets).toEqual(['local']);
+  });
+
+  test('KNOWN QUIRK (BL-29, not fixed by this unit): ir.yml declares ztrackPreset simple-gh-sdlc — a tracker PRESET name coincidentally sharing a name with the unrelated simple-gh-sdlc PROFILE; the pack derives what the profile says, never "corrects" it', () => {
+    // The setup-pack schema carries no ztrackPreset field (that lives in ir.yml's policy.box.tracker, not
+    // the pack) — this test documents the quirk exists and is intentionally out of scope for the pack.
+    const ir = readFileSync('profiles/simple-gh/ir.yml', 'utf8');
+    expect(ir).toMatch(/ztrackPreset:\s*simple-gh-sdlc/);
+    expect(ir).toMatch(/BL-29/);
+  });
+
+  test('the pack validates structurally with zero errors (drift-vs-ir.yml/provision.json/skills is bin/check-setup-pack.test.ts\'s own coverage, not duplicated here)', () => {
+    expect(validateSetupPack(pack)).toEqual([]);
+  });
+});
+
+// --- TP.4 acceptance — the simple-sdlc pack asserted field-by-field against DESIGN §Q1's ladder ----------
+// ("simple-sdlc ladder (the local cousin; landing_mode = pr-free; no GitHub rung): M3 doctor only, no
+// protection rung; M4 >=1 `ready`+`oa-approved` ztrack item; M6 = ztrack `done` + AC-evidence trace (no
+// merged PR exists). Terminal: M5; M6 aspirational.")
+describe('TP.4 acceptance — simple-sdlc pack vs DESIGN §Q1 (the simple-sdlc ladder, the easiest one-shot)', () => {
+  const pack = getSetupPack('profiles/simple-sdlc');
+
+  test('landing_mode: pr-free (develop pushes commits directly, review verdicts over commit-evidence — no PR, no auto-merge, no manual-merge deputy, ir.yml header)', () => {
+    expect(pack.landing_mode).toBe('pr-free');
+  });
+
+  test('NO GitHub fields — required_checks/check_realizations/enforce_admins/labels all absent, and the pack still validates OK (this profile ships no provision.json at all)', () => {
+    expect(pack.required_checks).toBeUndefined();
+    expect(pack.check_realizations).toBeUndefined();
+    expect(pack.enforce_admins).toBeUndefined();
+    expect(pack.labels).toBeUndefined();
+    expect(validateSetupPack(pack)).toEqual([]);
+  });
+
+  test('board_seed_recipe: draft originates (no planner in this roster), `ready` ztrack STATE is the promotion fence, landing_path is DIRECT (no PR/merge machinery exists on this profile at all)', () => {
+    expect(pack.board_seed_recipe).toEqual({
+      originator_skill: 'draft',
+      promotion_fence: 'state',
+      import_verb: 'ztrack issue add',
+      landing_path: 'direct',
+    });
+  });
+
+  test('direction_spec: operator (ir.yml declares no documents.roles block — governance is standards/*.md, not a vision/constitution doc, DESIGN §Q1\'s "no vision rung" note)', () => {
+    expect(pack.direction_spec.mode).toBe('operator');
+  });
+
+  test('maturity_signals.m4_allowlist_label: oa-approved — the day-one dispatch fence (OA-07); a `ready` item alone is NOT enough to be actionable, it must ALSO carry this label (ir.yml policy.box.dispatch.mode: allowlist)', () => {
+    expect(pack.maturity_signals.m4_allowlist_label).toBe('oa-approved');
+  });
+
+  test('maturity_signals: m3_tool=doctor (no protection rung — this profile has no GitHub relationship at all), m4_predicate=ztrack', () => {
+    expect(pack.maturity_signals.m3_tool).toBe('doctor');
+    expect(pack.maturity_signals.m4_predicate).toBe('ztrack');
+  });
+
+  test('maturity_signals.m6_signal: per-issue — TP.4 pack+code coherence: this token is REQUIRED for m6-signal.ts\'s readPackFacts to parse this pack at all (non-empty check), but its ENUM VALUE is never consulted to select the pr-free branch (missionAdvancingSignal branches on landing_mode=pr-free FIRST, unconditionally) — proven in m6-signal.test.ts\'s dedicated coherence suite, not re-proven here', () => {
+    expect(pack.maturity_signals.m6_signal).toBe('per-issue');
+  });
+
+  test('extra_rungs: none — no rungs beyond the common M0-M5 spine', () => {
+    expect(pack.extra_rungs).toEqual([]);
+  });
+
+  test('terminal_stage: M5 (one-shot terminal target; M6 is aspirational on this profile per DESIGN §Q1 — no merged PR ever exists to prove a "gate-passed, merged PR closed a mission-linked item" against)', () => {
+    expect(pack.terminal_stage).toBe('M5');
+  });
+
+  test('codeHost=local-git, targets=[local] — genuinely no GitHub relationship (the github substrate realizes code:propose as an auto-merging PR gated on an independent agent-review status this profile does not provide, ir.yml header)', () => {
+    expect(pack.codeHost).toBe('local-git');
+    expect(pack.targets).toEqual(['local']);
+  });
+
+  test('the pack validates structurally with zero errors (drift-vs-ir.yml/skills is bin/check-setup-pack.test.ts\'s own coverage, not duplicated here)', () => {
     expect(validateSetupPack(pack)).toEqual([]);
   });
 });

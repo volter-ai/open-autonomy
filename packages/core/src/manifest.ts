@@ -2,7 +2,7 @@
 // every substrate emits the identical manifest and the runner reads it. So the (de)serialization is the
 // standard's, not any one substrate's emit — it lives here in core, and each substrate's emit imports it
 // rather than one substrate housing it for the others.
-import { isScript, type AutonomyIR } from './ir.js';
+import { isScript, type AutonomyIR, type DocumentRoles } from './ir.js';
 
 export interface OAManifest {
   schema?: string;
@@ -11,7 +11,15 @@ export interface OAManifest {
   // local runner only runs the propose effect (open a PR) for a github code host. A first-class signal, not
   // inferred from a capability.
   codeHost?: 'github' | 'local-git';
-  documents?: Record<string, unknown>;
+  // `resources` is the flat verbatim-file list (unchanged shape). `roles` is ADDITIVE (U2, supercode study
+  // §II.9.1): present only when the IR declares document roles. It is deliberately nested INSIDE
+  // `documents` (not a manifest-top-level key) so a `documents`-flattening consumer (e.g.
+  // substrate-github/ingest-manifest.ts's `collectDocPaths`, which walks arbitrary nesting under
+  // `documents`) picks up role paths as ordinary doc paths with zero code changes — verified against that
+  // flattener before choosing this shape. `Record<string, unknown>` stays the type (rather than a fixed
+  // `{ resources; roles }` object) so a substrate-specific documents key some other emit path adds is still
+  // assignable here — `roles` is just the one key this compiler itself may set.
+  documents?: { resources?: string[]; roles?: DocumentRoles } & Record<string, unknown>;
   skills?: Record<string, string>;
   agents?: Record<
     string,
@@ -74,7 +82,10 @@ export function emitAutonomy(ir: AutonomyIR): OAManifest {
   return {
     schema: 'open-autonomy.autonomy.v1',
     ...(ir.codeHost ? { codeHost: ir.codeHost } : {}),
-    documents: { resources: ir.resources },
+    // `roles` rides ALONGSIDE `resources` (never replacing it) — additive, back-compat: an existing
+    // consumer that only reads `documents.resources` (or flattens the whole `documents` map, as
+    // ingest-manifest.ts's collectDocPaths does) is unaffected whether or not roles are present.
+    documents: { resources: ir.resources, ...(ir.documents?.roles ? { roles: ir.documents.roles } : {}) },
     skills,
     agents,
     policy,

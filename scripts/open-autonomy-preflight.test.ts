@@ -115,6 +115,52 @@ describe('buildPreflightReport — MODEL_PROXY_URL does not apply to a local-run
   });
 });
 
+// U2 (supercode study §II.9.1) — preflight is the compile/preflight-time existence check for a declared
+// document role: `referencedAutonomyPaths` already walks `config.documents` (open-autonomy-config.ts) and
+// existsSync-checks every value with a hard 'fail' status, so a declared role rides that SAME mechanism
+// that already checks constitution/roadmap — no new preflight code needed, just the role showing up in
+// config.documents (see open-autonomy-config.test.ts for that half).
+describe('buildPreflightReport — a declared document role is existence-checked (U2)', () => {
+  const installWithManifest = (manifestYml: string, files: Record<string, string> = {}): string => {
+    const dir = mkdtempSync(join(tmpdir(), 'preflight-roles-'));
+    mkdirSync(join(dir, '.open-autonomy'), { recursive: true });
+    writeFileSync(join(dir, '.open-autonomy', 'autonomy.yml'), manifestYml);
+    for (const [rel, content] of Object.entries(files)) {
+      mkdirSync(join(dir, rel, '..'), { recursive: true });
+      writeFileSync(join(dir, rel), content);
+    }
+    return dir;
+  };
+
+  test('a declared vision role whose file is missing is a hard FAIL (not a warn)', () => {
+    const dir = installWithManifest('documents:\n  roles:\n    vision: docs/VISION.md\n');
+    const report = buildPreflightReport({ root: dir });
+    const check = report.checks.find((c) => c.id === 'autonomy-ref:docs/VISION.md');
+    expect(check?.status).toBe('fail');
+    expect(report.ready).toBe(false);
+  });
+
+  test('a declared vision role whose file EXISTS passes', () => {
+    const dir = installWithManifest('documents:\n  roles:\n    vision: docs/VISION.md\n', { 'docs/VISION.md': '# vision\n' });
+    const report = buildPreflightReport({ root: dir });
+    const check = report.checks.find((c) => c.id === 'autonomy-ref:docs/VISION.md');
+    expect(check?.status).toBe('pass');
+  });
+
+  test('an undeclared vision role is simply never checked (no false-positive fail)', () => {
+    const dir = installWithManifest('agents: {}\n');
+    const report = buildPreflightReport({ root: dir });
+    expect(report.checks.some((c) => c.id === 'autonomy-ref:docs/VISION.md')).toBe(false);
+  });
+
+  test('a declared constitution role overrides the default docs/CONSTITUTION.md path — the OVERRIDDEN path is what gets checked', () => {
+    const dir = installWithManifest('documents:\n  roles:\n    constitution: profiles/acme/docs/OUR_CONSTITUTION.md\n');
+    const report = buildPreflightReport({ root: dir });
+    expect(report.checks.some((c) => c.id === 'autonomy-ref:profiles/acme/docs/OUR_CONSTITUTION.md')).toBe(true);
+    expect(report.checks.some((c) => c.id === 'autonomy-ref:docs/CONSTITUTION.md')).toBe(false);
+  });
+});
+
 describe('the CLI writes its --out into a directory that does not exist yet (BL-27 dev/03)', () => {
   test('a bare run mkdir -ps the output parent instead of crashing ENOENT', () => {
     const dir = mkdtempSync(join(tmpdir(), 'preflight-mkdir-'));

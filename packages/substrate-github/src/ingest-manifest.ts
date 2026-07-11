@@ -1,5 +1,5 @@
 // Ingest an open-autonomy manifest (autonomy.yml) → autonomy.ir.v1 agents.
-import type { AutonomyIR, OAManifest, Trigger } from '@open-autonomy/core';
+import type { AutonomyIR, DocumentRoles, OAManifest, Trigger } from '@open-autonomy/core';
 
 export type { OAManifest };
 
@@ -30,12 +30,21 @@ export function ingestAutonomy(m: OAManifest): AutonomyIR {
     typeof autonomy?.max_open_agent_prs === 'number' ? (autonomy.max_open_agent_prs as number) : undefined;
   // Carry the policy governance data verbatim; see emitAutonomy. An unknown knob round-trips.
   const policyBox: Record<string, unknown> = { ...(m.policy ?? {}) };
+  // The manifest's role LABELS, if present and well-formed (`vision` required, matching validateIR) — full
+  // fidelity for a decompile → recompile round-trip (U2, supercode study §II.9.1). A manifest with no roles
+  // (or a malformed one, e.g. missing vision) yields no `documents` field, same as before U2 existed.
+  const roles = documentRoles(m.documents);
 
   return {
     schema: 'autonomy.ir.v1',
     targets: ['gh-actions'],
     agents,
+    // Every doc path — resources AND (if present) role paths — round-trips as a plain resource here: this
+    // flattener predates U2's `documents.roles` and knows nothing of it, which is exactly the point (U2,
+    // supercode study §II.9.1) — an additive manifest key stays ingestible by code that never heard of it;
+    // the files still get carried, just without the role LABEL (reconstructed separately below).
     resources: collectDocPaths(m.documents),
+    ...(roles ? { documents: { roles } } : {}),
     policy: { maxConcurrent, box: policyBox },
   };
 }
@@ -49,4 +58,12 @@ function collectDocPaths(documents?: Record<string, unknown>): string[] {
   };
   walk(documents);
   return [...new Set(out)].sort();
+}
+
+/** The manifest's `documents.roles`, if present and well-formed (a `vision` string) — else undefined. */
+function documentRoles(documents?: Record<string, unknown>): DocumentRoles | undefined {
+  const roles = (documents as { roles?: unknown } | undefined)?.roles;
+  if (!roles || typeof roles !== 'object') return undefined;
+  const vision = (roles as { vision?: unknown }).vision;
+  return typeof vision === 'string' && vision.length > 0 ? (roles as DocumentRoles) : undefined;
 }

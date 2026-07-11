@@ -11,6 +11,22 @@ schema: autonomy.ir.v1
 targets: [gh-actions, local]
 codeHost: github
 
+# Document roles (U2, supercode study §II.9.1): the measuring sticks, named by ALTITUDE, never filename —
+# a consumer (scripts/open-autonomy-config.ts, preflight) resolves the role rather than guessing a path.
+# `vision` is REQUIRED once this block exists (validateIR enforces it); it and `constitution` are
+# AUTO-GATED into policy.box.risk.human_required_paths below (applyDocumentAutoGate, ir-yaml.ts) — no
+# agent may silently rewrite the doc its own proposals are judged against. `roadmap` is deliberately NOT
+# auto-gated: it's the strategist's medium, kept current by planner/strategist proposals under the
+# ordinary code:propose@roadmap review path (gating it would block the mechanism that keeps it current).
+# All three already exist at this repo's root and (for vision/constitution) were already carried as
+# resources/gated by hand below — this makes that a declared, preflight-checked fact instead of two
+# independent hardcodes that could drift apart.
+documents:
+  roles:
+    vision: docs/VISION.md
+    constitution: docs/CONSTITUTION.md
+    roadmap: .open-autonomy/roadmap.yml
+
 agents:
   # Developer: edits code in its credentialed sandbox; the effect step proposes its change as an
   # auto-merging PR (landed only after ci + an independent agent-review). PM-gated: it runs when the PM

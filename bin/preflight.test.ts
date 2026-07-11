@@ -13,8 +13,10 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
   checkDevDepInstallability,
+  checkDocumentContentGate,
   checkTermfleetPorts,
   classifyPort,
+  declaredContentGateRoles,
   effectiveOmit,
   ensureAgentAuth,
   ensurePtyModule,
@@ -24,6 +26,7 @@ import {
   portOf,
   probePtyLoad,
   resolvePtyDir,
+  UNEDITED_TEMPLATE_MARKER,
   type AgentAuthIO,
   type DevDepIO,
   type RunFn,
@@ -1503,5 +1506,109 @@ describe('OA-14 docs (AC-6): no `claude --version` sign-in advice; INSTALL-AGENT
     const phase0 = text.slice(text.indexOf('## Phase 0'), text.indexOf('## Phase 1'));
     expect(phase0).toContain('gh auth status');
     expect(phase0).toContain('claude auth status');
+  });
+});
+
+// TA.1 (local preflight mirror): #138 hard-FAILs the compiled install's OWN gh-side preflight (scripts/
+// open-autonomy-preflight.ts) when a declared vision/constitution file is MISSING, but silently passes a
+// file that still carries the profile's shipped `REPLACE THIS` seed. This is that SAME content gate,
+// mirrored onto bin/preflight.ts's local surface — WARN (caution) only, never a FAIL, and only for a role
+// this manifest actually DECLARED (never `roadmap`, never a file that's simply missing — that's the
+// gh-side preflight's job, not this one's).
+describe('checkDocumentContentGate (TA.1) — WARN, never FAIL, on an unedited declared vision/constitution template', () => {
+  const compiledRepo = (manifestYml: string, files: Record<string, string> = {}): string => {
+    const dir = mkdtempSync(join(tmpdir(), 'oa-preflight-content-gate-'));
+    mkdirSync(join(dir, '.open-autonomy'), { recursive: true });
+    writeFileSync(join(dir, '.open-autonomy', 'autonomy.yml'), manifestYml);
+    for (const [rel, content] of Object.entries(files)) {
+      mkdirSync(join(dir, rel, '..'), { recursive: true });
+      writeFileSync(join(dir, rel), content);
+    }
+    return dir;
+  };
+
+  // The exact shape `yaml`'s stringify produces (verified against a real compile — see
+  // `bun bin/autonomy-compile.ts profiles/self-driving github <dir>`'s `.open-autonomy/autonomy.yml`).
+  const manifestWithRoles = (roles: Record<string, string>): string =>
+    [
+      'documents:',
+      '  resources:',
+      '    - README.md',
+      '  roles:',
+      ...Object.entries(roles).map(([k, v]) => `    ${k}: ${v}`),
+      'skills:',
+      '  draft: .codex/skills/draft',
+      '',
+    ].join('\n');
+
+  describe('declaredContentGateRoles — the dependency-free line-scan', () => {
+    test('extracts vision + constitution from a real compiled-manifest shape', () => {
+      const roles = declaredContentGateRoles(
+        manifestWithRoles({ vision: 'docs/VISION.md', constitution: 'docs/CONSTITUTION.md', roadmap: '.open-autonomy/roadmap.yml' }),
+      );
+      expect(roles).toEqual({ vision: 'docs/VISION.md', constitution: 'docs/CONSTITUTION.md' });
+    });
+
+    test('roadmap is never extracted, even though it is a real declared role', () => {
+      const roles = declaredContentGateRoles(manifestWithRoles({ roadmap: '.open-autonomy/roadmap.yml' }));
+      expect(roles).toEqual({});
+    });
+
+    test('no documents/roles block at all -> empty', () => {
+      expect(declaredContentGateRoles('agents: {}\nskills: {}\n')).toEqual({});
+    });
+  });
+
+  test('a compiled install whose declared constitution still has the REPLACE THIS marker -> ONE caution, worded WARN: <path> is an unedited template (...)', () => {
+    const dir = compiledRepo(manifestWithRoles({ vision: 'docs/VISION.md', constitution: 'docs/CONSTITUTION.md' }), {
+      'docs/CONSTITUTION.md': `# Constitution\n\n<!-- ${UNEDITED_TEMPLATE_MARKER} for your project. -->\nBuild the best <your product>.\n`,
+      // vision role is DECLARED but the file is simply absent — must not also fire the content gate.
+    });
+    const result = checkDocumentContentGate(dir);
+    expect(result.cautions).toEqual([`WARN: docs/CONSTITUTION.md is an unedited template (${UNEDITED_TEMPLATE_MARKER} marker present)`]);
+  });
+
+  test('after replacing the marker with real content, the caution is gone', () => {
+    const dir = compiledRepo(manifestWithRoles({ constitution: 'docs/CONSTITUTION.md' }), {
+      'docs/CONSTITUTION.md': '# Constitution\n\nBuild the absolute best rocket-delivery platform on Earth.\n',
+    });
+    expect(checkDocumentContentGate(dir).cautions).toEqual([]);
+  });
+
+  test('a profile with no documents block at all -> no caution (not even a "missing manifest" caution)', () => {
+    const dir = compiledRepo('agents: {}\nskills: {}\n');
+    expect(checkDocumentContentGate(dir).cautions).toEqual([]);
+  });
+
+  test('not compiled yet (no .open-autonomy/autonomy.yml on disk) -> no caution', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'oa-preflight-content-gate-precompile-'));
+    try {
+      expect(checkDocumentContentGate(dir).cautions).toEqual([]);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test('a declared vision role whose file is simply MISSING is never a caution here (that is the gh-side preflight FAIL, not this WARN)', () => {
+    const dir = compiledRepo(manifestWithRoles({ vision: 'docs/VISION.md' })); // no docs/VISION.md written
+    expect(checkDocumentContentGate(dir).cautions).toEqual([]);
+  });
+
+  test('a declared roadmap role is never content-gated even carrying the marker (machine-groomed, not authored content)', () => {
+    const dir = compiledRepo(manifestWithRoles({ roadmap: '.open-autonomy/roadmap.yml' }), {
+      '.open-autonomy/roadmap.yml': `# ${UNEDITED_TEMPLATE_MARKER} placeholder roadmap\n`,
+    });
+    expect(checkDocumentContentGate(dir).cautions).toEqual([]);
+  });
+
+  test('both vision and constitution unedited -> two independent cautions', () => {
+    const dir = compiledRepo(manifestWithRoles({ vision: 'docs/VISION.md', constitution: 'docs/CONSTITUTION.md' }), {
+      'docs/VISION.md': `<!-- ${UNEDITED_TEMPLATE_MARKER} -->\n`,
+      'docs/CONSTITUTION.md': `<!-- ${UNEDITED_TEMPLATE_MARKER} -->\n`,
+    });
+    const result = checkDocumentContentGate(dir);
+    expect(result.cautions).toHaveLength(2);
+    expect(result.cautions.some((c) => c.includes('docs/VISION.md'))).toBe(true);
+    expect(result.cautions.some((c) => c.includes('docs/CONSTITUTION.md'))).toBe(true);
   });
 });

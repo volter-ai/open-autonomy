@@ -161,6 +161,84 @@ describe('buildPreflightReport — a declared document role is existence-checked
   });
 });
 
+// TA.1 — the content gate: a DECLARED vision/constitution role file that EXISTS but still carries the
+// shipped template's `REPLACE THIS` marker is a WARN (never a FAIL — content quality is an agent-judgment
+// call OA deliberately leaves open, unlike the file's mere existence, covered by the FAIL suite above).
+describe('buildPreflightReport — content gate: WARN on an unedited vision/constitution template (TA.1)', () => {
+  const installWithManifest = (manifestYml: string, files: Record<string, string> = {}): string => {
+    const dir = mkdtempSync(join(tmpdir(), 'preflight-content-gate-'));
+    mkdirSync(join(dir, '.open-autonomy'), { recursive: true });
+    writeFileSync(join(dir, '.open-autonomy', 'autonomy.yml'), manifestYml);
+    for (const [rel, content] of Object.entries(files)) {
+      mkdirSync(join(dir, rel, '..'), { recursive: true });
+      writeFileSync(join(dir, rel), content);
+    }
+    return dir;
+  };
+
+  test('a declared constitution role whose file still has the REPLACE THIS marker WARNs, and never contributes to `missing`/readiness', () => {
+    const dir = installWithManifest('documents:\n  roles:\n    constitution: docs/CONSTITUTION.md\n', {
+      'docs/CONSTITUTION.md': '# Constitution\n\n<!-- REPLACE THIS for your project. -->\nBuild the best <your product>.\n',
+    });
+    const report = buildPreflightReport({ root: dir });
+    const check = report.checks.find((c) => c.id === 'content-gate:docs/CONSTITUTION.md');
+    expect(check?.status).toBe('warn');
+    expect(check?.message).toBe('WARN: docs/CONSTITUTION.md is an unedited template (REPLACE THIS marker present)');
+    // `ready`/exit code is driven ONLY by 'fail' statuses (buildPreflightReport's `missing` filter) — a
+    // 'warn' must never appear in `missing`, regardless of how many unrelated REQUIRED_FILES this bare
+    // fixture is missing (this fixture isn't a full green install; other checks legitimately fail here).
+    expect(report.missing).not.toContain('content-gate:docs/CONSTITUTION.md');
+  });
+
+  test('a declared vision role whose file still has the REPLACE THIS marker WARNs too', () => {
+    const dir = installWithManifest('documents:\n  roles:\n    vision: docs/VISION.md\n', {
+      'docs/VISION.md': '# Vision\n\n<!-- REPLACE THIS for your project. -->\n',
+    });
+    const report = buildPreflightReport({ root: dir });
+    const check = report.checks.find((c) => c.id === 'content-gate:docs/VISION.md');
+    expect(check?.status).toBe('warn');
+    expect(check?.message).toContain('REPLACE THIS marker present');
+  });
+
+  test('after the marker is replaced with real content, the warning is gone', () => {
+    const dir = installWithManifest('documents:\n  roles:\n    constitution: docs/CONSTITUTION.md\n', {
+      'docs/CONSTITUTION.md': '# Constitution\n\nBuild the absolute best rocket-delivery platform on Earth.\n',
+    });
+    const report = buildPreflightReport({ root: dir });
+    expect(report.checks.some((c) => c.id === 'content-gate:docs/CONSTITUTION.md')).toBe(false);
+    expect(report.checks.find((c) => c.id === 'autonomy-ref:docs/CONSTITUTION.md')?.status).toBe('pass');
+  });
+
+  test('a declared role whose file is MISSING gets no content-gate WARN (that is the FAIL suite\'s job, not this one\'s — no double-reporting)', () => {
+    const dir = installWithManifest('documents:\n  roles:\n    vision: docs/VISION.md\n');
+    const report = buildPreflightReport({ root: dir });
+    expect(report.checks.some((c) => c.id === 'content-gate:docs/VISION.md')).toBe(false);
+    expect(report.checks.find((c) => c.id === 'autonomy-ref:docs/VISION.md')?.status).toBe('fail');
+  });
+
+  test('a declared roadmap role is never content-gated, even with the marker present (machine-groomed, not authored content)', () => {
+    const dir = installWithManifest('documents:\n  roles:\n    vision: docs/VISION.md\n    roadmap: plans/roadmap.yml\n', {
+      'docs/VISION.md': '# Vision\nReal content, no marker.\n',
+      'plans/roadmap.yml': '# REPLACE THIS placeholder roadmap\n',
+    });
+    const report = buildPreflightReport({ root: dir });
+    expect(report.checks.some((c) => c.id === 'content-gate:plans/roadmap.yml')).toBe(false);
+  });
+
+  test('a profile with no documents block emits neither warn nor fail from the content gate', () => {
+    // (other REQUIRED_FILES / autonomy-ref checks legitimately fail against this bare fixture — e.g.
+    // GOVERNANCE_DOCS's default `constitution` guess is always existence-checked, declared or not. That's
+    // pre-existing, unrelated behavior; the content gate's only job here is to stay silent because no
+    // `documents.roles` were DECLARED at all — `config.documentRoles` is empty, per open-autonomy-config.ts.)
+    const dir = installWithManifest('agents: {}\n');
+    const report = buildPreflightReport({ root: dir });
+    expect(report.checks.some((c) => c.id.startsWith('content-gate:'))).toBe(false);
+    // docs/VISION.md specifically has no GOVERNANCE_DOCS default guess (open-autonomy-config.test.ts), so
+    // an undeclared vision role is never referenced at all — a clean negative control for "undeclared".
+    expect(report.checks.some((c) => c.id.startsWith('autonomy-ref:docs/VISION.md'))).toBe(false);
+  });
+});
+
 describe('the CLI writes its --out into a directory that does not exist yet (BL-27 dev/03)', () => {
   test('a bare run mkdir -ps the output parent instead of crashing ENOENT', () => {
     const dir = mkdtempSync(join(tmpdir(), 'preflight-mkdir-'));

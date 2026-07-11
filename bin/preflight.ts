@@ -768,6 +768,76 @@ function verifyLock(): void {
   }
 }
 
+// ── 5. document content gate (TA.1): a DECLARED vision/constitution role file that is still an unedited
+//      template ────────────────────────────────────────────────────────────────────────────────────────
+// #138's machinery hard-FAILs a compiled install's own gh-side preflight (scripts/open-autonomy-
+// preflight.ts) when a DECLARED `documents.roles.vision`/`.constitution` file is MISSING, but a file that
+// still carries the profile's shipped `<!-- REPLACE THIS … -->` seed passes every check silently. This is
+// the SAME content gate, mirrored onto this local surface — WARN only, NEVER a FAIL: content quality is a
+// judgment call OA deliberately leaves to agents (unlike the file's mere existence, which the compiled
+// install's gh-side preflight already hard-FAILs on separately — not this file's job to duplicate).
+// `roadmap` is intentionally excluded — it's the strategist's machine-groomed medium, not authored content
+// (mirrors packages/core/src/ir-yaml.ts's applyDocumentAutoGate, which gates the same pair for the same
+// reason). This file deliberately carries NO YAML dependency (it ships in the plain-`node` adopter bundle,
+// run before `bun install` even happens) — the manifest's `documents: roles: <key>: <path>` block is
+// always emitted in this exact `key: value`-per-line shape by the `yaml` library's stringify
+// (packages/core), so a scoped line-scan is a safe, dependency-free read of it, not a general YAML parse.
+export interface ContentGateIO {
+  existsSync: (p: string) => boolean;
+  readFileSync: (p: string) => string;
+}
+
+const defaultContentGateIO: ContentGateIO = { existsSync, readFileSync: (p) => readFileSync(p, 'utf8') };
+
+export interface ContentGateCheckResult {
+  /** Prominent `!`-line output that must NOT set `failed` — see caution() above; a WARN never fails the gate. */
+  cautions: string[];
+}
+
+export const UNEDITED_TEMPLATE_MARKER = 'REPLACE THIS';
+const CONTENT_GATE_ROLES = ['vision', 'constitution'] as const;
+
+/** Scoped extraction of `documents.roles.{vision,constitution}` from a compiled `.open-autonomy/
+ *  autonomy.yml`'s text — a targeted line-scan (see the section header above for why this isn't a real
+ *  YAML parse). `roadmap` is deliberately not extracted at all (never fed to the content gate). */
+export function declaredContentGateRoles(manifestText: string): Partial<Record<(typeof CONTENT_GATE_ROLES)[number], string>> {
+  const rolesBlock = manifestText.match(/^ {2}roles:\n((?: {4}\S.*\n?)*)/m)?.[1] ?? '';
+  const roles: Partial<Record<(typeof CONTENT_GATE_ROLES)[number], string>> = {};
+  for (const role of CONTENT_GATE_ROLES) {
+    const value = rolesBlock.match(new RegExp(`^ {4}${role}:\\s*(\\S.*)$`, 'm'))?.[1]?.trim();
+    if (value) roles[role] = value;
+  }
+  return roles;
+}
+
+/** Not compiled yet (no `.open-autonomy/autonomy.yml`), or the manifest declares no `documents` block at
+ *  all (or declares neither content-gated role) → cautions is empty, matching "no documents block emits
+ *  neither warn nor fail" exactly (buildPreflightReport's TA.1 test suite proves the SAME invariant on the
+ *  compiled-install surface; this is the pre-compile/local mirror of it). A role that's DECLARED but whose
+ *  file is MISSING is silently skipped here too — that's the gh-side preflight's hard FAIL, not a WARN this
+ *  check should duplicate. */
+export function checkDocumentContentGate(cwd: string, io: ContentGateIO = defaultContentGateIO): ContentGateCheckResult {
+  const cautions: string[] = [];
+  const manifestPath = join(cwd, '.open-autonomy', 'autonomy.yml');
+  if (!io.existsSync(manifestPath)) return { cautions };
+  let roles: Partial<Record<(typeof CONTENT_GATE_ROLES)[number], string>>;
+  try {
+    roles = declaredContentGateRoles(io.readFileSync(manifestPath));
+  } catch {
+    return { cautions }; // an unreadable/malformed manifest is reported by other checks, not this one
+  }
+  for (const role of CONTENT_GATE_ROLES) {
+    const relPath = roles[role];
+    if (!relPath) continue;
+    const abs = join(cwd, relPath);
+    if (!io.existsSync(abs)) continue; // missing — the compiled install's gh-side preflight hard-FAILs this
+    if (io.readFileSync(abs).includes(UNEDITED_TEMPLATE_MARKER)) {
+      cautions.push(`WARN: ${relPath} is an unedited template (${UNEDITED_TEMPLATE_MARKER} marker present)`);
+    }
+  }
+  return { cautions };
+}
+
 // ── 4. agent auth: coding-CLI sign-in — a real probe, never `claude --version` ────────────────────
 // docs/adoption-fixes/OA-14-claude-signin-verification.md (F-13). Extracted as a pure(ish),
 // dependency-injected helper (bin/preflight.test.ts) matching OA-05/OA-06's pattern — the `io` seam (an
@@ -904,6 +974,11 @@ export async function runPreflightCli(): Promise<void> {
   for (const c of portsResult.cautions) caution(c);
   for (const w of portsResult.warns) warn(w);
   verifyLock();
+  // TA.1: if this repo has already been compiled (`.open-autonomy/autonomy.yml` exists), surface an
+  // unedited vision/constitution template as a caution — never a failure (content quality is an
+  // agent-judgment call). A no-op before compile, or on a profile with no `documents` block.
+  const contentGateResult = checkDocumentContentGate(cwd);
+  for (const c of contentGateResult.cautions) caution(c);
   // Run last (docs/adoption-fixes/OA-14...): agent auth is independent of the checks above — it doesn't
   // explain any of their failure modes, and none of theirs explain a logged-out coding CLI.
   const authResult = ensureAgentAuth();

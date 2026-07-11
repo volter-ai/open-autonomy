@@ -1,0 +1,15 @@
+{
+  "name": "@volter/oa",
+  "version": "0.0.0",
+  "private": true,
+  "description": "The open-autonomy local substrate as a versioned CLI: oa start|once|pause|resume|status|dispatch|doctor. Extracted from the proven S6/T6 ensured-runner forks (see README.md).",
+  "type": "module",
+  "main": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "bin": {
+    "oa": "./src/bin/oa.ts"
+  },
+  "dependencies": {}
+}

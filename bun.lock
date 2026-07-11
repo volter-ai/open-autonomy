@@ -25,6 +25,9 @@
       "bin": {
         "oa": "./src/bin/oa.ts",
       },
+      "dependencies": {
+        "yaml": "^2.9.0",
+      },
     },
     "packages/substrate-github": {
       "name": "@open-autonomy/substrate-github",

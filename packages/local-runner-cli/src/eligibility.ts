@@ -29,6 +29,10 @@ function readyIssuesEligibleZtrack(cwd: string, proc: ProcRunner, note: NoteFn):
   return has;
 }
 
+// Exported (additive — was a function-local literal) so board-readiness.ts's `hasDispatchableWork` reads
+// the exact same parked-label set for its own gh-issues board probe instead of hand-copying it.
+export const PARKED_LABELS = new Set(['needs-info', 'human-required']);
+
 /** T6 variant: gh open issues labeled `ready`, minus the two PARKED labels (`needs-info`,
  *  `human-required`) that must never read as dispatchable even if `ready` is also present (a human
  *  paused it). Deliberately does NOT also cross-check "no open PR yet" — the pm SKILL's own WIP=1 step
@@ -46,8 +50,7 @@ function readyIssuesEligibleGhIssues(cwd: string, proc: ProcRunner, note: NoteFn
   } catch {
     rows = [];
   }
-  const parked = new Set(['needs-info', 'human-required']);
-  const dispatchable = Array.isArray(rows) ? rows.filter((row) => !(Array.isArray(row.labels) && row.labels.some((l) => parked.has(l.name)))) : [];
+  const dispatchable = Array.isArray(rows) ? rows.filter((row) => !(Array.isArray(row.labels) && row.labels.some((l) => PARKED_LABELS.has(l.name)))) : [];
   const has = dispatchable.length > 0;
   note(`[oa] eligibility: ready-issues = ${has} (${dispatchable.length}/${Array.isArray(rows) ? rows.length : '?'} ready, non-parked)`);
   return has;

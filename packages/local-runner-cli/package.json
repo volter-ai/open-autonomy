@@ -11,5 +11,7 @@
   "bin": {
     "oa": "./src/bin/oa.ts"
   },
-  "dependencies": {}
+  "dependencies": {
+    "yaml": "^2.9.0"
+  }
 }

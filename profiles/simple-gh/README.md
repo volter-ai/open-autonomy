@@ -1,6 +1,9 @@
 # simple-gh
 
-The single-manager GitHub PR loop. One agent, `manager`, on a `cron: */30 * * * *` trigger, that:
+The single-manager GitHub PR loop, plus a scheduled `planner`. Three declared agents — `manager` and
+`planner` scheduled (manager the only one that dispatches or lands; planner file-only), `audit`
+dispatch-only, never cron. `manager`, on a `cron: */30 * * * *` trigger, is still the only agent that
+dispatches or lands anything:
 
 1. dispatches **strongest-model** research/plan/review subagents in-session (harness-native, not OA
    actors),
@@ -9,19 +12,36 @@ The single-manager GitHub PR loop. One agent, `manager`, on a `cron: */30 * * * 
 4. **lands** work by opening the PR itself and merging it itself — but only after every required CI
    check is green and a fresh review-subagent verdict is recorded on the PR's current head SHA.
 
+`planner` (D3), on its own `cron: 13 5 * * *` trigger, keeps the board from drying up between manager
+ticks: it reads this repo's declared vision (+ constitution, where one exists), measures or judges the
+delta against the current board, and — only when the board is actually starving — authors + registers
+a plan doc and opens a docs-only PR on its own `plan/<date>` branch. It never dispatches, never merges,
+and never promotes anything to `ready` itself; see `skills/planner/SKILL.md`. It exists because a
+seed-only board empties (D8) — proven live in both downstream instances this doctrine is extracted
+from before either had a planner.
+
+The third agent, `audit`, carries **no cron trigger** — it is dispatch-only: a read-only conformance
+auditor of the install itself (not the product it builds), invoked on demand (locally: `AUTONOMY_AGENT=audit
+node scripts/run-agent.mjs`) to verify the install hasn't drifted into something inconsistent, contradictory,
+or against OA's own philosophy/structure. Its one write is opening its own dated report PR under
+`docs/audits/` — never a fix, never a merge, never another dispatch. See `skills/audit/SKILL.md`.
+
 This is the pattern strong operators already run agent fleets with today (one capable session, tiered
-subagent dispatch, worktree isolation, human-shaped review before landing) encoded as an `autonomy.ir.v1`
-profile. See `docs/SPEC.md#the-ir` for the standard; the design rationale in full lives in
-`OA-SIMPLE-GH-PRESET-AND-SUPERCODE-INSTALL.md` §2 (the study this profile implements).
+subagent dispatch, worktree isolation, human-shaped review before landing, plus an on-demand self-check)
+encoded as an `autonomy.ir.v1` profile. See `docs/SPEC.md#the-ir` for the standard; the design rationale
+in full lives in `OA-SIMPLE-GH-PRESET-AND-SUPERCODE-INSTALL.md` §2 (the study this profile implements) and
+the OA self-dev architecture study §II.10 (the audit agent's design).
 
 ## Files
 
 ```
 profiles/simple-gh/
-  ir.yml                       # the profile: one `manager` agent, no merge.yml/reconcile
+  ir.yml                       # the profile: `manager` (scheduled) + `planner` (scheduled, file-only) + `audit` (dispatch-only), no merge.yml/reconcile
   README.md                    # this file
   provision.json                # branch-protection floor: real CI required, enforce_admins, no auto-merge
-  skills/manager/SKILL.md      # the whole doctrine
+  skills/manager/SKILL.md      # the manager's whole doctrine
+  skills/planner/SKILL.md      # vision-anchored board replenishment (D3)
+  skills/audit/SKILL.md        # the auditor's whole doctrine — the 9-point conformance checklist
   standards/workflow.md        # single-manager loop: tick, WIP, worktree rules, dispatch-only-ready
   standards/issue-and-evidence.md  # ztrack grammar + plan-docs-as-document-sources recipe
   standards/risk-and-review.md # review-before-merge doctrine + human-required paths/topics
@@ -54,7 +74,23 @@ GitHub PR.
    is a hard block: rework (bounded) or escalate `human-required`. Never `--admin`, never a direct push
    to the default branch.
 5. Once merged, the manager itself flips the issue's ztrack state to `done` with a `PR:` line — there is
-   no reconcile sweep in this profile (see below).
+   no reconcile sweep in this profile (see below). That state flip is itself a commit that has to land on
+   `main` like any other change; branch protection blocks a direct push of it the same as it blocks a
+   direct push of code, so the manager batches it (and other board mutations) into a **board PR** it can
+   self-merge on green CI under a narrow, scoped carve-out — see `skills/manager/SKILL.md` §7 ("Board-PR
+   landing (the F1 carve-out)").
+
+## Planner
+
+`planner` never touches the merge flow above — it only ever produces a docs-only PR the manager (or the
+operator) lands separately. Its `code:propose` capability is declared **unscoped**, not `code:propose@docs/plans`
+as its plan-doc-only output might suggest: `ztrack import --register` (the step that registers a plan
+doc's issues onto the board) appends entries to the project's tracker config file *outside*
+`docs/plans/`, so a `@docs/plans` scope would understate what it actually writes. This matters less than
+it might seem — `packages/substrate-github/src/emit.ts`'s `capsToPermissions` strips everything after
+`@` before mapping a capability to a GitHub permission, so a scope suffix is never mechanically
+enforced; it is a documented honesty claim only (`docs/SPEC.md#capabilities`). Declaring it unscoped
+matches the proven supercode instance's own live declaration and avoids a false narrow claim.
 
 ## HONESTY
 

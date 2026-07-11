@@ -328,6 +328,17 @@ if (outDir) {
       `     (an uncommitted harness produces workers that die at launch with \`Unknown command: /develop\`):\n` +
       `       ${cd}git add ${stagePaths.join(' ')}  &&  git commit -m "Install the open-autonomy harness"\n` +
       `     (no push required on local-git; see docs/OPERATIONS.md#local-runner-quickstart, step 4)\n`;
+    // U4: this profile opted into the versioned `@volter/oa` CLI runner (policy.box.local.runner === "cli")
+    // — scheduler/run.mjs is now a thin shim that imports it, so it must be an actual project dependency
+    // (governance relocates to the PINNED version + lockfile, per U4's design contract — `package.json`
+    // joins `human_required_paths` the same way `termfleet`/`ztrack` already do). Purely advisory text; the
+    // compiled shim itself is unconditionally emitted either way (see packages/substrate-local/src/emit.ts).
+    const usesCliRunner = (ir.policy.box as { local?: { runner?: string } } | undefined)?.local?.runner === 'cli';
+    const cliRunnerNote = usesCliRunner
+      ? `  Note: this profile's local driver is the versioned CLI runner (policy.box.local.runner: "cli") —\n` +
+        `     install its dependency before step ${runStepNum} (pin the exact version; \`oa doctor\` folds in the\n` +
+        `     same dep-integrity probe OA-04 always ran): ${cd}npm install @volter/oa\n`
+      : '';
     console.log(
       `\nNext steps (local loop — open-autonomy v${CLI_VERSION}):\n` +
         `  1. Prereqs: Node 22.18+ (the ztrack preset is .mts), tmux. Add termfleet to this repo (the runner uses its SDK),\n` +
@@ -345,7 +356,9 @@ if (outDir) {
         `       ${cd}npx open-autonomy compile ${profileArg} local . --provider-url "$TERMFLEET_PROVIDER_URL"\n` +
         tracker +
         commitStep +
+        cliRunnerNote +
         `  ${runStepNum}. Run the loop:  ${cd}node scheduler/run.mjs --once   (one tick)  |  node scheduler/run.mjs   (continuous)\n` +
+        (usesCliRunner ? `     (this is now the @volter/oa shim under the hood — same argv, or use \`npx oa once\` / \`npx oa start\` directly)\n` : '') +
         `  ${runStepNum + 1}. This install starts PAUSED (fresh installs start paused so a pre-existing backlog is\n` +
         `     never dispatched before you review it) — step ${runStepNum}'s first tick exits naming this.\n` +
         `     Review your tracker board (especially a pre-existing backlog), then unpause:  rm .open-autonomy/paused\n` +

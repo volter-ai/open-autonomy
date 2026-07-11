@@ -4,10 +4,14 @@ Read this from the manager skill.
 
 ## Single-manager loop
 
-There is one agent, `manager`, on a `cron: */30 * * * *` trigger. `AUTONOMY_SINGLETON` dedups overlapping
-ticks, so a tick always runs to completion (or to "nothing eligible") before the next one starts. Every
-other worker (research/plan, implementation, review) is a harness-native **subagent** the manager
-dispatches inside that one tick — never a separate scheduled actor.
+`manager`, on a `cron: */30 * * * *` trigger, is the only scheduled agent that **dispatches or lands**
+anything. `AUTONOMY_SINGLETON` dedups overlapping ticks, so a tick always runs to completion (or to
+"nothing eligible") before the next one starts. Every worker in the loop (research/plan, implementation,
+review) is a harness-native **subagent** the manager dispatches inside that one tick — never a separate
+scheduled actor. The profile also declares a second scheduled agent, `planner`
+(`skills/planner/SKILL.md`), whose sole output is docs-only plan-doc PRs on its own `plan/<date>`
+branches — it never dispatches, never lands, and never promotes anything to `ready`, so the
+single-manager claim above holds for everything that executes or merges work.
 
 ## Tick cadence
 

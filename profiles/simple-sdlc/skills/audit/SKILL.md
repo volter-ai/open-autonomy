@@ -323,24 +323,66 @@ absent schedule/board/protection/first-fire is the *expected* state, not a defec
 a **closed catalog** of sources (`subject.ref`/`subject.actor`/`subject.actorRole`/`subject.text`/
 `trigger.kind`) — `mode` is not one of them, and adding a sixth source is a core/spec change this skill-text
 unit does not make. So `MODE` does not travel as a *declared* trigger param the way `TARGET_REF` does.
-It travels through a **different, already-real, profile-blind channel**: on the **local** target, the
-runner-facing launch CLI forwards **any** `--key value` flag verbatim into the launched session's
-environment, regardless of whether that key is declared anywhere in `ir.yml` — this is not a proposal, it's
-what `packages/substrate-local/src/runner-frontend.ts`'s `launch()` already does today for every skill
-agent: `names = Object.keys(params).filter((k) => k !== 'branch')` then spreads
+It travels through a **different, already-real, profile-blind channel** — but which local invocation
+carries it depends on the fence state, and setup-completion's defining case is the **paused** one (Phase 5
+VALIDATE runs before the G4 unpause), so the paused-safe channel is documented first and is the PRIMARY.
+
+**PRIMARY — works on a PAUSED, pre-first-tick install (the mode's whole point): the `run-agent` adapter**,
+the exact dispatch form the § Identity preamble already names (`AUTONOMY_AGENT=audit node
+scripts/run-agent.mjs`), extended with the forward list:
+
+```
+MODE=setup AUTONOMY_FORWARD=MODE AUTONOMY_AGENT=audit node scripts/run-agent.mjs
+```
+
+Why this is the paused-safe channel, cited: the OA-07 pause gate lives in **one** place on the local
+target — `scripts/runner.ts`'s `launch()` (`packages/substrate-local/src/runner-frontend.ts:420-423`:
+`if (existsSync(PAUSED_PATH)) { … throw new PausedError(); }`; only the `kind: human` park route sits
+above that gate). The `run-agent.mjs → autonomy-runner.mjs` adapter chain contains **no**
+`.open-autonomy/paused` check at all (read both files to confirm — the only "paused" strings in the
+backend are session-*status* vocabulary, not the fence), so this invocation launches on a paused install.
+That exemption is *correct* for this actor, not a hole: a read-only audit dispatched by an explicit human
+act spends nothing against the un-triaged backlog the fence protects — the same posture the `oa dispatch`
+verb's own header records ("manual dispatch bypasses the fence by design; … this breaks the circularity",
+`packages/local-runner-cli/src/dispatch.ts:1-8`). Note that `oa dispatch audit` itself does **not** work
+for this actor, though — that verb fires an agent's *schedule line*, and a dispatch-only actor has none
+(the compiled `scheduler/schedule.json` `scripts` list carries only the cron agents) — so the adapter
+above is the operator command here, not `oa dispatch`.
+
+How `MODE` actually reaches your session on this path: `run-agent.mjs` forwards each env name listed in
+`AUTONOMY_FORWARD` as an opaque `--key value` param (`--MODE setup`) to the backend, and the backend
+re-exports launch params **verbatim** into the session's env (`scripts/autonomy-runner.mjs`'s
+`exported = { …env filtered to TERMFLEET_.*|AUTONOMY.*|PATH, …params }` → `export MODE="setup"` in the
+session's setup command). The `AUTONOMY_FORWARD=MODE` part is load-bearing: a bare `MODE=setup` env var
+alone reaches the adapter *process* but is dropped by that session-env filter (`MODE` matches neither
+`TERMFLEET_.*` nor `AUTONOMY.*`), so it would never reach you.
+
+**On an UNPAUSED (already-running) install**, the runner-facing launch CLI works too and is the shorter
+form: it forwards **any** `--key value` flag verbatim into the launched session's environment, regardless
+of whether that key is declared anywhere in `ir.yml` — this is not a proposal, it's what
+`packages/substrate-local/src/runner-frontend.ts`'s `launch()` already does today for every skill agent:
+`names = Object.keys(params).filter((k) => k !== 'branch')` then spreads
 `Object.fromEntries(names.map((k) => [k, String(params[k])]))` straight into the child process's `env`
 (`runner-frontend.ts:487-492`; compiled into every install as `scripts/runner.ts`, same `runCli`/`parseFlags`
 contract, `scripts/runner.ts:74-109`). `--ref` is the one flag this file special-cases (remapped onto the
 target's own declared `subject.ref` param name, e.g. `TARGET_REF`); every other flag passes through
-untouched. So:
+untouched:
 
 ```
 bun scripts/runner.ts launch audit --MODE setup [--ref <issue-or-PR-if-you-have-one>]
 ```
 
-sets `MODE=setup` in the session's env, on any of the four profiles, with **zero** IR/core changes — the
-exact same channel TARGET_REF rides, generalized to an operator-chosen key. Read it the same way you
-already read `TARGET_REF`: `echo "$MODE"` (or equivalent) at the top of your run. **No `MODE` (or
+⚠️ **On a paused install that command is REFUSED** — `[runner] PAUSED — … rm .open-autonomy/paused`,
+exit 1 (the `runner-frontend.ts:420-423` gate above). **Do NOT follow that message's unpause hint to make
+an audit launch go through.** Deleting `.open-autonomy/paused` is the go-live act — M5's own gate, a human
+triage decision this skill's rails already forbid you from touching ("No fence changes, ever",
+§ Capabilities & rails) — and un-pausing an install *in order to check whether it is complete enough to
+un-pause* is exactly the incomplete-install-ticking failure mode this checklist exists to prevent. Use the
+PRIMARY `run-agent` adapter form above instead; it exists for precisely this state.
+
+Either way, read the value the same way you already read `TARGET_REF`: `echo "$MODE"` (or equivalent) at
+the top of your run. Both channels set `MODE=setup` on any of the four profiles with **zero** IR/core
+changes — the same channel `TARGET_REF` rides, generalized to an operator-chosen key. **No `MODE` (or
 `MODE=drift`) → drift mode** (§ above) — this preserves every existing dispatch of this skill unchanged;
 `MODE=setup` is strictly additive.
 
@@ -397,7 +439,8 @@ answers "is there ≥1 *actionable, ready, not-already-in-flight* item," gated b
 and the fresh-work filter (`packages/local-runner-cli/src/board-readiness.ts`'s header: "does this
 profile's board hold >=1 actionable item *right now*?"). A paused, pre-first-tick install by design has
 **zero** `ready` items — Phase 4 EXECUTE seeds **drafts only** and "must NOT self-promote items to
-ready/oa-approved" (DESIGN §Phase 4; `profiles/simple-sdlc/ir.yml:80-83`; pr-139's planners "file drafts,
+ready/oa-approved" (DESIGN §Phase 4; the day-one allowlist fence is `profiles/simple-sdlc/ir.yml:95-99` —
+`policy.box.dispatch: mode: allowlist / allow_label: oa-approved`; pr-139's planners "file drafts,
 never ready — the missing ready label IS the gate"). Running `hasDispatchableWork` here would report
 `actionable: false` on a **correctly-seeded** install and misname a PASS as a FAIL. So this check reads
 board state **directly**, at the draft rung, never through the ready-gate:
@@ -410,9 +453,13 @@ board state **directly**, at the draft rung, never through the ready-gate:
   ≥1 row → **PASS**, citing the count and one identifier. Zero rows → **FAIL**: "board seeded with 0 draft
   items."
 - **GitHub-issues board:** a draft item is an **open issue carrying no `ready` label** (and not parked —
-  same `PARKED_LABELS` exclusion `board-readiness.ts` applies): `gh issue list --state open --json
-  number,labels --limit 100`, filter out rows whose labels include `ready` or a parked label
-  (`agent-paused`/`needs-info`/`agent-blocked`). ≥1 remaining row → **PASS**. Zero → **FAIL**.
+  the exact `PARKED_LABELS` set the board machinery itself excludes: `{needs-info, human-required}`,
+  `packages/local-runner-cli/src/eligibility.ts:34`, imported by `board-readiness.ts:56`): `gh issue list
+  --state open --json number,labels --limit 100`, filter out rows whose labels include `ready`,
+  `needs-info`, or `human-required`. The parked exclusion matters here: an issue parked awaiting a human
+  (`human-required`) or awaiting the requester (`needs-info`) is *blocked*, not seeded work — counting it
+  as the board's one draft would let a wedged board read as seeded. ≥1 remaining row → **PASS**. Zero →
+  **FAIL**.
 - This sub-check applies to every profile (all four route through one of these two boards, same as check
   9) — never N/A. Unlike (a), there is no operator/documents-role branch here: a draft is a draft
   regardless of where the profile's direction lives.
@@ -434,6 +481,13 @@ one fact:
     mode's own OUTCOME grammar forbids. A setup-completion install with an honestly-unverifiable A13 is
     still reported **N/A**, not blocked — matching this file's own precedent that a credential gap is a
     distinct, non-punitive outcome, never folded into a false PASS or a false FAIL.
+  - `present: false` **and** `evidence` starts with `not-applicable:` (A13's own third prefix,
+    `imm-signals.ts:428-433`: the source profile ships no `provision.json` at all, or one with no
+    `branch_protection` block — reachable on a fork of a github-codeHost profile that dropped its
+    provisioning manifest) → **N/A (no prescription)**, citing the evidence string. There is no
+    prescription to match live protection *against*, so neither PASS nor FAIL is observable — the same
+    posture as drift-mode check 3's own "provision.json trap" (blocked-not-PASS-not-FAIL), except here A13
+    already recorded the fact for you.
   - `present: false` and `evidence` is a **proven** negative (starts with `protection NOT applied` or
     names `missing required check(s)`) → **FAIL**, citing the evidence string (it already names the
     missing checks).

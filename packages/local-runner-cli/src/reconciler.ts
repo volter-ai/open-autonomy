@@ -178,7 +178,7 @@ export async function start(opts: StartOptions = {}): Promise<void> {
         // inside the min-gap floor — no log (would spam every heartbeat).
       } else if (st.eligible()) {
         console.error(`[oa] ${label}: firing (eligible, min-gap elapsed, not in flight, no backoff)`);
-        const env = buildTickEnv(schedule.env, ambient);
+        const env = buildTickEnv(schedule.env, ambient, 'cron'); // D2: this heartbeat is the automatic fire
         const result = proc(script.cmd, [], { shell: true, stdio: 'inherit', env });
         // Last ACTUAL fire — deliberately NOT advanced while paused/in-flight/backed-off/ineligible, so
         // that unpausing (or backoff/eligibility clearing) lets it fire on the very NEXT heartbeat rather
@@ -207,7 +207,7 @@ export async function start(opts: StartOptions = {}): Promise<void> {
       const last = otherLastFire.get(key) ?? 0;
       const intervalMs = script.intervalSeconds * 1000;
       if (now - last >= intervalMs) {
-        if (!paused) proc(script.cmd, [], { shell: true, stdio: 'inherit', env: buildTickEnv(schedule.env, ambient) });
+        if (!paused) proc(script.cmd, [], { shell: true, stdio: 'inherit', env: buildTickEnv(schedule.env, ambient, 'cron') }); // D2: automatic per-script fire
         otherLastFire.set(key, now); // advances even while paused — matches pre-U4 behavior
       }
     }

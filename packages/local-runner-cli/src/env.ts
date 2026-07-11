@@ -4,12 +4,24 @@
 // shadow a real schedule pin.
 import type { ProcResult, ProcRunner } from './types.ts';
 
-export function buildTickEnv(scheduleEnv: Record<string, string>, ambient: NodeJS.ProcessEnv = process.env): NodeJS.ProcessEnv {
+// D2 fix (post-review, TC.3): `AUTONOMY_TRIGGER_KIND` distinguishes an AUTOMATIC fire (the reconciler's own
+// heartbeat, or the legacy loop driver's fireTick — packages/substrate-local/src/emit.ts's LOOP_DRIVER
+// carries an equivalent inline tag for the same reason) from an EXPLICIT human act (`oa dispatch <agent>` —
+// dispatch.ts). AUTONOMY_SINGLETON is NOT this signal: it is baked into the schedule-line STRING itself
+// (`AUTONOMY_AGENT=<x> AUTONOMY_SINGLETON=1 node scripts/run-agent.mjs`, packages/substrate-local/src/
+// emit.ts's scheduleScripts), so it is present on EVERY re-fire of that exact command — including a manual
+// `oa dispatch <agent>`, which fires the identical string on purpose. A skill that needs to throttle its own
+// automatic cadence (distinct from an operator's explicit ask for a fresh run) must key off THIS value, not
+// AUTONOMY_SINGLETON. `triggerKind` is optional and additive — omitting it (the pre-existing call shape)
+// leaves AUTONOMY_TRIGGER_KIND unset, exactly as before this fix; only a caller that explicitly passes
+// 'cron' or 'dispatch' sets it, so every existing caller's behavior is unchanged unless updated to pass one.
+export function buildTickEnv(scheduleEnv: Record<string, string>, ambient: NodeJS.ProcessEnv = process.env, triggerKind?: 'cron' | 'dispatch'): NodeJS.ProcessEnv {
   const env: NodeJS.ProcessEnv = { ...scheduleEnv, ...ambient };
   if (typeof ambient.TERMFLEET_PROVIDER_URL === 'string' && ambient.TERMFLEET_PROVIDER_URL.trim() === '') {
     if (scheduleEnv.TERMFLEET_PROVIDER_URL) env.TERMFLEET_PROVIDER_URL = scheduleEnv.TERMFLEET_PROVIDER_URL;
     else delete env.TERMFLEET_PROVIDER_URL;
   }
+  if (triggerKind) env.AUTONOMY_TRIGGER_KIND = triggerKind;
   return env;
 }
 

@@ -80,13 +80,26 @@ every run — it is check-zero, not optional housekeeping.
 
 **How to tell a cron-fired run from an operator dispatch (a real, already-wired signal, not a guess):**
 
-- **Local target:** the compiled loop driver's schedule launches every cron-bearing prose agent with
-  `AUTONOMY_SINGLETON=1` set (`packages/substrate-local/src/emit.ts`'s `scheduleScripts`, compiled into
-  `scheduler/schedule.json`) — and the launch adapter re-exports that env var, unfiltered, into your own
-  session (the backend's session-env filter keeps anything matching `AUTONOMY.*`). The § Identity
-  preamble's documented operator-dispatch form (`AUTONOMY_AGENT=audit node scripts/run-agent.mjs`, with
-  or without `MODE=setup AUTONOMY_FORWARD=MODE`) never sets it. So: `echo "$AUTONOMY_SINGLETON"` at the
-  top of your run — **non-empty → this is a cron tick; empty/unset → this is an operator dispatch.**
+- **Local target:** check `$AUTONOMY_TRIGGER_KIND` — **`cron` → this is the scheduler's own automatic
+  fire; anything else (unset, or `dispatch`) → an operator explicitly launched you.** This is set at the
+  point of firing, not baked into the schedule-line string: the legacy loop driver's `fireTick`
+  (`packages/substrate-local/src/emit.ts`'s compiled `scheduler/run.mjs`) tags every command it fires
+  `AUTONOMY_TRIGGER_KIND=cron`; the `@volter/oa` reconciler's automatic heartbeat
+  (`packages/local-runner-cli/src/reconciler.ts`) does the same. **`AUTONOMY_SINGLETON` is *not* this
+  signal, even though it looks like one** — it is baked into `scheduler/schedule.json`'s own command
+  STRING (`AUTONOMY_AGENT=audit AUTONOMY_SINGLETON=1 node scripts/run-agent.mjs`), so it is present on
+  *every* re-fire of that exact string regardless of who fires it — including `oa dispatch audit`
+  (`packages/local-runner-cli/src/dispatch.ts`), which fires the identical schedule-line string **on
+  purpose**, as a human's explicit, documented, one-off act. Using `AUTONOMY_SINGLETON` as the cron
+  signal would silently throttle that legitimate dispatch — this skill uses `AUTONOMY_TRIGGER_KIND`
+  precisely to avoid that misclassification. `oa dispatch audit` tags its own fire
+  `AUTONOMY_TRIGGER_KIND=dispatch` explicitly (never `cron`); the § Identity preamble's other documented
+  operator-dispatch forms (`AUTONOMY_AGENT=audit node scripts/run-agent.mjs`, with or without
+  `MODE=setup AUTONOMY_FORWARD=MODE`; `bun scripts/runner.ts launch audit ...`) set no
+  `AUTONOMY_TRIGGER_KIND` at all — also correctly read as "not cron" by the same rule. Either way, the
+  launch adapter re-exports `AUTONOMY_TRIGGER_KIND` unfiltered into your own session (the backend's
+  session-env filter keeps anything matching `AUTONOMY.*`), so `echo "$AUTONOMY_TRIGGER_KIND"` at the top
+  of your run always reflects how you were actually fired.
 - **`gh-actions` target:** GitHub Actions sets `GITHUB_EVENT_NAME` in every job unconditionally.
   `schedule` → this run is your cron firing; `workflow_dispatch` or `issue_comment` → an operator (or a
   control-plane replay of one) dispatched you.
@@ -415,10 +428,15 @@ backend are session-*status* vocabulary, not the fence), so this invocation laun
 That exemption is *correct* for this actor, not a hole: a read-only audit dispatched by an explicit human
 act spends nothing against the un-triaged backlog the fence protects — the same posture the `oa dispatch`
 verb's own header records ("manual dispatch bypasses the fence by design; … this breaks the circularity",
-`packages/local-runner-cli/src/dispatch.ts:1-8`). Note that `oa dispatch audit` itself does **not** work
-for this actor, though — that verb fires an agent's *schedule line*, and a dispatch-only actor has none
-(the compiled `scheduler/schedule.json` `scripts` list carries only the cron agents) — so the adapter
-above is the operator command here, not `oa dispatch`.
+`packages/local-runner-cli/src/dispatch.ts:1-8`). **As of TC.3, `oa dispatch audit` DOES work for this
+actor** (corrected from an earlier, now-false claim here): that verb fires an agent's *schedule line*, and
+this actor now has one — its own weekly `cron` trigger gave it a `scheduler/schedule.json` entry (the
+compiled `scripts` list carries every cron-bearing agent, `audit` included as of TC.3). `oa dispatch audit`
+tags its own fire `AUTONOMY_TRIGGER_KIND=dispatch` (§ CRON-TRIGGERED RUNS above), so it correctly bypasses
+the self-throttle and gets a full run — but it carries no `MODE`, so it runs **drift mode**, never
+setup-completion mode. For setup-completion mode specifically (this section's actual subject), the
+paused-safe adapter above (with `MODE=setup AUTONOMY_FORWARD=MODE`) remains the right command — `oa
+dispatch audit` is a real, additional way to fire a *drift-mode* run on demand, not a substitute for it.
 
 How `MODE` actually reaches your session on this path: `run-agent.mjs` forwards each env name listed in
 `AUTONOMY_FORWARD` as an opaque `--key value` param (`--MODE setup`) to the backend, and the backend

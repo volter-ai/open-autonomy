@@ -382,8 +382,19 @@ const buildTickEnv = () => {
   return env;
 };
 
+// D2 fix (post-review, TC.3): fireTick is the loop's OWN automatic tick — its only caller is the scheduler
+// itself (--once and continuous mode below), never a human. Tag every command it fires with
+// AUTONOMY_TRIGGER_KIND=cron so a launched agent can tell "the scheduler fired me on its own cadence" apart
+// from "an operator explicitly typed a launch command" (e.g. \`AUTONOMY_AGENT=audit node
+// scripts/run-agent.mjs\`, or \`oa dispatch <agent>\`/\`oa launch <agent>\` — neither of which goes through
+// fireTick, so neither ever carries this value). AUTONOMY_SINGLETON alone is NOT that signal: it is baked
+// into schedule.json's own command STRING (see scheduleScripts below), so it is present on every re-fire of
+// that exact command line regardless of who fires it — including \`oa dispatch <agent>\`, which fires the
+// identical schedule-line string on purpose. An agent whose own cadence must differ from "every shared tick"
+// (e.g. a low-frequency cron self-throttle) needs a signal that is true ONLY on the scheduler's own
+// automatic fire, never on an explicit human dispatch of the same command — this is that signal.
 const fireTick = () => {
-  const env = buildTickEnv();
+  const env = Object.assign({}, buildTickEnv(), { AUTONOMY_TRIGGER_KIND: 'cron' });
   for (const command of schedule.scripts) {
     spawnSync(command, { shell: true, stdio: 'inherit', env });
   }

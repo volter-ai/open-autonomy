@@ -1,4 +1,8 @@
 import { describe, expect, test } from 'bun:test';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { spawnSync } from 'node:child_process';
 import { compileGithub } from './emit';
 import type { AutonomyIR, Trigger } from '@open-autonomy/core';
 
@@ -175,6 +179,125 @@ describe('compileGithub — TC.3: a cron trigger coexists with dispatch on the S
     const cronFirst = workflows(compileGithub(irWith([{ cron: '51 9 * * 0' }, { dispatch: true }])))[0]!;
     const dispatchFirst = workflows(compileGithub(irWith([{ dispatch: true }, { cron: '51 9 * * 0' }])))[0]!;
     expect(cronFirst).toBe(dispatchFirst);
+  });
+
+  test('a bare cron trigger (no dispatch at all) still gets the ORIGINAL autonomous "no work item" step — unaffected by the subject-ref carve-out', () => {
+    const wf = workflows(compileGithub(irWith([{ cron: '51 9 * * 0' }])))[0]!;
+    expect(wf).toContain('Provide subject (autonomous — no work item)');
+    // no subjectRefParam at all -> the "Provide subject" step body (mkdir + printf) is untouched by D1;
+    // scope the assertion to that step's own body, since `github.event_name` legitimately appears
+    // elsewhere in this workflow (the control job's own `if:` condition).
+    const stepBody = wf.slice(wf.indexOf('Provide subject (autonomous'));
+    expect(stepBody.slice(0, stepBody.indexOf('- name:', 10))).not.toContain('github.event_name');
+  });
+});
+
+// D1 fix (post-review): subjectRefParam() is agent-wide — it can't tell WHICH trigger fired a given run.
+// Before this fix, an agent carrying both a cron trigger AND a dispatch trigger with a subject.ref param
+// (audit) got the SAME single-line `if [ -z "$ref" ]; then ...; exit 1; fi` guard as every subject-scoped
+// agent. On a REAL `schedule` firing, none of github.event.issue/inputs/pull_request exist, so `$ref`
+// resolves empty and the guard exited 1 BEFORE the audit job ever ran — the weekly cron would fail every
+// single time. These tests execute the job step's ACTUAL bash body (not just assert the `on:` block),
+// simulating both a real `schedule` firing and a real `workflow_dispatch` firing with no ref, proving the
+// fix closes the schedule case WITHOUT weakening the dispatch case.
+describe('compileGithub — D1: the "Provide subject" step body actually runs correctly per firing event', () => {
+  // Extract the literal `run: |` script body of a named step from a compiled workflow's YAML text — a
+  // structural extraction (indentation-based), not a regex guess, so it stays correct if surrounding steps
+  // change shape.
+  function extractRunScript(wf: string, stepName: string): string {
+    const lines = wf.split('\n');
+    const stepIdx = lines.findIndex((l) => l.trim() === `- name: ${stepName}`);
+    if (stepIdx === -1) throw new Error(`step "${stepName}" not found`);
+    const runIdx = lines.findIndex((l, i) => i > stepIdx && l.trim() === 'run: |');
+    if (runIdx === -1) throw new Error(`no "run: |" found under step "${stepName}"`);
+    const runIndent = lines[runIdx]!.length - lines[runIdx]!.trimStart().length;
+    const body: string[] = [];
+    for (let i = runIdx + 1; i < lines.length; i++) {
+      const line = lines[i]!;
+      if (line.trim() === '') {
+        body.push('');
+        continue;
+      }
+      const indent = line.length - line.trimStart().length;
+      if (indent <= runIndent) break;
+      body.push(line.slice(runIndent + 2)); // de-indent to the script's own column
+    }
+    return body.join('\n');
+  }
+
+  // Simulate the ONE bit of GitHub Actions templating this script depends on (`${{ github.event_name }}`)
+  // by substituting it with a literal value — everything else in the script is real, unmodified bash that
+  // reads real env vars ($TARGET_REF, via `ref="${TARGET_REF}"`), so this executes the actual shipped logic.
+  function runStep(script: string, eventName: string, targetRef: string, cwd: string): { status: number | null; stdout: string; issueJson: string | null } {
+    const simulated = script.replaceAll('${{ github.event_name }}', eventName);
+    mkdirSync(cwd, { recursive: true });
+    const r = spawnSync('bash', ['-c', simulated], { cwd, env: { ...process.env, TARGET_REF: targetRef, PATH: process.env.PATH }, encoding: 'utf8' });
+    const issuePath = join(cwd, '.agent-run', 'issue.json');
+    return { status: r.status, stdout: r.stdout, issueJson: existsSync(issuePath) ? readFileSync(issuePath, 'utf8') : null };
+  }
+
+  test('a REAL `schedule` firing with no ref: proceeds (exit 0), writes the autonomous placeholder — the weekly cron now actually runs', () => {
+    const wf = workflows(compileGithub(irWith([{ dispatch: true, params: { TARGET_REF: 'subject.ref' } }, { cron: '51 9 * * 0' }])))[0]!;
+    const script = extractRunScript(wf, 'Provide subject');
+    const dir = mkdtempSync(join(tmpdir(), 'oa-d1-schedule-'));
+    try {
+      const result = runStep(script, 'schedule', '', dir);
+      expect(result.status).toBe(0); // NOT exit 1 — this is the exact regression D1 reports
+      expect(result.stdout).not.toContain('no subject.ref forwarded');
+      expect(result.issueJson).not.toBeNull();
+      expect(JSON.parse(result.issueJson!)).toEqual({ number: 0, title: 'maintainer', body: '' });
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test('a REAL `workflow_dispatch` firing with no ref: STILL exits 1 — the dispatch path is not weakened', () => {
+    const wf = workflows(compileGithub(irWith([{ dispatch: true, params: { TARGET_REF: 'subject.ref' } }, { cron: '51 9 * * 0' }])))[0]!;
+    const script = extractRunScript(wf, 'Provide subject');
+    const dir = mkdtempSync(join(tmpdir(), 'oa-d1-dispatch-'));
+    try {
+      const result = runStep(script, 'workflow_dispatch', '', dir);
+      expect(result.status).toBe(1);
+      expect(result.stdout).toContain('no subject.ref forwarded by the trigger');
+      expect(result.issueJson).toBeNull(); // no placeholder written on a genuine caller error
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test('a REAL `issue_comment` firing with no ref: STILL exits 1 too (only `schedule` is exempt)', () => {
+    const wf = workflows(compileGithub(irWith([{ dispatch: true, params: { TARGET_REF: 'subject.ref' } }, { cron: '51 9 * * 0' }])))[0]!;
+    const script = extractRunScript(wf, 'Provide subject');
+    const dir = mkdtempSync(join(tmpdir(), 'oa-d1-comment-'));
+    try {
+      const result = runStep(script, 'issue_comment', '', dir);
+      expect(result.status).toBe(1);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test('a `workflow_dispatch` firing WITH a real ref still proceeds to the gh api fetch line unchanged (no regression on the happy path)', () => {
+    const wf = workflows(compileGithub(irWith([{ dispatch: true, params: { TARGET_REF: 'subject.ref' } }, { cron: '51 9 * * 0' }])))[0]!;
+    const script = extractRunScript(wf, 'Provide subject');
+    // Replace the real `gh api ...` call with a stub so this test has no network/credential dependency —
+    // everything BEFORE that line (the guard itself) is untouched and still real.
+    const stubbed = script.replace(/gh api .*$/m, 'echo "would fetch $ref" && printf \'{"stubbed":true}\\n\' > .agent-run/issue.json');
+    const dir = mkdtempSync(join(tmpdir(), 'oa-d1-happy-'));
+    try {
+      const result = runStep(stubbed, 'workflow_dispatch', '42', dir);
+      expect(result.status).toBe(0);
+      expect(result.stdout).toContain('would fetch 42');
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test('a dispatch-ONLY agent (no cron at all) is completely untouched by the D1 fix — byte-identical guard, no event_name check', () => {
+    const wf = workflows(compileGithub(irWith([{ dispatch: true, params: { TARGET_REF: 'subject.ref' } }])))[0]!;
+    const script = extractRunScript(wf, 'Provide subject');
+    expect(script).not.toContain('github.event_name');
+    expect(script).toContain('if [ -z "$ref" ]; then echo "no subject.ref forwarded by the trigger"; exit 1; fi');
   });
 });
 

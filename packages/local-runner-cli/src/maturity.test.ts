@@ -1245,6 +1245,243 @@ describe('computeMaturity — TP.2 ladder fixtures (real profiles/simple-gh pack
 });
 
 // ============================================================================================
+// TP.3 acceptance — ladder fixture tests driven against the REAL `profiles/self-driving` pack
+// (getSetupPack/checkPackDrift's own real-catalog subject — proven loadable+valid by
+// `bin/check-setup-pack.test.ts` and `bun bin/check-setup-pack.ts`, not re-proven here). Companion to the
+// PR's live before/after preflight transcript (a real `compile` to a scratch dir, proving the born-blocked
+// `docs/VISION.md` fix: gh-side preflight no longer hard-FAILs missing docs/VISION.md, TA.1's content-gate
+// WARN fires instead). This suite proves the STAGE-COMPOSITION side of the same fix plus this profile's
+// distinctive extra rungs (all three: proxy-ready/M3.p, direction-present/M4.d, human-seam-wired/M4.h) and
+// the two DESIGN §Q1 clarifications this unit is responsible for: (1) the honest "stops at M3/M4 without
+// proxy" terminal (no funded MODEL_PROXY_URL -> M3 blocked, never faked past); (2) M4.b — board readiness
+// (A14, m4_predicate=gh-issues) is satisfied by ANY `ready`-labeled issue, including one a MAINTAINER filed
+// directly (no `origin:roadmap-planner`/`roadmap:<id>` label, no strategist/strategy_reviewer/planner loop
+// running at all) — `skills/pm/SKILL.md:33`'s "ready is set by draft, the planner, OR A MAINTAINER" is not
+// gated behind the roadmap-ratification machinery (that loop is what `board_seed_recipe.promotion_fence:
+// upstream-ratified` documents as an ADDITIONAL path issues can arrive by, never the only one A14 accepts).
+// ============================================================================================
+describe('computeMaturity — TP.3 ladder fixtures (real profiles/self-driving pack)', () => {
+  const REAL_PROFILE_DIR = 'profiles/self-driving';
+
+  /** A committed github-substrate install mirroring this profile's REAL compiled shape: `documents.roles`
+   *  (vision+constitution), a `pm` agent, and — controlled per-test via `withHuman` — the `maintainer`
+   *  `kind:human` actor the real ir.yml declares (skills/pm's roster, ir.yml:163-164). `visionEdited`/
+   *  `constitutionEdited` control whether the seeded docs still carry the shipped `REPLACE THIS` marker
+   *  (the M4.d fixture below) or have been genuinely edited past it. */
+  function committedSelfDrivingInstall(
+    dir: string,
+    opts: { pin?: string; withHuman?: boolean; visionEdited?: boolean; constitutionEdited?: boolean } = {},
+  ): void {
+    const withHuman = opts.withHuman ?? true;
+    const visionEdited = opts.visionEdited ?? true;
+    const constitutionEdited = opts.constitutionEdited ?? true;
+    writeGenerated(dir, ['.open-autonomy/autonomy.yml', '.open-autonomy/generated.json', 'scheduler/schedule.json', 'docs/VISION.md', 'docs/CONSTITUTION.md']);
+    // Real YAML text (not writeAutonomyYml's JSON serialization, which flattens `kind: human` onto one
+    // compact `"kind":"human"` line no real compile ever produces) — humanSeamWiredSignal (M4.h) scans for
+    // the literal `  kind: human` indentation a genuine `compileGithub` manifest carries (mirrors D2's own
+    // writeSelfDrivingLikeInstall helper above, same reason).
+    mkdirSync(join(dir, '.open-autonomy'), { recursive: true });
+    const humanBlock = withHuman ? '  maintainer:\n    kind: human\n' : '';
+    writeFileSync(
+      join(dir, '.open-autonomy', 'autonomy.yml'),
+      `schema: open-autonomy.autonomy.v1\ncodeHost: github\ndocuments:\n  roles:\n    vision: docs/VISION.md\n    constitution: docs/CONSTITUTION.md\n    roadmap: .open-autonomy/roadmap.yml\nagents:\n  pm:\n    skill: pm\n    triggers:\n      schedule: "*/15 * * * *"\n${humanBlock}`,
+    );
+    writeSchedule(dir, opts);
+    mkdirSync(join(dir, 'docs'), { recursive: true });
+    writeFileSync(join(dir, 'docs', 'VISION.md'), visionEdited ? 'Our real north star + merit criteria.\n' : '<!-- REPLACE THIS for your project. -->\nMission TBD.\n');
+    writeFileSync(join(dir, 'docs', 'CONSTITUTION.md'), constitutionEdited ? 'Our real operating rules.\n' : '<!-- REPLACE THIS for your project. -->\nRules TBD.\n');
+    gitInit(dir);
+    gitCommitAll(dir);
+  }
+
+  /** gh stubbed fully green for this pack's REAL `provision.json` required_checks (['ci','agent-review',
+   *  'security','human-approval']) + a `ready`-labeled gh-issue on the board — deliberately carrying NO
+   *  `origin:roadmap-planner`/`roadmap:<id>` label, proving M4.b (A14) needs no roadmap-ratification loop —
+   *  + no open PRs (nothing already in flight). */
+  function ghGreenStubForSelfDriving(): StubProc {
+    return baseStub()
+      .onArgs('gh', ['repo', 'view'], () => ok('acme/widgets'))
+      .onArgs('gh', ['api', 'repos/acme/widgets'], () => ok('true'))
+      .onArgs('gh', ['api', 'repos/acme/widgets/branches/main/protection'], () =>
+        ok(JSON.stringify({ required_status_checks: { contexts: ['ci', 'agent-review', 'security', 'human-approval'] } })),
+      )
+      .onArgs('gh', ['issue', 'list', '--state', 'open'], () => ok(JSON.stringify([{ number: 11, labels: [{ name: 'ready' }] }]))) // maintainer-seeded, no roadmap label
+      .onArgs('gh', ['pr', 'list', '--state', 'open'], () => ok('[]'));
+  }
+
+  const fetch200 = (async () => ({ ok: true, status: 200 })) as unknown as typeof fetch;
+
+  function envWithout(...names: string[]): NodeJS.ProcessEnv {
+    const env = { ...process.env };
+    for (const n of names) delete env[n];
+    return env;
+  }
+
+  test("M3 blocked: proxy-ready (M3.p) with MODEL_PROXY_URL unset — the honest DESIGN §Q3 'stops at M3/M4 without proxy' terminal (A13 green, A11/A12 softened, everything else this pack needs for M3 is satisfied)", async () => {
+    const dir = tmpDir();
+    try {
+      committedSelfDrivingInstall(dir);
+      const record = await computeMaturity({
+        cwd: dir,
+        profileDir: REAL_PROFILE_DIR,
+        target: 'gh-actions',
+        proc: withRealGit(ghGreenStubForSelfDriving()),
+        env: envWithout('MODEL_PROXY_URL'),
+        fetchImpl: fetch200,
+        preflightBin: NO_PREFLIGHT,
+        ghPreflightScript: NO_GH_PREFLIGHT,
+      });
+      expect(record.stage).toBe('M2');
+      expect(record.blockers[0]).toMatch(/^M3 blocked:/);
+      expect(record.blockers[0]).toContain("extra rung 'proxy-ready' (M3) failed");
+      expect(record.blockers[0]).toContain('MODEL_PROXY_URL not set');
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test('M4.d blocked: direction-present fails while REPLACE markers are still present in docs/VISION.md (the born-blocked-to-born-WARNED fix\'s runtime counterpart) — proxy reachable, human seam wired, board ready, but M4 still blocks on unedited direction content', async () => {
+    const dir = tmpDir();
+    try {
+      committedSelfDrivingInstall(dir, { visionEdited: false }); // the shipped REPLACE-THIS seed, never edited
+      const env = { ...process.env, MODEL_PROXY_URL: 'http://proxy.test', PUBLIC_AGENT_MAINTAINERS: 'brennan' };
+      const record = await computeMaturity({
+        cwd: dir,
+        profileDir: REAL_PROFILE_DIR,
+        target: 'gh-actions',
+        proc: withRealGit(ghGreenStubForSelfDriving()),
+        env,
+        fetchImpl: fetch200,
+        preflightBin: NO_PREFLIGHT,
+        ghPreflightScript: NO_GH_PREFLIGHT,
+      });
+      expect(record.stage).toBe('M3'); // proxy-ready + human-seam-wired are M3/M4-clean; M3 itself is reached
+      expect(record.blockers[0]).toMatch(/^M4 blocked:/);
+      expect(record.blockers[0]).toContain("extra rung 'direction-present' (M4) failed");
+      expect(record.blockers[0]).toContain('docs/VISION.md is an unedited template');
+      // the generic M4-direction rung (evaluated unconditionally for every documents.roles profile,
+      // independent of whether 'direction-present' also happens to be one of this pack's extra_rungs) must
+      // agree — never silently pass while the named extra rung fails.
+      const directionEntry = record.signals.find((s) => s.id === 'M4-direction')!;
+      expect(directionEntry.present).toBe(false);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test("M4.b satisfied: a MAINTAINER-seeded ready gh-issue (no origin:roadmap-planner/roadmap:<id> label) drives A14 true with NO strategist/strategy_reviewer/planner loop running — skills/pm/SKILL.md:33's 'ready is set by draft, the planner, or a maintainer' proven for the maintainer leg specifically", async () => {
+    const dir = tmpDir();
+    try {
+      committedSelfDrivingInstall(dir);
+      const env = { ...process.env, MODEL_PROXY_URL: 'http://proxy.test', PUBLIC_AGENT_MAINTAINERS: 'brennan' };
+      const record = await computeMaturity({
+        cwd: dir,
+        profileDir: REAL_PROFILE_DIR,
+        target: 'gh-actions',
+        proc: withRealGit(ghGreenStubForSelfDriving()),
+        env,
+        fetchImpl: fetch200,
+        preflightBin: NO_PREFLIGHT,
+        ghPreflightScript: NO_GH_PREFLIGHT,
+      });
+      const a14 = record.signals.find((s) => s.id === 'A14')!;
+      expect(a14.present).toBe(true);
+      expect(a14.evidence).toContain('variant=gh-issues');
+      expect(record.stage).toBe('M4');
+      expect(record.stageName).toBe('ARMED');
+      expect(record.blockers[0]).toMatch(/^M5 blocked:/); // still paused — go-live is a later, separate act
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test("M4.h blocked: no kind:human maintainer actor compiled into the install (proxy reachable, direction clean, board ready) — the negative fixture; the real profile's own ir.yml DOES declare one (ir.yml:163-164), proven by the positive case in the M4.b test above (withHuman defaults true)", async () => {
+    const dir = tmpDir();
+    try {
+      committedSelfDrivingInstall(dir, { withHuman: false });
+      const env = envWithout('PUBLIC_AGENT_MAINTAINERS');
+      env.MODEL_PROXY_URL = 'http://proxy.test';
+      const record = await computeMaturity({
+        cwd: dir,
+        profileDir: REAL_PROFILE_DIR,
+        target: 'gh-actions',
+        proc: withRealGit(ghGreenStubForSelfDriving()),
+        env,
+        fetchImpl: fetch200,
+        preflightBin: NO_PREFLIGHT,
+        ghPreflightScript: NO_GH_PREFLIGHT,
+      });
+      expect(record.stage).toBe('M3');
+      expect(record.blockers[0]).toMatch(/^M4 blocked:/);
+      expect(record.blockers[0]).toContain("extra rung 'human-seam-wired' (M4) failed");
+      expect(record.blockers[0]).toContain('no agent declares "kind: human"');
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test('hosted (gh-actions) target: A8/A10 doctor never evaluated for this real pack (m3_tool=gh-preflight, target-invariant) — proven through the FULL composer, not just signal-sets.ts in isolation', async () => {
+    const dir = tmpDir();
+    try {
+      committedSelfDrivingInstall(dir);
+      const env = { ...process.env, MODEL_PROXY_URL: 'http://proxy.test', PUBLIC_AGENT_MAINTAINERS: 'brennan' };
+      const record = await computeMaturity({
+        cwd: dir,
+        profileDir: REAL_PROFILE_DIR,
+        target: 'gh-actions',
+        proc: withRealGit(ghGreenStubForSelfDriving()),
+        env,
+        fetchImpl: fetch200,
+        preflightBin: NO_PREFLIGHT,
+        ghPreflightScript: NO_GH_PREFLIGHT,
+      });
+      expect(record.signals.find((s) => s.id === 'A8')).toBeUndefined();
+      expect(record.skipped.some((s) => s.id === 'A8' && /gh-preflight/.test(s.reason))).toBe(true);
+      // A12 itself is `doctor-unavailable:` here (no real checkout-relative script in this unit test's
+      // fixture — softOk() treats that as OK, never a real ran-and-failed negative); the composer still
+      // reaches past M3 on it (proven by the stage below), matching D3's own softening semantics.
+      const a12 = record.signals.find((s) => s.id === 'A12')!;
+      expect(a12.evidence).toMatch(/^doctor-unavailable:/);
+      expect(record.stage === 'M3' || record.stage === 'M4' || record.stage === 'M5').toBe(true);
+      expect(record.blockers.every((b) => !b.includes('m3_tool=gh-preflight) failed'))).toBe(true);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test('M5 boundary: all rungs (proxy, direction, human seam, board) satisfied + fence lifted + an install-scoped session belonging to a declared agent -> M5/RUNNING reached', async () => {
+    const dir = tmpDir();
+    try {
+      committedSelfDrivingInstall(dir, { pin: 'http://pinned.test' });
+      rmSync(join(dir, '.open-autonomy', 'paused'), { force: true });
+      const env = { ...process.env, MODEL_PROXY_URL: 'http://proxy.test', PUBLIC_AGENT_MAINTAINERS: 'brennan' };
+      const fakeProbe: SessionProbe = async (_cwd, pinnedProviderUrl) => {
+        expect(pinnedProviderUrl).toBe('http://pinned.test');
+        return [{ agent: 'pm', status: 'running' } as Session];
+      };
+      const record = await computeMaturity({
+        cwd: dir,
+        profileDir: REAL_PROFILE_DIR,
+        target: 'gh-actions',
+        proc: withRealGit(ghGreenStubForSelfDriving()),
+        env,
+        fetchImpl: fetch200,
+        preflightBin: NO_PREFLIGHT,
+        ghPreflightScript: NO_GH_PREFLIGHT,
+        sessionProbe: fakeProbe,
+      });
+      expect(record.stage).toBe('M5');
+      expect(record.stageName).toBe('RUNNING');
+      // terminal_stage: M5 for this pack (setup-pack.yml) — M6 (roadmap-rollup) is a separate, async,
+      // OBSERVABLE-not-required rung not re-proven by this synthetic fixture; m6-signal.test.ts owns it.
+      expect(record.blockers[0]).toMatch(/^M6 blocked:/);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+});
+
+// ============================================================================================
 // TP.4 acceptance — ladder fixture tests driven against the REAL `profiles/simple-sdlc` pack, walking the
 // FULL END-TO-END ladder this pack's own terminal_stage:M5 promises — the "easiest one-shot" DESIGN §Q1
 // calls out. Companion to the PR's live transcript (a real `compile` + `oa provider up` + `oa doctor --live`

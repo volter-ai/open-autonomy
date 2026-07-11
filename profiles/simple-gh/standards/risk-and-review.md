@@ -61,6 +61,11 @@ are NOT blocked.)
   `scripts/prompts/**` (the launch→skill mapping). NOT your project's own `scripts/`.
 - `.volter/tracker/validation/**`
 
+The `.open-autonomy/**` entry above carries one scoped exception: the manager SKILL's §7 (Board-PR
+landing) carve-out for exactly `.open-autonomy/board-*` and `.open-autonomy/paused` (create/update
+only — never deletion) is self-mergeable on green CI per §7's own terms; every other path under
+`.open-autonomy/**` keeps the unqualified stop rule above.
+
 When a diff touches any of the above, or the issue's topic is in `human_required_topics` (auth, secrets,
 billing, deployment, destructive data migration, dependency trust): **stop**, label the issue
 `human-required`, and engage the operator instead of proceeding or merging. Never edit the harness, this

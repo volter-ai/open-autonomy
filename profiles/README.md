@@ -264,22 +264,40 @@ bun bin/autonomy-compile.ts profiles/hello gh-actions /tmp/hello-gh
   Targets **`local` only** — it is PR-free (review = the reviewer's verdict over commit-evidence), and
   github's merge boundary requires an auto-merging PR + `agent-review` it doesn't provide; the GitHub
   PR-based SDLC is `simple-gh-sdlc`'s job. Its agents use `ztrack` for tooling.
-- **`simple-gh-sdlc/`** — the **github** counterpart of simple-sdlc (pm / draft / develop / reviewer).
-  Same ztrack-tracked dispatch loop, but the merge boundary is GitHub's: `develop` (`code:propose`) lands
-  its change as an auto-merging PR gated by an independent `reviewer` (`code:review` → `agent-review`) —
-  the permission split, native auto-merge, done = merged PR (self-driving's merge model on a generic
-  ztrack SDLC). Targets **`gh-actions` + `local`** (runner ⟂ code host — agents on Actions *or* your
-  machine, auto-merging PRs on GitHub either way); uses the ztrack `simple-gh-sdlc` preset.
-- **`simple-gh/`** — the **single-manager** GitHub PR loop. ONE agent (`manager`, `cron: */30 * * * *`) —
-  research/plan/review/implementation are harness-native **subagents** it dispatches in-session
+- **`simple-gh-sdlc/`** — the **github** counterpart of simple-sdlc (pm / draft / develop / reviewer +
+  a scheduled `planner`, D3). Same ztrack-tracked dispatch loop, but the merge boundary is GitHub's:
+  `develop` (`code:propose`) lands its change as an auto-merging PR gated by an independent `reviewer`
+  (`code:review` → `agent-review`) — the permission split, native auto-merge, done = merged PR
+  (self-driving's merge model on a generic ztrack SDLC). `planner` sits outside that flow: on its own
+  cron, it reads the repo's declared vision and files new draft (unlabeled) issues — `tasks:author`
+  only, no `code:propose`/`agent:launch` — when the board is starving, since nothing else in this loop
+  originates work, only shapes/develops issues that already exist (D8: a seed-only board empties).
+  Targets **`gh-actions` + `local`** (runner ⟂ code host — agents on Actions *or* your machine,
+  auto-merging PRs on GitHub either way); uses the ztrack `simple-gh-sdlc` preset.
+- **`simple-gh/`** — the **single-manager** GitHub PR loop, plus a scheduled `planner` (D3). Three
+  declared agents — `manager` and `planner` scheduled (manager the only one that dispatches or lands;
+  planner file-only), `audit` dispatch-only, never cron. `manager` (`cron: */30 * * * *`) is still the
+  only agent that dispatches or lands anything — research/plan/review/implementation are harness-native
+  **subagents** it dispatches in-session
   (per-dispatch `model` override + worktree isolation), not separate OA actors;
   `policy.box.models.{research,implement}` are abstract tier labels the SKILL.md maps to concrete models.
-  Plans are **docs** registered as ztrack document sources, not hand-authored issues. The merge boundary
+  Plans are **docs** registered as ztrack document sources, not hand-authored issues. `planner`
+  (`cron: 13 5 * * *`) keeps that board fed between manager ticks by reading the repo's declared vision
+  and, only when the board is starving, authoring + registering a plan doc and opening a docs-only PR on
+  its own branch — it never dispatches, never merges, never promotes anything to `ready`; the manager
+  (or the operator) lands what it files. Its `code:propose` is deliberately UNSCOPED, not
+  `@docs/plans` — `ztrack import --register` also appends to the project's tracker config file outside
+  `docs/plans/`, and a scope suffix is a doctrine-only honesty claim (`docs/SPEC.md#capabilities`; never
+  mechanically enforced), so a narrower claim than reality would be false. The merge boundary
   drops the auto-merge/`agent-review` pair entirely: the manager itself opens and **merges** each PR
   (`code:propose` only — no `code:review`, no `code:merge`), but only once every required repo CI check
   is green **and** a freshly-dispatched review subagent has recorded a `pass` verdict on the current head
   SHA — twin's owner-decided landing model (a human merges every green PR by hand), agent-executed as the
-  operator's deputy. Targets **`local` only**, `codeHost: github`. Honesty (see
+  operator's deputy. The third declared agent, `audit`, is dispatch-only (no cron, ever) — a read-only
+  conformance auditor of the install itself, filing a dated report PR under `docs/audits/` on demand; it
+  does not add a third scheduled actor — only `manager` and `planner` tick on their own crons
+  (`profiles/simple-gh/skills/audit/SKILL.md`). Targets **`local`
+  only**, `codeHost: github`. Honesty (see
   `profiles/simple-gh/README.md`): on a shared local credential there is no independent reviewer identity,
   so the *deterministic* gate is branch protection (real CI required + `enforce_admins: true`), not agent
   independence; and the model tiering works only on the Claude Code harness — `TERMFLEET_AGENT=codex`

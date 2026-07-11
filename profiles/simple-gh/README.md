@@ -63,7 +63,11 @@ GitHub PR.
    is a hard block: rework (bounded) or escalate `human-required`. Never `--admin`, never a direct push
    to the default branch.
 5. Once merged, the manager itself flips the issue's ztrack state to `done` with a `PR:` line — there is
-   no reconcile sweep in this profile (see below).
+   no reconcile sweep in this profile (see below). That state flip is itself a commit that has to land on
+   `main` like any other change; branch protection blocks a direct push of it the same as it blocks a
+   direct push of code, so the manager batches it (and other board mutations) into a **board PR** it can
+   self-merge on green CI under a narrow, scoped carve-out — see `skills/manager/SKILL.md` §7 ("Board-PR
+   landing (the F1 carve-out)").
 
 ## HONESTY
 

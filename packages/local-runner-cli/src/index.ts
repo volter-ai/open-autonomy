@@ -19,6 +19,22 @@ export type { DispatchableWorkOptions, DispatchableWorkVerdict, BoardKind, Board
 export type { NormalizedSchedule, NormalizedScript } from './types.ts';
 export { bringUpProvider, providerStatus, providerDown } from './provider.ts';
 export type { BringUpOptions, BringUpResult, ProviderState, ProviderStatusResult, ProviderDownResult } from './provider.ts';
+export {
+  a1GeneratedJsonValid,
+  a2CompileClean,
+  a3AutonomyYmlParses,
+  a4PausedSeeded,
+  a5PausedAbsent,
+  a6HarnessCommitted,
+  a8a10DoctorPass,
+  a11PreflightPass,
+  a12GhPreflightReady,
+  a13ProvisionMatchesLiveProtection,
+  a14BoardHasDispatchableWork,
+  IMM_SIGNALS,
+  collectImmSignals,
+} from './imm-signals.ts';
+export type { Signal, SignalFn, SignalContext } from './imm-signals.ts';
 
 import { readFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';

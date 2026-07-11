@@ -22,19 +22,26 @@
 //
 // ONE-QUESTION BOOKKEEPING (acceptance (ii)): each invocation emits AT MOST one question:
 //   - recommend flow, invocation 1 (no --confirm/--override): emits exactly 1 question, NO record.
-//   - recommend flow, invocation 2 (--confirm <profile> or --override <profile>): emits 0 NEW questions
+//   - recommend flow, invocation 2 (--confirm <profile>@<substrate> or --override <profile>): emits 0 NEW questions
 //     (the record's `g1` field documents the question that WAS asked in invocation 1 + the answer given
 //     here) — a record IS emitted.
 //
-// CONFIRM-DRIFT GUARD (review round D1): because the two invocations are stateless, the repo can change
-// between them — and a bare "yes" flag would then silently bind whatever the SECOND derivation happens to
-// recommend, fabricating a g1 record for a question the human never saw (live repro: empty repo asked
-// "simple-sdlc?", repo gained content + a GitHub remote, bare --confirm bound simple-gh-sdlc and flipped
-// landing_mode pr-free→auto-merge). So `--confirm` REQUIRES the profile name the human actually confirmed
-// (invocation 1's question names it): the second invocation re-derives the recommendation and HARD-ERRORS
-// on any mismatch ("recommendation drifted since the question was asked … re-ask G1") — it never binds a
-// profile the human did not see, and `g1.answer` records exactly what the human confirmed. A bare
-// `--confirm` is a loud usage error (no silent legacy path).
+// CONFIRM-DRIFT GUARD (review rounds D1 + D4): because the two invocations are stateless, the repo can
+// change between them — and a bare "yes" flag would then silently bind whatever the SECOND derivation
+// happens to recommend, fabricating a g1 record for a question the human never saw (D1 live repro: empty
+// repo asked "simple-sdlc?", repo gained content + a GitHub remote, bare --confirm bound simple-gh-sdlc
+// and flipped landing_mode pr-free→auto-merge). And G1 is a confirm/override of profile + SUBSTRATE
+// (DESIGN §Q3's gate table: "confirm/override profile+substrate") — the recommender yields the SAME
+// profile on two substrates (simple-gh-sdlc@gh-actions when hostedRunner && ghAdmin!==false vs @local
+// when ghAdmin===false, packages/core/src/recommend.ts), so a profile-only token would still silently
+// flip WHERE THE FLEET RUNS on a ghAdmin drift (D4 live repro: ghAdmin false→true between invocations
+// re-bound simple-gh-sdlc from local to gh-actions under a profile-only --confirm). So `--confirm`
+// REQUIRES the full `<profile>@<substrate>` token the human actually confirmed (invocation 1's help line
+// prints the exact token): the second invocation re-derives the recommendation and HARD-ERRORS on a
+// mismatch in EITHER dimension ("recommendation drifted since the question was asked … re-ask G1") — it
+// never binds a profile OR substrate the human did not see, and `g1.answer` records exactly the confirmed
+// pair. A bare `--confirm`, or a profile-only token without `@<substrate>`, is a loud usage error (no
+// soft fallback).
 //   - pre-pick flow, validated OK: emits 0 questions — the human's pre-pick + a clean validation together
 //     already constitute G1's answer; a record is emitted immediately, no re-ask.
 //   - pre-pick flow, BLOCKED: emits exactly 1 question (the blocker doubles as "pick something else?") —
@@ -140,6 +147,30 @@ export function formatG1Question(rec: Recommendation): string {
   return `I recommend ${rec.profile} on ${rec.substrate} because ${rec.reasons.join('; ')}; confirm or override?`;
 }
 
+/** Parse --confirm's `<profile>@<substrate>` token (D4). G1 confirms BOTH dimensions (DESIGN §Q3:
+ *  "confirm/override profile+substrate"), so a profile-only token is refused loudly — a soft fallback
+ *  would let a substrate drift (same profile, ghAdmin flipped between the stateless invocations) bind a
+ *  substrate the human never saw. Profile directory names never contain '@', so the split is unambiguous. */
+export function parseConfirmToken(token: string): { profile: string; substrate: Substrate } | { error: string } {
+  const at = token.indexOf('@');
+  if (at === -1) {
+    return {
+      error:
+        `error: --confirm requires the full <profile>@<substrate> token (got a profile-only "${token}") — ` +
+        `e.g. --confirm ${token}@local. G1 confirms BOTH the profile AND the substrate (invocation 1's help ` +
+        `line prints the exact token): a profile-only confirmation would let a substrate drift between the ` +
+        `two stateless invocations silently flip where the fleet runs.`,
+    };
+  }
+  const profile = token.slice(0, at);
+  const substrate = token.slice(at + 1);
+  if (!profile) return { error: `error: --confirm token "${token}" is missing the profile before '@' (expected <profile>@<substrate>, e.g. simple-sdlc@local)` };
+  if (substrate !== 'local' && substrate !== 'gh-actions') {
+    return { error: `error: --confirm token "${token}" has an invalid substrate "${substrate}" (expected <profile>@<substrate> with substrate 'local' or 'gh-actions')` };
+  }
+  return { profile, substrate };
+}
+
 export interface G1Record {
   /** Was a confirm/override question ever put to the human for this selection? */
   asked: boolean;
@@ -187,7 +218,8 @@ interface CliOptions {
   out?: string;
   pick?: string;
   substrate?: Substrate;
-  /** The profile name the human confirmed (D1: --confirm REQUIRES the name — never a bare boolean). */
+  /** The `<profile>@<substrate>` token the human confirmed (D1/D4: --confirm REQUIRES the full pair —
+   *  never a bare boolean, never a profile-only name that would let a substrate drift bind silently). */
   confirm?: string;
   override?: string;
   hostedRunner?: boolean;
@@ -248,17 +280,20 @@ export function parseArgs(argv: string[]): ParsedArgs {
         break;
       }
       case '--confirm': {
-        // D1: --confirm REQUIRES the profile name being confirmed (invocation 1's question names it).
+        // D1: --confirm REQUIRES the confirmed token (invocation 1's help line prints it exactly).
         // A bare --confirm is refused loudly so a drifted recommendation can never be silently bound.
+        // (The token's <profile>@<substrate> SHAPE is validated in run() — D4 — where the error can say
+        // more; here we only refuse the fully-absent value.)
         const v = takeValue(a);
         if (v === undefined) {
           return {
             opts,
             error:
-              'error: --confirm requires the profile name being confirmed, e.g. --confirm simple-sdlc ' +
-              '(invocation 1\'s G1 question names it). A bare --confirm is refused: this CLI is stateless, ' +
-              'so the repo may have changed since the question was asked — the confirmed name is what lets ' +
-              'the second invocation detect recommendation drift instead of silently binding a profile the ' +
+              'error: --confirm requires the profile name being confirmed, as the full <profile>@<substrate> ' +
+              'token, e.g. --confirm simple-sdlc@local (invocation 1\'s G1 question names it and its help ' +
+              'line prints the exact token). A bare --confirm is refused: this CLI is stateless, so the repo ' +
+              'may have changed since the question was asked — the confirmed pair is what lets the second ' +
+              'invocation detect recommendation drift instead of silently binding a profile or substrate the ' +
               'human never saw.',
           };
         }
@@ -313,18 +348,18 @@ export function parseArgs(argv: string[]): ParsedArgs {
 const USAGE = [
   'usage: bun bin/install-select.ts <repoDir> [--detect <detect-report.json>] [--json] [--out <file>]',
   '                                  [--pick <profileName> [--substrate local|gh-actions]]',
-  '                                  [--confirm <profileName> | --override <profileName>]',
+  '                                  [--confirm <profileName>@<substrate> | --override <profileName>]',
   '                                  [--hosted-runner|--no-hosted-runner] [--prefer-no-auto-merge]',
   '                                  [--can-fund-proxy|--cannot-fund-proxy] [--demo] [--soc2]',
   '                                  [--profiles-root <dir>]',
   '',
   'Two flows:',
   '  (a) no --pick: RECOMMEND. First invocation (no --confirm/--override) emits the G1 question.',
-  '      Second invocation, same args + --confirm <profile> (accept — pass the profile the question named)',
-  '      or --override <profile> (reject + choose), re-derives the recommendation (stateless) and emits',
-  '      the SELECTION RECORD. If the re-derived recommendation no longer matches the confirmed profile',
-  '      (the repo changed between invocations), the CLI hard-errors and G1 must be re-asked — it never',
-  '      binds a profile the human did not see.',
+  '      Second invocation, same args + --confirm <profile>@<substrate> (accept — pass the exact token the',
+  '      question\'s help line printed) or --override <profile> (reject + choose), re-derives the',
+  '      recommendation (stateless) and emits the SELECTION RECORD. If the re-derived recommendation no',
+  '      longer matches the confirmed profile OR substrate (the repo changed between invocations), the CLI',
+  '      hard-errors and G1 must be re-asked — it never binds a profile or substrate the human did not see.',
   '  (b) --pick <profile>: VALIDATE. Validates the pre-pick against the repo. If OK, emits the SELECTION',
   '      RECORD immediately (no question). If BLOCKED, emits the ONE blocker question, no record.',
 ].join('\n');
@@ -438,7 +473,7 @@ export async function run(argv: string[], profilesRootDefault: string, proc: Pro
     // Invocation 1: emit THE ONE G1 QUESTION. No record — nothing is instantiated until the human answers.
     const output = opts.json
       ? JSON.stringify({ mode: 'recommend', asked: true, question, recommendation: rec, detect: detectRef }, null, 2)
-      : [question, '', 'Why:', ...rec.reasons.map((r) => `  - ${r}`), '', 'Answer on a second invocation (same repoDir/--detect args — this CLI is stateless):', `  --confirm ${rec.profile.padEnd(18)} accept the recommendation (pass the profile this question named)`, '  --override <profileName>     choose a different profile instead'].join('\n');
+      : [question, '', 'Why:', ...rec.reasons.map((r) => `  - ${r}`), '', 'Answer on a second invocation (same repoDir/--detect args — this CLI is stateless):', `  --confirm ${`${rec.profile}@${rec.substrate}`.padEnd(18)} accept the recommendation (pass exactly this profile@substrate token)`, '  --override <profileName>     choose a different profile instead'].join('\n');
     return { ok: true, output, asked: true };
   }
 
@@ -447,23 +482,28 @@ export async function run(argv: string[], profilesRootDefault: string, proc: Pro
   let chosenSubstrate = rec.substrate;
   let answer: string;
   if (opts.confirm) {
-    // CONFIRM-DRIFT GUARD (D1): the human confirmed a NAMED profile — the one invocation 1's question put
-    // to them. If re-deriving now recommends something else, the repo's facts changed between the two
-    // stateless invocations and this "confirmation" answers a question that was never asked. HARD-ERROR:
-    // never bind the drifted profile, never fabricate a g1 record for it — G1 must be re-asked.
-    if (opts.confirm !== rec.profile) {
+    // CONFIRM-DRIFT GUARD (D1 + D4): the human confirmed a NAMED profile@substrate pair — the one
+    // invocation 1's question put to them (G1 is a confirm/override of profile+SUBSTRATE, DESIGN §Q3's
+    // gate table; the recommender yields the same profile on two substrates, so a profile-only check
+    // would still let a ghAdmin drift silently flip where the fleet runs). If re-deriving now recommends
+    // a different profile OR substrate, the repo's facts changed between the two stateless invocations
+    // and this "confirmation" answers a question that was never asked. HARD-ERROR: never bind the
+    // drifted pair, never fabricate a g1 record for it — G1 must be re-asked.
+    const confirmed = parseConfirmToken(opts.confirm);
+    if ('error' in confirmed) return { ok: false, output: `${confirmed.error}\n\n${USAGE}`, asked: false };
+    if (confirmed.profile !== rec.profile || confirmed.substrate !== rec.substrate) {
       const f = detectRef.repoFacts;
       const factsNow = `onGitHub=${f.onGitHub}, populated=${f.populated}, ghAdmin=${f.ghAdmin === undefined ? 'unknown' : f.ghAdmin}`;
       return {
         ok: false,
         output:
-          `error: recommendation drifted since the question was asked (was "${opts.confirm}", now "${rec.profile}" @ ${rec.substrate}` +
+          `error: recommendation drifted since the question was asked (was "${confirmed.profile}@${confirmed.substrate}", now "${rec.profile}@${rec.substrate}"` +
           ` — repo facts changed: the facts NOW read ${factsNow}, which drive: ${rec.reasons.join('; ')}); ` +
           `re-ask G1: re-run without --confirm to emit the current question, and confirm THAT recommendation.`,
         asked: false,
       };
     }
-    answer = `confirmed "${opts.confirm}" @ ${rec.substrate}`;
+    answer = `confirmed "${confirmed.profile}@${confirmed.substrate}"`;
   } else {
     // --override <profile>: never blindly trust an override into a clobber — validate it through the
     // SAME eligibility path a pre-pick goes through (reuses TD.2's validatePrePick, not re-derived).

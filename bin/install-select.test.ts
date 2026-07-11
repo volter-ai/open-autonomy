@@ -22,6 +22,7 @@ import {
   formatG1Question,
   loadDetectReport,
   parseArgs,
+  parseConfirmToken,
   repoFactsFromDetectReport,
   run,
 } from './install-select.ts';
@@ -186,14 +187,14 @@ describe('Fixture 1 — RECOMMEND flow (empty, non-GitHub repo)', () => {
     cleanupAll();
   });
 
-  test('invocation 2 (--confirm <profile>): zero NEW questions, emits a SELECTION RECORD whose pack byte-matches getSetupPack', async () => {
+  test('invocation 2 (--confirm <profile>@<substrate>): zero NEW questions, emits a SELECTION RECORD whose pack byte-matches getSetupPack', async () => {
     const dir = track(mkdtempSync(join(tmpdir(), 'oa-select-recommend-confirm-')));
     gitInit(dir);
 
     // Stateless re-derivation: same repoDir/args as invocation 1, plus --confirm <the profile invocation
     // 1's question named>. No session file exists between the two calls — this whole test only runs
     // invocation 2, proving statelessness works alone.
-    const result = await run([dir, '--json', '--confirm', 'simple-sdlc'], PROFILES_ROOT, offlineGhProc);
+    const result = await run([dir, '--json', '--confirm', 'simple-sdlc@local'], PROFILES_ROOT, offlineGhProc);
     expect(result.ok).toBe(true);
     expect(result.asked).toBe(false); // no NEW question this invocation
     expect(result.record).toBeDefined();
@@ -202,7 +203,7 @@ describe('Fixture 1 — RECOMMEND flow (empty, non-GitHub repo)', () => {
     expect(record.profile).toBe('simple-sdlc');
     expect(record.substrate).toBe('local');
     expect(record.g1.asked).toBe(true); // documents that a question WAS asked (in invocation 1)
-    expect(record.g1.answer).toMatch(/^confirmed "simple-sdlc" @ local$/);
+    expect(record.g1.answer).toMatch(/^confirmed "simple-sdlc@local"$/);
     expect(record.g1.question).toMatch(/^I recommend simple-sdlc on local because/);
 
     // PACK FIDELITY: byte-matches getSetupPack's own output for this profile.
@@ -236,12 +237,12 @@ describe('Fixture 1 — RECOMMEND flow (empty, non-GitHub repo)', () => {
     writeFileSync(join(dir, 'src', 'app.js'), 'module.exports = {}\n');
     commitAll(dir, 'real app content');
 
-    const inv2 = await run([dir, '--json', '--confirm', 'simple-sdlc'], PROFILES_ROOT, offlineGhProc);
+    const inv2 = await run([dir, '--json', '--confirm', 'simple-sdlc@local'], PROFILES_ROOT, offlineGhProc);
     expect(inv2.ok).toBe(false);
     expect(inv2.asked).toBe(false);
     expect(inv2.record).toBeUndefined(); // nothing bound, no record, no pack instantiated
     expect(inv2.output).toMatch(/recommendation drifted since the question was asked/);
-    expect(inv2.output).toMatch(/was "simple-sdlc", now "simple-gh-sdlc"/); // both profiles named
+    expect(inv2.output).toMatch(/was "simple-sdlc@local", now "simple-gh-sdlc@local"/); // both pairs named
     expect(inv2.output).toMatch(/onGitHub=true/); // the changed fact, cited
     expect(inv2.output).toMatch(/populated=true/); // the changed fact, cited
     expect(inv2.output).toMatch(/re-ask G1/);
@@ -249,14 +250,14 @@ describe('Fixture 1 — RECOMMEND flow (empty, non-GitHub repo)', () => {
     cleanupAll();
   });
 
-  test('no-drift --confirm <profile>: the confirmed name matches the re-derivation -> record, g1.answer records exactly what the human confirmed', async () => {
+  test('no-drift --confirm <profile>@<substrate>: the confirmed name matches the re-derivation -> record, g1.answer records exactly what the human confirmed', async () => {
     const dir = track(mkdtempSync(join(tmpdir(), 'oa-select-nodrift-')));
     gitInit(dir);
 
-    const result = await run([dir, '--confirm', 'simple-sdlc'], PROFILES_ROOT, offlineGhProc);
+    const result = await run([dir, '--confirm', 'simple-sdlc@local'], PROFILES_ROOT, offlineGhProc);
     expect(result.ok).toBe(true);
     expect(result.record!.profile).toBe('simple-sdlc');
-    expect(result.record!.g1.answer).toBe('confirmed "simple-sdlc" @ local');
+    expect(result.record!.g1.answer).toBe('confirmed "simple-sdlc@local"');
 
     cleanupAll();
   });
@@ -269,10 +270,75 @@ describe('Fixture 1 — RECOMMEND flow (empty, non-GitHub repo)', () => {
     expect(result.ok).toBe(false);
     expect(result.record).toBeUndefined();
     expect(result.output).toMatch(/--confirm requires the profile name being confirmed/);
-    expect(result.output).toMatch(/--confirm simple-sdlc/); // the example syntax
+    expect(result.output).toMatch(/--confirm simple-sdlc@local/); // the example syntax (full @-token, D4)
     expect(result.output).toMatch(/usage:/);
 
     cleanupAll();
+  });
+
+  test('SUBSTRATE-DRIFT GUARD (D4): same profile, ghAdmin flipped between invocations -> --confirm <profile>@<old substrate> HARD-ERRORS, binds NOTHING', async () => {
+    // The reviewer's D4 live repro, as a test: G1 confirms profile+SUBSTRATE (DESIGN §Q3's gate table),
+    // and the recommender yields the SAME profile on two substrates — simple-gh-sdlc@gh-actions when
+    // hostedRunner && ghAdmin!==false, @local when ghAdmin===false (packages/core/src/recommend.ts). So:
+    // invocation 1 (ghAdmin=false) asked "simple-gh-sdlc on LOCAL"; ghAdmin drifts to true; invocation 2
+    // must NOT silently re-bind to gh-actions — that flips where the fleet runs.
+    const dir = track(mkdtempSync(join(tmpdir(), 'oa-select-substrate-drift-')));
+    gitInit(dir);
+    const f1 = join(dir, '..', 'detect-admin-false.json');
+    const f2 = join(dir, '..', 'detect-admin-true.json');
+    track(f1);
+    track(f2);
+    writeFileSync(f1, JSON.stringify(fakeDetectReport({ onGitHub: true, populated: true, admin: false })));
+    writeFileSync(f2, JSON.stringify(fakeDetectReport({ onGitHub: true, populated: true, admin: true })));
+
+    const inv1 = await run([dir, '--detect', f1, '--hosted-runner', '--json'], PROFILES_ROOT, offlineGhProc);
+    const inv1Parsed = JSON.parse(inv1.output);
+    expect(inv1Parsed.recommendation.profile).toBe('simple-gh-sdlc');
+    expect(inv1Parsed.recommendation.substrate).toBe('local'); // ghAdmin=false -> local fallback
+
+    // ghAdmin drifts false -> true between the stateless invocations (f2); the human's answer confirmed LOCAL.
+    const inv2 = await run([dir, '--detect', f2, '--hosted-runner', '--confirm', 'simple-gh-sdlc@local'], PROFILES_ROOT, offlineGhProc);
+    expect(inv2.ok).toBe(false);
+    expect(inv2.asked).toBe(false);
+    expect(inv2.record).toBeUndefined(); // nothing bound — no silent flip of where the fleet runs
+    expect(inv2.output).toMatch(/recommendation drifted since the question was asked/);
+    expect(inv2.output).toMatch(/was "simple-gh-sdlc@local", now "simple-gh-sdlc@gh-actions"/); // both pairs named
+    expect(inv2.output).toMatch(/ghAdmin=true/); // the changed fact, cited
+    expect(inv2.output).toMatch(/re-ask G1/);
+
+    // Control (no drift): the same confirm token against the SAME facts that asked the question -> record.
+    const control = await run([dir, '--detect', f1, '--hosted-runner', '--confirm', 'simple-gh-sdlc@local'], PROFILES_ROOT, offlineGhProc);
+    expect(control.ok).toBe(true);
+    expect(control.record!.profile).toBe('simple-gh-sdlc');
+    expect(control.record!.substrate).toBe('local');
+    expect(control.record!.g1.answer).toBe('confirmed "simple-gh-sdlc@local"');
+
+    cleanupAll();
+  });
+
+  test('D4: a profile-only --confirm token (no @substrate) -> loud usage error pointing at the @-syntax, no soft fallback', async () => {
+    const dir = track(mkdtempSync(join(tmpdir(), 'oa-select-profileonly-')));
+    gitInit(dir);
+
+    const result = await run([dir, '--confirm', 'simple-sdlc'], PROFILES_ROOT, offlineGhProc);
+    expect(result.ok).toBe(false);
+    expect(result.asked).toBe(false);
+    expect(result.record).toBeUndefined();
+    expect(result.output).toMatch(/requires the full <profile>@<substrate> token \(got a profile-only "simple-sdlc"\)/);
+    expect(result.output).toMatch(/--confirm simple-sdlc@local/); // the exact corrected syntax
+    expect(result.output).toMatch(/usage:/);
+
+    cleanupAll();
+  });
+
+  test('D4: parseConfirmToken — invalid substrate and missing profile are loud errors', () => {
+    const bad = parseConfirmToken('simple-sdlc@nonsense');
+    expect('error' in bad && bad.error).toMatch(/invalid substrate "nonsense"/);
+    const noProfile = parseConfirmToken('@local');
+    expect('error' in noProfile && noProfile.error).toMatch(/missing the profile before '@'/);
+    const ok = parseConfirmToken('simple-gh-sdlc@gh-actions');
+    expect('profile' in ok && ok.profile).toBe('simple-gh-sdlc');
+    expect('substrate' in ok && ok.substrate).toBe('gh-actions');
   });
 
   test('--override <profile> validates the override (never blindly trusted) and records the override, not the recommendation', async () => {
@@ -346,7 +412,7 @@ describe('Fixture 1 — RECOMMEND flow (empty, non-GitHub repo)', () => {
     const outFile = join(dir, '..', 'selection-record.json');
     track(outFile);
 
-    const result = await run([dir, '--confirm', 'simple-sdlc', '--out', outFile], PROFILES_ROOT, offlineGhProc);
+    const result = await run([dir, '--confirm', 'simple-sdlc@local', '--out', outFile], PROFILES_ROOT, offlineGhProc);
     expect(result.ok).toBe(true);
     const written = JSON.parse(readFileSync(outFile, 'utf8'));
     expect(written.profile).toBe('simple-sdlc');
@@ -436,7 +502,7 @@ describe('one-question invariant — count question emissions per flow, zero re-
     gitInit(dir);
 
     const inv1 = await run([dir], PROFILES_ROOT, offlineGhProc);
-    const inv2 = await run([dir, '--confirm', 'simple-sdlc'], PROFILES_ROOT, offlineGhProc);
+    const inv2 = await run([dir, '--confirm', 'simple-sdlc@local'], PROFILES_ROOT, offlineGhProc);
     const questionCount = [inv1, inv2].filter((r) => r.asked).length;
     expect(questionCount).toBe(1);
     expect(inv1.asked).toBe(true);
@@ -490,8 +556,8 @@ describe('parseArgs', () => {
     expect(opts.out).toBe('/tmp/out.json');
   });
 
-  test('--confirm <profile> and --override <profile> parse independently', () => {
-    expect(parseArgs(['/tmp/x', '--confirm', 'simple-sdlc']).opts.confirm).toBe('simple-sdlc');
+  test('--confirm <profile>@<substrate> and --override <profile> parse independently', () => {
+    expect(parseArgs(['/tmp/x', '--confirm', 'simple-sdlc@local']).opts.confirm).toBe('simple-sdlc@local');
     expect(parseArgs(['/tmp/x', '--override', 'simple-gh']).opts.override).toBe('simple-gh');
   });
 
@@ -541,7 +607,7 @@ describe('run() — error paths', () => {
   test('--pick combined with --confirm -> rejected (the two flows are mutually exclusive)', async () => {
     const dir = track(mkdtempSync(join(tmpdir(), 'oa-select-mixedflags-')));
     gitInit(dir);
-    const result = await run([dir, '--pick', 'simple-sdlc', '--confirm', 'simple-sdlc'], PROFILES_ROOT, offlineGhProc);
+    const result = await run([dir, '--pick', 'simple-sdlc', '--confirm', 'simple-sdlc@local'], PROFILES_ROOT, offlineGhProc);
     expect(result.ok).toBe(false);
     expect(result.output).toMatch(/cannot be combined/);
     cleanupAll();
@@ -550,7 +616,7 @@ describe('run() — error paths', () => {
   test('--confirm and --override together -> rejected', async () => {
     const dir = track(mkdtempSync(join(tmpdir(), 'oa-select-mixedflags2-')));
     gitInit(dir);
-    const result = await run([dir, '--confirm', 'simple-sdlc', '--override', 'simple-gh'], PROFILES_ROOT, offlineGhProc);
+    const result = await run([dir, '--confirm', 'simple-sdlc@local', '--override', 'simple-gh'], PROFILES_ROOT, offlineGhProc);
     expect(result.ok).toBe(false);
     expect(result.output).toMatch(/mutually exclusive/);
     cleanupAll();

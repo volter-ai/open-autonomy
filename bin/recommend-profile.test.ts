@@ -270,10 +270,11 @@ describe('validatePrePick — an OK pre-pick', () => {
     expect(result.blocker).toMatch(/does not support the "gh-actions" target/);
   });
 
-  test('an unknown profile name -> BLOCKED with a not-found reason', () => {
+  test('an unknown profile name -> BLOCKED with a not-found reason, standalone (no "dedicated, empty repo" tail)', () => {
     const result = validatePrePick('not-a-real-profile', 'local', baseRepoFacts(), fixtureCatalog());
     expect(result.ok).toBe(false);
     expect(result.blocker).toMatch(/was not found in the loaded catalog/);
+    expect(result.blocker).not.toMatch(/dedicated, empty repo/);
   });
 });
 

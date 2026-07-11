@@ -290,8 +290,12 @@ export function validatePrePick(pickedName: string, substrateArg: Substrate | un
   let blocker = check.why;
   try {
     const alt = recommendProfile(repoFacts, profiles);
-    if (alt.profile !== pickedName) {
+    if (alt.profile !== pickedName && picked) {
       blocker += ` — pick ${alt.profile}${alt.substrate !== substrate ? ` @ ${alt.substrate}` : ''} (recommended for this repo: ${alt.reasons[alt.reasons.length - 1]}) or use a dedicated, empty repo for "${pickedName}".`;
+    } else if (alt.profile !== pickedName) {
+      // pickedName isn't a known profile at all — a "use a dedicated, empty repo for it" tail would be
+      // nonsense; just point at the recommender's own pick.
+      blocker += ` — recommended for this repo instead: ${alt.profile} @ ${alt.substrate}.`;
     }
   } catch {
     // recommendProfile found nothing eligible either — leave the blocker as the bare eligibility reason;

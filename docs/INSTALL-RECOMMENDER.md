@@ -31,6 +31,7 @@ bun bin/recommend-profile.ts <repoDir> [--json]
                               [--pick <profileName>] [--substrate local|gh-actions]
                               [--hosted-runner|--no-hosted-runner] [--prefer-no-auto-merge]
                               [--can-fund-proxy|--cannot-fund-proxy] [--demo] [--soc2]
+                              [--profiles-root <dir>]
 ```
 
 It is a thin wrapper over TD.1 (`packages/core/src/recommend.ts`'s `recommendProfile`/`loadAllProfileFacts`/
@@ -68,9 +69,11 @@ or use a dedicated, empty repo for "self-driving".
 The `bin/autonomy-compile.ts:233-257` citation is **live** — `eligible()` (TD.1, `packages/core/src/
 recommend.ts`) carries it as a string literal, verified against the compile-time clobber guard's actual
 current line range on `main` (re-verify with `grep -n "" bin/autonomy-compile.ts | sed -n
-'233,257p'` if `bin/autonomy-compile.ts` has since moved — a stale citation here was found and fixed as
-part of landing this skill: the number had drifted by 6 lines from an earlier merge before this file
-existed, and nothing had caught it because nothing exercised the live text end-to-end until this CLI did).
+'233,257p'` if `bin/autonomy-compile.ts` has since moved). The span: `:233-257` covers the guard's
+explanatory comment block (233-238) plus the executable guard — `findClobbers` (239) through `exit(1)`
+(256/257). TD.1's original `:239-257` citation was and remains exactly the executable guard (no drift has
+occurred); landing this skill merely **widened** the cited span to include the comment block, so a reader
+following the citation lands on the guard's own explanation, not mid-mechanism.
 
 ## Repo-fact detection (what the CLI can read on its own, vs. what it must ask for)
 

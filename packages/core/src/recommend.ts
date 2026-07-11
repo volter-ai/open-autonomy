@@ -21,7 +21,7 @@ export type Substrate = 'local' | 'gh-actions';
 // Mirrors bin/autonomy-compile.ts's `REPO_SHELL_FILES` (bin/autonomy-compile.ts:42) — the set of
 // resource paths that mark a profile as a whole-repo SCAFFOLD (it ships its own README/package.json/etc,
 // so compiling it onto an existing repo would try to overwrite the adopter's own copies). That set is
-// the source of truth for the compiler's clobber guard (bin/autonomy-compile.ts:239-257); this is a
+// the source of truth for the compiler's clobber guard (bin/autonomy-compile.ts:233-257); this is a
 // deliberate prose-mirror (the two-layer pattern this codebase already uses for hand-authored facts that
 // track code elsewhere — see OA-INSTALL-IMPLEMENTATION-TASKS.md TS.1's DRIFT GUARD note) — kept in sync
 // by recommend.test.ts's drift-guard test, which reads bin/autonomy-compile.ts's own source and fails if
@@ -43,7 +43,7 @@ export interface ProfileFacts {
   hasProvisionJson: boolean;
   /** Whether `ir.yml`'s `resources:` list carries any of `REPO_SHELL_FILES` — i.e. this profile ships
    *  its own README/package.json/etc, so it is a whole-repo SCAFFOLD, not an overlay onto an existing
-   *  repo (bin/autonomy-compile.ts:239-257). A scaffold profile is new-repo-only. */
+   *  repo (bin/autonomy-compile.ts:233-257). A scaffold profile is new-repo-only. */
   isWholeRepoScaffold: boolean;
   /** Whether `policy.box['gh-actions'].proxy_host` is declared — this profile ships (or expects) a
    *  model-proxy fallback host, i.e. it needs a funded, allowlisted proxy to run hosted. */
@@ -58,7 +58,7 @@ export interface RepoFacts {
   onGitHub: boolean;
   /** Is the repo already populated with real content, or is it new/empty (a fresh, dedicated repo)?
    *  Drives the scaffold-clobber guard: a whole-repo-scaffold profile is only eligible when this is
-   *  `false` (bin/autonomy-compile.ts:239-257). */
+   *  `false` (bin/autonomy-compile.ts:233-257). */
   populated: boolean;
   /** Does the operator hold GitHub repo-admin rights (needed to provision branch protection)? Left
    *  `undefined` means "unknown, assume yes" — TE.4's AUTHORIZE gate is where this is actually confirmed
@@ -130,16 +130,19 @@ export function loadAllProfileFacts(profilesRoot: string): ProfileFacts[] {
   return names.map((n) => loadProfileFacts(join(profilesRoot, n), n)).sort((a, b) => a.name.localeCompare(b.name));
 }
 
-/** One eligibility check result: either the profile's facts (usable), or a reason it is not. */
-type Eligibility = { ok: true; facts: ProfileFacts } | { ok: false; why: string };
+/** One eligibility check result: either the profile's facts (usable), or a reason it is not. Exported (as
+ *  of TD.2) so the recommender SKILL's "validate a pre-picked profile" path (bin/recommend-profile.ts) can
+ *  reuse the EXACT same eligibility logic — including the scaffold-clobber blocker's citation — that
+ *  `recommendProfile` uses internally, instead of re-deriving it. */
+export type Eligibility = { ok: true; facts: ProfileFacts } | { ok: false; why: string };
 
 /** A profile is eligible for a repo+substrate iff (a) it exists in the loaded catalog, (b) it declares
  *  the requested substrate in `targets`, and (c) — the scaffold clobber guard — it is not a whole-repo
  *  SCAFFOLD being aimed at a populated repo. (c) is evaluated from the LOADED `isWholeRepoScaffold` flag,
  *  never a hardcoded profile name, so it protects every current and future scaffold profile alike
- *  (today: self-driving and soc2-baseline) — see bin/autonomy-compile.ts:239-257.
+ *  (today: self-driving and soc2-baseline) — see bin/autonomy-compile.ts:233-257.
  */
-function eligible(profiles: ReadonlyMap<string, ProfileFacts>, repoFacts: RepoFacts, name: string, substrate: Substrate): Eligibility {
+export function eligible(profiles: ReadonlyMap<string, ProfileFacts>, repoFacts: RepoFacts, name: string, substrate: Substrate): Eligibility {
   const facts = profiles.get(name);
   if (!facts) return { ok: false, why: `profile "${name}" was not found in the loaded catalog` };
   if (!facts.targets.includes(substrate)) {
@@ -150,7 +153,7 @@ function eligible(profiles: ReadonlyMap<string, ProfileFacts>, repoFacts: RepoFa
       ok: false,
       why:
         `"${name}" is a whole-repo scaffold (its resources carry repo-shell files: ${[...REPO_SHELL_FILES].join(', ')}) ` +
-        `— it is new-repo-only; the compile-time clobber guard will refuse it on a populated repo (bin/autonomy-compile.ts:239-257)`,
+        `— it is new-repo-only; the compile-time clobber guard will refuse it on a populated repo (bin/autonomy-compile.ts:233-257)`,
     };
   }
   return { ok: true, facts };
@@ -242,7 +245,7 @@ export function recommendProfile(repoFacts: RepoFacts, profiles: ProfileFacts[])
         reasons: [
           ...carriedReasons,
           'repo is new/dedicated (unpopulated) and the operator can fund an allowlisted model proxy — self-driving is viable and is the most autonomous bundled profile',
-          'self-driving is a whole-repo scaffold (carries its own README/package.json/CHANGELOG.md as resources), so it needs a dedicated, unpopulated repo (bin/autonomy-compile.ts:239-257)',
+          'self-driving is a whole-repo scaffold (carries its own README/package.json/CHANGELOG.md as resources), so it needs a dedicated, unpopulated repo (bin/autonomy-compile.ts:233-257)',
         ],
       };
     }

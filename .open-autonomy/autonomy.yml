@@ -51,6 +51,7 @@ skills:
   planner: .codex/skills/planner
   strategist: .codex/skills/strategist
   strategy_reviewer: .codex/skills/strategy-reviewer
+  audit: .codex/skills/audit
 agents:
   draft:
     skill: draft
@@ -158,6 +159,16 @@ agents:
     capabilities:
       - tasks:converse
       - code:review
+  audit:
+    skill: audit
+    workflowFile: audit.yml
+    params:
+      TARGET_REF: subject.ref
+    triggers:
+      dispatch: true
+    capabilities:
+      - tasks:converse
+      - code:propose@docs/audits
 policy:
   tracker:
     ztrackPreset: simple-gh-sdlc

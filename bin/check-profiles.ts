@@ -21,6 +21,19 @@ const profiles = readdirSync(ROOT).filter((d) => existsSync(join(ROOT, d, 'ir.ym
 // differ per install, so they're exempt — the same authority that lets `upgrade` never overwrite them.
 const githubResources = new Map<string, Map<string, string>>(); // profile -> (install path -> content)
 
+// TC.1 sibling guard: SKILLS are NOT part of `resources:` (they resolve from the fixed convention path
+// `skills/<behavior>/SKILL.md`, see packages/substrate-*/src/emit.ts) so the `resources:`-scoped drift
+// guard above never sees them, and it only runs for a `gh-actions` target — which would silently exempt
+// `simple-gh`/`simple-sdlc` (local-only targets) from ever being checked. A handful of skills are
+// nonetheless meant to be ONE canonical doctrine shipped byte-identical to every profile that carries it
+// (today: `audit`, generalized across all four profiles by TC.1 — docs/oa-setup-feasibility's
+// OA-INSTALL-IMPLEMENTATION-TASKS.md). This is the same "each profile carries its own copy; check:profiles'
+// byte-identity guard keeps the copies honest" precedent docs/CODE_HOST_RESOURCES.md already documents for
+// standards docs — extended here to cover skills, and to every declared target (not gh-actions only), since
+// a shared skill's byte-identity matters on a local-only profile exactly as much as on a hosted one.
+const SHARED_SKILLS = ['audit'];
+const sharedSkills = new Map<string, Map<string, string>>(); // behavior -> (profile -> content)
+
 for (const name of profiles) {
   const dir = join(ROOT, name);
   let ir;
@@ -80,6 +93,16 @@ for (const name of profiles) {
   // MUST equal its folder (the agent's behavior) — shared with the compile CLI (validateSkillFrontmatterIn)
   // so an external profile author gets the same signal this repo's own catalog is checked against.
   for (const e of validateSkillFrontmatterIn(ir, dir)) errs.push(`${name}: ${e}`);
+
+  // Record this profile's copy of any designated SHARED skill, target-independent (the physical source
+  // file — profiles/<name>/skills/<behavior>/SKILL.md — is the same bytes regardless of which target it
+  // compiles to, so read it once per profile rather than once per target).
+  for (const behavior of SHARED_SKILLS) {
+    const skillPath = join(dir, 'skills', behavior, 'SKILL.md');
+    if (!existsSync(skillPath)) continue;
+    if (!sharedSkills.has(behavior)) sharedSkills.set(behavior, new Map());
+    sharedSkills.get(behavior)!.set(name, readFileSync(skillPath, 'utf8'));
+  }
 }
 
 // Cross-profile drift guard: every install-path carried by 2+ github profiles must be byte-identical
@@ -102,10 +125,27 @@ for (const [path, carriers] of byPath) {
     );
 }
 
+// Cross-profile drift guard for SHARED SKILLS (TC.1): every profile carrying a designated shared skill
+// (SHARED_SKILLS above) must ship byte-identical prose, regardless of target — a diverged copy of a
+// doctrine that claims to be "one shared skill" is exactly the class of silent fork the resources guard
+// above exists to catch for standards docs.
+let sharedSkillsChecked = 0;
+for (const [behavior, byProfile] of sharedSkills) {
+  if (byProfile.size < 2) continue;
+  sharedSkillsChecked++;
+  const entries = [...byProfile.entries()];
+  const [baselineProfile, baselineContent] = entries[0];
+  const diverged = entries.filter(([, content]) => content !== baselineContent).map(([profile]) => profile);
+  if (diverged.length)
+    errs.push(
+      `shared skill "${behavior}" has drifted: profiles [${[baselineProfile, ...diverged].join(', ')}] carry different bytes for skills/${behavior}/SKILL.md — a skill declared as one shared doctrine (SHARED_SKILLS in bin/check-profiles.ts) must be byte-identical across every profile that carries it (sync them, or if the divergence is intentional it isn't a shared skill — drop it from SHARED_SKILLS).`,
+    );
+}
+
 if (errs.length) {
   console.error(`profiles check FAILED — ${errs.length}:\n  ${errs.join('\n  ')}`);
   process.exit(1);
 }
 console.log(
-  `profiles OK: ${profiles.length} profile(s) compile to all declared targets; ${sharedChecked} shared standard resource(s) byte-identical across github profiles`,
+  `profiles OK: ${profiles.length} profile(s) compile to all declared targets; ${sharedChecked} shared standard resource(s) byte-identical across github profiles; ${sharedSkillsChecked} shared skill(s) byte-identical across all carrying profiles`,
 );

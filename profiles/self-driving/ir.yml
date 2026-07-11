@@ -167,6 +167,25 @@ agents:
     triggers:
       - dispatch: true
 
+  # Dispatch-only conformance auditor of THIS INSTALL (not the product it builds) — verifies changes made
+  # to it aren't inconsistent, contradictory, or against OA's own philosophy/structure (§II.10 of the OA
+  # self-dev architecture study — the same doctrine simple-gh's audit shipped from, now generalized to
+  # every profile, TC.1). Read-only against the install with exactly one write: composing and opening its
+  # own dated report PR under docs/audits/ — never a fix, never a merge, never another dispatch (no
+  # agent:launch). NEVER carries a cron trigger — see skills/audit/SKILL.md's identity section: `pm` here
+  # holds `agent:launch` for its own architecture (launching draft/develop against the roadmap-fed board),
+  # so the "operator-dispatched only" guarantee for this actor is DOCTRINAL (pm's own SKILL.md never names
+  # `audit` as something it launches), not structural — the skill documents this distinction itself. On
+  # this profile, check 6's model-proxy allowlist sub-check and check 1's `documents.roles` branch both
+  # apply (this is the one profile that declares both) — the shared skill text reads those from the live
+  # `autonomy.yml`, never from this comment or this file's name.
+  audit:
+    behavior: audit
+    capabilities: [tasks:converse, code:propose@docs/audits]
+    triggers:
+      - dispatch: true
+        params: { TARGET_REF: subject.ref }   # optional: an issue/PR the one-line summary comment lands on
+
 policy:
   # Row 7 (knobs — kept at self-driving's current values, owner-tunable):
   maxConcurrent: 5

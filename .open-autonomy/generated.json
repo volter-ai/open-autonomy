@@ -1,6 +1,7 @@
 {
   "schema": "open-autonomy.generated.v1",
   "files": [
+    ".claude/skills/audit/SKILL.md",
     ".claude/skills/develop/SKILL.md",
     ".claude/skills/draft/SKILL.md",
     ".claude/skills/maintainer/SKILL.md",
@@ -9,6 +10,7 @@
     ".claude/skills/reviewer/SKILL.md",
     ".claude/skills/strategist/SKILL.md",
     ".claude/skills/strategy-reviewer/SKILL.md",
+    ".codex/skills/audit/SKILL.md",
     ".codex/skills/develop/SKILL.md",
     ".codex/skills/draft/SKILL.md",
     ".codex/skills/maintainer/SKILL.md",
@@ -22,6 +24,7 @@
     ".github/ISSUE_TEMPLATE/public_agent_session.yml",
     ".github/agent-control.mjs",
     ".github/dependabot.yml",
+    ".github/workflows/audit.yml",
     ".github/workflows/develop.yml",
     ".github/workflows/draft.yml",
     ".github/workflows/human-approval.yml",

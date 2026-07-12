@@ -72,9 +72,13 @@ is never transitioned in place — it is closed once its content has been tracke
    `agent/issue-<id>` branch already has a PR — see `.claude/skills/pm/SKILL.md`). Worked example: if
    `COMBO-9` were minted, worked, and merged, then its store file later cleaned up (a scratch-proof
    cleanup, a reverted draft, …), a bare re-mint of `COMBO-9` afterward would be dead on arrival.
-   Run `node scripts/next-free-issue-id.mjs` and note the id it prints (e.g. `COMBO-12`) — this is the
-   EXPECTED next id, checked against real `agent/issue-<id>` PR history on GitHub (any PR, any state, means
-   "used"), not just against the store's current file listing.
+   Run `node scripts/next-free-issue-id.mjs` (a pure advisory helper — reads only, mints nothing) and note
+   the id it prints — this is the EXPECTED next id, checked against real `agent/issue-<id>` PR history on
+   GitHub (any PR, any state, means "used"), not just against the store's current file listing. It uses YOUR
+   repo's own team key automatically (derived from `.volter/tracker-config.json`'s `local.teamKey` — the same
+   `<team>-<n>` namespace ztrack itself mints in, e.g. `LOCAL-12` for team key `LOCAL`, not a hardcoded
+   `COMBO`); it prints the team + where it resolved it to stderr. Pass `--team <key>` only to override that
+   for a non-default namespace.
 6. **Mint the store issue** — this is what puts the work item on the board (there is no "mark ready in
    place" step; a store id is created fresh, never number-shared with the GitHub intake issue):
    `npx ztrack issue create --title "<refined title>" --state ready --assignee "<login>" --body-file "$BODY_MD"`.

@@ -24,11 +24,18 @@
 // been proposed before" — never a local counter or cache that could itself drift from GitHub's own record.
 //
 // USAGE:
-//   node scripts/next-free-issue-id.mjs [--team COMBO] [--dir .volter/tracker/markdown] [--repo owner/name]
-//     -> prints the next free id (e.g. `COMBO-12`) to stdout, nothing else, exit 0.
-//   Import `nextFreeIssueId` / `candidateIds` / `hasBranchHistory` directly for a caller (a script or a
-//   skill's own guard) that wants the id programmatically instead of parsing stdout, or that wants to
-//   substitute a fake `hasHistory` predicate for a test/proof (no real `gh` calls).
+//   node scripts/next-free-issue-id.mjs [--team <key>] [--dir .volter/tracker/markdown] [--repo owner/name]
+//                                       [--config .volter/tracker-config.json]
+//     -> prints the next free id (e.g. `LOCAL-12`) to stdout, nothing else, exit 0.
+//   The team key is resolved automatically from the committed `.volter/tracker-config.json`'s
+//   `local.teamKey` when `--team` is not passed — the SAME key ztrack forms `<team>-<n>` store ids from —
+//   so a bare invocation returns the RIGHT ids for whatever the adopter's team is (never a hardcoded
+//   `COMBO`). `--team` overrides; a missing/malformed config falls back to a literal only as a last resort.
+//   The chosen team + its source is printed to stderr for transparency.
+//   Import `nextFreeIssueId` / `candidateIds` / `hasBranchHistory` / `teamKeyFromConfig` / `parseArgs`
+//   directly for a caller (a script or a skill's own guard) that wants the id programmatically instead of
+//   parsing stdout, or that wants to substitute a fake `hasHistory` predicate for a test/proof (no real
+//   `gh` calls).
 //
 // CALLERS: the `draft` skill (standards/issue-and-evidence.md's minting step — `skills/draft/SKILL.md`
 // step 5) runs this FIRST and passes its output as an expectation check: mint with `ztrack issue create`,
@@ -36,11 +43,42 @@
 // that SKILL.md's step 5 for the exact guard. Any other seeding path (an operator minting an issue by hand)
 // should run this first too, for the same reason.
 import { execFileSync } from 'node:child_process';
-import { existsSync, readdirSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 const STORE_DIR_DEFAULT = '.volter/tracker/markdown';
-const TEAM_DEFAULT = 'COMBO';
+const TRACKER_CONFIG_DEFAULT = '.volter/tracker-config.json';
+// Last-resort fallback ONLY — used when the committed tracker config is absent/unreadable and no
+// `--team` was passed. The real default is the adopter's OWN team key, derived from
+// `.volter/tracker-config.json`'s `local.teamKey` (see teamKeyFromConfig below): ztrack mints ids as
+// `<teamKey>-<n>`, so a hardcoded literal here would hand back a WRONG cross-check id for any repo whose
+// team key isn't this string (e.g. OA's own is `LOCAL`). Kept only so a config-less invocation still
+// returns *something* rather than throwing.
+const TEAM_FALLBACK = 'COMBO';
+
+// Derive the store's team key from the committed tracker config — the SAME `local.teamKey` ztrack's own
+// allocator reads when it forms `<team>-<n>` store ids, so this helper's candidate ids match ztrack's for
+// real (never a hardcoded guess). Returns null (not the fallback) when the config is missing/malformed, so
+// the caller can decide whether to fall back or surface the gap.
+export function teamKeyFromConfig(configPath = TRACKER_CONFIG_DEFAULT, read = defaultReadFile) {
+  const raw = read(configPath);
+  if (raw == null) return null;
+  try {
+    const cfg = JSON.parse(raw);
+    const key = cfg?.local?.teamKey;
+    return typeof key === 'string' && key.length > 0 ? key : null;
+  } catch {
+    return null;
+  }
+}
+
+function defaultReadFile(p) {
+  try {
+    return readFileSync(p, 'utf8');
+  } catch {
+    return null;
+  }
+}
 
 // Every numeric id this store's file listing already carries for `<team>-<n>.md`, e.g. `COMBO-11.md` -> 11.
 // This is the SAME signal ztrack's own allocator reads (existing store files), so "highest seen + 1" here is
@@ -65,8 +103,8 @@ function defaultListDir(dir) {
   }
 }
 
-// Infinite candidate generator starting one past the highest id the store currently holds — team-scoped so
-// a multi-team install (unlikely today; COMBO is this repo's only team) never cross-contaminates.
+// Infinite candidate generator starting one past the highest id the store currently holds — team-scoped
+// (team = the adopter's `local.teamKey`) so a multi-team install never cross-contaminates.
 export function* candidateIds(team, startAfter) {
   let n = startAfter + 1;
   for (;;) {
@@ -110,7 +148,7 @@ function defaultGh(args) {
 // is not a real scenario this needs to survive silently; it's a signal something else is badly wrong, so this
 // throws rather than looping unboundedly.
 export function nextFreeIssueId({
-  team = TEAM_DEFAULT,
+  team = TEAM_FALLBACK,
   dir = STORE_DIR_DEFAULT,
   repo,
   listDir = defaultListDir,
@@ -128,12 +166,23 @@ export function nextFreeIssueId({
   throw new Error(`next-free-issue-id: exhausted ${maxTries} candidates past ${team}-${startAfter} with no free id found — check GitHub connectivity or investigate a real allocation problem`);
 }
 
-function parseArgs(argv) {
-  const opts = { team: TEAM_DEFAULT, dir: STORE_DIR_DEFAULT, repo: undefined };
+// Resolve the team key in precedence order: an explicit `--team` (operator override) > the committed
+// `.volter/tracker-config.json`'s `local.teamKey` (the real per-adopter default) > TEAM_FALLBACK (only when
+// no config is present). `--config` lets a caller point at a non-default tracker-config path.
+export function parseArgs(argv, readFile = defaultReadFile) {
+  const opts = { team: undefined, dir: STORE_DIR_DEFAULT, repo: undefined, config: TRACKER_CONFIG_DEFAULT };
   for (let i = 0; i < argv.length; i++) {
     if (argv[i] === '--team') opts.team = argv[++i];
     else if (argv[i] === '--dir') opts.dir = argv[++i];
     else if (argv[i] === '--repo') opts.repo = argv[++i];
+    else if (argv[i] === '--config') opts.config = argv[++i];
+  }
+  if (!opts.team) {
+    const derived = teamKeyFromConfig(opts.config, readFile);
+    opts.team = derived ?? TEAM_FALLBACK;
+    opts.teamSource = opts.team === derived ? `${opts.config} (local.teamKey)` : `fallback "${TEAM_FALLBACK}" (no team key in ${opts.config})`;
+  } else {
+    opts.teamSource = '--team';
   }
   return opts;
 }
@@ -144,6 +193,7 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     console.error(`next-free-issue-id: store dir ${opts.dir} not found`);
     process.exit(1);
   }
+  console.error(`next-free-issue-id: team "${opts.team}" (from ${opts.teamSource})`);
   try {
     const { id, skipped } = nextFreeIssueId(opts);
     if (skipped > 0) {

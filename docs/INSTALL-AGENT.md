@@ -23,8 +23,9 @@
 > pausing for your answer exactly like this guide asks you to, never fabricating one; its EXECUTE phase
 > calls `install-execute.ts`'s `runExecute()` — the same deterministic overlay steps Phase 3 walks through
 > by hand, in the same dependency order ("commit the harness first, wire the gate last"); and its VALIDATE
-> + HAND-OFF phases are this guide's Phase 4 VERIFY (`oa doctor`/`oa maturity`, then G4a's
-> verify-and-construct-only go-live).
+> + HAND-OFF phases are this guide's Phase 4 VERIFY (`oa doctor`/`oa maturity`, then G4a's verify-then-go-live:
+> the safe `oa resume` fence-lift is performed automatically once you're confirmed ready, while `oa start` —
+> the half that would actually launch an agent session — stays construct-only, for you to run yourself).
 >
 > An installing agent (or human) can now either:
 > - **(a) run `bun bin/install.ts <repoDir> [options]` directly** to execute this exact flow
@@ -35,7 +36,8 @@
 >   read if you're auditing or debugging what `oa install` did.
 >
 > **Honest caveat:** `oa install` is **source-checkout only** as of open-autonomy 0.4.2 — the *published*
-> `npx open-autonomy install` / `oa install` looks for `bin/install.ts` next to itself, finds nothing in
+> `npx open-autonomy install` / `oa install` looks for `bin/install.ts` in the current working directory
+> (i.e. you must run it from inside a source checkout of this repo), finds nothing in
 > the npm tarball (it's dev-time-only monorepo tooling, never bundled), and exits `1` with an explicit
 > "clone the repo" message rather than silently doing less than advertised (verified live). Clone
 > `volter-ai/open-autonomy` to use it; this guide's manual phases remain the only no-clone-required path.

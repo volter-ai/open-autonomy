@@ -89,10 +89,12 @@ steps 1–5 (shared) vs step 6 (per code host) below.
 >   protection state (the exact hard signal `oa maturity` uses for M3) — a present:false verdict of any
 >   kind is a named blocker, never a silent pass. Also dispatches the profile's planner once to seed the
 >   board with **draft** items only (never `ready`).
-> - **Constructed, never executed:** the go-live command — `oa resume`+`oa start` (local) or the
->   `PUBLIC_AGENT_REPO_PAUSED` clear (hosted). G4a only *verifies* you already promoted a board item to
->   `ready` and prints the exact command for **you** to run — the same human act step 6 below already
->   requires ("watch the first PR merge under supervision" before arming anything).
+> - **Go-live is split, not uniformly construct-only:** once G4a's readiness check confirms you already
+>   promoted a board item to `ready`, `oa resume` (local) — a single safe, reversible fence-removal, no
+>   process spawn — **is performed automatically, for real**. Only `oa start` (local) or, for hosted, the
+>   `PUBLIC_AGENT_REPO_PAUSED` clear — the halves that would actually launch/unblock a real agent session —
+>   stay **constructed, never executed**: G4a prints the exact command for **you** to run — the same human
+>   act step 6 below already requires ("watch the first PR merge under supervision" before arming anything).
 > - **NOT automated — still exactly the manual steps below:** `npx ztrack init --sync github --repo
 >   <owner>/<repo>` (step 6a — the compile step only *prints* this as a next-step suggestion, for either
 >   manual `compile` or `oa install`'s own compile step; neither runs it); opening an actual
@@ -106,9 +108,10 @@ steps 1–5 (shared) vs step 6 (per code host) below.
 >   installed** — DETECT reports `gh auth status` and coding-CLI sign-in state so a blocked gate names the
 >   fix, but `oa install` doesn't run `gh auth login` or install tmux for you.
 > - **Source-checkout only today:** `bun bin/install.ts <repoDir> [options]` from a clone of this repo —
->   the *published* `npx open-autonomy install` / `oa install` looks for `bin/install.ts` next to itself,
->   finds nothing in the npm tarball, and exits 1 with an explicit "clone the repo" message (verified live)
->   rather than silently doing less than advertised.
+>   the *published* `npx open-autonomy install` / `oa install` looks for `bin/install.ts` in the current
+>   working directory (i.e. you must run it from inside a source checkout of this repo), finds nothing in
+>   the npm tarball, and exits 1 with an explicit "clone the repo" message (verified live) rather than
+>   silently doing less than advertised.
 >
 > `bun bin/install.ts --help` lists every gate-answer flag. Keep reading — this checklist is still the
 > canonical phase-by-phase reference for what each step means and why, and the only path for a plain `npx`

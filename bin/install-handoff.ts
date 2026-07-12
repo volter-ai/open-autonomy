@@ -435,8 +435,10 @@ const USAGE = [
   '         [--profile-dir <dir>] [--actor <name>] [--owner-repo <owner/name>] [--launcher tmux|nohup] [--json]',
   '       bun bin/install-handoff.ts runbook   # prints the G4b async babysit protocol',
   '',
-  '⛔ SAFETY: `go-live` never executes a launch — it only ever VERIFIES G4a (board promotion) and',
-  'CONSTRUCTS the substrate-specific go-live command/action, printing it for a human to run.',
+  '⛔ SAFETY: `go-live` never executes a launch. It VERIFIES G4a (board promotion), and (local substrate',
+  'only, once verified) PERFORMS the safe `oa resume` fence-lift for real (a single unlink, no spawn) —',
+  'then CONSTRUCTS the launch half (`oa start` locally, or the hosted PUBLIC_AGENT_REPO_PAUSED clear),',
+  'printing it for a human to run.',
 ].join('\n');
 
 function flagValue(argv: string[], name: string): string | undefined {

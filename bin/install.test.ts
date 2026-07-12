@@ -5,7 +5,8 @@
 // (DETECT through PROVE ADVANCING) against a scratch fixture with all four gates auto-approved, proving
 // real phase-chaining (each phase's real output record correctly threads into the next phase's real input)
 // and reaching the honest ceiling this program's other units already established (never M5/M6, since no
-// real agent ever launches and go-live is construct-only).
+// real agent ever launches — go-live's `oa start` launch half is construct-only, though the safe `oa
+// resume` fence-lift is performed for real).
 //
 // SAFETY (repeat of install.ts's own file header): every subprocess call in this file goes through an
 // injected `proc`. Git/compile/identity-read calls are allowed to be REAL (offline-deterministic or

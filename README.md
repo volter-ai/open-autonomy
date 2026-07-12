@@ -110,7 +110,8 @@ npx open-autonomy compile simple-sdlc local .          # no GitHub; or `hello` f
 > implements. `bun bin/install.ts --help` lists every gate-answer flag.
 >
 > **Honest caveat — source-checkout only today:** the *published* `npx open-autonomy install` / `oa
-> install` looks for `bin/install.ts` next to itself; that file is dev-time-only monorepo tooling and is
+> install` looks for `bin/install.ts` in the current working directory (i.e. you must run it from inside a
+> source checkout of this repo); that file is dev-time-only monorepo tooling and is
 > never bundled into the npm tarball, so it exits `1` with an explicit "clone the repo" message instead of
 > silently doing less than advertised (verified live: `node dist/cli.js install --help` outside this
 > checkout prints exactly that and exits 1). Until it ships in a release, use it via the clone above; the

@@ -61,7 +61,7 @@
 //     performed for real once G4a verifies readiness; see install-handoff.ts's own header for the split.) This
 //     orchestrator inherits that guarantee unchanged: it prints/records `report.handoff.goLive`, it never
 //     spawns it. Every dispatch/launch-command this file's own phases construct forces the provider URL
-//     from the install's own `scheduler/schedule.json` pin (TE.5's `buildPlannerDispatchCommand` / TE.6's
+//     from the install's own `scheduler/schedule.json` pin (TE.5's `buildBoardSeedDispatchCommand` / TE.6's
 //     `buildLocalGoLive` — reused verbatim, never reinvented) — never an ambient/box-wide provider.
 import { existsSync, mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -82,7 +82,8 @@ import {
 import { runG4a, G4B_RUNBOOK, type Launcher, type RunG4aReport } from './install-handoff.ts';
 import { proveAdvancing, renderReportHuman as renderProveAdvancingHuman, type ProveAdvancingReport } from './install-prove-advancing.ts';
 import { profilesRoot as bundledProfilesRoot } from './bundled-profiles.ts';
-import type { BringUpOptions } from '../packages/local-runner-cli/src/provider.ts';
+import { cleanupProbe } from './doctor-checks.ts';
+import { providerDown, readProviderState, type BringUpOptions } from '../packages/local-runner-cli/src/provider.ts';
 import type { ProcRunner } from '../packages/local-runner-cli/src/types.ts';
 import { defaultProc } from '../packages/local-runner-cli/src/proc.ts';
 import type { ProcFn } from './recommend-profile.ts';
@@ -571,6 +572,126 @@ export async function runInstall(opts: InstallOptions): Promise<InstallReport> {
 }
 
 // =========================================================================================================
+// MEDIUM#4 FIX (aggregate-review round 2) — orphaned termfleet processes survive a killed orchestrator.
+//
+// ROOT CAUSE: EXECUTE step 5 (TG.1's own `bringUpProvider`, invoked via `phaseExecute` -> `runExecute` ->
+// `stepProviderUp`) spawns the real termfleet console+provider as DETACHED child processes so they survive
+// this orchestrator process exiting normally (the intended lifetime: they keep serving the install's
+// ongoing autonomous loop long after `oa install` itself has finished). That same detachment means a
+// SIGKILL — a dropped terminal, Ctrl-C escalating past a stuck handler, an OOM kill — leaves them running
+// with nothing supervising them: a live, unsupervised termfleet provider an operator may not even know
+// exists.
+//
+// FIX: trap SIGINT/SIGTERM (the two signals a Node process CAN observe — see the honest SIGKILL residual
+// note below) for the duration of THIS invocation and, if fired, clean up the provider — but ONLY if THIS
+// run is the one that (re)started it. Blindly killing on every signal would be WORSE than the bug: the
+// provider is deliberately long-lived (a human re-running `oa install` later, e.g. to progress past a
+// paused gate, must never have their Ctrl-C nuke an already-running provider serving live agent sessions
+// from a previous run). `ProviderState.startedAt` (provider.ts's `bringUpProvider`/`startOn`) already
+// records exactly when the CURRENTLY-RECORDED console/provider pids were spawned — comparing it against
+// this invocation's own start timestamp distinguishes "I started this" ('started'/'restarted', a fresh
+// startedAt) from "this predates me" ('noop', a stale startedAt) with zero new state and zero API surface
+// added to install-execute.ts/provider.ts — reusing `providerDown` (the exact `oa provider down` primitive)
+// verbatim for the actual kill.
+//
+// RESIDUAL LIMITATION (documented honestly, not hidden): SIGKILL cannot be trapped by the process it is
+// sent to — POSIX delivers it straight to the kernel, no handler ever runs. A SIGKILL'd `oa install` still
+// orphans a provider it just started; this fix cannot and does not claim otherwise. RECOVERY for that case
+// already exists independent of this fix: `oa provider status`/`oa provider down` (packages/local-runner-
+// cli/src/index.ts, wrapping `providerStatus`/`providerDown`) read this install's DURABLE on-disk state
+// (.open-autonomy/runner-state/provider/state.json), not in-memory process tracking — an operator can
+// discover and clean up an orphan after the fact regardless of which process (or none) is still alive to
+// ask. `oa doctor --live` also independently probes the pinned provider's /healthz reachability
+// (doctor.ts's `checkProviderHealth`), so an orphan's presence is discoverable through the normal health-
+// check path too, not just the dedicated provider subcommand.
+// =========================================================================================================
+
+/** Exported for this unit's own live signal-handling proof (see bin/install.test.ts) — the exact function
+ *  the SIGINT/SIGTERM handler below calls, so the test exercises the real decision logic, not a re-
+ *  implementation of it. `sinceMs` is the invoking CLI's own start timestamp (`Date.now()`), captured BEFORE
+ *  `runInstall` (and so before any `bringUpProvider` call it may make) begins. */
+export function cleanupOrphanedProvider(repoDir: string, sinceMs: number, opts: { now?: () => string; kill?: (pid: number, signal: NodeJS.Signals) => void } = {}): { attempted: boolean; detail: string } {
+  const state = readProviderState(repoDir);
+  if (!state || state.stoppedAt) {
+    return { attempted: false, detail: 'no provider (or already stopped) recorded for this install — nothing to clean up' };
+  }
+  if (new Date(state.startedAt).getTime() < sinceMs) {
+    return {
+      attempted: false,
+      detail: `a provider is up but its recorded startedAt (${state.startedAt}) predates this invocation — it was NOT started by this run, leaving it running untouched (the intended steady state; use \`oa provider down\` if you actually want it stopped).`,
+    };
+  }
+  const r = providerDown({ cwd: repoDir, now: opts.now, kill: opts.kill });
+  return { attempted: true, detail: `this run's own termfleet provider (startedAt ${state.startedAt}) was orphaned by the signal — cleaned up: ${r.detail}` };
+}
+
+// DISCOVERED WHILE BUILDING THIS FIX'S LIVE PROOF — a second, pre-existing signal-handling hazard, closed
+// as part of landing this one: `bin/doctor-checks.ts` (pulled in transitively by this file's own
+// `install-select.ts` -> `install-detect.ts` import, for its `checkAuth`/`checkEnv`/`checkProvider` checks)
+// registers ITS OWN module-level `process.on('SIGINT'|'SIGTERM'|'SIGHUP', ...)` handler (doctor-checks.ts's
+// own `cleanupProbe` — cleans up ITS `oa doctor --live`'s worktree-probe artifact) that calls
+// `process.exit(130)` UNCONDITIONALLY. Node/Bun invoke same-event listeners in REGISTRATION order, and a
+// listener that calls `process.exit()` terminates the process immediately — no later-registered listener
+// for that event ever runs. Because ES module imports are always evaluated before the importing module's
+// own top-level code, doctor-checks.ts's handler is ALWAYS registered before this file's own `if
+// (import.meta.main)` block runs — so a plain `process.on('SIGINT', ...)` registered below would NEVER
+// fire (verified live: exit code was consistently doctor-checks.ts's own hardcoded 130, provider cleanup
+// never ran). FIX: `process.prependListener` puts THIS handler first regardless of import-time registration
+// order, and it explicitly also calls doctor-checks.ts's own exported `cleanupProbe()` (idempotent — a
+// second/redundant call, including doctor-checks.ts's own listener never getting to run because this
+// handler already calls `process.exit()`, is a safe no-op) so that hazard's own cleanup is never silently
+// dropped by winning the race. (In practice `checkHarness`/`cleanupProbe`'s `activeProbe` is never armed
+// during a normal `oa install` run — `phaseValidate` calls packages/local-runner-cli/src/doctor.ts's own
+// smaller `doctor()`, a different function despite the similar name, never bin/doctor-checks.ts's
+// `runDoctor`/`checkHarness` — so this call is currently always a no-op in THIS caller; it is kept as
+// defense-in-depth against a future code path in this chain reaching `checkHarness`, and because it is the
+// one-line fix that makes the listener-ordering hazard fully honest rather than merely worked around.)
+
+/** Installs the SIGINT/SIGTERM orphan-provider-cleanup handlers for a `runInstall()` invocation covering
+ *  `repoDir`, armed from `invocationStartedAtMs` (see `cleanupOrphanedProvider`'s own doc for what that
+ *  timestamp scopes). Returns `disarm()` — call it the instant `runInstall()` returns, so a normal finish
+ *  (COMPLETED/PAUSED/BLOCKED) never triggers signal-based cleanup (see this file's header comment: the
+ *  provider staying up after a normal finish is the intended steady state).
+ *
+ *  Extracted into its own exported function (rather than inlined in the `import.meta.main` CLI block below)
+ *  for exactly one reason: `import.meta.main` is false whenever this module is *imported* rather than run
+ *  as the entrypoint, so the CLI block never executes under import — which is precisely how this unit's own
+ *  live SIGINT proof drives `runInstall()` (it must inject a stub for the one dangerous real-agent-dispatch
+ *  subprocess call, so it imports `runInstall` as a library rather than shelling out to a real `bun
+ *  bin/install.ts` process). A hand-copied replica of this registration in the proof script would test its
+ *  OWN logic, not this file's — and did, during this fix's own development, silently mask the exact
+ *  prependListener/cleanupProbe fix below not yet existing. Calling this SAME exported function from both
+ *  the real CLI and the live proof closes that gap: the proof exercises the literal code this file runs. */
+export function installOrphanCleanupHandlers(repoDir: string, invocationStartedAtMs: number): { disarm: () => void } {
+  let cleanupArmed = true;
+  const onInterruptSignal = (signal: NodeJS.Signals) => {
+    if (!cleanupArmed) return; // already handled (or already past runInstall) — never double-act
+    cleanupArmed = false;
+    // Run doctor-checks.ts's OWN cleanup FIRST (see this function's own header comment for the full
+    // listener-ordering hazard this neutralizes) — idempotent/safe even though it is always a no-op for
+    // this caller today.
+    cleanupProbe();
+    const c = cleanupOrphanedProvider(repoDir, invocationStartedAtMs);
+    process.stderr.write(`\n[oa install] ${signal} received mid-run — ${c.detail}\n`);
+    if (!c.attempted) {
+      process.stderr.write(
+        '[oa install] NOTE: SIGKILL cannot be trapped by this process at all (POSIX delivers it straight to the ' +
+          'kernel) — a SIGKILL\'d run gets no cleanup chance and may still orphan a provider it started; recover ' +
+          'via `oa provider status` / `oa provider down`, which read this install\'s durable on-disk state, not ' +
+          'process liveness.\n',
+      );
+    }
+    process.exit(signal === 'SIGINT' ? 130 : 143);
+  };
+  // prependListener (NOT .on/.addListener): guarantees this handler runs BEFORE doctor-checks.ts's own
+  // module-level SIGINT/SIGTERM listener (registered earlier, at import time) — otherwise that listener's
+  // unconditional `process.exit(130)` would terminate the process before this one ever ran.
+  process.prependListener('SIGINT', () => onInterruptSignal('SIGINT'));
+  process.prependListener('SIGTERM', () => onInterruptSignal('SIGTERM'));
+  return { disarm: () => { cleanupArmed = false; } };
+}
+
+// =========================================================================================================
 // Rendering.
 // =========================================================================================================
 
@@ -937,7 +1058,16 @@ if (import.meta.main) {
     process.stderr.write(`error: repoDir "${opts.repoDir}" does not exist\n`);
     process.exit(2);
   }
+
+  // MEDIUM#4 fix — see `installOrphanCleanupHandlers`'s own doc (above `cleanupOrphanedProvider`) for the
+  // full root cause + rationale. Armed for the duration of THIS invocation only; disarmed the instant
+  // runInstall returns (a clean finish — COMPLETED, PAUSED, or BLOCKED — is the process exiting normally,
+  // which is never a reason to touch the provider; only an interrupting SIGINT/SIGTERM mid-run is).
+  const invocationStartedAtMs = Date.now();
+  const { disarm } = installOrphanCleanupHandlers(opts.repoDir, invocationStartedAtMs);
+
   const report = await runInstall(opts);
+  disarm(); // a normal finish never triggers signal-based provider cleanup — see comment above
   const out = opts.json ? JSON.stringify(report, null, 2) : renderInstallHuman(report);
   process.stdout.write(`${out}\n`);
   const code = report.classification === 'COMPLETED' ? 0 : report.classification === 'PAUSED' ? 3 : 1;

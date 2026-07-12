@@ -109,7 +109,7 @@ describe('buildLocalGoLive — construction only, FORCED PIN (the single most im
     cleanupAll();
   });
 
-  // Regression test, same shape as TE.5's own `buildPlannerDispatchCommand` forced-pin test
+  // Regression test, same shape as TE.5's own `buildBoardSeedDispatchCommand` forced-pin test
   // (bin/install-execute.test.ts: "forces TERMFLEET_PROVIDER_URL to the INSTALL-SCOPED pin, never
   // ambient") — this session's own TE.5 incident is exactly the hazard this proves closed for Phase 6's
   // go-live command too: an ambient TERMFLEET_PROVIDER_URL pointing at a DIFFERENT (e.g. box-wide) provider

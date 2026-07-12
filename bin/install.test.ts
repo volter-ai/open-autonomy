@@ -19,6 +19,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import {
+  cleanupOrphanedProvider,
   ok,
   paused,
   blocked,
@@ -37,6 +38,7 @@ import { profilesRoot } from './bundled-profiles.ts';
 import { getSetupPack } from '@open-autonomy/core';
 import type { SelectionRecord } from './install-select.ts';
 import type { ProcResult, ProcRunner } from '../packages/local-runner-cli/src/types.ts';
+import type { ProviderState } from '../packages/local-runner-cli/src/provider.ts';
 
 const REPO_ROOT = join(import.meta.dir, '..');
 
@@ -230,6 +232,102 @@ describe('GateResult helpers', () => {
     expect(ok({ x: 1 })).toEqual({ status: 'ok', record: { x: 1 } });
     expect(paused('q', 'hint').status).toBe('paused');
     expect(blocked('q').status).toBe('blocked');
+  });
+});
+
+// =========================================================================================================
+// MEDIUM#4 — cleanupOrphanedProvider (the decision logic behind this file's SIGINT/SIGTERM handler). Every
+// case here operates on a hand-written state.json fixture — no real termfleet process is ever spawned by
+// these tests (the live SIGINT proof against a REAL provider is a separate, explicit acceptance run — see
+// the PR body — never part of this repo's own fast test suite).
+// =========================================================================================================
+
+function writeProviderStateFixture(repoDir: string, state: ProviderState): void {
+  const dir = join(repoDir, '.open-autonomy', 'runner-state', 'provider');
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(join(dir, 'state.json'), JSON.stringify(state, null, 2));
+}
+
+describe('cleanupOrphanedProvider (MEDIUM#4)', () => {
+  test('no provider state recorded at all -> not attempted, no-op', () => {
+    const dir = track(mkdtempSync(join(tmpdir(), 'oa-te8-cleanup-')));
+    const r = cleanupOrphanedProvider(dir, Date.now());
+    expect(r.attempted).toBe(false);
+    expect(r.detail).toMatch(/nothing to clean up/);
+    cleanupAll();
+  });
+
+  test('provider already stopped -> not attempted, no-op (never re-kills an already-dead recorded pid)', () => {
+    const dir = track(mkdtempSync(join(tmpdir(), 'oa-te8-cleanup-')));
+    writeProviderStateFixture(dir, {
+      repoPath: dir, prefix: 'x-oa', consolePort: 1, providerPort: 2,
+      consoleUrl: 'http://127.0.0.1:1', providerUrl: 'http://127.0.0.1:2',
+      consolePid: 111, providerPid: 222, startedAt: new Date(Date.now() - 60000).toISOString(),
+      stoppedAt: new Date().toISOString(),
+    });
+    const r = cleanupOrphanedProvider(dir, Date.now() - 120000);
+    expect(r.attempted).toBe(false);
+    cleanupAll();
+  });
+
+  // The core scoping rule: a provider that predates THIS invocation is NEVER touched — the opposite bug
+  // (killing an already-running, legitimately-in-use provider on every Ctrl-C) would be worse than the
+  // orphan-leak defect this fix closes.
+  test('provider startedAt PREDATES this invocation -> not attempted, left running untouched', () => {
+    const dir = track(mkdtempSync(join(tmpdir(), 'oa-te8-cleanup-')));
+    const invocationStartedAtMs = Date.now();
+    writeProviderStateFixture(dir, {
+      repoPath: dir, prefix: 'x-oa', consolePort: 1, providerPort: 2,
+      consoleUrl: 'http://127.0.0.1:1', providerUrl: 'http://127.0.0.1:2',
+      consolePid: 111, providerPid: 222, startedAt: new Date(invocationStartedAtMs - 3600000).toISOString(), // 1h earlier
+    });
+    let killed = false;
+    const r = cleanupOrphanedProvider(dir, invocationStartedAtMs, { kill: () => { killed = true; } });
+    expect(r.attempted).toBe(false);
+    expect(killed).toBe(false);
+    expect(r.detail).toMatch(/predates this invocation/);
+    cleanupAll();
+  });
+
+  // The actual fix: a provider started BY this invocation (fresh startedAt) IS cleaned up on signal.
+  test('provider startedAt is AFTER this invocation began -> cleaned up (SIGTERM sent to the recorded pids)', () => {
+    const dir = track(mkdtempSync(join(tmpdir(), 'oa-te8-cleanup-')));
+    const invocationStartedAtMs = Date.now();
+    writeProviderStateFixture(dir, {
+      repoPath: dir, prefix: 'x-oa', consolePort: 1, providerPort: 2,
+      consoleUrl: 'http://127.0.0.1:1', providerUrl: 'http://127.0.0.1:2',
+      consolePid: 111, providerPid: 222, startedAt: new Date(invocationStartedAtMs + 50).toISOString(), // just after
+    });
+    const killedPids: Array<[number, NodeJS.Signals]> = [];
+    const r = cleanupOrphanedProvider(dir, invocationStartedAtMs, { kill: (pid, sig) => killedPids.push([pid, sig]) });
+    expect(r.attempted).toBe(true);
+    expect(r.detail).toMatch(/orphaned by the signal/);
+    expect(killedPids).toEqual([
+      [111, 'SIGTERM'],
+      [222, 'SIGTERM'],
+    ]);
+    // providerDown's own effect: state.json is marked stopped, so a second cleanup call is a no-op.
+    const r2 = cleanupOrphanedProvider(dir, invocationStartedAtMs, { kill: () => killedPids.push([0, 'SIGTERM']) });
+    expect(r2.attempted).toBe(false);
+    expect(killedPids.length).toBe(2); // no double-kill
+    cleanupAll();
+  });
+
+  // 'restarted' bring-ups also get a fresh startedAt (provider.ts's startOn), so a mid-run restart is
+  // covered by the exact same timestamp comparison as a fresh 'started' — no separate branch needed.
+  test('a RESTARTED provider (fresh startedAt from a reap+restart) is treated identically to a freshly-started one', () => {
+    const dir = track(mkdtempSync(join(tmpdir(), 'oa-te8-cleanup-')));
+    const invocationStartedAtMs = Date.now();
+    writeProviderStateFixture(dir, {
+      repoPath: dir, prefix: 'x-oa', consolePort: 3, providerPort: 4,
+      consoleUrl: 'http://127.0.0.1:3', providerUrl: 'http://127.0.0.1:4',
+      consolePid: 333, providerPid: 444, startedAt: new Date(invocationStartedAtMs + 1000).toISOString(),
+    });
+    const killedPids: number[] = [];
+    const r = cleanupOrphanedProvider(dir, invocationStartedAtMs, { kill: (pid) => killedPids.push(pid) });
+    expect(r.attempted).toBe(true);
+    expect(killedPids.sort()).toEqual([333, 444]);
+    cleanupAll();
   });
 });
 

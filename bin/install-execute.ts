@@ -68,13 +68,22 @@
 //                             continues silently on a failed non-admin PUT). A present:false verdict of
 //                             ANY kind (unverifiable, not-applicable, proven-negative) is a NAMED BLOCKER,
 //                             never a silent pass. N/A for a local-git profile.
-//   7. seed the board       — dispatches the profile's planner ONCE via the paused-safe primary dispatch
-//                             channel TC.2's audit skill established (`AUTONOMY_AGENT=planner node
-//                             scripts/run-agent.mjs` — no `.open-autonomy/paused` check, unlike
+//   7. seed the board       — dispatches the profile's REAL originator ONCE (its setup-pack.yml's
+//                             `board_seed_recipe.originator_skill` — NOT a hardcoded 'planner': CRITICAL#2
+//                             fix, aggregate-review round 2. simple-sdlc's roster has no `planner` agent at
+//                             all — its originator is `draft` — so a hardcoded 'planner' dispatched the
+//                             wrong agent, and worse, would have gone missing-prompt-file straight into
+//                             packages/substrate-local/src/backend.mjs's silent bare-agent-name prompt
+//                             fallback, see that step's own comment below) via the paused-safe primary
+//                             dispatch channel TC.2's audit skill established (`AUTONOMY_AGENT=<originator>
+//                             node scripts/run-agent.mjs` — no `.open-autonomy/paused` check, unlike
 //                             runner-frontend.ts's `launch()`; see profiles/*/skills/audit/SKILL.md's
 //                             "SETUP-COMPLETION MODE" section for the cited mechanism this reuses, only
 //                             the agent name differs) or, on a gh-actions target, `gh workflow run
-//                             planner.yml`. ⛔ SAFETY: dispatching this for real launches a real agent —
+//                             <originator>.yml` (packages/substrate-github/src/emit.ts emits one workflow
+//                             file per agent ROLE — `${name}.yml` — so this is the same originator-driven
+//                             fix applied uniformly to both substrates, not just the local one the defect
+//                             report called out). ⛔ SAFETY: dispatching this for real launches a real agent —
 //                             this file only ever CONSTRUCTS the exact command and calls it through an
 //                             injectable `proc`; this unit's own acceptance stubs `proc` so no agent is
 //                             ever actually launched (see install-execute.test.ts + the PR body's explicit
@@ -695,12 +704,21 @@ export async function stepCiAndProvision(
 }
 
 // =========================================================================================================
-// Step 7 — seed the board with DRAFT items only. Dispatches the profile's planner ONCE via the paused-safe
-// primary dispatch channel TC.2's audit skill established. ⛔ Real dispatch launches a real agent — this
-// function only ever constructs+calls the command through an injectable proc; this unit's own acceptance
-// stubs it (see PR body's explicit mocked-sequencing disclosure). Never mutates board state itself.
-// =========================================================================================================
-
+// Step 7 — seed the board with DRAFT items only. Dispatches the profile's REAL originator (setup-pack.yml's
+// board_seed_recipe.originator_skill) ONCE via the paused-safe primary dispatch channel TC.2's audit skill
+// established. ⛔ Real dispatch launches a real agent — this function only ever constructs+calls the
+// command through an injectable proc; this unit's own acceptance stubs it (see PR body's explicit
+// mocked-sequencing disclosure). Never mutates board state itself.
+//
+// CRITICAL#2 FIX (aggregate-review round 2) — renamed from `buildPlannerDispatchCommand`: the old name and
+// its hardcoded `AUTONOMY_AGENT: 'planner'` assumed every profile's originator is the planner. It is not —
+// simple-sdlc's setup-pack.yml declares `originator_skill: draft` (its ir.yml roster carries no `planner`
+// agent at all — see profiles/simple-sdlc/setup-pack.yml's own comment). `originatorSkill` is now a REQUIRED
+// parameter the caller resolves from the pack (`sel.pack.board_seed_recipe.originator_skill`), never a
+// literal baked in here. Applied to BOTH substrate branches for the same reason (packages/substrate-github/
+// src/emit.ts emits one `.github/workflows/<role>.yml` per agent role, so the gh-actions branch's dispatch
+// target is exactly as originator-dependent as the local branch's AUTONOMY_AGENT, even though every profile
+// that can run gh-actions today happens to declare `planner` — this stays correct if that ever changes).
 export interface DispatchCommand {
   cmd: string;
   args: string[];
@@ -710,7 +728,7 @@ export interface DispatchCommand {
 /** `repoDir` is REQUIRED for a local-substrate command (not optional) — see the "install-scoped, never
  *  ambient" note below; this is a deliberate signature change from an earlier draft that omitted it (found
  *  live, see this file's own PR-body incident note). */
-export function buildPlannerDispatchCommand(substrate: Substrate, repoDir: string | undefined, ownerRepo?: string): DispatchCommand {
+export function buildBoardSeedDispatchCommand(substrate: Substrate, repoDir: string | undefined, originatorSkill: string, ownerRepo?: string): DispatchCommand {
   if (substrate === 'local') {
     // INSTALL-SCOPED, NEVER AMBIENT (live-verified incident during this unit's own acceptance proof — see
     // PR body): a bare `node scripts/run-agent.mjs` with no TERMFLEET_PROVIDER_URL falls back to the
@@ -722,14 +740,14 @@ export function buildPlannerDispatchCommand(substrate: Substrate, repoDir: strin
     // scheduler/schedule.json pin (TG.1's durable artifact, via provider.ts's `readSchedulePin`) whenever
     // one exists, so a real dispatch can only ever reach the provider THIS install's own Phase-4 step 5
     // brought up — never an unrelated ambient one.
-    const env: Record<string, string> = { AUTONOMY_AGENT: 'planner' };
+    const env: Record<string, string> = { AUTONOMY_AGENT: originatorSkill };
     if (repoDir) {
       const pin = readSchedulePin(repoDir);
       if (pin) env.TERMFLEET_PROVIDER_URL = pin;
     }
     return { cmd: 'node', args: ['scripts/run-agent.mjs'], env };
   }
-  const args = ['workflow', 'run', 'planner.yml'];
+  const args = ['workflow', 'run', `${originatorSkill}.yml`];
   if (ownerRepo) args.push('--repo', ownerRepo);
   return { cmd: 'gh', args };
 }
@@ -738,8 +756,69 @@ export interface SeedBoardResult extends ExecuteStepResult {
   command: DispatchCommand;
 }
 
-export function stepSeedBoardDrafts(sel: SelectionRecordRef, opts: { proc: ProcRunner; ownerRepo?: string; dryRun?: boolean }): SeedBoardResult {
-  const command = buildPlannerDispatchCommand(sel.substrate, sel.detect.repoDir, opts.ownerRepo);
+// The launch harness (which coding CLI termfleet drives) — mirrors packages/substrate-local/src/
+// runner-config.ts's RUNNER_DEFAULTS.harness default ('claude'); TERMFLEET_AGENT overrides it identically
+// at real dispatch time (backend.mjs) and here, so this check probes the EXACT path a real launch resolves.
+const DEFAULT_LAUNCH_HARNESS = 'claude';
+
+export function stepSeedBoardDrafts(sel: SelectionRecordRef, opts: { proc: ProcRunner; ownerRepo?: string; dryRun?: boolean; plannedFiles?: string[] }): SeedBoardResult {
+  const originatorSkill = sel.pack.board_seed_recipe.originator_skill;
+  const command = buildBoardSeedDispatchCommand(sel.substrate, sel.detect.repoDir, originatorSkill, opts.ownerRepo);
+
+  // CRITICAL#2 FIX, part (b) — loud-failure guard, scoped to THIS unit's own dispatch layer.
+  // packages/substrate-local/src/backend.mjs's `launch()` silently falls back to the BARE AGENT NAME as the
+  // literal prompt text (`promptExists ? readFileSync(promptFile, 'utf8') : agent`) whenever no compiled
+  // prompt file exists for AUTONOMY_AGENT — a real coding CLI would then be handed e.g. the literal string
+  // "planner" as its entire instructions. That silent-fallback pattern lives in shared runtime code used by
+  // every launch path in the system (the loop driver, the PM's own nested launches, a human's `oa dispatch`)
+  // — not something this install-time orchestration unit owns or can safely change here (rewriting a shared
+  // primitive's error-handling contract needs its own reviewed unit, with every OTHER caller's expectations
+  // re-verified — out of scope for a two-defect fix PR). What THIS unit CAN and does guarantee: its own
+  // seed-board-drafts dispatch can never be the one that walks into that fallback. Step 1 (compile) already
+  // ran earlier in this exact EXECUTE sequence and, for a local-substrate profile, materializes
+  // `scripts/prompts/<harness>/<role>.txt` for every real agent role in the profile's ir.yml (packages/
+  // substrate-local/src/emit.ts's `promptFiles`) — so if the resolved originator's prompt file is missing,
+  // that is itself evidence of a real defect (the pack's declared originator_skill doesn't match the
+  // profile's own compiled agent roster) and this step now fails LOUDLY here, before ever spawning anything,
+  // instead of silently reaching backend.mjs's fallback.
+  //
+  // --dry-run interaction: the check is read-only (existsSync only — no side effect), so it is SAFE to run
+  // identically under dry-run, but its DATA SOURCE must change: under a real run, step 1 (compile) really
+  // wrote the prompt file, so a real on-disk existsSync is the right question. Under dry-run, step 1's own
+  // dry-run branch (stepCompile) never wrote anything for real — it only returned a `wouldWrite` file list
+  // (threaded through here as `opts.plannedFiles`, the exact same list stepCommitHarness's own dry-run
+  // branch already consumes) — so the right question under dry-run is "is the prompt file IN the compile
+  // plan", not "does it exist on disk yet". A prediction that the real run WOULD refuse to dispatch is
+  // exactly the kind of blocked prediction stepCompile/stepCiAndProvision's own dry-run branches already
+  // surface (see runExecute's own dry-run header comment). If `plannedFiles` is empty/absent (compile itself
+  // was blocked, or ran through a non-dry-run-listing proc stub), this step makes no claim either way —
+  // mirrors stepCommitHarness's own "0 planned files — nothing to plan" discipline: never over-claim a block
+  // this step can't actually back up.
+  if (sel.substrate === 'local' && sel.detect.repoDir) {
+    const harness = process.env.TERMFLEET_AGENT || DEFAULT_LAUNCH_HARNESS;
+    const relPromptPath = join('scripts', 'prompts', harness, `${originatorSkill}.txt`);
+    const promptFile = join(sel.detect.repoDir, relPromptPath);
+    const missing = opts.dryRun
+      ? opts.plannedFiles && opts.plannedFiles.length > 0 && !opts.plannedFiles.includes(relPromptPath)
+      : !existsSync(promptFile);
+    if (missing) {
+      return {
+        ...step(
+          'seed-board-drafts',
+          'blocked',
+          `${opts.dryRun ? '[DRY-RUN] would refuse' : 'refusing'} to dispatch AUTONOMY_AGENT=${originatorSkill}: no compiled launch prompt ${opts.dryRun ? `is planned at ${relPromptPath}` : `exists at ${promptFile}`}. ` +
+            `Dispatching anyway would silently fall through to backend.mjs's bare-agent-name prompt fallback and hand ` +
+            `a real coding CLI the literal text "${originatorSkill}" as its entire prompt — refused ${opts.dryRun ? '(predicted)' : 'before spawning anything'}. This means the pack's board_seed_recipe.originator_skill ` +
+            `("${originatorSkill}") is out of sync with the profile's own compiled ir.yml agent roster, or step 1 (compile) ` +
+            `has not actually run for this repoDir/harness — check profiles/${sel.profile}/setup-pack.yml against ` +
+            `profiles/${sel.profile}/ir.yml.`,
+          opts.dryRun ? { dryRun: true } : {},
+        ),
+        command,
+      };
+    }
+  }
+
   if (opts.dryRun) {
     // Reuses the SAME construct-never-execute discipline install-handoff.ts's go-live logic already proves
     // safe (buildLocalGoLive/buildHostedGoLive: construct a DispatchCommand, never call proc on it). This is
@@ -750,22 +829,23 @@ export function stepSeedBoardDrafts(sel: SelectionRecordRef, opts: { proc: ProcR
       ...step(
         'seed-board-drafts',
         'ok',
-        `[DRY-RUN] would dispatch the planner once via \`${command.cmd} ${command.args.join(' ')}\`${envDetail} — NOT executed; no real agent ever launched.`,
+        `[DRY-RUN] would dispatch ${originatorSkill} (this profile's real board_seed_recipe.originator_skill) once via \`${command.cmd} ${command.args.join(' ')}\`${envDetail} — NOT executed; no real agent ever launched.`,
         { dryRun: true },
       ),
       command,
     };
   }
+
   const env = command.env ? { ...process.env, ...command.env } : process.env;
   const r = opts.proc(command.cmd, command.args, { cwd: sel.detect.repoDir, env });
   if (r.status !== 0) {
-    return { ...step('seed-board-drafts', 'blocked', `planner dispatch failed (${command.cmd} ${command.args.join(' ')}, exit ${r.status}): ${firstLine(r.stderr || r.stdout)}`), command };
+    return { ...step('seed-board-drafts', 'blocked', `${originatorSkill} dispatch failed (${command.cmd} ${command.args.join(' ')}, exit ${r.status}): ${firstLine(r.stderr || r.stdout)}`), command };
   }
   return {
     ...step(
       'seed-board-drafts',
       'ok',
-      `dispatched the planner once via ${command.cmd} ${command.args.join(' ')} — seeds DRAFT items only; never self-promotes to ready/oa-approved (that is the planner's own doctrine, pr-139: "file drafts, never ready" — this orchestrator holds no board-mutation code path of its own).`,
+      `dispatched ${originatorSkill} (this profile's real board_seed_recipe.originator_skill) once via ${command.cmd} ${command.args.join(' ')} — seeds DRAFT items only; never self-promotes to ready/oa-approved (that is the originator's own doctrine, pr-139: "file drafts, never ready" — this orchestrator holds no board-mutation code path of its own).`,
     ),
     command,
   };
@@ -877,7 +957,7 @@ export async function runExecute(opts: ExecuteOptions): Promise<ExecuteReport> {
     if (h) return h;
   }
 
-  steps.push(stepSeedBoardDrafts(sel, { proc, ownerRepo: opts.ownerRepo, dryRun }));
+  steps.push(stepSeedBoardDrafts(sel, { proc, ownerRepo: opts.ownerRepo, dryRun, plannedFiles }));
   {
     const h = haltIfBlocked();
     if (h) return h;

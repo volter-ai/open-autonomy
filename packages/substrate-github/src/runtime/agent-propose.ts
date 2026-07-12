@@ -32,11 +32,13 @@ export function refKind(ref: string): RefKind {
 
 /** DUAL mode (this change): a numeric ref closes the issue (unchanged, squash-merge-safe `Closes #<n>`); a
  *  non-numeric store ref (e.g. `COMBO-9`) gets a plain `Tracker: <ref>` reference line — NEVER a close
- *  keyword, because no store-native ref has a numbered GitHub issue behind it for GitHub to auto-close (the
- *  store issue itself is flipped to done by reconcile-merged-issues.ts once the merge-commit lands). Absent
- *  ref (an autonomous/cron proposer) yields no trailer at all. Shared by the commit message and the PR body
- *  so both carry the identical line (belt-and-suspenders: a merge-commit merge preserves the commit as-is on
- *  main even if the PR body itself is ever dropped). */
+ *  keyword, because no store-native ref has a numbered GitHub issue behind it for GitHub to auto-close. The
+ *  trailer is a durable, machine-readable citation of the originating work item that rides into the merged
+ *  commit; flipping that store item to done on merge is a store-side consumer's job (numeric refs are
+ *  auto-closed by GitHub; reconcile-merged-issues.ts is numeric-only in-tree and does nothing for a store
+ *  ref today). Absent ref (an autonomous/cron proposer) yields no trailer at all. Shared by the commit
+ *  message and the PR body so both carry the identical line (belt-and-suspenders: a merge-commit merge
+ *  preserves the commit as-is on main even if the PR body itself is ever dropped). */
 export function refTrailer(ref: string): string {
   const kind = refKind(ref);
   if (kind === 'numeric') return `Closes #${ref}`;
@@ -95,9 +97,10 @@ if (import.meta.main) {
 
   // Deterministic dedup backstop: if this branch ALREADY has a merged PR, the work has landed — never open a
   // duplicate. (A proposer can be relaunched in the lag between a PR merging and the work item's tracker
-  // reflecting it — `Closes #<n>` auto-closing a GitHub issue, or reconcile-merged-issues.ts flipping a store
-  // issue to done; this guard stops the second run from opening a redundant PR for already-merged work.) Any
-  // REAL ref participates — numeric or store — only an absent ref has no work-item identity to dedup against.
+  // reflecting it — a numeric ref's GitHub issue auto-closing, or a store item being flipped to done by its
+  // own store-side consumer; this guard stops the second run from opening a redundant PR for already-merged
+  // work.) Any REAL ref participates — numeric or store — only an absent ref has no work-item identity to
+  // dedup against.
   if (isDedupCandidate(ref) && sh('gh', ['pr', 'list', '--head', branch, '--state', 'merged', '--json', 'number', '--jq', '.[0].number // empty'], { allowFail: true })) {
     process.stdout.write(`branch ${branch} already has a merged PR; nothing to propose\n`);
     process.exit(0);
@@ -133,8 +136,9 @@ if (import.meta.main) {
   // Tracker trailer in the COMMIT (squash-merge carries it reliably; a PR-body trailer alone is dropped when
   // the repo squashes from the commit message) — DUAL mode: `Closes #<n>` for a numeric ref (unchanged,
   // squash-merge auto-closes the GitHub issue), `Tracker: <ref>` for a non-numeric store ref (never a close
-  // keyword — there is no numbered GitHub issue behind it to close; the store issue is flipped to done by
-  // reconcile-merged-issues.ts once this merge-commit lands on main). No trailer at all for an absent ref.
+  // keyword — there is no numbered GitHub issue behind it to close; it is a durable citation of the store
+  // work item that rides into main, for a store-side consumer to reconcile). No trailer at all for an absent
+  // ref.
   const commitArgs = ['commit', '--allow-empty', '-m', `agent: ${rid}`];
   const trailer = refTrailer(ref);
   if (trailer) commitArgs.push('-m', trailer);

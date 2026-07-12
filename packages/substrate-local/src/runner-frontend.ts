@@ -508,13 +508,20 @@ export async function launch(agent: string, params: LaunchParams = {}): Promise<
       recordPostSessionEffect({
         id,
         agent,
-        ref: /agent\/issue-(\d+)/.exec(branch)?.[1] ?? '', // the issue this session is isolated for
+        // The work-item ref this session is isolated for, recovered from the `agent/issue-<ref>` branch the
+        // PM named. The alphabet MUST match the ref alphabet agent-propose.ts constructs the branch from
+        // (`[A-Za-z0-9._-]+`, widened for store ids like `COMBO-9`) — a digit-only capture would yield an
+        // empty ref for a store-id branch (`agent/issue-COMBO-9`), so agent-propose would see no ref and its
+        // `Tracker: <ref>` trailer would never emit. Anchored to end-of-string since the ref is the branch's
+        // suffix.
+        ref: /agent\/issue-([A-Za-z0-9._-]+)$/.exec(branch)?.[1] ?? '', // the work item this session is isolated for
         worktree,
         effect: 'scripts/agent-propose.ts', // the github code host's publish effect (git + gh; runner-independent)
         env: {
           // ISSUE_REF derives from the worktree's branch so agent-propose checks out the SAME branch the
-          // worker committed onto (`agent/issue-<n>`); the rest mirror github's propose-step env.
-          ISSUE_REF: /agent\/issue-(\d+)/.exec(branch)?.[1] ?? '',
+          // worker committed onto (`agent/issue-<ref>`, numeric OR a store id); the rest mirror github's
+          // propose-step env. Same widened alphabet as the `ref` capture above.
+          ISSUE_REF: /agent\/issue-([A-Za-z0-9._-]+)$/.exec(branch)?.[1] ?? '',
           AGENT_NAME: agent,
           AGENT_BOT_NAME: process.env.AGENT_BOT_NAME ?? 'open-autonomy-agent',
           AGENT_BOT_EMAIL: process.env.AGENT_BOT_EMAIL ?? 'open-autonomy-agent@users.noreply.github.com',

@@ -278,10 +278,17 @@ policy:
         - scripts/rearm-auto-merge.ts
         - scripts/reconcile-merged-issues.ts
         - scripts/check-supply-chain.ts
+        # THE done-flip gate scripts — check-flip-diff.ts IS the security boundary that decides whether a
+        # flip PR gets auto-approved; an agent PR rewriting it (or flip-done.ts, which invokes it) would let
+        # the loop weaken its own merge-boundary check unsupervised.
+        - scripts/flip-done.ts
+        - scripts/check-flip-diff.ts
         - profiles/self-driving/scripts/human-approval-gate.ts
         - profiles/self-driving/scripts/rearm-auto-merge.ts
         - profiles/self-driving/scripts/reconcile-merged-issues.ts
         - profiles/self-driving/scripts/check-supply-chain.ts
+        - profiles/self-driving/scripts/flip-done.ts
+        - profiles/self-driving/scripts/check-flip-diff.ts
       human_required_topics: [auth, secrets, billing, deployment, destructive data migration, dependency trust]
     merge:
       # (ci/agent-review/security/human-approval being required, and per-head-SHA re-earn, are the seam
@@ -327,6 +334,11 @@ resources:
   - .github/workflows/human-approval.yml
   - .github/workflows/security.yml
   - .github/workflows/security-gate.yml   # row 5: sdlc's dispatched, blocking realization of security.yml
+  # The done-flip's own workflow (committed-store installs only — a harmless no-op job on a legacy install,
+  # see the file's own header): gated bookkeeping PR that lands a merged agent PR's issue-done flip, since a
+  # direct push to branch-protected `main` always fails (GH006). scripts/check-flip-diff.ts is the security
+  # boundary it gates on.
+  - .github/workflows/flip-done.yml
   - .github/workflows/open-autonomy-preflight.yml
   - .github/dependabot.yml
   - .gitattributes
@@ -384,3 +396,8 @@ resources:
   - scripts/reconcile-merged-issues.ts
   - scripts/human-approval-gate.ts
   - scripts/check-supply-chain.ts
+  # THE done-flip gate scripts (committed-store installs only; see docs/CODE_HOST_RESOURCES.md's same
+  # reasoning as the pair above — code-host behavior, not substrate machinery, byte-identical across every
+  # carrying profile, check:profiles enforces).
+  - scripts/flip-done.ts
+  - scripts/check-flip-diff.ts

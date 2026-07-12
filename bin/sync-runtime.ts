@@ -59,6 +59,10 @@ const CODE_HOST_RESOURCE = new Set([
   // never via the mirror. scripts/ stays where they are developed + unit-tested (check:public-agent);
   // the per-profile copies must match byte-for-byte (check:profiles' shared-standard guard).
   'rearm-auto-merge.ts', 'reconcile-merged-issues.ts', 'human-approval-gate.ts', 'check-supply-chain.ts',
+  // The done-flip gate scripts behind .github/workflows/flip-done.yml (committed-store installs only —
+  // see reconcile-merged-issues.ts's mode-switch) — same reasoning: code-host behavior, not substrate
+  // machinery, shipped via the carrying profiles' `resources:`.
+  'flip-done.ts', 'check-flip-diff.ts',
 ]);
 // Unit tests are dev artifacts, NOT install content — they never run in an installation and would carry
 // dangling deps if vendored. They stay in scripts/ (run by check:public-agent) and ship to no profile.

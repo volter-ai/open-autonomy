@@ -92,6 +92,30 @@ npx open-autonomy compile simple-sdlc local .          # no GitHub; or `hello` f
 > Follow the full checklist end to end →
 > [**`docs/OPERATIONS.md#local-install-checklist`**](./docs/OPERATIONS.md#local-install-checklist).
 
+> **One-command local install — `oa install`.** `bin/install.ts` (the `open-autonomy install` verb, alias
+> `oa install`) chains the **entire** flow above into one command: detect → select → direction → authorize
+> → execute → validate → hand-off → prove-advancing, pausing at 4 human gates (profile pick, mission
+> content, spend/consent, go-live) and printing exactly which flag to add on your next invocation to
+> resume. It's the recommended path for the **local** runner once you've cloned this repo:
+> ```bash
+> git clone https://github.com/volter-ai/open-autonomy && cd open-autonomy
+> bun bin/install.ts /path/to/your-repo --pick simple-gh-sdlc --substrate local --owner-repo <owner>/<repo>
+> # or fully local, no GitHub at all:
+> bun bin/install.ts /path/to/your-repo --pick simple-sdlc --substrate local
+> ```
+> It calls the exact manual commands above and below **internally** (`compile`, the harness commit, branch-
+> protection provisioning, …) — the manual paths remain valid and are what `oa install` itself calls into;
+> use them directly for fine-grained control over any one step, or read
+> [`docs/INSTALL-AGENT.md`](./docs/INSTALL-AGENT.md) for the phase-by-phase reference `bin/install.ts`
+> implements. `bun bin/install.ts --help` lists every gate-answer flag.
+>
+> **Honest caveat — source-checkout only today:** the *published* `npx open-autonomy install` / `oa
+> install` looks for `bin/install.ts` next to itself; that file is dev-time-only monorepo tooling and is
+> never bundled into the npm tarball, so it exits `1` with an explicit "clone the repo" message instead of
+> silently doing less than advertised (verified live: `node dist/cli.js install --help` outside this
+> checkout prints exactly that and exits 1). Until it ships in a release, use it via the clone above; the
+> plain `npx`, no-clone `compile` commands above remain the only no-clone install path today.
+
 Full step-by-step for the **hosted** GitHub Actions runner (repo vars/secrets, branch protection) →
 [**`docs/OPERATIONS.md`**](./docs/OPERATIONS.md#github-production-rollout). `self-driving` and
 `simple-gh-sdlc` run on **either** runner; `simple-sdlc` is local-git (no code host). See

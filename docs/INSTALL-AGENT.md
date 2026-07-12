@@ -15,6 +15,35 @@
 > For the other setups (fully hosted on GitHub Actions; fully local with no GitHub) see
 > [`OPERATIONS.md`](./OPERATIONS.md#install--operate).
 
+> **This guide's own flow now exists as real code.** `bin/install.ts` (TE.8, `oa install`) programmatically
+> implements exactly the phases below: its own DETECT phase calls `install-detect.ts`'s `detect()` (the
+> same read-only tool/auth/repo facts Phase 1's snippets below gather by hand — including this guide's own
+> Phase 0 preflight checks: `gh auth status`, coding-CLI sign-in); its SELECT/DIRECTION/AUTHORIZE phases
+> are this guide's Phase 2 ASK judgment calls (G1 profile pick, G2 mission content, G3 spend/consent),
+> pausing for your answer exactly like this guide asks you to, never fabricating one; its EXECUTE phase
+> calls `install-execute.ts`'s `runExecute()` — the same deterministic overlay steps Phase 3 walks through
+> by hand, in the same dependency order ("commit the harness first, wire the gate last"); and its VALIDATE
+> + HAND-OFF phases are this guide's Phase 4 VERIFY (`oa doctor`/`oa maturity`, then G4a's
+> verify-and-construct-only go-live).
+>
+> An installing agent (or human) can now either:
+> - **(a) run `bun bin/install.ts <repoDir> [options]` directly** to execute this exact flow
+>   automatically, pausing at the same 4 human gates (`--help` lists every gate-answer flag) — the
+>   recommended path once you've cloned this repo; or
+> - **(b) follow this guide's phases by hand, below**, for full visibility/control at each step — this
+>   remains the authoritative phase-by-phase reference `bin/install.ts` itself implements, and the doc to
+>   read if you're auditing or debugging what `oa install` did.
+>
+> **Honest caveat:** `oa install` is **source-checkout only** as of open-autonomy 0.4.2 — the *published*
+> `npx open-autonomy install` / `oa install` looks for `bin/install.ts` next to itself, finds nothing in
+> the npm tarball (it's dev-time-only monorepo tooling, never bundled), and exits `1` with an explicit
+> "clone the repo" message rather than silently doing less than advertised (verified live). Clone
+> `volter-ai/open-autonomy` to use it; this guide's manual phases remain the only no-clone-required path.
+> Also note: `oa install`'s EXECUTE phase does **not** run the tracker's own `ztrack init --sync github`
+> (Phase 3 step 3 below) or arm native auto-merge (Phase 4, after the supervised first merge) — those two
+> stay exactly the manual commands in this guide, by design (the latter is a deliberate
+> supervised-first-merge gate, not a gap).
+
 ## The merge boundary, and what it does NOT give you on local
 
 OA's design is *agent proposes, an independent reviewer blesses, no agent merges* — the merge boundary is

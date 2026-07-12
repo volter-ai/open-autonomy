@@ -16,156 +16,206 @@
 //   GH_TOKEN, GITHUB_RUN_ID  (the repo is resolved from the remote via gh's {owner}/{repo} placeholders)
 import { execFileSync } from 'node:child_process';
 
-const env = process.env;
-const ref = (env.ISSUE_REF ?? '').trim();
-const agentName = env.AGENT_NAME || 'agent';
-const runId = env.GITHUB_RUN_ID || '0';
-const rid = `ir-${agentName}-${runId}`;
-const reviewWorkflow = (env.REVIEW_WORKFLOW ?? '').trim();
-const reviewAgent = (env.REVIEW_AGENT ?? '').trim();
-const isNumericRef = /^[0-9]+$/.test(ref);
-const branch = ref ? `agent/issue-${ref}` : `agent/${rid}`;
+// The ref shape catalog: a bare GitHub issue NUMBER (the original, only-ever-supported shape) vs a
+// non-numeric STORE id (e.g. `COMBO-9` — a work item tracked by a non-GitHub-issue store). Widened from
+// digit-only so a store ref is recognized at all (branch naming, the merged-duplicate dedup guard, the
+// run-history folder slug) — a store id never had a numbered GitHub issue behind it, so it was previously
+// invisible to every one of those, not merely denied the close keyword.
+export const REF_PATTERN = /^[A-Za-z0-9._-]+$/;
+export type RefKind = 'numeric' | 'store' | 'none';
 
-const sh = (cmd: string, args: string[], opts: { allowFail?: boolean } = {}): string => {
-  try {
-    return execFileSync(cmd, args, { encoding: 'utf8' }).trim();
-  } catch (e) {
-    if (opts.allowFail) return '';
-    throw e;
+export function refKind(ref: string): RefKind {
+  if (!ref) return 'none';
+  if (/^[0-9]+$/.test(ref)) return 'numeric';
+  return REF_PATTERN.test(ref) ? 'store' : 'none';
+}
+
+/** DUAL mode (this change): a numeric ref closes the issue (unchanged, squash-merge-safe `Closes #<n>`); a
+ *  non-numeric store ref (e.g. `COMBO-9`) gets a plain `Tracker: <ref>` reference line — NEVER a close
+ *  keyword, because no store-native ref has a numbered GitHub issue behind it for GitHub to auto-close (the
+ *  store issue itself is flipped to done by reconcile-merged-issues.ts once the merge-commit lands). Absent
+ *  ref (an autonomous/cron proposer) yields no trailer at all. Shared by the commit message and the PR body
+ *  so both carry the identical line (belt-and-suspenders: a merge-commit merge preserves the commit as-is on
+ *  main even if the PR body itself is ever dropped). */
+export function refTrailer(ref: string): string {
+  const kind = refKind(ref);
+  if (kind === 'numeric') return `Closes #${ref}`;
+  if (kind === 'store') return `Tracker: ${ref}`;
+  return '';
+}
+
+/** Does this ref participate in the merged-duplicate dedup guard (agent-propose.ts's `gh pr list --state
+ *  merged` backstop)? Any REAL ref does — numeric or store — since either can be relaunched in the lag
+ *  between a PR merging and the work item flipping to done/closed; only an ABSENT ref (no real work-item
+ *  identity to dedup against) is excluded. */
+export function isDedupCandidate(ref: string): boolean {
+  return refKind(ref) !== 'none';
+}
+
+// Everything below is the EFFECT itself (git/gh side effects) — gated behind `import.meta.main` so this
+// module stays safely IMPORTABLE (this file's own unit test imports only the pure functions above; without
+// this gate, importing the module for that would immediately run the whole propose against whatever `gh`/
+// `git` happen to be on PATH). `bun scripts/agent-propose.ts` (the only way it is ever actually invoked —
+// every workflow/runner call site runs it as a script, never imports it) still sets `import.meta.main`,
+// so this is a no-op behavior change for every real caller.
+if (import.meta.main) {
+  const env = process.env;
+  const ref = (env.ISSUE_REF ?? '').trim();
+  const agentName = env.AGENT_NAME || 'agent';
+  const runId = env.GITHUB_RUN_ID || '0';
+  const rid = `ir-${agentName}-${runId}`;
+  const reviewWorkflow = (env.REVIEW_WORKFLOW ?? '').trim();
+  const reviewAgent = (env.REVIEW_AGENT ?? '').trim();
+  const branch = ref ? `agent/issue-${ref}` : `agent/${rid}`;
+
+  const sh = (cmd: string, args: string[], opts: { allowFail?: boolean } = {}): string => {
+    try {
+      return execFileSync(cmd, args, { encoding: 'utf8' }).trim();
+    } catch (e) {
+      if (opts.allowFail) return '';
+      throw e;
+    }
+  };
+  const ok = (cmd: string, args: string[]): boolean => {
+    try {
+      execFileSync(cmd, args, { stdio: 'pipe' });
+      return true;
+    } catch {
+      return false;
+    }
+  };
+  const sleep = (s: number) => { try { execFileSync('sleep', [String(s)]); } catch { /* pacing */ } };
+  // Dispatch a code-host workflow with retry — a bot-opened PR fires no pull_request event (GITHUB_TOKEN
+  // anti-recursion), so ci/agent-review/merge are kicked here; a swallowed dispatch leaves a required check
+  // unposted and the PR permanently unmergeable, so retry until it lands.
+  const dispatch = (label: string, args: string[]): void => {
+    for (let i = 0; i < 6; i++) { if (ok('gh', ['workflow', 'run', ...args])) return; sleep(4); }
+    process.stdout.write(`${label} dispatch failed after retries (non-fatal)\n`);
+  };
+
+  // Deterministic dedup backstop: if this branch ALREADY has a merged PR, the work has landed — never open a
+  // duplicate. (A proposer can be relaunched in the lag between a PR merging and the work item's tracker
+  // reflecting it — `Closes #<n>` auto-closing a GitHub issue, or reconcile-merged-issues.ts flipping a store
+  // issue to done; this guard stops the second run from opening a redundant PR for already-merged work.) Any
+  // REAL ref participates — numeric or store — only an absent ref has no work-item identity to dedup against.
+  if (isDedupCandidate(ref) && sh('gh', ['pr', 'list', '--head', branch, '--state', 'merged', '--json', 'number', '--jq', '.[0].number // empty'], { allowFail: true })) {
+    process.stdout.write(`branch ${branch} already has a merged PR; nothing to propose\n`);
+    process.exit(0);
   }
-};
-const ok = (cmd: string, args: string[]): boolean => {
-  try {
-    execFileSync(cmd, args, { stdio: 'pipe' });
-    return true;
-  } catch {
-    return false;
+
+  // Propose only if the skill left changes OR already committed onto its own agent branch (the ztrack SDLC
+  // cites the commit SHA as evidence). Bail when the tree is clean AND no such branch exists.
+  const dirty = sh('git', ['status', '--porcelain'], { allowFail: true }).length > 0;
+  const branchExists = ok('git', ['rev-parse', '--verify', branch]);
+  if (!dirty && !branchExists) {
+    process.stdout.write('no changes and no agent branch; nothing to propose\n');
+    process.exit(0);
   }
-};
-const sleep = (s: number) => { try { execFileSync('sleep', [String(s)]); } catch { /* pacing */ } };
-// Dispatch a code-host workflow with retry — a bot-opened PR fires no pull_request event (GITHUB_TOKEN
-// anti-recursion), so ci/agent-review/merge are kicked here; a swallowed dispatch leaves a required check
-// unposted and the PR permanently unmergeable, so retry until it lands.
-const dispatch = (label: string, args: string[]): void => {
-  for (let i = 0; i < 6; i++) { if (ok('gh', ['workflow', 'run', ...args])) return; sleep(4); }
-  process.stdout.write(`${label} dispatch failed after retries (non-fatal)\n`);
-};
 
-// Deterministic dedup backstop: if this branch ALREADY has a merged PR, the work has landed — never open a
-// duplicate. (A proposer can be relaunched in the lag between a PR merging and its `Closes #<n>` auto-closing
-// the issue; this guard stops the second run from opening a redundant PR for already-merged work.)
-if (isNumericRef && sh('gh', ['pr', 'list', '--head', branch, '--state', 'merged', '--json', 'number', '--jq', '.[0].number // empty'], { allowFail: true })) {
-  process.stdout.write(`branch ${branch} already has a merged PR; nothing to propose\n`);
-  process.exit(0);
-}
+  sh('git', ['config', 'user.name', env.AGENT_BOT_NAME || 'open-autonomy-agent']);
+  sh('git', ['config', 'user.email', env.AGENT_BOT_EMAIL || 'open-autonomy-agent@users.noreply.github.com']);
+  sh('git', ['config', 'core.filemode', 'false']);
+  ok('git', ['checkout', branch]) || sh('git', ['checkout', '-b', branch]);
 
-// Propose only if the skill left changes OR already committed onto its own agent branch (the ztrack SDLC
-// cites the commit SHA as evidence). Bail when the tree is clean AND no such branch exists.
-const dirty = sh('git', ['status', '--porcelain'], { allowFail: true }).length > 0;
-const branchExists = ok('git', ['rev-parse', '--verify', branch]);
-if (!dirty && !branchExists) {
-  process.stdout.write('no changes and no agent branch; nothing to propose\n');
-  process.exit(0);
-}
+  // Persist this run's transcript + visual evidence INTO the proposal so they ride into the PR and become
+  // permanent history only if it merges (each run its own folder; Actions artifacts expire in 30 days).
+  const refSlug = (ref.replace(/[^0-9A-Za-z._-]/g, '').slice(0, 40)) || (ref ? 'item' : 'autonomous');
+  const runDir = `.open-autonomy/history/${agentName}/${refSlug}-run-${runId}`;
+  sh('mkdir', ['-p', runDir]);
+  sh('bash', ['-c', `cp -f .agent-run/artifacts/transcript.md "${runDir}/transcript.md" 2>/dev/null || true`]);
+  sh('bash', ['-c', `cp -f .agent-run/artifacts/screenshot-* "${runDir}/" 2>/dev/null || true`]);
+  sh('git', ['add', '-A']);
+  // The tracker's `.volter/` sync-state (world twin, event log, cursors) churns on every run but is NEVER a
+  // code deliverable — and an agent edit to it would be a human-required path anyway. Drop it from the
+  // proposal so it can't ride into the PR (the run transcript/evidence under `.open-autonomy/history/` stays).
+  sh('git', ['reset', '-q', '--', '.volter'], { allowFail: true });
 
-sh('git', ['config', 'user.name', env.AGENT_BOT_NAME || 'open-autonomy-agent']);
-sh('git', ['config', 'user.email', env.AGENT_BOT_EMAIL || 'open-autonomy-agent@users.noreply.github.com']);
-sh('git', ['config', 'core.filemode', 'false']);
-ok('git', ['checkout', branch]) || sh('git', ['checkout', '-b', branch]);
+  // Tracker trailer in the COMMIT (squash-merge carries it reliably; a PR-body trailer alone is dropped when
+  // the repo squashes from the commit message) — DUAL mode: `Closes #<n>` for a numeric ref (unchanged,
+  // squash-merge auto-closes the GitHub issue), `Tracker: <ref>` for a non-numeric store ref (never a close
+  // keyword — there is no numbered GitHub issue behind it to close; the store issue is flipped to done by
+  // reconcile-merged-issues.ts once this merge-commit lands on main). No trailer at all for an absent ref.
+  const commitArgs = ['commit', '--allow-empty', '-m', `agent: ${rid}`];
+  const trailer = refTrailer(ref);
+  if (trailer) commitArgs.push('-m', trailer);
+  sh('git', commitArgs);
+  sh('git', ['push', '--force', 'origin', branch]);
 
-// Persist this run's transcript + visual evidence INTO the proposal so they ride into the PR and become
-// permanent history only if it merges (each run its own folder; Actions artifacts expire in 30 days).
-const refSlug = (ref.replace(/[^0-9A-Za-z._-]/g, '').slice(0, 40)) || (ref ? 'item' : 'autonomous');
-const runDir = `.open-autonomy/history/${agentName}/${refSlug}-run-${runId}`;
-sh('mkdir', ['-p', runDir]);
-sh('bash', ['-c', `cp -f .agent-run/artifacts/transcript.md "${runDir}/transcript.md" 2>/dev/null || true`]);
-sh('bash', ['-c', `cp -f .agent-run/artifacts/screenshot-* "${runDir}/" 2>/dev/null || true`]);
-sh('git', ['add', '-A']);
-// The tracker's `.volter/` sync-state (world twin, event log, cursors) churns on every run but is NEVER a
-// code deliverable — and an agent edit to it would be a human-required path anyway. Drop it from the
-// proposal so it can't ride into the PR (the run transcript/evidence under `.open-autonomy/history/` stays).
-sh('git', ['reset', '-q', '--', '.volter'], { allowFail: true });
-
-// Closing keyword in the COMMIT (squash-merge carries it reliably; a PR-body keyword alone is dropped when
-// the repo squashes from the commit message) — only when the subject is an issue number.
-const commitArgs = ['commit', '--allow-empty', '-m', `agent: ${rid}`];
-if (isNumericRef) commitArgs.push('-m', `Closes #${ref}`);
-sh('git', commitArgs);
-sh('git', ['push', '--force', 'origin', branch]);
-
-// C6 — GitHub-VERIFIED signed commits (opt-in via COMMIT_SIGNING=verified-api; a profile like soc2-baseline
-// sets it). A commit CREATED through GitHub's git/commits API by the job's GITHUB_TOKEN (github-actions[bot],
-// a GitHub App identity) is signed by GitHub and shows "Verified" — keyless, nothing to register; a plain
-// `git commit` + push is unsigned. So we re-create the just-pushed commit through the API (same tree, parents,
-// author + message — only the COMMITTER becomes the signing bot) and move the branch ref to the signed copy;
-// the unsigned local commit is orphaned. This lets branch protection require signed commits without wedging.
-// Best-effort: any hiccup leaves the already-pushed (unsigned) commit in place rather than failing the propose.
-if ((env.COMMIT_SIGNING ?? '').trim() === 'verified-api') {
-  const tree = sh('git', ['rev-parse', 'HEAD^{tree}'], { allowFail: true }).trim();
-  // CRITICAL: do NOT pass an `author` (or `committer`) on the API commit. GitHub signs a git/commits API
-  // commit ONLY when the committer defaults to the authenticated identity (github-actions[bot]); the moment a
-  // custom author is given, the committer mirrors it (not the app) and GitHub leaves the commit UNSIGNED —
-  // which, under required_signatures, wedges every merge. So we let author+committer both be the signing bot
-  // and keep the agent's attribution in the commit MESSAGE (which already carries `agent: <id>` + `Closes #`).
-  const message = sh('git', ['log', '-1', '--format=%B'], { allowFail: true }).replace(/\n+$/, '');
-  const parents = sh('git', ['rev-list', '--parents', '-n', '1', 'HEAD'], { allowFail: true }).trim().split(/\s+/).slice(1);
-  const args = ['api', '-X', 'POST', 'repos/{owner}/{repo}/git/commits',
-    '-f', `message=${message}`, '-f', `tree=${tree}`, '--jq', '.sha'];
-  for (const p of parents) if (p) args.push('-f', `parents[]=${p}`);
-  const signed = tree && message ? sh('gh', args, { allowFail: true }).trim() : '';
-  if (/^[0-9a-f]{40}$/.test(signed)
-      && ok('gh', ['api', '-X', 'PATCH', `repos/{owner}/{repo}/git/refs/heads/${branch}`, '-f', `sha=${signed}`, '-F', 'force=true'])) {
-    sh('git', ['fetch', 'origin', branch], { allowFail: true });
-    sh('git', ['reset', '--hard', 'FETCH_HEAD'], { allowFail: true });
-    process.stdout.write(`commit re-created via API as GitHub-verified ${signed.slice(0, 7)}\n`);
-  } else {
-    process.stdout.write('verified-api signing skipped (API create/ref-update failed); kept the unsigned pushed commit (non-fatal)\n');
+  // C6 — GitHub-VERIFIED signed commits (opt-in via COMMIT_SIGNING=verified-api; a profile like soc2-baseline
+  // sets it). A commit CREATED through GitHub's git/commits API by the job's GITHUB_TOKEN (github-actions[bot],
+  // a GitHub App identity) is signed by GitHub and shows "Verified" — keyless, nothing to register; a plain
+  // `git commit` + push is unsigned. So we re-create the just-pushed commit through the API (same tree, parents,
+  // author + message — only the COMMITTER becomes the signing bot) and move the branch ref to the signed copy;
+  // the unsigned local commit is orphaned. This lets branch protection require signed commits without wedging.
+  // Best-effort: any hiccup leaves the already-pushed (unsigned) commit in place rather than failing the propose.
+  if ((env.COMMIT_SIGNING ?? '').trim() === 'verified-api') {
+    const tree = sh('git', ['rev-parse', 'HEAD^{tree}'], { allowFail: true }).trim();
+    // CRITICAL: do NOT pass an `author` (or `committer`) on the API commit. GitHub signs a git/commits API
+    // commit ONLY when the committer defaults to the authenticated identity (github-actions[bot]); the moment a
+    // custom author is given, the committer mirrors it (not the app) and GitHub leaves the commit UNSIGNED —
+    // which, under required_signatures, wedges every merge. So we let author+committer both be the signing bot
+    // and keep the agent's attribution in the commit MESSAGE (which already carries `agent: <id>` + the
+    // tracker trailer — `Closes #<n>` or `Tracker: <ref>`, whichever `refTrailer` produced).
+    const message = sh('git', ['log', '-1', '--format=%B'], { allowFail: true }).replace(/\n+$/, '');
+    const parents = sh('git', ['rev-list', '--parents', '-n', '1', 'HEAD'], { allowFail: true }).trim().split(/\s+/).slice(1);
+    const args = ['api', '-X', 'POST', 'repos/{owner}/{repo}/git/commits',
+      '-f', `message=${message}`, '-f', `tree=${tree}`, '--jq', '.sha'];
+    for (const p of parents) if (p) args.push('-f', `parents[]=${p}`);
+    const signed = tree && message ? sh('gh', args, { allowFail: true }).trim() : '';
+    if (/^[0-9a-f]{40}$/.test(signed)
+        && ok('gh', ['api', '-X', 'PATCH', `repos/{owner}/{repo}/git/refs/heads/${branch}`, '-f', `sha=${signed}`, '-F', 'force=true'])) {
+      sh('git', ['fetch', 'origin', branch], { allowFail: true });
+      sh('git', ['reset', '--hard', 'FETCH_HEAD'], { allowFail: true });
+      process.stdout.write(`commit re-created via API as GitHub-verified ${signed.slice(0, 7)}\n`);
+    } else {
+      process.stdout.write('verified-api signing skipped (API create/ref-update failed); kept the unsigned pushed commit (non-fatal)\n');
+    }
   }
-}
 
-// Resolve the repo through gh's `{owner}/{repo}` placeholders (filled from the remote) — works ambiently on
-// GitHub Actions AND a local runner, so this effect needs no injected GITHUB_REPOSITORY.
-const base = sh('gh', ['api', 'repos/{owner}/{repo}', '--jq', '.default_branch'], { allowFail: true }) || 'main';
-let body = sh('bash', ['-c', 'cat .agent-run/artifacts/pr.md 2>/dev/null || true'], { allowFail: true }) || `Automated agent change (${rid}).`;
-if (isNumericRef) body = `Closes #${ref}\n\n${body}`;
-if (!ok('gh', ['pr', 'create', '--base', base, '--head', branch, '--title', `Agent: ${rid}`, '--body', body])) {
-  ok('gh', ['pr', 'view', branch]); // already exists — fine
-}
-
-// Arm native auto-merge via the merge.yml code-host resource (it holds the merge mechanics; the proposer
-// only kicks it, exactly as it kicks ci/agent-review). merge.yml's schedule is the backstop.
-dispatch('merge', ['merge.yml']);
-
-const headSha = sh('git', ['rev-parse', 'HEAD'], { allowFail: true });
-const prNumber = sh('gh', ['pr', 'view', branch, '--json', 'number', '--jq', '.number'], { allowFail: true });
-dispatch('ci', ['ci.yml', '--ref', branch, '-f', `sha=${headSha}`, '-f', `pr=${prNumber}`]);
-// Trigger the review edge. A bot-opened PR fires no pull_request event, so the proposer KICKS the reviewer
-// itself. Either form resolves to "launch the reviewer for this PR" through the Runner seam, the
-// substrate-correct realization of develop's `review:` edge: github carries REVIEW_WORKFLOW and dispatches
-// it as a workflow; a local runner carries REVIEW_AGENT and launches a termfleet reviewer session via the
-// same `runner.ts launch` the PM uses. (`runner.ts launch <reviewer> --ref <pr>` on github would itself
-// `gh workflow run reviewer.yml -f issue_number=<pr>`, so the two are equivalent; we keep both env forms so
-// the proven github path dispatches exactly as before.)
-if (reviewWorkflow) dispatch('review', [reviewWorkflow, '-f', `issue_number=${prNumber}`]);
-else if (reviewAgent && prNumber) {
-  for (let i = 0; i < 6; i++) {
-    if (ok('bun', ['scripts/runner.ts', 'launch', reviewAgent, '--ref', prNumber])) break;
-    sleep(4);
+  // Resolve the repo through gh's `{owner}/{repo}` placeholders (filled from the remote) — works ambiently on
+  // GitHub Actions AND a local runner, so this effect needs no injected GITHUB_REPOSITORY.
+  const base = sh('gh', ['api', 'repos/{owner}/{repo}', '--jq', '.default_branch'], { allowFail: true }) || 'main';
+  let body = sh('bash', ['-c', 'cat .agent-run/artifacts/pr.md 2>/dev/null || true'], { allowFail: true }) || `Automated agent change (${rid}).`;
+  if (trailer) body = `${trailer}\n\n${body}`;
+  if (!ok('gh', ['pr', 'create', '--base', base, '--head', branch, '--title', `Agent: ${rid}`, '--body', body])) {
+    ok('gh', ['pr', 'view', branch]); // already exists — fine
   }
+
+  // Arm native auto-merge via the merge.yml code-host resource (it holds the merge mechanics; the proposer
+  // only kicks it, exactly as it kicks ci/agent-review). merge.yml's schedule is the backstop.
+  dispatch('merge', ['merge.yml']);
+
+  const headSha = sh('git', ['rev-parse', 'HEAD'], { allowFail: true });
+  const prNumber = sh('gh', ['pr', 'view', branch, '--json', 'number', '--jq', '.number'], { allowFail: true });
+  dispatch('ci', ['ci.yml', '--ref', branch, '-f', `sha=${headSha}`, '-f', `pr=${prNumber}`]);
+  // Trigger the review edge. A bot-opened PR fires no pull_request event, so the proposer KICKS the reviewer
+  // itself. Either form resolves to "launch the reviewer for this PR" through the Runner seam, the
+  // substrate-correct realization of develop's `review:` edge: github carries REVIEW_WORKFLOW and dispatches
+  // it as a workflow; a local runner carries REVIEW_AGENT and launches a termfleet reviewer session via the
+  // same `runner.ts launch` the PM uses. (`runner.ts launch <reviewer> --ref <pr>` on github would itself
+  // `gh workflow run reviewer.yml -f issue_number=<pr>`, so the two are equivalent; we keep both env forms so
+  // the proven github path dispatches exactly as before.)
+  if (reviewWorkflow) dispatch('review', [reviewWorkflow, '-f', `issue_number=${prNumber}`]);
+  else if (reviewAgent && prNumber) {
+    for (let i = 0; i < 6; i++) {
+      if (ok('bun', ['scripts/runner.ts', 'launch', reviewAgent, '--ref', prNumber])) break;
+      sleep(4);
+    }
+  }
+  dispatch('human-approval', ['human-approval.yml', '-f', `pr=${prNumber}`]);
+
+  // Profile-declared EXTRA required-check workflows (e.g. soc2-baseline's `supply-chain` + `codeql` gates).
+  // Exactly like ci/agent-review/human-approval: a bot-opened PR fires no pull_request event, so a required
+  // check only posts on the head SHA if the proposer KICKS it here — otherwise that required check stays
+  // unposted and native auto-merge never fires (the PR wedges). The list is empty for profiles that don't set
+  // policy.box.gh-actions.propose_dispatch_checks, so this is a no-op everywhere except where it's declared.
+  // Each gate workflow takes `sha` + `pr` inputs and posts a commit status named after its own check context.
+  const extraChecks = (env.EXTRA_CHECK_WORKFLOWS ?? '').split(',').map((s) => s.trim()).filter(Boolean);
+  for (const wf of extraChecks) dispatch(wf, [wf, '-f', `sha=${headSha}`, '-f', `pr=${prNumber}`]);
+
+  // EXTRA agent-reviewers (e.g. the advisory compliance-verifier): a bot PR fires no pull_request_target, so the
+  // proposer kicks each with the agent-reviewer `issue_number=<pr>` shape (NOT the gate sha/pr shape), exactly
+  // as it kicks the main `review:` edge above. Empty unless policy.box.gh-actions.propose_dispatch_reviews set.
+  const extraReviews = (env.EXTRA_REVIEW_WORKFLOWS ?? '').split(',').map((s) => s.trim()).filter(Boolean);
+  for (const wf of extraReviews) dispatch(wf, [wf, '-f', `issue_number=${prNumber}`]);
 }
-dispatch('human-approval', ['human-approval.yml', '-f', `pr=${prNumber}`]);
-
-// Profile-declared EXTRA required-check workflows (e.g. soc2-baseline's `supply-chain` + `codeql` gates).
-// Exactly like ci/agent-review/human-approval: a bot-opened PR fires no pull_request event, so a required
-// check only posts on the head SHA if the proposer KICKS it here — otherwise that required check stays
-// unposted and native auto-merge never fires (the PR wedges). The list is empty for profiles that don't set
-// policy.box.gh-actions.propose_dispatch_checks, so this is a no-op everywhere except where it's declared.
-// Each gate workflow takes `sha` + `pr` inputs and posts a commit status named after its own check context.
-const extraChecks = (env.EXTRA_CHECK_WORKFLOWS ?? '').split(',').map((s) => s.trim()).filter(Boolean);
-for (const wf of extraChecks) dispatch(wf, [wf, '-f', `sha=${headSha}`, '-f', `pr=${prNumber}`]);
-
-// EXTRA agent-reviewers (e.g. the advisory compliance-verifier): a bot PR fires no pull_request_target, so the
-// proposer kicks each with the agent-reviewer `issue_number=<pr>` shape (NOT the gate sha/pr shape), exactly
-// as it kicks the main `review:` edge above. Empty unless policy.box.gh-actions.propose_dispatch_reviews set.
-const extraReviews = (env.EXTRA_REVIEW_WORKFLOWS ?? '').split(',').map((s) => s.trim()).filter(Boolean);
-for (const wf of extraReviews) dispatch(wf, [wf, '-f', `issue_number=${prNumber}`]);

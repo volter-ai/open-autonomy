@@ -63,7 +63,8 @@
 //     spawns it. Every dispatch/launch-command this file's own phases construct forces the provider URL
 //     from the install's own `scheduler/schedule.json` pin (TE.5's `buildPlannerDispatchCommand` / TE.6's
 //     `buildLocalGoLive` — reused verbatim, never reinvented) — never an ambient/box-wide provider.
-import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { detect, type DetectReport } from './install-detect.ts';
 import { run as runSelect, type SelectionRecord, type RunResult as SelectRunResult } from './install-select.ts';
@@ -155,6 +156,20 @@ export interface InstallOptions {
   bringUp?: Partial<BringUpOptions>;
   /** test seam only — overrides Phase 0's own call to TE.1's `detect()`. Production never sets this. */
   detectHook?: (repoDir: string, proc: ProcRunner) => Promise<DetectReport>;
+
+  /** THE SAFE WAY TO REHEARSE A REAL INSTALL (see this file's own header + the USAGE banner below): runs
+   *  every phase for real EXCEPT every side-effecting operation EXECUTE/HAND-OFF would otherwise perform —
+   *  no real npm/bun install, no real compile write (reuses autonomy-compile.ts's own built-in file-list
+   *  dry-run), no real git commit, no real termfleet provider bring-up (the single most important leg — a
+   *  real provider bring-up is itself the first half of the near-miss this flag exists to close), no real
+   *  branch-protection/CI mutation, no real agent dispatch, no real `oa resume` unlink, no real go-live
+   *  launch (already construct-only). Orthogonal to `--auto-approve`: `--dry-run` alone still pauses at each
+   *  human gate exactly like a normal run (safety of REAL operations and interactive-gate pausing are
+   *  different concerns) — combine `--dry-run --auto-approve` for a full non-interactive rehearsal of the
+   *  entire chain. Defaults `--work-dir` OUTSIDE the target repo (a fresh tmp dir) when not explicitly
+   *  overridden, so a dry-run leaves the target repo's working tree byte-for-byte untouched (verifiable via
+   *  `git status`), not just free of npm/git/termfleet mutations. */
+  dryRun?: boolean;
 
   // ---- G1 SELECT --------------------------------------------------------------------------------------
   pick?: string;
@@ -330,6 +345,17 @@ export async function phaseAuthorize(ctx: Ctx, selectionFile: string): Promise<G
   const batch = parsed.batch;
   const o = ctx.opts;
 
+  // ⛔ --dry-run NEVER opens a real GitHub PR — --live-probe (TE.4's runProbePr) is the one operation in the
+  // G1-G3 phases that is a genuine, real mutation against a real GitHub repo (open a throwaway PR, push a
+  // branch), unlike every other DETECT/SELECT/DIRECTION/AUTHORIZE call, which is read-only. Refused loudly
+  // here rather than silently dropped, so a caller who passed both flags together learns why nothing opened.
+  if (ctx.opts.dryRun && o.liveProbe) {
+    return blocked(
+      `--live-probe ${o.liveProbe} opens a REAL throwaway PR against a real GitHub repo — refusing under --dry-run ` +
+        '(the whole point of dry-run is zero live side effects). Re-run without --dry-run once you are ready for a real probe.',
+    );
+  }
+
   const spendCadence = o.spendCadence ?? (ctx.autoApprove ? '*/15' : undefined);
   const spendWip = o.spendWip ?? (ctx.autoApprove ? 1 : undefined);
   const consentHarness = o.consentHarnessCommit ?? ctx.autoApprove;
@@ -391,13 +417,14 @@ export async function phaseExecute(ctx: Ctx, selectionFile: string): Promise<Exe
     force: ctx.opts.force,
     proc: ctx.proc,
     bringUp: ctx.opts.bringUp,
+    dryRun: ctx.opts.dryRun,
   });
   writeWork(ctx, '04-execute.json', report);
   return report;
 }
 
 export async function phaseValidate(ctx: Ctx, selectionFile: string): Promise<ValidateReport> {
-  const report = await runValidate({ record: selectionFile, repoDir: ctx.repoDir, profilesRoot: ctx.profilesRoot, proc: ctx.proc, live: true });
+  const report = await runValidate({ record: selectionFile, repoDir: ctx.repoDir, profilesRoot: ctx.profilesRoot, proc: ctx.proc, live: true, dryRun: ctx.opts.dryRun });
   writeWork(ctx, '05-validate.json', report);
   return report;
 }
@@ -418,7 +445,8 @@ export function phaseHandoff(ctx: Ctx, selection: SelectionRecord): RunG4aReport
     profileDir: join(ctx.profilesRoot, selection.profile),
     ownerRepo: ctx.opts.ownerRepo,
     proc: ctx.proc,
-    local: ctx.opts.launcher ? { launcher: ctx.opts.launcher } : undefined,
+    local: ctx.opts.launcher || ctx.opts.dryRun ? { launcher: ctx.opts.launcher, dryRun: ctx.opts.dryRun } : undefined,
+    dryRun: ctx.opts.dryRun,
   });
   writeWork(ctx, '06-handoff.json', report);
   return report;
@@ -431,7 +459,10 @@ export function phaseHandoff(ctx: Ctx, selection: SelectionRecord): RunG4aReport
 
 export async function phaseProveAdvancing(ctx: Ctx, selection: SelectionRecord): Promise<ProveAdvancingReport> {
   const profileDir = join(ctx.profilesRoot, selection.profile);
-  const report = await proveAdvancing(ctx.repoDir, profileDir, { proc: ctx.proc, repo: ctx.opts.ownerRepo, writeInstallJson: true });
+  // --dry-run: PROVE ADVANCING's report computation is already read-only; its one real write is
+  // `.open-autonomy/install.json` (writeInstallJson) — suppressed here for the same "target repo stays
+  // byte-for-byte untouched" reason every other phase's real write is suppressed under dry-run.
+  const report = await proveAdvancing(ctx.repoDir, profileDir, { proc: ctx.proc, repo: ctx.opts.ownerRepo, writeInstallJson: !ctx.opts.dryRun });
   writeWork(ctx, '07-prove-advancing.json', report);
   return report;
 }
@@ -449,6 +480,9 @@ export interface InstallReport {
   question?: string;
   resumeHint?: string;
   workDir: string;
+  /** true iff this run was `--dry-run` — never a real side-effecting operation was performed anywhere in
+   *  the chain (see runInstall's own comment + install.ts's file header). */
+  dryRun?: boolean;
   detect?: DetectReport;
   selection?: SelectionRecord;
   direction?: DirectionRecord;
@@ -461,8 +495,14 @@ export interface InstallReport {
 
 export async function runInstall(opts: InstallOptions): Promise<InstallReport> {
   const proc = opts.proc ?? defaultProc;
+  const dryRun = opts.dryRun === true;
   const profilesRoot = opts.profilesRoot ?? bundledProfilesRoot;
-  const workDir = opts.workDir ?? join(opts.repoDir, '.open-autonomy', 'install-work');
+  // --dry-run defaults --work-dir OUTSIDE the target repo (a fresh tmp dir) rather than
+  // `<repoDir>/.open-autonomy/install-work` (the real-run default) — every phase's own audit-trail write
+  // (writeWork, below) is otherwise harmless bookkeeping, but a dry-run's whole promise is "the target repo
+  // is left byte-for-byte untouched", so it must never create so much as an audit file inside repoDir unless
+  // the caller explicitly asks (an explicit --work-dir still wins either way).
+  const workDir = opts.workDir ?? (dryRun ? mkdtempSync(join(tmpdir(), 'oa-install-dry-run-')) : join(opts.repoDir, '.open-autonomy', 'install-work'));
   mkdirSync(workDir, { recursive: true });
   const ctx: Ctx = { repoDir: opts.repoDir, workDir, profilesRoot, proc, autoApprove: opts.autoApprove === true, opts };
 
@@ -471,29 +511,34 @@ export async function runInstall(opts: InstallOptions): Promise<InstallReport> {
 
   const g1 = await phaseSelect(ctx, detectFile);
   if (g1.status !== 'ok' || !g1.record) {
-    return { classification: g1.status === 'paused' ? 'PAUSED' : 'BLOCKED', stoppedAt: 'G1', question: g1.question, resumeHint: g1.resumeHint, workDir, detect: detectReport };
+    return { classification: g1.status === 'paused' ? 'PAUSED' : 'BLOCKED', stoppedAt: 'G1', question: g1.question, resumeHint: g1.resumeHint, workDir, dryRun, detect: detectReport };
   }
   const selection = g1.record;
   const selectionFile = join(workDir, '01-selection.json');
 
   const g2 = phaseDirection(ctx, selectionFile);
   if (g2.status !== 'ok' || !g2.record) {
-    return { classification: g2.status === 'paused' ? 'PAUSED' : 'BLOCKED', stoppedAt: 'G2', question: g2.question, resumeHint: g2.resumeHint, workDir, detect: detectReport, selection };
+    return { classification: g2.status === 'paused' ? 'PAUSED' : 'BLOCKED', stoppedAt: 'G2', question: g2.question, resumeHint: g2.resumeHint, workDir, dryRun, detect: detectReport, selection };
   }
 
   const g3 = await phaseAuthorize(ctx, selectionFile);
   if (g3.status !== 'ok' || !g3.record) {
-    return { classification: g3.status === 'paused' ? 'PAUSED' : 'BLOCKED', stoppedAt: 'G3', question: g3.question, resumeHint: g3.resumeHint, workDir, detect: detectReport, selection, direction: g2.record };
+    return { classification: g3.status === 'paused' ? 'PAUSED' : 'BLOCKED', stoppedAt: 'G3', question: g3.question, resumeHint: g3.resumeHint, workDir, dryRun, detect: detectReport, selection, direction: g2.record };
   }
 
   const executeReport = await phaseExecute(ctx, selectionFile);
-  if (!executeReport.ok) {
+  // Real mode: a blocked EXECUTE halts the chain (VALIDATE/HAND-OFF/PROVE-ADVANCING all reason about REAL
+  // post-EXECUTE state that never happened). Dry-run mode: EXECUTE's own steps never halt each other either
+  // (see runExecute's header) — for the same reason, a PREDICTED block in one step must not hide every later
+  // phase's own prediction from the operator; the whole point of --dry-run is seeing the full chain.
+  if (!executeReport.ok && !dryRun) {
     return {
       classification: 'BLOCKED',
       stoppedAt: 'EXECUTE',
       question: executeReport.blocker,
       resumeHint: 'inspect the EXECUTE report above for the exact blocked step, fix it, and re-invoke (idempotent steps skip cleanly).',
       workDir,
+      dryRun,
       detect: detectReport,
       selection,
       direction: g2.record,
@@ -507,8 +552,13 @@ export async function runInstall(opts: InstallOptions): Promise<InstallReport> {
   const proveAdvancingReport = await phaseProveAdvancing(ctx, selection);
 
   return {
-    classification: 'COMPLETED',
+    // dry-run with a step that predicted a block still finishes the whole chain (above) but must not claim
+    // COMPLETED — it honestly reports BLOCKED (a real run would have stopped there) while still attaching
+    // every phase's report for full visibility.
+    classification: !executeReport.ok ? 'BLOCKED' : 'COMPLETED',
+    ...(!executeReport.ok ? { stoppedAt: 'EXECUTE' as const, question: executeReport.blocker } : {}),
     workDir,
+    dryRun,
     detect: detectReport,
     selection,
     direction: g2.record,
@@ -524,14 +574,68 @@ export async function runInstall(opts: InstallOptions): Promise<InstallReport> {
 // Rendering.
 // =========================================================================================================
 
+/** Collects every "[DRY-RUN] would ..." plan the EXECUTE/HAND-OFF phases recorded into one short recap, so
+ *  an operator/reviewer never has to re-read the full step-by-step output just to see what a REAL run would
+ *  have done. Purely a presentation convenience over data already on the report — nothing computed here. */
+function renderDryRunSummary(report: InstallReport): string {
+  const lines: string[] = ['DRY-RUN SUMMARY — what a REAL (non-dry-run) run would have done, phase by phase:'];
+  const steps = report.execute?.steps ?? [];
+  const byId = (id: string) => steps.find((s) => s.id === id);
+
+  const deps = byId('install-deps');
+  const wouldInstall = deps?.wouldInstall as string[] | undefined;
+  lines.push(`  deps:      ${wouldInstall?.length ? `would run: ${wouldInstall.join('; ')}` : 'nothing to install (already present)'}`);
+
+  const compile = byId('compile');
+  const wouldWrite = compile?.wouldWrite as string[] | undefined;
+  lines.push(`  compile:   ${wouldWrite ? `would write ${wouldWrite.length} file(s) into ${report.detect?.repoDir ?? report.selection?.detect.repoDir ?? '(repoDir)'}` : '(not reached)'}`);
+
+  const commit = byId('commit-harness');
+  const wouldCommit = commit?.wouldCommit as string[] | undefined;
+  lines.push(`  commit:    ${wouldCommit?.length ? `would run: git add -f -- <${wouldCommit.length} file(s)> && git commit -m "Install the open-autonomy harness"` : '(nothing planned — see the commit-harness step above)'}`);
+
+  const provider = byId('provider-up');
+  const wouldBringUp = provider?.wouldBringUp as { action?: string; consoleUrl?: string; providerUrl?: string } | undefined;
+  lines.push(`  provider:  ${wouldBringUp ? `${wouldBringUp.action} — console ${wouldBringUp.consoleUrl ?? '(n/a)'}, provider ${wouldBringUp.providerUrl ?? '(n/a)'}` : '(not reached, or substrate != local)'}`);
+
+  const provision = byId('ci-and-provision');
+  const wouldProvision = provision?.wouldProvision as { ownerRepo?: string; requiredChecks?: string[] } | undefined;
+  lines.push(`  provision: ${wouldProvision ? `would provision ${wouldProvision.ownerRepo} with checks [${wouldProvision.requiredChecks?.join(', ')}]` : '(not reached, or substrate != gh-actions)'}`);
+
+  const seed = byId('seed-board-drafts');
+  lines.push(`  dispatch:  ${seed?.command ? `would run: ${(seed.command as { cmd: string; args: string[] }).cmd} ${(seed.command as { cmd: string; args: string[] }).args.join(' ')}` : '(not reached)'}`);
+
+  const goLive = report.handoff?.goLive;
+  if (goLive && 'startCommand' in goLive) {
+    lines.push(`  go-live:   would run: ${goLive.startCommand.cmd} ${goLive.startCommand.args.join(' ')} (already construct-only even outside --dry-run)`);
+  } else if (goLive && 'command' in goLive && goLive.command) {
+    lines.push(`  go-live:   would run: ${goLive.command.cmd} ${goLive.command.args.join(' ')} (already construct-only even outside --dry-run)`);
+  } else {
+    lines.push(`  go-live:   not ready — ${report.handoff?.verification.message ?? '(hand-off not reached)'}`);
+  }
+  lines.push('');
+  lines.push('Zero of the above were actually run. Re-invoke without --dry-run once you are ready for the real thing.');
+  return lines.join('\n');
+}
+
 export function renderInstallHuman(report: InstallReport): string {
   const lines: string[] = [];
   lines.push('OA INSTALL — the one-shot install agent (TE.8)');
   lines.push('='.repeat(70));
+  if (report.dryRun) {
+    lines.push('');
+    lines.push('*** DRY-RUN — THE SAFE WAY TO REHEARSE A REAL INSTALL — NO REAL SIDE EFFECTS WERE PERFORMED ***');
+    lines.push(
+      'Every phase below ran for real EXCEPT every mutating operation (npm/bun install, compile writes, git ' +
+        'commit, termfleet provider bring-up, branch-protection/CI mutation, agent dispatch, go-live launch) — ' +
+        'those are reported as PLANS ("[DRY-RUN] would ...") only, never performed. See DRY-RUN SUMMARY below.',
+    );
+  }
   lines.push(`work-dir: ${report.workDir}`);
   lines.push('');
 
-  if (report.classification !== 'COMPLETED') {
+  if (report.classification !== 'COMPLETED' && !report.execute) {
+    // Paused/blocked before EXECUTE ever ran (G1/G2/G3) — nothing else to print.
     lines.push(`${report.classification} at ${report.stoppedAt}`);
     lines.push('');
     if (report.question) lines.push(report.question);
@@ -540,6 +644,14 @@ export function renderInstallHuman(report: InstallReport): string {
       lines.push(`TO CONTINUE: ${report.resumeHint}`);
     }
     return lines.join('\n');
+  }
+
+  if (report.classification !== 'COMPLETED') {
+    // dry-run only (see runInstall's own comment): EXECUTE predicted a block but the whole chain still ran
+    // so every later phase's own prediction is visible too — say so plainly before the per-phase detail.
+    lines.push(`${report.classification} at ${report.stoppedAt} — a REAL run would have stopped here (dry-run continues anyway to show every phase's plan):`);
+    if (report.question) lines.push(`  ${report.question}`);
+    lines.push('');
   }
 
   lines.push(`selected: ${report.selection!.profile} @ ${report.selection!.substrate} (G1: ${report.selection!.g1.answer})`);
@@ -559,10 +671,16 @@ export function renderInstallHuman(report: InstallReport): string {
   lines.push('');
   lines.push(renderProveAdvancingHuman(report.proveAdvancing!, report.detect!.repoDir));
   lines.push('');
+
+  if (report.dryRun) {
+    lines.push(renderDryRunSummary(report));
+    lines.push('');
+  }
+
   lines.push(
     `HONEST CEILING: this run never launches a real agent (board-seeding is the only real dispatch; go-` +
       `live's \`oa start\` launch half is construct-only, though \`oa resume\` — the safe fence-lift — is ` +
-      `performed for real once G4a verifies readiness) — expect M3/INSTALLED or, once a human has promoted ` +
+      `performed for real once G4a verifies readiness${report.dryRun ? ' (skipped entirely under --dry-run)' : ''}) — expect M3/INSTALLED or, once a human has promoted ` +
       `a board item, M4/ARMED; M5/RUNNING requires the human's own G4a promotion + running the printed \`oa ` +
       `start\` command themselves, and M6/ADVANCING is an async follow-up (DESIGN hardening #1/#2), never a ` +
       `same-session guarantee.`,
@@ -580,6 +698,16 @@ export interface CliOptions extends InstallOptions {
 
 const USAGE = `usage: bun bin/install.ts <repoDir> [options]
 
+*** --dry-run — THE SAFE WAY TO REHEARSE A REAL INSTALL. RUN THIS FIRST. ***
+    Runs the ENTIRE chain (all 7 phases) against your REAL repo but NEVER performs a real side-effecting
+    operation anywhere in it: no real npm/bun install, no real compile write, no real git commit,
+    no real termfleet provider bring-up (the critical one — a real provider bring-up is itself half the
+    hazard a real install carries), no real branch-protection/CI mutation, no real agent dispatch,
+    no real go-live launch. Every one of those is reported instead as a plan ("[DRY-RUN] would ..."), and a
+    DRY-RUN SUMMARY recaps every phase's plan at the end. This is the DEFAULT SAFE PATH for evaluating/
+    testing this tool — combine with --auto-approve for a full non-interactive rehearsal:
+      bun bin/install.ts <repoDir> --dry-run --auto-approve
+
 Chains all 7 install phases (DETECT -> SELECT -> DIRECTION -> AUTHORIZE -> EXECUTE -> VALIDATE -> HAND-OFF
 -> PROVE ADVANCING) into one command, pausing at each of the 4 human gates by default:
 
@@ -591,7 +719,11 @@ Chains all 7 install phases (DETECT -> SELECT -> DIRECTION -> AUTHORIZE -> EXECU
                 \`oa start\` — the launch half — for you to run yourself
 
 Global:
-  --work-dir <dir>              default: <repoDir>/.open-autonomy/install-work
+  --dry-run                     THE SAFE WAY TO REHEARSE — see the banner above. Orthogonal to
+                                 --auto-approve (this flag only ever concerns REAL side effects, never
+                                 interactive-gate pausing) — combine both for a full non-interactive rehearsal.
+  --work-dir <dir>              default: <repoDir>/.open-autonomy/install-work (--dry-run default: a fresh
+                                 tmp dir OUTSIDE <repoDir>, so the target repo stays byte-for-byte untouched)
   --profiles-root <dir>         default: this checkout's bundled profiles/
   --json                        machine-readable final report
   --owner-repo <owner/name>     required for a GitHub-target EXECUTE/HAND-OFF
@@ -622,6 +754,7 @@ G3 AUTHORIZE answers:
   --consent-gh-admin --identity <own-token|bot-reviewer>     (GitHub profiles only)
   --consent-proxy <deploy-own|get-allowlisted>               (self-driving-shaped profiles only)
   --live-probe <owner/repo>       opens a REAL throwaway probe PR — real GitHub side effects, use deliberately
+                                   (refused under --dry-run — never opens a real PR)
 
 HAND-OFF:
   --launcher <tmux|nohup>        local go-live launcher shape (default tmux)
@@ -670,6 +803,9 @@ export function parseArgs(argv: string[]): { opts: CliOptions; error?: string } 
       case '--auto-approve':
       case '--non-interactive':
         opts.autoApprove = true;
+        break;
+      case '--dry-run':
+        opts.dryRun = true;
         break;
       case '--pick': {
         const v = takeValue(a);

@@ -153,6 +153,27 @@ describe('bun bin/install.ts --help', () => {
     const r = help();
     expect(r.code).toBe(2);
   });
+
+  // --dry-run is THE SAFE DEFAULT PATH for anyone evaluating/testing this tool — it must be prominent, not
+  // buried in the flag list (the whole point of this unit: a reviewer/adopter reaching for --help should see
+  // it FIRST, before ever considering a real run).
+  test('--dry-run is documented PROMINENTLY (before the "Global:" flag list, not just inside it)', () => {
+    const r = help('--help');
+    expect(r.stdout).toContain('--dry-run');
+    expect(r.stdout).toMatch(/SAFE WAY TO REHEARSE/);
+    const bannerIdx = r.stdout.indexOf('SAFE WAY TO REHEARSE');
+    const globalIdx = r.stdout.indexOf('Global:');
+    expect(bannerIdx).toBeGreaterThan(-1);
+    expect(globalIdx).toBeGreaterThan(-1);
+    expect(bannerIdx).toBeLessThan(globalIdx);
+  });
+
+  test('--dry-run documents zero-real-side-effect coverage: npm/compile/git/termfleet/dispatch', () => {
+    const r = help('--help');
+    for (const phrase of ['no real npm', 'no real compile write', 'no real git commit', 'no real termfleet provider bring-up', 'no real agent dispatch']) {
+      expect(r.stdout).toContain(phrase);
+    }
+  });
 });
 
 // =========================================================================================================
@@ -330,6 +351,21 @@ describe('phaseAuthorize (G3) — universal consents auto-approve; GitHub-admin/
     expect(r.resumeHint).toMatch(/consent-proxy/);
     cleanupAll();
   });
+
+  test('--dry-run + --live-probe together -> BLOCKED (a real GitHub PR is never opened under --dry-run)', async () => {
+    const dir = track(mkdtempSync(join(tmpdir(), 'oa-te8-')));
+    const workDir = join(dir, 'work');
+    mkdirSync(workDir, { recursive: true });
+    const record = selectionRecordFor('simple-gh-sdlc', dir);
+    const recordFile = join(workDir, '01-selection.json');
+    writeFileSync(recordFile, JSON.stringify(record));
+    const ctx = baseCtx(dir, workDir, true, { consentGhAdmin: true, identity: 'own-token', liveProbe: 'acme/throwaway-scratch', dryRun: true });
+    const r = await phaseAuthorize(ctx, recordFile);
+    expect(r.status).toBe('blocked');
+    expect(r.question).toMatch(/--live-probe.*opens a REAL throwaway PR/);
+    expect(r.question).toMatch(/--dry-run/);
+    cleanupAll();
+  });
 });
 
 // =========================================================================================================
@@ -475,6 +511,82 @@ describe('runInstall — FULL CHAIN dry-run, all 4 gates auto-approved (bin/inst
     const human = renderInstallHuman(report);
     expect(human).toContain(profile);
     expect(human).toContain('HONEST CEILING');
+
+    cleanupAll();
+  }, 60000);
+});
+
+// =========================================================================================================
+// THE --dry-run FLAG — bin/install.ts's own first-class safety feature (distinct from the "FULL DRY-RUN"
+// test-harness terminology above, which predates this flag and refers to this SUITE's own use of stubs).
+// This block proves the ACTUAL --dry-run mode: the whole chain runs against a real fixture repo with NO
+// planner-dispatch stub needed at all (dry-run never calls proc for it), a poison proc/bringUp that THROWS
+// on any real npm/tmux/nohup/termfleet-spawn call, and byte-for-byte git-status equality before/after.
+// =========================================================================================================
+
+describe('install --dry-run — the safe way to rehearse a real install (bin/install.ts)', () => {
+  test('DETECT -> ... -> PROVE ADVANCING: zero real side effects, workDir defaults OUTSIDE the repo, git status unchanged, termfleet never spawned, planner never dispatched (no stub needed)', async () => {
+    const dir = makeFixture();
+    const gitBefore = realGitProc()('git', ['status', '--porcelain'], { cwd: dir }).stdout;
+
+    const callLog: string[] = [];
+    const proc: ProcRunner = (cmd, args, opts) => {
+      callLog.push(`${cmd} ${args.join(' ')}`);
+      if (cmd === 'npm' || (cmd === 'node' && args[0] === 'scripts/run-agent.mjs') || cmd === 'tmux' || cmd === 'nohup') {
+        throw new Error(`install --dry-run must NEVER invoke a real "${cmd} ${args.join(' ')}" — a dry-run gate is missing somewhere`);
+      }
+      return defaultProc(cmd, args, opts);
+    };
+
+    const report: InstallReport = await runInstall({
+      repoDir: dir,
+      autoApprove: true,
+      dryRun: true,
+      proc,
+      bringUp: {
+        isPortFree: () => true,
+        spawnImpl: () => {
+          throw new Error('install --dry-run must NEVER spawn a real termfleet process');
+        },
+        kill: () => {
+          throw new Error('install --dry-run must NEVER kill a real process');
+        },
+        rangeStart: 46000,
+        rangeEnd: 46100,
+      },
+    });
+
+    expect(report.dryRun).toBe(true);
+    // --work-dir defaults OUTSIDE the target repo under --dry-run — not even an audit-file trace is left.
+    expect(report.workDir.startsWith(dir)).toBe(false);
+    expect(existsSync(join(dir, '.open-autonomy', 'install-work'))).toBe(false);
+
+    // reached the full chain (a local-git profile needs no --owner-repo, so nothing SHOULD predict a block).
+    expect(report.classification).toBe('COMPLETED');
+    expect(report.execute).toBeDefined();
+    expect(report.execute!.dryRun).toBe(true);
+    expect(report.execute!.steps.every((s) => s.status !== 'blocked')).toBe(true);
+    expect(report.validate).toBeDefined();
+    expect(report.handoff).toBeDefined();
+    expect(report.proveAdvancing).toBeDefined();
+
+    // --- the zero-real-side-effect proof ------------------------------------------------------------------
+    expect(existsSync(join(dir, '.open-autonomy', 'generated.json'))).toBe(false); // no real compile write
+    expect(existsSync(join(dir, '.open-autonomy', 'install.json'))).toBe(false); // no real maturity/prove-advancing write
+    expect(existsSync(join(dir, '.open-autonomy-install-provision.json'))).toBe(false);
+    const gitAfter = realGitProc()('git', ['status', '--porcelain'], { cwd: dir }).stdout;
+    expect(gitAfter).toBe(gitBefore); // byte-for-byte identical — dry-run left the repo completely untouched
+    expect(callLog.some((c) => c.startsWith('npm '))).toBe(false);
+    expect(callLog.some((c) => c === 'node scripts/run-agent.mjs')).toBe(false);
+    expect(callLog.some((c) => c.startsWith('tmux') || c.startsWith('nohup'))).toBe(false);
+    expect(callLog.some((c) => c.startsWith('git add') || c.startsWith('git commit'))).toBe(false);
+
+    // --- the report itself is a clear, structured, human-readable plan -----------------------------------
+    const human = renderInstallHuman(report);
+    expect(human).toContain('DRY-RUN');
+    expect(human).toContain('DRY-RUN SUMMARY');
+    expect(human).toMatch(/would compile|would write/);
+    expect(human).toMatch(/provider:/);
 
     cleanupAll();
   }, 60000);

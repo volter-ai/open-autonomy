@@ -105,9 +105,12 @@ const HELP = `oa <command> [args]  (@volter/oa v${pkgVersion()}) — the local o
   oa provider down                stop the provider/console this install brought up (best-effort SIGTERM)
   oa install [args]              (TE.8) the one-shot install agent — chains DETECT->SELECT->DIRECTION->
                                 AUTHORIZE->EXECUTE->VALIDATE->HAND-OFF->PROVE-ADVANCING into one command,
-                                pausing at the 4 human gates by default. Delegates (spawns, never imports)
-                                to the monorepo's own bin/install.ts — SOURCE-CHECKOUT ONLY today (T0.1):
-                                run 'oa install --help' for the full flow, or see it directly with
+                                pausing at the 4 human gates by default. Try 'oa install --dry-run' FIRST —
+                                the safe way to rehearse the entire chain against a real repo with zero real
+                                side effects (no real npm/git/compile writes, no real termfleet provider
+                                bring-up, no real agent dispatch). Delegates (spawns, never imports) to the
+                                monorepo's own bin/install.ts — SOURCE-CHECKOUT ONLY today (T0.1): run
+                                'oa install --help' for the full flow, or see it directly with
                                 'bun bin/install.ts --help'.
 
 The '.open-autonomy/paused' marker file is the source of truth; this CLI is ergonomics over the file, never

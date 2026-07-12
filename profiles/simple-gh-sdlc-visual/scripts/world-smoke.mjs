@@ -315,7 +315,14 @@ const PACKAGE_TO_VENDOR = Object.fromEntries(
 // never called at request-time) doesn't false-positive as an uncovered external — a real
 // vendor SDK the app talks to at runtime is a `dependencies` entry, not a `devDependencies`-
 // only build tool.
-const GENERIC_SCOPED_PACKAGE_RE = /from\s+['"](@[a-zA-Z0-9_.-]+\/[a-zA-Z0-9_.-]+)['"]|require\(\s*['"](@[a-zA-Z0-9_.-]+\/[a-zA-Z0-9_.-]+)['"]\s*\)/g;
+// All three import shapes are matched — static `from '...'`, `require('...')`, AND dynamic
+// `import('...')` — and a SUBPATH specifier (`<pkg>/anything`, e.g. an `openai/helpers/...`
+// deep import or an SDK's `/resources/...` module) resolves to its root package. Without
+// those, a vendor reached only via a dynamic import or a subpath specifier was INVISIBLE to
+// this whole stage — real egress sliding through a green coverage gate, the exact
+// false-green this rule exists to stop (proven by probe: `import('<llm-sdk>')` and
+// `from '<llm-sdk>/resources/...'` both passed a sealed config before this was closed).
+const GENERIC_SCOPED_PACKAGE_RE = /from\s+['"](@[a-zA-Z0-9_.-]+\/[a-zA-Z0-9_.-]+)(?:\/[^'"]*)?['"]|require\(\s*['"](@[a-zA-Z0-9_.-]+\/[a-zA-Z0-9_.-]+)(?:\/[^'"]*)?['"]\s*\)|import\(\s*['"](@[a-zA-Z0-9_.-]+\/[a-zA-Z0-9_.-]+)(?:\/[^'"]*)?['"]\s*\)/g;
 // Generic fallback #2: a BARE (non-scoped) package import (e.g. a default import of the "twilio"
 // package, imported under its own bare package name — deliberately not written here in the
 // literal `import X from "X"` shape, since this file itself is repo-wide-scanned and that shape
@@ -327,7 +334,11 @@ const GENERIC_SCOPED_PACKAGE_RE = /from\s+['"](@[a-zA-Z0-9_.-]+\/[a-zA-Z0-9_.-]+
 // (`./`, `../`) and Node builtin-shaped specifiers, and — like the scoped fallback — is gated
 // against RUNTIME_DEPENDENCY_PACKAGES so a bare devDependency build tool (e.g. `esbuild`,
 // `typescript`) doesn't false-positive as an uncovered external.
-const GENERIC_BARE_PACKAGE_RE = /from\s+['"]([a-zA-Z][a-zA-Z0-9_.-]*)['"]|require\(\s*['"]([a-zA-Z][a-zA-Z0-9_.-]*)['"]\s*\)/g;
+// Same three import shapes + subpath resolution as the scoped fallback above. A bare
+// subpath like a Node builtin's `fs/promises` resolves to `fs` and is then excluded by
+// NODE_BUILTIN_RE; `react/...` falls to NON_VENDOR_BARE_PACKAGES — the existing gates all
+// apply to the resolved ROOT package, unchanged.
+const GENERIC_BARE_PACKAGE_RE = /from\s+['"]([a-zA-Z][a-zA-Z0-9_.-]*)(?:\/[^'"]*)?['"]|require\(\s*['"]([a-zA-Z][a-zA-Z0-9_.-]*)(?:\/[^'"]*)?['"]\s*\)|import\(\s*['"]([a-zA-Z][a-zA-Z0-9_.-]*)(?:\/[^'"]*)?['"]\s*\)/g;
 const NODE_BUILTIN_RE = /^(node:|assert|buffer|child_process|cluster|crypto|dgram|dns|domain|events|fs|http|http2|https|net|os|path|perf_hooks|process|punycode|querystring|readline|repl|stream|string_decoder|tls|tty|url|util|v8|vm|zlib|module|worker_threads)$/;
 // Bare runtime-dependency packages that are NOT a vendor SDK in the sense this stage cares about
 // (something the app calls out to an external network service through), so the bare fallback
@@ -340,7 +351,15 @@ const NODE_BUILTIN_RE = /^(node:|assert|buffer|child_process|cluster|crypto|dgra
 // fix closes), so growing this list is a deliberate, reviewable per-package judgment call, not a
 // silent broadening of what passes.
 const NON_VENDOR_BARE_PACKAGES = new Set(['react', 'react-dom', 'termfleet']);
-const IMPORT_RE_FOR = (pkg) => new RegExp(`from\\s+['"]${pkg.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}['"]|require\\(\\s*['"]${pkg.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}['"]\\s*\\)`);
+// Registry-named detection matches the same three import shapes as the generic fallbacks
+// (static `from`, `require()`, dynamic `import()`) and tolerates a subpath after the package
+// name (`(?:/...)?` before the closing quote) — a deep import of a registry SDK is still that
+// vendor's SDK.
+const IMPORT_RE_FOR = (pkg) => {
+  const esc = pkg.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const spec = `['"]${esc}(?:\\/[^'"]*)?['"]`;
+  return new RegExp(`from\\s+${spec}|require\\(\\s*${spec}\\s*\\)|import\\(\\s*${spec}\\s*\\)`);
+};
 
 // Union of `dependencies` (NOT devDependencies) across every package.json in the repo/workspaces.
 // This is the derivation-based signal for "a real runtime SDK the app might call an external
@@ -528,7 +547,7 @@ function deriveUsedVendors() {
     let m;
     GENERIC_SCOPED_PACKAGE_RE.lastIndex = 0;
     while ((m = GENERIC_SCOPED_PACKAGE_RE.exec(text))) {
-      const pkg = m[1] || m[2];
+      const pkg = m[1] || m[2] || m[3];
       if (PACKAGE_TO_VENDOR[pkg]) continue; // already handled by the named registry above
       if (/^@volter\b|^@volter-ai-dev\b/.test(pkg)) continue; // our own twin/world tooling, not an external vendor SDK
       if (!runtimeDeps.has(pkg)) continue; // not declared as a runtime dependency anywhere — treat as build/type tooling, not an uncovered external
@@ -542,7 +561,7 @@ function deriveUsedVendors() {
     // "vendor SDK" in the sense this stage cares about.
     GENERIC_BARE_PACKAGE_RE.lastIndex = 0;
     while ((m = GENERIC_BARE_PACKAGE_RE.exec(text))) {
-      const pkg = m[1] || m[2];
+      const pkg = m[1] || m[2] || m[3];
       if (PACKAGE_TO_VENDOR[pkg]) continue; // already handled by the named registry above
       if (NODE_BUILTIN_RE.test(pkg)) continue; // a Node builtin, not an external vendor SDK
       if (NON_VENDOR_BARE_PACKAGES.has(pkg)) continue; // UI framework / our own tooling — not a vendor SDK
@@ -593,7 +612,9 @@ const UNPARSEABLE_STYLES = [
   ['bracket/dynamic access on the stripe client', /\bstripe\s*\[/],
   ['aliasing the stripe client into another variable', /=\s*stripe\s*(?:$|[;,)\]])/m],
 ];
-const STRIPE_IMPORT_RE = /from\s+['"]stripe['"]|require\(\s*['"]stripe['"]\s*\)/;
+// Matches the same three import shapes + subpath tolerance as IMPORT_RE_FOR, so a dynamic
+// or deep stripe import outside SOURCE_FILES is a blind spot too, not just static ones.
+const STRIPE_IMPORT_RE = /from\s+['"]stripe(?:\/[^'"]*)?['"]|require\(\s*['"]stripe(?:\/[^'"]*)?['"]\s*\)|import\(\s*['"]stripe(?:\/[^'"]*)?['"]\s*\)/;
 
 function findDerivationBlindSpots() {
   const problems = [];
@@ -728,8 +749,12 @@ async function stageMockCoverage() {
     log(`WARN  stage 4 endpoint-derivation drift vs. cross-check list — derived-only: [${missingFromCrossCheck.join(', ')}] cross-check-only: [${missingFromDerived.join(', ')}] (the DERIVED list is authoritative; update KNOWN_CROSS_CHECK in this script if this is an intentional new call site)`);
   }
 
+  // The stripe specifier below is held in a variable (not an inline quoted literal) so this
+  // file — which is itself repo-wide-scanned — cannot self-match the dynamic-import shape the
+  // vendor scan now detects (same convention as GENERIC_BARE_PACKAGE_RE's own comment).
   const probeScript = `
-    const Stripe = (await import('stripe')).default;
+    const stripeSpecifier = ['str', 'ipe'].join('');
+    const Stripe = (await import(stripeSpecifier)).default;
     const stripe = new Stripe(process.env.STRIPE_API_KEY || 'sk_test_fake');
     const ops = ${JSON.stringify(derived)};
     const results = [];

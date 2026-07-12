@@ -183,7 +183,20 @@ function resolveVideo(summary, runDir) {
 // Pin the run video once; every AC's evidence/proof references the same pin.
 // Returns { ref, sha256, stored } — ref is a URL (attach) or repo-relative
 // path (commit).
+//
+// The stored name is RUN-SCOPED: demo-runner always writes `demo.webm`, and
+// `ztrack evidence add` stores by basename — so two runs (e.g. <issue>-baseline
+// and <issue>-dryrun) would both pin `.volter/evidence/demo.webm`, the second
+// silently REPLACING the first at HEAD while the first run's proofs still cite
+// the old sha256 (proven live on a real adopter's sealed re-run). Copy to
+// `<runId>.demo.webm` first so each run's video is its own pinned artifact.
 function pinVideo(videoPath, runId) {
+  const scopedName = `${runId}.${path.basename(videoPath)}`;
+  if (path.basename(videoPath) !== scopedName) {
+    const scopedPath = path.join(path.dirname(videoPath), scopedName);
+    fs.copyFileSync(videoPath, scopedPath);
+    videoPath = scopedPath;
+  }
   try {
     const attachOutput = sh('npx', ['ztrack', 'evidence', 'add', videoPath, '--attach']);
     const { image, sha256 } = JSON.parse(attachOutput);

@@ -1,0 +1,13 @@
+{
+  "$comment": "simple-gh-sdlc-visual provisioning manifest (scripts/provision-target-repo.ts) — derived from simple-gh-sdlc's; the visual-evidence delta is a develop/reviewer skill + policy.box addition and three carried operative scripts/workflows, not a branch-protection change. PROFILE-DERIVED branch-protection control: `security` (the dispatched, blocking realization of security.yml — .github/workflows/security-gate.yml, wired via policy.box.gh-actions.propose_dispatch_checks) joins `ci` + `agent-review` as a default REQUIRED merge gate, so an agent-authored PR can never land while a security finding (zizmor high+ or a supply-chain failure) is red. `ci` runs typecheck + a real `ztrack check` (.github/workflows/ci.yml) — this manifest's required_checks list (`ci`, `agent-review`, `security`) is unchanged because `ci` is the context name, not the steps inside it. LOCAL-SUBSTRATE NOTE (this profile's `targets: [local]`): `agent-review` is still required and still meaningful — on local, scripts/reconcile-open-reviews.mjs (substrate-emitted, PR #174) polls open agent/* PRs and dispatches the `reviewer` agent for any missing/stale status, the same deterministic delivery this profile's own .github/workflows/agent-review-human.yml documents as the reason a human-authored PR (branch not matching agent/* or flip/*) needs its own auto-pass path instead of wedging behind a check only the agent-authored path ever gets. Kept MINIMAL relative to soc2-baseline's manifest: no required_reviews/required_signatures hardening, no compliance labels, no model-proxy variables — this is the generic profile's floor plus the evidence pipeline, not the SOC 2 baseline.",
+  "description": "open-autonomy simple-gh-sdlc-visual install",
+  "private": true,
+  "required_secrets": [],
+  "variables": [],
+  "labels": [],
+  "branch_protection": {
+    "branch": "main",
+    "required_checks": ["ci", "security", "agent-review"],
+    "enforce_admins": true
+  }
+}

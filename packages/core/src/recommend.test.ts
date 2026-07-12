@@ -157,7 +157,16 @@ describe('loadProfileFacts / loadAllProfileFacts — live read of the real profi
   test('discovers every bundled profile directory', () => {
     const names = realProfiles.map((p) => p.name).sort();
     expect(names).toEqual(
-      ['hello', 'hello-human', 'self-driving', 'simple-gh', 'simple-gh-sdlc', 'simple-sdlc', 'soc2-baseline'].sort(),
+      [
+        'hello',
+        'hello-human',
+        'self-driving',
+        'simple-gh',
+        'simple-gh-sdlc',
+        'simple-gh-sdlc-visual',
+        'simple-sdlc',
+        'soc2-baseline',
+      ].sort(),
     );
   });
 

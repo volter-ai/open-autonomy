@@ -1,0 +1,77 @@
+name: Merge
+# Standard code-host CI resource — installed into every github install that has a code:propose agent (a
+# resource, carried by the profile like the standards docs; NOT engine output — docs/CODE_HOST_RESOURCES.md).
+# It realizes the integration boundary, the sibling of deploy's "no agent deploys": agents only ever PROPOSE
+# (open a PR); the merge is performed here, deterministically, by no agent. This workflow ARMS native
+# auto-merge on open agent PRs and RECONCILES issues whose linked PR has merged. Enabling auto-merge requires
+# push access, so it holds contents:write (+ pull-requests:write to manage the PR, issues:write to reconcile) —
+# BUT it cannot bypass review: branch protection requires ci + agent-review server-side with no bypass, so
+# `--auto` only ever lands a PR once those are green (a red/unreviewed PR is refused even with contents:write).
+# Branch protection is the gate, not the absence of a permission. A bot-opened PR fires no pull_request event
+# (GITHUB_TOKEN anti-recursion), so the proposer DISPATCHES this right after opening its PR (exactly as it
+# dispatches ci/agent-review), and a schedule re-runs it as the deterministic backstop for any arm/close missed.
+#
+# THE done-flip (flipping a merged agent PR's committed-store issue to `done` + anchoring `PR:<merge-sha>`)
+# used to be attempted HERE too, via reconcile-merged-issues.ts's committed-store `main()` performing a
+# direct `git push origin HEAD:main` — but `main` branch protection (enforce_admins, required checks, no
+# bypass) REJECTS every direct push, including github-actions[bot]'s (GH006). That push failed on every run,
+# silently, behind this workflow's own `|| true` (legacy, no-tracker installs are unaffected — they only
+# `gh issue close`, never push). THE FIX: the done-flip is now its OWN workflow,
+# .github/workflows/flip-done.yml, which lands the flip through a gated `flip/<id>` bookkeeping PR instead of
+# a doomed direct push — see that file + THE SECURITY BOUNDARY at scripts/check-flip-diff.ts. This workflow
+# (merge.yml) still calls reconcile-merged-issues.ts unconditionally below (it mode-switches internally and
+# is a loud-but-swallowed redirect in committed-store mode, a no-op change in legacy mode) — but see the last
+# step below: it ALSO kicks flip-done.yml itself, since it turns out to be the one thing reliably positioned
+# to do so (see that step's own comment for why).
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "*/15 * * * *"
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+  actions: write # required to `gh workflow run flip-done.yml` in the last step below — see that step.
+jobs:
+  merge:
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+      - run: bun install --frozen-lockfile || bun install
+      - name: Arm native auto-merge on open agent PRs (cannot bypass review — branch protection gates the merge)
+        run: bun scripts/rearm-auto-merge.ts || true
+      - name: Reconcile — close issues whose linked PR has merged
+        run: bun scripts/reconcile-merged-issues.ts || true
+      - name: Kick flip-done.yml immediately — the reliable path for an auto-merged agent PR (committed-store installs)
+        # WHY THIS IS HERE, not left to flip-done.yml's own triggers: flip-done.yml's `pull_request: closed`
+        # listener ONLY fires when a merge is performed by a non-GITHUB_TOKEN identity (a human clicking
+        # "Merge", or a PAT/App-token actor) — GitHub's anti-recursion rule for GITHUB_TOKEN-authored events
+        # means a merge landed by THIS workflow's own `--auto` arm (performed under `GH_TOKEN: github.token`,
+        # same as every other job in this repo) fires NO `pull_request` event at all. Confirmed live on the
+        # validating testbed: a human-merged PR DID trigger flip-done.yml's listener; a PR landed by
+        # github-actions[bot]'s auto-merge — the common case for every agent PR that goes green unattended —
+        # fired NONE. Left alone, the ONLY remaining path for that case was flip-done.yml's own 15-min cron —
+        # and that cron can itself drift, so a merge could sit unflipped for a long, unpredictable window
+        # with nothing pushing it.
+        # THE FIX: this workflow is the one thing that (a) already runs immediately whenever a proposer's PR
+        # goes green and dispatches it (agent-propose.ts's post-open dispatch), and (b) is the actual causal
+        # source of every GITHUB_TOKEN auto-merge landing in the first place — so it kicks flip-done.yml
+        # itself, right here, unconditionally, every time it runs (harmless on a legacy, no-tracker install —
+        # flip-done.ts's own sweep finds no committed-store files and opens nothing). This is deliberately NOT
+        # conditioned on "did a merge juuust happen in this exact run" (that's not reliably observable —
+        # `--auto` only ARMS; GitHub performs the actual merge asynchronously, possibly after this job has
+        # already exited) — the dispatch is cheap and flip-done.ts's own sweep is fully idempotent
+        # (scripts/flip-done.ts's `alreadyReconciled` check), so an extra no-op run costs nothing. Net effect:
+        # flip-done now effectively runs on TWO independent cadences (its own cron + this one, offset from
+        # each other in practice since they're dispatched by different runs) instead of one, shrinking the
+        # realistic worst-case gap, AND gets triggered immediately (not up to 15 min later) whenever THIS
+        # workflow runs on-demand right after a proposer opens a PR or after `rearm-auto-merge.ts` just armed
+        # something.
+        # Best-effort: a transient dispatch failure here is not fatal — flip-done.yml's own cron is still the
+        # backstop-of-last-resort, so this never blocks or fails the merge job itself.
+        run: |
+          gh workflow run flip-done.yml -R "${{ github.repository }}" || \
+            echo "::warning::merge.yml could not dispatch flip-done.yml this run -- its own cron remains the backstop"

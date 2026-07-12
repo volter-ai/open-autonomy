@@ -171,6 +171,10 @@ policy:
         - scripts/model-proxy-revoke.ts
         - scripts/rearm-auto-merge.ts
         - scripts/reconcile-merged-issues.ts
+        # THE done-flip gate scripts — check-flip-diff.ts IS the security boundary that decides whether a
+        # flip PR gets auto-approved; must never be rewritable by an un-human-gated agent PR.
+        - scripts/flip-done.ts
+        - scripts/check-flip-diff.ts
         - scripts/run-agent.mjs
         - scripts/runner-defaults.mjs
         - scripts/runner.ts
@@ -199,6 +203,11 @@ resources:
   - .github/workflows/codeql-gate.yml       # C8  richer SAST gate (dispatched; posts `codeql` status) — NOT in required_checks; code-scan.yml (Semgrep) is the no-GHAS blocker
   - .github/workflows/supply-chain.yml      # C7  supply-chain BLOCKING gate on bot PRs (dispatched; posts `supply-chain` status)
   - .github/workflows/human-approval.yml    # C4  deterministic per-head-SHA maintainer change gate
+  # The done-flip's own workflow (committed-store installs only — a harmless no-op job on a legacy install,
+  # see the file's own header): gated bookkeeping PR that lands a merged agent PR's issue-done flip, since a
+  # direct push to branch-protected `main` always fails (GH006). scripts/check-flip-diff.ts is the security
+  # boundary it gates on.
+  - .github/workflows/flip-done.yml
   - .github/workflows/code-scan.yml         # C8  no-signup SAST gate (Semgrep OSS) — enforces on private, no GHAS
   - .github/workflows/secret-scan.yml       # C12 no-signup secret-scan gate (gitleaks) — enforces on private, no GHAS
   - .github/workflows/dependency-review.yml # C9  PR-time dependency vulnerability review (GHAS)
@@ -220,6 +229,8 @@ resources:
   - scripts/reconcile-merged-issues.ts # merge.yml
   - scripts/human-approval-gate.ts     # C4 human-approval.yml
   - scripts/check-supply-chain.ts      # C7 security.yml + supply-chain.yml
+  - scripts/flip-done.ts               # flip-done.yml — the done-flip bookkeeping PR opener
+  - scripts/check-flip-diff.ts         # flip-done.yml — THE security boundary the flip PR is gated on
   - package.json                   # runnable-install seed (install-owned) — makes `bun install` work so the agents run
   - bun.lock                       # matching lockfile (frozen-lockfile) — merge-dangerous, human-required
   - provision.json

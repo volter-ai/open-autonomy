@@ -48,21 +48,33 @@ jobs:
           # that can see anything but the tip commit in a shallow clone.
           fetch-depth: 0
       # actions/checkout only ever fetches the ref given above (the PR head sha/branch) — even at
-      # fetch-depth 0 it does NOT fetch `main` as a separate ref, so `main` does not exist in this checkout
-      # yet. gitWorld hardcodes the literal ref name `main` for its `merge-base --is-ancestor <sha> main`
-      # merged-check — no config knob, so a literal local `main` must exist for `done_requires_merged_pr` to
-      # ever resolve true. Fetch + create it explicitly here — except on the `push` trigger (this job's own
-      # trigger is `main`), where the checkout is ALREADY the `main` branch and
-      # `git fetch origin main:refs/heads/main` errors ("refusing to fetch into branch checked out");
-      # `git symbolic-ref` names the currently-checked-out branch, so this only fetches when it's something
-      # else (a PR head sha/ref, which is never named `main`).
-      - name: Fetch main (ztrack's gitWorld needs a literal local `main` ref to resolve merged-PR checks)
+      # fetch-depth 0 it does NOT fetch the trunk branch as a separate ref, so a local `main` does not exist
+      # in this checkout yet. gitWorld hardcodes the literal LOCAL ref name `main` for its
+      # `merge-base --is-ancestor <sha> main` merged-check — no config knob on ztrack's side, so a literal
+      # local ref named `main` must exist for `done_requires_merged_pr` to ever resolve true. This is true
+      # regardless of what the adopter's repo actually calls its trunk branch (`main`/`dev`/`master`/…) — the
+      # LOCAL ref ztrack reads is always spelled `main`, even when the REMOTE branch is not.
+      #
+      # So: resolve the repo's REAL default branch via the GitHub API first (same idiom as
+      # scripts/agent-propose.ts's own default-branch lookup: `gh api repos/{owner}/{repo} --jq
+      # .default_branch`, falling back to the literal string "main" if the API call itself fails — network
+      # hiccup, no `gh`, unauthenticated — never crash this step over that), then fetch THAT remote branch
+      # into the LOCAL ref name `main` (`git fetch origin <resolved>:refs/heads/main`) — the remote branch
+      # name may differ, the local ref name may not. Preserve the already-on-trunk short-circuit (skip the
+      # fetch if the currently checked-out ref IS the resolved trunk name — fetching into a checked-out
+      # branch errors "refusing to fetch into branch checked out"), now compared against the RESOLVED name,
+      # not a hardcoded "main".
+      - name: Fetch trunk as local `main` (ztrack's gitWorld needs a literal local `main` ref to resolve merged-PR checks)
+        env: { GH_TOKEN: "${{ github.token }}" }
         run: |
+          trunk="$(gh api repos/{owner}/{repo} --jq .default_branch 2>/dev/null || true)"
+          trunk="${trunk:-main}"
+          echo "resolved trunk branch: $trunk"
           current="$(git symbolic-ref --short -q HEAD || true)"
-          if [ "$current" = "main" ]; then
-            echo "already on main — nothing to fetch"
+          if [ "$current" = "$trunk" ]; then
+            echo "already on $trunk — nothing to fetch"
           else
-            git fetch --no-tags origin main:refs/heads/main
+            git fetch --no-tags origin "$trunk:refs/heads/main"
           fi
       # An in-review issue's `PR:` value is the local branch name `agent/issue-<id>` (the simple-gh-sdlc
       # ztrack preset's defaultPrBranches/prBranchesFrom) until the PR merges, at which point the store is
@@ -82,16 +94,83 @@ jobs:
         if: github.event_name == 'workflow_dispatch' && inputs.sha != ''
         env: { GH_TOKEN: "${{ github.token }}", SHA: "${{ inputs.sha }}" }
         run: gh api -X POST "repos/{owner}/{repo}/statuses/${SHA}" -f state=pending -f context=ci -f description="typecheck + ztrack check" >/dev/null
+      # Detect the adopter's actual package manager instead of assuming npm — an adopter repo may carry no
+      # package-lock.json at all (pnpm/yarn/bun-only) and its own `preinstall` hook may reject any manager
+      # but its pinned one, so a blind `npm ci` fails outright ("can only install with an existing
+      # package-lock.json"). Precedence follows this repo's OWN convention (bin/install-detect.ts's
+      # LOCKFILE_MANAGERS): bun.lock/bun.lockb -> pnpm-lock.yaml -> yarn.lock -> package-lock.json, falling
+      # back to npm when no lockfile is present. `corepack enable` resolves the exact pnpm/yarn version
+      # pinned in the adopter's package.json `packageManager` field — no separate version pin needed here.
+      # Same snippet, verbatim, in smoke.yml — keep both in sync if this ever changes.
+      - name: Detect package manager
+        id: pm
+        run: |
+          if [ -f bun.lock ] || [ -f bun.lockb ]; then
+            pm=bun
+          elif [ -f pnpm-lock.yaml ]; then
+            pm=pnpm
+          elif [ -f yarn.lock ]; then
+            pm=yarn
+          elif [ -f package-lock.json ]; then
+            pm=npm
+          else
+            pm=npm
+          fi
+          echo "manager=$pm" >> "$GITHUB_OUTPUT"
+          echo "detected package manager: $pm"
+          corepack enable
       - name: Install
-        run: npm ci
+        run: |
+          case "${{ steps.pm.outputs.manager }}" in
+            bun) bun install --frozen-lockfile || bun install ;;
+            pnpm) pnpm install --frozen-lockfile ;;
+            yarn) yarn install --frozen-lockfile ;;
+            npm) npm ci ;;
+          esac
+      # In a workspace/monorepo layout, library packages (e.g. packages/shared, packages/ui) are typed
+      # against their OWN compiled dist/ output (package.json main/types/exports point at dist/, never
+      # src/), so on a fresh clone with no prior build, an app package's typecheck fails "Cannot find
+      # module '@scope/shared'" for every workspace dependency — proven live even after Fix A/B landed.
+      # This step is deliberately SCOPED + BEST-EFFORT, not a full `turbo build` of everything (that would
+      # slow down what's meant to be a fast required check), and deliberately a no-op rather than a hard
+      # failure for adopters without this layout — the same defensive philosophy the Typecheck step below
+      # already uses `--if-present` for. Turborepo's own `--filter='./packages/*'` is the one syntax that
+      # cleanly expresses "just the libraries, not the whole graph" across npm/pnpm/yarn/bun workspaces
+      # alike, so: only attempt it when a turbo.json is actually present (a single-package repo, or a
+      # monorepo on some other tool, has no turbo.json and gets no prebuild — it either has no cross-package
+      # dist/ dependency to satisfy, or its own adopter-authored typecheck/build script already accounts for
+      # it). `|| true`: an adopter's turbo config may have no `packages/*` workspace, may have no `build`
+      # task wired for those packages, or turbo itself may not be installed yet — any of those is a harmless
+      # no-op here, not a CI failure; the real gate is the Typecheck step immediately after.
+      - name: Prebuild library packages (best-effort — only if this is a turborepo with a packages/* workspace)
+        if: hashFiles('turbo.json') != ''
+        run: |
+          case "${{ steps.pm.outputs.manager }}" in
+            bun) bunx turbo build --filter='./packages/*' || true ;;
+            pnpm) pnpm exec turbo build --filter='./packages/*' || true ;;
+            yarn) yarn exec turbo build --filter='./packages/*' || true ;;
+            npm) npx turbo build --filter='./packages/*' || true ;;
+          esac
       - name: Typecheck (adopter-defined — a no-op if the app has no "typecheck" script yet)
         id: typecheck
         continue-on-error: true
-        run: npm run --if-present typecheck
+        run: |
+          case "${{ steps.pm.outputs.manager }}" in
+            bun) bun run --if-present typecheck ;;
+            pnpm) pnpm run --if-present typecheck ;;
+            yarn) yarn run --if-present typecheck ;;
+            npm) npm run --if-present typecheck ;;
+          esac
       - name: ztrack check (the fifth deterministic gate — honest backlog, cited evidence, no fabricated claims)
         id: ztrack
         continue-on-error: true
-        run: npx ztrack check
+        run: |
+          case "${{ steps.pm.outputs.manager }}" in
+            bun) bunx ztrack check ;;
+            pnpm) pnpm dlx ztrack check ;;
+            yarn) yarn dlx ztrack check ;;
+            npm) npx ztrack check ;;
+          esac
       - name: Post final status (bot-PR dispatch path only — human-PR path relies on the job's own check run)
         if: always() && github.event_name == 'workflow_dispatch' && inputs.sha != ''
         env:

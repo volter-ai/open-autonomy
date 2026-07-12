@@ -494,6 +494,26 @@ export interface InstallReport {
   proveAdvancing?: ProveAdvancingReport;
 }
 
+/** LOW#6 fix (owner-mandated aggregate skeptic review of `oa install`): `classification === 'COMPLETED'`
+ *  only means EXECUTE's own steps all reported ok/skipped — it says nothing about whether VALIDATE (the very
+ *  next phase, using fresher/independent signals — doctor, live A13 protection, and a live re-read of the
+ *  board) still finds the install isn't yet ready to advance. That gap is real, not hypothetical: EXECUTE's
+ *  step 7 (`stepSeedBoardDrafts`) only checks that ITS OWN dispatch spawn exited 0 — the dispatched planner
+ *  runs asynchronously and may not have filed a draft yet by the time VALIDATE's `checkBoardSeededWithDrafts`
+ *  re-reads the board a moment later, which then reports `canAdvanceToG4=false` even though EXECUTE was
+ *  entirely clean (bin/install.test.ts's own "FULL CHAIN dry-run" test hits exactly this: EXECUTE reports
+ *  `ok: true`/COMPLETED, yet `report.handoff.verification.ready` is `false` because the mocked dispatch never
+ *  actually filed anything). Exit 0 must mean "ready to advance", not merely "nothing errored" — a caller
+ *  gating on exit code alone (`oa install ... && start-the-loop`) would otherwise wrongly proceed. This gives
+ *  that state its OWN documented exit code (4), distinct from both 0 (fully ready) and 1 (a genuine step
+ *  failure) — see USAGE's "Exit codes" line and renderInstallHuman's prominent "NOT READY: ..." line. */
+export function installExitCode(report: InstallReport): number {
+  if (report.classification === 'PAUSED') return 3;
+  if (report.classification !== 'COMPLETED') return 1;
+  if (report.validate && !report.validate.canAdvanceToG4) return 4;
+  return 0;
+}
+
 export async function runInstall(opts: InstallOptions): Promise<InstallReport> {
   const proc = opts.proc ?? defaultProc;
   const dryRun = opts.dryRun === true;
@@ -775,6 +795,17 @@ export function renderInstallHuman(report: InstallReport): string {
     lines.push('');
   }
 
+  // LOW#6 fix (owner-mandated aggregate skeptic review): make it impossible to read this report as fully
+  // done when it isn't — a completed-with-no-hard-failure chain can still leave VALIDATE's canAdvanceToG4
+  // false (e.g. step 7 only checks that ITS OWN dispatch spawn exited 0, not that the dispatched planner
+  // actually finished filing a draft before VALIDATE's board-seeded check ran). Surfaced prominently, right
+  // up front — see also installExitCode(), which gives this state its own distinct nonzero exit code so a
+  // script gating on exit code alone can't conflate "ran clean" with "ready to advance".
+  if (report.classification === 'COMPLETED' && report.validate && !report.validate.canAdvanceToG4) {
+    lines.push(`NOT READY: the chain completed with no hard step failure, but VALIDATE reports canAdvanceToG4 = false — ${report.validate.blockers.join('; ') || '(see VALIDATE detail below)'}`);
+    lines.push('');
+  }
+
   lines.push(`selected: ${report.selection!.profile} @ ${report.selection!.substrate} (G1: ${report.selection!.g1.answer})`);
   lines.push(`direction: ${report.direction!.action} — ${report.direction!.invariant.reason}`);
   lines.push(`authorize: ${report.authorize!.g3.answer}`);
@@ -880,9 +911,13 @@ G3 AUTHORIZE answers:
 HAND-OFF:
   --launcher <tmux|nohup>        local go-live launcher shape (default tmux)
 
-Exit codes: 0 completed the chain (through PROVE ADVANCING; the FINAL maturity/M6 stage is a report, never
-a failure) · 1 blocked (a genuine defect — see the printed detail) · 2 usage error · 3 paused at a gate
-(interactive, awaiting your answer — see "TO CONTINUE" in the output).
+Exit codes: 0 completed the chain AND VALIDATE confirms it is ready to advance (through PROVE ADVANCING; the
+FINAL maturity/M6 stage is a report, never a failure) · 1 blocked (a genuine defect — see the printed detail)
+· 2 usage error · 3 paused at a gate (interactive, awaiting your answer — see "TO CONTINUE" in the output)
+· 4 completed with NO hard step failure but NOT yet ready to advance (VALIDATE's canAdvanceToG4 = false —
+see the printed "NOT READY: ..." line/blockers; an expected pre-G4 state on its own, e.g. the dispatched
+planner hadn't finished filing a draft yet, never a defect by itself — but distinct from full readiness so a
+script gating on exit code alone doesn't wrongly treat it as "done").
 `;
 
 export function parseArgs(argv: string[]): { opts: CliOptions; error?: string } {
@@ -1070,8 +1105,7 @@ if (import.meta.main) {
   disarm(); // a normal finish never triggers signal-based provider cleanup — see comment above
   const out = opts.json ? JSON.stringify(report, null, 2) : renderInstallHuman(report);
   process.stdout.write(`${out}\n`);
-  const code = report.classification === 'COMPLETED' ? 0 : report.classification === 'PAUSED' ? 3 : 1;
-  process.exit(code);
+  process.exit(installExitCode(report));
 }
 
 // Re-exported so a caller/test can print the G4b async babysit runbook without importing install-handoff.ts

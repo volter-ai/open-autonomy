@@ -135,7 +135,7 @@ import { profilesRoot as bundledProfilesRoot } from './bundled-profiles';
 import { ensureCiScaffold, formatCiScaffoldResult, type CiScaffoldResult } from './ensure-ci-workflow.ts';
 import { checkDirectionInvariant, type InvariantResult } from './install-direction.ts';
 import type { ProcResult, ProcRunner } from '../packages/local-runner-cli/src/types.ts';
-import { defaultProc, firstLine } from '../packages/local-runner-cli/src/proc.ts';
+import { defaultProc, firstErrLine, firstLine } from '../packages/local-runner-cli/src/proc.ts';
 import { checkUncommittedHarness } from '../packages/local-runner-cli/src/guards.ts';
 import { doctor, formatDoctorReport, type DoctorReport } from '../packages/local-runner-cli/src/doctor.ts';
 import {
@@ -152,7 +152,7 @@ import { PARKED_LABELS } from '../packages/local-runner-cli/src/eligibility.ts';
 import { bringUpProvider, planBringUpProvider, readSchedulePin, type BringUpOptions } from '../packages/local-runner-cli/src/provider.ts';
 import { readLastFires } from '../packages/local-runner-cli/src/status.ts';
 
-export { defaultProc, firstLine };
+export { defaultProc, firstErrLine, firstLine };
 export type { ProcResult, ProcRunner };
 
 // =========================================================================================================
@@ -839,7 +839,26 @@ export function stepSeedBoardDrafts(sel: SelectionRecordRef, opts: { proc: ProcR
   const env = command.env ? { ...process.env, ...command.env } : process.env;
   const r = opts.proc(command.cmd, command.args, { cwd: sel.detect.repoDir, env });
   if (r.status !== 0) {
-    return { ...step('seed-board-drafts', 'blocked', `${originatorSkill} dispatch failed (${command.cmd} ${command.args.join(' ')}, exit ${r.status}): ${firstLine(r.stderr || r.stdout)}`), command };
+    // LOW#5 fix (owner-mandated aggregate skeptic review round 2 — the missing-prompt-file case itself is
+    // now refused LOUDLY above, before ever reaching this proc call at all, by CRITICAL#2's own pre-flight
+    // guard; this is a DIFFERENT failure — the prompt/skill exists, but the dispatched PROCESS itself still
+    // failed). Two concrete gaps the bare "<originator> dispatch failed" message used to hide:
+    //  (1) a genuine SPAWN failure (e.g. `node`/`gh` missing from PATH) sets `r.error`, not stderr/stdout —
+    //      the old message silently dropped it and printed the useless firstLine-of-nothing "(no output)".
+    //  (2) the dispatched process is `node scripts/run-agent.mjs` -> `autonomy-runner.mjs launch <role>`,
+    //      which on a real failure THROWS — an uncaught Node error's stderr leads with the SOURCE LINE that
+    //      threw (`      throw new Error(...)`), not the message; the real "Error: ..." text is a few lines
+    //      further down. `firstLine` grabbed the useless source-line; `firstErrLine` finds the real message.
+    const cause = r.error ? r.error.message : firstErrLine(r.stderr || r.stdout);
+    const harness = process.env.TERMFLEET_AGENT || DEFAULT_LAUNCH_HARNESS;
+    const hint =
+      sel.substrate === 'local'
+        ? `the compiled "${originatorSkill}" prompt already exists (the pre-flight check above passed), so this ` +
+          `looks like a runtime dispatch problem, not a missing skill — check that a termfleet provider is ` +
+          `reachable (TERMFLEET_PROVIDER_URL / \`oa provider status\`) and that the coding CLI ("${harness}") is ` +
+          `installed and authenticated`
+        : `check \`gh auth status\` and that .github/workflows/${originatorSkill}.yml was compiled and pushed to ${opts.ownerRepo ?? '<owner/repo>'}`;
+    return { ...step('seed-board-drafts', 'blocked', `${originatorSkill} dispatch failed (${command.cmd} ${command.args.join(' ')}, exit ${r.status}): ${cause} — ${hint}`), command };
   }
   return {
     ...step(

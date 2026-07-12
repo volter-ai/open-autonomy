@@ -954,6 +954,70 @@ describe('buildBoardSeedDispatchCommand + stepSeedBoardDrafts', () => {
   });
 
   // =========================================================================================================
+  // LOW#5 (owner-mandated aggregate skeptic review) — the failure message must name a specific, actionable
+  // thing to check, not a bare "dispatch failed" + a possibly-useless stderr excerpt. Scoped to the case
+  // CRITICAL#2's own pre-flight guard (above) does NOT already cover: the compiled prompt genuinely exists
+  // (pre-flight passed), but the dispatched PROCESS itself still failed. Two concrete gaps fixed here:
+  //  (1) firstLine -> firstErrLine: a real dispatched process's UNCAUGHT throw prints Node's own code-frame
+  //      first ("      throw new Error(...)"), THEN the actual "Error: <message>" line a few lines later —
+  //      firstLine grabbed the useless code-frame line; firstErrLine correctly skips to the real message.
+  //  (2) a genuine SPAWN failure (`node`/`gh` missing from PATH) sets ProcResult.error, not stderr/stdout —
+  //      the old message silently dropped it, printing the unhelpful firstLine-of-nothing "(no output)".
+  // =========================================================================================================
+  test('dispatch failure detail: an uncaught-throw-shaped stderr surfaces the REAL "Error: ..." line, not the source code-frame line, plus a runtime-dispatch hint (the prompt already passed pre-flight)', () => {
+    const dir = track(mkdtempSync(join(tmpdir(), 'oa-te5-')));
+    writeCompiledPrompt(dir, 'claude', 'draft'); // pre-flight passes -> the proc call below is actually reached
+    const sel = selectionRecord('simple-sdlc', dir);
+    // The exact shape node prints to stderr for an uncaught throw (a real termfleet/provider-side failure
+    // downstream of the launch, e.g. createAgentWindow throwing): a source code-frame line first, the real
+    // "Error: ..." message several lines down.
+    const nodeUncaughtStderr = [
+      'file:///repo/scripts/autonomy-runner.mjs:110',
+      '    throw new Error(',
+      '    ^',
+      '',
+      'Error: termfleet createAgentWindow returned no terminalId for agent "draft": connection refused',
+      '    at TermfleetRunner.launch (/repo/scripts/autonomy-runner.mjs:110:11)',
+      '',
+      'Node.js v22.0.0',
+    ].join('\n');
+    const r = stepSeedBoardDrafts(sel, { proc: () => failResult(nodeUncaughtStderr) });
+    expect(r.status).toBe('blocked');
+    // the REAL error message made it into the detail, not the useless leading code-frame line.
+    expect(r.detail).toContain('Error: termfleet createAgentWindow returned no terminalId for agent "draft": connection refused');
+    expect(r.detail).not.toMatch(/^draft dispatch failed \([^)]*\): {2,}throw new Error/);
+    // an actionable hint follows the raw cause — names concrete things to check, not just a stack.
+    expect(r.detail).toContain('the compiled "draft" prompt already exists');
+    expect(r.detail).toContain('TERMFLEET_PROVIDER_URL');
+    expect(r.detail).toContain('oa provider status');
+    expect(r.detail).toContain('coding CLI ("claude")');
+    cleanupAll();
+  });
+
+  test('dispatch failure detail: a genuine SPAWN failure (proc.error, e.g. ENOENT) is surfaced, not silently dropped as "(no output)"', () => {
+    const dir = track(mkdtempSync(join(tmpdir(), 'oa-te5-')));
+    const sel = selectionRecord('simple-gh', dir); // codeHost=github -> gh-actions substrate, no pre-flight prompt check
+    const spawnFail: ProcRunner = () => ({ status: null, stdout: '', stderr: '', error: Object.assign(new Error('spawn gh ENOENT'), { code: 'ENOENT' }) });
+    const r = stepSeedBoardDrafts(sel, { proc: spawnFail });
+    expect(r.status).toBe('blocked');
+    expect(r.detail).toContain('spawn gh ENOENT');
+    expect(r.detail).not.toContain('(no output)');
+    cleanupAll();
+  });
+
+  test('dispatch failure detail: gh-actions substrate gets a gh-shaped hint (auth status + workflow file), not the local runtime/skill hint', () => {
+    const dir = track(mkdtempSync(join(tmpdir(), 'oa-te5-')));
+    const sel = selectionRecord('simple-gh-sdlc', dir);
+    const r = stepSeedBoardDrafts(sel, { proc: () => failResult('HTTP 404: Not Found'), ownerRepo: 'acme/widgets' });
+    expect(r.status).toBe('blocked');
+    expect(r.detail).toContain('gh auth status');
+    expect(r.detail).toContain('.github/workflows/planner.yml');
+    expect(r.detail).toContain('acme/widgets');
+    expect(r.detail).not.toContain('TERMFLEET_PROVIDER_URL');
+    cleanupAll();
+  });
+
+  // =========================================================================================================
   // --dry-run: NO STUB NEEDED AT ALL to stay safe — `unexpectedProc` fails the test if stepSeedBoardDrafts
   // ever calls proc under dryRun, proving genuine non-invocation (stronger than a mocked-ok stub: dry-run
   // doesn't even need the "safe stub" this file's OTHER tests rely on for the same command shape).

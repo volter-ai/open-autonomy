@@ -121,11 +121,33 @@ interface Options {
   private?: boolean;
   forceContent: boolean;
   dryRun: boolean;
+  // Arms GitHub's native auto-merge (repos/<repo> PATCH allow_auto_merge=true) as part of this
+  // provisioning run. OFF BY DEFAULT (safety fix, TE.10): this used to fire unconditionally, which meant
+  // `oa install`'s automated EXECUTE phase (bin/install-execute.ts's stepCiAndProvision, invoked with no
+  // human checkpoint in between) silently pre-armed auto-merge before any human had watched a single PR
+  // merge — a direct regression against this program's own already-ratified doctrine: TE.6's G4b runbook
+  // (this file's sibling `bin/install-handoff.ts`'s G4B_RUNBOOK constant, mirrored into
+  // docs/OSS_AGENT_RUNBOOK.md's "Phase 6 Hand-Off" section) and docs/INSTALL-AGENT.md's own
+  // "supervised first merge (then arm auto-merge)" playbook both document arming auto-merge as a
+  // DELIBERATE, LATER, human-gated step — never something provisioning does for you. The runbook's own
+  // step 5 (`gh repo edit <owner>/<repo> --enable-auto-merge`) already covers the manual arm; no new
+  // command needed.
+  //
+  // Kept as an explicit opt-in (not just deleted) for `bin/bench.ts`'s live-testing harness
+  // (docs/LIVE_TESTING_STRATEGY.md), which provisions a DISPOSABLE fixture repo and deliberately proves
+  // the fully unattended merge boundary end-to-end with no human in the loop by design — "merging a
+  // low-risk PR that native auto-merge is supposed to land" is explicitly FORBIDDEN operator behavior
+  // there, so bench must keep arming eagerly. `bin/bench.ts` passes `--arm-auto-merge` to preserve its
+  // pre-existing behavior; every other caller (`bin/install-execute.ts`'s stepCiAndProvision, the manual
+  // `soc2-baseline`/`self-driving` provisioning commands in profiles/soc2-baseline/README.md,
+  // compliance/ONBOARDING.md, docs/OPERATIONS.md's "GitHub production rollout" checklist) never passed a
+  // flag before and gets the safe default now.
+  armAutoMerge: boolean;
 }
 
 function usage(): never {
   throw new Error(`Usage:
-  bun scripts/provision-target-repo.ts --repo owner/name --source <build-dir> [--manifest path] [--private] [--force-content] [--dry-run]`);
+  bun scripts/provision-target-repo.ts --repo owner/name --source <build-dir> [--manifest path] [--private] [--force-content] [--dry-run] [--arm-auto-merge]`);
 }
 
 function parseArgs(argv: string[]): Options {
@@ -143,33 +165,63 @@ function parseArgs(argv: string[]): Options {
     private: argv.includes('--private') ? true : undefined,
     forceContent: argv.includes('--force-content'),
     dryRun: argv.includes('--dry-run'),
+    armAutoMerge: argv.includes('--arm-auto-merge'),
   };
 }
 
-function run(cmd: string, args: string[], opts: { input?: string; cwd?: string } = {}): string {
-  return execFileSync(cmd, args, {
-    encoding: 'utf8',
-    input: opts.input,
-    cwd: opts.cwd,
-    stdio: ['pipe', 'pipe', 'pipe'],
-  });
+// The one process-spawning seam this script goes through (gh/git) — mirrors the ProcRunner seam
+// packages/local-runner-cli/src/types.ts documents for the rest of the CLI ("a proc/sessions seam on
+// every verb that shells out ... so the test suite can stub gh ... without needing real binaries"). Kept
+// local (rather than importing that package) since scripts/ has no existing dependency on
+// packages/local-runner-cli and this shape needs stdin `input` support the shared type doesn't carry.
+// Default impl wraps execFileSync exactly as the old inline `run`/`tryRun` did; tests inject a stub so
+// provisioning logic — including whether the allow_auto_merge PATCH fires — is verifiable without a real
+// `gh` binary.
+export interface ProcResult {
+  status: number;
+  stdout: string;
+  stderr: string;
 }
 
-function tryRun(cmd: string, args: string[], opts: { input?: string; cwd?: string } = {}): { ok: boolean; out: string } {
+export type ProcFn = (cmd: string, args: string[], opts?: { input?: string; cwd?: string }) => ProcResult;
+
+export const defaultProc: ProcFn = (cmd, args, opts = {}) => {
   try {
-    return { ok: true, out: run(cmd, args, opts) };
+    const out = execFileSync(cmd, args, {
+      encoding: 'utf8',
+      input: opts.input,
+      cwd: opts.cwd,
+      stdio: ['pipe', 'pipe', 'pipe'],
+    });
+    return { status: 0, stdout: out, stderr: '' };
   } catch (error) {
-    const err = error as { stdout?: Buffer | string; stderr?: Buffer | string };
-    return { ok: false, out: String(err.stderr ?? err.stdout ?? error) };
+    const err = error as { status?: number | null; stdout?: Buffer | string; stderr?: Buffer | string };
+    return { status: err.status ?? 1, stdout: String(err.stdout ?? ''), stderr: String(err.stderr ?? '') };
   }
+};
+
+function run(proc: ProcFn, cmd: string, args: string[], opts: { input?: string; cwd?: string } = {}): string {
+  const r = proc(cmd, args, opts);
+  if (r.status !== 0) {
+    throw Object.assign(new Error(r.stderr || r.stdout || `${cmd} ${args.join(' ')} exited ${r.status}`), {
+      stdout: r.stdout,
+      stderr: r.stderr,
+    });
+  }
+  return r.stdout;
 }
 
-function repoExists(repo: string): boolean {
-  return tryRun('gh', ['repo', 'view', repo, '--json', 'name']).ok;
+function tryRun(proc: ProcFn, cmd: string, args: string[], opts: { input?: string; cwd?: string } = {}): { ok: boolean; out: string } {
+  const r = proc(cmd, args, opts);
+  return r.status === 0 ? { ok: true, out: r.stdout } : { ok: false, out: r.stderr || r.stdout };
 }
 
-function mainHasCommits(repo: string): boolean {
-  const result = tryRun('gh', ['api', `repos/${repo}/commits`, '--jq', '.[0].sha']);
+function repoExists(proc: ProcFn, repo: string): boolean {
+  return tryRun(proc, 'gh', ['repo', 'view', repo, '--json', 'name']).ok;
+}
+
+function mainHasCommits(proc: ProcFn, repo: string): boolean {
+  const result = tryRun(proc, 'gh', ['api', `repos/${repo}/commits`, '--jq', '.[0].sha']);
   return result.ok && result.out.trim().length > 0;
 }
 
@@ -179,8 +231,8 @@ const ALWAYS_EXCLUDE = new Set(['.git', 'node_modules', '.agent-run']);
 // a git repo (a committed workload seed like bench/workload/<name>/seed) or a standalone build dir
 // assembled by bench --live (compile + overlay). Git enumeration respects .gitignore (excludes node_modules); the
 // filesystem-walk fallback applies when the source is not a git tree.
-export function sourceFiles(source: string): string[] {
-  const tracked = tryRun('git', ['-C', source, 'ls-files', '--cached', '--others', '--exclude-standard']);
+export function sourceFiles(source: string, proc: ProcFn = defaultProc): string[] {
+  const tracked = tryRun(proc, 'git', ['-C', source, 'ls-files', '--cached', '--others', '--exclude-standard']);
   if (tracked.ok) {
     const files = tracked.out.split('\n').map((line) => line.trim()).filter(Boolean);
     if (files.length > 0) return files;
@@ -198,51 +250,53 @@ export function sourceFiles(source: string): string[] {
   return out.sort();
 }
 
-function pushInitialContent(repo: string, source: string): void {
+function pushInitialContent(proc: ProcFn, repo: string, source: string): void {
   const tmp = mkdtempSync(join(tmpdir(), 'provision-'));
   try {
-    for (const rel of sourceFiles(source)) {
+    for (const rel of sourceFiles(source, proc)) {
       const abs = join(source, rel);
       if (!existsSync(abs)) continue;
       const target = join(tmp, rel);
       mkdirSync(dirname(target), { recursive: true });
       cpSync(abs, target);
     }
-    run('git', ['init', '-b', 'main'], { cwd: tmp });
-    run('git', ['add', '-A'], { cwd: tmp });
-    run('git', ['commit', '-m', 'Initial open-autonomy content'], { cwd: tmp });
-    run('git', ['remote', 'add', 'origin', `https://github.com/${repo}.git`], { cwd: tmp });
-    run('git', ['push', '-u', '--force', 'origin', 'main'], { cwd: tmp });
+    run(proc, 'git', ['init', '-b', 'main'], { cwd: tmp });
+    run(proc, 'git', ['add', '-A'], { cwd: tmp });
+    run(proc, 'git', ['commit', '-m', 'Initial open-autonomy content'], { cwd: tmp });
+    run(proc, 'git', ['remote', 'add', 'origin', `https://github.com/${repo}.git`], { cwd: tmp });
+    run(proc, 'git', ['push', '-u', '--force', 'origin', 'main'], { cwd: tmp });
   } finally {
     rmSync(tmp, { recursive: true, force: true });
   }
 }
 
-async function main(): Promise<void> {
-  const options = parseArgs(process.argv.slice(2));
+// The provisioning logic itself, factored out of `main()` so tests can drive it with an injected `proc`
+// (no real `gh`/`git` binaries) and assert on the exact call log — in particular, that the
+// allow_auto_merge PATCH (see `options.armAutoMerge` above) only ever fires when explicitly requested.
+export async function provisionTargetRepo(options: Options, proc: ProcFn = defaultProc): Promise<string> {
   const manifest = parseManifest(readFileSync(options.manifest, 'utf8'));
   const isPrivate = options.private ?? manifest.private;
 
-  const exists = repoExists(options.repo);
+  const exists = repoExists(proc, options.repo);
   if (!exists && !options.dryRun) {
     const visibility = isPrivate ? '--private' : '--public';
-    run('gh', ['repo', 'create', options.repo, visibility, ...(manifest.description ? ['--description', manifest.description] : [])]);
+    run(proc, 'gh', ['repo', 'create', options.repo, visibility, ...(manifest.description ? ['--description', manifest.description] : [])]);
   }
 
-  const hasCommits = exists ? mainHasCommits(options.repo) : false;
+  const hasCommits = exists ? mainHasCommits(proc, options.repo) : false;
   const shouldPush = (!hasCommits || options.forceContent) && !options.dryRun;
   if (shouldPush) {
     // A force-push to an existing protected branch is rejected, so drop protection before pushing;
     // the branch-protection step below re-adds it. Keeps re-provisioning idempotent and hands-free.
     if (exists && manifest.branch_protection) {
-      tryRun('gh', ['api', '-X', 'DELETE', `repos/${options.repo}/branches/${manifest.branch_protection.branch}/protection`]);
+      tryRun(proc, 'gh', ['api', '-X', 'DELETE', `repos/${options.repo}/branches/${manifest.branch_protection.branch}/protection`]);
     }
-    pushInitialContent(options.repo, options.source);
+    pushInitialContent(proc, options.repo, options.source);
   }
 
   const existingVars: Record<string, string> = {};
   if (exists || shouldPush) {
-    const result = tryRun('gh', ['variable', 'list', '-R', options.repo, '--json', 'name,value']);
+    const result = tryRun(proc, 'gh', ['variable', 'list', '-R', options.repo, '--json', 'name,value']);
     if (result.ok) {
       for (const item of JSON.parse(result.out) as Array<{ name: string; value: string }>) {
         existingVars[item.name] = item.value;
@@ -253,18 +307,18 @@ async function main(): Promise<void> {
   if (!options.dryRun) {
     for (const v of variablePlan) {
       if (v.action === 'unchanged') continue;
-      run('gh', ['variable', 'set', v.name, '-R', options.repo, '--body', v.value]);
+      run(proc, 'gh', ['variable', 'set', v.name, '-R', options.repo, '--body', v.value]);
     }
   }
 
   let existingLabels: string[] = [];
-  const labelList = tryRun('gh', ['label', 'list', '-R', options.repo, '--json', 'name', '--limit', '200']);
+  const labelList = tryRun(proc, 'gh', ['label', 'list', '-R', options.repo, '--json', 'name', '--limit', '200']);
   if (labelList.ok) existingLabels = (JSON.parse(labelList.out) as Array<{ name: string }>).map((l) => l.name);
   const labelPlan = planLabels(manifest.labels, existingLabels);
   if (!options.dryRun) {
     for (const label of manifest.labels) {
       if (labelPlan.find((l) => l.name === label.name)?.action !== 'create') continue;
-      run('gh', [
+      run(proc, 'gh', [
         'label', 'create', label.name, '-R', options.repo, '--force',
         ...(label.color ? ['--color', label.color] : []),
         ...(label.description ? ['--description', label.description] : []),
@@ -277,9 +331,14 @@ async function main(): Promise<void> {
     if (options.dryRun || !(hasCommits || shouldPush)) {
       branchProtection = 'skipped';
     } else {
-      // Enable native auto-merge so a PR lands the instant its required checks are green — the new merge
-      // model (no agent merges; GitHub performs the merge). Best-effort; non-fatal if the API rejects it.
-      tryRun('gh', ['api', '-X', 'PATCH', `repos/${options.repo}`, '-F', 'allow_auto_merge=true']);
+      // Arm native auto-merge ONLY when explicitly requested (options.armAutoMerge — see the Options
+      // field doc above for the TE.10 safety rationale). Best-effort; non-fatal if the API rejects it.
+      // NEVER unconditional — `oa install`'s automated EXECUTE phase must never pre-arm this; the G4b
+      // runbook's own step (`gh repo edit <owner>/<repo> --enable-auto-merge`) is the human-gated way to
+      // arm it after a supervised first merge.
+      if (options.armAutoMerge) {
+        tryRun(proc, 'gh', ['api', '-X', 'PATCH', `repos/${options.repo}`, '-F', 'allow_auto_merge=true']);
+      }
       const bp = manifest.branch_protection;
       const body = JSON.stringify({
         // Require a PR (no direct push to main, even for a contents:write agent) + the status checks that
@@ -296,7 +355,7 @@ async function main(): Promise<void> {
         },
         restrictions: null,
       });
-      const result = tryRun('gh', [
+      const result = tryRun(proc, 'gh', [
         'api', '-X', 'PUT',
         `repos/${options.repo}/branches/${manifest.branch_protection.branch}/protection`,
         '--input', '-',
@@ -311,7 +370,7 @@ async function main(): Promise<void> {
       // commit_signing: verified-api) — otherwise every agent merge wedges. Best-effort + non-fatal.
       if (bp.required_signatures !== undefined) {
         const rsName = 'open-autonomy-required-signatures';
-        const found = tryRun('gh', ['api', `repos/${options.repo}/rulesets`, '--jq', `.[] | select(.name=="${rsName}") | .id`]);
+        const found = tryRun(proc, 'gh', ['api', `repos/${options.repo}/rulesets`, '--jq', `.[] | select(.name=="${rsName}") | .id`]);
         const rsId = found.ok ? found.out.trim().split('\n')[0] : '';
         if (bp.required_signatures) {
           const rsBody = JSON.stringify({
@@ -319,10 +378,10 @@ async function main(): Promise<void> {
             conditions: { ref_name: { include: ['~DEFAULT_BRANCH'], exclude: [] } },
             rules: [{ type: 'required_signatures' }],
           });
-          if (rsId) tryRun('gh', ['api', '-X', 'PUT', `repos/${options.repo}/rulesets/${rsId}`, '--input', '-'], { input: rsBody });
-          else tryRun('gh', ['api', '-X', 'POST', `repos/${options.repo}/rulesets`, '--input', '-'], { input: rsBody });
+          if (rsId) tryRun(proc, 'gh', ['api', '-X', 'PUT', `repos/${options.repo}/rulesets/${rsId}`, '--input', '-'], { input: rsBody });
+          else tryRun(proc, 'gh', ['api', '-X', 'POST', `repos/${options.repo}/rulesets`, '--input', '-'], { input: rsBody });
         } else if (rsId) {
-          tryRun('gh', ['api', '-X', 'DELETE', `repos/${options.repo}/rulesets/${rsId}`]);
+          tryRun(proc, 'gh', ['api', '-X', 'DELETE', `repos/${options.repo}/rulesets/${rsId}`]);
         }
       }
     }
@@ -338,17 +397,17 @@ async function main(): Promise<void> {
     if (manifest.security.secret_scanning_push_protection !== undefined)
       sec.secret_scanning_push_protection = { status: manifest.security.secret_scanning_push_protection ? 'enabled' : 'disabled' };
     if (Object.keys(sec).length > 0) {
-      tryRun('gh', ['api', '-X', 'PATCH', `repos/${options.repo}`, '--input', '-'], {
+      tryRun(proc, 'gh', ['api', '-X', 'PATCH', `repos/${options.repo}`, '--input', '-'], {
         input: JSON.stringify({ security_and_analysis: sec }),
       });
     }
   }
 
   let presentSecrets: string[] = [];
-  const secretList = tryRun('gh', ['secret', 'list', '-R', options.repo, '--json', 'name']);
+  const secretList = tryRun(proc, 'gh', ['secret', 'list', '-R', options.repo, '--json', 'name']);
   if (secretList.ok) presentSecrets = (JSON.parse(secretList.out) as Array<{ name: string }>).map((s) => s.name);
 
-  const report = formatReport({
+  return formatReport({
     repo: options.repo,
     created: !exists,
     pushed: shouldPush,
@@ -358,6 +417,11 @@ async function main(): Promise<void> {
     missingSecrets: missingSecrets(manifest.required_secrets, presentSecrets),
     dryRun: options.dryRun,
   });
+}
+
+async function main(): Promise<void> {
+  const options = parseArgs(process.argv.slice(2));
+  const report = await provisionTargetRepo(options, defaultProc);
   process.stdout.write(`${report}\n`);
 }
 

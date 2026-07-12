@@ -407,7 +407,7 @@ describe('buildHumanGates', () => {
   test('gh-admin: admin=false (confirmed negative) -> blocked, names the provisioning consequence', () => {
     const gate = buildHumanGates(gh({ admin: false }), true, cli('PASS')).find((g) => g.id === 'gh-admin')!;
     expect(gate.status).toBe('blocked');
-    expect(gate.detail).toContain('provision-target-repo.ts:305');
+    expect(gate.detail).toContain('provision-target-repo.ts:363');
   });
 
   test('gh-admin: admin=undefined (unknown) -> unverifiable, never assumed clear', () => {

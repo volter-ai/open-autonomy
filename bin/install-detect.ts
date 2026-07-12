@@ -452,7 +452,7 @@ export function buildHumanGates(gh: GhFacts, onGitHub: boolean, codingCli: Check
       id: 'gh-admin',
       name: 'GitHub repo-admin (branch-protection provisioning)',
       status: 'blocked',
-      detail: `${gh.adminBasis} — a non-admin token cannot provision branch protection (the PUT will 403/404 and provision-target-repo continues past a failed protection PUT, scripts/provision-target-repo.ts:305); this is a human gate, not an autonomous step.`,
+      detail: `${gh.adminBasis} — a non-admin token cannot provision branch protection (the PUT will 403/404 and provision-target-repo continues past a failed protection PUT, scripts/provision-target-repo.ts:363); this is a human gate, not an autonomous step.`,
     });
   } else {
     gates.push({

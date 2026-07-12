@@ -470,6 +470,44 @@ describe('stepCiAndProvision', () => {
     expect(r.status).toBe('ok');
     expect(r.detail).toMatch(/independently verified live protection/);
   });
+
+  // TE.10 — the safety regression this test guards against: scripts/provision-target-repo.ts used to PATCH
+  // repos/<repo> allow_auto_merge=true UNCONDITIONALLY during provisioning, meaning `oa install`'s fully
+  // automated, unattended EXECUTE phase silently pre-armed native auto-merge before any human had ever
+  // watched a PR merge — directly contradicting TE.6's already-ratified G4b runbook (bin/install-handoff.ts's
+  // G4B_RUNBOOK: "watch the first PR merge under supervision ... THEN arm auto-merge") and
+  // docs/INSTALL-AGENT.md's "supervised first merge (then arm auto-merge)" playbook. The fix: the PATCH is
+  // now gated behind an explicit `--arm-auto-merge` flag (default off) that stepCiAndProvision's real
+  // oa-install call site NEVER passes. This test captures the FULL call log stepCiAndProvision issues and
+  // proves the exact subprocess argv constructed for provision-target-repo.ts never contains the flag —
+  // by construction, that means the allow_auto_merge PATCH can never fire from this path (see
+  // scripts/provision-target-repo.test.ts for the script's own proof that the flag is what gates the PATCH).
+  test('TE.10: real oa-install call site NEVER passes --arm-auto-merge to provision-target-repo.ts (auto-merge stays un-armed through unattended EXECUTE)', async () => {
+    const dir = track(mkdtempSync(join(tmpdir(), 'oa-te10-')));
+    writeTargetPackageJson(dir);
+    const sel = ghSdlcSelection(dir);
+    const calls: string[][] = [];
+    const proc: ProcRunner = (cmd, args) => {
+      calls.push([cmd, ...args]);
+      if (cmd === 'bun' && args[0]?.includes('provision-target-repo.ts')) return okResult('provisioned');
+      if (cmd === 'gh' && args.includes('.permissions.admin')) return okResult('true');
+      if (cmd === 'gh' && args[0] === 'api' && args[1]?.includes('/protection') && !args[1]?.includes('branches/main')) return failResult('not found');
+      if (cmd === 'gh' && args[0] === 'api' && args.some((a) => a.includes('branches/main/protection'))) {
+        return okResult(JSON.stringify({ required_status_checks: { contexts: ['ci', 'agent-review', 'security'] } }));
+      }
+      return failResult(`unexpected call: ${args.join(' ')}`);
+    };
+    const r = await stepCiAndProvision(sel, undefined, { proc, profilesRoot: PROFILES_ROOT, ownerRepo: 'acme/throwaway-scratch' });
+    expect(r.status).toBe('ok');
+
+    const provisionCalls = calls.filter((c) => c[0] === 'bun' && c.some((a) => a.includes('provision-target-repo.ts')));
+    expect(provisionCalls.length).toBe(1);
+    expect(provisionCalls[0]).not.toContain('--arm-auto-merge');
+    // Never a raw allow_auto_merge PATCH anywhere in the whole captured call log either (belt-and-braces —
+    // stepCiAndProvision's own gh calls, distinct from the provision-target-repo.ts subprocess, also never
+    // touch it).
+    expect(calls.some((c) => c.join(' ').includes('allow_auto_merge'))).toBe(false);
+  });
 });
 
 // =========================================================================================================

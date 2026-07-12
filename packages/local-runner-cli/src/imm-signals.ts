@@ -385,7 +385,7 @@ function mktempSafe(): string {
 }
 
 // --- A13 — provision.json's declared required_checks == LIVE branch protection ---------------------------
-// DESIGN hardening #4: `provision-target-repo.ts:305` logs and CONTINUES on a failed (e.g. non-admin)
+// DESIGN hardening #4: `provision-target-repo.ts:363` logs and CONTINUES on a failed (e.g. non-admin)
 // protection PUT, and gh-preflight's own branch-protection check PASSES with zero protection
 // (`requiredChecks.length===0 -> 'pass'`) — so this must be verified INDEPENDENTLY of both, straight
 // against `gh api branches/<branch>/protection`, never trusted from provisioning's own exit code. A HARD

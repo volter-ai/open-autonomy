@@ -188,7 +188,7 @@ vuln-remediation SLA policy.
 | CI gates | ✅ | `bun run check`: tsc, core tests, conformance, runtime-sync, compile, profiles, dogfood, provision, supply-chain, public-agent, agent-proxy, proof (`package.json`, `CLAUDE.md`). |
 | Deploy change control | ✅ | Admin-only `deploy-v*` tags + `production` environment approval + egress-locked deploy (`deploy.yml`, `DEPLOY.md:11-16`). |
 | Signed commits | ❌ | DCO sign-off only (`-s`), **no GPG/sigstore signature enforcement** (`PULL_REQUEST_TEMPLATE.md:14`). |
-| `enforce_admins` consistency | 🟡 | Production expects `enforce_admins:false` (so human admins can operate), but docs/scripts disagree in places (`docs/OPERATIONS.md:205` says `true` vs `scripts/provision-target-repo.ts:275` sets `false`). Reconcile + document the *intended* value and rationale for auditors. |
+| `enforce_admins` consistency | 🟡 | Production expects `enforce_admins:false` (so human admins can operate), but docs/scripts disagree in places (`docs/OPERATIONS.md:205` says `true` vs `scripts/provision-target-repo.ts:351` sets `false`). Reconcile + document the *intended* value and rationale for auditors. |
 
 **SDLC is OA's strongest area.** Main gap: signed commits, and reconciling the documented branch-protection
 config so the auditor sees one source of truth.
@@ -271,7 +271,7 @@ Effort key: **S** ≈ ≤ 1 day · **M** ≈ 2–5 days · **L** ≈ > 1 week. "
 | Constant-time admin-token compare; add proxy **rate limiting**; document secret-rotation cadence + dual-key HMAC rotation | code | M | §3.2/§3.5; `src/index.ts:497`, `src/token.ts` |
 | npm/bun **Dependabot**; elevate **CodeQL + zizmor** to required checks (human PRs); generate an **SBOM** at deploy | code | S–M | §3.6; `.github/dependabot.yml`, `codeql.yml`, `security.yml` |
 | Enforce **signed commits** in branch protection | code/org | S | §3.7 |
-| Reconcile `enforce_admins` across docs/scripts; write the branch-protection control narrative | code+doc | S | §3.7; `scripts/provision-target-repo.ts:275` vs `docs/OPERATIONS.md:205` |
+| Reconcile `enforce_admins` across docs/scripts; write the branch-protection control narrative | code+doc | S | §3.7; `scripts/provision-target-repo.ts:351` vs `docs/OPERATIONS.md:205` |
 | At-rest-encryption assertion doc referencing subprocessor reports | doc | S | §3.1 |
 | External **uptime monitoring + alerting/on-call** (and/or land issues #66/#67) | code+org | M | §3.8 |
 

@@ -140,7 +140,7 @@ import {
 import { a13ProvisionMatchesLiveProtection, type Signal, type SignalContext } from '../packages/local-runner-cli/src/imm-signals.ts';
 import { resolveBoardKind } from '../packages/local-runner-cli/src/board-readiness.ts';
 import { PARKED_LABELS } from '../packages/local-runner-cli/src/eligibility.ts';
-import { bringUpProvider, readSchedulePin, type BringUpOptions } from '../packages/local-runner-cli/src/provider.ts';
+import { bringUpProvider, planBringUpProvider, readSchedulePin, type BringUpOptions } from '../packages/local-runner-cli/src/provider.ts';
 import { readLastFires } from '../packages/local-runner-cli/src/status.ts';
 
 export { defaultProc, firstLine };
@@ -295,7 +295,7 @@ function profileDirOf(profilesRoot: string, profile: string): string {
 // package.json compile just materialized (or didn't ship), never race it to auto-create a stub first.
 // =========================================================================================================
 
-export function stepInstallDeps(sel: SelectionRecordRef, opts: { proc: ProcRunner; detectFile?: string }): ExecuteStepResult {
+export function stepInstallDeps(sel: SelectionRecordRef, opts: { proc: ProcRunner; detectFile?: string; dryRun?: boolean }): ExecuteStepResult {
   const repoDir = sel.detect.repoDir;
   let tools: MinimalDetectTools | undefined;
   if (opts.detectFile) {
@@ -306,14 +306,20 @@ export function stepInstallDeps(sel: SelectionRecordRef, opts: { proc: ProcRunne
     }
   }
   const notes: string[] = [];
+  const wouldInstall: string[] = [];
   const toolSource = tools ? "TE.1's own DetectReport (--detect)" : 'a minimal node_modules presence read (no --detect supplied — never a re-derivation of TE.1\'s own probing logic)';
 
   // ztrack: every profile routes through it (CLAUDE.md: "all four route through ztrack").
   const ztrackPresent = tools ? Boolean(tools.ztrack?.vendored || tools.ztrack?.global) : existsSync(join(repoDir, 'node_modules', 'ztrack'));
   if (!ztrackPresent) {
-    const r = opts.proc('npm', ['install', '-D', 'ztrack@1.0.0'], { cwd: repoDir });
-    if (r.status !== 0) return step('install-deps', 'blocked', `npm install -D ztrack@1.0.0 failed (exit ${r.status}): ${firstLine(r.stderr || r.stdout)}`);
-    notes.push('installed ztrack@1.0.0 (was absent)');
+    if (opts.dryRun) {
+      wouldInstall.push('npm install -D ztrack@1.0.0');
+      notes.push('[DRY-RUN] ztrack absent — would run: npm install -D ztrack@1.0.0 (NOT run; node_modules/package.json untouched)');
+    } else {
+      const r = opts.proc('npm', ['install', '-D', 'ztrack@1.0.0'], { cwd: repoDir });
+      if (r.status !== 0) return step('install-deps', 'blocked', `npm install -D ztrack@1.0.0 failed (exit ${r.status}): ${firstLine(r.stderr || r.stdout)}`);
+      notes.push('installed ztrack@1.0.0 (was absent)');
+    }
   } else {
     notes.push(`ztrack present (source: ${toolSource})`);
   }
@@ -322,9 +328,14 @@ export function stepInstallDeps(sel: SelectionRecordRef, opts: { proc: ProcRunne
   if (sel.substrate === 'local') {
     const termfleetPresent = tools ? Boolean(tools.termfleet?.installed) : existsSync(join(repoDir, 'node_modules', 'termfleet'));
     if (!termfleetPresent) {
-      const r = opts.proc('npm', ['install', 'termfleet'], { cwd: repoDir });
-      if (r.status !== 0) return step('install-deps', 'blocked', `npm install termfleet failed (exit ${r.status}): ${firstLine(r.stderr || r.stdout)}`);
-      notes.push('installed termfleet (was absent)');
+      if (opts.dryRun) {
+        wouldInstall.push('npm install termfleet');
+        notes.push('[DRY-RUN] termfleet absent — would run: npm install termfleet (NOT run; node_modules/package.json untouched)');
+      } else {
+        const r = opts.proc('npm', ['install', 'termfleet'], { cwd: repoDir });
+        if (r.status !== 0) return step('install-deps', 'blocked', `npm install termfleet failed (exit ${r.status}): ${firstLine(r.stderr || r.stdout)}`);
+        notes.push('installed termfleet (was absent)');
+      }
     } else {
       notes.push(`termfleet present (source: ${toolSource})`);
     }
@@ -333,7 +344,7 @@ export function stepInstallDeps(sel: SelectionRecordRef, opts: { proc: ProcRunne
   }
 
   notes.push('bun present (this orchestrator runs under bun)');
-  return step('install-deps', 'ok', notes.join('; '));
+  return step('install-deps', 'ok', notes.join('; '), wouldInstall.length ? { dryRun: true, wouldInstall } : {});
 }
 
 // =========================================================================================================
@@ -355,7 +366,28 @@ export function stepInstallDeps(sel: SelectionRecordRef, opts: { proc: ProcRunne
 const AUTONOMY_COMPILE_SCRIPT = 'bin/autonomy-compile.ts';
 const PROVISION_TARGET_REPO_SCRIPT = 'scripts/provision-target-repo.ts';
 
-export function stepCompile(sel: SelectionRecordRef, opts: { proc: ProcRunner; force?: boolean }): ExecuteStepResult {
+export function stepCompile(sel: SelectionRecordRef, opts: { proc: ProcRunner; force?: boolean; dryRun?: boolean }): ExecuteStepResult {
+  if (opts.dryRun) {
+    // bin/autonomy-compile.ts's OWN built-in dry-run mode (its own file header: "With no outDir, prints the
+    // installation's file list (a dry run)") — reused verbatim rather than re-derived: omitting the outDir
+    // positional is the exact mechanism that script already uses to guarantee zero writes (compileLocal's
+    // own `outDir` branch — the ENTIRE materialize/clobber-guard/write path — never runs at all). This is
+    // real, already-proven-safe production code, not a bespoke simulation of it.
+    const args = [AUTONOMY_COMPILE_SCRIPT, sel.profile, sel.substrate];
+    const r = opts.proc('bun', args, {});
+    if (r.status !== 0) {
+      return step('compile', 'blocked', `[DRY-RUN] bun bin/autonomy-compile.ts ${sel.profile} ${sel.substrate} (no outDir — the tool's own built-in dry-run) failed (exit ${r.status}): ${firstLine(r.stderr || r.stdout)}`);
+    }
+    const wouldWrite = r.stdout.split('\n').map((l) => l.trim()).filter(Boolean);
+    return step(
+      'compile',
+      'ok',
+      `[DRY-RUN] would compile ${sel.profile}@${sel.substrate} into ${sel.detect.repoDir} — ${wouldWrite.length} file(s) ` +
+        `(via \`bun bin/autonomy-compile.ts ${sel.profile} ${sel.substrate}\`'s own built-in dry-run/list mode — no outDir arg, ` +
+        `so materialize/write never runs). NOT written.`,
+      { dryRun: true, wouldWrite },
+    );
+  }
   const args = [AUTONOMY_COMPILE_SCRIPT, sel.profile, sel.substrate, sel.detect.repoDir];
   if (opts.force) args.push('--force');
   const r = opts.proc('bun', args, {});
@@ -381,7 +413,7 @@ function applyDirectionFill(repoDir: string, fill: DirectionFillFile): string[] 
   return written;
 }
 
-export function stepDirectionFill(sel: SelectionRecordRef, opts: { fillFile?: string; profileDir: string }): ExecuteStepResult {
+export function stepDirectionFill(sel: SelectionRecordRef, opts: { fillFile?: string; profileDir: string; dryRun?: boolean }): ExecuteStepResult {
   const repoDir = sel.detect.repoDir;
   const before: InvariantResult = checkDirectionInvariant(sel.pack, opts.profileDir, repoDir);
   if (before.satisfied) {
@@ -400,6 +432,21 @@ export function stepDirectionFill(sel: SelectionRecordRef, opts: { fillFile?: st
   } catch (e) {
     return step('direction-fill', 'blocked', (e as Error).message);
   }
+  if (opts.dryRun) {
+    // Never writes the fill content to repoDir — loadDirectionFill (above) is a pure read of the ALREADY-
+    // gathered content file itself, not of repoDir. Re-verifying the invariant would require the real write
+    // this mode refuses to perform, so this reports the plan honestly instead of fabricating a "satisfied"
+    // verdict it cannot actually prove.
+    const paths = fill.files.map((f) => `${f.path} (${f.content.length} byte(s))`);
+    return step(
+      'direction-fill',
+      'ok',
+      `[DRY-RUN] would apply --direction-fill, writing ${fill.files.length} file(s): ${paths.join(', ')} — invariant currently NOT satisfied ` +
+        `(${before.reason}); re-verification after writing is skipped in dry-run (would require the real write this mode refuses to perform). ` +
+        `Run without --dry-run to confirm the invariant becomes satisfied.`,
+      { dryRun: true, wouldWrite: fill.files.map((f) => f.path) },
+    );
+  }
   const written = applyDirectionFill(repoDir, fill);
   const after: InvariantResult = checkDirectionInvariant(sel.pack, opts.profileDir, repoDir);
   if (!after.satisfied) {
@@ -413,9 +460,30 @@ export function stepDirectionFill(sel: SelectionRecordRef, opts: { fillFile?: st
 // `checkUncommittedHarness` — never a second manifest-diffing implementation.
 // =========================================================================================================
 
-export function stepCommitHarness(sel: SelectionRecordRef, opts: { proc: ProcRunner }): ExecuteStepResult {
+export function stepCommitHarness(sel: SelectionRecordRef, opts: { proc: ProcRunner; dryRun?: boolean; plannedFiles?: string[] }): ExecuteStepResult {
   const repoDir = sel.detect.repoDir;
   const manifestPath = join(repoDir, '.open-autonomy', 'generated.json');
+  if (opts.dryRun) {
+    // Under --dry-run the compile step (above) never materialized `.open-autonomy/generated.json` — there
+    // is genuinely nothing on disk yet to `git add`/`git status` against. Report the plan from the compile
+    // step's own dry-run file list (`opts.plannedFiles`, threaded in by runExecute) rather than reading a
+    // manifest that, correctly, does not exist. Never calls `git add`/`git commit` for real.
+    const files = opts.plannedFiles ?? [];
+    if (files.length === 0) {
+      return step(
+        'commit-harness',
+        'ok',
+        `[DRY-RUN] compile step reported 0 planned file(s) (or ran with a real, non-dry-run proc stub) — nothing to plan a commit for. NOT run.`,
+        { dryRun: true },
+      );
+    }
+    return step(
+      'commit-harness',
+      'ok',
+      `[DRY-RUN] would run: git add -f -- <${files.length} file(s) from the compile plan> && git commit -m "Install the open-autonomy harness". NOT run — repo left untouched.`,
+      { dryRun: true, wouldCommit: files },
+    );
+  }
   if (!existsSync(manifestPath)) {
     // checkUncommittedHarness itself reads an absent manifest as ok:true ("nothing declared, nothing to
     // check") — correct for ITS purpose (a schedule with no compiled harness has nothing to guard), but
@@ -464,7 +532,9 @@ const SCHEDULE_RELATIVE_PATH = join('scheduler', 'schedule.json');
  *  `stepCommitHarness` already establishes (never a second commit-implementation idiom). No-ops (status:
  *  'skipped') when the file doesn't exist, `repoDir` isn't a git repo (mirrors guards.ts's own
  *  `checkUncommittedHarness` "nothing declared, nothing to check" convention), or the pin left nothing
- *  dirty (e.g. bringUpProvider's idempotent no-op branch, already-committed from an earlier run). */
+ *  dirty (e.g. bringUpProvider's idempotent no-op branch, already-committed from an earlier run).
+ *  NEVER called under --dry-run (see stepProviderUp below) — a real `git add`/`git commit`, exactly the
+ *  class of operation --dry-run exists to suppress. */
 function commitSchedulePinIfDirty(repoDir: string, proc: ProcRunner): { status: 'ok' | 'skipped' | 'blocked'; detail: string } {
   if (!existsSync(join(repoDir, SCHEDULE_RELATIVE_PATH))) return { status: 'skipped', detail: '' };
   const isGitRepo = proc('git', ['rev-parse', '--git-dir'], { cwd: repoDir }).status === 0;
@@ -478,9 +548,23 @@ function commitSchedulePinIfDirty(repoDir: string, proc: ProcRunner): { status: 
   return { status: 'ok', detail: `committed ${SCHEDULE_RELATIVE_PATH} (provider pin) — working tree clean.` };
 }
 
-export async function stepProviderUp(sel: SelectionRecordRef, opts: { proc?: ProcRunner; bringUp?: Partial<BringUpOptions> } = {}): Promise<ExecuteStepResult> {
+export async function stepProviderUp(sel: SelectionRecordRef, opts: { proc?: ProcRunner; bringUp?: Partial<BringUpOptions>; dryRun?: boolean } = {}): Promise<ExecuteStepResult> {
   if (sel.substrate !== 'local') {
     return step('provider-up', 'skipped', `substrate=${sel.substrate} — provider bring-up only applies to the local substrate`);
+  }
+  if (opts.dryRun) {
+    // THE critical dry-run leg (see this file's own PR/near-miss note): a REAL termfleet bring-up is itself
+    // the first half of the hazard this whole unit exists to close. `planBringUpProvider` computes the
+    // SAME action/ports a real call would via only non-mutating reads/probes (readProviderState,
+    // verifyConsoleIdentity/verifyProviderIdentity's read-only HTTP GETs, pickProviderPorts' bind-then-
+    // close probe) — it never spawns `npx termfleet ...`, never pins scheduler/schedule.json, and (per the
+    // D3 fix above) never commits that pin either — commitSchedulePinIfDirty is simply never reached.
+    const plan = await planBringUpProvider({ cwd: sel.detect.repoDir, ...opts.bringUp });
+    const status: StepStatus = plan.action === 'would-refuse-foreign-occupant' ? 'blocked' : 'ok';
+    return step('provider-up', status, plan.detail, {
+      dryRun: true,
+      wouldBringUp: { action: plan.action, consoleUrl: plan.consoleUrl, providerUrl: plan.providerUrl, consolePort: plan.consolePort, providerPort: plan.providerPort },
+    });
   }
   let result;
   try {
@@ -513,7 +597,7 @@ export async function stepProviderUp(sel: SelectionRecordRef, opts: { proc?: Pro
 export async function stepCiAndProvision(
   sel: SelectionRecordRef,
   authRecord: AuthorizeRecordRef | undefined,
-  opts: { proc: ProcRunner; profilesRoot: string; ownerRepo?: string },
+  opts: { proc: ProcRunner; profilesRoot: string; ownerRepo?: string; dryRun?: boolean },
 ): Promise<ExecuteStepResult> {
   if (sel.pack.codeHost !== 'github') {
     return step('ci-and-provision', 'skipped', `codeHost=${sel.pack.codeHost} — no CI scaffold/provisioning needed`);
@@ -527,9 +611,9 @@ export async function stepCiAndProvision(
     return step('ci-and-provision', 'blocked', 'no --owner-repo <owner/name> supplied — a GitHub-target EXECUTE cannot provision without knowing the real target repo');
   }
 
-  const ci: CiScaffoldResult = ensureCiScaffold(repoDir, sel.pack);
+  const ci: CiScaffoldResult = ensureCiScaffold(repoDir, sel.pack, { dryRun: opts.dryRun });
   if (!ci.ok) {
-    return step('ci-and-provision', 'blocked', `TA.3 CI scaffold BLOCKED: ${ci.blocker}`);
+    return step('ci-and-provision', 'blocked', `${opts.dryRun ? '[DRY-RUN] would be ' : ''}TA.3 CI scaffold BLOCKED: ${ci.blocker}`);
   }
 
   const discovered = authRecord?.checkNameDiscovery;
@@ -560,6 +644,24 @@ export async function stepCiAndProvision(
     return step('ci-and-provision', 'blocked', `${provisionSrc} declares no branch_protection block`);
   }
   manifest.branch_protection.required_checks = requiredChecks;
+
+  if (opts.dryRun) {
+    // Two real mutations skipped here: (1) writing the patched manifest into repoDir (a real file this
+    // path would otherwise `writeFileSync`), and (2) `scripts/provision-target-repo.ts` — a REAL PUT
+    // against `${opts.ownerRepo}`'s branch protection settings on GitHub. Neither runs. The a13 independent
+    // live-protection re-verification is skipped too — there is nothing real to independently re-verify.
+    const patchedManifestPath = join(repoDir, '.open-autonomy-install-provision.json');
+    return step(
+      'ci-and-provision',
+      'ok',
+      `[DRY-RUN] CI scaffold plan: ${formatCiScaffoldResult(ci) || '(no authored-workflow checks needed)'}; would run: bun ${PROVISION_TARGET_REPO_SCRIPT} ` +
+        `--repo ${opts.ownerRepo} --source ${repoDir} --manifest ${patchedManifestPath} — branch_protection.required_checks=[${requiredChecks.join(', ')}] ` +
+        `(source: ${checkNameSource}). NOT executed — no real branch-protection/CI mutation against ${opts.ownerRepo}. Independent live-protection ` +
+        `re-verification (hardening #4, A13) is skipped: nothing was actually provisioned to verify.`,
+      { dryRun: true, wouldProvision: { ownerRepo: opts.ownerRepo, requiredChecks, manifestPath: patchedManifestPath } },
+    );
+  }
+
   const patchedManifestPath = join(repoDir, '.open-autonomy-install-provision.json');
   writeFileSync(patchedManifestPath, JSON.stringify(manifest, null, 2));
 
@@ -636,8 +738,24 @@ export interface SeedBoardResult extends ExecuteStepResult {
   command: DispatchCommand;
 }
 
-export function stepSeedBoardDrafts(sel: SelectionRecordRef, opts: { proc: ProcRunner; ownerRepo?: string }): SeedBoardResult {
+export function stepSeedBoardDrafts(sel: SelectionRecordRef, opts: { proc: ProcRunner; ownerRepo?: string; dryRun?: boolean }): SeedBoardResult {
   const command = buildPlannerDispatchCommand(sel.substrate, sel.detect.repoDir, opts.ownerRepo);
+  if (opts.dryRun) {
+    // Reuses the SAME construct-never-execute discipline install-handoff.ts's go-live logic already proves
+    // safe (buildLocalGoLive/buildHostedGoLive: construct a DispatchCommand, never call proc on it). This is
+    // real agent dispatch in production (see this file's own header — deliberately, by design, outside
+    // dry-run); under --dry-run, `opts.proc` is never called for it at all.
+    const envDetail = command.env ? ` (env: ${Object.entries(command.env).map(([k, v]) => `${k}=${v}`).join(', ')})` : '';
+    return {
+      ...step(
+        'seed-board-drafts',
+        'ok',
+        `[DRY-RUN] would dispatch the planner once via \`${command.cmd} ${command.args.join(' ')}\`${envDetail} — NOT executed; no real agent ever launched.`,
+        { dryRun: true },
+      ),
+      command,
+    };
+  }
   const env = command.env ? { ...process.env, ...command.env } : process.env;
   const r = opts.proc(command.cmd, command.args, { cwd: sel.detect.repoDir, env });
   if (r.status !== 0) {
@@ -656,6 +774,16 @@ export function stepSeedBoardDrafts(sel: SelectionRecordRef, opts: { proc: ProcR
 // =========================================================================================================
 // runExecute — the orchestrator. Fail-closed: halts on the first 'blocked' step (dependency order); a
 // 'skipped' step (N/A for this profile/substrate) never halts the sequence.
+//
+// --dry-run (`opts.dryRun`): every step above accepts its own `dryRun` flag and, when set, never performs
+// the step's real side-effecting operation (no real npm install, no real compile write, no real git commit,
+// no real termfleet bring-up, no real branch-protection mutation, no real agent dispatch) — see each step's
+// own comment for its specific plan. Under dryRun this orchestrator ALSO never halts early on a 'blocked'
+// step: a dry-run's whole purpose is a full end-to-end rehearsal report, so a step that predicts a real run
+// WOULD block still lets every later step run and report its own prediction too (each step's dry-run plan is
+// computed independently of its siblings' real effects, since none of them performed one) — `ok`/`blocker` on
+// the final report still honestly reflect the first step that predicted a block, unchanged from the real
+// (non-dry-run) semantics.
 // =========================================================================================================
 
 export interface ExecuteOptions {
@@ -669,6 +797,9 @@ export interface ExecuteOptions {
   force?: boolean;
   proc?: ProcRunner;
   bringUp?: Partial<BringUpOptions>;
+  /** never performs a real npm install / compile write / git commit / termfleet bring-up / branch-protection
+   *  mutation / agent dispatch — see runExecute's own header + each step's comment for its exact plan. */
+  dryRun?: boolean;
 }
 
 export interface ExecuteReport {
@@ -677,10 +808,12 @@ export interface ExecuteReport {
   substrate: Substrate;
   steps: ExecuteStepResult[];
   blocker?: string;
+  dryRun?: boolean;
 }
 
 export async function runExecute(opts: ExecuteOptions): Promise<ExecuteReport> {
   const proc = opts.proc ?? defaultProc;
+  const dryRun = opts.dryRun === true;
   const sel = loadSelectionRecord(opts.record);
   if (opts.repoDir) sel.detect.repoDir = opts.repoDir;
   const profilesRoot = opts.profilesRoot ?? bundledProfilesRoot;
@@ -690,57 +823,67 @@ export async function runExecute(opts: ExecuteOptions): Promise<ExecuteReport> {
   if (opts.authorize) authRecord = loadAuthorizeRecord(opts.authorize);
 
   const steps: ExecuteStepResult[] = [];
-  const halted = (): ExecuteReport | undefined => {
+  const finish = (): ExecuteReport => {
+    const blocked = steps.find((s) => s.status === 'blocked');
+    return { ok: !blocked, profile: sel.profile, substrate: sel.substrate, steps, ...(blocked ? { blocker: blocked.detail } : {}), ...(dryRun ? { dryRun: true } : {}) };
+  };
+  // Real mode: stop at the first blocked step (fail-closed, dependency order — a later step's real
+  // preconditions may depend on an earlier one's real effect). Dry-run mode: never stop early — every step's
+  // plan is computed independently of its siblings' (non-)effects, so the whole chain always finishes and
+  // reports every phase's prediction, per this unit's own "operator can safely see ALL phases" mandate.
+  const haltIfBlocked = (): ExecuteReport | undefined => {
+    if (dryRun) return undefined;
     const last = steps.at(-1)!;
-    if (last.status === 'blocked') return { ok: false, profile: sel.profile, substrate: sel.substrate, steps, blocker: last.detail };
-    return undefined;
+    return last.status === 'blocked' ? finish() : undefined;
   };
 
   // D1 fix: compile MUST run before install-deps — see the file-header "EXECUTE order" note above for the
   // full root cause + rationale (a fresh self-driving install used to self-clobber at the compile step).
-  steps.push(stepCompile(sel, { proc, force: opts.force }));
+  steps.push(stepCompile(sel, { proc, force: opts.force, dryRun }));
   {
-    const h = halted();
+    const h = haltIfBlocked();
+    if (h) return h;
+  }
+  const compileStep = steps.find((s) => s.id === 'compile');
+  const plannedFiles = (compileStep?.wouldWrite as string[] | undefined) ?? undefined;
+
+  steps.push(stepInstallDeps(sel, { proc, detectFile: opts.detect, dryRun }));
+  {
+    const h = haltIfBlocked();
     if (h) return h;
   }
 
-  steps.push(stepInstallDeps(sel, { proc, detectFile: opts.detect }));
+  steps.push(stepDirectionFill(sel, { fillFile: opts.directionFill, profileDir, dryRun }));
   {
-    const h = halted();
+    const h = haltIfBlocked();
     if (h) return h;
   }
 
-  steps.push(stepDirectionFill(sel, { fillFile: opts.directionFill, profileDir }));
+  steps.push(stepCommitHarness(sel, { proc, dryRun, plannedFiles }));
   {
-    const h = halted();
+    const h = haltIfBlocked();
     if (h) return h;
   }
 
-  steps.push(stepCommitHarness(sel, { proc }));
+  steps.push(await stepProviderUp(sel, { proc, bringUp: opts.bringUp, dryRun }));
   {
-    const h = halted();
+    const h = haltIfBlocked();
     if (h) return h;
   }
 
-  steps.push(await stepProviderUp(sel, { proc, bringUp: opts.bringUp }));
+  steps.push(await stepCiAndProvision(sel, authRecord, { proc, profilesRoot, ownerRepo: opts.ownerRepo, dryRun }));
   {
-    const h = halted();
+    const h = haltIfBlocked();
     if (h) return h;
   }
 
-  steps.push(await stepCiAndProvision(sel, authRecord, { proc, profilesRoot, ownerRepo: opts.ownerRepo }));
+  steps.push(stepSeedBoardDrafts(sel, { proc, ownerRepo: opts.ownerRepo, dryRun }));
   {
-    const h = halted();
+    const h = haltIfBlocked();
     if (h) return h;
   }
 
-  steps.push(stepSeedBoardDrafts(sel, { proc, ownerRepo: opts.ownerRepo }));
-  {
-    const h = halted();
-    if (h) return h;
-  }
-
-  return { ok: true, profile: sel.profile, substrate: sel.substrate, steps };
+  return finish();
 }
 
 export function renderExecuteHuman(report: ExecuteReport): string {
@@ -825,6 +968,11 @@ export interface ValidateOptions {
   fetchImpl?: typeof fetch;
   live?: boolean;
   sessionProbe?: SessionProbe;
+  /** VALIDATE's report-computation itself is already read-only (oa doctor/oa maturity are report verbs) —
+   *  the ONE real write in this path is `computeMaturity`'s own `.open-autonomy/install.json` (default
+   *  `write: true`). Under --dry-run this is suppressed (`write: false`) so a dry-run VALIDATE leaves the
+   *  target repo's disk byte-for-byte untouched, same as every other phase. */
+  dryRun?: boolean;
 }
 
 export interface ValidateReport {
@@ -852,6 +1000,7 @@ export async function runValidate(opts: ValidateOptions): Promise<ValidateReport
   const maturityOpts: MaturityOptions = { cwd: repoDir, profileDir, proc, live };
   if (opts.fetchImpl) maturityOpts.fetchImpl = opts.fetchImpl;
   if (opts.sessionProbe) maturityOpts.sessionProbe = opts.sessionProbe;
+  if (opts.dryRun) maturityOpts.write = false;
   const maturity = await computeMaturity(maturityOpts);
 
   // (a) direction filled — TE.3's own mechanical invariant.

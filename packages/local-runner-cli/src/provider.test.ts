@@ -11,6 +11,7 @@ import {
   isTermfleetProviderBody,
   pickProviderPorts,
   pinScheduleProviderUrl,
+  planBringUpProvider,
   providerDown,
   providerStatus,
   readSchedulePin,
@@ -169,6 +170,96 @@ describe('pinScheduleProviderUrl / readSchedulePin', () => {
     const dir = mkdtempSync(join(tmpdir(), 'oa-provider-uncompiled-'));
     try {
       expect(() => pinScheduleProviderUrl(dir, 'http://127.0.0.1:1')).toThrow(/does not exist/);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+});
+
+// =========================================================================================================
+// planBringUpProvider — the --dry-run seam. THE critical leg of the whole install --dry-run flag: a real
+// termfleet bring-up is itself half of the near-miss hazard this program's remediation wave exists to close.
+// `spawnImpl`/`kill` below both THROW if ever invoked — a passing test is the proof this function never
+// spawns or kills a real process, under any of the three decision branches.
+// =========================================================================================================
+
+describe('planBringUpProvider', () => {
+  const poisonSpawn: SpawnImpl = () => {
+    throw new Error('planBringUpProvider must NEVER spawn a real process');
+  };
+  const poisonKill = () => {
+    throw new Error('planBringUpProvider must NEVER kill a real process');
+  };
+
+  test('fresh install (no state recorded) -> would-start, with the SAME deterministic ports pickProviderPorts would pick; never pins/writes anything', async () => {
+    const dir = tmpRepo();
+    try {
+      const expected = await pickProviderPorts({ repoPath: dir, isPortFree: () => true, rangeStart: 42000, rangeEnd: 42100 });
+      const plan = await planBringUpProvider({ cwd: dir, isPortFree: () => true, spawnImpl: poisonSpawn, kill: poisonKill, rangeStart: 42000, rangeEnd: 42100 });
+      expect(plan.action).toBe('would-start');
+      expect(plan.consolePort).toBe(expected.consolePort);
+      expect(plan.providerPort).toBe(expected.providerPort);
+      expect(plan.consoleUrl).toBe(`http://127.0.0.1:${expected.consolePort}`);
+      expect(plan.providerUrl).toBe(`http://127.0.0.1:${expected.providerPort}`);
+      expect(plan.detail).toMatch(/\[DRY-RUN\]/);
+      expect(plan.detail).toMatch(/NOT spawned, NOT pinned/);
+      // never wrote a pin — schedule.json's env is untouched (no TERMFLEET_PROVIDER_URL key at all).
+      expect(readSchedulePin(dir)).toBeUndefined();
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test('existing HEALTHY pinned state -> would-noop; the identity probe is a non-mutating HTTP GET, never a spawn', async () => {
+    const dir = tmpRepo();
+    try {
+      const overrides = new Map<string, unknown>([
+        ['http://127.0.0.1:42200/healthz', { ok: true, service: 'console' }],
+        ['http://127.0.0.1:42201/healthz', { ok: true, provider: 'virtual-tmux', instanceId: 'abc' }],
+      ]);
+      mkdirSync(join(dir, '.open-autonomy', 'runner-state', 'provider'), { recursive: true });
+      writeFileSync(
+        join(dir, '.open-autonomy', 'runner-state', 'provider', 'state.json'),
+        JSON.stringify({ repoPath: dir, prefix: 'x-oa', consolePort: 42200, providerPort: 42201, consoleUrl: 'http://127.0.0.1:42200', providerUrl: 'http://127.0.0.1:42201', startedAt: new Date().toISOString() }),
+      );
+      const plan = await planBringUpProvider({ cwd: dir, fetchImpl: stubFetch({ overrides }), spawnImpl: poisonSpawn, kill: poisonKill });
+      expect(plan.action).toBe('would-noop');
+      expect(plan.providerUrl).toBe('http://127.0.0.1:42201');
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test('existing DEAD pinned state -> would-restart on the SAME ports, never re-derived', async () => {
+    const dir = tmpRepo();
+    try {
+      mkdirSync(join(dir, '.open-autonomy', 'runner-state', 'provider'), { recursive: true });
+      writeFileSync(
+        join(dir, '.open-autonomy', 'runner-state', 'provider', 'state.json'),
+        JSON.stringify({ repoPath: dir, prefix: 'x-oa', consolePort: 42300, providerPort: 42301, consoleUrl: 'http://127.0.0.1:42300', providerUrl: 'http://127.0.0.1:42301', consolePid: 111, providerPid: 222, startedAt: new Date().toISOString() }),
+      );
+      const plan = await planBringUpProvider({ cwd: dir, fetchImpl: stubFetch({ dead: new Set(['http://127.0.0.1:42300/healthz', 'http://127.0.0.1:42301/healthz']) }), spawnImpl: poisonSpawn, kill: poisonKill });
+      expect(plan.action).toBe('would-restart');
+      expect(plan.consolePort).toBe(42300);
+      expect(plan.providerPort).toBe(42301);
+      expect(plan.detail).toMatch(/SAME already-pinned ports/);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test('foreign occupant on the pinned provider port -> would-refuse-foreign-occupant, never pins/spawns over it', async () => {
+    const dir = tmpRepo();
+    try {
+      const overrides = new Map<string, unknown>([['http://127.0.0.1:42401/healthz', { some: 'unrelated service' }]]);
+      mkdirSync(join(dir, '.open-autonomy', 'runner-state', 'provider'), { recursive: true });
+      writeFileSync(
+        join(dir, '.open-autonomy', 'runner-state', 'provider', 'state.json'),
+        JSON.stringify({ repoPath: dir, prefix: 'x-oa', consolePort: 42400, providerPort: 42401, consoleUrl: 'http://127.0.0.1:42400', providerUrl: 'http://127.0.0.1:42401', startedAt: new Date().toISOString() }),
+      );
+      const plan = await planBringUpProvider({ cwd: dir, fetchImpl: stubFetch({ overrides }), spawnImpl: poisonSpawn, kill: poisonKill });
+      expect(plan.action).toBe('would-refuse-foreign-occupant');
+      expect(plan.detail).toMatch(/would REFUSE/);
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }

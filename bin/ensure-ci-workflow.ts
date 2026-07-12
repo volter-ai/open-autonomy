@@ -40,7 +40,7 @@ import { parse as parseYaml } from 'yaml';
 import { getSetupPack } from '@open-autonomy/core';
 import type { CheckRealization, SetupPack } from '@open-autonomy/core';
 
-export type CiScaffoldStatus = 'already-realized' | 'authored' | 'blocked';
+export type CiScaffoldStatus = 'already-realized' | 'authored' | 'would-author' | 'blocked';
 
 export interface CiScaffoldCheckResult {
   check: string;
@@ -228,8 +228,14 @@ function dedupe(xs: string[]): string[] {
  *
  *  Checks whose realization is NOT 'authored-workflow' (native, propose_dispatch_checks) are out of scope —
  *  this step only ever touches the authored-workflow subset (the probe-PR check-name discovery that reads
- *  what a CI already posts is TE.4, not this unit). */
-export function ensureCiScaffold(targetRepoDir: string, pack: SetupPack): CiScaffoldResult {
+ *  what a CI already posts is TE.4, not this unit).
+ *
+ *  `opts.dryRun` (--dry-run seam, additive/opt-in — every existing call site that omits it is BYTE-FOR-BYTE
+ *  unchanged): every step above (ii) is already a pure filesystem READ (`findRealizingWorkflow`,
+ *  `detectLanguage`) — only the FINAL loop (iii) writes. Under dryRun, that loop never calls
+ *  `mkdirSync`/`writeFileSync`; it reports the exact path+language a real run would author, status
+ *  'would-author' instead of 'authored'. */
+export function ensureCiScaffold(targetRepoDir: string, pack: SetupPack, opts: { dryRun?: boolean } = {}): CiScaffoldResult {
   const authoredChecks = dedupe((pack.check_realizations ?? []).filter((cr: CheckRealization) => cr.via === 'authored-workflow').map((cr) => cr.check));
 
   if (authoredChecks.length === 0) {
@@ -258,6 +264,20 @@ export function ensureCiScaffold(targetRepoDir: string, pack: SetupPack): CiScaf
     const blocker = `author CI first: required check '${first}' has no workflow and language is undetectable`;
     for (const check of remaining) results.push({ check, status: 'blocked', detail: blocker });
     return { ok: false, results, blocker };
+  }
+
+  if (opts.dryRun) {
+    for (const check of remaining) {
+      const filename = pickWorkflowFilename(targetRepoDir, check);
+      const relPath = join('.github', 'workflows', filename);
+      results.push({
+        check,
+        status: 'would-author',
+        workflowPath: relPath,
+        detail: `[DRY-RUN] would author ${relPath} (${lang.runtime}, ${lang.hasTestScript ? 'runs package.json test script' : 'no-op build step'}) — NOT written.`,
+      });
+    }
+    return { ok: true, results };
   }
 
   const workflowsDir = join(targetRepoDir, '.github', 'workflows');

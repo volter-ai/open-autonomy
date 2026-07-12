@@ -165,6 +165,23 @@ describe('stepInstallDeps', () => {
     expect(r.detail).toMatch(/node_modules presence read/);
     cleanupAll();
   });
+
+  // =========================================================================================================
+  // --dry-run: missing deps NEVER trigger a real `npm install` — `unexpectedProc` would fail the test if
+  // stepInstallDeps called it under dryRun, so a passing test here is itself the proof.
+  // =========================================================================================================
+  test('--dry-run: ztrack+termfleet both absent -> reports wouldInstall, proc is NEVER called', () => {
+    const dir = track(mkdtempSync(join(tmpdir(), 'oa-te5-')));
+    const detectFile = join(dir, 'detect.json');
+    writeFileSync(detectFile, JSON.stringify({ tools: { bun: { present: true }, termfleet: { installed: false }, ztrack: { vendored: false, global: false } } }));
+    const sel = selectionRecord('simple-sdlc', dir);
+    const r = stepInstallDeps(sel, { proc: unexpectedProc, detectFile, dryRun: true });
+    expect(r.status).toBe('ok');
+    expect(r.wouldInstall).toEqual(['npm install -D ztrack@1.0.0', 'npm install termfleet']);
+    expect(r.detail).toMatch(/\[DRY-RUN\]/);
+    expect(existsSync(join(dir, 'node_modules'))).toBe(false);
+    cleanupAll();
+  });
 });
 
 // =========================================================================================================
@@ -198,6 +215,44 @@ describe('stepCompile', () => {
     expect(r.detail).toMatch(/would overwrite existing file/);
     cleanupAll();
   });
+
+  // =========================================================================================================
+  // --dry-run: reuses bin/autonomy-compile.ts's OWN built-in dry-run (omit outDir) — asserted here by
+  // checking the constructed argv never includes `dir` (the repoDir) as a 4th positional, and that a REAL
+  // invocation of the real script (not a stub) never writes anything to repoDir.
+  // =========================================================================================================
+  test('--dry-run: invokes autonomy-compile.ts WITHOUT the outDir arg — never writes to repoDir', () => {
+    const dir = track(mkdtempSync(join(tmpdir(), 'oa-te5-')));
+    const sel = selectionRecord('simple-sdlc', dir);
+    const calls: string[][] = [];
+    const proc: ProcRunner = (cmd, args) => {
+      calls.push([cmd, ...args]);
+      return okResult('scripts/sweep.ts\nscheduler/schedule.json\n.open-autonomy/generated.json');
+    };
+    const r = stepCompile(sel, { proc, dryRun: true });
+    expect(r.status).toBe('ok');
+    expect(calls[0]).toEqual(['bun', 'bin/autonomy-compile.ts', 'simple-sdlc', 'local']); // no repoDir 4th arg
+    expect(r.wouldWrite).toEqual(['scripts/sweep.ts', 'scheduler/schedule.json', '.open-autonomy/generated.json']);
+    expect(r.detail).toMatch(/\[DRY-RUN\]/);
+    cleanupAll();
+  });
+
+  test('--dry-run against the REAL bin/autonomy-compile.ts script (no stub) genuinely writes nothing to repoDir', async () => {
+    const dir = track(mkdtempSync(join(tmpdir(), 'oa-te5-')));
+    const sel = selectionRecord('simple-sdlc', dir);
+    const { spawnSync } = require('node:child_process') as typeof import('node:child_process');
+    const realProc: ProcRunner = (cmd, args, opts = {}) => {
+      const r = spawnSync(cmd, args, { cwd: REPO_ROOT, encoding: 'utf8' });
+      return { status: r.status, stdout: r.stdout ?? '', stderr: r.stderr ?? '' };
+    };
+    const r = stepCompile(sel, { proc: realProc, dryRun: true });
+    expect(r.status).toBe('ok');
+    expect((r.wouldWrite as string[]).length).toBeGreaterThan(0);
+    // The critical proof: repoDir (an empty tmp dir) received ZERO files from this real, unstubbed call.
+    expect(existsSync(join(dir, '.open-autonomy'))).toBe(false);
+    expect(existsSync(join(dir, 'scheduler'))).toBe(false);
+    cleanupAll();
+  }, 30000);
 });
 
 // =========================================================================================================
@@ -328,6 +383,19 @@ describe('stepDirectionFill', () => {
     const r = stepDirectionFill(sel, { profileDir: join(PROFILES_ROOT, 'simple-sdlc') });
     expect(r.status).toBe('skipped');
   });
+
+  test('--dry-run: self-driving with a fill file -> reports the plan, NEVER writes the fill content to repoDir', () => {
+    const dir = track(mkdtempSync(join(tmpdir(), 'oa-te5-')));
+    const sel = selectionRecord('self-driving', dir);
+    const fillFile = join(dir, 'fill.json');
+    writeFileSync(fillFile, JSON.stringify({ files: [{ path: 'docs/VISION.md', content: 'would-be vision content' }] }));
+    const r = stepDirectionFill(sel, { profileDir: join(PROFILES_ROOT, 'self-driving'), fillFile, dryRun: true });
+    expect(r.status).toBe('ok');
+    expect(r.detail).toMatch(/\[DRY-RUN\]/);
+    expect(r.wouldWrite).toEqual(['docs/VISION.md']);
+    expect(existsSync(join(dir, 'docs', 'VISION.md'))).toBe(false);
+    cleanupAll();
+  });
 });
 
 // =========================================================================================================
@@ -392,6 +460,20 @@ describe('stepCommitHarness', () => {
     expect(after).toBe(before);
     cleanupAll();
   });
+
+  test('--dry-run: reports the plan from the compile step\'s plannedFiles, NEVER calls git add/commit', () => {
+    const dir = track(mkdtempSync(join(tmpdir(), 'oa-te5-')));
+    initGitRepo(dir);
+    const sel = selectionRecord('simple-sdlc', dir);
+    // unexpectedProc fails the test if stepCommitHarness calls it for real under dryRun.
+    const r = stepCommitHarness(sel, { proc: unexpectedProc, dryRun: true, plannedFiles: ['scheduler/schedule.json', '.open-autonomy/generated.json'] });
+    expect(r.status).toBe('ok');
+    expect(r.detail).toMatch(/\[DRY-RUN\]/);
+    expect(r.wouldCommit).toEqual(['scheduler/schedule.json', '.open-autonomy/generated.json']);
+    const log = realGitProc()('git', ['log', '--oneline'], { cwd: dir });
+    expect(log.stdout.trim()).toBe(''); // no commit was made — the repo has no commits at all yet
+    cleanupAll();
+  });
 });
 
 // =========================================================================================================
@@ -449,6 +531,74 @@ describe('stepProviderUp', () => {
     expect(r.status).toBe('blocked');
     expect(r.detail).toMatch(/FOREIGN|foreign/);
     cleanupAll();
+  });
+
+  // =========================================================================================================
+  // --dry-run — THE most critical leg (see this file's + provider.ts's own header): a real provider bring-up
+  // IS the near-miss hazard this whole unit exists to close. `spawnImpl`/`kill` below THROW if ever called —
+  // a passing test is itself the proof planBringUpProvider never spawns/kills anything.
+  // =========================================================================================================
+  describe('--dry-run', () => {
+    const poisonSpawn = () => {
+      throw new Error('stepProviderUp dry-run must NEVER spawn a real process');
+    };
+    const poisonKill = () => {
+      throw new Error('stepProviderUp dry-run must NEVER kill a real process');
+    };
+
+    test('fresh install, no existing state -> would-start with deterministic repo-unique ports; NEVER spawns', async () => {
+      const dir = track(mkdtempSync(join(tmpdir(), 'oa-te5-')));
+      const sel = selectionRecord('simple-sdlc', dir);
+      const r = await stepProviderUp(sel, {
+        dryRun: true,
+        bringUp: { isPortFree: () => true, spawnImpl: poisonSpawn as never, kill: poisonKill as never, rangeStart: 45000, rangeEnd: 45100 },
+      });
+      expect(r.status).toBe('ok');
+      expect(r.detail).toMatch(/\[DRY-RUN\]/);
+      expect(r.detail).toMatch(/would start termfleet/);
+      const plan = r.wouldBringUp as { action: string; consoleUrl: string; providerUrl: string };
+      expect(plan.action).toBe('would-start');
+      expect(plan.consoleUrl).toMatch(/^http:\/\/127\.0\.0\.1:4[0-9]{4}$/);
+      expect(plan.providerUrl).toMatch(/^http:\/\/127\.0\.0\.1:4[0-9]{4}$/);
+      // never wrote a pin — the scratch dir has no scheduler/ directory at all.
+      expect(existsSync(join(dir, 'scheduler'))).toBe(false);
+      cleanupAll();
+    });
+
+    test('existing HEALTHY pinned provider -> would-noop; the healthz probe is a non-mutating read, never a spawn', async () => {
+      const dir = track(mkdtempSync(join(tmpdir(), 'oa-te5-')));
+      mkdirSync(join(dir, '.open-autonomy', 'runner-state', 'provider'), { recursive: true });
+      writeFileSync(
+        join(dir, '.open-autonomy', 'runner-state', 'provider', 'state.json'),
+        JSON.stringify({ repoPath: dir, prefix: 'x-oa', consolePort: 45500, providerPort: 45501, consoleUrl: 'http://127.0.0.1:45500', providerUrl: 'http://127.0.0.1:45501', startedAt: new Date().toISOString() }),
+      );
+      const sel = selectionRecord('simple-sdlc', dir);
+      const r = await stepProviderUp(sel, {
+        dryRun: true,
+        bringUp: { fetchImpl: stubFetch(), spawnImpl: poisonSpawn as never, kill: poisonKill as never },
+      });
+      expect(r.status).toBe('ok');
+      const plan = r.wouldBringUp as { action: string };
+      expect(plan.action).toBe('would-noop');
+      cleanupAll();
+    });
+
+    test('foreign occupant on the pinned port -> would-refuse-foreign-occupant (still never spawns/kills)', async () => {
+      const dir = track(mkdtempSync(join(tmpdir(), 'oa-te5-')));
+      mkdirSync(join(dir, '.open-autonomy', 'runner-state', 'provider'), { recursive: true });
+      writeFileSync(
+        join(dir, '.open-autonomy', 'runner-state', 'provider', 'state.json'),
+        JSON.stringify({ repoPath: dir, prefix: 'x-oa', consolePort: 45600, providerPort: 45601, consoleUrl: 'http://127.0.0.1:45600', providerUrl: 'http://127.0.0.1:45601', startedAt: new Date().toISOString() }),
+      );
+      const sel = selectionRecord('simple-sdlc', dir);
+      const r = await stepProviderUp(sel, {
+        dryRun: true,
+        bringUp: { fetchImpl: stubFetch({ some: 'foreign service' }), spawnImpl: poisonSpawn as never, kill: poisonKill as never },
+      });
+      expect(r.status).toBe('blocked'); // an honest prediction of a real block, still never spawns/kills
+      expect(r.detail).toMatch(/would REFUSE/);
+      cleanupAll();
+    });
   });
 });
 
@@ -668,6 +818,30 @@ describe('stepCiAndProvision', () => {
     // touch it).
     expect(calls.some((c) => c.join(' ').includes('allow_auto_merge'))).toBe(false);
   });
+
+  // =========================================================================================================
+  // --dry-run: NEVER calls provision-target-repo.ts (a REAL PUT against real GitHub branch protection), NEVER
+  // writes the patched manifest into repoDir, NEVER re-probes live protection (nothing was provisioned to
+  // verify). `unexpectedProc` throws/fails the test if any of those subprocess calls are attempted.
+  // =========================================================================================================
+  test('--dry-run: would-plan only — proc is NEVER called, no patched-manifest file written to repoDir', async () => {
+    const dir = track(mkdtempSync(join(tmpdir(), 'oa-te5-')));
+    writeTargetPackageJson(dir);
+    const sel = ghSdlcSelection(dir);
+    const authRecord: AuthorizeRecordRef = { profile: 'simple-gh-sdlc', substrate: 'gh-actions', checkNameDiscovery: { status: 'discovered', prNumber: 7, checks: ['ci', 'agent-review', 'security'] } };
+    const r = await stepCiAndProvision(sel, authRecord, { proc: unexpectedProc, profilesRoot: PROFILES_ROOT, ownerRepo: 'acme/throwaway-scratch', dryRun: true });
+    expect(r.status).toBe('ok');
+    expect(r.detail).toMatch(/\[DRY-RUN\]/);
+    expect(r.detail).toMatch(/would run: bun scripts\/provision-target-repo\.ts/);
+    expect(r.detail).toMatch(/never a real branch-protection\/CI mutation|NOT executed/);
+    const plan = r.wouldProvision as { ownerRepo: string; requiredChecks: string[] };
+    expect(plan.ownerRepo).toBe('acme/throwaway-scratch');
+    expect(plan.requiredChecks).toEqual(['ci', 'agent-review', 'security']);
+    expect(existsSync(join(dir, '.open-autonomy-install-provision.json'))).toBe(false);
+    // ensureCiScaffold's own dry-run leg: the CI workflow it WOULD author was never written either.
+    expect(existsSync(join(dir, '.github', 'workflows'))).toBe(false);
+    cleanupAll();
+  });
 });
 
 // =========================================================================================================
@@ -724,6 +898,22 @@ describe('buildPlannerDispatchCommand + stepSeedBoardDrafts', () => {
     const sel = selectionRecord('simple-sdlc', dir);
     const r = stepSeedBoardDrafts(sel, { proc: () => failResult('agent CLI not signed in') });
     expect(r.status).toBe('blocked');
+    cleanupAll();
+  });
+
+  // =========================================================================================================
+  // --dry-run: NO STUB NEEDED AT ALL to stay safe — `unexpectedProc` fails the test if stepSeedBoardDrafts
+  // ever calls proc under dryRun, proving genuine non-invocation (stronger than a mocked-ok stub: dry-run
+  // doesn't even need the "safe stub" this file's OTHER tests rely on for the same command shape).
+  // =========================================================================================================
+  test('--dry-run: constructs the exact same command but NEVER calls proc — no real agent ever launched', () => {
+    const dir = track(mkdtempSync(join(tmpdir(), 'oa-te5-')));
+    const sel = selectionRecord('simple-sdlc', dir);
+    const r = stepSeedBoardDrafts(sel, { proc: unexpectedProc, dryRun: true });
+    expect(r.status).toBe('ok');
+    expect(r.detail).toMatch(/\[DRY-RUN\]/);
+    expect(r.detail).toMatch(/would dispatch the planner/);
+    expect(r.command).toEqual({ cmd: 'node', args: ['scripts/run-agent.mjs'], env: { AUTONOMY_AGENT: 'planner' } });
     cleanupAll();
   });
 });
@@ -856,6 +1046,70 @@ describe('runExecute — step ordering + fail-closed halt', () => {
     expect(report.blocker).toMatch(/--owner-repo/);
     cleanupAll();
   });
+
+  // =========================================================================================================
+  // --dry-run: THE full-chain safety proof. `proc` here is the REAL, unstubbed defaultProc (via realGitProc
+  // for git, plus a thin logger) — no risky command is ever mocked "safe"; if the implementation forgot a
+  // dry-run gate anywhere, this test would actually perform the real mutation (still confined to a scratch
+  // tmp dir, never a real repo/network target). A passing test is real proof, not a mocked one.
+  // =========================================================================================================
+  test('--dry-run: runs ALL 7 steps for a github-target profile, never halts on a predicted block, NEVER performs any real npm/git/provider/dispatch/provision mutation', async () => {
+    const dir = track(mkdtempSync(join(tmpdir(), 'oa-te5-')));
+    initGitRepo(dir);
+    writeFileSync(join(dir, 'README.md'), `# Scratch\n\n${LONG_PROSE}\n`);
+    writeTargetPackageJson(dir);
+    const record = { ...selectionRecord('simple-gh-sdlc', dir), substrate: 'gh-actions' as const };
+    const recordFile = join(dir, 'record.json');
+    writeFileSync(recordFile, JSON.stringify(record));
+    // Commit the fixture itself first (README/package.json/record.json — the TEST's own setup, not anything
+    // the dry-run run is supposed to touch) so "git status stays clean throughout" below proves something
+    // real: a snapshot taken immediately before runExecute must equal the snapshot taken after it.
+    const setupGit = realGitProc();
+    setupGit('git', ['add', '-A'], { cwd: dir });
+    setupGit('git', ['commit', '-q', '-m', 'fixture setup'], { cwd: dir });
+    const statusBefore = setupGit('git', ['status', '--porcelain'], { cwd: dir }).stdout;
+
+    const realCalls: string[] = [];
+    const proc: ProcRunner = (cmd, args, opts) => {
+      realCalls.push(`${cmd} ${args.join(' ')}`);
+      // git/bun (autonomy-compile.ts's own built-in list-only dry-run) are genuinely safe to run for real —
+      // exactly the point being proven. Anything else (npm, gh, node scripts/run-agent.mjs) would be a real
+      // dry-run-gating bug if ever reached, so it deliberately has NO safe branch here (falls to unexpectedProc).
+      if (cmd === 'git') return realGitProc()(cmd, args, opts);
+      if (cmd === 'bun') {
+        const { spawnSync } = require('node:child_process') as typeof import('node:child_process');
+        const r = spawnSync(cmd, args, { cwd: REPO_ROOT, encoding: 'utf8' });
+        return { status: r.status, stdout: r.stdout ?? '', stderr: r.stderr ?? '' };
+      }
+      return unexpectedProc(cmd, args, opts);
+    };
+
+    // Deliberately NO --owner-repo (github target) — a real run would BLOCK at ci-and-provision; dry-run
+    // must still run every later phase and report that predicted block honestly.
+    const report = await runExecute({ record: recordFile, proc, dryRun: true });
+
+    expect(report.dryRun).toBe(true);
+    expect(report.steps.map((s) => s.id)).toEqual(['compile', 'install-deps', 'direction-fill', 'commit-harness', 'provider-up', 'ci-and-provision', 'seed-board-drafts']);
+    expect(report.ok).toBe(false); // ci-and-provision predicted a block (no --owner-repo) — honestly reported
+    expect(report.blocker).toMatch(/--owner-repo/);
+    // ... but EVERY step still ran and reported its own plan, proving dry-run never halts early.
+    expect(report.steps.find((s) => s.id === 'seed-board-drafts')!.status).toBe('ok');
+    expect(report.steps.find((s) => s.id === 'seed-board-drafts')!.detail).toMatch(/\[DRY-RUN\]/);
+
+    // --- the zero-real-mutation proof -------------------------------------------------------------------
+    expect(existsSync(join(dir, 'node_modules'))).toBe(false); // no real npm install
+    expect(existsSync(join(dir, '.open-autonomy'))).toBe(false); // no real compile write
+    expect(existsSync(join(dir, 'scheduler'))).toBe(false);
+    expect(existsSync(join(dir, '.github', 'workflows'))).toBe(false); // no real CI scaffold write
+    expect(existsSync(join(dir, '.open-autonomy-install-provision.json'))).toBe(false);
+    const statusAfter = realGitProc()('git', ['status', '--porcelain'], { cwd: dir }).stdout;
+    expect(statusAfter).toBe(statusBefore); // git status is IDENTICAL before/after — dry-run touched nothing
+    expect(realCalls.some((c) => c.startsWith('npm '))).toBe(false);
+    expect(realCalls.some((c) => c.startsWith('git add') || c.startsWith('git commit'))).toBe(false);
+    expect(realCalls.some((c) => c.includes('provision-target-repo.ts'))).toBe(false);
+    expect(realCalls.some((c) => c.includes('run-agent.mjs'))).toBe(false);
+    cleanupAll();
+  }, 30000);
 });
 
 // =========================================================================================================
@@ -931,6 +1185,19 @@ describe('runValidate — fail-closed, offline (live:false)', () => {
     expect(['M0', 'M1', 'M2', 'M3', 'M4']).toContain(report.maturity.stage);
     cleanupAll();
   });
+
+  test('--dry-run: VALIDATE never writes .open-autonomy/install.json (computeMaturity\'s one real write is suppressed)', async () => {
+    const dir = track(mkdtempSync(join(tmpdir(), 'oa-te5-')));
+    initGitRepo(dir);
+    compileSimpleSdlcInto(dir);
+    const recordFile = writeRecord(dir, 'simple-sdlc', dir);
+    const before = existsSync(join(dir, '.open-autonomy', 'install.json'));
+    const proc: ProcRunner = (cmd, args) => (cmd === 'npx' ? okResult('[]') : okResult(''));
+    await runValidate({ record: recordFile, proc, live: false, dryRun: true });
+    expect(before).toBe(false);
+    expect(existsSync(join(dir, '.open-autonomy', 'install.json'))).toBe(false);
+    cleanupAll();
+  });
 });
 
 // =========================================================================================================
@@ -956,5 +1223,92 @@ describe('rendering + CLI parsing', () => {
   test('parseArgs: unknown flag -> loud error', () => {
     const { error } = parseArgs(['validate', '--record', 'r.json', '--bogus']);
     expect(error).toMatch(/unknown flag/);
+  });
+});
+
+// =========================================================================================================
+// META — "grep the whole implementation" audit (the acceptance bar this unit's own PR body cites): every
+// call site that would perform a REAL side-effecting operation (npm/bun install, a real git mutation, a real
+// termfleet bring-up, a real branch-protection PUT, a real agent dispatch) must be textually preceded, within
+// its own enclosing function, by a `dryRun`/`opts.dryRun` guard. A regression that strips a guard later would
+// fail this test even if every other test above happened to exercise a code path where the guard wasn't hit.
+// =========================================================================================================
+
+describe('META — every risky call site in install-execute.ts checks dryRun first (grepped, not exercised)', () => {
+  const src = readFileSync(join(REPO_ROOT, 'bin', 'install-execute.ts'), 'utf8');
+  const lines = src.split('\n');
+
+  /** Finds `needle`'s line (1-indexed), then walks BACKWARD to the nearest enclosing
+   *  `export (async )?function` and confirms a `dryRun` token appears somewhere between that function's
+   *  start and the risky line — i.e. the guard is textually earlier in the SAME function body. */
+  function assertGuardedByDryRun(needle: string) {
+    const idx = lines.findIndex((l) => l.includes(needle));
+    expect(idx).toBeGreaterThan(-1); // the risky call site must still exist — a refactor that removes it
+    // entirely would also need this test updated, never silently pass.
+    let fnStart = idx;
+    for (; fnStart >= 0; fnStart--) {
+      if (/^export (async )?function /.test(lines[fnStart]!)) break;
+    }
+    expect(fnStart).toBeGreaterThan(-1);
+    const body = lines.slice(fnStart, idx).join('\n');
+    expect(body).toMatch(/dryRun/);
+  }
+
+  test('stepInstallDeps: both real `npm install` call sites are dryRun-guarded', () => {
+    assertGuardedByDryRun("opts.proc('npm', ['install', '-D', 'ztrack@1.0.0']");
+    assertGuardedByDryRun("opts.proc('npm', ['install', 'termfleet']");
+  });
+  test('stepCompile: the REAL (outDir-writing) compile call site is dryRun-guarded', () => {
+    assertGuardedByDryRun("const args = [AUTONOMY_COMPILE_SCRIPT, sel.profile, sel.substrate, sel.detect.repoDir];");
+  });
+  test('stepDirectionFill: the real applyDirectionFill(repoDir, fill) write is dryRun-guarded', () => {
+    assertGuardedByDryRun('const written = applyDirectionFill(repoDir, fill);');
+  });
+  test('stepCommitHarness: the real `git add -f`/`git commit` calls are dryRun-guarded', () => {
+    assertGuardedByDryRun("opts.proc('git', ['add', '-f'");
+    assertGuardedByDryRun("opts.proc('git', ['commit'");
+  });
+  test('stepProviderUp: the real bringUpProvider(...) call (real termfleet spawn) is dryRun-guarded', () => {
+    assertGuardedByDryRun('result = await bringUpProvider({ cwd: sel.detect.repoDir');
+  });
+  test('stepCiAndProvision: the real patched-manifest write + provision-target-repo.ts subprocess are dryRun-guarded', () => {
+    assertGuardedByDryRun('writeFileSync(patchedManifestPath, JSON.stringify(manifest, null, 2));');
+    assertGuardedByDryRun("opts.proc('bun', [PROVISION_TARGET_REPO_SCRIPT");
+  });
+  test('stepSeedBoardDrafts: the real planner-dispatch proc call is dryRun-guarded', () => {
+    assertGuardedByDryRun('const r = opts.proc(command.cmd, command.args, { cwd: sel.detect.repoDir, env });');
+  });
+});
+
+describe('META — install-handoff.ts\'s real resume() unlink is dryRun-guarded', () => {
+  test('buildLocalGoLive never calls the real resumeFn without checking opts.dryRun first', () => {
+    const src = readFileSync(join(REPO_ROOT, 'bin', 'install-handoff.ts'), 'utf8');
+    const lines = src.split('\n');
+    const idx = lines.findIndex((l) => l.includes('(opts.resumeFn ?? resumeReal)({ cwd: repoDir })'));
+    expect(idx).toBeGreaterThan(-1);
+    let fnStart = idx;
+    for (; fnStart >= 0; fnStart--) {
+      if (/^export function buildLocalGoLive/.test(lines[fnStart]!)) break;
+    }
+    expect(fnStart).toBeGreaterThan(-1);
+    expect(lines.slice(fnStart, idx).join('\n')).toMatch(/dryRun/);
+  });
+});
+
+describe('META — provider.ts\'s planBringUpProvider never references the real spawn/kill seams', () => {
+  test('planBringUpProvider\'s own function body contains no spawnImpl/kill/pinScheduleProviderUrl/writeProviderState call', () => {
+    const src = readFileSync(join(REPO_ROOT, 'packages', 'local-runner-cli', 'src', 'provider.ts'), 'utf8');
+    const lines = src.split('\n');
+    const start = lines.findIndex((l) => l.includes('export async function planBringUpProvider'));
+    expect(start).toBeGreaterThan(-1);
+    // planBringUpProvider is the last export before bringUpProvider's own header comment in this file —
+    // bound the scan at the next `export async function bringUpProvider` after it.
+    let end = lines.findIndex((l, i) => i > start && l.includes('export async function bringUpProvider'));
+    if (end === -1) end = lines.length;
+    const body = lines.slice(start, end).join('\n');
+    expect(body).not.toMatch(/ctx\.spawnImpl|\.spawnImpl\(/);
+    expect(body).not.toMatch(/ctx\.kill|\.kill\(/);
+    expect(body).not.toMatch(/pinScheduleProviderUrl\(/);
+    expect(body).not.toMatch(/writeProviderState\(/);
   });
 });

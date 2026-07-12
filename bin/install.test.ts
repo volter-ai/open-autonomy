@@ -23,6 +23,7 @@ import {
   ok,
   paused,
   blocked,
+  installExitCode,
   parseArgs,
   phaseAuthorize,
   phaseDirection,
@@ -176,6 +177,14 @@ describe('bun bin/install.ts --help', () => {
       expect(r.stdout).toContain(phrase);
     }
   });
+
+  // LOW#6 (owner-mandated aggregate skeptic review): exit code 4 — "ran clean but not yet ready to
+  // advance" — must be documented alongside the other 3, distinct from exit 0 (fully ready).
+  test('documents the LOW#6 exit code 4 (completed but canAdvanceToG4=false), distinct from exit 0/1/3', () => {
+    const r = help('--help');
+    expect(r.stdout).toMatch(/4 completed with NO hard step failure but NOT yet ready to advance/);
+    expect(r.stdout).toContain('canAdvanceToG4');
+  });
 });
 
 // =========================================================================================================
@@ -198,6 +207,46 @@ describe('parseArgs', () => {
   test('--substrate rejects an invalid value', () => {
     const { error } = parseArgs(['/tmp/x', '--substrate', 'bogus']);
     expect(error).toMatch(/local.*gh-actions/);
+  });
+});
+
+// =========================================================================================================
+// installExitCode — LOW#6 (owner-mandated aggregate skeptic review): "exit 0/COMPLETED can happen while
+// canAdvanceToG4=false, misleading a script that gates on exit code alone." Fabricated InstallReport shapes
+// (fast, no real chain execution needed — the FULL CHAIN dry-run test above additionally proves the exact
+// live repro end to end).
+// =========================================================================================================
+
+describe('installExitCode', () => {
+  const base = { workDir: '/tmp/irrelevant' };
+
+  test('COMPLETED + canAdvanceToG4=true -> 0 (fully done, safe to gate on exit code alone)', () => {
+    const report = { ...base, classification: 'COMPLETED' as const, validate: { canAdvanceToG4: true, blockers: [] } as unknown as InstallReport['validate'] };
+    expect(installExitCode(report as InstallReport)).toBe(0);
+  });
+
+  test('COMPLETED + no validate attached at all -> 0 (never reached VALIDATE is not this state\'s concern)', () => {
+    const report = { ...base, classification: 'COMPLETED' as const };
+    expect(installExitCode(report as InstallReport)).toBe(0);
+  });
+
+  test('COMPLETED + canAdvanceToG4=false -> 4, distinct from both 0 (fully ready) and 1 (a genuine failure)', () => {
+    const report = {
+      ...base,
+      classification: 'COMPLETED' as const,
+      validate: { canAdvanceToG4: false, blockers: ['setup-completion (b) board seeded with drafts: FAIL — board seeded with 0 draft items'] } as unknown as InstallReport['validate'],
+    };
+    expect(installExitCode(report as InstallReport)).toBe(4);
+  });
+
+  test('BLOCKED -> 1, unchanged (a genuine step failure stays a hard failure)', () => {
+    const report = { ...base, classification: 'BLOCKED' as const };
+    expect(installExitCode(report as InstallReport)).toBe(1);
+  });
+
+  test('PAUSED -> 3, unchanged (awaiting a human answer at a gate)', () => {
+    const report = { ...base, classification: 'PAUSED' as const };
+    expect(installExitCode(report as InstallReport)).toBe(3);
   });
 });
 
@@ -567,6 +616,19 @@ describe('runInstall — FULL CHAIN dry-run, all 4 gates auto-approved (bin/inst
     // --- VALIDATE: an honest IMM stage report was produced ----------------------------------------------
     expect(report.validate).toBeDefined();
     expect(report.validate!.maturity.stage).toBeDefined();
+
+    // --- LOW#6 (owner-mandated aggregate skeptic review): the exact repro for "exit 0/COMPLETED while
+    // canAdvanceToG4=false" — EXECUTE's planner-dispatch stub reports `ok` (its spawn "exited 0"), so
+    // classification is COMPLETED, but the mocked dispatch never actually filed a board draft, so VALIDATE's
+    // live re-read of the board correctly reports canAdvanceToG4=false. A script gating on exit code/
+    // classification alone would wrongly read this as "fully done" — installExitCode() must NOT return 0.
+    expect(report.classification).toBe('COMPLETED');
+    expect(report.validate!.canAdvanceToG4).toBe(false);
+    expect(report.validate!.blockers.length).toBeGreaterThan(0);
+    expect(installExitCode(report)).toBe(4);
+    expect(installExitCode(report)).not.toBe(0);
+    // and the human-readable summary prominently says so, not just buried in the VALIDATE detail block.
+    expect(renderInstallHuman(report)).toMatch(/^NOT READY: /m);
 
     // --- HAND-OFF: verify-only + construct-only, board never had a REAL draft filed (planner mocked) ---
     expect(report.handoff).toBeDefined();

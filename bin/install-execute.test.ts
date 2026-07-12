@@ -954,6 +954,70 @@ describe('buildBoardSeedDispatchCommand + stepSeedBoardDrafts', () => {
   });
 
   // =========================================================================================================
+  // LOW#5 (owner-mandated aggregate skeptic review) — the failure message must name a specific, actionable
+  // thing to check, not a bare "dispatch failed" + a possibly-useless stderr excerpt. Two concrete gaps
+  // fixed here:
+  //  (1) firstLine -> firstErrLine: a real dispatched process's UNCAUGHT throw prints Node's own code-frame
+  //      first ("      throw new Error(...)"), THEN the actual "Error: <message>" line a few lines later —
+  //      firstLine grabbed the useless code-frame line; firstErrLine correctly skips to the real message.
+  //  (2) a genuine SPAWN failure (`node`/`gh` missing from PATH) sets ProcResult.error, not stderr/stdout —
+  //      the old message silently dropped it, printing the unhelpful firstLine-of-nothing "(no output)".
+  // =========================================================================================================
+  test('dispatch failure detail: an uncaught-throw-shaped stderr surfaces the REAL "Error: ..." line, not the source code-frame line', () => {
+    const dir = track(mkdtempSync(join(tmpdir(), 'oa-te5-')));
+    const sel = selectionRecord('simple-sdlc', dir);
+    // The exact shape node prints to stderr for an uncaught throw (see backend.mjs's OA-08 launch-refused
+    // error, which is exactly this failure mode in production): a source code-frame line first, the real
+    // "Error: ..." message several lines down.
+    const nodeUncaughtStderr = [
+      'file:///repo/scripts/autonomy-runner.mjs:76',
+      '        throw new Error(',
+      '        ^',
+      '',
+      `Error: [runner] launch refused: planner's skill "planner" is missing at /repo/.claude/skills/planner/SKILL.md — the session would die at launch.`,
+      '    at TermfleetRunner.launch (/repo/scripts/autonomy-runner.mjs:76:13)',
+      '',
+      'Node.js v22.0.0',
+    ].join('\n');
+    const r = stepSeedBoardDrafts(sel, { proc: () => failResult(nodeUncaughtStderr) });
+    expect(r.status).toBe('blocked');
+    // the REAL error message made it into the detail, not the useless leading code-frame line.
+    expect(r.detail).toContain('Error: [runner] launch refused: planner\'s skill "planner" is missing');
+    expect(r.detail).not.toMatch(/^planner dispatch failed \([^)]*\): {2,}throw new Error/);
+    // an actionable hint follows the raw cause — names a concrete file/command to check, not just a stack.
+    expect(r.detail).toMatch(/check that a compiled "planner" skill exists/);
+    expect(r.detail).toContain('.claude/skills/planner/SKILL.md');
+    expect(r.detail).toContain('bun bin/autonomy-compile.ts');
+    // this profile's own originator_skill ("draft") is surfaced too — the likely real root cause when it
+    // differs from the hardcoded "planner" dispatch name.
+    expect(r.detail).toContain('originator_skill is "draft"');
+    cleanupAll();
+  });
+
+  test('dispatch failure detail: a genuine SPAWN failure (proc.error, e.g. ENOENT) is surfaced, not silently dropped as "(no output)"', () => {
+    const dir = track(mkdtempSync(join(tmpdir(), 'oa-te5-')));
+    const sel = selectionRecord('simple-gh', dir);
+    const spawnFail: ProcRunner = () => ({ status: null, stdout: '', stderr: '', error: Object.assign(new Error('spawn node ENOENT'), { code: 'ENOENT' }) });
+    const r = stepSeedBoardDrafts(sel, { proc: spawnFail });
+    expect(r.status).toBe('blocked');
+    expect(r.detail).toContain('spawn node ENOENT');
+    expect(r.detail).not.toContain('(no output)');
+    cleanupAll();
+  });
+
+  test('dispatch failure detail: gh-actions substrate gets a gh-shaped hint (auth status + workflow file), not the local skill/prompt hint', () => {
+    const dir = track(mkdtempSync(join(tmpdir(), 'oa-te5-')));
+    const sel = selectionRecord('simple-gh-sdlc', dir);
+    const r = stepSeedBoardDrafts(sel, { proc: () => failResult('HTTP 404: Not Found'), ownerRepo: 'acme/widgets' });
+    expect(r.status).toBe('blocked');
+    expect(r.detail).toContain('gh auth status');
+    expect(r.detail).toContain('.github/workflows/planner.yml');
+    expect(r.detail).toContain('acme/widgets');
+    expect(r.detail).not.toContain('.claude/skills');
+    cleanupAll();
+  });
+
+  // =========================================================================================================
   // --dry-run: NO STUB NEEDED AT ALL to stay safe — `unexpectedProc` fails the test if stepSeedBoardDrafts
   // ever calls proc under dryRun, proving genuine non-invocation (stronger than a mocked-ok stub: dry-run
   // doesn't even need the "safe stub" this file's OTHER tests rely on for the same command shape).

@@ -573,6 +573,13 @@ function promptFiles(ir: AutonomyIR): Record<string, string> {
 // genuinely NO orchestrator at all and an event-only, non-reviewed agent is flagged) — that compiling to
 // `local` would silently drop the trigger.
 export function undeliverableEventAgents(ir: AutonomyIR): string[] {
+  // ASSUMPTION worth naming: the review-target escape assumes the reviews reconciler will actually be
+  // emitted to deliver it — but that reconciler is gated on `ir.codeHost === 'github'` (compileLocal below;
+  // a `local-git` code host has no PRs to poll). So a `local-git` profile with a review-edge `event` agent
+  // is exempted here yet gets NO delivery. Moot for every bundled profile today (every one with a `review:`
+  // edge is `codeHost: github`), and a `local-git` reviewer is a contradiction in terms anyway (nothing to
+  // review — the PM merges worktrees directly), so this isn't tightened to `&& ir.codeHost === 'github'`;
+  // if a real local-git-with-review profile ever appears, add that clause and a delivery path together.
   const reviewTargets = new Set<string>();
   for (const agent of Object.values(ir.agents)) if (agent.review) reviewTargets.add(agent.review);
   const hasOrchestrator = Object.values(ir.agents).some((a) => (a.capabilities ?? []).includes('agent:launch'));

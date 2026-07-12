@@ -173,6 +173,10 @@ policy:
         - scripts/model-proxy-revoke.ts
         - scripts/rearm-auto-merge.ts
         - scripts/reconcile-merged-issues.ts
+        # THE done-flip gate scripts — check-flip-diff.ts IS the security boundary that decides whether a
+        # flip PR gets auto-approved; must never be rewritable by an un-human-gated agent PR.
+        - scripts/flip-done.ts
+        - scripts/check-flip-diff.ts
         - scripts/run-agent.mjs
         - scripts/runner-defaults.mjs
         - scripts/runner.ts
@@ -188,12 +192,19 @@ resources:
   - .github/workflows/merge.yml
   - .github/workflows/security.yml
   - .github/workflows/security-gate.yml   # dispatched, blocking realization of security.yml on bot PRs — posts `security`
+  # The done-flip's own workflow (committed-store installs only — a harmless no-op job on a legacy install,
+  # see the file's own header): gated bookkeeping PR that lands a merged agent PR's issue-done flip, since a
+  # direct push to branch-protected `main` always fails (GH006). scripts/check-flip-diff.ts is the security
+  # boundary it gates on.
+  - .github/workflows/flip-done.yml
   - .github/dependabot.yml
   # the gate scripts those carried workflows call — shared standards, byte-identical across carrying
   # profiles (docs/CODE_HOST_RESOURCES.md)
   - scripts/rearm-auto-merge.ts
   - scripts/reconcile-merged-issues.ts
   - scripts/check-supply-chain.ts
+  - scripts/flip-done.ts
+  - scripts/check-flip-diff.ts
   - standards/workflow.md
   - standards/issue-and-evidence.md
   - standards/risk-and-review.md

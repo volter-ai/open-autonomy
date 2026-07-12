@@ -8,9 +8,30 @@
 // protection still requires ci + agent-review server-side, so `--auto` only ever lands a PR once those checks
 // are green. Run by the merge.yml code-host resource (dispatch + schedule); idempotent — re-arming an
 // armed/merged PR is a no-op.
+//
+// MODE-SWITCHED merge method (runtime, on `.volter/tracker-config.json` presence — see
+// scripts/reconcile-merged-issues.ts's `isCommittedStoreMode` for the same convention): a committed-store
+// install's ztrack evidence lines cite a commit sha on the `agent/issue-<id>` branch itself
+// (standards/issue-and-evidence.md). A squash merge rewrites that into a brand-new squashed sha on `main`
+// and drops the original commit from history entirely — content lands (sha256-identical) but the CITED sha
+// becomes unreachable, so `ztrack check` on a clean clone of `main` fails `evidence_commit_not_found` even
+// though the work genuinely merged (confirmed live on the testbed: two squashed PRs both orphaned their
+// evidence commits — `git merge-base --is-ancestor <cited-sha> origin/main` returned 1 for both). `--merge`
+// keeps every branch commit (incl. the cited evidence commit) as an ancestor of `main`, so committed-store
+// installs use it for BOTH `agent/*` and `flip/*` arming. A legacy (no-tracker) install has no evidence-
+// ancestry model to protect, so it keeps the original `--squash` behavior unchanged.
 import { execFileSync } from 'node:child_process';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
+
+const TRACKER_CONFIG_PATH = '.volter/tracker-config.json';
+
+// Pure + testable without invoking real `gh`: which merge method `armWithRetry` should use for this
+// install. Mirrors `reconcile-merged-issues.ts`'s `isCommittedStoreMode` runtime check (same file's
+// existence, same reasoning) rather than re-deriving its own detection logic.
+export function mergeMethodFor(root = '.'): '--merge' | '--squash' {
+  return existsSync(join(root, TRACKER_CONFIG_PATH)) ? '--merge' : '--squash';
+}
 
 // An intentionally-held PR must not be re-armed. The label vocabulary is the PROFILE's, declared once at
 // `policy.merge.maintainer_block_labels` in .open-autonomy/autonomy.yml — this sweep owns no labels of its
@@ -38,6 +59,15 @@ export function loadHoldLabels(root = '.'): Set<string> {
 // (agent-propose.ts) creates for every agent, whatever its name — a seam-contract constant, not a roster.
 export const AGENT_BRANCH = /^agent\//;
 
+// The ONE other machine-authored prefix in this repo: the done-flip bookkeeping PR
+// (.github/workflows/flip-done.yml, scripts/flip-done.ts, committed-store mode only) also needs auto-merge
+// armed by this same backstop — flip-done.yml itself arms it inline right after the diff-gate passes, but
+// that inline arm can miss transiently exactly like agent-propose.ts's (mergeability still UNKNOWN), so this
+// sweep must cover it too, or a green-but-unarmed flip PR sits stuck forever with nothing else re-arming it.
+// Matching is unconditional (harmless in legacy mode: no `flip/*` branch is ever created there, so this
+// regex simply never matches anything on a legacy install).
+export const FLIP_BRANCH = /^flip\//;
+
 export interface PR {
   number: number;
   headRefName: string;
@@ -50,7 +80,10 @@ export type Disposition = 'arm' | 'held' | 'ignore';
 export function disposition(pr: PR, hold: Set<string>): Disposition {
   if (pr.isDraft) return 'ignore';
   if (pr.autoMergeRequest) return 'ignore'; // already armed
-  if (!AGENT_BRANCH.test(pr.headRefName || '')) return 'ignore'; // not agent-proposed — leave human PRs alone
+  const headRef = pr.headRefName || '';
+  // Machine-authored branches only — `agent/*` (a developer's proposal) or `flip/*` (the done-flip
+  // bookkeeping PR, committed-store mode). Leave every human PR alone.
+  if (!AGENT_BRANCH.test(headRef) && !FLIP_BRANCH.test(headRef)) return 'ignore';
   if ((pr.labels || []).some((l) => hold.has(l.name))) return 'held'; // intentionally held
   return 'arm';
 }
@@ -87,9 +120,10 @@ if (import.meta.main) {
   // The proposer dispatches merge.yml on the hot path, so this sweep must ride out the UNKNOWN window itself —
   // the same 6×retry the old inline arm had. Bounded + idempotent: a genuinely-stuck PR (conflict) just exhausts
   // the retries and is caught next sweep; arming an already-armed/merged PR is a no-op.
+  const mergeMethod = mergeMethodFor();
   const armWithRetry = (number: number): boolean => {
     for (let i = 0; i < 6; i++) {
-      if (ghOk(['pr', 'merge', String(number), '-R', repo, '--squash', '--auto'])) return true;
+      if (ghOk(['pr', 'merge', String(number), '-R', repo, mergeMethod, '--auto'])) return true;
       if (i < 5) sleep(4);
     }
     return false;

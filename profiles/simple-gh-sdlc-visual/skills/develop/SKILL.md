@@ -68,7 +68,13 @@ and have no visible surface):
     id, **inside the world env** so it sees the injected app URL and TLS/proxy vars:
     `npx volter-world env combo-dev -- env PLAYWRIGHT_DEMO_RUN_ID=<issue>-baseline node apps/web/.visual-edit/playwright-demos/<slug>.mjs`
     (the world env already injects `APP_URL`; a visual-state script under `playwright-visual-states/`
-    instead, when the AC is a state to reach rather than a flow to demo).
+    instead, when the AC is a state to reach rather than a flow to demo). **MANDATORY: every demo script
+    drives its flow through `runDemo()` from the installed `apps/web/.visual-edit/lib/demo-runner.mjs`
+    — never a hand-rolled `chromium.launch()`/`page.screenshot()` lifecycle.** `runDemo()` records the
+    whole flow as ONE video (`demo.webm`); each step's screenshot is a MOMENT of that video (stamped
+    `videoTimeMs`), never a standalone capture — see standards/visual-evidence.md's evidence-runner
+    mandate and `demo-runner.mjs`'s own header comment for the full contract (enforced `validateDemoStep`,
+    settled-ARIA + narration per step).
 (c) **Inspect each captured screenshot before describing it.** Baseline evidence must PROVE the bug
     exists or the feature is absent — a screenshot you haven't looked at proves nothing.
 (d) **Baseline artifacts are cited by `bk/01` ONLY — never by any `dev/NN` AC.** If the issue carries a
@@ -94,7 +100,13 @@ and have no visible surface):
     **REPLAY** a flow you've already discovered by hand — never script a flow you haven't walked
     yourself. Only **human-performable** browser moves are allowed (real clicks, real typed text, real
     navigation) — no state injection, no synthetic/dispatched events, no reaching into app internals.
-(f) **Seed and all app interaction MUST run inside the world env** (`npm run seed`, or `volter-world env
+(f) **FORBIDDEN: hand-rolled browser lifecycles in any evidence script.** No evidence-producing script —
+    demo, visual-state, ad hoc discovery-turned-permanent script, anything cited by an AC — may call
+    `chromium.launch()`/`browser.newContext()`/`page.screenshot()` directly. Route it through `runDemo()`
+    (point (b) above). A screenshot is a moment of the recorded flow's video, never a standalone capture —
+    if you find yourself writing `await page.screenshot(...)` outside `demo-runner.mjs` itself, stop and
+    restructure the script as demo steps instead.
+(g) **Seed and all app interaction MUST run inside the world env** (`npm run seed`, or `volter-world env
     combo-dev -- …`). NEVER run seed/scripts bare: the app's fallback fake key means a bare run escapes
     the sealed world and hits real vendor APIs (proven: bare seed → real api.stripe.com 401).
 

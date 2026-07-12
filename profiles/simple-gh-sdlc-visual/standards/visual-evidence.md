@@ -91,6 +91,66 @@ permanently unmergeable over bookends it has no visual content to produce.
    to every command in Baseline/DryRun that touches the app or seeds data — no exceptions for "just a
    quick check".
 
+## The evidence-runner mandate: `runDemo()`, not hand-rolled `page.screenshot()`
+
+Every demo/visual-state script under `policy.box.visual_evidence.demo_dir`/`state_dir` **MUST** drive its
+flow through `runDemo()` from the installed `apps/web/.visual-edit/lib/demo-runner.mjs` (+
+`frame-capture.mjs`) — this is an INSTALLED library, not prose to reimplement per-issue. A hand-rolled
+`chromium.launch()` / `browser.newContext()` / `page.screenshot()` lifecycle in any evidence-producing
+script is **forbidden** (see the develop skill's §Baseline(f)): the develop/reviewer skills' whole
+evidence model assumes the runner's contract holds, and a bespoke lifecycle silently opts out of it.
+
+`runDemo()` records the **whole flow as ONE video** (`demo.webm` in the run dir) — every step's screenshot
+is a MOMENT of that video, stamped with `videoTimeMs` (its offset from recording start), never a
+standalone capture. Concretely, `runDemo()`:
+
+- enforces a **required, default-throw `validateDemoStep`** — a demo author cannot skip validating a step,
+  and an unrecognized step id throws rather than silently passing;
+- captures, per step: a screenshot, a **settled** ARIA snapshot (`waitForStableAria` — polls until the
+  accessibility tree stops changing, so the moment is a stable frame, not mid-transition), the page's
+  `innerText`, and the step's narration;
+- attaches console/`pageerror` diagnostics for the whole run (`diagnostics.json`, surfaced as an issue
+  count in `summary.json`);
+- writes one `summary.json` per run carrying `runId`/`script`/`mode`/`acIds`/`runError` (the OA/tracker
+  fields `scripts/evidence-attach.mjs` and the bookend discipline consume) alongside the canonical
+  `video`/`videoTimeMs`/`diagnostics` fields and a top-level `evidence.screenshot` (the field
+  `scripts/world-smoke.mjs`'s capture gate reads).
+
+`scripts/evidence-attach.mjs` pins the run's `demo.webm` once (a ztrack attachment upload when the store is
+linked to a GitHub repo, else the same in-repo sha256 commit the frame PNGs use) and carries
+`video=<ref> videoSha256=<sha> videoTimeMs=<n>` on every frame's evidence/proof — so a reviewer (or a human
+auditor) can always locate a cited screenshot as a moment of the one recorded flow, not an isolated image
+with no context for what came before or after it.
+
+## The default-sealed world + openings model
+
+The feature under test is **never** LLM/vendor-driven: `scripts/world-smoke.mjs` stage 4 enforces that
+every registry-named external vendor the app imports (payment/comms/LLM-provider SDKs — see
+`VENDOR_REGISTRY` in that script, including the Vercel AI-SDK provider adapters) is **either**:
+
+- **twinned** — a `type: "twin"` service for it in `world.config.json`, so develop/reviewer evidence is
+  captured against a durable, sealed stand-in, never a real external; or
+- **covered by a human-granted opening** — an entry in `world.config.json`'s top-level `openings` array,
+  `{"vendor", "reason", "grantedBy"}`, where `grantedBy` names the real human who granted it.
+
+This holds in **every mode** the smoke gate runs, including a world that otherwise boots non-sealed for
+other reasons — there is no mode that silently waives the rule. **An agent must never self-grant an
+opening.** If a task's actual purpose is testing a real remote (not simulating one), that is exactly the
+situation an opening exists for — get a human to grant one, naming the vendor and the reason, before
+proceeding; do not fabricate a twin for a vendor you're deliberately testing live, and do not proceed
+against real vendor egress without a declared opening covering it.
+
+**Openings are also the sanctioned doorway for recording a new twin.** Building a new twin against a real
+vendor (capturing its real request/response shapes to seed a scenario/fixture) is itself a task that
+legitimately needs real egress to that vendor for the duration of the recording — get an opening for it,
+record the twin, then remove the opening once the twin is in place and covers the vendor going forward. An
+opening that outlives the task it was granted for is stale; `world-smoke.mjs` warns (does not fail) on an
+opening whose vendor no longer appears in scanned source, specifically so a stale grant gets noticed and
+removed rather than quietly continuing to cover a future reintroduction of that vendor.
+
+`npm run smoke:coverage` (`--coverage-only`) runs just this stage-4 rule — a seconds-fast dry check with
+no world boot — for confirming twin/opening coverage without paying the cost of a full `npm run smoke`.
+
 ## Worksheet layout
 
 Baseline and dry-run runs land in a per-issue worksheet directory first — the raw capture output (video,

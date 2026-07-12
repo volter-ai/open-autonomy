@@ -56,7 +56,16 @@
 //   - evidence file must be committed to git BEFORE the commit sha is cited
 //     in the AC patch (ztrack check verifies the cited commit really holds
 //     the artifact)
+//
+// Demo video: when summary.video is set (a demo-runner run — see
+// apps/web/.visual-edit/lib/demo-runner.mjs's runDemo()), the run's demo.webm
+// is pinned once (ztrack evidence add --attach when a GitHub repo is linked;
+// else --commit, the same sha256 in-repo pin as the PNGs) and every frame's
+// evidence/proof carries `video=<ref> videoSha256=<sha> videoTimeMs=<n>` so
+// each screenshot is locatable as a moment of the ONE recorded flow. The
+// frame-PNG mechanism (what ztrack actually gates on) is unchanged.
 import { execFileSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 
@@ -119,7 +128,7 @@ function commitEvidence(evidencePath, message) {
 
 // Normalize a demo run (steps[]) and a visual-state run (single implicit
 // step, acIds on the top-level visualState) into one shape: a list of
-// { stepId, name, narration, acIds, screenshotPath }.
+// { stepId, name, narration, acIds, screenshotPath, videoTimeMs }.
 function collectSteps(summary, runDir) {
   if (Array.isArray(summary.steps) && summary.steps.length > 0) {
     return summary.steps.map((step) => ({
@@ -130,6 +139,9 @@ function collectSteps(summary, runDir) {
       screenshotPath: step.evidence?.screenshot
         ? path.resolve(runDir, step.evidence.screenshot)
         : null,
+      // demo-runner runs record each moment's offset into demo.webm — carried
+      // onto the evidence/proof lines so a frame can be located in the video.
+      videoTimeMs: Number.isFinite(step.videoTimeMs) ? step.videoTimeMs : null,
     }));
   }
   // visual-state shape: one implicit step, acIds live on summary.visualState.
@@ -141,7 +153,69 @@ function collectSteps(summary, runDir) {
     narration: `Reached visual state "${summary.visualState?.name || summary.visualState?.slug}".`,
     acIds,
     screenshotPath: screenshot ? path.resolve(runDir, screenshot) : null,
+    videoTimeMs: null,
   }];
+}
+
+// --- Demo video (the ONE recorded flow the frame moments belong to) ---------
+//
+// demo-runner runs put the whole flow in <run-dir>/demo.webm (summary.video).
+// The video rides along with the frame evidence:
+//   - preferred: `ztrack evidence add <video> --attach` (a GitHub-release-asset
+//     upload, when this tracker's store is linked to a GitHub repo via
+//     `ztrack init --sync github`).
+//   - fallback: `ztrack evidence add <video> --commit` — same sha256-pinned
+//     in-repo mechanism the frame PNGs use — and the video path + sha256 are
+//     recorded as metadata on each frame's evidence/proof lines
+//     (`video=<path> videoSha256=<sha256:hex> videoTimeMs=<n>`).
+// The frame-PNG gating mechanism is untouched: ztrack still gates on frames.
+function sha256File(filePath) {
+  return `sha256:${createHash('sha256').update(fs.readFileSync(filePath)).digest('hex')}`;
+}
+
+function resolveVideo(summary, runDir) {
+  if (!summary.video) return null;
+  const videoPath = path.resolve(runDir, summary.video);
+  if (!fs.existsSync(videoPath)) fail(`summary.video is "${summary.video}" but ${videoPath} does not exist`);
+  return videoPath;
+}
+
+// Pin the run video once; every AC's evidence/proof references the same pin.
+// Returns { ref, sha256, stored } — ref is a URL (attach) or repo-relative
+// path (commit).
+function pinVideo(videoPath, runId) {
+  try {
+    const attachOutput = sh('npx', ['ztrack', 'evidence', 'add', videoPath, '--attach']);
+    const { image, sha256 } = JSON.parse(attachOutput);
+    console.log(`video uploaded as ztrack attachment: ${image}`);
+    return { ref: image, sha256, stored: 'attach' };
+  } catch {
+    // no linked GitHub repo (or upload failed) — fall through to commit-mode pinning
+  }
+  const addOutput = sh('npx', ['ztrack', 'evidence', 'add', videoPath, '--commit']);
+  const { path: videoEvidencePath, sha256 } = JSON.parse(addOutput);
+  const commitSha = commitEvidence(videoEvidencePath, `evidence: demo video (${runId})`);
+  console.log(`video pinned in-repo at ${videoEvidencePath} (${commitSha})`);
+  return { ref: videoEvidencePath, sha256, stored: 'commit' };
+}
+
+// Metadata suffix appended to a proof explanation for one frame of the video.
+function videoProofSuffix(video, videoTimeMs) {
+  if (!video) return '';
+  const at = videoTimeMs === null ? '' : ` videoTimeMs=${videoTimeMs}`;
+  return ` — video=${video.ref} videoSha256=${video.sha256}${at}`;
+}
+
+// Extra evidence-line tokens (loose-file mode only): parseEvidenceLine in
+// .volter/tracker/validation/preset.mts tokenizes `key=value` pairs and
+// ignores unknown keys, so these ride on the frame's evidence line without
+// breaking the gate. (Stored mode can't carry them — `ztrack ac patch`
+// reserializes evidence lines to image/sha256/commit/acv only — so there the
+// same metadata lives in the proof explanation.)
+function videoEvidenceTokens(video, videoTimeMs) {
+  if (!video) return '';
+  const at = videoTimeMs === null ? '' : ` videoTimeMs=${videoTimeMs}`;
+  return ` video=${video.ref} videoSha256=${video.sha256}${at}`;
 }
 
 function parseAcId(raw, forcedIssue) {
@@ -235,10 +309,11 @@ function main() {
 
   const steps = collectSteps(summary, runDir);
   const runId = path.basename(runDir);
+  const videoPath = resolveVideo(summary, runDir);
 
   // Group evidence per (issue, acId): each step contributes at most one
   // screenshot to each acId it lists.
-  const groups = new Map(); // key `${issue}#${acId}` -> { issue, acId, stepId, name, narration, screenshotPath }
+  const groups = new Map(); // key `${issue}#${acId}` -> { issue, acId, stepId, name, narration, screenshotPath, videoTimeMs }
   for (const step of steps) {
     if (!step.acIds || step.acIds.length === 0) continue;
     if (!step.screenshotPath) fail(`step "${step.stepId}" has acIds but no evidence.screenshot`);
@@ -247,7 +322,7 @@ function main() {
       const { issue, acId } = parseAcId(raw, args.issue);
       const key = `${issue}#${acId}`;
       if (groups.has(key)) fail(`acId "${key}" is claimed by more than one step in this run — one screenshot per AC expected`);
-      groups.set(key, { issue, acId, stepId: step.stepId, name: step.name, narration: step.narration, screenshotPath: step.screenshotPath });
+      groups.set(key, { issue, acId, stepId: step.stepId, name: step.name, narration: step.narration, screenshotPath: step.screenshotPath, videoTimeMs: step.videoTimeMs });
     }
   }
 
@@ -268,8 +343,13 @@ function main() {
 
     if (args.dryRun) {
       console.log('evidence-attach: --dry-run (--issue-file mode), no git/file mutation. Plan:');
-      for (const { issue, acId, stepId, name, screenshotPath } of groups.values()) {
-        console.log(`\n[${issue} ${acId}] step "${stepId}" (${name})`);
+      if (videoPath) {
+        console.log(`\n[video] ${videoPath} (sha256 ${sha256File(videoPath)})`);
+        console.log(`  would run: npx ztrack evidence add "${videoPath}" --attach (falling back to --commit if no linked GitHub repo)`);
+        console.log(`  each frame's evidence line would also carry: video=<pinned ref> videoSha256=<sha256:hex> videoTimeMs=<offset>`);
+      }
+      for (const { issue, acId, stepId, name, screenshotPath, videoTimeMs } of groups.values()) {
+        console.log(`\n[${issue} ${acId}] step "${stepId}" (${name})${videoTimeMs === null ? '' : ` @ videoTimeMs=${videoTimeMs}`}`);
         console.log(`  screenshot: ${screenshotPath}`);
         console.log(`  would run: npx ztrack evidence add "${screenshotPath}" --commit`);
         console.log(`  would run: git add <copied evidence path> && git commit -m "evidence: ${issue} ${acId} (${runId})"`);
@@ -279,7 +359,9 @@ function main() {
       return;
     }
 
-    for (const { issue, acId, name, narration, screenshotPath, acVersion } of groups.values()) {
+    const video = videoPath ? pinVideo(videoPath, runId) : null;
+
+    for (const { issue, acId, name, narration, screenshotPath, acVersion, videoTimeMs } of groups.values()) {
       console.log(`\n=== ${issue} ${acId} (${args.issueFile}) ===`);
 
       const addOutput = sh('npx', ['ztrack', 'evidence', 'add', screenshotPath, '--commit']);
@@ -291,8 +373,10 @@ function main() {
 
       // `sha256` from `ztrack evidence add`'s JSON output is already prefixed ("sha256:<hex>") —
       // do not re-prefix it here (that would double it to "sha256=sha256:sha256:<hex>").
-      const evidenceLine = `evidence ev1: image=${evidencePath} sha256=${sha256} commit=${commitSha} acv=${acVersion}`;
-      const explanation = `${narration} (visual-edit run ${runId}, step "${name}")${args.notes[acId] ? ` — ${args.notes[acId]}` : ''}`;
+      // The video tokens ride on the same evidence line (unknown keys are tolerated by
+      // parseEvidenceLine); the gate still verifies the frame PNG exactly as before.
+      const evidenceLine = `evidence ev1: image=${evidencePath} sha256=${sha256} commit=${commitSha} acv=${acVersion}${videoEvidenceTokens(video, videoTimeMs)}`;
+      const explanation = `${narration} (visual-edit run ${runId}, step "${name}")${args.notes[acId] ? ` — ${args.notes[acId]}` : ''}${videoProofSuffix(video, videoTimeMs)}`;
       const proofLine = `proof: "${explanation}" -> ev1`;
 
       fileText = spliceEvidenceIntoFile(fileText, { acId, evidenceLine, proofLine });
@@ -325,8 +409,13 @@ function main() {
 
   if (args.dryRun) {
     console.log('evidence-attach: --dry-run, no git/tracker mutation. Plan:');
-    for (const { issue, acId, stepId, name, screenshotPath } of groups.values()) {
-      console.log(`\n[${issue} ${acId}] step "${stepId}" (${name})`);
+    if (videoPath) {
+      console.log(`\n[video] ${videoPath} (sha256 ${sha256File(videoPath)})`);
+      console.log(`  would run: npx ztrack evidence add "${videoPath}" --attach (falling back to --commit if no linked GitHub repo)`);
+      console.log(`  each frame's proof would also carry: video=<pinned ref> videoSha256=<sha256:hex> videoTimeMs=<offset>`);
+    }
+    for (const { issue, acId, stepId, name, screenshotPath, videoTimeMs } of groups.values()) {
+      console.log(`\n[${issue} ${acId}] step "${stepId}" (${name})${videoTimeMs === null ? '' : ` @ videoTimeMs=${videoTimeMs}`}`);
       console.log(`  screenshot: ${screenshotPath}`);
       console.log(`  would run: npx ztrack evidence add "${screenshotPath}" --commit`);
       console.log(`  would run: git add <copied evidence path> && git commit -m "evidence: ${issue} ${acId} (${runId})"`);
@@ -336,8 +425,15 @@ function main() {
     return;
   }
 
+  // Pin the run video once (attach if a GitHub repo is linked, else in-repo
+  // commit); each AC's proof references the same pin + its frame's offset.
+  // Stored mode carries the video metadata in the PROOF text because
+  // `ztrack ac patch` reserializes evidence lines to image/sha256/commit/acv
+  // only — extra evidence fields would be silently dropped.
+  const video = videoPath ? pinVideo(videoPath, runId) : null;
+
   const checkedIssues = new Set();
-  for (const { issue, acId, name, narration, screenshotPath, acVersion } of groups.values()) {
+  for (const { issue, acId, name, narration, screenshotPath, acVersion, videoTimeMs } of groups.values()) {
     console.log(`\n=== ${issue} ${acId} ===`);
 
     const addOutput = sh('npx', ['ztrack', 'evidence', 'add', screenshotPath, '--commit']);
@@ -352,7 +448,7 @@ function main() {
       status: 'passed',
       evidence: [{ id: 'ev1', image: evidencePath, sha256, commit: commitSha, acVersion }],
       proof: {
-        explanation: `${narration} (visual-edit run ${runId}, step "${name}")${args.notes[acId] ? ` — ${args.notes[acId]}` : ''}`,
+        explanation: `${narration} (visual-edit run ${runId}, step "${name}")${args.notes[acId] ? ` — ${args.notes[acId]}` : ''}${videoProofSuffix(video, videoTimeMs)}`,
         evidenceRefs: ['ev1'],
       },
     };

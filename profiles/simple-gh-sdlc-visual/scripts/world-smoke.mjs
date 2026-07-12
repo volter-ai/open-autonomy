@@ -37,6 +37,17 @@
 //     agnostic already; per-op PROBING for a vendor other than Stripe is a template to extend
 //     (add a probe strategy alongside the Stripe one) rather than something this profile ships
 //     pre-built for every possible vendor.
+//
+// DEFAULT-SEALED WITH DECLARED OPENINGS (proven on a real adopter install — see
+// standards/visual-evidence.md's "openings" cross-reference and world.config.json's own
+// "openingsNote" convention): stage 4 pass 1 enforces that every REGISTRY-NAMED external
+// vendor (VENDOR_REGISTRY below — known SDKs for LLM providers, payment/comms/etc vendors)
+// the app imports must be EITHER twinned (a `type:"twin"` service in world.config.json) OR
+// covered by a human-granted opening — `world.config.json`'s top-level `openings` array,
+// `[{vendor, reason, grantedBy}]`. This holds in EVERY mode this script runs, including a
+// world.config.json that boots non-sealed for other reasons — an agent must never self-grant
+// an opening; `grantedBy` must name the human who granted it. `npm run smoke:coverage`
+// (--coverage-only) runs ONLY this rule, no world boot, for a seconds-fast dry check.
 
 import { spawn, spawnSync } from 'node:child_process';
 import fs from 'node:fs';
@@ -54,6 +65,13 @@ const WORLD_ENV_FILE = path.join(ROOT, '.volter/world.env');
 // for the log line only). Fully self-contained: booted and torn down within this process.
 const WORLD_NAME = process.env.SMOKE_WORLD_NAME || 'smoke-gate';
 const DEV_WORLD_INSTANCE = process.env.SMOKE_WORLD_INSTANCE || 'combo-dev';
+
+// --coverage-only: run ONLY stage 4 pass 1 (the default-sealed vendor-coverage rule) and
+// exit. Needs no world boot — it just reads source + world.config.json — so it's a
+// seconds-fast dry check of the seal rule (wired as `npm run smoke:coverage`). It does NOT
+// replace `npm run smoke`: op-probes, capture, and the evidence dry-run still need the
+// full gate.
+const COVERAGE_ONLY = process.argv.includes('--coverage-only');
 
 const STAGE_NAMES = [
   'Boot sealed',
@@ -265,6 +283,11 @@ const KNOWN_CROSS_CHECK = [
 // flagged (by its package name) rather than silently passing. Includes common BARE-named
 // (non-`@scope/`) vendor SDKs explicitly, since the generic scoped-package fallback alone
 // cannot see those (see GENERIC_BARE_PACKAGE_RE's own comment for why that gap mattered).
+// LLM vendors each map BOTH their native SDK and their Vercel AI-SDK provider adapter to the
+// SAME vendor identity — without the @ai-sdk/* entries the generic scoped-package fallback
+// would name all three as one blurry "ai-sdk" vendor, hiding WHICH real external is reached
+// (proven live: an app routing through @ai-sdk/anthropic/@ai-sdk/openai/@ai-sdk/google needs
+// each named individually so the twin-or-opening rule below can be satisfied per-vendor).
 const VENDOR_REGISTRY = {
   stripe: { packages: ['stripe'] },
   slack: { packages: ['@slack/web-api'] },
@@ -272,9 +295,10 @@ const VENDOR_REGISTRY = {
   jira: { packages: ['jira.js'] },
   github: { packages: ['@octokit/rest'] },
   twilio: { packages: ['twilio'] },
-  openai: { packages: ['openai'] },
+  openai: { packages: ['openai', '@ai-sdk/openai'] },
+  anthropic: { packages: ['@anthropic-ai/sdk', '@ai-sdk/anthropic'] },
+  google: { packages: ['@google/generative-ai', '@google/genai', '@ai-sdk/google', '@ai-sdk/google-vertex'] },
   resend: { packages: ['resend'] },
-  anthropic: { packages: ['@anthropic-ai/sdk'] },
   sendgrid: { packages: ['@sendgrid/mail'] },
   aws: { packages: ['aws-sdk'] },
   plaid: { packages: ['plaid'] },
@@ -442,6 +466,37 @@ function deriveConfiguredTwinVendors() {
   return vendors;
 }
 
+// DEFAULT-SEALED WITH DECLARED OPENINGS. world.config.json may carry a top-level `openings`
+// array: [{ "vendor": "<vendor>", "reason": "<why this external must run real>", "grantedBy":
+// "<human name>" }]. An opening is a HUMAN-GRANTED, per-task exception to the rule "every
+// external the app imports must have a configured twin". `grantedBy` must be a real human's
+// name — an agent must never self-grant an opening. Anything malformed here is a hard
+// stage-4 FAIL (a broken grant must never silently grant). Returns
+// { openings: Map<vendor, {reason, grantedBy}>, problems: string[] }.
+function deriveDeclaredOpenings() {
+  const raw = JSON.parse(fs.readFileSync(WORLD_CONFIG, 'utf8'));
+  const openings = new Map();
+  const problems = [];
+  const list = raw.openings ?? [];
+  if (!Array.isArray(list)) {
+    return { openings, problems: [`world.config.json "openings" must be an array, got ${typeof list}`] };
+  }
+  list.forEach((entry, i) => {
+    if (!entry || typeof entry !== 'object' || Array.isArray(entry)) {
+      problems.push(`openings[${i}] is not an object`);
+      return;
+    }
+    const vendor = typeof entry.vendor === 'string' ? entry.vendor.trim().toLowerCase() : '';
+    const reason = typeof entry.reason === 'string' ? entry.reason.trim() : '';
+    const grantedBy = typeof entry.grantedBy === 'string' ? entry.grantedBy.trim() : '';
+    if (!vendor) problems.push(`openings[${i}] missing non-empty "vendor"`);
+    if (!reason) problems.push(`openings[${i}] missing non-empty "reason"`);
+    if (!grantedBy) problems.push(`openings[${i}] missing non-empty "grantedBy" (must be a human name — openings are human-granted, never agent-self-granted)`);
+    if (vendor && reason && grantedBy) openings.set(vendor, { reason, grantedBy });
+  });
+  return { openings, problems };
+}
+
 // Scan SOURCE_FILES (+ any additional not-yet-committed app/script source, so a brand new
 // file is caught too) for vendor SDK imports. Returns Map<vendor, Set<matched package>>.
 function deriveUsedVendors() {
@@ -570,31 +625,84 @@ function findDerivationBlindSpots() {
   return problems;
 }
 
+// --- Pass 1: vendor coverage — DEFAULT-SEALED WITH DECLARED OPENINGS ------------------
+// THE RULE: every external vendor the app source imports must be EITHER
+//   (a) twinned in world.config.json (a `type: "twin"` service), OR
+//   (b) covered by a declared opening in world.config.json's top-level `openings` array
+//       ({vendor, reason, grantedBy} — human-granted per-task exceptions, see
+//       deriveDeclaredOpenings above).
+// A detected REGISTRY-NAMED vendor with NEITHER is a hard stage-4 FAIL — in every mode this
+// script runs. (A prior version of this rule downgraded uncovered vendors to an INFO line;
+// that let a real install run with real vendor egress under a green smoke — the exact
+// silent slide-through this gate exists to stop. Proven on a real adopter: RED with no
+// twin/opening, GREEN once the vendor was twinned or opened.)
+//
+// Extracted from stageMockCoverage so `--coverage-only` can run this rule standalone,
+// without booting the world (it only reads source files + world.config.json).
+async function stageVendorCoverage() {
+  currentStage = 3;
+  const configuredTwins = deriveConfiguredTwinVendors(); // Map<vendor, serviceId>
+  const usedVendors = deriveUsedVendors(); // Map<vendor, Set<package>>
+  const { openings, problems } = deriveDeclaredOpenings(); // Map<vendor, {reason, grantedBy}>
+  if (problems.length > 0) {
+    await fail(3, `world.config.json "openings" is malformed — a broken grant must never grant: ${problems.join(' | ')}`);
+  }
+  for (const vendor of openings.keys()) {
+    if (!usedVendors.has(vendor)) {
+      log(`WARN  stage 4: stale opening for "${vendor}" — no scanned source imports it; remove it from world.config.json openings[] so it cannot quietly cover a future re-introduction`);
+    }
+  }
+
+  const uncovered = [...usedVendors.keys()].filter((v) => !configuredTwins.has(v));
+  const opened = uncovered.filter((v) => openings.has(v));
+  // The hard rule bites on REGISTRY-NAMED vendors (known external-service SDKs — the LLM
+  // providers, twilio, stripe, ...). Heuristic fallback detections (generic scoped/bare
+  // packages) stay a FAIL too but are reported separately below: in a real app they can sweep
+  // up runtime infra libraries (server frameworks, ORMs) that are not external vendors, so
+  // they're named explicitly rather than folded into the registry-named violation message.
+  // Promote a package into VENDOR_REGISTRY to put it under the hard rule by name.
+  const violations = uncovered.filter((v) => !openings.has(v) && VENDOR_REGISTRY[v]);
+  const genericUncovered = uncovered.filter((v) => !openings.has(v) && !VENDOR_REGISTRY[v]);
+
+  for (const v of opened) {
+    const o = openings.get(v);
+    log(`OPEN  stage 4: ${v} (imported via ${[...usedVendors.get(v)].join(', ')}) runs REAL under a declared opening — granted by ${o.grantedBy}: ${o.reason}`);
+  }
+
+  if (violations.length > 0) {
+    const detail = violations
+      .map((v) => `${v} (imported via ${[...usedVendors.get(v)].join(', ')})`)
+      .join(', ');
+    await fail(3, `DEFAULT-SEALED VIOLATION — external vendor(s) with NO twin and NO declared opening: ${detail}. Real egress to these vendors must not slide through silently. Two remedies, per vendor: (a) TWIN it — add a type:"twin" service for it in world.config.json; or (b) DECLARE AN OPENING — add {"vendor","reason","grantedBy"} to world.config.json's top-level "openings" array, where grantedBy is the HUMAN who granted the per-task exception (agents must never self-grant an opening)`);
+  }
+
+  if (genericUncovered.length > 0) {
+    const detail = genericUncovered
+      .map((v) => `${v} (imported via ${[...usedVendors.get(v)].join(', ')})`)
+      .join(', ');
+    const remedies = genericUncovered
+      .map((v) => `no twin configured in world.config.json for ${v}; add @volter/twin-${v} and a twin service, or declare an opening, or the sealed world will block it`)
+      .join(' | ');
+    await fail(3, `app calls external(s) with NO configured twin and NO declared opening: ${detail}. ${remedies}`);
+  }
+
+  log(`INFO  stage 4 vendor coverage OK — externals the app imports: ${[...usedVendors.keys()].join(', ') || 'none'}; configured twins: ${[...configuredTwins.keys()].join(', ') || 'none'}; declared openings in effect: ${opened.join(', ') || 'none'}`);
+  return usedVendors;
+}
+
 async function stageMockCoverage() {
   currentStage = 3;
 
-  // --- Pass 1: vendor coverage (twin-config-driven + source-driven) ------------------
-  const configuredTwins = deriveConfiguredTwinVendors(); // Map<vendor, serviceId>
-  const usedVendors = deriveUsedVendors(); // Map<vendor, Set<package>>
-
-  const uncovered = [...usedVendors.keys()].filter((v) => !configuredTwins.has(v));
-  if (uncovered.length > 0) {
-    const detail = uncovered
-      .map((v) => `${v} (imported via ${[...usedVendors.get(v)].join(', ')})`)
-      .join(', ');
-    const remedies = uncovered
-      .map((v) => `no twin configured in world.config.json for ${v}; add @volter/twin-${v} and a twin service, or the sealed world will block it`)
-      .join(' | ');
-    await fail(3, `app calls external(s) with NO configured twin: ${detail}. ${remedies}`);
-  }
-  log(`INFO  stage 4 vendor coverage OK — every external the app imports (${[...usedVendors.keys()].join(', ') || 'none'}) has a configured twin (${[...configuredTwins.keys()].join(', ') || 'none'})`);
+  // --- Pass 1: vendor coverage (default-sealed with declared openings) ---------------
+  const usedVendors = await stageVendorCoverage();
 
   // --- Pass 2: op coverage, per configured+used vendor -------------------------------
   // Stripe has a full derivation + live op-probe (below, unchanged in spirit). Other
   // configured vendors without a per-op probe strategy still passed vendor coverage above
   // (twin configured + reachable via stage 1's doctor check) but their specific ops are not
   // individually probed here — noted, not silently claimed as modeled.
-  const otherConfiguredUsedVendors = [...usedVendors.keys()].filter((v) => v !== 'stripe');
+  const configuredTwins = deriveConfiguredTwinVendors();
+  const otherConfiguredUsedVendors = [...usedVendors.keys()].filter((v) => v !== 'stripe' && configuredTwins.has(v));
   if (otherConfiguredUsedVendors.length > 0) {
     log(`NOTE  stage 4: ${otherConfiguredUsedVendors.join(', ')} twin(s) configured+reachable but this stage has no per-op probe strategy for them yet — only vendor-level coverage was verified, not individual op modeling. Extend VENDOR_REGISTRY + add a probe strategy (see the stripe op-probe below) for full op-level assurance.`);
   }
@@ -776,6 +884,13 @@ async function stageEvidenceDryRun(runDir) {
 // main
 // ---------------------------------------------------------------------------
 async function main() {
+  if (COVERAGE_ONLY) {
+    log(`world-smoke --coverage-only: stage-4 vendor-coverage rule only (no world boot; op-probes/capture/evidence skipped — run the full \`npm run smoke\` for those)`);
+    await stageVendorCoverage();
+    log('');
+    log('SMOKE-COVERAGE: PASS (stage 4 vendor coverage only)');
+    process.exit(0);
+  }
   log(`world-smoke: booting instance "${WORLD_NAME}" (distinct from ${DEV_WORLD_INSTANCE} — never clobbers a running dev world)`);
   await stageBoot();
   await stageEgress();

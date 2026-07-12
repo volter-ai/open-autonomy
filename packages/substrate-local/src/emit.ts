@@ -17,6 +17,7 @@ import { SUPPORTED_RUNNERS, type RunnerName } from '@open-autonomy/core';
 // no longer depends on github's emit.
 import { runtimeFiles } from '@open-autonomy/substrate-github';
 import { runnerDefaultsModule } from './runner-config';
+import { reconcileOpenChecksSrc, reconcileOpenReviewsSrc, reconcileReadyBranchesSrc } from './reconcilers';
 
 // github-only runtime scripts — the proxy/mint+exchange clients and the credentialed skill runner. A
 // trusted local box never mints a bounded run token, so these are excluded from the local install
@@ -541,10 +542,75 @@ function promptFiles(ir: AutonomyIR): Record<string, string> {
   return out;
 }
 
+// OA2: compile-time validation that an agent's `event`-kind trigger has a real local-substrate delivery
+// mechanism, so it can never be SILENTLY dropped the way it was before this change. On gh-actions, an
+// `event` trigger (`issue_comment`, `pull_request_target`, …) becomes a real `on:` block a github Action
+// fires natively. `compileLocal` has no webhook listener at all — its schedule only ever fires
+// `cron`/`dispatch` agents (see `cronAgents` below), so an agent whose ONLY triggers are `event`-kind used
+// to compile clean and then simply never run: no compile-time signal, no runtime warning, nothing (the gap
+// docs/SPEC.md's conformance section names but that BL-22 dev/04 left unimplemented — see that section's
+// "not full feature-conformance" caveat, and BACKLOG.md's own note that a per-feature target/substrate
+// check "isn't wired up"). This function is that check, scoped to the one target it can decide about
+// (`local`) — never a general feature-conformance oracle.
+//
+// An agent is NEVER at risk of silent drop if it has some OTHER portable way to be invoked, even while
+// also declaring `event` triggers:
+//   - it declares its own `dispatch: true` trigger — `dispatch` is portable by definition (docs/SPEC.md:
+//     "the two PORTABLE trigger kinds are cron and dispatch"), and the Runner's `launch` (scripts/runner.ts)
+//     can invoke ANY agent by name regardless of what else it declares — so an agent with a `dispatch`
+//     trigger is reachable on `local` today, the `event` entry is simply the gh-actions-native REALIZATION
+//     of that same portable dispatch (e.g. a "/agent <name>" comment IS a human doing the dispatch on
+//     github; the profile's own PM does the identical dispatch locally via `runner.ts launch <name>`).
+//   - it is named by some OTHER agent's `review:` field — reconcile-open-reviews.mjs (reconcilers.ts) is
+//     the one generic delivery mechanism this substrate ships, and it dispatches exactly these agents.
+// What's left after both of those — an agent whose ENTIRE trigger set is `event`-kind (no cron, no
+// dispatch) and that nothing else's `review:` names — genuinely has NO invocation path on `local` unless
+// some OTHER agent in the profile holds `agent:launch` at all (an orchestrator that could, in principle, launch
+// it on its own schedule/logic — prose the IR can't read, but its EXISTENCE is a decidable, structural
+// fact). Only when NEITHER escape applies do we know for certain — from the IR alone, with no false
+// positives against any profile in this repo (self-driving's `develop` has no `dispatch` trigger of its
+// own, but self-driving's `pm` holds `agent:launch`, so `develop` is not flagged; only a profile with
+// genuinely NO orchestrator at all and an event-only, non-reviewed agent is flagged) — that compiling to
+// `local` would silently drop the trigger.
+export function undeliverableEventAgents(ir: AutonomyIR): string[] {
+  const reviewTargets = new Set<string>();
+  for (const agent of Object.values(ir.agents)) if (agent.review) reviewTargets.add(agent.review);
+  const hasOrchestrator = Object.values(ir.agents).some((a) => (a.capabilities ?? []).includes('agent:launch'));
+
+  return Object.entries(ir.agents)
+    .filter(([role, a]) => {
+      if (isHuman(a)) return false;
+      const triggers = a.triggers ?? [];
+      const hasEvent = triggers.some((t) => 'event' in t);
+      if (!hasEvent) return false;
+      const hasDispatch = triggers.some((t) => 'dispatch' in t);
+      if (hasDispatch) return false; // reachable via the portable Runner dispatch regardless of `event`
+      if (reviewTargets.has(role)) return false; // reconcile-open-reviews.mjs delivers this one
+      return !hasOrchestrator; // no agent:launch anywhere -> structurally no one could ever dispatch it either
+    })
+    .map(([role]) => role);
+}
+
 export function compileLocal(ir: AutonomyIR, opts: { runner?: RunnerName; destDir?: string; providerUrl?: string } = {}): CompileOutput {
   const runner = opts.runner ?? 'termfleet';
   if (!SUPPORTED_RUNNERS.includes(runner)) {
     throw new Error(`unsupported runner "${runner}"; supported: ${SUPPORTED_RUNNERS.join(', ')}`);
+  }
+  // OA2: fail loud (never silently drop) when an agent's ONLY delivery would have been an `event` trigger
+  // this substrate cannot fire and has no reconciler covering. See `undeliverableEventAgents` above for the
+  // full rationale; this is the one place a local compile can still catch it before shipping an install
+  // whose agent silently never runs.
+  const undeliverable = undeliverableEventAgents(ir);
+  if (undeliverable.length) {
+    throw new Error(
+      `open-autonomy: compiling to "local" but agent(s) ${undeliverable.join(', ')} declare an event-kind ` +
+        `trigger with no local delivery mechanism (the local substrate has no webhook listener; only a ` +
+        `code:propose agent's declared "review:" target is delivered, by scripts/reconcile-open-reviews.mjs). ` +
+        `Compiling would silently drop that trigger — the agent would install correctly and never run. Fix: ` +
+        `add a "dispatch: true" or "cron" trigger the loop can fire, name the agent as another agent's ` +
+        `"review:" target if it really is a review edge, or compile this profile onto "gh-actions" instead, ` +
+        `which fires event triggers natively.`,
+    );
   }
   // Fresh-install detection for the pause marker (OA-07): "fresh" = no `.open-autonomy/generated.json` in
   // destDir yet — the exact signal `readGeneratedManifest` already treats as "no prior install" (the same
@@ -593,6 +659,28 @@ export function compileLocal(ir: AutonomyIR, opts: { runner?: RunnerName; destDi
   // A github code host's propose effect is NOT scheduled here — it is a per-session lifecycle effect the loop
   // driver runs when a proposer's session finishes (see LOOP_DRIVER's reconcilePendingEffects + runner.ts's
   // effect markers), mirroring github's post-skill job step. A local-git code host has no PRs (the PM merges).
+  //
+  // OA2/OA3: the reconciler backstops (reconcilers.ts) all operate on github PRs/branch-protection — they
+  // are meaningless (and would just fail every tick resolving `gh api repos/{owner}/{repo}`) on a
+  // `local-git` code host, which has no PRs at all (the PM merges worktrees directly, per the comment
+  // above). Gated on `ir.codeHost === 'github'` AND at least one code:propose agent existing — an install
+  // with neither never needed a github-PR reconciler in the first place. Wired into the same schedule the
+  // cron loop already fires, right after the cron agents, so every tick both dispatches scheduled work AND
+  // converges any open agent PR — the local mirror of what a real webhook would have fired instantly.
+  const hasProposer = Object.values(ir.agents).some((a) => (a.capabilities ?? []).includes('code:propose'));
+  if (ir.codeHost === 'github' && hasProposer) {
+    generated['scripts/reconcile-ready-branches.mjs'] = reconcileReadyBranchesSrc();
+    generated['scripts/reconcile-open-checks.mjs'] = reconcileOpenChecksSrc();
+    scheduleScripts.push('bun scripts/reconcile-ready-branches.mjs', 'bun scripts/reconcile-open-checks.mjs');
+    // The review-edge delivery script only earns its place when some agent actually declares a `review:`
+    // edge for another to fulfil — otherwise there is nothing for it to deliver (see
+    // `locallyDeliverableAgents`), and emitting a script with permanently-empty work would just be noise on
+    // every tick's log.
+    if (Object.values(ir.agents).some((a) => a.review)) {
+      generated['scripts/reconcile-open-reviews.mjs'] = reconcileOpenReviewsSrc();
+      scheduleScripts.push('bun scripts/reconcile-open-reviews.mjs');
+    }
+  }
   //
   // OA-09: `env` was always `{}` — nothing durable carried a TERMFLEET_PROVIDER_URL pin, so it existed only
   // if the operator remembered to export it in the exact shell that started the loop (lost across shells,

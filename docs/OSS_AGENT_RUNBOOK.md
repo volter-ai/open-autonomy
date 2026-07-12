@@ -113,6 +113,80 @@ proxy admin API directly (`GET /admin/limits/status`, `POST /admin/runs/revoke`)
 with the admin token from your local `.env` — it is an operator/treasury
 credential and never lives in the repo.
 
+## Phase 6 Hand-Off — G4b async babysit protocol
+
+G4a (above) lifts the fence and constructs the go-live launch. What happens next — the first full
+draft -> develop -> review -> PR cycle — takes **hours to days**, not one CLI call. This is a runbook for
+a human to follow across that window, not something an agent session executes start-to-finish.
+
+### 1. Confirm the loop actually started
+
+```bash
+oa status
+```
+
+Expect `fence: unpaused` and, once the first tick has fired, a live session line
+(`sessions: N live (<agent>:<status>, ...)`). If sessions stays `none live` for longer than one
+reconcile period (~20s heartbeat locally; the next cron tick on gh-actions), re-check `oa doctor` and the
+provider (`oa provider status`) before assuming the loop is stuck.
+
+### 2. Watch the first PR appear and go green
+
+```bash
+gh pr list --search "is:open is:pr"
+gh pr checks <pr-number>
+```
+
+Wait for all three required checks (`ci`, `agent-review`, and — where the profile has it —
+`human-approval`) to post. A `DIRTY`/conflicting PR never auto-merges even when green; re-dispatch is the
+PM's own doctrine, not an operator action.
+
+### 3. Review the first PR yourself (this is the "babysit" step)
+
+Read the diff. This is the one PR in the whole lifecycle a human reads end-to-end before trusting the
+fleet's own `agent-review` gate. If the profile carries a `human-approval` required check, approve it on
+GitHub (a maintainer Approve on the current head SHA); otherwise merge directly once `ci`+`agent-review`
+are green:
+
+```bash
+gh pr merge <pr-number> --squash
+```
+
+### 4. Confirm the merge actually landed
+
+```bash
+gh pr view <pr-number> --json state,mergedAt
+oa maturity
+```
+
+`oa maturity` (TB.2) recomputes the IMM stage from real, install-scoped evidence — after a genuine merge
++ a subsequent tick, expect it to progress toward M6/ADVANCING (mission-advancing signal); it will report
+the stage HONESTLY (never a fabricated M6 off a single merge alone — see `missionAdvancingSignal`,
+packages/local-runner-cli/src/m6-signal.ts).
+
+### 5. Only THEN arm native auto-merge
+
+Never before step 4 completes — auto-merging before you've watched one PR land under supervision means the
+first real proof of the review gate's independence never happens under human eyes.
+
+```bash
+gh repo edit <owner>/<repo> --enable-auto-merge
+```
+
+(Local-substrate installs have no native auto-merge concept — the PM's own merge doctrine performs the
+merge each tick once required checks are green; there is nothing to "arm" locally.)
+
+### 6. Ongoing supervision
+
+- `oa status` / `gh pr checks <n>` — spot-check periodically, not continuously.
+- `oa maturity --json` — machine-readable stage + blockers, safe to script into a periodic check.
+- Escalation still routes through the human seam (`human-required` label, `needs-info`, `agent-blocked`) —
+  `docs/OPERATIONS.md`'s Operator Controls section is the full reference.
+
+> This section is mirrored verbatim (`bin/install-handoff.ts`'s `G4B_RUNBOOK` constant, kept in sync by
+> `bin/install-handoff.test.ts`'s own content-sanity test) so the TE.6 install unit's runbook artifact and
+> this human-facing doc never drift apart.
+
 ## Production Rollout
 
 Before enabling the agent on a public backlog, work through the

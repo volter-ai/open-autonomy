@@ -25,7 +25,8 @@
 //                        (self-driving) model-proxy decision — named security boundaries the agent must
 //                        not self-grant (DESIGN §Phase 3).
 //   G4a GO-LIVE  (TE.6)  verifies the human already promoted the first board item to ready/oa-approved,
-//                        then CONSTRUCTS (never executes) the substrate-specific go-live command.
+//                        then (local only) PERFORMS the safe `oa resume` fence-lift for real and
+//                        CONSTRUCTS (never executes) `oa start` — the launch half — for the human to run.
 //
 // --auto-approve (alias --non-interactive) is the TEST/PROOF HARNESS's own mechanism for driving straight
 // through G1/G3 with safe, named defaults in a single invocation — documented per-flag below, and NEVER a
@@ -55,7 +56,9 @@
 //     of a real one-shot install (DESIGN §Phase 4), not a safety gap.
 //   - Go-live (HAND-OFF, TE.6's `runG4a`): TE.6's own `buildLocalGoLive`/`buildHostedGoLive` NEVER execute a
 //     launch command under any code path (structurally — no `spawn`/`proc` call of the constructed
-//     `startCommand`/`command` exists in install-handoff.ts) — they only ever construct+report it. This
+//     `startCommand`/`command` exists in install-handoff.ts) — they only ever construct+report it. (Local
+//     substrate's safe `oa resume` fence-lift is the one exception — a real `unlinkSync`, zero spawn risk,
+//     performed for real once G4a verifies readiness; see install-handoff.ts's own header for the split.) This
 //     orchestrator inherits that guarantee unchanged: it prints/records `report.handoff.goLive`, it never
 //     spawns it. Every dispatch/launch-command this file's own phases construct forces the provider URL
 //     from the install's own `scheduler/schedule.json` pin (TE.5's `buildPlannerDispatchCommand` / TE.6's
@@ -400,10 +403,12 @@ export async function phaseValidate(ctx: Ctx, selectionFile: string): Promise<Va
 }
 
 // =========================================================================================================
-// Phase 6 — HAND-OFF (TE.6, G4a). Verify-only + construct-only — see file header's SAFETY note. Always
-// attempted (it is read-only + construct-only, never a launch), even when G4a's own verification reports
-// "not ready" — that is an honest, expected outcome (the board holds drafts only until a human promotes an
-// item), never a defect this orchestrator should hide or refuse to report.
+// Phase 6 — HAND-OFF (TE.6, G4a). Verify, then (local only, once verified ready) perform the safe `oa
+// resume` fence-lift for real, and construct-only for `oa start` — see file header's SAFETY note; no
+// launch/spawn ever happens here. Always attempted (never a launch, even the real `resume()` is a single
+// safe unlink, not a process spawn), even when G4a's own verification reports "not ready" — that is an
+// honest, expected outcome (the board holds drafts only until a human promotes an item), never a defect
+// this orchestrator should hide or refuse to report.
 // =========================================================================================================
 
 export function phaseHandoff(ctx: Ctx, selection: SelectionRecord): RunG4aReport {
@@ -545,7 +550,7 @@ export function renderInstallHuman(report: InstallReport): string {
   lines.push('');
   lines.push(renderValidateHuman(report.validate!));
   lines.push('');
-  lines.push('HAND-OFF (G4a) — verify + construct-only, NEVER executed by this tool:');
+  lines.push('HAND-OFF (G4a) — verify, then (local) `oa resume` performed for real; `oa start` construct-only, NEVER executed by this tool:');
   lines.push(`  ${report.handoff!.verification.message}`);
   if (report.handoff!.goLive) {
     const gl = report.handoff!.goLive;
@@ -555,10 +560,12 @@ export function renderInstallHuman(report: InstallReport): string {
   lines.push(renderProveAdvancingHuman(report.proveAdvancing!, report.detect!.repoDir));
   lines.push('');
   lines.push(
-    `HONEST CEILING: this run never launches a real agent (board-seeding is the only real dispatch, and go-` +
-      `live is construct-only) — expect M3/INSTALLED or, once a human has promoted a board item, M4/ARMED; ` +
-      `M5/RUNNING requires the human's own G4a promotion + running the printed go-live command themselves, ` +
-      `and M6/ADVANCING is an async follow-up (DESIGN hardening #1/#2), never a same-session guarantee.`,
+    `HONEST CEILING: this run never launches a real agent (board-seeding is the only real dispatch; go-` +
+      `live's \`oa start\` launch half is construct-only, though \`oa resume\` — the safe fence-lift — is ` +
+      `performed for real once G4a verifies readiness) — expect M3/INSTALLED or, once a human has promoted ` +
+      `a board item, M4/ARMED; M5/RUNNING requires the human's own G4a promotion + running the printed \`oa ` +
+      `start\` command themselves, and M6/ADVANCING is an async follow-up (DESIGN hardening #1/#2), never a ` +
+      `same-session guarantee.`,
   );
   return lines.join('\n');
 }
@@ -579,8 +586,9 @@ Chains all 7 install phases (DETECT -> SELECT -> DIRECTION -> AUTHORIZE -> EXECU
   G1 PROFILE    confirm/override the recommended profile+substrate (or validate a --pick)
   G2 DIRECTION  the mission is yours — this tool never invents it, only detects/applies what you supply
   G3 AUTHORIZE  spend cadence+WIP, harness-commit, (GitHub) admin+identity, (self-driving) model-proxy
-  G4a GO-LIVE   verifies you already promoted the first board item to ready/oa-approved, then constructs
-                (never executes) the go-live command for you to run yourself
+  G4a GO-LIVE   verifies you already promoted the first board item to ready/oa-approved, then (local only)
+                automatically performs the safe \`oa resume\` fence-lift, and constructs (never executes)
+                \`oa start\` — the launch half — for you to run yourself
 
 Global:
   --work-dir <dir>              default: <repoDir>/.open-autonomy/install-work

@@ -132,9 +132,21 @@ async function stageBoot() {
   // there), not a required pre-existing input — it does not need to exist beforehand, and
   // in a fresh clone / CI checkout it won't (.volter/world.env is gitignored local state).
 
-  const up = sh(VOLTER_WORLD, ['up', WORLD_CONFIG, '--env-file', WORLD_ENV_FILE, '--mode', 'sealed', '--name', WORLD_NAME], { timeout: 90_000 });
+  // Outer wall-clock budget for the WHOLE boot, derived from world.config.json's own declared
+  // per-service readiness timeouts (see deriveWorldBootTimeoutMs) — NOT a hardcoded literal. A
+  // hardcoded number here can silently be tighter than what the config itself declares
+  // acceptable, in which case spawnSync's `timeout` SIGTERMs `volter-world up` with no readiness-
+  // probe diagnostic at all (opaque `volter-world up exited null:`), even though no service had
+  // actually failed and the boot was still within its own declared allowance.
+  let bootTimeoutMs = MIN_BOOT_TIMEOUT_MS;
+  try {
+    bootTimeoutMs = deriveWorldBootTimeoutMs(JSON.parse(fs.readFileSync(WORLD_CONFIG, 'utf8')));
+  } catch (e) {
+    log(`WARN  stage 1: could not derive a config-based boot timeout from ${WORLD_CONFIG} (${e.message}) — falling back to ${MIN_BOOT_TIMEOUT_MS}ms floor`);
+  }
+  const up = sh(VOLTER_WORLD, ['up', WORLD_CONFIG, '--env-file', WORLD_ENV_FILE, '--mode', 'sealed', '--name', WORLD_NAME], { timeout: bootTimeoutMs });
   if (up.status !== 0) {
-    await fail(0, `volter-world up exited ${up.status}: ${(up.stderr || up.stdout || '').trim()}`);
+    await fail(0, `volter-world up exited ${up.status}: ${(up.stderr || up.stdout || '').trim()}${up.signal === 'SIGTERM' ? ` (killed by outer ${bootTimeoutMs}ms boot-timeout wrapper — see deriveWorldBootTimeoutMs; if this fires with no per-service readiness message, world.config.json's declared timeouts may need revisiting, not this wrapper)` : ''}`);
   }
   worldBooted = true;
 
@@ -327,6 +339,84 @@ function deriveRuntimeDependencyPackages() {
     }
   }
   return pkgs;
+}
+
+// ---------------------------------------------------------------------------
+// Boot timeout derivation
+// ---------------------------------------------------------------------------
+// BUG this closes: `volter-world up` was previously wrapped in a HARDCODED outer wall-clock
+// timeout (90_000ms) via spawnSync's own `timeout` option. That number was picked independently
+// of what the adopter's OWN world.config.json declares acceptable per service (each service has
+// its own readiness-probe budget, e.g. `readyWhen.timeoutMs`). When the sum of those per-service
+// budgets exceeds the outer wrapper's number — which a real adopter hit in production — spawnSync
+// kills `volter-world up` with SIGTERM the moment ITS timeout elapses, even though no individual
+// service had actually failed its own readiness probe and the boot was still within what the
+// config itself calls acceptable. Because SIGTERM short-circuits the CLI, it never gets to print
+// its own honest "service X timed out" diagnostic — it surfaces here as an opaque
+// `volter-world up exited null: ` (empty stderr/stdout), which is strictly worse than a real
+// per-service timeout message.
+//
+// FIX: derive the outer timeout FROM the config's own declared per-service budgets, so the outer
+// wrapper is always at least as generous as what the config says is acceptable — never an
+// independently-chosen number that can silently be tighter. See deriveWorldBootTimeoutMs below.
+
+// Per-service readiness timeout, read defensively since the field name/shape is owned by
+// `volter-world`/`@volter/twin-world` (not vendored/inspectable in this sandbox — see comment
+// on deriveWorldBootTimeoutMs for why SUM, not MAX, is used). Tries the documented
+// `readyWhen.timeoutMs` shape first, then a couple of plausible fallbacks, so a differently-
+// shaped-but-still-numeric config field is still honored rather than silently ignored.
+function readServiceTimeoutMs(svc) {
+  const candidates = [
+    svc?.readyWhen?.timeoutMs,
+    svc?.readinessTimeoutMs,
+    svc?.timeoutMs,
+  ];
+  for (const c of candidates) {
+    if (typeof c === 'number' && Number.isFinite(c) && c > 0) return c;
+  }
+  return null;
+}
+
+// Fallback per-service budget when a service declares no readiness timeout at all (a minimal/
+// degenerate config) — conservative, matches the old global default order of magnitude, so a
+// config missing this field entirely doesn't collapse the derived sum to ~0.
+const DEFAULT_SERVICE_TIMEOUT_MS = 60_000;
+// Fixed margin for the CLI's own non-per-service overhead: world creation, CA minting, network
+// setup, etc, which happen once per boot regardless of service count. Modest on purpose — this
+// is NOT where most of the budget should come from; the per-service sum is the primary driver.
+const BOOT_OVERHEAD_MARGIN_MS = 90_000;
+// Sane floor for a tiny/degenerate config (e.g. zero services, or a config that fails to parse
+// enough to find any) — keeps `up` from being wrapped in an unreasonably short timeout even when
+// the derivation has nothing to sum.
+const MIN_BOOT_TIMEOUT_MS = 90_000;
+
+// Derive the outer wall-clock budget for `volter-world up` from the world config's own declared
+// per-service readiness timeouts, so the wrapper can never be tighter than what the config itself
+// says is acceptable.
+//
+// SUM vs MAX: services CAN have startup dependencies on each other (e.g. an app server waiting on
+// postgres before it even starts its own readiness probe), so a later service's timeout clock may
+// only start once an earlier one is satisfied — i.e. worst case, the budgets are consumed
+// sequentially, not concurrently. `volter-world`/`@volter/twin-world` is not vendored in this
+// sandbox to inspect its actual scheduling, so this deliberately takes the SAFE, CONSERVATIVE
+// model (SUM of all per-service timeouts) rather than assuming full parallelism (MAX) — the
+// worst outcome of over-budgeting SUM is a smoke run waits a bit longer before reporting a REAL
+// failure; the worst outcome of under-budgeting MAX is exactly the bug this fix closes (an
+// opaque SIGTERM cutting off a boot that was still within its own declared allowance).
+//
+// Exported as a standalone pure function (config object in, number out) specifically so it can be
+// unit-tested with a fabricated config without needing a real `volter-world`/`world.config.json`
+// (see the `node -e` smoke check in this profile's PR description) — following this repo's
+// existing convention of isolating pure logic behind a run-as-entrypoint gate (this file runs
+// under plain `node`, so it uses the `import.meta.url === file://process.argv[1]` idiom — see
+// this profile's own scripts/next-free-issue-id.mjs — rather than the `import.meta.main` gate
+// used in scripts that run under `bun`, e.g. scripts/rearm-auto-merge.ts) instead of leaving the
+// derivation buried in the imperative stage functions.
+export function deriveWorldBootTimeoutMs(rawConfig) {
+  const services = Array.isArray(rawConfig?.services) ? rawConfig.services : [];
+  const perServiceSum = services.reduce((sum, svc) => sum + (readServiceTimeoutMs(svc) ?? DEFAULT_SERVICE_TIMEOUT_MS), 0);
+  const derived = perServiceSum + BOOT_OVERHEAD_MARGIN_MS;
+  return Math.max(derived, MIN_BOOT_TIMEOUT_MS);
 }
 
 // Read world.config.json and return the set of vendors CONFIGURED as a twin service.
@@ -705,8 +795,13 @@ async function main() {
   process.exit(0);
 }
 
-process.on('uncaughtException', async (err) => {
-  await fail(currentStage, `uncaught exception: ${err?.stack || err}`);
-});
+// Gated so `deriveWorldBootTimeoutMs` (and other pure helpers) can be imported by a unit test
+// without running the whole smoke sequence — same convention as this profile's own
+// scripts/next-free-issue-id.mjs.
+if (import.meta.url === `file://${process.argv[1]}`) {
+  process.on('uncaughtException', async (err) => {
+    await fail(currentStage, `uncaught exception: ${err?.stack || err}`);
+  });
 
-main();
+  main();
+}

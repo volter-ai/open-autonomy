@@ -99,8 +99,13 @@ steps 1–5 (shared) vs step 6 (per code host) below.
 >   <owner>/<repo>` (step 6a — the compile step only *prints* this as a next-step suggestion, for either
 >   manual `compile` or `oa install`'s own compile step; neither runs it); opening an actual
 >   `ready`-labeled issue (step 6c — by design: EXECUTE only ever seeds drafts, promoting the first item to
->   ready IS the G4a human act); arming native auto-merge (`gh repo edit --enable-auto-merge`, step 6d —
->   deliberately a supervised-first-merge gate, not a gap); and every
+>   ready IS the G4a human act); **arming native auto-merge** (`gh repo edit --enable-auto-merge`, step 6d)
+>   — `oa install` provisions branch protection + the required CI checks automatically (previous bullet),
+>   but does **not** arm native auto-merge: that stays a deliberate, separate, manual step, run only after
+>   a supervised first merge, exactly as step 6d above describes. Verified against
+>   `scripts/provision-target-repo.ts`'s `armAutoMerge` option (off by default, TE.10) and
+>   `bin/install-execute.ts`'s `stepCiAndProvision` (the real EXECUTE call site), which never passes
+>   `--arm-auto-merge`; and every
 >   [GitHub production rollout](#github-production-rollout) repo variable/secret plus the model-proxy
 >   Worker deployment itself (`oa install`'s G3 only *records* your deploy-own-vs-get-allowlisted decision,
 >   it never runs `wrangler deploy` or touches a repo variable/secret).

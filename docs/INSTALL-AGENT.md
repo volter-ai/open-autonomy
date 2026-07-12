@@ -41,10 +41,14 @@
 > the npm tarball (it's dev-time-only monorepo tooling, never bundled), and exits `1` with an explicit
 > "clone the repo" message rather than silently doing less than advertised (verified live). Clone
 > `volter-ai/open-autonomy` to use it; this guide's manual phases remain the only no-clone-required path.
-> Also note: `oa install`'s EXECUTE phase does **not** run the tracker's own `ztrack init --sync github`
-> (Phase 3 step 3 below) or arm native auto-merge (Phase 4, after the supervised first merge) — those two
-> stay exactly the manual commands in this guide, by design (the latter is a deliberate
-> supervised-first-merge gate, not a gap).
+> Also note: `oa install`'s EXECUTE phase provisions branch protection + the required CI checks
+> automatically (`scripts/provision-target-repo.ts`, called from `bin/install-execute.ts`'s
+> `stepCiAndProvision`), but does **not** run the tracker's own `ztrack init --sync github` (Phase 3 step 3
+> below) or arm native auto-merge (Phase 4, after the supervised first merge) — those two stay exactly the
+> manual commands in this guide, by design. Auto-merge arming in particular is a deliberate,
+> separate, human-gated step, not a gap: `provisionTargetRepo`'s `armAutoMerge` option (TE.10) defaults to
+> `false`, and `stepCiAndProvision` never passes `--arm-auto-merge` — provisioning during the automated
+> EXECUTE phase never arms it on its own.
 
 ## The merge boundary, and what it does NOT give you on local
 

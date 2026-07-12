@@ -12,7 +12,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { getSetupPack, type SetupPack } from '@open-autonomy/core';
 import {
-  buildPlannerDispatchCommand,
+  buildBoardSeedDispatchCommand,
   checkBoardSeededWithDrafts,
   defaultProc,
   loadAuthorizeRecord,
@@ -847,14 +847,33 @@ describe('stepCiAndProvision', () => {
 // =========================================================================================================
 // stepSeedBoardDrafts — ⛔ SAFETY: real dispatch launches a real agent. This test only ever exercises the
 // COMMAND CONSTRUCTION + sequencing through an injected proc stub that NEVER actually spawns anything;
-// per the unit's own explicit limitation, no real planner-seeding proof is claimed here or anywhere else
+// per the unit's own explicit limitation, no real originator-seeding proof is claimed here or anywhere else
 // in this unit.
+//
+// CRITICAL#2 regression coverage (aggregate-review round 2): the dispatch used to hardcode
+// `AUTONOMY_AGENT: 'planner'` for every local-substrate profile, which is simply WRONG for simple-sdlc (its
+// setup-pack.yml declares `originator_skill: draft` — its ir.yml roster has no `planner` agent at all).
+// `buildBoardSeedDispatchCommand` now takes `originatorSkill` as a required parameter the caller resolves
+// from `sel.pack.board_seed_recipe.originator_skill`, and `stepSeedBoardDrafts` refuses to dispatch at all
+// if the resolved originator has no real compiled launch prompt (the loud-failure guard — see that
+// function's own comment for why packages/substrate-local/src/backend.mjs's silent bare-agent-name fallback
+// is out of THIS unit's safe-to-touch scope, and why the pre-flight check is the mitigation instead).
 // =========================================================================================================
 
-describe('buildPlannerDispatchCommand + stepSeedBoardDrafts', () => {
-  test('local substrate, no repoDir / no pin -> the paused-safe run-agent.mjs adapter, AUTONOMY_AGENT=planner only', () => {
-    const cmd = buildPlannerDispatchCommand('local', undefined);
-    expect(cmd).toEqual({ cmd: 'node', args: ['scripts/run-agent.mjs'], env: { AUTONOMY_AGENT: 'planner' } });
+/** Mirrors packages/substrate-local/src/emit.ts's `promptFiles`: one `/${behavior}\n` (claude) /
+ *  `$${behavior}\n` (codex) file per real agent role, at exactly the path a real compile would write it to
+ *  and a real dispatch would read it from. Used to simulate "step 1 (compile) already ran" without paying
+ *  for a real compile subprocess in every test. */
+function writeCompiledPrompt(repoDir: string, harness: 'claude' | 'codex', role: string): void {
+  const dir = join(repoDir, 'scripts', 'prompts', harness);
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(join(dir, `${role}.txt`), harness === 'codex' ? `$${role}\n` : `/${role}\n`);
+}
+
+describe('buildBoardSeedDispatchCommand + stepSeedBoardDrafts', () => {
+  test('local substrate, no repoDir / no pin -> the paused-safe run-agent.mjs adapter, AUTONOMY_AGENT=<originator> only', () => {
+    const cmd = buildBoardSeedDispatchCommand('local', undefined, 'draft');
+    expect(cmd).toEqual({ cmd: 'node', args: ['scripts/run-agent.mjs'], env: { AUTONOMY_AGENT: 'draft' } });
   });
 
   // Regression test for a live incident during this unit's own acceptance proof: a bare dispatch with no
@@ -865,36 +884,69 @@ describe('buildPlannerDispatchCommand + stepSeedBoardDrafts', () => {
     const dir = track(mkdtempSync(join(tmpdir(), 'oa-te5-')));
     mkdirSync(join(dir, 'scheduler'), { recursive: true });
     writeFileSync(join(dir, 'scheduler', 'schedule.json'), JSON.stringify({ intervalSeconds: 900, env: { TERMFLEET_PROVIDER_URL: 'http://127.0.0.1:55812' }, scripts: ['bun scripts/sweep.ts'] }));
-    const cmd = buildPlannerDispatchCommand('local', dir);
+    const cmd = buildBoardSeedDispatchCommand('local', dir, 'planner');
     expect(cmd).toEqual({ cmd: 'node', args: ['scripts/run-agent.mjs'], env: { AUTONOMY_AGENT: 'planner', TERMFLEET_PROVIDER_URL: 'http://127.0.0.1:55812' } });
     cleanupAll();
   });
 
-  test('gh-actions substrate -> gh workflow run planner.yml --repo <owner/repo>', () => {
-    const cmd = buildPlannerDispatchCommand('gh-actions', undefined, 'acme/repo');
+  test('gh-actions substrate -> gh workflow run <originator>.yml --repo <owner/repo> (originator-parameterized, not a literal "planner.yml")', () => {
+    const cmd = buildBoardSeedDispatchCommand('gh-actions', undefined, 'planner', 'acme/repo');
     expect(cmd).toEqual({ cmd: 'gh', args: ['workflow', 'run', 'planner.yml', '--repo', 'acme/repo'] });
+    // Prove it is genuinely parameterized, not a hardcoded literal that happens to match: a hypothetical
+    // profile with a different originator dispatches THAT originator's workflow, not "planner.yml".
+    const cmd2 = buildBoardSeedDispatchCommand('gh-actions', undefined, 'draft', 'acme/repo');
+    expect(cmd2).toEqual({ cmd: 'gh', args: ['workflow', 'run', 'draft.yml', '--repo', 'acme/repo'] });
   });
 
-  test('mocked dispatch (⛔ no real agent launched) -> ok, cites drafts-only/never-ready doctrine', () => {
+  // --- CRITICAL#2 core regression: all 4 shipped profiles resolve their REAL originator, never a hardcoded
+  // 'planner' ------------------------------------------------------------------------------------------
+  test.each([
+    ['simple-sdlc', 'draft'],
+    ['simple-gh', 'planner'],
+    ['simple-gh-sdlc', 'planner'],
+    ['self-driving', 'planner'],
+  ] as const)('%s resolves board_seed_recipe.originator_skill=%s (never a hardcoded "planner")', (profile, expectedOriginator) => {
+    const pack = getSetupPack(join(PROFILES_ROOT, profile));
+    expect(pack.board_seed_recipe.originator_skill).toBe(expectedOriginator);
+    const cmd = buildBoardSeedDispatchCommand('local', undefined, pack.board_seed_recipe.originator_skill);
+    expect(cmd.env?.AUTONOMY_AGENT).toBe(expectedOriginator);
+    // Every resolved originator ships a real skill for its own profile (the agent this dispatch launches
+    // must actually exist, not just be spelled differently from "planner").
+    expect(existsSync(join(PROFILES_ROOT, profile, 'skills', expectedOriginator, 'SKILL.md'))).toBe(true);
+  });
+
+  test('simple-sdlc specifically: dispatches "draft", never "planner" — simple-sdlc ships NO planner skill/prompt at all', () => {
+    const pack = getSetupPack(join(PROFILES_ROOT, 'simple-sdlc'));
+    expect(pack.board_seed_recipe.originator_skill).toBe('draft');
+    expect(existsSync(join(PROFILES_ROOT, 'simple-sdlc', 'skills', 'draft', 'SKILL.md'))).toBe(true);
+    // The old defect's exact failure mode: simple-sdlc ships no planner skill/prompt at all.
+    expect(existsSync(join(PROFILES_ROOT, 'simple-sdlc', 'skills', 'planner'))).toBe(false);
+  });
+
+  test('mocked dispatch (⛔ no real agent launched) -> ok, dispatches the REAL originator (draft for simple-sdlc), cites drafts-only/never-ready doctrine', () => {
     const dir = track(mkdtempSync(join(tmpdir(), 'oa-te5-')));
+    writeCompiledPrompt(dir, 'claude', 'draft'); // simulates step 1 (compile) having already run
     const sel = selectionRecord('simple-sdlc', dir);
     let sawRealSpawnAttempt = false;
-    const mockedProc: ProcRunner = (cmd, args) => {
+    const mockedProc: ProcRunner = (cmd, args, opts) => {
       // The exact command TE.5 would issue in production — asserted, never executed for real.
       expect(cmd).toBe('node');
       expect(args).toEqual(['scripts/run-agent.mjs']);
+      expect((opts?.env as Record<string, string> | undefined)?.AUTONOMY_AGENT).toBe('draft'); // NOT 'planner'
       sawRealSpawnAttempt = true;
       return okResult('(mocked — no real agent launched by this test)');
     };
     const r = stepSeedBoardDrafts(sel, { proc: mockedProc });
     expect(sawRealSpawnAttempt).toBe(true);
     expect(r.status).toBe('ok');
+    expect(r.detail).toContain('dispatched draft');
     expect(r.detail).toMatch(/never self-promotes to ready\/oa-approved/);
     cleanupAll();
   });
 
   test('mocked dispatch failure -> blocked', () => {
     const dir = track(mkdtempSync(join(tmpdir(), 'oa-te5-')));
+    writeCompiledPrompt(dir, 'claude', 'draft');
     const sel = selectionRecord('simple-sdlc', dir);
     const r = stepSeedBoardDrafts(sel, { proc: () => failResult('agent CLI not signed in') });
     expect(r.status).toBe('blocked');
@@ -906,14 +958,84 @@ describe('buildPlannerDispatchCommand + stepSeedBoardDrafts', () => {
   // ever calls proc under dryRun, proving genuine non-invocation (stronger than a mocked-ok stub: dry-run
   // doesn't even need the "safe stub" this file's OTHER tests rely on for the same command shape).
   // =========================================================================================================
-  test('--dry-run: constructs the exact same command but NEVER calls proc — no real agent ever launched', () => {
+  test('--dry-run: constructs the exact same command but NEVER calls proc — no real agent ever launched (dispatches the REAL originator, draft for simple-sdlc, never a hardcoded planner)', () => {
     const dir = track(mkdtempSync(join(tmpdir(), 'oa-te5-')));
     const sel = selectionRecord('simple-sdlc', dir);
+    // No plannedFiles given: the loud-failure guard makes no claim it can't back up (see stepSeedBoardDrafts's
+    // own dry-run comment) — this proves dry-run still reports the correct ORIGINATOR even with zero compile
+    // context available, the CRITICAL#2 regression this test originally existed to guard.
     const r = stepSeedBoardDrafts(sel, { proc: unexpectedProc, dryRun: true });
     expect(r.status).toBe('ok');
     expect(r.detail).toMatch(/\[DRY-RUN\]/);
-    expect(r.detail).toMatch(/would dispatch the planner/);
-    expect(r.command).toEqual({ cmd: 'node', args: ['scripts/run-agent.mjs'], env: { AUTONOMY_AGENT: 'planner' } });
+    expect(r.detail).toMatch(/would dispatch draft/);
+    expect(r.command).toEqual({ cmd: 'node', args: ['scripts/run-agent.mjs'], env: { AUTONOMY_AGENT: 'draft' } });
+    cleanupAll();
+  });
+
+  test('--dry-run LOUD FAILURE: plannedFiles from the compile step\'s own dry-run does NOT include the resolved originator\'s prompt -> blocked prediction, still never calls proc', () => {
+    const dir = track(mkdtempSync(join(tmpdir(), 'oa-te5-')));
+    const sel = selectionRecord('simple-sdlc', dir);
+    // Simulates stepCompile's dry-run wouldWrite list missing the draft prompt entirely (a real
+    // pack/roster-drift prediction, not just "we don't know") — plannedFiles non-empty but lacks it.
+    const r = stepSeedBoardDrafts(sel, { proc: unexpectedProc, dryRun: true, plannedFiles: ['scripts/prompts/claude/pm.txt', 'scripts/prompts/claude/develop.txt'] });
+    expect(r.status).toBe('blocked');
+    expect(r.detail).toMatch(/\[DRY-RUN\] would refuse/);
+    expect(r.detail).toMatch(/no compiled launch prompt is planned at scripts\/prompts\/claude\/draft\.txt/);
+    cleanupAll();
+  });
+
+  test('--dry-run: plannedFiles DOES include the resolved originator\'s prompt -> ok prediction (positive control for the above)', () => {
+    const dir = track(mkdtempSync(join(tmpdir(), 'oa-te5-')));
+    const sel = selectionRecord('simple-sdlc', dir);
+    const r = stepSeedBoardDrafts(sel, { proc: unexpectedProc, dryRun: true, plannedFiles: ['scripts/prompts/claude/draft.txt', 'scripts/prompts/claude/pm.txt'] });
+    expect(r.status).toBe('ok');
+    expect(r.detail).toMatch(/would dispatch draft/);
+    cleanupAll();
+  });
+
+  // --- CRITICAL#2 part (b): the loud-failure guard — proves the dangerous silent-fallback path can never
+  // be reached through THIS unit's own dispatch construction ---------------------------------------------
+  test('LOUD FAILURE: resolved originator has no compiled prompt file -> blocked BEFORE ever spawning anything (never the silent bare-agent-name fallback)', () => {
+    const dir = track(mkdtempSync(join(tmpdir(), 'oa-te5-')));
+    // Deliberately do NOT write scripts/prompts/claude/draft.txt — simulates a pack/roster drift (or step 1
+    // compile genuinely not having run yet) where the resolved originator has no real launch prompt.
+    const sel = selectionRecord('simple-sdlc', dir);
+    let procCalled = false;
+    const r = stepSeedBoardDrafts(sel, { proc: () => { procCalled = true; return okResult(); } });
+    expect(procCalled).toBe(false); // never spawned anything — refused before dispatch, not after a bad one
+    expect(r.status).toBe('blocked');
+    expect(r.detail).toMatch(/no compiled launch prompt exists/);
+    expect(r.detail).toMatch(/bare-agent-name prompt fallback/);
+    expect(r.detail).toContain('AUTONOMY_AGENT=draft');
+    cleanupAll();
+  });
+
+  test('LOUD FAILURE guard is harness-aware: a codex-only compile does not satisfy the default claude check (still refuses)', () => {
+    const dir = track(mkdtempSync(join(tmpdir(), 'oa-te5-')));
+    writeCompiledPrompt(dir, 'codex', 'draft'); // codex prompt exists, but the default launch harness is claude
+    const sel = selectionRecord('simple-sdlc', dir);
+    const r = stepSeedBoardDrafts(sel, { proc: () => okResult() });
+    expect(r.status).toBe('blocked');
+    expect(r.detail).toMatch(/no compiled launch prompt exists/);
+    cleanupAll();
+  });
+
+  test('gh-actions substrate skips the local prompt-file guard entirely (dispatch goes through unconditionally, matching gh workflow run\'s own loud native failure on a missing workflow)', () => {
+    const dir = track(mkdtempSync(join(tmpdir(), 'oa-te5-')));
+    // No scripts/prompts written at all — irrelevant for gh-actions, which never reads that path.
+    const pack = getSetupPack(join(PROFILES_ROOT, 'self-driving'));
+    const sel: SelectionRecordRef = { profile: 'self-driving', substrate: 'gh-actions', pack, detect: { repoDir: dir } };
+    let sawRealSpawnAttempt = false;
+    const r = stepSeedBoardDrafts(sel, {
+      proc: (cmd, args) => {
+        expect(cmd).toBe('gh');
+        expect(args).toEqual(['workflow', 'run', 'planner.yml']);
+        sawRealSpawnAttempt = true;
+        return okResult();
+      },
+    });
+    expect(sawRealSpawnAttempt).toBe(true);
+    expect(r.status).toBe('ok');
     cleanupAll();
   });
 });
@@ -970,11 +1092,13 @@ describe('runExecute — step ordering + fail-closed halt', () => {
       seenIds.push(`${cmd} ${args[0] ?? ''}`);
       if (cmd === 'npm') return okResult('installed');
       if (cmd === 'bun' && args[0]?.includes('autonomy-compile.ts')) {
-        // Simulate a real compile's on-disk effect just enough for the next step (commit-harness) to see a
-        // manifest — the compile subprocess itself is stubbed (a real compile is exercised separately, in
-        // this unit's live acceptance transcript, not in this fast unit test).
+        // Simulate a real compile's on-disk effect just enough for the next steps (commit-harness, and
+        // CRITICAL#2's seed-board-drafts loud-failure guard) to see what a real compile would have written —
+        // the compile subprocess itself is stubbed (a real compile is exercised separately, in this unit's
+        // live acceptance transcript, not in this fast unit test).
         mkdirSync(join(dir, '.open-autonomy'), { recursive: true });
         writeFileSync(join(dir, '.open-autonomy', 'generated.json'), JSON.stringify({ schema: 'open-autonomy.generated.v1', files: ['scheduler/schedule.json'] }));
+        writeCompiledPrompt(dir, 'claude', 'draft'); // simple-sdlc's real originator_skill (CRITICAL#2)
         return okResult('installed 1 file');
       }
       if (cmd === 'git') return realGitProc()(cmd, args, { cwd: dir });

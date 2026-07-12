@@ -16,7 +16,7 @@
 //               beating the schedule pin ("ambient TERMFLEET_PROVIDER_URL, beats everything"). This file
 //               NEVER executes the constructed `start` command — every acceptance leg for it stops at
 //               "the command was constructed correctly," mirroring install-execute.ts's own
-//               `buildPlannerDispatchCommand` discipline (and its own regression test shape) exactly.
+//               `buildBoardSeedDispatchCommand` discipline (and its own regression test shape) exactly.
 //     - HOSTED (gh-actions): per DESIGN hardening #7's ORIGINAL text, "there's no paused file — the
 //       analogue is removing an `agent-paused` label". That assumption does NOT survive contact with the
 //       actual code (verified, not assumed, per this program's standing rule #2/#6):
@@ -59,7 +59,7 @@
 //
 // ⛔⛔⛔ ABSOLUTE SAFETY: nothing in this file ever spawns `oa start`, `tmux new-session`, or any other
 // dispatch/launch command for real — every "go-live" function here only ever CONSTRUCTS a `DispatchCommand`
-// (cmd/args/env), the exact same construct-only discipline TE.5's `buildPlannerDispatchCommand` uses, and
+// (cmd/args/env), the exact same construct-only discipline TE.5's `buildBoardSeedDispatchCommand` uses, and
 // every constructed local `start` command's env is asserted, never executed, in this unit's own tests.
 import { existsSync } from 'node:fs';
 import { basename } from 'node:path';

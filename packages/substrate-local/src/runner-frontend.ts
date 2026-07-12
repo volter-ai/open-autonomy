@@ -78,6 +78,12 @@ interface ManifestAgent {
   params?: Record<string, string>;
   capabilities?: string[];
   review?: string; // the reviewer agent that judges this proposer's PRs (the merge-boundary review edge)
+  // An opaque shell command declared on ONE agent's manifest entry (e.g. a loop-control arm) that the
+  // runner executes in the session's own cwd BEFORE spawning it. The runner stays METHODOLOGY-FREE here:
+  // this string is DATA the manifest supplies, never a hardcoded per-agent branch — the runner would run
+  // this identically for any agent that declared a `prelaunch:`, and does nothing at all for one that
+  // doesn't (most agents declare none, so this is a no-op for them).
+  prelaunch?: string;
 }
 
 // --- post-session effects: the LOCAL mirror of github's post-skill job step --------------------------------
@@ -408,7 +414,7 @@ async function defaultHarness(): Promise<string> {
 /** Launch an agent with forwarded params (agent:launch). Resolves to the launch's exit code; the pre-check
  *  refusal (and the pause gate, OA-07) throw instead — see runCli, which maps both to a nonzero exit. */
 export async function launch(agent: string, params: LaunchParams = {}): Promise<number> {
-  const { kind, skill: behavior = '', params: declared = {}, review = '' } = manifestAgent(agent);
+  const { kind, skill: behavior = '', params: declared = {}, review = '', prelaunch = '' } = manifestAgent(agent);
 
   if (kind === 'human') {
     // The THIRD route: a person cannot be executed — park the ask instead (see the human route above).
@@ -491,6 +497,23 @@ export async function launch(agent: string, params: LaunchParams = {}): Promise<
     AUTONOMY_FORWARD: [process.env.AUTONOMY_FORWARD, ...names].filter(Boolean).join(','),
     ...Object.fromEntries(names.map((k) => [k, String(params[k])])),
   };
+
+  // --- the DECLARED PRELAUNCH (arms optional session-local state before the session spawns) --------------
+  // Runs in the session's own cwd (the worktree it is about to be launched into — or process.cwd() for a
+  // trunk launch), with the SAME env the session itself will see (so any forwarded params are already
+  // resolved), BEFORE the session spawns — so whatever the command arms (e.g. a marker file a session's own
+  // hooks read) exists the instant the session starts looking for it. Scoped purely by manifest
+  // declaration: only an agent whose entry carries a `prelaunch:` ever runs one — every other agent declares
+  // none, so this is a no-op for them, and the runner never special-cases an agent name to decide whether to
+  // run it. `shell: true` because the declared value is a shell command string, not an argv array; a
+  // nonzero exit is logged but never refuses the launch — a prelaunch is a best-effort arm, not a gate on
+  // whether the session itself gets to run.
+  if (prelaunch) {
+    const r = spawnSync(prelaunch, { shell: true, stdio: 'inherit', env, cwd });
+    if (r.status !== 0) {
+      console.error(`[runner] ${agent}: prelaunch "${prelaunch}" exited ${r.status ?? '(signal)'} — continuing anyway (best-effort arm)`);
+    }
+  }
 
   // An ISOLATED session on a github CODE HOST gets a post-session effect recorded: when the session finishes,
   // the loop turns that worktree into a PR (agent-propose) — the local mirror of github's post-skill propose

@@ -655,6 +655,13 @@ export async function computeMaturity(opts: MaturityOptions = {}): Promise<Insta
       // even when the `local` target just controls where the scheduler loop runs, DESIGN §Q1/§Q2's "no
       // hosted doctor... proven by gh-preflight" — signal-sets.ts's own A12/A13 comment: "the repo is
       // still hosted on GitHub... even when the scheduler happens to run on the operator's own machine").
+      // D2 FIX — this target-invariance is about WHERE AGENTS RUN (relevant to A13/branch-protection and
+      // M6's roadmap-rollup), NOT about which files a LOCAL compile writes to disk. A12 itself
+      // (scripts/open-autonomy-preflight.ts) is target-aware at the file-existence layer: it only demands
+      // a `.github/workflows/<agent>.yml` exist when THIS install's own `.open-autonomy/generated.json`
+      // says this compile actually produced it — never a target-invariant "every agent needs one on disk"
+      // assumption (that used to permanently block self-driving@local at M2, since a local compile never
+      // materializes those files by design — see agentWorkflowFiles()'s own header for the full story).
       const a12 = sig('A12');
       m3ToolOk = softOk(a12);
       if (!m3ToolOk) reasons.push(`A12 (m3_tool=gh-preflight) failed: ${a12.evidence}`);

@@ -13,11 +13,31 @@
 // import for a package export).
 //
 // EXECUTE order (dependency order, "commit the harness first, wire the gate last"):
-//   1. install deps        — bun/termfleet/ztrack presence, consuming TE.1's own DetectReport (--detect),
-//                             never re-running detect's own probes.
-//   2. compile              — `bun bin/autonomy-compile.ts <profile> <substrate> <repoDir>` (subprocess —
+//   1. compile              — `bun bin/autonomy-compile.ts <profile> <substrate> <repoDir>` (subprocess —
 //                             autonomy-compile.ts is a top-level script, not an importable function; this
 //                             is the same "reuse via subprocess" idiom TE.4's probe-PR step already uses).
+//   2. install deps         — bun/termfleet/ztrack presence, consuming TE.1's own DetectReport (--detect),
+//                             never re-running detect's own probes.
+//                             DEFECT D1 FIX (aggregate-review, 100%-reproducible on a fresh self-driving
+//                             install): this step USED TO run before compile. `npm install -D` on a
+//                             directory with no package.json auto-creates a minimal one
+//                             (`{devDependencies:{ztrack:...}}`). self-driving ships its OWN real
+//                             package.json as a REPO_SHELL_FILES resource (bin/autonomy-compile.ts) —
+//                             compile's clobber guard then correctly refused to overwrite the just-auto-
+//                             created stub with self-driving's real file, blocking EVERY unforced fresh
+//                             self-driving EXECUTE at the compile step, every time. Compile-first fixes
+//                             this: it materializes whatever package.json the profile ships (self-driving)
+//                             or doesn't ship (every additive profile — simple-sdlc, simple-gh-sdlc, …)
+//                             FIRST, so install-deps's `npm install` always lands on whatever now exists on
+//                             disk (the profile's own file, or nothing yet, in which case npm's own
+//                             auto-create behavior is exactly what an additive profile always relied on —
+//                             unchanged). Safe to reorder: compile is a pure-materialization subprocess of
+//                             THIS orchestrator's own already-installed node_modules — it never shells out
+//                             to npm/ztrack/termfleet itself and has no forward dependency on the TARGET
+//                             repo's deps being installed (verified by reading compileLocal/compileGithub
+//                             end to end: the only `npm`/`ztrack` mentions are inside emitted TEMPLATE
+//                             STRINGS that become the compiled harness's own runtime scripts, never
+//                             executed during compile itself).
 //   3. write filled vision  — applies TE.3's ALREADY-GATHERED fill content (--direction-fill), never
 //                             invents any. Re-verifies via TE.3's own `checkDirectionInvariant`
 //                             (bin/install-direction.ts) — the exact function, not a re-derivation.
@@ -27,6 +47,16 @@
 //                             re-parsing `.open-autonomy/generated.json` a second way.
 //   5. provider up (local)  — TG.1's own `bringUpProvider` (packages/local-runner-cli/src/provider.ts),
 //                             reused verbatim; N/A for a gh-actions target.
+//                             DEFECT D3 FIX (aggregate-review): `bringUpProvider` calls `provider.ts`'s own
+//                             `pinScheduleProviderUrl`, which mutates `scheduler/schedule.json` IN PLACE —
+//                             AFTER step 4 already committed the harness (schedule.json included). Left
+//                             alone, `git status` shows schedule.json modified immediately after a real
+//                             EXECUTE run, and `oa maturity`'s A6 signal fails until an operator manually
+//                             re-commits it. This step now follows a successful pin with a SECOND, narrow
+//                             commit of ONLY scheduler/schedule.json (same add-then-commit semantics step 4
+//                             already establishes) whenever the pin actually left it dirty — applies to
+//                             every local-target profile (the check is substrate-scoped, never profile-
+//                             scoped), so the working tree is clean the instant provider-up finishes.
 //   6. CI + provision (gh)  — TA.3's own `ensureCiScaffold` (bin/ensure-ci-workflow.ts) then
 //                             `scripts/provision-target-repo.ts` (subprocess — a top-level script) with
 //                             the check names TE.4's probe-PR discovery found (or the pack's own
@@ -260,7 +290,9 @@ function profileDirOf(profilesRoot: string, profile: string): string {
 }
 
 // =========================================================================================================
-// Step 1 — install deps (bun/termfleet/ztrack), consuming TE.1's own DetectReport when supplied.
+// Step 2 — install deps (bun/termfleet/ztrack), consuming TE.1's own DetectReport when supplied. Runs
+// AFTER compile (D1 fix — see file-header "EXECUTE order" note): `npm install` must land on whatever
+// package.json compile just materialized (or didn't ship), never race it to auto-create a stub first.
 // =========================================================================================================
 
 export function stepInstallDeps(sel: SelectionRecordRef, opts: { proc: ProcRunner; detectFile?: string }): ExecuteStepResult {
@@ -305,9 +337,11 @@ export function stepInstallDeps(sel: SelectionRecordRef, opts: { proc: ProcRunne
 }
 
 // =========================================================================================================
-// Step 2 — compile the profile onto the substrate. `bun bin/autonomy-compile.ts` is a top-level script
+// Step 1 — compile the profile onto the substrate. `bun bin/autonomy-compile.ts` is a top-level script
 // (import.meta.main body), not an importable function — reused via subprocess, the same idiom TE.4's
-// probe-PR step already uses for `gh`/`git`.
+// probe-PR step already uses for `gh`/`git`. Runs BEFORE install-deps (D1 fix — see file-header "EXECUTE
+// order" note): compile never shells out to npm/ztrack/termfleet itself, so it has no forward dependency
+// on the target repo's deps being installed first.
 // =========================================================================================================
 
 // A plain repo-root-relative literal (never `dirname(fileURLToPath(import.meta.url))`) — this file, like
@@ -415,7 +449,36 @@ export function stepCommitHarness(sel: SelectionRecordRef, opts: { proc: ProcRun
 // Step 5 — provider up (local target only). TG.1's own bringUpProvider, reused verbatim.
 // =========================================================================================================
 
-export async function stepProviderUp(sel: SelectionRecordRef, opts: { bringUp?: Partial<BringUpOptions> } = {}): Promise<ExecuteStepResult> {
+// D3 fix — the one file bringUpProvider's own `pinScheduleProviderUrl` (provider.ts) mutates durably.
+// Kept as a literal (not a re-derivation of provider.ts's own `schedulePath`) since this step only ever
+// needs the CONVENTIONAL compiled path to know what to `git add`; provider.ts remains the sole source of
+// truth for where it actually writes (including its own AUTONOMY_SCHEDULE override), and if that ever
+// diverges from this literal, `git status --porcelain` below simply finds nothing dirty here and no-ops —
+// fail-quiet in the "nothing to commit" direction, never a false commit of the wrong path.
+const SCHEDULE_RELATIVE_PATH = join('scheduler', 'schedule.json');
+
+/** D3 fix — after a successful provider bring-up, `pinScheduleProviderUrl` may have just modified
+ *  `scheduler/schedule.json` IN PLACE, AFTER step 4 (`stepCommitHarness`) already committed it — left
+ *  alone, `git status` shows it dirty and `oa maturity`'s A6 signal fails until an operator manually
+ *  re-commits. Commits ONLY that one file, using the exact same add-then-commit semantics
+ *  `stepCommitHarness` already establishes (never a second commit-implementation idiom). No-ops (status:
+ *  'skipped') when the file doesn't exist, `repoDir` isn't a git repo (mirrors guards.ts's own
+ *  `checkUncommittedHarness` "nothing declared, nothing to check" convention), or the pin left nothing
+ *  dirty (e.g. bringUpProvider's idempotent no-op branch, already-committed from an earlier run). */
+function commitSchedulePinIfDirty(repoDir: string, proc: ProcRunner): { status: 'ok' | 'skipped' | 'blocked'; detail: string } {
+  if (!existsSync(join(repoDir, SCHEDULE_RELATIVE_PATH))) return { status: 'skipped', detail: '' };
+  const isGitRepo = proc('git', ['rev-parse', '--git-dir'], { cwd: repoDir }).status === 0;
+  if (!isGitRepo) return { status: 'skipped', detail: '' };
+  const status = proc('git', ['status', '--porcelain', '--', SCHEDULE_RELATIVE_PATH], { cwd: repoDir });
+  if (!(status.stdout || '').trim()) return { status: 'skipped', detail: '' };
+  const add = proc('git', ['add', '--', SCHEDULE_RELATIVE_PATH], { cwd: repoDir });
+  if (add.status !== 0) return { status: 'blocked', detail: `git add ${SCHEDULE_RELATIVE_PATH} failed (exit ${add.status}): ${firstLine(add.stderr || add.stdout)}` };
+  const commit = proc('git', ['commit', '-m', 'Pin the local termfleet provider URL'], { cwd: repoDir });
+  if (commit.status !== 0) return { status: 'blocked', detail: `git commit failed (exit ${commit.status}): ${firstLine(commit.stderr || commit.stdout)}` };
+  return { status: 'ok', detail: `committed ${SCHEDULE_RELATIVE_PATH} (provider pin) — working tree clean.` };
+}
+
+export async function stepProviderUp(sel: SelectionRecordRef, opts: { proc?: ProcRunner; bringUp?: Partial<BringUpOptions> } = {}): Promise<ExecuteStepResult> {
   if (sel.substrate !== 'local') {
     return step('provider-up', 'skipped', `substrate=${sel.substrate} — provider bring-up only applies to the local substrate`);
   }
@@ -432,7 +495,13 @@ export async function stepProviderUp(sel: SelectionRecordRef, opts: { bringUp?: 
   if (result.action === 'foreign-occupant-refused') {
     return step('provider-up', 'blocked', result.detail);
   }
-  return step('provider-up', 'ok', result.detail, { providerUrl: result.providerUrl });
+
+  const pin = commitSchedulePinIfDirty(sel.detect.repoDir, opts.proc ?? defaultProc);
+  if (pin.status === 'blocked') {
+    return step('provider-up', 'blocked', `provider is up (${result.detail}) but committing the pinned ${SCHEDULE_RELATIVE_PATH} failed: ${pin.detail}`);
+  }
+  const detail = pin.detail ? `${result.detail} ${pin.detail}` : result.detail;
+  return step('provider-up', 'ok', detail, { providerUrl: result.providerUrl });
 }
 
 // =========================================================================================================
@@ -627,13 +696,15 @@ export async function runExecute(opts: ExecuteOptions): Promise<ExecuteReport> {
     return undefined;
   };
 
-  steps.push(stepInstallDeps(sel, { proc, detectFile: opts.detect }));
+  // D1 fix: compile MUST run before install-deps — see the file-header "EXECUTE order" note above for the
+  // full root cause + rationale (a fresh self-driving install used to self-clobber at the compile step).
+  steps.push(stepCompile(sel, { proc, force: opts.force }));
   {
     const h = halted();
     if (h) return h;
   }
 
-  steps.push(stepCompile(sel, { proc, force: opts.force }));
+  steps.push(stepInstallDeps(sel, { proc, detectFile: opts.detect }));
   {
     const h = halted();
     if (h) return h;
@@ -651,7 +722,7 @@ export async function runExecute(opts: ExecuteOptions): Promise<ExecuteReport> {
     if (h) return h;
   }
 
-  steps.push(await stepProviderUp(sel, { bringUp: opts.bringUp }));
+  steps.push(await stepProviderUp(sel, { proc, bringUp: opts.bringUp }));
   {
     const h = halted();
     if (h) return h;

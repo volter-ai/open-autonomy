@@ -412,9 +412,10 @@ describe('runInstall — FULL CHAIN dry-run, all 4 gates auto-approved (bin/inst
 
     // --- EXECUTE: all 7 steps ran; ci-and-provision skipped (local-git); the harness is really committed
     expect(report.execute?.ok).toBe(true);
+    // D1 fix: compile runs BEFORE install-deps (see install-execute.ts's "EXECUTE order" file-header note).
     expect(report.execute?.steps.map((s) => s.id)).toEqual([
-      'install-deps',
       'compile',
+      'install-deps',
       'direction-fill',
       'commit-harness',
       'provider-up',

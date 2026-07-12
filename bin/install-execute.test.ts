@@ -7,13 +7,14 @@
 // here ever shells out to a real `gh`, launches a real agent, or touches a real GitHub repo (see this
 // file's own SAFETY comments at the planner-dispatch and provisioning tests).
 import { describe, expect, test } from 'bun:test';
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { getSetupPack, type SetupPack } from '@open-autonomy/core';
 import {
   buildPlannerDispatchCommand,
   checkBoardSeededWithDrafts,
+  defaultProc,
   loadAuthorizeRecord,
   loadDirectionFill,
   loadSelectionRecord,
@@ -200,6 +201,79 @@ describe('stepCompile', () => {
 });
 
 // =========================================================================================================
+// D1 REGRESSION — fresh self-driving installs used to self-clobber: `stepInstallDeps` running BEFORE
+// `stepCompile` let `npm install -D` auto-create a minimal package.json on an empty scratch dir, which
+// compile's own clobber guard then correctly refused to overwrite with self-driving's REAL shipped
+// package.json — blocking every unforced fresh self-driving EXECUTE, every time. This test exercises the
+// REAL `bun bin/autonomy-compile.ts` subprocess (via `defaultProc`, not a stub) against a truly empty
+// scratch dir, in the fixed order (compile first) — every prior fixture in this file stubbed the compile
+// subprocess away, which is exactly why this defect went uncaught. The `npm install` leg is a faithful
+// simulation of npm's own real auto-create-package.json behavior (root cause of D1), not stubbed away.
+// =========================================================================================================
+
+describe('D1 regression — compile-before-install-deps never self-clobbers a fresh self-driving install', () => {
+  test('real compile (subprocess) writes self-driving\'s own package.json; install-deps then augments it, never overwrites it', async () => {
+    const dir = track(mkdtempSync(join(tmpdir(), 'oa-te5-d1-')));
+    const sel = selectionRecord('self-driving', dir);
+
+    // Faithful to npm's REAL behavior: `npm install -D <pkg>` on a directory with no package.json
+    // auto-creates a minimal one; on a directory that already has one, it augments devDependencies in
+    // place. This is the exact mechanism D1's root cause depends on — stubbing it away (as every prior
+    // fixture in this file did for stepCompile) would hide the defect entirely.
+    const npmLikeProc: ProcRunner = (cmd, args, opts) => {
+      if (cmd === 'npm' && args[0] === 'install') {
+        const cwd = opts?.cwd ?? dir;
+        const pkgPath = join(cwd, 'package.json');
+        const pkg = existsSync(pkgPath) ? JSON.parse(readFileSync(pkgPath, 'utf8')) : {};
+        pkg.devDependencies = { ...(pkg.devDependencies ?? {}), ztrack: '1.0.0' };
+        writeFileSync(pkgPath, JSON.stringify(pkg, null, 2));
+        return okResult('added ztrack@1.0.0');
+      }
+      return failResult(`unexpected call in D1 regression test: ${cmd} ${args.join(' ')}`);
+    };
+
+    // Step 1 (fixed order): REAL compile subprocess against a truly empty dir — no clobber guard trip.
+    const compileResult = stepCompile(sel, { proc: defaultProc });
+    expect(compileResult.status).toBe('ok'); // <- this is exactly what BLOCKED under the pre-fix ordering
+    expect(compileResult.detail).not.toMatch(/would overwrite/);
+
+    const shippedPkg = readFileSync(join(PROFILES_ROOT, 'self-driving', 'package.json'), 'utf8');
+    expect(readFileSync(join(dir, 'package.json'), 'utf8')).toBe(shippedPkg); // self-driving's REAL file landed, byte for byte
+
+    // Step 2 (fixed order): install-deps now installs ONTO the file compile just materialized.
+    const installResult = stepInstallDeps(sel, { proc: npmLikeProc });
+    expect(installResult.status).toBe('ok');
+    const finalPkg = JSON.parse(readFileSync(join(dir, 'package.json'), 'utf8'));
+    expect(finalPkg.name).toBe('self-driving-repo-template'); // never replaced by npm's auto-created stub
+    expect(finalPkg.devDependencies.ztrack).toBe('1.0.0'); // ztrack was ADDED onto the shipped file
+    expect(finalPkg.devDependencies.typescript).toBeDefined(); // self-driving's own deps survive untouched
+    cleanupAll();
+  });
+
+  test('non-scaffold profile (simple-sdlc) onto an empty dir: reorder is a no-op — npm still auto-creates package.json as before', () => {
+    const dir = track(mkdtempSync(join(tmpdir(), 'oa-te5-d1b-')));
+    const sel = selectionRecord('simple-sdlc', dir);
+    const npmLikeProc: ProcRunner = (cmd, args, opts) => {
+      if (cmd === 'npm' && args[0] === 'install') {
+        const cwd = opts?.cwd ?? dir;
+        const pkgPath = join(cwd, 'package.json');
+        if (!existsSync(pkgPath)) writeFileSync(pkgPath, JSON.stringify({ devDependencies: { ztrack: '1.0.0' } }, null, 2));
+        return okResult('added ztrack@1.0.0');
+      }
+      return failResult(`unexpected call: ${cmd} ${args.join(' ')}`);
+    };
+    // simple-sdlc ships no package.json resource — compile writes nothing at that path.
+    const compileResult = stepCompile(sel, { proc: defaultProc });
+    expect(compileResult.status).toBe('ok');
+    expect(existsSync(join(dir, 'package.json'))).toBe(false);
+    const installResult = stepInstallDeps(sel, { proc: npmLikeProc });
+    expect(installResult.status).toBe('ok');
+    expect(existsSync(join(dir, 'package.json'))).toBe(true); // npm's own auto-create, unaffected by the reorder
+    cleanupAll();
+  });
+});
+
+// =========================================================================================================
 // stepDirectionFill — apply TE.3's already-gathered fill, never invent content; re-verify via
 // checkDirectionInvariant (the SAME exported function TE.3 itself uses).
 // =========================================================================================================
@@ -374,6 +448,92 @@ describe('stepProviderUp', () => {
     });
     expect(r.status).toBe('blocked');
     expect(r.detail).toMatch(/FOREIGN|foreign/);
+    cleanupAll();
+  });
+});
+
+// =========================================================================================================
+// D3 REGRESSION — `bringUpProvider`'s own `pinScheduleProviderUrl` (provider.ts) mutates
+// scheduler/schedule.json IN PLACE, AFTER stepCommitHarness (step 4) already committed it — left alone,
+// `git status` shows it dirty immediately after a real EXECUTE run and `oa maturity`'s A6 signal fails
+// until an operator manually re-commits. Proves stepProviderUp now commits ONLY that one file whenever the
+// pin actually left it dirty, using a REAL (offline) git repo — never a stubbed git that would hide a
+// defect in the add/commit sequencing itself.
+// =========================================================================================================
+
+describe('D3 regression — provider-up commits the schedule.json pin, leaving git status clean', () => {
+  test('after stepCommitHarness commits the harness and a real bringUpProvider pin dirties schedule.json again, provider-up commits it on its own', async () => {
+    const dir = track(mkdtempSync(join(tmpdir(), 'oa-te5-d3-')));
+    initGitRepo(dir);
+    const gitProc = realGitProc();
+    mkdirSync(join(dir, 'scheduler'), { recursive: true });
+    mkdirSync(join(dir, '.open-autonomy'), { recursive: true });
+    writeFileSync(join(dir, 'scheduler', 'schedule.json'), `${JSON.stringify({ intervalSeconds: 900, env: {}, scripts: ['bun scripts/sweep.ts'] }, null, 2)}\n`);
+    // `.open-autonomy/generated.json` included in `files` here purely so this fixture's OWN tree is fully
+    // clean after stepCommitHarness — isolating this test to D3's own concern (schedule.json committed
+    // after provider-up) rather than the unrelated pre-existing fact that a real compiled manifest never
+    // lists itself in its own `files` (see packages/core/src/materialize.ts).
+    writeFileSync(join(dir, '.open-autonomy', 'generated.json'), JSON.stringify({ schema: 'open-autonomy.generated.v1', files: ['scheduler/schedule.json', '.open-autonomy/generated.json'] }));
+
+    // Simulate step 4 (stepCommitHarness) having already run and committed the harness, schedule.json
+    // included — this is the pre-D3-fix starting point: HEAD has an UNPINNED schedule.json.
+    const commitHarness = stepCommitHarness(selectionRecord('simple-sdlc', dir), { proc: gitProc });
+    expect(commitHarness.status).toBe('ok');
+    // Scoped to scheduler/schedule.json — D3's own concern. (bringUpProvider's runner-state/ log+state
+    // files are separate, pre-existing, legitimately-untracked local runtime output, unrelated to D3.)
+    expect(gitProc('git', ['status', '--porcelain', '--', 'scheduler/schedule.json'], { cwd: dir }).stdout.trim()).toBe(''); // clean right after the harness commit
+
+    // Step 5 (stepProviderUp): a REAL bringUpProvider pin (via injected isPortFree/spawnImpl/fetchImpl —
+    // never a real termfleet process) mutates scheduler/schedule.json again.
+    const sel = selectionRecord('simple-sdlc', dir);
+    const r = await stepProviderUp(sel, {
+      proc: gitProc,
+      bringUp: { isPortFree: () => true, spawnImpl: () => ({ pid: 4242, unref: () => {} }), fetchImpl: stubFetch(), rangeStart: 41400, rangeEnd: 41500 },
+    });
+    expect(r.status).toBe('ok');
+    expect(r.detail).toMatch(/committed scheduler\/schedule\.json/);
+
+    // D3 fix proof: schedule.json is clean — the pin was committed by provider-up itself, never left
+    // dirty. (Scoped to schedule.json — bringUpProvider's runner-state/ log+state files are separate,
+    // pre-existing, legitimately-untracked local runtime output, unrelated to D3.)
+    const status = gitProc('git', ['status', '--porcelain', '--', 'scheduler/schedule.json'], { cwd: dir });
+    expect(status.stdout.trim()).toBe('');
+    const log = gitProc('git', ['log', '--oneline'], { cwd: dir });
+    expect(log.stdout).toMatch(/Pin the local termfleet provider URL/);
+    cleanupAll();
+  });
+
+  test('a true idempotent no-op re-run (provider already up + already pinned + already committed) makes no new commit', async () => {
+    const dir = track(mkdtempSync(join(tmpdir(), 'oa-te5-d3b-')));
+    initGitRepo(dir);
+    const gitProc = realGitProc();
+    mkdirSync(join(dir, 'scheduler'), { recursive: true });
+    writeFileSync(join(dir, 'scheduler', 'schedule.json'), `${JSON.stringify({ intervalSeconds: 900, env: {}, scripts: ['bun scripts/sweep.ts'] }, null, 2)}\n`);
+    gitProc('git', ['add', '-A'], { cwd: dir });
+    gitProc('git', ['commit', '-m', 'Install the open-autonomy harness'], { cwd: dir });
+
+    const sel = selectionRecord('simple-sdlc', dir);
+    const bringUp = {
+      isPortFree: () => true,
+      spawnImpl: () => ({ pid: 4242, unref: () => {} }),
+      fetchImpl: stubFetch(),
+      rangeStart: 41600,
+      rangeEnd: 41700,
+    };
+    // First call: starts the provider, pins schedule.json, and (D3 fix) commits that pin.
+    const first = await stepProviderUp(sel, { proc: gitProc, bringUp });
+    expect(first.status).toBe('ok');
+    const afterFirst = gitProc('git', ['rev-parse', 'HEAD'], { cwd: dir }).stdout;
+    expect(gitProc('git', ['status', '--porcelain', '--', 'scheduler/schedule.json'], { cwd: dir }).stdout.trim()).toBe('');
+
+    // Second call against the SAME repoDir: bringUpProvider's own state record makes this a genuine
+    // 'noop' (already healthy, already pinned) — schedule.json is untouched, so D3's commit logic must
+    // skip cleanly rather than creating an empty/spurious commit.
+    const second = await stepProviderUp(sel, { proc: gitProc, bringUp });
+    expect(second.status).toBe('ok');
+    const afterSecond = gitProc('git', ['rev-parse', 'HEAD'], { cwd: dir }).stdout;
+    expect(afterSecond).toBe(afterFirst); // no new commit made
+    expect(gitProc('git', ['status', '--porcelain', '--', 'scheduler/schedule.json'], { cwd: dir }).stdout.trim()).toBe('');
     cleanupAll();
   });
 });
@@ -639,7 +799,8 @@ describe('runExecute — step ordering + fail-closed halt', () => {
     });
 
     expect(report.ok).toBe(true);
-    expect(report.steps.map((s) => s.id)).toEqual(['install-deps', 'compile', 'direction-fill', 'commit-harness', 'provider-up', 'ci-and-provision', 'seed-board-drafts']);
+    // D1 fix: compile runs BEFORE install-deps (see file-header "EXECUTE order" note in install-execute.ts).
+    expect(report.steps.map((s) => s.id)).toEqual(['compile', 'install-deps', 'direction-fill', 'commit-harness', 'provider-up', 'ci-and-provision', 'seed-board-drafts']);
     expect(report.steps.find((s) => s.id === 'ci-and-provision')!.status).toBe('skipped'); // local-git profile
     expect(report.steps.find((s) => s.id === 'provider-up')!.status).toBe('ok');
     expect(report.steps.find((s) => s.id === 'seed-board-drafts')!.status).toBe('ok');
@@ -655,14 +816,14 @@ describe('runExecute — step ordering + fail-closed halt', () => {
     const calls: string[] = [];
     const proc: ProcRunner = (cmd, args) => {
       calls.push(cmd);
-      if (cmd === 'npm') return okResult('installed');
-      if (cmd === 'bun') return failResult('compile refused: would overwrite existing file'); // step 2 blocks
+      if (cmd === 'bun' && args[0]?.includes('autonomy-compile.ts')) return okResult('installed 1 file'); // step 1 (compile) ok
+      if (cmd === 'npm') return failResult('npm install -D ztrack@1.0.0 failed: ENOSPC'); // step 2 (install-deps) blocks
       return failResult('should never reach here');
     };
     const report = await runExecute({ record: recordFile, proc });
     expect(report.ok).toBe(false);
-    expect(report.steps.map((s) => s.id)).toEqual(['install-deps', 'compile']); // steps 3-7 never ran
-    expect(report.blocker).toMatch(/would overwrite existing file/);
+    expect(report.steps.map((s) => s.id)).toEqual(['compile', 'install-deps']); // steps 3-7 never ran
+    expect(report.blocker).toMatch(/npm install -D ztrack/);
     cleanupAll();
   });
 
@@ -690,7 +851,7 @@ describe('runExecute — step ordering + fail-closed halt', () => {
 
     const report = await runExecute({ record: recordFile, directionFill: fillFile, proc }); // no ownerRepo passed
     expect(report.ok).toBe(false);
-    expect(report.steps.map((s) => s.id)).toEqual(['install-deps', 'compile', 'direction-fill', 'commit-harness', 'provider-up', 'ci-and-provision']);
+    expect(report.steps.map((s) => s.id)).toEqual(['compile', 'install-deps', 'direction-fill', 'commit-harness', 'provider-up', 'ci-and-provision']);
     expect(report.steps.find((s) => s.id === 'provider-up')!.status).toBe('skipped'); // gh-actions
     expect(report.blocker).toMatch(/--owner-repo/);
     cleanupAll();

@@ -2,7 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import { mkdtempSync, mkdirSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { AGENT_BRANCH, DEFAULT_HOLD, disposition, loadHoldLabels, type PR } from './rearm-auto-merge';
+import { AGENT_BRANCH, DEFAULT_HOLD, FLIP_BRANCH, disposition, loadHoldLabels, mergeMethodFor, type PR } from './rearm-auto-merge';
 
 const pr = (over: Partial<PR>): PR => ({
   number: 1,
@@ -72,5 +72,50 @@ describe('AGENT_BRANCH — the seam-contract prefix, not a roster', () => {
   test('the legacy strategist/ prefix is NOT matched (no profile-agent names in the substrate)', () => {
     expect(AGENT_BRANCH.test('strategist/roadmap-123')).toBe(false);
     expect(disposition(pr({ headRefName: 'strategist/roadmap-123' }), new Set())).toBe('ignore');
+  });
+});
+
+describe('FLIP_BRANCH — the done-flip bookkeeping PR is armed just like an agent PR', () => {
+  test('flip/<id> branches are eligible (armed, not ignored)', () => {
+    expect(disposition(pr({ headRefName: 'flip/COMBO-9' }), new Set())).toBe('arm');
+    expect(disposition(pr({ headRefName: 'flip/42' }), new Set())).toBe('arm');
+    expect(FLIP_BRANCH.test('flip/COMBO-9')).toBe(true);
+  });
+
+  test('a flip/* PR carrying a policy-declared hold label is held, not re-armed — same as agent/*', () => {
+    const root = installWith('policy:\n  merge:\n    maintainer_block_labels: [agent-blocked]\n');
+    const hold = loadHoldLabels(root);
+    expect(disposition(pr({ headRefName: 'flip/COMBO-9', labels: [{ name: 'agent-blocked' }] }), hold)).toBe('held');
+  });
+
+  test('drafts and already-armed flip/* PRs are still ignored', () => {
+    expect(disposition(pr({ headRefName: 'flip/COMBO-9', isDraft: true }), new Set(DEFAULT_HOLD))).toBe('ignore');
+    expect(disposition(pr({ headRefName: 'flip/COMBO-9', autoMergeRequest: {} }), new Set(DEFAULT_HOLD))).toBe('ignore');
+  });
+
+  test('an unrelated non-agent, non-flip branch is still ignored', () => {
+    expect(disposition(pr({ headRefName: 'flipper/not-a-flip' }), new Set())).toBe('ignore');
+    expect(disposition(pr({ headRefName: 'feature/flip-something' }), new Set())).toBe('ignore');
+  });
+});
+
+describe('mergeMethodFor — mode-switched merge method (evidence-ancestry protection)', () => {
+  test('legacy install (no .volter/tracker-config.json) keeps --squash', () => {
+    const root = installWith();
+    expect(mergeMethodFor(root)).toBe('--squash');
+  });
+
+  test('committed-store install (.volter/tracker-config.json present) uses --merge', () => {
+    const root = installWith();
+    mkdirSync(join(root, '.volter'), { recursive: true });
+    writeFileSync(join(root, '.volter', 'tracker-config.json'), '{}');
+    expect(mergeMethodFor(root)).toBe('--merge');
+  });
+
+  test('an empty tracker-config.json still counts as committed-store mode (existence, not content, gates it)', () => {
+    const root = installWith();
+    mkdirSync(join(root, '.volter'), { recursive: true });
+    writeFileSync(join(root, '.volter', 'tracker-config.json'), '');
+    expect(mergeMethodFor(root)).toBe('--merge');
   });
 });

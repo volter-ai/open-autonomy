@@ -1,0 +1,179 @@
+name: flip-done
+# THE done-flip, as a GATED bookkeeping PR — replaces scripts/reconcile-merged-issues.ts's committed-store
+# `main()`, which used to `git push origin main` directly (merge.yml used to run this via `bun scripts/
+# reconcile-merged-issues.ts || true` for every install; branch protection — enforce_admins, required
+# checks, no bypass — REJECTS that for every identity including github-actions[bot], GH006 — so that push
+# always failed, silently, behind merge.yml's `|| true`, and every merged issue's committed-store STORE
+# stayed stuck at `in-review` forever). ONLY relevant to a committed-store install (`.volter/tracker-
+# config.json` present) — reconcile-merged-issues.ts's legacy (no-tracker) mode is unaffected and unchanged.
+#
+# Everything here goes through a PR, same as any other change: when an `agent/issue-<id>` PR merges, this
+# workflow computes the flip on a NEW branch `flip/<id>`, opens `flip/<id> -> main`, and — ONLY if the diff
+# is mechanically verified to be exactly a done-flip (scripts/check-flip-diff.ts; see that file's header for
+# the exact allowlist) — auto-approves it (`agent-review=success`) and enables auto-merge. A diff that fails
+# the gate is left exactly as-is: unreviewed, unmergeable, and LOUD (a workflow annotation + failed job) —
+# never silently approved and never silently dropped.
+#
+# A no-op, harmlessly, on a legacy (no committed store) install: scripts/flip-done.ts scans merged PRs via
+# `gh pr list` and only ever acts on a merged `agent/issue-<id>` PR whose store file
+# (`.volter/tracker/markdown/<id>.md`) exists — a legacy install carries no such directory, so every PR is
+# classified `no-store-file` and skipped; the job still runs (cheap) but opens nothing.
+#
+# THREE TRIGGER PATHS, same shape as ci.yml/security-gate.yml/merge.yml itself:
+#   - `pull_request` closed: fires the instant an agent PR merges — but ONLY when that merge was performed by
+#     an actual human (or any non-GITHUB_TOKEN identity). GUARD: only an `agent/issue-*` head triggers this —
+#     NEVER a `flip/*` head, so a flip PR's own merge can never recursively trigger another flip (the
+#     no-recursive-flip guard).
+#     CONFIRMED GAP (live evidence on the validating testbed): almost every `agent/issue-*` PR is landed by
+#     NATIVE AUTO-MERGE, armed by merge.yml's `gh pr merge --auto` under `GH_TOKEN: github.token`. GitHub's
+#     own anti-recursion rule for `GITHUB_TOKEN` means an event whose actor is that token's identity
+#     (`github-actions[bot]`) does NOT trigger further `on:` workflow runs — the exact same rule already
+#     documented all over this repo for why a BOT-OPENED PR fires no `pull_request` (ci.yml/security-gate.yml/
+#     merge.yml's own comments). So for the common case — an agent PR that goes green and auto-merges with
+#     no human ever clicking "Merge" — this trigger path structurally never fires. It is kept only for the
+#     rarer human-merge case; it must never be the ONLY path relied on.
+#   - `workflow_dispatch` fired DIRECTLY BY merge.yml the moment its own sweep runs (see merge.yml's "Kick
+#     flip-done.yml" step) — this is the RELIABLE path for the auto-merge case above: merge.yml already runs
+#     every 15 min (+ on-demand right after a proposer opens a PR) and is the one thing that actually knows
+#     when its own `--auto` armed merges landed, so it kicks flip-done immediately instead of waiting on a
+#     webhook that can't fire or a second independent cron that can drift out of phase with the first.
+#   - `schedule`: the deterministic backstop of last resort for anything even THAT misses (a `gh workflow run`
+#     dispatch call transiently failing, a sweep that crashed before reaching the dispatch step, etc.) —
+#     mirrors merge.yml's own schedule backstop. scripts/flip-done.ts itself scans ALL merged PRs and is
+#     idempotent, so re-running the sweep is always safe, and this is now the backstop-of-a-backstop, not the
+#     primary path.
+on:
+  pull_request:
+    types: [closed]
+  schedule:
+    - cron: "*/15 * * * *"
+  workflow_dispatch:
+permissions:
+  contents: write
+  pull-requests: write
+  statuses: write
+  checks: write
+  actions: write # required to `gh workflow run ci.yml` / the profile's declared extra check workflows below
+                 # — its ABSENCE makes every one of those dispatch attempts fail `HTTP 403: Resource not
+                 # accessible by integration` even though contents/pull-requests/statuses/checks:write are
+                 # all already present; `actions:write` is the one scope that gates the "dispatch another
+                 # workflow" API call itself, distinct from writing to any of those other resources.
+                 # Least-privilege: only this one extra scope is added, nothing broader.
+jobs:
+  flip-done:
+    # Only an `agent/issue-*` head that actually merged fires the fast path — a closed-not-merged PR, a
+    # human PR, or (critically) a `flip/*` PR closing must never re-enter this job. The schedule/dispatch
+    # path has no `github.event.pull_request` at all, so it always runs (flip-done.ts itself decides
+    # per-PR what needs flipping).
+    if: >
+      github.event_name != 'pull_request' ||
+      (github.event.pull_request.merged == true && startsWith(github.event.pull_request.head.ref, 'agent/issue-'))
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        with:
+          ref: main
+          fetch-depth: 0
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: 1.3.10
+      - run: bun install --frozen-lockfile || bun install
+      - name: git identity for the flip commit
+        run: |
+          git config user.name "open-autonomy-agent"
+          git config user.email "open-autonomy-agent@users.noreply.github.com"
+      - name: Open (or reuse) the flip/<id> PR for every merged agent PR not yet flipped
+        id: flip
+        run: bun scripts/flip-done.ts
+      - name: Resolve this install's EXTRA required-check workflows (beyond ci/agent-review/human-approval)
+        # A flip PR must satisfy the SAME required checks as any other PR before native auto-merge can land
+        # it — `ci` (the adopter's own CI; hardcoded `ci.yml`, the same assumption scripts/agent-propose.ts
+        # already makes for the identical reason) + `human-approval` (always dispatched; auto-passes here
+        # since a flip touches no human-required scope) + whatever the profile declares as its OWN dispatched
+        # blocking gate(s) (self-driving/simple-gh-sdlc: security-gate.yml → `security`; soc2-baseline:
+        # supply-chain.yml + code-scan.yml + secret-scan.yml + codeql-gate.yml → their own contexts). Read
+        # from the COMPILED `.open-autonomy/autonomy.yml`'s `policy.gh-actions.propose_dispatch_checks` —
+        # the SAME key scripts/agent-propose.ts's EXTRA_CHECK_WORKFLOWS reads for a developer's PR — rather
+        # than hardcoding a workflow filename here, so this ONE byte-identical flip-done.yml resource
+        # generalizes correctly across every profile that carries it instead of only the profile it was
+        # first written against.
+        id: extra-checks
+        run: |
+          workflows=$(bun -e "
+            const fs = require('node:fs');
+            try {
+              const y = Bun.YAML.parse(fs.readFileSync('.open-autonomy/autonomy.yml', 'utf8')) ?? {};
+              const checks = y?.policy?.['gh-actions']?.propose_dispatch_checks;
+              console.log(Array.isArray(checks) ? checks.join(',') : '');
+            } catch { console.log(''); }
+          ")
+          echo "workflows=$workflows" >> "$GITHUB_OUTPUT"
+      - name: Gate + auto-approve each open flip/* PR (the security boundary — see scripts/check-flip-diff.ts)
+        env:
+          EXTRA_CHECK_WORKFLOWS: ${{ steps.extra-checks.outputs.workflows }}
+        run: |
+          set +e
+          overall=0
+          IFS=',' read -r -a extra_workflows <<< "$EXTRA_CHECK_WORKFLOWS"
+          for pr_json in $(gh pr list -R "${{ github.repository }}" --state open --json number,headRefName --jq '.[] | select(.headRefName | startswith("flip/")) | @base64'); do
+            pr="$(echo "$pr_json" | base64 -d)"
+            number=$(echo "$pr" | jq -r '.number')
+            branch=$(echo "$pr" | jq -r '.headRefName')
+            issue_id="${branch#flip/}"
+            head_sha=$(gh pr view "$number" -R "${{ github.repository }}" --json headRefOid --jq '.headRefOid')
+
+            # Resolve the expected merge sha INDEPENDENTLY of the flip PR's own content — never by reading the
+            # `PR:` line back off the flip branch's own head (that would be a tautology: the gate would just be
+            # checking the flip PR's claim against itself, since flip-done.ts is exactly what wrote that line in
+            # the first place). Instead, ask GitHub directly for the REAL merge commit of the issue's own
+            # `agent/issue-<id>` PR — the same authoritative source flip-done.ts itself used to decide what to
+            # write (see scripts/flip-done.ts's `pr.mergeCommit.oid`, sourced from `gh pr list --state merged
+            # --json ...mergeCommit`). Re-querying it here means the gate verifies the flip's `PR:` line against
+            # GitHub's own record of that issue's agent PR, not against the flip PR's own say-so.
+            expected_sha=$(gh pr list -R "${{ github.repository }}" --head "agent/issue-${issue_id}" --state merged --json mergeCommit --jq '.[0].mergeCommit.oid // empty')
+            if [ -z "$expected_sha" ]; then
+              echo "::error::flip-done gate: PR #$number ($branch) — no merged agent/issue-${issue_id} PR found on GitHub, cannot independently determine expected merge sha, refusing to approve"
+              overall=1
+              continue
+            fi
+
+            echo "::group::check-flip-diff for PR #$number ($branch)"
+            if bun scripts/check-flip-diff.ts "$issue_id" "$expected_sha" "origin/main" "$head_sha"; then
+              echo "::endgroup::"
+              echo "flip-done gate: PR #$number ($branch) PASSED — posting agent-review=success + dispatching ci/human-approval/extra checks + enabling auto-merge"
+              gh api -X POST "repos/${{ github.repository }}/statuses/$head_sha" \
+                -f state=success -f context=agent-review \
+                -f description="flip/* bookkeeping PR — mechanically verified by check-flip-diff.ts (state:->done + PR:->merge-sha only, no other change)" \
+                >/dev/null
+              # A bot-opened PR fires no pull_request/pull_request_target event (GITHUB_TOKEN anti-recursion) —
+              # exactly the same gap agent-propose.ts's own `dispatch(...)` calls close for a developer's PR.
+              # Without this, a flip PR sits with agent-review green but its OTHER required checks (ci, human-
+              # approval, the profile's own extra gate(s)) NEVER POST AT ALL, so native auto-merge could never
+              # actually land it. Retry a few times — mergeability/dispatch can both be transiently unready
+              # right after `pr create`.
+              for i in 1 2 3 4 5 6; do
+                gh workflow run ci.yml -R "${{ github.repository }}" --ref "$branch" -f sha="$head_sha" -f pr="$number" && break
+                sleep 4
+              done
+              for i in 1 2 3 4 5 6; do
+                gh workflow run human-approval.yml -R "${{ github.repository }}" -f pr="$number" && break
+                sleep 4
+              done
+              for wf in "${extra_workflows[@]}"; do
+                [ -z "$wf" ] && continue
+                for i in 1 2 3 4 5 6; do
+                  gh workflow run "$wf" -R "${{ github.repository }}" -f sha="$head_sha" -f pr="$number" && break
+                  sleep 4
+                done
+              done
+              gh pr merge "$number" -R "${{ github.repository }}" --merge --auto || \
+                echo "::warning::flip-done: could not arm auto-merge yet on #$number — rearm-auto-merge.ts's flip/* coverage will retry"
+            else
+              echo "::endgroup::"
+              echo "::error::flip-done gate: PR #$number ($branch) FAILED check-flip-diff — NOT approving, NOT merging. This PR stays exactly as-is until a human resolves it."
+              overall=1
+            fi
+          done
+          exit $overall

@@ -11,9 +11,13 @@
   "scripts/rearm-auto-merge.ts",
   "scripts/reconcile-merged-issues.ts",
   "scripts/check-supply-chain.ts",
+  "scripts/flip-done.ts",
+  "scripts/check-flip-diff.ts",
   "profiles/self-driving/scripts/human-approval-gate.ts",
   "profiles/self-driving/scripts/rearm-auto-merge.ts",
   "profiles/self-driving/scripts/reconcile-merged-issues.ts",
   "profiles/self-driving/scripts/check-supply-chain.ts",
+  "profiles/self-driving/scripts/flip-done.ts",
+  "profiles/self-driving/scripts/check-flip-diff.ts",
   "docs/VISION.md"
 ]

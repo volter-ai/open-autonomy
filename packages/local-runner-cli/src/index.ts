@@ -38,6 +38,8 @@ export {
 } from './imm-signals.ts';
 export type { Signal, SignalFn, SignalContext } from './imm-signals.ts';
 export { IMM_SIGNAL_IDS, signalSetFor } from './signal-sets.ts';
+export { resolveInstallScript, runInstallDelegate, INSTALL_NOT_AVAILABLE_MESSAGE } from './install-delegate.ts';
+export type { InstallDelegateResult, RunInstallDelegateOptions, SpawnFn } from './install-delegate.ts';
 export type { ImmSignalId, SignalId, SignalSet, SignalSetPack, SkippedSignal, InstallTarget } from './signal-sets.ts';
 export {
   computeMaturity,
@@ -65,6 +67,7 @@ import { bringUpProvider, providerStatus, providerDown } from './provider.ts';
 import { computeMaturity } from './maturity.ts';
 import type { MaturityOptions } from './maturity.ts';
 import type { InstallTarget } from './signal-sets.ts';
+import { runInstallDelegate } from './install-delegate.ts';
 
 function pkgVersion(): string {
   try {
@@ -100,6 +103,12 @@ const HELP = `oa <command> [args]  (@volter/oa v${pkgVersion()}) — the local o
                                 (idempotent: no-ops on a healthy pin, restarts a dead one on the same ports)
   oa provider status             report whether the pinned provider is up and really answering as termfleet
   oa provider down                stop the provider/console this install brought up (best-effort SIGTERM)
+  oa install [args]              (TE.8) the one-shot install agent — chains DETECT->SELECT->DIRECTION->
+                                AUTHORIZE->EXECUTE->VALIDATE->HAND-OFF->PROVE-ADVANCING into one command,
+                                pausing at the 4 human gates by default. Delegates (spawns, never imports)
+                                to the monorepo's own bin/install.ts — SOURCE-CHECKOUT ONLY today (T0.1):
+                                run 'oa install --help' for the full flow, or see it directly with
+                                'bun bin/install.ts --help'.
 
 The '.open-autonomy/paused' marker file is the source of truth; this CLI is ergonomics over the file, never
 a daemon holding its own state. schedule.json/autonomy.yml/prompts are read from the current working
@@ -216,6 +225,11 @@ export async function runCli(argv: string[]): Promise<number> {
     }
     console.error(`[oa] provider: unknown subcommand "${sub}" — usage: oa provider up|status|down`);
     return 1;
+  }
+  if (cmd === 'install') {
+    const r = runInstallDelegate(rest, { cwd });
+    if (r.message) console.error(r.message);
+    return r.code;
   }
   if (cmd === '--help' || cmd === 'help' || cmd === '-h') {
     console.log(HELP);

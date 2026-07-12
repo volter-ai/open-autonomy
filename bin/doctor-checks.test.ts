@@ -282,6 +282,58 @@ describe('checkEnv (AC-2/AC-4, F-4/F-6) — devDeps + NODE_ENV + workspace shado
     expect(r.detail.toLowerCase()).not.toContain('build toolchain');
     cleanupAll();
   });
+
+  // Fix 3 (pnpm-workspace-install-hardening): @termfleet/core/local-providers.js is a REQUIRED RUNTIME
+  // dependency of the local runner (packages/substrate-local's backend.mjs + runner.ts both import it at
+  // first live scheduler tick) -- mirrors ztrack's devDep-integrity check (b) above exactly, but for a
+  // runtime dep instead of a devDependency, and gated on the local substrate actually being in play
+  // (scripts/run-agent.mjs present) rather than on a declared devDependencies entry.
+  describe('@termfleet/core runtime-dependency resolvability (mirrors the ztrack devDep-integrity check, for a REQUIRED runtime dep)', () => {
+    function scaffoldLocalRunnerInstall(dir: string): void {
+      // The minimal signal checkEnv's new sub-check gates on: scripts/run-agent.mjs existing (the same
+      // signal checkLive/check-7 already uses to know "the local substrate is in play here").
+      mkdirSync(join(dir, 'scripts'), { recursive: true });
+      writeFileSync(join(dir, 'scripts', 'run-agent.mjs'), '// stub — only its existence matters to checkEnv\n');
+    }
+
+    test('local substrate in play + @termfleet/core NOT resolvable -> FAIL naming it a required runtime dependency of the local runner', () => {
+      const dir = track(mkdtempSync(join(tmpdir(), 'oa18-termfleet-core-missing-')));
+      writeFileSync(join(dir, 'package.json'), JSON.stringify({ name: 'adopter' }));
+      scaffoldLocalRunnerInstall(dir);
+      // Deliberately no node_modules/@termfleet/core at all -- the pnpm-under-non-hoisting failure mode.
+      const r = checkEnv(dir);
+      expect(r.status).toBe('FAIL');
+      expect(r.detail).toContain('@termfleet/core/local-providers.js');
+      expect(r.detail).toContain('REQUIRED runtime');
+      expect(r.detail).toContain('local runner');
+      cleanupAll();
+    });
+
+    test('local substrate in play + @termfleet/core resolvable -> that sub-check is clean (PASS or at least not the missing-dep FAIL)', () => {
+      const dir = track(mkdtempSync(join(tmpdir(), 'oa18-termfleet-core-ok-')));
+      writeFileSync(join(dir, 'package.json'), JSON.stringify({ name: 'adopter' }));
+      scaffoldLocalRunnerInstall(dir);
+      mkdirSync(join(dir, 'node_modules', '@termfleet', 'core'), { recursive: true });
+      writeFileSync(
+        join(dir, 'node_modules', '@termfleet', 'core', 'package.json'),
+        JSON.stringify({ name: '@termfleet/core', version: '1.0.0', exports: { './local-providers.js': './local-providers.js' } }),
+      );
+      writeFileSync(join(dir, 'node_modules', '@termfleet', 'core', 'local-providers.js'), 'export function resolveDefaultProvider() { return {}; }\n');
+      const r = checkEnv(dir);
+      expect(r.detail).not.toContain('is not resolvable from node_modules');
+      expect(r.detail).toContain('@termfleet/core resolves from node_modules');
+      cleanupAll();
+    });
+
+    test('the local substrate is NOT in play (no scripts/run-agent.mjs) -> the check is skipped entirely, never a false FAIL on an unrelated repo', () => {
+      const dir = track(mkdtempSync(join(tmpdir(), 'oa18-termfleet-core-not-local-')));
+      writeFileSync(join(dir, 'package.json'), JSON.stringify({ name: 'some-other-repo' }));
+      // No scripts/run-agent.mjs at all -- e.g. a github-substrate install, or no install yet.
+      const r = checkEnv(dir);
+      expect(r.detail).not.toContain('@termfleet/core');
+      cleanupAll();
+    });
+  });
 });
 
 describe('checkSelf (AC-1/AC-14, F-1/F-14) — against a REAL built artifact', () => {

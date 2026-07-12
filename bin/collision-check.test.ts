@@ -7,7 +7,7 @@
 //      Check C to a bare `existsSync` goes red here even though the DI tests above still pass with a
 //      correspondingly-tampered fake `io`.
 import { describe, expect, test } from 'bun:test';
-import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
@@ -241,6 +241,77 @@ describe('probeResolution — the authoritative Check C, DI-driven', () => {
     const r = probeResolution('/repo', '@termfleet/core', '@termfleet/core/local-providers.js', io);
     expect(r.ok).toBe(true);
   });
+
+  // Fix 2 (pnpm-workspace-install-hardening): pnpm installs `node_modules/<name>` as a SYMLINK into
+  // `node_modules/.pnpm/<name>@<version>/node_modules/<name>`, and Node's ESM `import.meta.resolve`
+  // REALPATHS by default — so on a perfectly healthy pnpm install, resolving even the package's own files
+  // returns an absolute path under `node_modules/.pnpm/...`, which does NOT literally string-prefix-match
+  // `node_modules/<name>/`. Proven live on a real pnpm-installed `@termfleet/core`; this was a false
+  // positive ("outside-node-modules") on an install with nothing wrong.
+  test('pnpm symlink layout: resolution lands under node_modules/.pnpm/<name>@<ver>/node_modules/<name>/ (pkgDir\'s own realpath), NOT literally under node_modules/<name>/ → still ok', () => {
+    const dirs = new Set([
+      '/repo/node_modules',
+      '/repo/node_modules/@termfleet',
+      '/repo/node_modules/@termfleet/core', // the pnpm-style symlink itself
+      '/repo/node_modules/.pnpm',
+      '/repo/node_modules/.pnpm/@termfleet+core@1.0.0',
+      '/repo/node_modules/.pnpm/@termfleet+core@1.0.0/node_modules',
+      '/repo/node_modules/.pnpm/@termfleet+core@1.0.0/node_modules/@termfleet',
+      '/repo/node_modules/.pnpm/@termfleet+core@1.0.0/node_modules/@termfleet/core',
+    ]);
+    const realTarget = '/repo/node_modules/.pnpm/@termfleet+core@1.0.0/node_modules/@termfleet/core';
+    const io: CollisionIO = {
+      ...fakeIo(
+        { '/repo/node_modules/@termfleet/core/package.json': '{}' },
+        dirs,
+        (_cmd, args) => {
+          expect(args).toContain('@termfleet/core/local-providers.js');
+          // import.meta.resolve realpaths through the pnpm symlink to the .pnpm store copy.
+          return { status: 0, stdout: `file://${realTarget}/dist/local-providers.js\n`, stderr: '' };
+        },
+      ),
+      realpathSync: (p) => (p === '/repo/node_modules/@termfleet/core' ? realTarget : p),
+    };
+    const r = probeResolution('/repo', '@termfleet/core', '@termfleet/core/local-providers.js', io);
+    expect(r).toEqual({ ok: true });
+  });
+
+  // The pnpm-realpath acceptance above must NOT weaken the genuine collision case: a workspace member
+  // symlinked in place of the real package realpaths into the REPO's own source tree (never into
+  // node_modules/.pnpm/...), so it must still fail — here both the literal-prefix check AND the new
+  // pkgDir-realpath check see the same repo-tree escape, so the check that runs next (escapes-into-repo,
+  // Fix 2 leaves it untouched) is what actually reports it; either way this must never resolve `ok: true`.
+  test('pnpm-shaped symlink but the realpath escapes OUTSIDE node_modules entirely (a workspace shadow, not a .pnpm store copy) → still a collision, not ok', () => {
+    const dirs = new Set(['/repo/node_modules', '/repo/node_modules/@termfleet', '/repo/node_modules/@termfleet/core', '/repo/packages', '/repo/packages/core']);
+    const io: CollisionIO = {
+      ...fakeIo(
+        { '/repo/node_modules/@termfleet/core/package.json': '{}' },
+        dirs,
+        () => ({ status: 0, stdout: 'file:///repo/packages/core/dist/local-providers.js\n', stderr: '' }),
+      ),
+      realpathSync: (p) => (p === '/repo/node_modules/@termfleet/core' ? '/repo/packages/core' : p),
+    };
+    const r = probeResolution('/repo', '@termfleet/core', '@termfleet/core/local-providers.js', io);
+    expect(r.ok).toBe(false);
+    expect(r.reason === 'outside-node-modules' || r.reason === 'escapes-into-repo').toBe(true);
+  });
+
+  test('a broken pkgDir symlink (realpathSync throws) during the new realpath check falls back to pkgDir itself, same defensive pattern as the existing escapes-into-repo check', () => {
+    const dirs = new Set(['/repo/node_modules', '/repo/node_modules/termfleet']);
+    const io: CollisionIO = {
+      ...fakeIo(
+        { '/repo/node_modules/termfleet/package.json': '{}' },
+        dirs,
+        () => ({ status: 0, stdout: 'file:///somewhere/else/entirely/index.js\n', stderr: '' }),
+      ),
+      realpathSync: () => {
+        throw new Error('ENOENT: broken symlink');
+      },
+    };
+    const r = probeResolution('/repo', 'termfleet', 'termfleet', io);
+    expect(r.ok).toBe(false);
+    expect(r.reason).toBe('outside-node-modules'); // falls back to pkgDir, which still doesn't match -> correctly still a collision
+  });
 });
 
 describe('checkNamespaceCollisions — the assembled check, DI-driven', () => {
@@ -371,7 +442,13 @@ describe('checkNamespaceCollisions — the assembled check, DI-driven', () => {
 // above green.
 describe('checkNamespaceCollisions — LIVE fixtures (real fs, real symlinks, real node child process)', () => {
   function mk(): string {
-    return mkdtempSync(join(tmpdir(), 'oa-collision-live-'));
+    // realpathSync: on macOS, tmpdir() lives under /var, which is itself a symlink to /private/var — a
+    // fixture path built from the UNRESOLVED tmpdir() would make probeResolution's cwd-vs-realpath
+    // comparisons see two different spellings of the same directory (a spawned `node` child's
+    // import.meta.resolve fully realpaths its result) and spuriously fail even a genuinely clean fixture.
+    // Resolving once here (same fix as probeResolution's own cwd-absolutizing) keeps every path in these
+    // fixtures canonical from the start, matching how a real repo checkout's cwd is not itself a symlink.
+    return realpathSync(mkdtempSync(join(tmpdir(), 'oa-collision-live-')));
   }
 
   test('[Check A, live] root package.json literally named "termfleet" → self-reference collision, no network/install needed', () => {
@@ -422,6 +499,66 @@ describe('checkNamespaceCollisions — LIVE fixtures (real fs, real symlinks, re
       // assert on the CHECK'S OWN label prefix, not a bare substring, to avoid a false pass/fail on wording.)
       expect(r.warns.some((w) => w.includes('COLLISION (self-reference)'))).toBe(false);
       expect(r.warns.some((w) => w.includes('COLLISION (workspace shadowing)'))).toBe(false);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  // Fix 2 (pnpm-workspace-install-hardening), LIVE: reproduces pnpm's actual on-disk shape —
+  // node_modules/@termfleet/core is a SYMLINK into node_modules/.pnpm/<name>@<version>/node_modules/<name>,
+  // a sibling directory INSIDE node_modules, never into the repo's own source tree. This is a perfectly
+  // healthy pnpm install (nothing shadows anything), so Check C must NOT flag it — before this fix, a real
+  // child `node --input-type=module -e "import.meta.resolve(...)"` realpaths through the symlink, landing
+  // the resolved path under node_modules/.pnpm/... instead of literally under node_modules/@termfleet/core/,
+  // and the old literal-prefix-only check false-positived "outside-node-modules" on this exact shape.
+  test('[Check C, live, pnpm layout] node_modules/@termfleet/core is a pnpm-style symlink into node_modules/.pnpm/.../node_modules/@termfleet/core → NO false alarm (healthy pnpm install)', () => {
+    const dir = mk();
+    try {
+      writeFileSync(join(dir, 'package.json'), JSON.stringify({ name: 'unrelated-host-name', version: '0.0.0' }));
+      const storeDir = join(dir, 'node_modules', '.pnpm', '@termfleet+core@1.0.0', 'node_modules', '@termfleet', 'core');
+      mkdirSync(storeDir, { recursive: true });
+      writeFileSync(
+        join(storeDir, 'package.json'),
+        JSON.stringify({ name: '@termfleet/core', version: '1.0.0', exports: { './local-providers.js': './local-providers.js' } }),
+      );
+      writeFileSync(join(storeDir, 'local-providers.js'), 'export function resolveDefaultProvider() { return {}; }\n');
+      mkdirSync(join(dir, 'node_modules', '@termfleet'), { recursive: true });
+      symlinkSync(storeDir, join(dir, 'node_modules', '@termfleet', 'core'), 'dir');
+      const r = checkNamespaceCollisions(dir);
+      expect(r.failed).toBe(false);
+      expect(r.notes.some((n) => n.includes('✓'))).toBe(true);
+      expect(r.warns).toEqual([]);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  // Same pnpm-symlink SHAPE, but the .pnpm store copy is itself a symlink to a workspace member's own
+  // source (the real collision this whole check exists to catch — a workspace member named @termfleet/core
+  // shadowing the published package even under pnpm). Proves Fix 2 didn't blanket-accept "anything a pnpm
+  // symlink points at" — only a resolution that lands inside pkgDir's OWN realpath is accepted, and here
+  // pkgDir's realpath (after following node_modules/@termfleet/core -> the workspace member) is the repo's
+  // own source tree, not a node_modules/.pnpm/ store copy, so the escapes-into-repo check (unchanged by
+  // Fix 2) still fires.
+  test('[Check C, live, pnpm layout] node_modules/@termfleet/core symlinked STRAIGHT to a workspace member source (no .pnpm store hop) → still a collision, never weakened by the pnpm realpath acceptance', () => {
+    const dir = mk();
+    try {
+      writeFileSync(join(dir, 'package.json'), JSON.stringify({ name: 'unrelated-host-name', workspaces: ['packages/*'] }));
+      mkdirSync(join(dir, 'packages', 'core'), { recursive: true });
+      writeFileSync(
+        join(dir, 'packages', 'core', 'package.json'),
+        JSON.stringify({ name: '@termfleet/core', version: '0.0.0-dev', exports: { './local-providers.js': './local-providers.js' } }),
+      );
+      writeFileSync(join(dir, 'packages', 'core', 'local-providers.js'), 'export function resolveDefaultProvider() { return {}; }\n');
+      mkdirSync(join(dir, 'node_modules', '@termfleet'), { recursive: true });
+      symlinkSync(join(dir, 'packages', 'core'), join(dir, 'node_modules', '@termfleet', 'core'), 'dir');
+      const r = checkNamespaceCollisions(dir);
+      expect(r.failed).toBe(true);
+      // Caught by Check B (workspace shadowing, since it's a declared workspace member here) at minimum;
+      // the resolution probe (Check C) must ALSO still see the escape, not be fooled into an 'ok'.
+      const probeResult = probeResolution(dir, '@termfleet/core', '@termfleet/core/local-providers.js');
+      expect(probeResult.ok).toBe(false);
+      expect(probeResult.reason).toBe('escapes-into-repo');
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }

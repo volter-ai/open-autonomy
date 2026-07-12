@@ -288,13 +288,18 @@ function git(args: string[], cwd?: string): { status: number | null; stdout: str
 
 // Create (or reuse) the worktree for the PM-assigned branch, from trunk HEAD. Idempotent: develop creates
 // it, review (same `--branch`) joins it. node_modules is gitignored (lives only in the main checkout), so a
-// fresh worktree has none — symlink it so the repo-pinned ztrack/preset-kit + agent CLIs resolve inside it.
+// fresh worktree has none — symlink it (root AND every workspace-member directory that has its own, see
+// linkNodeModulesInto) so the repo-pinned ztrack/preset-kit + agent CLIs resolve inside it.
 // Ignore the Runner-created paths via the repo's COMMON `.git/info/exclude`, not `.gitignore`. info/exclude
 // is shared by every worktree and is never committed, so it reliably covers a worktree's `node_modules`
-// symlink regardless of what `.gitignore` that worktree's branch has checked out. (Appending to the main
+// symlink(s) regardless of what `.gitignore` that worktree's branch has checked out. (Appending to the main
 // checkout's working-copy `.gitignore` does NOT reach a worktree, which sees its branch's committed version.)
-// `node_modules` carries no trailing slash on purpose — a `node_modules/` dir pattern does NOT match the
-// symlink the Runner creates, which would otherwise be staged by a worker's `git add -A` and merged onto trunk.
+// `node_modules` carries no trailing slash and no leading slash on purpose — a bare `node_modules` pattern
+// matches a directory of that name AT ANY DEPTH (gitignore semantics), so it covers every per-package
+// symlink linkNodeModulesInto creates, not just the root one; a `node_modules/` (trailing-slash) pattern
+// would still match at any depth too, but the missing trailing slash is deliberate for a different reason:
+// it also matches if some future change ever created `node_modules` as a plain FILE, not just a directory.
+// (Whichever form: any of these symlinks would otherwise be staged by a worker's `git add -A` and merged onto trunk.)
 function ensureRunnerPathsIgnored(): void {
   const commonDir = git(['rev-parse', '--git-common-dir']).stdout.trim();
   if (!commonDir) return;
@@ -319,6 +324,121 @@ function ensureRunnerPathsIgnored(): void {
  *  and pure so it's unit-testable without a live termfleet stack — mirrors the `mergeInFlight` pattern. */
 export function worktreeBase(codeHost: string, originTrunkResolves: boolean, trunk: string): string {
   return codeHost === 'github' && originTrunkResolves ? `origin/${trunk}` : 'HEAD';
+}
+
+// --- workspace-member node_modules discovery (pnpm/yarn/npm workspace layouts don't hoist everything to
+// root) ---------------------------------------------------------------------------------------------------
+// npm's classic hoisting puts (almost) every dependency under the ROOT node_modules, so linking just that
+// one directory into a fresh worktree (below) is enough for a script/CLI anywhere in the repo to resolve
+// its tools. pnpm (and any workspace-aware manager configured to skip full hoisting) instead gives EACH
+// workspace member its OWN node_modules/.bin — e.g. apps/server/node_modules/.bin/knex — with nothing
+// equivalent at the root. A worktree that only linked the root node_modules would leave every per-package
+// CLI unreachable (proven live: `pnpm db:migrate` inside a fresh worktree died "knex not found" even though
+// the main checkout had `apps/server/node_modules/.bin/knex`). So we ALSO best-effort-symlink node_modules
+// for every workspace member directory this checkout actually declares.
+//
+// Member directories are read from the repo's OWN declared workspace globs — never hardcoded to
+// "apps"/"packages" — so this stays correct for any repo shape:
+//   - npm/yarn/bun: package.json's "workspaces" (array form, or yarn's `{ packages: [...] }` object form).
+//   - pnpm: pnpm-workspace.yaml's "packages" list (pnpm does not read package.json's "workspaces" field at
+//     all — this is its own, DIFFERENT source of truth, and is checked FIRST/in addition since a pnpm repo
+//     may have no "workspaces" field in package.json whatsoever).
+// A repo with neither file (a plain single-package project) simply yields no members — a no-op, exactly
+// like the existing root-link behavior degrades gracefully when there's no root node_modules to link either.
+function readWorkspaceGlobs(): string[] {
+  const globs: string[] = [];
+  try {
+    const pkg = JSON.parse(readFileSync(resolve('package.json'), 'utf8')) as {
+      workspaces?: string[] | { packages?: string[] };
+    };
+    if (Array.isArray(pkg.workspaces)) globs.push(...pkg.workspaces);
+    else if (Array.isArray(pkg.workspaces?.packages)) globs.push(...pkg.workspaces.packages);
+  } catch {
+    /* no root package.json, or it doesn't parse — fall through to pnpm-workspace.yaml / the conventional fallback */
+  }
+  try {
+    const pnpmWs = Bun.YAML.parse(readFileSync(resolve('pnpm-workspace.yaml'), 'utf8')) as { packages?: string[] };
+    if (Array.isArray(pnpmWs.packages)) globs.push(...pnpmWs.packages);
+  } catch {
+    /* no pnpm-workspace.yaml — not a pnpm workspace, or it doesn't parse */
+  }
+  // Nothing declared anywhere (no "workspaces" field, no pnpm-workspace.yaml): fall back to the
+  // conventional globs most workspace repos use, so a repo that DOES shape itself this way but forgot (or
+  // has yet) to declare it explicitly still gets its member node_modules linked. A glob that matches nothing
+  // (below) is simply a no-op, so trying these speculatively is always safe.
+  if (!globs.length) globs.push('apps/*', 'packages/*');
+  return [...new Set(globs)];
+}
+
+// A minimal, single-`*`-segment glob expander — deliberately NOT the general-purpose engine
+// bin/collision-check.ts's expandWorkspaceGlob is (that lives in the dev-only CLI package and pulls in
+// machinery this file can't depend on: runner-frontend.ts is emitted VERBATIM into every install with zero
+// package dependencies — see the file-header comment). Covers what real workspace globs actually use:
+// literal segments and a single trailing `*` segment (`packages/*`, `apps/*`, a scoped `packages/@scope/*`,
+// ...). Anything fancier (`**`, mid-path `*`) simply matches nothing here rather than throwing — a missed
+// exotic pattern degrades to "that glob's members don't get linked", the same best-effort posture as every
+// other step in this function.
+function expandSimpleGlob(pattern: string): string[] {
+  const segments = pattern.split('/').filter(Boolean);
+  let dirs = [resolve('.')];
+  for (const seg of segments) {
+    const next: string[] = [];
+    if (seg === '*') {
+      for (const d of dirs) {
+        let entries: string[] = [];
+        try {
+          entries = readdirSync(d);
+        } catch {
+          continue;
+        }
+        for (const e of entries) {
+          if (e.startsWith('.') || e === 'node_modules') continue;
+          const p = join(d, e);
+          if (existsSync(p)) next.push(p);
+        }
+      }
+    } else if (seg.includes('*')) {
+      return []; // an exotic mid-segment wildcard — not worth a false-positive match; skip this glob
+    } else {
+      for (const d of dirs) next.push(join(d, seg));
+    }
+    dirs = next;
+  }
+  return dirs;
+}
+
+/** Every workspace-member directory this checkout declares (or conventionally implies), deduped, that
+ *  actually exists on disk and has its OWN node_modules to link. Exported so it's unit-testable without a
+ *  real worktree. */
+export function workspaceMemberNodeModulesDirs(): string[] {
+  const dirs = new Set<string>();
+  for (const glob of readWorkspaceGlobs()) {
+    for (const dir of expandSimpleGlob(glob)) {
+      if (existsSync(join(dir, 'node_modules'))) dirs.add(dir);
+    }
+  }
+  return [...dirs];
+}
+
+// Best-effort-symlink `<dir>/node_modules` from the main checkout into the same relative path inside
+// `worktree`, for the root AND every workspace-member directory that has its own node_modules. Every link
+// is independently best-effort (try/catch swallow, never throw) — a missing/failed symlink for any one
+// package just means THAT package falls back to root/global resolution inside the worktree, exactly like
+// the pre-existing root-only behavior already degraded.
+function linkNodeModulesInto(worktree: string): void {
+  const roots = [resolve('.'), ...workspaceMemberNodeModulesDirs()];
+  for (const dir of roots) {
+    const source = join(dir, 'node_modules');
+    const relDir = dir === resolve('.') ? '' : dir.slice(resolve('.').length + 1);
+    const linkPath = join(worktree, relDir, 'node_modules');
+    if (!existsSync(source) || existsSync(linkPath)) continue;
+    try {
+      mkdirSync(dirname(linkPath), { recursive: true });
+      symlinkSync(source, linkPath, 'dir');
+    } catch {
+      /* best-effort: a missing symlink just means that package falls back to root/global tools */
+    }
+  }
 }
 
 // Returns the base descriptor actually used to create the worktree ('existing' when the branch already
@@ -347,15 +467,7 @@ function ensureWorktree(branch: string, worktree: string, codeHost: string): str
   const add = branchExists ? ['worktree', 'add', worktree, branch] : ['worktree', 'add', '-b', branch, worktree, base];
   const r = git(add);
   if (r.status !== 0) throw new Error(`git worktree add failed for ${branch}: ${r.stderr || r.stdout}`);
-  const mainNodeModules = resolve('node_modules');
-  const linkPath = join(worktree, 'node_modules');
-  if (existsSync(mainNodeModules) && !existsSync(linkPath)) {
-    try {
-      symlinkSync(mainNodeModules, linkPath, 'dir');
-    } catch {
-      /* best-effort: a missing symlink just means the worktree falls back to global tools */
-    }
-  }
+  linkNodeModulesInto(worktree);
   return branchExists ? 'existing' : base;
 }
 

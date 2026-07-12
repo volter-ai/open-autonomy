@@ -94,7 +94,12 @@ if (process.argv.includes('--live')) {
   writeFileSync(join(build, 'provision.json'), `${JSON.stringify(provision, null, 2)}\n`);
 
   console.log(`provisioning ${repo} …`);
-  run('bun', ['scripts/provision-target-repo.ts', '--repo', repo, '--source', build, '--private', '--force-content']);
+  // --arm-auto-merge: bench provisions a DISPOSABLE fixture repo and deliberately proves the fully
+  // unattended merge boundary end-to-end (docs/LIVE_TESTING_STRATEGY.md's no-fakery contract explicitly
+  // FORBIDS a human hand-merging a PR native auto-merge is supposed to land) — this is the one caller
+  // that needs auto-merge armed immediately, unlike `oa install`'s automated EXECUTE path (TE.10), which
+  // never passes this flag so it never arms auto-merge before a human has watched a supervised first merge.
+  run('bun', ['scripts/provision-target-repo.ts', '--repo', repo, '--source', build, '--private', '--force-content', '--arm-auto-merge']);
 
   // Seed the org's intake per the workload's declared mode. A freshly-created repo isn't immediately
   // addressable — retry briefly past the race.

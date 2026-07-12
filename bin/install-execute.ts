@@ -1,9 +1,11 @@
 #!/usr/bin/env bun
 // TE.5 — Phase 4 EXECUTE + Phase 5 VALIDATE (OA-INSTALL-IMPLEMENTATION-TASKS.md#te5, DESIGN §Phase 4/§Phase
 // 5 + hardening #4; docs/INSTALL-AGENT.md:203 "commit the harness first, wire the gate last";
-// profiles/simple-sdlc/ir.yml:95-99 (seed-drafts-not-ready); scripts/provision-target-repo.ts:305
+// profiles/simple-sdlc/ir.yml:95-99 (seed-drafts-not-ready); scripts/provision-target-repo.ts:363
 // (continues-on-failed-protection-PUT); scripts/open-autonomy-preflight.ts:189-194 (passes-with-zero-
-// protection)).
+// protection); TE.10 — this step never passes --arm-auto-merge, so provisioning here never arms native
+// auto-merge; see scripts/provision-target-repo.ts's `armAutoMerge` doc and bin/install-handoff.ts's
+// G4B_RUNBOOK for the human-gated arm step).
 //
 // THIS IS AN ORCHESTRATION unit — it composes ALREADY-BUILT primitives into the dependency-ordered
 // EXECUTE -> VALIDATE sequence. It never re-derives a signal/guard/compile/provision primitive; every
@@ -32,7 +34,7 @@
 //                             independent verification: `a13ProvisionMatchesLiveProtection`
 //                             (packages/local-runner-cli/src/imm-signals.ts) — the EXACT hard-signal
 //                             function `oa maturity` itself uses for M3 — called directly here rather than
-//                             trusting provisioning's own exit code (scripts/provision-target-repo.ts:305
+//                             trusting provisioning's own exit code (scripts/provision-target-repo.ts:363
 //                             continues silently on a failed non-admin PUT). A present:false verdict of
 //                             ANY kind (unverifiable, not-applicable, proven-negative) is a NAMED BLOCKER,
 //                             never a silent pass. N/A for a local-git profile.
@@ -492,10 +494,16 @@ export async function stepCiAndProvision(
   const patchedManifestPath = join(repoDir, '.open-autonomy-install-provision.json');
   writeFileSync(patchedManifestPath, JSON.stringify(manifest, null, 2));
 
+  // TE.10: deliberately NEVER passes --arm-auto-merge. Provisioning during EXECUTE sets up branch
+  // protection + required CI checks only; arming native auto-merge is a human-gated LATER step (TE.6's
+  // G4b runbook, bin/install-handoff.ts's G4B_RUNBOOK: "watch the first PR merge under supervision, THEN
+  // arm auto-merge" via `gh repo edit <owner>/<repo> --enable-auto-merge`) — never something an
+  // unattended EXECUTE phase does on its own. See scripts/provision-target-repo.ts's `armAutoMerge`
+  // Options field doc for the full rationale.
   const prov = opts.proc('bun', [PROVISION_TARGET_REPO_SCRIPT, '--repo', opts.ownerRepo, '--source', repoDir, '--manifest', patchedManifestPath], {});
   const provisionExitOk = prov.status === 0;
 
-  // HARDENING #4: never trust the exit code above — provision-target-repo.ts:305 continues silently on a
+  // HARDENING #4: never trust the exit code above — provision-target-repo.ts:363 continues silently on a
   // failed non-admin protection PUT. Independently re-verify via the EXACT hard-signal function `oa
   // maturity` uses for M3 (imm-signals.ts's a13ProvisionMatchesLiveProtection) — a present:false verdict
   // of ANY kind (unverifiable/not-applicable/proven-negative) is a NAMED BLOCKER, never a silent pass.

@@ -80,13 +80,23 @@ function defaultReadFile(p) {
   }
 }
 
+// Escape any regex metacharacter in an untrusted string (a `--team` CLI arg, or a `local.teamKey` pulled
+// from the committed tracker config) before it's interpolated into a `RegExp(...)` source. Without this, a
+// team key containing `.*`, `(`, `[`, etc. would be compiled as a live regex fragment instead of matched
+// literally — e.g. `--team 'LOCAL|OTHER'` would silently widen the match to two teams' store files. Standard
+// escape set per MDN's regex guide.
+export function escapeRegExp(str) {
+  return String(str).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
 // Every numeric id this store's file listing already carries for `<team>-<n>.md`, e.g. `COMBO-11.md` -> 11.
 // This is the SAME signal ztrack's own allocator reads (existing store files), so "highest seen + 1" here is
 // deliberately the same starting candidate ztrack would pick unprompted — this helper's job is only to keep
 // walking PAST that candidate when GitHub says it's actually dead, not to invent a different allocation
-// scheme.
+// scheme. `team` is untrusted (a CLI arg or config value), so it's escaped before being spliced into the
+// RegExp source — see escapeRegExp above.
 export function highestExistingId(team, dir, listDir = defaultListDir) {
-  const re = new RegExp(`^${team}-(\\d+)\\.md$`);
+  const re = new RegExp(`^${escapeRegExp(team)}-(\\d+)\\.md$`);
   let highest = 0;
   for (const name of listDir(dir)) {
     const m = re.exec(name);

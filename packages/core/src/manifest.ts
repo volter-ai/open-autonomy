@@ -33,6 +33,9 @@ export interface OAManifest {
       capabilities?: string[];
       timeout?: number;
       review?: string; // the reviewer agent that judges this proposer's PRs (the merge-boundary review edge)
+      // Opaque shell-command DATA the LOCAL runner executes in the session's own cwd before it spawns (see
+      // IRAgent.prelaunch, ir.ts). Carried verbatim like `review`/`timeout` — never interpreted here.
+      prelaunch?: string;
     }
   >;
   // Portable governance data, carried verbatim — each substrate reads the keys it knows
@@ -75,6 +78,7 @@ export function emitAutonomy(ir: AutonomyIR): OAManifest {
       ...(typeof agent.timeout === 'number' ? { timeout: agent.timeout } : {}),
       ...(agent.capabilities?.length ? { capabilities: agent.capabilities } : {}),
       ...(agent.review ? { review: agent.review } : {}),
+      ...(agent.prelaunch ? { prelaunch: agent.prelaunch } : {}),
     };
   }
   // Carry the policy box verbatim — it is opaque governance, not a fixed schema (see OAManifest.policy).

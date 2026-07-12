@@ -135,11 +135,20 @@ are added to a catalog first, then implemented by substrates — purely additive
 2. **Trigger param sources** ([§Trigger params](#trigger-params)) — what a trigger can forward to the agent:
    `subject.ref` · `subject.actor` · `subject.text` · `trigger.kind`. A trigger declares
    `params: { OPAQUE_NAME: source }`; the substrate resolves the source from its firing context.
-3. **Agent fields** (no opaque config box) — the only non-capability field is `timeout`:
+3. **Agent fields** (no opaque config box) — the non-capability fields are `timeout` and `prelaunch`:
 
    | field | meaning | github | local |
    |---|---|---|---|
    | `timeout` | minutes before kill | job `timeout-minutes` | runner kill-after |
+   | `prelaunch` | an opaque shell command the runner runs in the session's own cwd, BEFORE it spawns (best-effort: a nonzero exit is logged, never fatal) | *(no realization yet — local-only for v1)* | `spawnSync(prelaunch, { shell: true, cwd })` before the session spawns |
+
+   `prelaunch` is not a reintroduction of a config box — it is a single opaque DATA string with one
+   documented realization (the runner executes it verbatim, never interprets it), the same shape as
+   `review` naming a reviewer agent. It exists to arm optional session-local state (e.g. a marker file a
+   session's own hooks read) that must exist *before* the session starts looking for it — something no
+   agent's own skill prompt can do, since the skill only runs once the session has already spawned.
+   Declared per-agent; absent ⇒ no-op (most agents declare none). See [§The Runner](#the-runner) for the
+   full contract.
 
    There is **no** `config` box. Everything the box once carried is now either a capability (authority),
    substrate-DERIVED (the workflow filename = `<agent>.yml`; the model endpoint is provisioned for every
@@ -236,6 +245,26 @@ own workspace (a local runner: a git worktree; a gh-actions runner: the job's fr
 the work item — the caller (the PM) names the branch — and it injects **no** code-host identity: an agent that
 needs its repo or PR resolves them through its own code-host tool (e.g. `gh api repos/{owner}/{repo}/…`, which
 `gh` fills from the remote). So the runner never names a code host, on any substrate.
+
+**`prelaunch` is a methodology-free pre-spawn hook, not a lifecycle stage.** An agent may declare an opaque
+`prelaunch: <shell command>` (`IRAgent.prelaunch`, `packages/core/src/ir.ts`). Where realized, the runner
+executes it in the session's own cwd — the worktree it is about to be launched into (or `process.cwd()` for
+a trunk launch, no `--branch`) — **before** the session spawns, with the same env the session itself will
+see. The runner treats it as **opaque data** the profile supplies: it never hardcodes a per-agent branch to
+decide whether to run one, and it runs identically for any agent that declares a `prelaunch:` (a no-op for
+every agent that doesn't — most agents declare none). This exists because a session's own tooling (its skill
+prompt, its own Stop/SubagentStop hooks) only runs *after* the session has already spawned — too late to
+arm state (e.g. a marker file) that tooling needs to see from its very first moment. It is **best-effort**:
+a nonzero exit is logged and the launch proceeds anyway — a prelaunch arms optional session-local state, it
+is never a gate on whether the session gets to run.
+
+Realized today by the **local** substrate only (`packages/substrate-local/src/runner-frontend.ts`'s
+`launch()`). gh-actions has **no realization yet** — deliberately deferred to a future change rather than
+guessed at here: a plausible shape would be an extra pre-skill step in the generated per-agent workflow, but
+that only pays for itself once a concrete gh-actions use case needs it. Declaring `prelaunch` on a profile
+compiled only to `gh-actions` is accepted (validated for shape, carried into the manifest) but has no effect
+there today — the same "declared, substrate may not implement it yet" posture as an unsupported capability
+(see [§Conformance](#conformance--the-support-matrix)).
 
 ### What is NOT an agent
 

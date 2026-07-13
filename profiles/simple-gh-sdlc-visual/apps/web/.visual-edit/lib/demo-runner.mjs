@@ -285,7 +285,7 @@ function writeJson(filePath, value) {
 // repo root via `git rev-parse --show-toplevel` (the runner may execute
 // from a worktree, so this is never hardcoded) and never throws; git
 // failures must not break a demo run.
-function captureGitProvenance(cwd) {
+export function captureGitProvenance(cwd) {
   let root;
   try {
     root = execFileSync('git', ['rev-parse', '--show-toplevel'], { cwd, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim();

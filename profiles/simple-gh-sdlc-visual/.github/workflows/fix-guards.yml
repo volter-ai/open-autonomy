@@ -1,0 +1,36 @@
+name: fix-guards
+# Profile-level regression guards (scripts/regression/fix-guards.mjs) — proves two
+# previously-fixed defects in this profile's own source cannot silently regress:
+#   1. Vendor-scan shape-completeness (scripts/world-smoke.mjs stage-4 pass-1) — a vendor
+#      reached only via a dynamic import() or only via a static subpath specifier must still
+#      be caught as an uncovered external.
+#   2. Provenance stamping (apps/web/.visual-edit/lib/demo-runner.mjs) — summary.json must
+#      carry gitSha/gitBranch/gitDirty.
+# See fix-guards.mjs's own header for the full technique + why twin-scenario strict-validation
+# (owned by the twin package, not this profile) is deliberately out of scope here.
+#
+# Deliberately LIGHT: the harness is pure Node stdlib (no npm/bun install, no world boot, no
+# Playwright) — it never imports demo-runner.mjs as a module (that would pull in `playwright`,
+# which this profile template does not ship a dependency on) and coverage-only vendor scanning
+# needs no world boot. Keep it that way; if a future guard needs either, reconsider whether it
+# belongs in this workflow or in smoke.yml instead.
+on:
+  pull_request:
+    paths:
+      - "scripts/world-smoke.mjs"
+      - "scripts/regression/fix-guards.mjs"
+      - "apps/web/.visual-edit/lib/demo-runner.mjs"
+      - ".github/workflows/fix-guards.yml"
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  fix-guards:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: "22"
+      - name: Profile fix guards
+        run: node scripts/regression/fix-guards.mjs

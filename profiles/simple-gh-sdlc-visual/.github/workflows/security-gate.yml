@@ -1,0 +1,58 @@
+name: security-gate
+# `security` as a BLOCKING required check on bot PRs (mirrors soc2-baseline's supply-chain.yml — the
+# dispatched, blocking realization of a monitoring scan). The proposer effect dispatches this with the PR
+# head sha (a bot PR fires no pull_request, so it must be kicked to post its required status — see
+# scripts/agent-propose.ts EXTRA_CHECK_WORKFLOWS). It checks out the head, runs the SAME two scans as the
+# monitoring security.yml (zizmor workflow static analysis + the supply-chain gate), and posts a `security`
+# commit status on that sha. Native auto-merge waits for it.
+#
+# The monitoring `security.yml` still runs on push/PR/weekly and its job is ALSO named `security` — this is
+# intentional, not a collision: the two never populate the same commit. A bot-authored PR fires no
+# `pull_request` (GITHUB_TOKEN anti-recursion), so only THIS dispatched gate posts `security` for it; a
+# human-authored PR fires `pull_request` and only security.yml's job posts `security` for it — nothing ever
+# dispatches this gate for a human PR. One logical check, two trigger paths depending on PR authorship —
+# exactly the same pattern this repo's own root `ci.yml` uses for the `ci` context (pull_request for a human
+# PR, workflow_dispatch for a bot PR, both posting `ci`).
+on:
+  workflow_dispatch:
+    inputs:
+      sha:
+        description: "head SHA to gate + post the status on"
+        required: true
+        type: string
+      pr:
+        description: "PR number (context only)"
+        required: false
+        type: string
+permissions:
+  contents: read
+  statuses: write
+jobs:
+  security-gate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        with:
+          ref: ${{ github.event.inputs.sha }}
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: 1.3.10
+      - name: Post pending status
+        env: { GH_TOKEN: "${{ github.token }}", SHA: "${{ github.event.inputs.sha }}" }
+        run: gh api -X POST "repos/{owner}/{repo}/statuses/${SHA}" -f state=pending -f context=security -f description="scanning workflows (zizmor) + supply chain" >/dev/null
+      - name: Run security gate + post result
+        env: { GH_TOKEN: "${{ github.token }}", SHA: "${{ github.event.inputs.sha }}" }
+        run: |
+          set +e   # we handle every exit code + ALWAYS post a final status (never leave it stuck pending)
+          state=success
+          desc=""
+          if ! pipx run zizmor==1.26.1 --offline --min-severity high .github/workflows/; then
+            state=failure; desc="zizmor workflow finding(s) at high+ severity"
+          fi
+          bun install --frozen-lockfile || bun install || true
+          if ! bun scripts/check-supply-chain.ts; then
+            state=failure; desc="${desc:+$desc; }supply-chain gate failed (integrity or advisory)"
+          fi
+          [ "$state" = success ] && desc="zizmor clean + supply-chain gate passed"
+          gh api -X POST "repos/{owner}/{repo}/statuses/${SHA}" -f state="$state" -f context=security -f description="$desc" >/dev/null
+          [ "$state" = success ]

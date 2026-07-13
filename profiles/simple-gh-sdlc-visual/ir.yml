@@ -1,0 +1,228 @@
+# simple-gh-sdlc-visual — simple-gh-sdlc + visual evidence bookends: Playwright captures before/after
+# implementation via visual-edit runners inside sealed twin worlds, evidence written to ztrack. Same
+# ztrack-tracked dispatch loop (a cron PM that reads the board and launches workers via agent:launch).
+# LOCAL-SUBSTRATE profile: agents run on your machine via termfleet (never gh-actions), but the code
+# host is still GitHub — develop's change lands as a real auto-merging PR on `agent/issue-<id>`, gated
+# by an independent `agent-review` status (the code:review / code:propose permission split). On local,
+# that review edge and the propose-recovery/check-convergence sweeps are DELIVERED by the substrate's own
+# reconcilers (packages/substrate-local/src/reconcilers.ts — reconcile-open-reviews.mjs,
+# reconcile-ready-branches.mjs, reconcile-open-checks.mjs; emitted automatically for any codeHost:github
+# profile with a code:propose agent, no resources: entry needed) rather than GitHub's native
+# issue_comment/pull_request_target webhooks, which local has no listener for — see
+# docs/CODE_HOST_RESOURCES.md and docs/SPEC.md#the-runner. Uses the ztrack `simple-gh-sdlc` preset (PR at
+# in-review, merged PR for done) — UNCHANGED from the base profile; this profile adds an evidence
+# PIPELINE on top, not a new tracker preset. `develop` also declares a `prelaunch` hook (IRAgent.prelaunch,
+# packages/core/src/ir.ts) that arms `ztrack loop start` before the session spawns — realized only on the
+# local substrate today (docs/SPEC.md#the-runner), which is exactly the substrate this profile targets.
+# One unit: an agent = behavior + capabilities + triggers(+params) (+ review edge). See
+# docs/SPEC.md#the-ir, docs/SPEC.md#the-runner.
+schema: autonomy.ir.v1
+# LOCAL only (deliberately narrower than simple-gh-sdlc's [gh-actions, local]): this profile's Runner is
+# always the local substrate — the store-native ztrack-loop `prelaunch` gate, and the reviewer-delivery +
+# convergence reconcilers it depends on, only have a realization there today (PR #170, #174). A gh-actions
+# compile would accept `prelaunch` (shape-validated, carried, but inert — no realization on that substrate
+# yet) and would natively fire the `reviewer` event triggers instead of relying on the local reconcilers —
+# plausible future work, not declared here so `check:profiles` only ever proves the substrate this profile
+# actually depends on.
+targets: [local]
+codeHost: github
+
+agents:
+  # The only dispatcher. Sweeps the ztrack board on a tick, enforces WIP, and LAUNCHES the next eligible
+  # worker (draft/develop) through the Runner. Review happens on the PR, not by a launched worker.
+  pm:
+    behavior: pm
+    capabilities: [tasks:converse, agent:launch, agent:list]
+    triggers:
+      - cron: "*/15 * * * *"
+
+  # Turns an untriaged request into a verifiable Ready issue (sources + 1-3 ACs + evidence scaffold).
+  draft:
+    behavior: draft
+    capabilities: [tasks:author, tasks:converse]
+    triggers:
+      - dispatch: true
+        params: { ZTRACK_ISSUE: subject.ref }
+
+  # Implements one Ready issue with evidence and pushes its branch; the substrate opens an auto-merging
+  # PR. Its proposals are reviewed by `reviewer` — the substrate triggers that review when the PR opens
+  # (the merge boundary; no PM/model routing). Holds code:propose, never code:review. `prelaunch` arms
+  # the in-session ztrack-loop gate (`ztrack loop start "$ZTRACK_ISSUE" --until in-review --max 8`)
+  # BEFORE the session spawns, so the developer's own Stop/SubagentStop hooks hold every turn until the
+  # issue reaches in-review with a green `ztrack check` — see skills/develop/SKILL.md step 1.
+  develop:
+    behavior: develop
+    capabilities: [code:propose, tasks:converse]
+    review: reviewer
+    prelaunch: npx ztrack loop start "$ZTRACK_ISSUE" --until in-review --max 8
+    triggers:
+      - dispatch: true
+        params: { ZTRACK_ISSUE: subject.ref }
+
+  # The independent GitHub reviewer: verifies the developer's PR (ztrack green + every passed AC backed by
+  # cited evidence + no unapproved human-required path) and posts the `agent-review` status (code:review =
+  # statuses:write). Holds NO contents:write, so it cannot merge; native auto-merge lands the PR once
+  # `ci` + `agent-review` are both green (docs/SPEC.md#capabilities — the merge boundary). On the local
+  # substrate this profile targets, the `event:` triggers below are never fired by a webhook — instead
+  # `scripts/reconcile-open-reviews.mjs` (substrate-emitted; see the profile header) polls open agent PRs
+  # and LAUNCHES this agent by name (read from the compiled manifest's `agents.develop.review`, never
+  # hardcoded) whenever a PR's head sha lacks a fresh `agent-review` status. Declaring the `event:` triggers
+  # here is still correct and load-bearing: they are what makes `agents.develop.review: reviewer` resolve to
+  # a real agent at all, and a future gh-actions compile of this same IR would fire them natively.
+  reviewer:
+    behavior: reviewer
+    capabilities: [code:review, tasks:converse]
+    triggers:
+      - event: issue_comment
+        config: { types: [created] }
+        params:
+          TARGET_REF: subject.ref
+          SUBJECT_TEXT: subject.text
+          ACTOR_ROLE: subject.actorRole
+      - event: pull_request_target
+        config: { types: [opened, synchronize, reopened, ready_for_review] }
+    timeout: 20
+
+policy:
+  maxConcurrent: 2   # the WIP ceiling: at most one in-progress + one in-review at a time
+  box:
+    # (the WIP ceiling — one develop in flight, one in review — is the PM doctrine in standards/workflow.md;
+    # policy.maxConcurrent is the enforced runner cap. No component reads a wip.* key.)
+    # The visual-evidence pipeline: where the before/after (baseline/dryrun) bookends live and how they get
+    # attached to ztrack. READERS (agent-at-runtime): skills/develop/SKILL.md (§Baseline, §DryRun — boots
+    # world_config, runs the demo/state script under demo_dir/state_dir against app_url_env, invokes adapter
+    # to attach evidence) and skills/reviewer/SKILL.md (downloads/inspects the evidence images the adapter
+    # attached and verifies them against the commit named in each evidence line). Every key here is read by
+    # those two skills' instructions — no key exists without a reader (profiles/README.md's policy.box rule).
+    # world_config/demo_dir/state_dir NAME the adopter's own layout (a template, not the testbed's billing
+    # app) — see README.md's "Adopting this profile" section for what the adopter fills in.
+    visual_evidence:
+      world_config: world.config.json
+      demo_dir: apps/web/.visual-edit/playwright-demos
+      state_dir: apps/web/.visual-edit/playwright-visual-states
+      adapter: scripts/evidence-attach.mjs
+      app_url_env: APP_URL
+    # gh-actions runner config key namespace (kept for parity with simple-gh-sdlc's box shape and because
+    # scripts/agent-propose.ts — shared runtime, invoked by the LOCAL runner too via reconcile-*.mjs's PR
+    # open/dispatch paths — reads `propose_dispatch_checks` regardless of which substrate launched it). The
+    # base profile SHIPS a security scan (security.yml) but never made it a required merge gate on its own:
+    # a bot PR fires no pull_request (GITHUB_TOKEN anti-recursion), so security.yml never ran on the agent-PR
+    # path and a security finding could never block a merge. Mirrors soc2-baseline's propose_dispatch_checks:
+    # the proposer effect dispatches security-gate.yml (the dispatched, blocking realization of security.yml)
+    # with the PR head sha so its `security` status posts and native auto-merge waits for it.
+    gh-actions:
+      propose_dispatch_checks: [security-gate.yml]
+    tracker:
+      # bin/autonomy-compile.ts's local-runner "next steps" print resolves the ztrack preset name from
+      # THIS key first, falling back to the profile directory's basename only if it's absent (a bundled
+      # profile's basename happens to equal its preset name today). FORKING this profile? Keep this key —
+      # renaming the directory without it silently selects a nonexistent preset (BL-29); the CLI warns
+      # loudly if the basename fallback doesn't match a bundled name, but an explicit declaration survives
+      # the rename outright.
+      ztrackPreset: simple-gh-sdlc
+    autonomy:
+      max_develop_attempts: 2   # the PM caps rework at this; without it a stuck issue re-launches develop forever
+    risk:
+      # The OA harness itself is human-required: an agent must never auto-merge a change to the runner, the
+      # loop driver, the skills, or the manifest — that would let the loop rewrite/brick its own installation
+      # through the same (single-token, self-blessing) gate that lands ordinary changes. Kept in sync with
+      # standards/risk-and-review.md (the file the develop/reviewer skills actually enforce). Scoped to OA's
+      # OWN files by name — NOT broad globs like `scripts/**`, which would block an adopter's own scripts.
+      # In an ADOPTER repo, all of scripts/ is OA's INJECTED harness (not the adopter's product), so EVERY
+      # OA-shipped file under scripts/ must be here — incl. the ones merge.yml/security.yml/security-gate.yml/
+      # flip-done.yml execute (reconcile-merged-issues.ts, rearm-auto-merge.ts, check-supply-chain.ts,
+      # flip-done.ts, check-flip-diff.ts) and scripts/prompts/** (the launch→skill mapping) — or an in-scope
+      # issue could auto-merge a rewrite of that privileged machinery. Listed by name (NOT scripts/**) so an
+      # adopter's own scripts/ isn't blocked. Mirrors standards/risk-and-review.md, which the skills read.
+      #
+      # BL-29 dev/02 — FORK INSTRUCTION (kept manual, not automated; decision recorded in BACKLOG.md):
+      # if you add a script to this profile's `resources:` list above that a carried workflow (merge.yml /
+      # security.yml / security-gate.yml / flip-done.yml) EXECUTES, add its path here too, or an in-scope
+      # agent PR could auto-merge a rewrite of that privileged machinery through the very gate it's supposed
+      # to enforce. A generic "every scripts/ resource must be listed here" check was considered and
+      # REJECTED (see simple-gh-sdlc/ir.yml's own comment for the full rationale) — this stays a documented,
+      # human-authored list. MUST be kept complete by hand when OA adds a script.
+      human_required_paths:
+        # .github/workflows/** already covers .github/workflows/security-gate.yml + agent-review-human.yml
+        # (this profile's own dispatched required-check / auto-pass gates) — same as security.yml, which is
+        # likewise not listed by name; all are OA harness the loop must never auto-merge a rewrite of.
+        - .github/workflows/**
+        - .codex/skills/**
+        - .claude/skills/**
+        - .open-autonomy/**
+        - scheduler/run.mjs
+        - scheduler/schedule.json
+        - scripts/prompts/**
+        - scripts/agent.ts
+        - scripts/agent-propose.ts
+        - scripts/agent-visual-verify.ts
+        - scripts/autonomy-runner.mjs
+        - scripts/check-supply-chain.ts
+        - scripts/claude-agent-run.ts
+        - scripts/human-approval-gate.ts
+        - scripts/model-proxy-exchange.ts
+        - scripts/model-proxy-mint.ts
+        - scripts/model-proxy-revoke.ts
+        - scripts/rearm-auto-merge.ts
+        - scripts/reconcile-merged-issues.ts
+        - scripts/reconcile-ready-branches.mjs
+        - scripts/reconcile-open-reviews.mjs
+        - scripts/reconcile-open-checks.mjs
+        - scripts/check-trigger-support.mjs
+        - scripts/check-skill-sync.mjs
+        # THE done-flip gate scripts — check-flip-diff.ts IS the security boundary that decides whether a
+        # flip PR gets auto-approved; must never be rewritable by an un-human-gated agent PR.
+        - scripts/flip-done.ts
+        - scripts/check-flip-diff.ts
+        - scripts/run-agent.mjs
+        - scripts/runner-defaults.mjs
+        - scripts/runner.ts
+        - scripts/transcript.ts
+        - profiles/**/skills/**
+        - .volter/tracker/validation/**
+        # The visual-evidence pipeline DEFINES what counts as proof for user-facing ACs — the same class of
+        # file as the tracker validation preset above. An agent must never weaken its own oracle: world
+        # topology, the demo/state runner directories, and the ztrack-attach adapter are all human-required.
+        - world.config.json
+        - .visual-edit/**
+        - apps/*/.visual-edit/playwright-*.json
+        - scripts/evidence-attach.mjs
+        - scripts/world-smoke.mjs
+        - scripts/next-free-issue-id.mjs
+      human_required_topics: [auth, secrets, billing, deployment, destructive data migration, dependency trust]
+
+# SELF-CONTAINED: every operative file this profile's workflows/skills reference is carried here — none
+# of it lives only in a compiled root (see README.md's "Self-contained" section for the audit).
+resources:
+  - .open-autonomy/architecture-invariants.yml
+  - .claude/settings.json
+  - .github/workflows/merge.yml
+  - .github/workflows/security.yml
+  - .github/workflows/security-gate.yml   # dispatched, blocking realization of security.yml on bot PRs — posts `security`
+  - .github/workflows/flip-done.yml   # the done-flip's gated bookkeeping-PR workflow — see scripts/check-flip-diff.ts
+  # Auto-passes agent-review on a non-agent/non-flip (i.e. HUMAN-authored) PR so a human contribution never
+  # wedges behind a check only the local-reviewer setup can post (see the file's own header for why this is
+  # profile-specific: OA5/#177 established the real OA repo needs no such file, since a live gh-actions
+  # `reviewer.yml` posts agent-review on every PR including human ones — this profile's reviewer only runs
+  # via the local reconcilers, which dispatch review for `agent/*` PRs, not human ones).
+  - .github/workflows/agent-review-human.yml
+  - .github/workflows/smoke.yml
+  - .github/workflows/ci.yml
+  - .github/dependabot.yml
+  # the gate scripts those carried workflows call — shared standards, byte-identical across carrying
+  # profiles (docs/CODE_HOST_RESOURCES.md)
+  - scripts/rearm-auto-merge.ts
+  - scripts/reconcile-merged-issues.ts
+  - scripts/check-supply-chain.ts
+  - scripts/flip-done.ts
+  - scripts/check-flip-diff.ts
+  # the visual-evidence pipeline's own operative scripts (policy.box.visual_evidence.adapter + ci.yml's
+  # `ztrack check` step + smoke.yml's world-smoke gate + draft's id-preflight step) — carried here so the
+  # profile is self-contained; genericized off the testbed's billing-app specifics (see README.md).
+  - scripts/evidence-attach.mjs
+  - scripts/world-smoke.mjs
+  - scripts/next-free-issue-id.mjs
+  - standards/workflow.md
+  - standards/issue-and-evidence.md
+  - standards/risk-and-review.md
+  - standards/visual-evidence.md

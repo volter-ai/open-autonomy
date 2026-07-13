@@ -1,0 +1,48 @@
+name: agent-review (human PRs)
+# `agent-review` is REQUIRED on main (branch protection), but the reviewer skill/evaluator that posts it
+# (scripts/reconcile-open-reviews.mjs -> the local `reviewer` termfleet session -> `gh api .../statuses`) only
+# ever reviews AGENT-authored PRs — branches matching `agent/*`, the one naming convention every proposer uses
+# (scripts/agent-propose.ts, scripts/reconcile-ready-branches.mjs) and the same boundary
+# scripts/rearm-auto-merge.ts's own AGENT_BRANCH regex already draws ("never touch a human's PR"). The
+# `reviewer` skill's whole purpose is judging a DEVELOPER AGENT's work against ztrack/evidence/architecture-
+# invariants (see .claude/skills/reviewer/SKILL.md's description: "Review a developer's GitHub pull request");
+# it has no meaning applied to a maintainer's own PR, who already reviewed their own change by writing it.
+#
+# Without this workflow, requiring `agent-review` on EVERY PR would wedge every human-authored PR forever —
+# nothing else in this repo ever posts that context for a non-agent branch, and enforce_admins means even a
+# repo admin can't bypass it by merging anyway. This is the same "two trigger paths depending on PR
+# authorship" shape ci.yml/security-gate.yml already use (a human PR fires `pull_request` and gets its status
+# from the job itself; a bot PR fires no `pull_request` and gets it from an explicit dispatch instead) — here
+# inverted: a HUMAN PR gets `agent-review` posted by THIS job; an AGENT PR gets it from the reviewer skill, and
+# this job explicitly skips so it never races or overwrites that verdict.
+#
+# `flip/*` (the done-flip bookkeeping PR — see .github/workflows/flip-done.yml) is ALSO explicitly excluded
+# here, same as `agent/*` — NOT because a reviewer covers it, but because a blanket "not agent/*" auto-pass
+# would otherwise approve a flip PR with ZERO diff verification (this job posts success unconditionally). A
+# flip PR's `agent-review` is instead posted by flip-done.yml, gated on scripts/check-flip-diff.ts's strict
+# mechanical check (touches only the one store file, changes only state:/PR:). Never let this job's blanket
+# pass cover a branch prefix it hasn't actually inspected.
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+permissions:
+  contents: read
+  statuses: write
+jobs:
+  agent-review-human:
+    runs-on: ubuntu-latest
+    # Skip entirely for an agent-authored branch — the local reviewer (dispatched by
+    # scripts/reconcile-open-reviews.mjs) owns posting agent-review for those; this job must never race it or
+    # paper over a real failing review with an auto-success. Skip `flip/*` too — flip-done.yml's diff-gated
+    # check owns that verdict; this job's unconditional pass must never substitute for it (the security gate
+    # this task exists to prove: see scripts/check-flip-diff.ts).
+    if: ${{ !startsWith(github.head_ref, 'agent/') && !startsWith(github.head_ref, 'flip/') }}
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Post agent-review=success for a human-authored PR
+        run: |
+          gh api -X POST "repos/${{ github.repository }}/statuses/${{ github.event.pull_request.head.sha }}" \
+            -f state=success \
+            -f context=agent-review \
+            -f description="human-authored PR (branch does not match agent/*) — reviewed by its author/maintainer, not the agent reviewer"

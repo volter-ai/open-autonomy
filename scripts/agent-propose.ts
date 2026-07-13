@@ -41,6 +41,44 @@ const dispatch = (label: string, args: string[]): void => {
   process.stdout.write(`${label} dispatch failed after retries (non-fatal)\n`);
 };
 
+// The ref shape catalog: a bare GitHub issue NUMBER (the original, only-ever-supported shape) vs a
+// non-numeric STORE id (e.g. `COMBO-9` — a work item tracked by a non-GitHub-issue store). Widened from
+// digit-only so a store ref is recognized at all (branch naming, the merged-duplicate dedup guard, the
+// run-history folder slug) — a store id never had a numbered GitHub issue behind it, so it was previously
+// invisible to every one of those, not merely denied the close keyword.
+export const REF_PATTERN = /^[A-Za-z0-9._-]+$/;
+export type RefKind = 'numeric' | 'store' | 'none';
+
+export function refKind(ref: string): RefKind {
+  if (!ref) return 'none';
+  if (/^[0-9]+$/.test(ref)) return 'numeric';
+  return REF_PATTERN.test(ref) ? 'store' : 'none';
+}
+
+/** DUAL mode (this change): a numeric ref closes the issue (unchanged, squash-merge-safe `Closes #<n>`); a
+ *  non-numeric store ref (e.g. `COMBO-9`) gets a plain `Tracker: <ref>` reference line — NEVER a close
+ *  keyword, because no store-native ref has a numbered GitHub issue behind it for GitHub to auto-close. The
+ *  trailer is a durable, machine-readable citation of the originating work item that rides into the merged
+ *  commit; flipping that store item to done on merge is a store-side consumer's job (numeric refs are
+ *  auto-closed by GitHub; reconcile-merged-issues.ts is numeric-only in-tree and does nothing for a store
+ *  ref today). Absent ref (an autonomous/cron proposer) yields no trailer at all. Shared by the commit
+ *  message and the PR body so both carry the identical line (belt-and-suspenders: a merge-commit merge
+ *  preserves the commit as-is on main even if the PR body itself is ever dropped). */
+export function refTrailer(ref: string): string {
+  const kind = refKind(ref);
+  if (kind === 'numeric') return `Closes #${ref}`;
+  if (kind === 'store') return `Tracker: ${ref}`;
+  return '';
+}
+
+/** Does this ref participate in the merged-duplicate dedup guard (agent-propose.ts's `gh pr list --state
+ *  merged` backstop)? Any REAL ref does — numeric or store — since either can be relaunched in the lag
+ *  between a PR merging and the work item flipping to done/closed; only an ABSENT ref (no real work-item
+ *  identity to dedup against) is excluded. */
+export function isDedupCandidate(ref: string): boolean {
+  return refKind(ref) !== 'none';
+}
+
 // Resolve the PR's base branch — the repo's default branch, whatever it's actually called (main, master,
 // dev, trunk, …). A real adopter hit this: a transient `gh api` hiccup during a propose run fell straight
 // through to the hardcoded 'main' literal on a repo whose default branch is `dev` (no `main` branch exists
@@ -83,6 +121,12 @@ export function resolveBaseBranch(deps: ResolveBaseBranchDeps = realDeps): strin
   return 'main';
 }
 
+// Everything below is the EFFECT itself (git/gh side effects) — gated behind `import.meta.main` so this
+// module stays safely IMPORTABLE (this file's own unit tests import only the pure functions above; without
+// this gate, importing the module for that would immediately run the whole propose against whatever `gh`/
+// `git` happen to be on PATH). `bun scripts/agent-propose.ts` (the only way it is ever actually invoked —
+// every workflow/runner call site runs it as a script, never imports it) still sets `import.meta.main`,
+// so this is a no-op behavior change for every real caller.
 if (import.meta.main) {
   const env = process.env;
   const ref = (env.ISSUE_REF ?? '').trim();
@@ -91,13 +135,15 @@ if (import.meta.main) {
   const rid = `ir-${agentName}-${runId}`;
   const reviewWorkflow = (env.REVIEW_WORKFLOW ?? '').trim();
   const reviewAgent = (env.REVIEW_AGENT ?? '').trim();
-  const isNumericRef = /^[0-9]+$/.test(ref);
   const branch = ref ? `agent/issue-${ref}` : `agent/${rid}`;
 
   // Deterministic dedup backstop: if this branch ALREADY has a merged PR, the work has landed — never open a
-  // duplicate. (A proposer can be relaunched in the lag between a PR merging and its `Closes #<n>` auto-closing
-  // the issue; this guard stops the second run from opening a redundant PR for already-merged work.)
-  if (isNumericRef && sh('gh', ['pr', 'list', '--head', branch, '--state', 'merged', '--json', 'number', '--jq', '.[0].number // empty'], { allowFail: true })) {
+  // duplicate. (A proposer can be relaunched in the lag between a PR merging and the work item's tracker
+  // reflecting it — a numeric ref's GitHub issue auto-closing, or a store item being flipped to done by its
+  // own store-side consumer; this guard stops the second run from opening a redundant PR for already-merged
+  // work.) Any REAL ref participates — numeric or store — only an absent ref has no work-item identity to
+  // dedup against.
+  if (isDedupCandidate(ref) && sh('gh', ['pr', 'list', '--head', branch, '--state', 'merged', '--json', 'number', '--jq', '.[0].number // empty'], { allowFail: true })) {
     process.stdout.write(`branch ${branch} already has a merged PR; nothing to propose\n`);
     process.exit(0);
   }
@@ -129,10 +175,15 @@ if (import.meta.main) {
   // proposal so it can't ride into the PR (the run transcript/evidence under `.open-autonomy/history/` stays).
   sh('git', ['reset', '-q', '--', '.volter'], { allowFail: true });
 
-  // Closing keyword in the COMMIT (squash-merge carries it reliably; a PR-body keyword alone is dropped when
-  // the repo squashes from the commit message) — only when the subject is an issue number.
+  // Tracker trailer in the COMMIT (squash-merge carries it reliably; a PR-body trailer alone is dropped when
+  // the repo squashes from the commit message) — DUAL mode: `Closes #<n>` for a numeric ref (unchanged,
+  // squash-merge auto-closes the GitHub issue), `Tracker: <ref>` for a non-numeric store ref (never a close
+  // keyword — there is no numbered GitHub issue behind it to close; it is a durable citation of the store
+  // work item that rides into main, for a store-side consumer to reconcile). No trailer at all for an absent
+  // ref.
   const commitArgs = ['commit', '--allow-empty', '-m', `agent: ${rid}`];
-  if (isNumericRef) commitArgs.push('-m', `Closes #${ref}`);
+  const trailer = refTrailer(ref);
+  if (trailer) commitArgs.push('-m', trailer);
   sh('git', commitArgs);
   sh('git', ['push', '--force', 'origin', branch]);
 
@@ -149,7 +200,8 @@ if (import.meta.main) {
     // commit ONLY when the committer defaults to the authenticated identity (github-actions[bot]); the moment a
     // custom author is given, the committer mirrors it (not the app) and GitHub leaves the commit UNSIGNED —
     // which, under required_signatures, wedges every merge. So we let author+committer both be the signing bot
-    // and keep the agent's attribution in the commit MESSAGE (which already carries `agent: <id>` + `Closes #`).
+    // and keep the agent's attribution in the commit MESSAGE (which already carries `agent: <id>` + the
+    // tracker trailer — `Closes #<n>` or `Tracker: <ref>`, whichever `refTrailer` produced).
     const message = sh('git', ['log', '-1', '--format=%B'], { allowFail: true }).replace(/\n+$/, '');
     const parents = sh('git', ['rev-list', '--parents', '-n', '1', 'HEAD'], { allowFail: true }).trim().split(/\s+/).slice(1);
     const args = ['api', '-X', 'POST', 'repos/{owner}/{repo}/git/commits',
@@ -171,7 +223,7 @@ if (import.meta.main) {
   // resolveBaseBranch() above for the retry + local-git-fallback chain (api retries -> origin/HEAD -> 'main').
   const base = resolveBaseBranch();
   let body = sh('bash', ['-c', 'cat .agent-run/artifacts/pr.md 2>/dev/null || true'], { allowFail: true }) || `Automated agent change (${rid}).`;
-  if (isNumericRef) body = `Closes #${ref}\n\n${body}`;
+  if (trailer) body = `${trailer}\n\n${body}`;
   if (!ok('gh', ['pr', 'create', '--base', base, '--head', branch, '--title', `Agent: ${rid}`, '--body', body])) {
     ok('gh', ['pr', 'view', branch]); // already exists — fine
   }

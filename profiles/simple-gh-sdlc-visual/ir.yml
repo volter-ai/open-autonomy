@@ -182,10 +182,14 @@ policy:
         - .volter/tracker/validation/**
         # The visual-evidence pipeline DEFINES what counts as proof for user-facing ACs — the same class of
         # file as the tracker validation preset above. An agent must never weaken its own oracle: world
-        # topology, the demo/state runner directories, and the ztrack-attach adapter are all human-required.
+        # topology, the demo/state runner directories, the installed demo-runner library (runDemo()'s
+        # enforced validateDemoStep + recorded-video-moment contract — see standards/visual-evidence.md and
+        # the develop skill's mandate to use it, never a hand-rolled browser lifecycle), and the
+        # ztrack-attach adapter are all human-required.
         - world.config.json
         - .visual-edit/**
         - apps/*/.visual-edit/playwright-*.json
+        - apps/*/.visual-edit/lib/**
         - scripts/evidence-attach.mjs
         - scripts/world-smoke.mjs
         - scripts/next-free-issue-id.mjs
@@ -222,6 +226,12 @@ resources:
   - scripts/evidence-attach.mjs
   - scripts/world-smoke.mjs
   - scripts/next-free-issue-id.mjs
+  # the canonical demo-runner library (INSTALLED, not prose): every demo/visual-state script under
+  # policy.box.visual_evidence.demo_dir/state_dir drives its flow through runDemo() here — recordVideo
+  # WebM per run, each screenshot a stamped video moment, enforced validateDemoStep — instead of a
+  # hand-rolled Playwright lifecycle. See standards/visual-evidence.md and the develop skill's mandate.
+  - apps/web/.visual-edit/lib/demo-runner.mjs
+  - apps/web/.visual-edit/lib/frame-capture.mjs
   - standards/workflow.md
   - standards/issue-and-evidence.md
   - standards/risk-and-review.md

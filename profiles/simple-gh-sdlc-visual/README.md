@@ -60,6 +60,7 @@ profiles/simple-gh-sdlc-visual/
   .github/workflows/{merge,security,security-gate,flip-done,agent-review-human,smoke,ci}.yml
   scripts/{rearm-auto-merge,reconcile-merged-issues,check-supply-chain,flip-done,check-flip-diff}.ts
   scripts/{evidence-attach,world-smoke,next-free-issue-id}.mjs
+  apps/web/.visual-edit/lib/{demo-runner,frame-capture}.mjs
   skills/{pm,draft,develop,reviewer}/SKILL.md
   standards/{workflow,issue-and-evidence,risk-and-review,visual-evidence}.md
 ```
@@ -78,23 +79,48 @@ The profile scaffolds structure; the app is yours. It does **not** ship `world.c
 app, seed data, or example tracked issues — those are adopter-specific. Fill in:
 
 - `world.config.json` at your repo root — a sealed-world topology naming the twin services your app's
-  vendor SDKs need (see `node_modules/@volter/twin-world`'s docs for the schema). `policy.box.visual_evidence.world_config`
+  vendor SDKs need (see `node_modules/@volter/twin-world`'s docs for the schema), PLUS a top-level
+  `openings` array for any vendor that must run real for a specific task — human-granted only, never
+  agent-self-granted (see "Default-sealed openings" below). `policy.box.visual_evidence.world_config`
   in `ir.yml` just names the path; it does not require any particular topology.
 - `apps/web/.visual-edit/playwright-demos/` and `playwright-visual-states/` (or your own equivalents —
   update `policy.box.visual_evidence.demo_dir`/`state_dir` in `ir.yml` if you relocate them) — your
   own demo/visual-state scripts, authored per `standards/visual-evidence.md`'s human-moves-only
-  discovery discipline.
+  discovery discipline, **driven through `runDemo()` from the installed
+  `apps/web/.visual-edit/lib/demo-runner.mjs`** — never a hand-rolled Playwright lifecycle (see
+  "Installed demo-runner library" below).
 - `scripts/evidence-attach.mjs`'s `APP_URL`-injecting world env and `scripts/world-smoke.mjs`'s
   vendor-coverage probe: the vendor-coverage half of `world-smoke.mjs` (stage 4, pass 1 — "does every
-  external the app imports have a configured twin?") is fully vendor-agnostic already; the
+  external the app imports have a twin or a declared opening?") is fully vendor-agnostic already; the
   **op-level** probe (pass 2) ships one worked example (a live probe against a Stripe twin, gated
   behind the app actually importing `stripe` — a no-op otherwise) as a template to extend for your own
   vendor(s). `world-smoke.mjs`'s header comment documents the `SMOKE_*` env vars that let you point it
   at your own source-file layout, canonical visual-state script, and service count without editing the
   script.
-- `npm run smoke` / `npm run typecheck` in your `package.json` — `ci.yml` and `smoke.yml` call them by
-  name; `ci.yml`'s typecheck step uses `--if-present` so an app with no typecheck script yet doesn't
-  fail the gate outright.
+- `npm run smoke` / `npm run smoke:coverage` (`world-smoke.mjs --coverage-only` — the seconds-fast,
+  no-world-boot stage-4 vendor-coverage dry check) / `npm run typecheck` in your `package.json` —
+  `ci.yml` and `smoke.yml` call `smoke`/`typecheck` by name; `ci.yml`'s typecheck step uses
+  `--if-present` so an app with no typecheck script yet doesn't fail the gate outright.
+
+### Installed demo-runner library
+
+`apps/web/.visual-edit/lib/demo-runner.mjs` + `frame-capture.mjs` are carried as installable resources
+(not prose to reimplement) — every demo/visual-state script drives its flow through `runDemo()`: the
+whole flow is recorded as ONE video (`demo.webm`), each step's screenshot is a MOMENT of that video
+(stamped `videoTimeMs`), and `validateDemoStep` is required + default-throws on an unknown step id. See
+`standards/visual-evidence.md`'s "evidence-runner mandate" section and the develop skill's §Baseline(f)
+(hand-rolled `chromium.launch()`/`page.screenshot()` lifecycles are forbidden in any evidence script).
+`scripts/evidence-attach.mjs` pins the run's video once and carries `video=<ref> videoSha256=<sha>
+videoTimeMs=<n>` on every frame's evidence/proof.
+
+### Default-sealed openings
+
+`world.config.json`'s top-level `openings` array — `[{"vendor", "reason", "grantedBy"}]` — is the sole,
+human-granted exception mechanism to `world-smoke.mjs`'s default-sealed rule (every registry-named
+external vendor the app imports must be twinned OR opened, in every mode). `grantedBy` must name a real
+human; an agent must never self-grant an opening. This is also the sanctioned doorway for recording a new
+twin — see `standards/visual-evidence.md`'s "default-sealed world + openings model" section for the full
+model, including when a stale opening should be removed.
 
 ## ztrack version floor
 

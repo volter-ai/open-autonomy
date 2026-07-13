@@ -37,6 +37,17 @@
 //     agnostic already; per-op PROBING for a vendor other than Stripe is a template to extend
 //     (add a probe strategy alongside the Stripe one) rather than something this profile ships
 //     pre-built for every possible vendor.
+//
+// DEFAULT-SEALED WITH DECLARED OPENINGS (proven on a real adopter install — see
+// standards/visual-evidence.md's "openings" cross-reference and world.config.json's own
+// "openingsNote" convention): stage 4 pass 1 enforces that every REGISTRY-NAMED external
+// vendor (VENDOR_REGISTRY below — known SDKs for LLM providers, payment/comms/etc vendors)
+// the app imports must be EITHER twinned (a `type:"twin"` service in world.config.json) OR
+// covered by a human-granted opening — `world.config.json`'s top-level `openings` array,
+// `[{vendor, reason, grantedBy}]`. This holds in EVERY mode this script runs, including a
+// world.config.json that boots non-sealed for other reasons — an agent must never self-grant
+// an opening; `grantedBy` must name the human who granted it. `npm run smoke:coverage`
+// (--coverage-only) runs ONLY this rule, no world boot, for a seconds-fast dry check.
 
 import { spawn, spawnSync } from 'node:child_process';
 import fs from 'node:fs';
@@ -54,6 +65,13 @@ const WORLD_ENV_FILE = path.join(ROOT, '.volter/world.env');
 // for the log line only). Fully self-contained: booted and torn down within this process.
 const WORLD_NAME = process.env.SMOKE_WORLD_NAME || 'smoke-gate';
 const DEV_WORLD_INSTANCE = process.env.SMOKE_WORLD_INSTANCE || 'combo-dev';
+
+// --coverage-only: run ONLY stage 4 pass 1 (the default-sealed vendor-coverage rule) and
+// exit. Needs no world boot — it just reads source + world.config.json — so it's a
+// seconds-fast dry check of the seal rule (wired as `npm run smoke:coverage`). It does NOT
+// replace `npm run smoke`: op-probes, capture, and the evidence dry-run still need the
+// full gate.
+const COVERAGE_ONLY = process.argv.includes('--coverage-only');
 
 const STAGE_NAMES = [
   'Boot sealed',
@@ -132,9 +150,21 @@ async function stageBoot() {
   // there), not a required pre-existing input — it does not need to exist beforehand, and
   // in a fresh clone / CI checkout it won't (.volter/world.env is gitignored local state).
 
-  const up = sh(VOLTER_WORLD, ['up', WORLD_CONFIG, '--env-file', WORLD_ENV_FILE, '--mode', 'sealed', '--name', WORLD_NAME], { timeout: 90_000 });
+  // Outer wall-clock budget for the WHOLE boot, derived from world.config.json's own declared
+  // per-service readiness timeouts (see deriveWorldBootTimeoutMs) — NOT a hardcoded literal. A
+  // hardcoded number here can silently be tighter than what the config itself declares
+  // acceptable, in which case spawnSync's `timeout` SIGTERMs `volter-world up` with no readiness-
+  // probe diagnostic at all (opaque `volter-world up exited null:`), even though no service had
+  // actually failed and the boot was still within its own declared allowance.
+  let bootTimeoutMs = MIN_BOOT_TIMEOUT_MS;
+  try {
+    bootTimeoutMs = deriveWorldBootTimeoutMs(JSON.parse(fs.readFileSync(WORLD_CONFIG, 'utf8')));
+  } catch (e) {
+    log(`WARN  stage 1: could not derive a config-based boot timeout from ${WORLD_CONFIG} (${e.message}) — falling back to ${MIN_BOOT_TIMEOUT_MS}ms floor`);
+  }
+  const up = sh(VOLTER_WORLD, ['up', WORLD_CONFIG, '--env-file', WORLD_ENV_FILE, '--mode', 'sealed', '--name', WORLD_NAME], { timeout: bootTimeoutMs });
   if (up.status !== 0) {
-    await fail(0, `volter-world up exited ${up.status}: ${(up.stderr || up.stdout || '').trim()}`);
+    await fail(0, `volter-world up exited ${up.status}: ${(up.stderr || up.stdout || '').trim()}${up.signal === 'SIGTERM' ? ` (killed by outer ${bootTimeoutMs}ms boot-timeout wrapper — see deriveWorldBootTimeoutMs; if this fires with no per-service readiness message, world.config.json's declared timeouts may need revisiting, not this wrapper)` : ''}`);
   }
   worldBooted = true;
 
@@ -253,6 +283,11 @@ const KNOWN_CROSS_CHECK = [
 // flagged (by its package name) rather than silently passing. Includes common BARE-named
 // (non-`@scope/`) vendor SDKs explicitly, since the generic scoped-package fallback alone
 // cannot see those (see GENERIC_BARE_PACKAGE_RE's own comment for why that gap mattered).
+// LLM vendors each map BOTH their native SDK and their Vercel AI-SDK provider adapter to the
+// SAME vendor identity — without the @ai-sdk/* entries the generic scoped-package fallback
+// would name all three as one blurry "ai-sdk" vendor, hiding WHICH real external is reached
+// (proven live: an app routing through @ai-sdk/anthropic/@ai-sdk/openai/@ai-sdk/google needs
+// each named individually so the twin-or-opening rule below can be satisfied per-vendor).
 const VENDOR_REGISTRY = {
   stripe: { packages: ['stripe'] },
   slack: { packages: ['@slack/web-api'] },
@@ -260,9 +295,10 @@ const VENDOR_REGISTRY = {
   jira: { packages: ['jira.js'] },
   github: { packages: ['@octokit/rest'] },
   twilio: { packages: ['twilio'] },
-  openai: { packages: ['openai'] },
+  openai: { packages: ['openai', '@ai-sdk/openai'] },
+  anthropic: { packages: ['@anthropic-ai/sdk', '@ai-sdk/anthropic'] },
+  google: { packages: ['@google/generative-ai', '@google/genai', '@ai-sdk/google', '@ai-sdk/google-vertex'] },
   resend: { packages: ['resend'] },
-  anthropic: { packages: ['@anthropic-ai/sdk'] },
   sendgrid: { packages: ['@sendgrid/mail'] },
   aws: { packages: ['aws-sdk'] },
   plaid: { packages: ['plaid'] },
@@ -279,7 +315,14 @@ const PACKAGE_TO_VENDOR = Object.fromEntries(
 // never called at request-time) doesn't false-positive as an uncovered external — a real
 // vendor SDK the app talks to at runtime is a `dependencies` entry, not a `devDependencies`-
 // only build tool.
-const GENERIC_SCOPED_PACKAGE_RE = /from\s+['"](@[a-zA-Z0-9_.-]+\/[a-zA-Z0-9_.-]+)['"]|require\(\s*['"](@[a-zA-Z0-9_.-]+\/[a-zA-Z0-9_.-]+)['"]\s*\)/g;
+// All three import shapes are matched — static `from '...'`, `require('...')`, AND dynamic
+// `import('...')` — and a SUBPATH specifier (`<pkg>/anything`, e.g. an `openai/helpers/...`
+// deep import or an SDK's `/resources/...` module) resolves to its root package. Without
+// those, a vendor reached only via a dynamic import or a subpath specifier was INVISIBLE to
+// this whole stage — real egress sliding through a green coverage gate, the exact
+// false-green this rule exists to stop (proven by probe: `import('<llm-sdk>')` and
+// `from '<llm-sdk>/resources/...'` both passed a sealed config before this was closed).
+const GENERIC_SCOPED_PACKAGE_RE = /from\s+['"](@[a-zA-Z0-9_.-]+\/[a-zA-Z0-9_.-]+)(?:\/[^'"]*)?['"]|require\(\s*['"](@[a-zA-Z0-9_.-]+\/[a-zA-Z0-9_.-]+)(?:\/[^'"]*)?['"]\s*\)|import\(\s*['"](@[a-zA-Z0-9_.-]+\/[a-zA-Z0-9_.-]+)(?:\/[^'"]*)?['"]\s*\)/g;
 // Generic fallback #2: a BARE (non-scoped) package import (e.g. a default import of the "twilio"
 // package, imported under its own bare package name — deliberately not written here in the
 // literal `import X from "X"` shape, since this file itself is repo-wide-scanned and that shape
@@ -291,7 +334,11 @@ const GENERIC_SCOPED_PACKAGE_RE = /from\s+['"](@[a-zA-Z0-9_.-]+\/[a-zA-Z0-9_.-]+
 // (`./`, `../`) and Node builtin-shaped specifiers, and — like the scoped fallback — is gated
 // against RUNTIME_DEPENDENCY_PACKAGES so a bare devDependency build tool (e.g. `esbuild`,
 // `typescript`) doesn't false-positive as an uncovered external.
-const GENERIC_BARE_PACKAGE_RE = /from\s+['"]([a-zA-Z][a-zA-Z0-9_.-]*)['"]|require\(\s*['"]([a-zA-Z][a-zA-Z0-9_.-]*)['"]\s*\)/g;
+// Same three import shapes + subpath resolution as the scoped fallback above. A bare
+// subpath like a Node builtin's `fs/promises` resolves to `fs` and is then excluded by
+// NODE_BUILTIN_RE; `react/...` falls to NON_VENDOR_BARE_PACKAGES — the existing gates all
+// apply to the resolved ROOT package, unchanged.
+const GENERIC_BARE_PACKAGE_RE = /from\s+['"]([a-zA-Z][a-zA-Z0-9_.-]*)(?:\/[^'"]*)?['"]|require\(\s*['"]([a-zA-Z][a-zA-Z0-9_.-]*)(?:\/[^'"]*)?['"]\s*\)|import\(\s*['"]([a-zA-Z][a-zA-Z0-9_.-]*)(?:\/[^'"]*)?['"]\s*\)/g;
 const NODE_BUILTIN_RE = /^(node:|assert|buffer|child_process|cluster|crypto|dgram|dns|domain|events|fs|http|http2|https|net|os|path|perf_hooks|process|punycode|querystring|readline|repl|stream|string_decoder|tls|tty|url|util|v8|vm|zlib|module|worker_threads)$/;
 // Bare runtime-dependency packages that are NOT a vendor SDK in the sense this stage cares about
 // (something the app calls out to an external network service through), so the bare fallback
@@ -304,7 +351,15 @@ const NODE_BUILTIN_RE = /^(node:|assert|buffer|child_process|cluster|crypto|dgra
 // fix closes), so growing this list is a deliberate, reviewable per-package judgment call, not a
 // silent broadening of what passes.
 const NON_VENDOR_BARE_PACKAGES = new Set(['react', 'react-dom', 'termfleet']);
-const IMPORT_RE_FOR = (pkg) => new RegExp(`from\\s+['"]${pkg.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}['"]|require\\(\\s*['"]${pkg.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}['"]\\s*\\)`);
+// Registry-named detection matches the same three import shapes as the generic fallbacks
+// (static `from`, `require()`, dynamic `import()`) and tolerates a subpath after the package
+// name (`(?:/...)?` before the closing quote) — a deep import of a registry SDK is still that
+// vendor's SDK.
+const IMPORT_RE_FOR = (pkg) => {
+  const esc = pkg.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const spec = `['"]${esc}(?:\\/[^'"]*)?['"]`;
+  return new RegExp(`from\\s+${spec}|require\\(\\s*${spec}\\s*\\)|import\\(\\s*${spec}\\s*\\)`);
+};
 
 // Union of `dependencies` (NOT devDependencies) across every package.json in the repo/workspaces.
 // This is the derivation-based signal for "a real runtime SDK the app might call an external
@@ -329,6 +384,84 @@ function deriveRuntimeDependencyPackages() {
   return pkgs;
 }
 
+// ---------------------------------------------------------------------------
+// Boot timeout derivation
+// ---------------------------------------------------------------------------
+// BUG this closes: `volter-world up` was previously wrapped in a HARDCODED outer wall-clock
+// timeout (90_000ms) via spawnSync's own `timeout` option. That number was picked independently
+// of what the adopter's OWN world.config.json declares acceptable per service (each service has
+// its own readiness-probe budget, e.g. `readyWhen.timeoutMs`). When the sum of those per-service
+// budgets exceeds the outer wrapper's number — which a real adopter hit in production — spawnSync
+// kills `volter-world up` with SIGTERM the moment ITS timeout elapses, even though no individual
+// service had actually failed its own readiness probe and the boot was still within what the
+// config itself calls acceptable. Because SIGTERM short-circuits the CLI, it never gets to print
+// its own honest "service X timed out" diagnostic — it surfaces here as an opaque
+// `volter-world up exited null: ` (empty stderr/stdout), which is strictly worse than a real
+// per-service timeout message.
+//
+// FIX: derive the outer timeout FROM the config's own declared per-service budgets, so the outer
+// wrapper is always at least as generous as what the config says is acceptable — never an
+// independently-chosen number that can silently be tighter. See deriveWorldBootTimeoutMs below.
+
+// Per-service readiness timeout, read defensively since the field name/shape is owned by
+// `volter-world`/`@volter/twin-world` (not vendored/inspectable in this sandbox — see comment
+// on deriveWorldBootTimeoutMs for why SUM, not MAX, is used). Tries the documented
+// `readyWhen.timeoutMs` shape first, then a couple of plausible fallbacks, so a differently-
+// shaped-but-still-numeric config field is still honored rather than silently ignored.
+function readServiceTimeoutMs(svc) {
+  const candidates = [
+    svc?.readyWhen?.timeoutMs,
+    svc?.readinessTimeoutMs,
+    svc?.timeoutMs,
+  ];
+  for (const c of candidates) {
+    if (typeof c === 'number' && Number.isFinite(c) && c > 0) return c;
+  }
+  return null;
+}
+
+// Fallback per-service budget when a service declares no readiness timeout at all (a minimal/
+// degenerate config) — conservative, matches the old global default order of magnitude, so a
+// config missing this field entirely doesn't collapse the derived sum to ~0.
+const DEFAULT_SERVICE_TIMEOUT_MS = 60_000;
+// Fixed margin for the CLI's own non-per-service overhead: world creation, CA minting, network
+// setup, etc, which happen once per boot regardless of service count. Modest on purpose — this
+// is NOT where most of the budget should come from; the per-service sum is the primary driver.
+const BOOT_OVERHEAD_MARGIN_MS = 90_000;
+// Sane floor for a tiny/degenerate config (e.g. zero services, or a config that fails to parse
+// enough to find any) — keeps `up` from being wrapped in an unreasonably short timeout even when
+// the derivation has nothing to sum.
+const MIN_BOOT_TIMEOUT_MS = 90_000;
+
+// Derive the outer wall-clock budget for `volter-world up` from the world config's own declared
+// per-service readiness timeouts, so the wrapper can never be tighter than what the config itself
+// says is acceptable.
+//
+// SUM vs MAX: services CAN have startup dependencies on each other (e.g. an app server waiting on
+// postgres before it even starts its own readiness probe), so a later service's timeout clock may
+// only start once an earlier one is satisfied — i.e. worst case, the budgets are consumed
+// sequentially, not concurrently. `volter-world`/`@volter/twin-world` is not vendored in this
+// sandbox to inspect its actual scheduling, so this deliberately takes the SAFE, CONSERVATIVE
+// model (SUM of all per-service timeouts) rather than assuming full parallelism (MAX) — the
+// worst outcome of over-budgeting SUM is a smoke run waits a bit longer before reporting a REAL
+// failure; the worst outcome of under-budgeting MAX is exactly the bug this fix closes (an
+// opaque SIGTERM cutting off a boot that was still within its own declared allowance).
+//
+// Exported as a standalone pure function (config object in, number out) specifically so it can be
+// unit-tested with a fabricated config without needing a real `volter-world`/`world.config.json`
+// (see the `node -e` smoke check in this profile's PR description) — following this repo's
+// existing convention of isolating pure logic behind a run-as-entrypoint gate (this file runs
+// under plain `node`, so it uses the `import.meta.url === file://process.argv[1]` idiom — see
+// this profile's own scripts/next-free-issue-id.mjs — rather than the `import.meta.main` gate
+// used in scripts that run under `bun`, e.g. scripts/rearm-auto-merge.ts) instead of leaving the
+// derivation buried in the imperative stage functions.
+export function deriveWorldBootTimeoutMs(rawConfig) {
+  const services = Array.isArray(rawConfig?.services) ? rawConfig.services : [];
+  const perServiceSum = services.reduce((sum, svc) => sum + (readServiceTimeoutMs(svc) ?? DEFAULT_SERVICE_TIMEOUT_MS), 0);
+  const derived = perServiceSum + BOOT_OVERHEAD_MARGIN_MS;
+  return Math.max(derived, MIN_BOOT_TIMEOUT_MS);
+}
+
 // Read world.config.json and return the set of vendors CONFIGURED as a twin service.
 // Vendor is derived from the service's `injectEnv` (e.g. STRIPE_TWIN_URL -> stripe) with
 // `id`/`command` as fallbacks — never hardcoded to "just stripe".
@@ -350,6 +483,37 @@ function deriveConfiguredTwinVendors() {
     if (vendor) vendors.set(vendor, svc.id);
   }
   return vendors;
+}
+
+// DEFAULT-SEALED WITH DECLARED OPENINGS. world.config.json may carry a top-level `openings`
+// array: [{ "vendor": "<vendor>", "reason": "<why this external must run real>", "grantedBy":
+// "<human name>" }]. An opening is a HUMAN-GRANTED, per-task exception to the rule "every
+// external the app imports must have a configured twin". `grantedBy` must be a real human's
+// name — an agent must never self-grant an opening. Anything malformed here is a hard
+// stage-4 FAIL (a broken grant must never silently grant). Returns
+// { openings: Map<vendor, {reason, grantedBy}>, problems: string[] }.
+function deriveDeclaredOpenings() {
+  const raw = JSON.parse(fs.readFileSync(WORLD_CONFIG, 'utf8'));
+  const openings = new Map();
+  const problems = [];
+  const list = raw.openings ?? [];
+  if (!Array.isArray(list)) {
+    return { openings, problems: [`world.config.json "openings" must be an array, got ${typeof list}`] };
+  }
+  list.forEach((entry, i) => {
+    if (!entry || typeof entry !== 'object' || Array.isArray(entry)) {
+      problems.push(`openings[${i}] is not an object`);
+      return;
+    }
+    const vendor = typeof entry.vendor === 'string' ? entry.vendor.trim().toLowerCase() : '';
+    const reason = typeof entry.reason === 'string' ? entry.reason.trim() : '';
+    const grantedBy = typeof entry.grantedBy === 'string' ? entry.grantedBy.trim() : '';
+    if (!vendor) problems.push(`openings[${i}] missing non-empty "vendor"`);
+    if (!reason) problems.push(`openings[${i}] missing non-empty "reason"`);
+    if (!grantedBy) problems.push(`openings[${i}] missing non-empty "grantedBy" (must be a human name — openings are human-granted, never agent-self-granted)`);
+    if (vendor && reason && grantedBy) openings.set(vendor, { reason, grantedBy });
+  });
+  return { openings, problems };
 }
 
 // Scan SOURCE_FILES (+ any additional not-yet-committed app/script source, so a brand new
@@ -383,7 +547,7 @@ function deriveUsedVendors() {
     let m;
     GENERIC_SCOPED_PACKAGE_RE.lastIndex = 0;
     while ((m = GENERIC_SCOPED_PACKAGE_RE.exec(text))) {
-      const pkg = m[1] || m[2];
+      const pkg = m[1] || m[2] || m[3];
       if (PACKAGE_TO_VENDOR[pkg]) continue; // already handled by the named registry above
       if (/^@volter\b|^@volter-ai-dev\b/.test(pkg)) continue; // our own twin/world tooling, not an external vendor SDK
       if (!runtimeDeps.has(pkg)) continue; // not declared as a runtime dependency anywhere — treat as build/type tooling, not an uncovered external
@@ -397,7 +561,7 @@ function deriveUsedVendors() {
     // "vendor SDK" in the sense this stage cares about.
     GENERIC_BARE_PACKAGE_RE.lastIndex = 0;
     while ((m = GENERIC_BARE_PACKAGE_RE.exec(text))) {
-      const pkg = m[1] || m[2];
+      const pkg = m[1] || m[2] || m[3];
       if (PACKAGE_TO_VENDOR[pkg]) continue; // already handled by the named registry above
       if (NODE_BUILTIN_RE.test(pkg)) continue; // a Node builtin, not an external vendor SDK
       if (NON_VENDOR_BARE_PACKAGES.has(pkg)) continue; // UI framework / our own tooling — not a vendor SDK
@@ -448,7 +612,9 @@ const UNPARSEABLE_STYLES = [
   ['bracket/dynamic access on the stripe client', /\bstripe\s*\[/],
   ['aliasing the stripe client into another variable', /=\s*stripe\s*(?:$|[;,)\]])/m],
 ];
-const STRIPE_IMPORT_RE = /from\s+['"]stripe['"]|require\(\s*['"]stripe['"]\s*\)/;
+// Matches the same three import shapes + subpath tolerance as IMPORT_RE_FOR, so a dynamic
+// or deep stripe import outside SOURCE_FILES is a blind spot too, not just static ones.
+const STRIPE_IMPORT_RE = /from\s+['"]stripe(?:\/[^'"]*)?['"]|require\(\s*['"]stripe(?:\/[^'"]*)?['"]\s*\)|import\(\s*['"]stripe(?:\/[^'"]*)?['"]\s*\)/;
 
 function findDerivationBlindSpots() {
   const problems = [];
@@ -480,31 +646,84 @@ function findDerivationBlindSpots() {
   return problems;
 }
 
+// --- Pass 1: vendor coverage — DEFAULT-SEALED WITH DECLARED OPENINGS ------------------
+// THE RULE: every external vendor the app source imports must be EITHER
+//   (a) twinned in world.config.json (a `type: "twin"` service), OR
+//   (b) covered by a declared opening in world.config.json's top-level `openings` array
+//       ({vendor, reason, grantedBy} — human-granted per-task exceptions, see
+//       deriveDeclaredOpenings above).
+// A detected REGISTRY-NAMED vendor with NEITHER is a hard stage-4 FAIL — in every mode this
+// script runs. (A prior version of this rule downgraded uncovered vendors to an INFO line;
+// that let a real install run with real vendor egress under a green smoke — the exact
+// silent slide-through this gate exists to stop. Proven on a real adopter: RED with no
+// twin/opening, GREEN once the vendor was twinned or opened.)
+//
+// Extracted from stageMockCoverage so `--coverage-only` can run this rule standalone,
+// without booting the world (it only reads source files + world.config.json).
+async function stageVendorCoverage() {
+  currentStage = 3;
+  const configuredTwins = deriveConfiguredTwinVendors(); // Map<vendor, serviceId>
+  const usedVendors = deriveUsedVendors(); // Map<vendor, Set<package>>
+  const { openings, problems } = deriveDeclaredOpenings(); // Map<vendor, {reason, grantedBy}>
+  if (problems.length > 0) {
+    await fail(3, `world.config.json "openings" is malformed — a broken grant must never grant: ${problems.join(' | ')}`);
+  }
+  for (const vendor of openings.keys()) {
+    if (!usedVendors.has(vendor)) {
+      log(`WARN  stage 4: stale opening for "${vendor}" — no scanned source imports it; remove it from world.config.json openings[] so it cannot quietly cover a future re-introduction`);
+    }
+  }
+
+  const uncovered = [...usedVendors.keys()].filter((v) => !configuredTwins.has(v));
+  const opened = uncovered.filter((v) => openings.has(v));
+  // The hard rule bites on REGISTRY-NAMED vendors (known external-service SDKs — the LLM
+  // providers, twilio, stripe, ...). Heuristic fallback detections (generic scoped/bare
+  // packages) stay a FAIL too but are reported separately below: in a real app they can sweep
+  // up runtime infra libraries (server frameworks, ORMs) that are not external vendors, so
+  // they're named explicitly rather than folded into the registry-named violation message.
+  // Promote a package into VENDOR_REGISTRY to put it under the hard rule by name.
+  const violations = uncovered.filter((v) => !openings.has(v) && VENDOR_REGISTRY[v]);
+  const genericUncovered = uncovered.filter((v) => !openings.has(v) && !VENDOR_REGISTRY[v]);
+
+  for (const v of opened) {
+    const o = openings.get(v);
+    log(`OPEN  stage 4: ${v} (imported via ${[...usedVendors.get(v)].join(', ')}) runs REAL under a declared opening — granted by ${o.grantedBy}: ${o.reason}`);
+  }
+
+  if (violations.length > 0) {
+    const detail = violations
+      .map((v) => `${v} (imported via ${[...usedVendors.get(v)].join(', ')})`)
+      .join(', ');
+    await fail(3, `DEFAULT-SEALED VIOLATION — external vendor(s) with NO twin and NO declared opening: ${detail}. Real egress to these vendors must not slide through silently. Two remedies, per vendor: (a) TWIN it — add a type:"twin" service for it in world.config.json; or (b) DECLARE AN OPENING — add {"vendor","reason","grantedBy"} to world.config.json's top-level "openings" array, where grantedBy is the HUMAN who granted the per-task exception (agents must never self-grant an opening)`);
+  }
+
+  if (genericUncovered.length > 0) {
+    const detail = genericUncovered
+      .map((v) => `${v} (imported via ${[...usedVendors.get(v)].join(', ')})`)
+      .join(', ');
+    const remedies = genericUncovered
+      .map((v) => `no twin configured in world.config.json for ${v}; add @volter/twin-${v} and a twin service, or declare an opening, or the sealed world will block it`)
+      .join(' | ');
+    await fail(3, `app calls external(s) with NO configured twin and NO declared opening: ${detail}. ${remedies}`);
+  }
+
+  log(`INFO  stage 4 vendor coverage OK — externals the app imports: ${[...usedVendors.keys()].join(', ') || 'none'}; configured twins: ${[...configuredTwins.keys()].join(', ') || 'none'}; declared openings in effect: ${opened.join(', ') || 'none'}`);
+  return usedVendors;
+}
+
 async function stageMockCoverage() {
   currentStage = 3;
 
-  // --- Pass 1: vendor coverage (twin-config-driven + source-driven) ------------------
-  const configuredTwins = deriveConfiguredTwinVendors(); // Map<vendor, serviceId>
-  const usedVendors = deriveUsedVendors(); // Map<vendor, Set<package>>
-
-  const uncovered = [...usedVendors.keys()].filter((v) => !configuredTwins.has(v));
-  if (uncovered.length > 0) {
-    const detail = uncovered
-      .map((v) => `${v} (imported via ${[...usedVendors.get(v)].join(', ')})`)
-      .join(', ');
-    const remedies = uncovered
-      .map((v) => `no twin configured in world.config.json for ${v}; add @volter/twin-${v} and a twin service, or the sealed world will block it`)
-      .join(' | ');
-    await fail(3, `app calls external(s) with NO configured twin: ${detail}. ${remedies}`);
-  }
-  log(`INFO  stage 4 vendor coverage OK — every external the app imports (${[...usedVendors.keys()].join(', ') || 'none'}) has a configured twin (${[...configuredTwins.keys()].join(', ') || 'none'})`);
+  // --- Pass 1: vendor coverage (default-sealed with declared openings) ---------------
+  const usedVendors = await stageVendorCoverage();
 
   // --- Pass 2: op coverage, per configured+used vendor -------------------------------
   // Stripe has a full derivation + live op-probe (below, unchanged in spirit). Other
   // configured vendors without a per-op probe strategy still passed vendor coverage above
   // (twin configured + reachable via stage 1's doctor check) but their specific ops are not
   // individually probed here — noted, not silently claimed as modeled.
-  const otherConfiguredUsedVendors = [...usedVendors.keys()].filter((v) => v !== 'stripe');
+  const configuredTwins = deriveConfiguredTwinVendors();
+  const otherConfiguredUsedVendors = [...usedVendors.keys()].filter((v) => v !== 'stripe' && configuredTwins.has(v));
   if (otherConfiguredUsedVendors.length > 0) {
     log(`NOTE  stage 4: ${otherConfiguredUsedVendors.join(', ')} twin(s) configured+reachable but this stage has no per-op probe strategy for them yet — only vendor-level coverage was verified, not individual op modeling. Extend VENDOR_REGISTRY + add a probe strategy (see the stripe op-probe below) for full op-level assurance.`);
   }
@@ -530,8 +749,12 @@ async function stageMockCoverage() {
     log(`WARN  stage 4 endpoint-derivation drift vs. cross-check list — derived-only: [${missingFromCrossCheck.join(', ')}] cross-check-only: [${missingFromDerived.join(', ')}] (the DERIVED list is authoritative; update KNOWN_CROSS_CHECK in this script if this is an intentional new call site)`);
   }
 
+  // The stripe specifier below is held in a variable (not an inline quoted literal) so this
+  // file — which is itself repo-wide-scanned — cannot self-match the dynamic-import shape the
+  // vendor scan now detects (same convention as GENERIC_BARE_PACKAGE_RE's own comment).
   const probeScript = `
-    const Stripe = (await import('stripe')).default;
+    const stripeSpecifier = ['str', 'ipe'].join('');
+    const Stripe = (await import(stripeSpecifier)).default;
     const stripe = new Stripe(process.env.STRIPE_API_KEY || 'sk_test_fake');
     const ops = ${JSON.stringify(derived)};
     const results = [];
@@ -686,6 +909,13 @@ async function stageEvidenceDryRun(runDir) {
 // main
 // ---------------------------------------------------------------------------
 async function main() {
+  if (COVERAGE_ONLY) {
+    log(`world-smoke --coverage-only: stage-4 vendor-coverage rule only (no world boot; op-probes/capture/evidence skipped — run the full \`npm run smoke\` for those)`);
+    await stageVendorCoverage();
+    log('');
+    log('SMOKE-COVERAGE: PASS (stage 4 vendor coverage only)');
+    process.exit(0);
+  }
   log(`world-smoke: booting instance "${WORLD_NAME}" (distinct from ${DEV_WORLD_INSTANCE} — never clobbers a running dev world)`);
   await stageBoot();
   await stageEgress();
@@ -705,8 +935,13 @@ async function main() {
   process.exit(0);
 }
 
-process.on('uncaughtException', async (err) => {
-  await fail(currentStage, `uncaught exception: ${err?.stack || err}`);
-});
+// Gated so `deriveWorldBootTimeoutMs` (and other pure helpers) can be imported by a unit test
+// without running the whole smoke sequence — same convention as this profile's own
+// scripts/next-free-issue-id.mjs.
+if (import.meta.url === `file://${process.argv[1]}`) {
+  process.on('uncaughtException', async (err) => {
+    await fail(currentStage, `uncaught exception: ${err?.stack || err}`);
+  });
 
-main();
+  main();
+}

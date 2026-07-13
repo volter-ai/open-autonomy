@@ -109,7 +109,7 @@ describe('buildLocalGoLive — construction only, FORCED PIN (the single most im
     cleanupAll();
   });
 
-  // Regression test, same shape as TE.5's own `buildPlannerDispatchCommand` forced-pin test
+  // Regression test, same shape as TE.5's own `buildBoardSeedDispatchCommand` forced-pin test
   // (bin/install-execute.test.ts: "forces TERMFLEET_PROVIDER_URL to the INSTALL-SCOPED pin, never
   // ambient") — this session's own TE.5 incident is exactly the hazard this proves closed for Phase 6's
   // go-live command too: an ambient TERMFLEET_PROVIDER_URL pointing at a DIFFERENT (e.g. box-wide) provider
@@ -166,6 +166,44 @@ describe('buildLocalGoLive — construction only, FORCED PIN (the single most im
     expect((r as Extract<typeof r, { status: 'ok' }>).resume.wasPaused).toBe(true);
     expect(localPauseState(dir).paused).toBe(false); // really removed — not simulated
     // and the START command was still only ever CONSTRUCTED, never executed — no session/process exists.
+    cleanupAll();
+  });
+
+  // =========================================================================================================
+  // --dry-run: even resume() — normally safe/real by design (a single unlink) — is suppressed, because a
+  // dry-run's contract is "the target repo is left byte-for-byte untouched" (a real unlink would show up as
+  // a git-tracked change). `resumeFn` below THROWS if ever called — a passing test IS the proof.
+  // =========================================================================================================
+  test('--dry-run: resume() is NEVER called (not even the real, otherwise-safe one) — reports the plan via a read-only isPaused() check', () => {
+    const dir = track(mkdtempSync(join(tmpdir(), 'oa-te6-')));
+    mkdirSync(join(dir, 'scheduler'), { recursive: true });
+    writeFileSync(join(dir, 'scheduler', 'schedule.json'), JSON.stringify({ intervalSeconds: 900, env: { TERMFLEET_PROVIDER_URL: 'http://127.0.0.1:33333' } }));
+    pause({ cwd: dir }); // seed paused
+    expect(localPauseState(dir).paused).toBe(true);
+    const poisonResume = () => {
+      throw new Error('buildLocalGoLive dry-run must NEVER call the real resume()');
+    };
+    const r = buildLocalGoLive(dir, { dryRun: true, resumeFn: poisonResume as never });
+    expect(r.status).toBe('ok');
+    const ok_ = r as Extract<typeof r, { status: 'ok' }>;
+    expect(ok_.resume.wasPaused).toBe(true); // accurately reflects current state, via a pure read
+    expect(ok_.message).toMatch(/\[DRY-RUN\]/);
+    expect(ok_.message).toMatch(/would lift the fence/);
+    // the file was NEVER actually removed — the whole point.
+    expect(localPauseState(dir).paused).toBe(true);
+    cleanupAll();
+  });
+
+  test('--dry-run: resume() also default-safe (no resumeFn at all) never touches the real pause.ts unlink', () => {
+    const dir = track(mkdtempSync(join(tmpdir(), 'oa-te6-')));
+    mkdirSync(join(dir, 'scheduler'), { recursive: true });
+    writeFileSync(join(dir, 'scheduler', 'schedule.json'), JSON.stringify({ intervalSeconds: 900, env: { TERMFLEET_PROVIDER_URL: 'http://127.0.0.1:33334' } }));
+    // NOT paused this time — would be a no-op even for real, but dry-run must still never call resumeReal.
+    const r = buildLocalGoLive(dir, { dryRun: true });
+    expect(r.status).toBe('ok');
+    const ok_ = r as Extract<typeof r, { status: 'ok' }>;
+    expect(ok_.resume.wasPaused).toBe(false);
+    expect(ok_.message).toMatch(/would be a no-op/);
     cleanupAll();
   });
 });
@@ -259,6 +297,21 @@ describe('runG4a', () => {
     if (r.goLive && 'mechanism' in r.goLive) {
       expect(r.goLive.action).toBe('clear-pause');
     }
+  });
+
+  test('--dry-run: top-level dryRun forwards into buildLocalGoLive without an explicit `local` option', () => {
+    const dir = track(mkdtempSync(join(tmpdir(), 'oa-te6-')));
+    mkdirSync(join(dir, 'scheduler'), { recursive: true });
+    writeFileSync(join(dir, 'scheduler', 'schedule.json'), JSON.stringify({ intervalSeconds: 900, env: { TERMFLEET_PROVIDER_URL: 'http://127.0.0.1:33335' } }));
+    const stub = new StubProc()
+      .onArgs('npx', ['ztrack', 'issue', 'list', '--state', 'ready'], () => ok(JSON.stringify([{ identifier: 'D-1', labels: ['oa-approved'] }])))
+      .onArgs('git', ['rev-parse', '--verify', '--quiet', 'agent/issue-D-1'], () => fail('unknown revision', 1));
+    const r = runG4a({ substrate: 'local', repoDir: dir, variant: 'ztrack', allowlistLabel: 'oa-approved', proc: stub.runner, dryRun: true });
+    expect(r.verification.ready).toBe(true);
+    const gl = r.goLive as { status?: string; message?: string } | undefined;
+    expect(gl?.status).toBe('ok');
+    expect(gl?.message).toMatch(/\[DRY-RUN\]/);
+    cleanupAll();
   });
 });
 

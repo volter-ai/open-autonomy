@@ -5,7 +5,8 @@
 // (DETECT through PROVE ADVANCING) against a scratch fixture with all four gates auto-approved, proving
 // real phase-chaining (each phase's real output record correctly threads into the next phase's real input)
 // and reaching the honest ceiling this program's other units already established (never M5/M6, since no
-// real agent ever launches and go-live is construct-only).
+// real agent ever launches — go-live's `oa start` launch half is construct-only, though the safe `oa
+// resume` fence-lift is performed for real).
 //
 // SAFETY (repeat of install.ts's own file header): every subprocess call in this file goes through an
 // injected `proc`. Git/compile/identity-read calls are allowed to be REAL (offline-deterministic or
@@ -18,9 +19,11 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import {
+  cleanupOrphanedProvider,
   ok,
   paused,
   blocked,
+  installExitCode,
   parseArgs,
   phaseAuthorize,
   phaseDirection,
@@ -36,6 +39,7 @@ import { profilesRoot } from './bundled-profiles.ts';
 import { getSetupPack } from '@open-autonomy/core';
 import type { SelectionRecord } from './install-select.ts';
 import type { ProcResult, ProcRunner } from '../packages/local-runner-cli/src/types.ts';
+import type { ProviderState } from '../packages/local-runner-cli/src/provider.ts';
 
 const REPO_ROOT = join(import.meta.dir, '..');
 
@@ -152,6 +156,35 @@ describe('bun bin/install.ts --help', () => {
     const r = help();
     expect(r.code).toBe(2);
   });
+
+  // --dry-run is THE SAFE DEFAULT PATH for anyone evaluating/testing this tool — it must be prominent, not
+  // buried in the flag list (the whole point of this unit: a reviewer/adopter reaching for --help should see
+  // it FIRST, before ever considering a real run).
+  test('--dry-run is documented PROMINENTLY (before the "Global:" flag list, not just inside it)', () => {
+    const r = help('--help');
+    expect(r.stdout).toContain('--dry-run');
+    expect(r.stdout).toMatch(/SAFE WAY TO REHEARSE/);
+    const bannerIdx = r.stdout.indexOf('SAFE WAY TO REHEARSE');
+    const globalIdx = r.stdout.indexOf('Global:');
+    expect(bannerIdx).toBeGreaterThan(-1);
+    expect(globalIdx).toBeGreaterThan(-1);
+    expect(bannerIdx).toBeLessThan(globalIdx);
+  });
+
+  test('--dry-run documents zero-real-side-effect coverage: npm/compile/git/termfleet/dispatch', () => {
+    const r = help('--help');
+    for (const phrase of ['no real npm', 'no real compile write', 'no real git commit', 'no real termfleet provider bring-up', 'no real agent dispatch']) {
+      expect(r.stdout).toContain(phrase);
+    }
+  });
+
+  // LOW#6 (owner-mandated aggregate skeptic review): exit code 4 — "ran clean but not yet ready to
+  // advance" — must be documented alongside the other 3, distinct from exit 0 (fully ready).
+  test('documents the LOW#6 exit code 4 (completed but canAdvanceToG4=false), distinct from exit 0/1/3', () => {
+    const r = help('--help');
+    expect(r.stdout).toMatch(/4 completed with NO hard step failure but NOT yet ready to advance/);
+    expect(r.stdout).toContain('canAdvanceToG4');
+  });
 });
 
 // =========================================================================================================
@@ -174,6 +207,46 @@ describe('parseArgs', () => {
   test('--substrate rejects an invalid value', () => {
     const { error } = parseArgs(['/tmp/x', '--substrate', 'bogus']);
     expect(error).toMatch(/local.*gh-actions/);
+  });
+});
+
+// =========================================================================================================
+// installExitCode — LOW#6 (owner-mandated aggregate skeptic review): "exit 0/COMPLETED can happen while
+// canAdvanceToG4=false, misleading a script that gates on exit code alone." Fabricated InstallReport shapes
+// (fast, no real chain execution needed — the FULL CHAIN dry-run test above additionally proves the exact
+// live repro end to end).
+// =========================================================================================================
+
+describe('installExitCode', () => {
+  const base = { workDir: '/tmp/irrelevant' };
+
+  test('COMPLETED + canAdvanceToG4=true -> 0 (fully done, safe to gate on exit code alone)', () => {
+    const report = { ...base, classification: 'COMPLETED' as const, validate: { canAdvanceToG4: true, blockers: [] } as unknown as InstallReport['validate'] };
+    expect(installExitCode(report as InstallReport)).toBe(0);
+  });
+
+  test('COMPLETED + no validate attached at all -> 0 (never reached VALIDATE is not this state\'s concern)', () => {
+    const report = { ...base, classification: 'COMPLETED' as const };
+    expect(installExitCode(report as InstallReport)).toBe(0);
+  });
+
+  test('COMPLETED + canAdvanceToG4=false -> 4, distinct from both 0 (fully ready) and 1 (a genuine failure)', () => {
+    const report = {
+      ...base,
+      classification: 'COMPLETED' as const,
+      validate: { canAdvanceToG4: false, blockers: ['setup-completion (b) board seeded with drafts: FAIL — board seeded with 0 draft items'] } as unknown as InstallReport['validate'],
+    };
+    expect(installExitCode(report as InstallReport)).toBe(4);
+  });
+
+  test('BLOCKED -> 1, unchanged (a genuine step failure stays a hard failure)', () => {
+    const report = { ...base, classification: 'BLOCKED' as const };
+    expect(installExitCode(report as InstallReport)).toBe(1);
+  });
+
+  test('PAUSED -> 3, unchanged (awaiting a human answer at a gate)', () => {
+    const report = { ...base, classification: 'PAUSED' as const };
+    expect(installExitCode(report as InstallReport)).toBe(3);
   });
 });
 
@@ -208,6 +281,102 @@ describe('GateResult helpers', () => {
     expect(ok({ x: 1 })).toEqual({ status: 'ok', record: { x: 1 } });
     expect(paused('q', 'hint').status).toBe('paused');
     expect(blocked('q').status).toBe('blocked');
+  });
+});
+
+// =========================================================================================================
+// MEDIUM#4 — cleanupOrphanedProvider (the decision logic behind this file's SIGINT/SIGTERM handler). Every
+// case here operates on a hand-written state.json fixture — no real termfleet process is ever spawned by
+// these tests (the live SIGINT proof against a REAL provider is a separate, explicit acceptance run — see
+// the PR body — never part of this repo's own fast test suite).
+// =========================================================================================================
+
+function writeProviderStateFixture(repoDir: string, state: ProviderState): void {
+  const dir = join(repoDir, '.open-autonomy', 'runner-state', 'provider');
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(join(dir, 'state.json'), JSON.stringify(state, null, 2));
+}
+
+describe('cleanupOrphanedProvider (MEDIUM#4)', () => {
+  test('no provider state recorded at all -> not attempted, no-op', () => {
+    const dir = track(mkdtempSync(join(tmpdir(), 'oa-te8-cleanup-')));
+    const r = cleanupOrphanedProvider(dir, Date.now());
+    expect(r.attempted).toBe(false);
+    expect(r.detail).toMatch(/nothing to clean up/);
+    cleanupAll();
+  });
+
+  test('provider already stopped -> not attempted, no-op (never re-kills an already-dead recorded pid)', () => {
+    const dir = track(mkdtempSync(join(tmpdir(), 'oa-te8-cleanup-')));
+    writeProviderStateFixture(dir, {
+      repoPath: dir, prefix: 'x-oa', consolePort: 1, providerPort: 2,
+      consoleUrl: 'http://127.0.0.1:1', providerUrl: 'http://127.0.0.1:2',
+      consolePid: 111, providerPid: 222, startedAt: new Date(Date.now() - 60000).toISOString(),
+      stoppedAt: new Date().toISOString(),
+    });
+    const r = cleanupOrphanedProvider(dir, Date.now() - 120000);
+    expect(r.attempted).toBe(false);
+    cleanupAll();
+  });
+
+  // The core scoping rule: a provider that predates THIS invocation is NEVER touched — the opposite bug
+  // (killing an already-running, legitimately-in-use provider on every Ctrl-C) would be worse than the
+  // orphan-leak defect this fix closes.
+  test('provider startedAt PREDATES this invocation -> not attempted, left running untouched', () => {
+    const dir = track(mkdtempSync(join(tmpdir(), 'oa-te8-cleanup-')));
+    const invocationStartedAtMs = Date.now();
+    writeProviderStateFixture(dir, {
+      repoPath: dir, prefix: 'x-oa', consolePort: 1, providerPort: 2,
+      consoleUrl: 'http://127.0.0.1:1', providerUrl: 'http://127.0.0.1:2',
+      consolePid: 111, providerPid: 222, startedAt: new Date(invocationStartedAtMs - 3600000).toISOString(), // 1h earlier
+    });
+    let killed = false;
+    const r = cleanupOrphanedProvider(dir, invocationStartedAtMs, { kill: () => { killed = true; } });
+    expect(r.attempted).toBe(false);
+    expect(killed).toBe(false);
+    expect(r.detail).toMatch(/predates this invocation/);
+    cleanupAll();
+  });
+
+  // The actual fix: a provider started BY this invocation (fresh startedAt) IS cleaned up on signal.
+  test('provider startedAt is AFTER this invocation began -> cleaned up (SIGTERM sent to the recorded pids)', () => {
+    const dir = track(mkdtempSync(join(tmpdir(), 'oa-te8-cleanup-')));
+    const invocationStartedAtMs = Date.now();
+    writeProviderStateFixture(dir, {
+      repoPath: dir, prefix: 'x-oa', consolePort: 1, providerPort: 2,
+      consoleUrl: 'http://127.0.0.1:1', providerUrl: 'http://127.0.0.1:2',
+      consolePid: 111, providerPid: 222, startedAt: new Date(invocationStartedAtMs + 50).toISOString(), // just after
+    });
+    const killedPids: Array<[number, NodeJS.Signals]> = [];
+    const r = cleanupOrphanedProvider(dir, invocationStartedAtMs, { kill: (pid, sig) => killedPids.push([pid, sig]) });
+    expect(r.attempted).toBe(true);
+    expect(r.detail).toMatch(/orphaned by the signal/);
+    expect(killedPids).toEqual([
+      [111, 'SIGTERM'],
+      [222, 'SIGTERM'],
+    ]);
+    // providerDown's own effect: state.json is marked stopped, so a second cleanup call is a no-op.
+    const r2 = cleanupOrphanedProvider(dir, invocationStartedAtMs, { kill: () => killedPids.push([0, 'SIGTERM']) });
+    expect(r2.attempted).toBe(false);
+    expect(killedPids.length).toBe(2); // no double-kill
+    cleanupAll();
+  });
+
+  // 'restarted' bring-ups also get a fresh startedAt (provider.ts's startOn), so a mid-run restart is
+  // covered by the exact same timestamp comparison as a fresh 'started' — no separate branch needed.
+  test('a RESTARTED provider (fresh startedAt from a reap+restart) is treated identically to a freshly-started one', () => {
+    const dir = track(mkdtempSync(join(tmpdir(), 'oa-te8-cleanup-')));
+    const invocationStartedAtMs = Date.now();
+    writeProviderStateFixture(dir, {
+      repoPath: dir, prefix: 'x-oa', consolePort: 3, providerPort: 4,
+      consoleUrl: 'http://127.0.0.1:3', providerUrl: 'http://127.0.0.1:4',
+      consolePid: 333, providerPid: 444, startedAt: new Date(invocationStartedAtMs + 1000).toISOString(),
+    });
+    const killedPids: number[] = [];
+    const r = cleanupOrphanedProvider(dir, invocationStartedAtMs, { kill: (pid) => killedPids.push(pid) });
+    expect(r.attempted).toBe(true);
+    expect(killedPids.sort()).toEqual([333, 444]);
+    cleanupAll();
   });
 });
 
@@ -329,6 +498,21 @@ describe('phaseAuthorize (G3) — universal consents auto-approve; GitHub-admin/
     expect(r.resumeHint).toMatch(/consent-proxy/);
     cleanupAll();
   });
+
+  test('--dry-run + --live-probe together -> BLOCKED (a real GitHub PR is never opened under --dry-run)', async () => {
+    const dir = track(mkdtempSync(join(tmpdir(), 'oa-te8-')));
+    const workDir = join(dir, 'work');
+    mkdirSync(workDir, { recursive: true });
+    const record = selectionRecordFor('simple-gh-sdlc', dir);
+    const recordFile = join(workDir, '01-selection.json');
+    writeFileSync(recordFile, JSON.stringify(record));
+    const ctx = baseCtx(dir, workDir, true, { consentGhAdmin: true, identity: 'own-token', liveProbe: 'acme/throwaway-scratch', dryRun: true });
+    const r = await phaseAuthorize(ctx, recordFile);
+    expect(r.status).toBe('blocked');
+    expect(r.question).toMatch(/--live-probe.*opens a REAL throwaway PR/);
+    expect(r.question).toMatch(/--dry-run/);
+    cleanupAll();
+  });
 });
 
 // =========================================================================================================
@@ -411,9 +595,10 @@ describe('runInstall — FULL CHAIN dry-run, all 4 gates auto-approved (bin/inst
 
     // --- EXECUTE: all 7 steps ran; ci-and-provision skipped (local-git); the harness is really committed
     expect(report.execute?.ok).toBe(true);
+    // D1 fix: compile runs BEFORE install-deps (see install-execute.ts's "EXECUTE order" file-header note).
     expect(report.execute?.steps.map((s) => s.id)).toEqual([
-      'install-deps',
       'compile',
+      'install-deps',
       'direction-fill',
       'commit-harness',
       'provider-up',
@@ -431,6 +616,19 @@ describe('runInstall — FULL CHAIN dry-run, all 4 gates auto-approved (bin/inst
     // --- VALIDATE: an honest IMM stage report was produced ----------------------------------------------
     expect(report.validate).toBeDefined();
     expect(report.validate!.maturity.stage).toBeDefined();
+
+    // --- LOW#6 (owner-mandated aggregate skeptic review): the exact repro for "exit 0/COMPLETED while
+    // canAdvanceToG4=false" — EXECUTE's planner-dispatch stub reports `ok` (its spawn "exited 0"), so
+    // classification is COMPLETED, but the mocked dispatch never actually filed a board draft, so VALIDATE's
+    // live re-read of the board correctly reports canAdvanceToG4=false. A script gating on exit code/
+    // classification alone would wrongly read this as "fully done" — installExitCode() must NOT return 0.
+    expect(report.classification).toBe('COMPLETED');
+    expect(report.validate!.canAdvanceToG4).toBe(false);
+    expect(report.validate!.blockers.length).toBeGreaterThan(0);
+    expect(installExitCode(report)).toBe(4);
+    expect(installExitCode(report)).not.toBe(0);
+    // and the human-readable summary prominently says so, not just buried in the VALIDATE detail block.
+    expect(renderInstallHuman(report)).toMatch(/^NOT READY: /m);
 
     // --- HAND-OFF: verify-only + construct-only, board never had a REAL draft filed (planner mocked) ---
     expect(report.handoff).toBeDefined();
@@ -473,6 +671,82 @@ describe('runInstall — FULL CHAIN dry-run, all 4 gates auto-approved (bin/inst
     const human = renderInstallHuman(report);
     expect(human).toContain(profile);
     expect(human).toContain('HONEST CEILING');
+
+    cleanupAll();
+  }, 60000);
+});
+
+// =========================================================================================================
+// THE --dry-run FLAG — bin/install.ts's own first-class safety feature (distinct from the "FULL DRY-RUN"
+// test-harness terminology above, which predates this flag and refers to this SUITE's own use of stubs).
+// This block proves the ACTUAL --dry-run mode: the whole chain runs against a real fixture repo with NO
+// planner-dispatch stub needed at all (dry-run never calls proc for it), a poison proc/bringUp that THROWS
+// on any real npm/tmux/nohup/termfleet-spawn call, and byte-for-byte git-status equality before/after.
+// =========================================================================================================
+
+describe('install --dry-run — the safe way to rehearse a real install (bin/install.ts)', () => {
+  test('DETECT -> ... -> PROVE ADVANCING: zero real side effects, workDir defaults OUTSIDE the repo, git status unchanged, termfleet never spawned, planner never dispatched (no stub needed)', async () => {
+    const dir = makeFixture();
+    const gitBefore = realGitProc()('git', ['status', '--porcelain'], { cwd: dir }).stdout;
+
+    const callLog: string[] = [];
+    const proc: ProcRunner = (cmd, args, opts) => {
+      callLog.push(`${cmd} ${args.join(' ')}`);
+      if (cmd === 'npm' || (cmd === 'node' && args[0] === 'scripts/run-agent.mjs') || cmd === 'tmux' || cmd === 'nohup') {
+        throw new Error(`install --dry-run must NEVER invoke a real "${cmd} ${args.join(' ')}" — a dry-run gate is missing somewhere`);
+      }
+      return defaultProc(cmd, args, opts);
+    };
+
+    const report: InstallReport = await runInstall({
+      repoDir: dir,
+      autoApprove: true,
+      dryRun: true,
+      proc,
+      bringUp: {
+        isPortFree: () => true,
+        spawnImpl: () => {
+          throw new Error('install --dry-run must NEVER spawn a real termfleet process');
+        },
+        kill: () => {
+          throw new Error('install --dry-run must NEVER kill a real process');
+        },
+        rangeStart: 46000,
+        rangeEnd: 46100,
+      },
+    });
+
+    expect(report.dryRun).toBe(true);
+    // --work-dir defaults OUTSIDE the target repo under --dry-run — not even an audit-file trace is left.
+    expect(report.workDir.startsWith(dir)).toBe(false);
+    expect(existsSync(join(dir, '.open-autonomy', 'install-work'))).toBe(false);
+
+    // reached the full chain (a local-git profile needs no --owner-repo, so nothing SHOULD predict a block).
+    expect(report.classification).toBe('COMPLETED');
+    expect(report.execute).toBeDefined();
+    expect(report.execute!.dryRun).toBe(true);
+    expect(report.execute!.steps.every((s) => s.status !== 'blocked')).toBe(true);
+    expect(report.validate).toBeDefined();
+    expect(report.handoff).toBeDefined();
+    expect(report.proveAdvancing).toBeDefined();
+
+    // --- the zero-real-side-effect proof ------------------------------------------------------------------
+    expect(existsSync(join(dir, '.open-autonomy', 'generated.json'))).toBe(false); // no real compile write
+    expect(existsSync(join(dir, '.open-autonomy', 'install.json'))).toBe(false); // no real maturity/prove-advancing write
+    expect(existsSync(join(dir, '.open-autonomy-install-provision.json'))).toBe(false);
+    const gitAfter = realGitProc()('git', ['status', '--porcelain'], { cwd: dir }).stdout;
+    expect(gitAfter).toBe(gitBefore); // byte-for-byte identical — dry-run left the repo completely untouched
+    expect(callLog.some((c) => c.startsWith('npm '))).toBe(false);
+    expect(callLog.some((c) => c === 'node scripts/run-agent.mjs')).toBe(false);
+    expect(callLog.some((c) => c.startsWith('tmux') || c.startsWith('nohup'))).toBe(false);
+    expect(callLog.some((c) => c.startsWith('git add') || c.startsWith('git commit'))).toBe(false);
+
+    // --- the report itself is a clear, structured, human-readable plan -----------------------------------
+    const human = renderInstallHuman(report);
+    expect(human).toContain('DRY-RUN');
+    expect(human).toContain('DRY-RUN SUMMARY');
+    expect(human).toMatch(/would compile|would write/);
+    expect(human).toMatch(/provider:/);
 
     cleanupAll();
   }, 60000);

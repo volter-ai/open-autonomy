@@ -75,6 +75,53 @@ steps 1–5 (shared) vs step 6 (per code host) below.
 > below rather than repeating them. Read [Stop-conditions before you start](#stop-conditions-before-you-start)
 > first — each one is a reason to stop, not to proceed.
 
+> **`oa install` now automates most of this checklist end-to-end for local-substrate profiles**
+> (`simple-sdlc`, `hello`, `simple-gh-sdlc`/`self-driving` on `local`). This is exactly what's automated,
+> read from `bin/install.ts` + `bin/install-execute.ts` + `bin/install-handoff.ts` directly, not assumed:
+>
+> - **Automated for real:** installing the `ztrack`/`termfleet` deps (step 1's npm installs — not the
+>   sign-in/`gh auth`/tmux prereqs, see below), compiling the profile (step 3), committing the harness
+>   (step 4, `checkUncommittedHarness`-verified both before and after), and bringing up the local termfleet
+>   provider (step 2's port/pin, `bringUpProvider`, reused verbatim).
+> - **Automated for real, GitHub code host only (either substrate — `simple-gh-sdlc` on `local` counts, not
+>   just `gh-actions`), and only given `--owner-repo`:** CI-scaffold + **branch-protection provisioning**
+>   (step 6b — `scripts/provision-target-repo.ts`), independently re-verified against GitHub's *live*
+>   protection state (the exact hard signal `oa maturity` uses for M3) — a present:false verdict of any
+>   kind is a named blocker, never a silent pass. Also dispatches the profile's planner once to seed the
+>   board with **draft** items only (never `ready`).
+> - **Go-live is split, not uniformly construct-only:** once G4a's readiness check confirms you already
+>   promoted a board item to `ready`, `oa resume` (local) — a single safe, reversible fence-removal, no
+>   process spawn — **is performed automatically, for real**. Only `oa start` (local) or, for hosted, the
+>   `PUBLIC_AGENT_REPO_PAUSED` clear — the halves that would actually launch/unblock a real agent session —
+>   stay **constructed, never executed**: G4a prints the exact command for **you** to run — the same human
+>   act step 6 below already requires ("watch the first PR merge under supervision" before arming anything).
+> - **NOT automated — still exactly the manual steps below:** `npx ztrack init --sync github --repo
+>   <owner>/<repo>` (step 6a — the compile step only *prints* this as a next-step suggestion, for either
+>   manual `compile` or `oa install`'s own compile step; neither runs it); opening an actual
+>   `ready`-labeled issue (step 6c — by design: EXECUTE only ever seeds drafts, promoting the first item to
+>   ready IS the G4a human act); **arming native auto-merge** (`gh repo edit --enable-auto-merge`, step 6d)
+>   — `oa install` provisions branch protection + the required CI checks automatically (previous bullet),
+>   but does **not** arm native auto-merge: that stays a deliberate, separate, manual step, run only after
+>   a supervised first merge, exactly as step 6d above describes. Verified against
+>   `scripts/provision-target-repo.ts`'s `armAutoMerge` option (off by default, TE.10) and
+>   `bin/install-execute.ts`'s `stepCiAndProvision` (the real EXECUTE call site), which never passes
+>   `--arm-auto-merge`; and every
+>   [GitHub production rollout](#github-production-rollout) repo variable/secret plus the model-proxy
+>   Worker deployment itself (`oa install`'s G3 only *records* your deploy-own-vs-get-allowlisted decision,
+>   it never runs `wrangler deploy` or touches a repo variable/secret).
+> - **Phase-0 prerequisites (step 1's sign-in, `gh auth`, tmux/node/git on PATH) are read, never
+>   installed** — DETECT reports `gh auth status` and coding-CLI sign-in state so a blocked gate names the
+>   fix, but `oa install` doesn't run `gh auth login` or install tmux for you.
+> - **Source-checkout only today:** `bun bin/install.ts <repoDir> [options]` from a clone of this repo —
+>   the *published* `npx open-autonomy install` / `oa install` looks for `bin/install.ts` in the current
+>   working directory (i.e. you must run it from inside a source checkout of this repo), finds nothing in
+>   the npm tarball, and exits 1 with an explicit "clone the repo" message (verified live) rather than
+>   silently doing less than advertised.
+>
+> `bun bin/install.ts --help` lists every gate-answer flag. Keep reading — this checklist is still the
+> canonical phase-by-phase reference for what each step means and why, and the only path for a plain `npx`
+> no-clone install today.
+
 Run the **agents on your own machine** — as local terminal sessions via
 [termfleet](https://www.npmjs.com/package/termfleet), using *your own* logged-in coding CLI (Claude Code
 or Codex) for model access (no bounded-token proxy, no sponsor budget — **you pay your model provider

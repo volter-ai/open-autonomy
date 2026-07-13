@@ -328,9 +328,32 @@ export function probeResolution(cwdArg: string, name: string, specifier: string,
 
   // The resolved file must live INSIDE this package's own node_modules directory (not just node_modules/
   // broadly — a subpath specifier like "@termfleet/core/local-providers.js" must resolve under
-  // node_modules/@termfleet/core/, never merely under node_modules/ at large).
+  // node_modules/@termfleet/core/, never merely under node_modules/ at large) — OR inside pkgDir's own
+  // REALPATH. The second half is required for pnpm: pnpm installs `node_modules/<name>` as a symlink into
+  // `node_modules/.pnpm/<name>@<version>/node_modules/<name>`, and Node's ESM `import.meta.resolve`
+  // realpaths by default — so on a perfectly healthy pnpm install, resolving even the package's OWN files
+  // (e.g. the subpath specifier `@termfleet/core/local-providers.js`) returns an absolute path inside
+  // `node_modules/.pnpm/...`, which does not literally string-prefix-match `node_modules/@termfleet/core/`.
+  // Without this, every healthy pnpm install would false-positive here (proven live). Resolving pkgDir's
+  // realpath ONCE and accepting either prefix keeps this correct for npm/yarn/bun (whose literal prefix
+  // already matches — realpath(pkgDir) usually equals pkgDir there, so the OR is a no-op) while fixing
+  // pnpm. A GENUINE self-reference/workspace-shadow still fails BOTH: a workspace member symlinked in place
+  // of the real package realpaths into the REPO's own source tree, not into node_modules/.pnpm/..., so
+  // neither the literal prefix nor the realpath prefix matches and this still correctly reports
+  // 'outside-node-modules' (see the LIVE fixture + DI tests below).
   const expectedPrefix = pkgDir + sep;
-  if (resolvedPath !== pkgDir && !resolvedPath.startsWith(expectedPrefix)) {
+  const matchesLiteral = resolvedPath === pkgDir || resolvedPath.startsWith(expectedPrefix);
+  let pkgDirReal = pkgDir;
+  if (!matchesLiteral) {
+    try {
+      pkgDirReal = io.realpathSync(pkgDir);
+    } catch {
+      /* broken symlink — leave as pkgDir; matchesRealpath below will then correctly stay false */
+    }
+  }
+  const realpathPrefix = pkgDirReal + sep;
+  const matchesRealpath = matchesLiteral || resolvedPath === pkgDirReal || resolvedPath.startsWith(realpathPrefix);
+  if (!matchesRealpath) {
     return { ok: false, reason: 'outside-node-modules', detail: resolvedPath };
   }
 

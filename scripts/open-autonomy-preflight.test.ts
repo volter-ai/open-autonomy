@@ -96,6 +96,97 @@ describe('buildPreflightReport — REQUIRED_FILES derives per-agent workflows fr
   });
 });
 
+// D2 (HIGH, aggregate-review finding) — self-driving@local could STRUCTURALLY NEVER reach M3 because
+// `agentWorkflowFiles` used to require every manifest-listed `.github/workflows/<agent>.yml` unconditionally,
+// even on an install whose OWN compile (a local-substrate compile) never generates those files by design
+// (substrate-local/emit.ts: "no workflows..."). The fix makes the check TARGET-AWARE: a workflow file is
+// only required when `.open-autonomy/generated.json`'s `files[]` (the install's own real compiled-output
+// provenance record — core/file-manifest.ts) actually lists it. Both directions are proven below: (a) a
+// local-shaped install (generated.json present, workflow files NOT listed) is never asked for them; (b) a
+// gh-actions-shaped install (generated.json lists them) still hard-fails if one is deleted post-compile —
+// the check must never be silently weakened for a genuinely hosted install.
+describe('buildPreflightReport — agentWorkflowFiles is target-aware against generated.json (D2 fix)', () => {
+  const installWith = (agents: Record<string, { workflowFile?: string }>, generatedFiles?: string[]): string => {
+    const dir = mkdtempSync(join(tmpdir(), 'preflight-d2-'));
+    mkdirSync(join(dir, '.open-autonomy'), { recursive: true });
+    writeFileSync(
+      join(dir, '.open-autonomy', 'autonomy.yml'),
+      `agents:\n${Object.entries(agents).map(([role, a]) => `  ${role}: ${a.workflowFile ? `{ workflowFile: ${a.workflowFile} }` : '{}'}\n`).join('')}`,
+    );
+    if (generatedFiles !== undefined) {
+      writeFileSync(
+        join(dir, '.open-autonomy', 'generated.json'),
+        JSON.stringify({ schema: 'open-autonomy.generated.v1', files: generatedFiles }, null, 2),
+      );
+    }
+    return dir;
+  };
+
+  test('(a) a local-target compile — generated.json exists but never lists .github/workflows/*.yml — never demands them, even though none exist on disk', () => {
+    const dir = installWith(
+      {
+        draft: { workflowFile: 'draft.yml' },
+        develop: { workflowFile: 'develop.yml' },
+        pm: { workflowFile: 'pm.yml' },
+        reviewer: { workflowFile: 'reviewer.yml' },
+      },
+      // a real local-substrate compile's generated.json — no .github/workflows/*.yml entries at all
+      ['.open-autonomy/autonomy.yml', '.open-autonomy/generated.json', '.open-autonomy/roadmap.yml', 'scheduler/schedule.json'],
+    );
+    const report = buildPreflightReport({ root: dir });
+    for (const f of ['draft.yml', 'develop.yml', 'pm.yml', 'reviewer.yml']) {
+      expect(report.checks.some((c) => c.id === `file:.github/workflows/${f}`)).toBe(false);
+    }
+    // sanity: this is genuinely proving the workflow files are ABSENT on disk, not merely unlisted
+    for (const f of ['draft.yml', 'develop.yml', 'pm.yml', 'reviewer.yml']) {
+      expect(existsSync(join(dir, '.github', 'workflows', f))).toBe(false);
+    }
+  });
+
+  test('(b) a gh-actions-target compile — generated.json DOES list .github/workflows/*.yml — still hard-fails when one is deleted post-compile', () => {
+    const dir = installWith(
+      { pm: { workflowFile: 'pm.yml' }, reviewer: { workflowFile: 'reviewer.yml' } },
+      ['.github/workflows/pm.yml', '.github/workflows/reviewer.yml', '.open-autonomy/autonomy.yml', '.open-autonomy/generated.json'],
+    );
+    // materialize pm.yml only — reviewer.yml was "deleted post-compile"
+    mkdirSync(join(dir, '.github', 'workflows'), { recursive: true });
+    writeFileSync(join(dir, '.github', 'workflows', 'pm.yml'), '# workflow\n');
+    const report = buildPreflightReport({ root: dir });
+    const pmCheck = report.checks.find((c) => c.id === 'file:.github/workflows/pm.yml')!;
+    const reviewerCheck = report.checks.find((c) => c.id === 'file:.github/workflows/reviewer.yml')!;
+    expect(pmCheck.status).toBe('pass');
+    expect(reviewerCheck.status).toBe('fail');
+    expect(report.ready).toBe(false);
+    expect(report.missing).toContain('file:.github/workflows/reviewer.yml');
+  });
+
+  test('generated.json missing entirely (legacy/corrupted install) falls back to the pre-D2-fix unfiltered behavior — never silently relaxes', () => {
+    const dir = installWith({ pm: { workflowFile: 'pm.yml' } }); // no generatedFiles arg -> no generated.json written
+    const report = buildPreflightReport({ root: dir });
+    const pmCheck = report.checks.find((c) => c.id === 'file:.github/workflows/pm.yml')!;
+    expect(pmCheck.status).toBe('fail'); // still required, matching legacy behavior
+  });
+
+  test('generated.json present but corrupted (invalid JSON) also falls back to unfiltered, not a silent pass', () => {
+    const dir = installWith({ pm: { workflowFile: 'pm.yml' } });
+    writeFileSync(join(dir, '.open-autonomy', 'generated.json'), '{not valid json');
+    const report = buildPreflightReport({ root: dir });
+    const pmCheck = report.checks.find((c) => c.id === 'file:.github/workflows/pm.yml')!;
+    expect(pmCheck.status).toBe('fail');
+  });
+
+  test('(c) regression — a gh-actions install with every listed workflow file present on disk still passes cleanly', () => {
+    const dir = installWith(
+      { developer: { workflowFile: 'developer.yml' } },
+      ['.github/workflows/developer.yml', '.open-autonomy/autonomy.yml', '.open-autonomy/generated.json'],
+    );
+    mkdirSync(join(dir, '.github', 'workflows'), { recursive: true });
+    writeFileSync(join(dir, '.github', 'workflows', 'developer.yml'), '# workflow\n');
+    const report = buildPreflightReport({ root: dir });
+    expect(report.checks.find((c) => c.id === 'file:.github/workflows/developer.yml')!.status).toBe('pass');
+  });
+});
+
 describe('buildPreflightReport — MODEL_PROXY_URL does not apply to a local-runner install (BL-27 dev/03)', () => {
   test('a gh-actions-shaped install (no scheduler/run.mjs) warns when MODEL_PROXY_URL is unset', () => {
     const dir = mkdtempSync(join(tmpdir(), 'preflight-env-gh-'));

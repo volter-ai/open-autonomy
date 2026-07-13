@@ -13,11 +13,31 @@
 // import for a package export).
 //
 // EXECUTE order (dependency order, "commit the harness first, wire the gate last"):
-//   1. install deps        — bun/termfleet/ztrack presence, consuming TE.1's own DetectReport (--detect),
-//                             never re-running detect's own probes.
-//   2. compile              — `bun bin/autonomy-compile.ts <profile> <substrate> <repoDir>` (subprocess —
+//   1. compile              — `bun bin/autonomy-compile.ts <profile> <substrate> <repoDir>` (subprocess —
 //                             autonomy-compile.ts is a top-level script, not an importable function; this
 //                             is the same "reuse via subprocess" idiom TE.4's probe-PR step already uses).
+//   2. install deps         — bun/termfleet/ztrack presence, consuming TE.1's own DetectReport (--detect),
+//                             never re-running detect's own probes.
+//                             DEFECT D1 FIX (aggregate-review, 100%-reproducible on a fresh self-driving
+//                             install): this step USED TO run before compile. `npm install -D` on a
+//                             directory with no package.json auto-creates a minimal one
+//                             (`{devDependencies:{ztrack:...}}`). self-driving ships its OWN real
+//                             package.json as a REPO_SHELL_FILES resource (bin/autonomy-compile.ts) —
+//                             compile's clobber guard then correctly refused to overwrite the just-auto-
+//                             created stub with self-driving's real file, blocking EVERY unforced fresh
+//                             self-driving EXECUTE at the compile step, every time. Compile-first fixes
+//                             this: it materializes whatever package.json the profile ships (self-driving)
+//                             or doesn't ship (every additive profile — simple-sdlc, simple-gh-sdlc, …)
+//                             FIRST, so install-deps's `npm install` always lands on whatever now exists on
+//                             disk (the profile's own file, or nothing yet, in which case npm's own
+//                             auto-create behavior is exactly what an additive profile always relied on —
+//                             unchanged). Safe to reorder: compile is a pure-materialization subprocess of
+//                             THIS orchestrator's own already-installed node_modules — it never shells out
+//                             to npm/ztrack/termfleet itself and has no forward dependency on the TARGET
+//                             repo's deps being installed (verified by reading compileLocal/compileGithub
+//                             end to end: the only `npm`/`ztrack` mentions are inside emitted TEMPLATE
+//                             STRINGS that become the compiled harness's own runtime scripts, never
+//                             executed during compile itself).
 //   3. write filled vision  — applies TE.3's ALREADY-GATHERED fill content (--direction-fill), never
 //                             invents any. Re-verifies via TE.3's own `checkDirectionInvariant`
 //                             (bin/install-direction.ts) — the exact function, not a re-derivation.
@@ -27,6 +47,16 @@
 //                             re-parsing `.open-autonomy/generated.json` a second way.
 //   5. provider up (local)  — TG.1's own `bringUpProvider` (packages/local-runner-cli/src/provider.ts),
 //                             reused verbatim; N/A for a gh-actions target.
+//                             DEFECT D3 FIX (aggregate-review): `bringUpProvider` calls `provider.ts`'s own
+//                             `pinScheduleProviderUrl`, which mutates `scheduler/schedule.json` IN PLACE —
+//                             AFTER step 4 already committed the harness (schedule.json included). Left
+//                             alone, `git status` shows schedule.json modified immediately after a real
+//                             EXECUTE run, and `oa maturity`'s A6 signal fails until an operator manually
+//                             re-commits it. This step now follows a successful pin with a SECOND, narrow
+//                             commit of ONLY scheduler/schedule.json (same add-then-commit semantics step 4
+//                             already establishes) whenever the pin actually left it dirty — applies to
+//                             every local-target profile (the check is substrate-scoped, never profile-
+//                             scoped), so the working tree is clean the instant provider-up finishes.
 //   6. CI + provision (gh)  — TA.3's own `ensureCiScaffold` (bin/ensure-ci-workflow.ts) then
 //                             `scripts/provision-target-repo.ts` (subprocess — a top-level script) with
 //                             the check names TE.4's probe-PR discovery found (or the pack's own
@@ -38,13 +68,22 @@
 //                             continues silently on a failed non-admin PUT). A present:false verdict of
 //                             ANY kind (unverifiable, not-applicable, proven-negative) is a NAMED BLOCKER,
 //                             never a silent pass. N/A for a local-git profile.
-//   7. seed the board       — dispatches the profile's planner ONCE via the paused-safe primary dispatch
-//                             channel TC.2's audit skill established (`AUTONOMY_AGENT=planner node
-//                             scripts/run-agent.mjs` — no `.open-autonomy/paused` check, unlike
+//   7. seed the board       — dispatches the profile's REAL originator ONCE (its setup-pack.yml's
+//                             `board_seed_recipe.originator_skill` — NOT a hardcoded 'planner': CRITICAL#2
+//                             fix, aggregate-review round 2. simple-sdlc's roster has no `planner` agent at
+//                             all — its originator is `draft` — so a hardcoded 'planner' dispatched the
+//                             wrong agent, and worse, would have gone missing-prompt-file straight into
+//                             packages/substrate-local/src/backend.mjs's silent bare-agent-name prompt
+//                             fallback, see that step's own comment below) via the paused-safe primary
+//                             dispatch channel TC.2's audit skill established (`AUTONOMY_AGENT=<originator>
+//                             node scripts/run-agent.mjs` — no `.open-autonomy/paused` check, unlike
 //                             runner-frontend.ts's `launch()`; see profiles/*/skills/audit/SKILL.md's
 //                             "SETUP-COMPLETION MODE" section for the cited mechanism this reuses, only
 //                             the agent name differs) or, on a gh-actions target, `gh workflow run
-//                             planner.yml`. ⛔ SAFETY: dispatching this for real launches a real agent —
+//                             <originator>.yml` (packages/substrate-github/src/emit.ts emits one workflow
+//                             file per agent ROLE — `${name}.yml` — so this is the same originator-driven
+//                             fix applied uniformly to both substrates, not just the local one the defect
+//                             report called out). ⛔ SAFETY: dispatching this for real launches a real agent —
 //                             this file only ever CONSTRUCTS the exact command and calls it through an
 //                             injectable `proc`; this unit's own acceptance stubs `proc` so no agent is
 //                             ever actually launched (see install-execute.test.ts + the PR body's explicit
@@ -96,7 +135,7 @@ import { profilesRoot as bundledProfilesRoot } from './bundled-profiles';
 import { ensureCiScaffold, formatCiScaffoldResult, type CiScaffoldResult } from './ensure-ci-workflow.ts';
 import { checkDirectionInvariant, type InvariantResult } from './install-direction.ts';
 import type { ProcResult, ProcRunner } from '../packages/local-runner-cli/src/types.ts';
-import { defaultProc, firstLine } from '../packages/local-runner-cli/src/proc.ts';
+import { defaultProc, firstErrLine, firstLine } from '../packages/local-runner-cli/src/proc.ts';
 import { checkUncommittedHarness } from '../packages/local-runner-cli/src/guards.ts';
 import { doctor, formatDoctorReport, type DoctorReport } from '../packages/local-runner-cli/src/doctor.ts';
 import {
@@ -110,10 +149,10 @@ import {
 import { a13ProvisionMatchesLiveProtection, type Signal, type SignalContext } from '../packages/local-runner-cli/src/imm-signals.ts';
 import { resolveBoardKind } from '../packages/local-runner-cli/src/board-readiness.ts';
 import { PARKED_LABELS } from '../packages/local-runner-cli/src/eligibility.ts';
-import { bringUpProvider, readSchedulePin, type BringUpOptions } from '../packages/local-runner-cli/src/provider.ts';
+import { bringUpProvider, planBringUpProvider, readSchedulePin, type BringUpOptions } from '../packages/local-runner-cli/src/provider.ts';
 import { readLastFires } from '../packages/local-runner-cli/src/status.ts';
 
-export { defaultProc, firstLine };
+export { defaultProc, firstErrLine, firstLine };
 export type { ProcResult, ProcRunner };
 
 // =========================================================================================================
@@ -260,10 +299,12 @@ function profileDirOf(profilesRoot: string, profile: string): string {
 }
 
 // =========================================================================================================
-// Step 1 — install deps (bun/termfleet/ztrack), consuming TE.1's own DetectReport when supplied.
+// Step 2 — install deps (bun/termfleet/ztrack), consuming TE.1's own DetectReport when supplied. Runs
+// AFTER compile (D1 fix — see file-header "EXECUTE order" note): `npm install` must land on whatever
+// package.json compile just materialized (or didn't ship), never race it to auto-create a stub first.
 // =========================================================================================================
 
-export function stepInstallDeps(sel: SelectionRecordRef, opts: { proc: ProcRunner; detectFile?: string }): ExecuteStepResult {
+export function stepInstallDeps(sel: SelectionRecordRef, opts: { proc: ProcRunner; detectFile?: string; dryRun?: boolean }): ExecuteStepResult {
   const repoDir = sel.detect.repoDir;
   let tools: MinimalDetectTools | undefined;
   if (opts.detectFile) {
@@ -274,14 +315,20 @@ export function stepInstallDeps(sel: SelectionRecordRef, opts: { proc: ProcRunne
     }
   }
   const notes: string[] = [];
+  const wouldInstall: string[] = [];
   const toolSource = tools ? "TE.1's own DetectReport (--detect)" : 'a minimal node_modules presence read (no --detect supplied — never a re-derivation of TE.1\'s own probing logic)';
 
   // ztrack: every profile routes through it (CLAUDE.md: "all four route through ztrack").
   const ztrackPresent = tools ? Boolean(tools.ztrack?.vendored || tools.ztrack?.global) : existsSync(join(repoDir, 'node_modules', 'ztrack'));
   if (!ztrackPresent) {
-    const r = opts.proc('npm', ['install', '-D', 'ztrack@1.0.0'], { cwd: repoDir });
-    if (r.status !== 0) return step('install-deps', 'blocked', `npm install -D ztrack@1.0.0 failed (exit ${r.status}): ${firstLine(r.stderr || r.stdout)}`);
-    notes.push('installed ztrack@1.0.0 (was absent)');
+    if (opts.dryRun) {
+      wouldInstall.push('npm install -D ztrack@1.0.0');
+      notes.push('[DRY-RUN] ztrack absent — would run: npm install -D ztrack@1.0.0 (NOT run; node_modules/package.json untouched)');
+    } else {
+      const r = opts.proc('npm', ['install', '-D', 'ztrack@1.0.0'], { cwd: repoDir });
+      if (r.status !== 0) return step('install-deps', 'blocked', `npm install -D ztrack@1.0.0 failed (exit ${r.status}): ${firstLine(r.stderr || r.stdout)}`);
+      notes.push('installed ztrack@1.0.0 (was absent)');
+    }
   } else {
     notes.push(`ztrack present (source: ${toolSource})`);
   }
@@ -290,9 +337,14 @@ export function stepInstallDeps(sel: SelectionRecordRef, opts: { proc: ProcRunne
   if (sel.substrate === 'local') {
     const termfleetPresent = tools ? Boolean(tools.termfleet?.installed) : existsSync(join(repoDir, 'node_modules', 'termfleet'));
     if (!termfleetPresent) {
-      const r = opts.proc('npm', ['install', 'termfleet'], { cwd: repoDir });
-      if (r.status !== 0) return step('install-deps', 'blocked', `npm install termfleet failed (exit ${r.status}): ${firstLine(r.stderr || r.stdout)}`);
-      notes.push('installed termfleet (was absent)');
+      if (opts.dryRun) {
+        wouldInstall.push('npm install termfleet');
+        notes.push('[DRY-RUN] termfleet absent — would run: npm install termfleet (NOT run; node_modules/package.json untouched)');
+      } else {
+        const r = opts.proc('npm', ['install', 'termfleet'], { cwd: repoDir });
+        if (r.status !== 0) return step('install-deps', 'blocked', `npm install termfleet failed (exit ${r.status}): ${firstLine(r.stderr || r.stdout)}`);
+        notes.push('installed termfleet (was absent)');
+      }
     } else {
       notes.push(`termfleet present (source: ${toolSource})`);
     }
@@ -301,13 +353,15 @@ export function stepInstallDeps(sel: SelectionRecordRef, opts: { proc: ProcRunne
   }
 
   notes.push('bun present (this orchestrator runs under bun)');
-  return step('install-deps', 'ok', notes.join('; '));
+  return step('install-deps', 'ok', notes.join('; '), wouldInstall.length ? { dryRun: true, wouldInstall } : {});
 }
 
 // =========================================================================================================
-// Step 2 — compile the profile onto the substrate. `bun bin/autonomy-compile.ts` is a top-level script
+// Step 1 — compile the profile onto the substrate. `bun bin/autonomy-compile.ts` is a top-level script
 // (import.meta.main body), not an importable function — reused via subprocess, the same idiom TE.4's
-// probe-PR step already uses for `gh`/`git`.
+// probe-PR step already uses for `gh`/`git`. Runs BEFORE install-deps (D1 fix — see file-header "EXECUTE
+// order" note): compile never shells out to npm/ztrack/termfleet itself, so it has no forward dependency
+// on the target repo's deps being installed first.
 // =========================================================================================================
 
 // A plain repo-root-relative literal (never `dirname(fileURLToPath(import.meta.url))`) — this file, like
@@ -321,7 +375,28 @@ export function stepInstallDeps(sel: SelectionRecordRef, opts: { proc: ProcRunne
 const AUTONOMY_COMPILE_SCRIPT = 'bin/autonomy-compile.ts';
 const PROVISION_TARGET_REPO_SCRIPT = 'scripts/provision-target-repo.ts';
 
-export function stepCompile(sel: SelectionRecordRef, opts: { proc: ProcRunner; force?: boolean }): ExecuteStepResult {
+export function stepCompile(sel: SelectionRecordRef, opts: { proc: ProcRunner; force?: boolean; dryRun?: boolean }): ExecuteStepResult {
+  if (opts.dryRun) {
+    // bin/autonomy-compile.ts's OWN built-in dry-run mode (its own file header: "With no outDir, prints the
+    // installation's file list (a dry run)") — reused verbatim rather than re-derived: omitting the outDir
+    // positional is the exact mechanism that script already uses to guarantee zero writes (compileLocal's
+    // own `outDir` branch — the ENTIRE materialize/clobber-guard/write path — never runs at all). This is
+    // real, already-proven-safe production code, not a bespoke simulation of it.
+    const args = [AUTONOMY_COMPILE_SCRIPT, sel.profile, sel.substrate];
+    const r = opts.proc('bun', args, {});
+    if (r.status !== 0) {
+      return step('compile', 'blocked', `[DRY-RUN] bun bin/autonomy-compile.ts ${sel.profile} ${sel.substrate} (no outDir — the tool's own built-in dry-run) failed (exit ${r.status}): ${firstLine(r.stderr || r.stdout)}`);
+    }
+    const wouldWrite = r.stdout.split('\n').map((l) => l.trim()).filter(Boolean);
+    return step(
+      'compile',
+      'ok',
+      `[DRY-RUN] would compile ${sel.profile}@${sel.substrate} into ${sel.detect.repoDir} — ${wouldWrite.length} file(s) ` +
+        `(via \`bun bin/autonomy-compile.ts ${sel.profile} ${sel.substrate}\`'s own built-in dry-run/list mode — no outDir arg, ` +
+        `so materialize/write never runs). NOT written.`,
+      { dryRun: true, wouldWrite },
+    );
+  }
   const args = [AUTONOMY_COMPILE_SCRIPT, sel.profile, sel.substrate, sel.detect.repoDir];
   if (opts.force) args.push('--force');
   const r = opts.proc('bun', args, {});
@@ -347,7 +422,7 @@ function applyDirectionFill(repoDir: string, fill: DirectionFillFile): string[] 
   return written;
 }
 
-export function stepDirectionFill(sel: SelectionRecordRef, opts: { fillFile?: string; profileDir: string }): ExecuteStepResult {
+export function stepDirectionFill(sel: SelectionRecordRef, opts: { fillFile?: string; profileDir: string; dryRun?: boolean }): ExecuteStepResult {
   const repoDir = sel.detect.repoDir;
   const before: InvariantResult = checkDirectionInvariant(sel.pack, opts.profileDir, repoDir);
   if (before.satisfied) {
@@ -366,6 +441,21 @@ export function stepDirectionFill(sel: SelectionRecordRef, opts: { fillFile?: st
   } catch (e) {
     return step('direction-fill', 'blocked', (e as Error).message);
   }
+  if (opts.dryRun) {
+    // Never writes the fill content to repoDir — loadDirectionFill (above) is a pure read of the ALREADY-
+    // gathered content file itself, not of repoDir. Re-verifying the invariant would require the real write
+    // this mode refuses to perform, so this reports the plan honestly instead of fabricating a "satisfied"
+    // verdict it cannot actually prove.
+    const paths = fill.files.map((f) => `${f.path} (${f.content.length} byte(s))`);
+    return step(
+      'direction-fill',
+      'ok',
+      `[DRY-RUN] would apply --direction-fill, writing ${fill.files.length} file(s): ${paths.join(', ')} — invariant currently NOT satisfied ` +
+        `(${before.reason}); re-verification after writing is skipped in dry-run (would require the real write this mode refuses to perform). ` +
+        `Run without --dry-run to confirm the invariant becomes satisfied.`,
+      { dryRun: true, wouldWrite: fill.files.map((f) => f.path) },
+    );
+  }
   const written = applyDirectionFill(repoDir, fill);
   const after: InvariantResult = checkDirectionInvariant(sel.pack, opts.profileDir, repoDir);
   if (!after.satisfied) {
@@ -379,9 +469,30 @@ export function stepDirectionFill(sel: SelectionRecordRef, opts: { fillFile?: st
 // `checkUncommittedHarness` — never a second manifest-diffing implementation.
 // =========================================================================================================
 
-export function stepCommitHarness(sel: SelectionRecordRef, opts: { proc: ProcRunner }): ExecuteStepResult {
+export function stepCommitHarness(sel: SelectionRecordRef, opts: { proc: ProcRunner; dryRun?: boolean; plannedFiles?: string[] }): ExecuteStepResult {
   const repoDir = sel.detect.repoDir;
   const manifestPath = join(repoDir, '.open-autonomy', 'generated.json');
+  if (opts.dryRun) {
+    // Under --dry-run the compile step (above) never materialized `.open-autonomy/generated.json` — there
+    // is genuinely nothing on disk yet to `git add`/`git status` against. Report the plan from the compile
+    // step's own dry-run file list (`opts.plannedFiles`, threaded in by runExecute) rather than reading a
+    // manifest that, correctly, does not exist. Never calls `git add`/`git commit` for real.
+    const files = opts.plannedFiles ?? [];
+    if (files.length === 0) {
+      return step(
+        'commit-harness',
+        'ok',
+        `[DRY-RUN] compile step reported 0 planned file(s) (or ran with a real, non-dry-run proc stub) — nothing to plan a commit for. NOT run.`,
+        { dryRun: true },
+      );
+    }
+    return step(
+      'commit-harness',
+      'ok',
+      `[DRY-RUN] would run: git add -f -- <${files.length} file(s) from the compile plan> && git commit -m "Install the open-autonomy harness". NOT run — repo left untouched.`,
+      { dryRun: true, wouldCommit: files },
+    );
+  }
   if (!existsSync(manifestPath)) {
     // checkUncommittedHarness itself reads an absent manifest as ok:true ("nothing declared, nothing to
     // check") — correct for ITS purpose (a schedule with no compiled harness has nothing to guard), but
@@ -415,9 +526,54 @@ export function stepCommitHarness(sel: SelectionRecordRef, opts: { proc: ProcRun
 // Step 5 — provider up (local target only). TG.1's own bringUpProvider, reused verbatim.
 // =========================================================================================================
 
-export async function stepProviderUp(sel: SelectionRecordRef, opts: { bringUp?: Partial<BringUpOptions> } = {}): Promise<ExecuteStepResult> {
+// D3 fix — the one file bringUpProvider's own `pinScheduleProviderUrl` (provider.ts) mutates durably.
+// Kept as a literal (not a re-derivation of provider.ts's own `schedulePath`) since this step only ever
+// needs the CONVENTIONAL compiled path to know what to `git add`; provider.ts remains the sole source of
+// truth for where it actually writes (including its own AUTONOMY_SCHEDULE override), and if that ever
+// diverges from this literal, `git status --porcelain` below simply finds nothing dirty here and no-ops —
+// fail-quiet in the "nothing to commit" direction, never a false commit of the wrong path.
+const SCHEDULE_RELATIVE_PATH = join('scheduler', 'schedule.json');
+
+/** D3 fix — after a successful provider bring-up, `pinScheduleProviderUrl` may have just modified
+ *  `scheduler/schedule.json` IN PLACE, AFTER step 4 (`stepCommitHarness`) already committed it — left
+ *  alone, `git status` shows it dirty and `oa maturity`'s A6 signal fails until an operator manually
+ *  re-commits. Commits ONLY that one file, using the exact same add-then-commit semantics
+ *  `stepCommitHarness` already establishes (never a second commit-implementation idiom). No-ops (status:
+ *  'skipped') when the file doesn't exist, `repoDir` isn't a git repo (mirrors guards.ts's own
+ *  `checkUncommittedHarness` "nothing declared, nothing to check" convention), or the pin left nothing
+ *  dirty (e.g. bringUpProvider's idempotent no-op branch, already-committed from an earlier run).
+ *  NEVER called under --dry-run (see stepProviderUp below) — a real `git add`/`git commit`, exactly the
+ *  class of operation --dry-run exists to suppress. */
+function commitSchedulePinIfDirty(repoDir: string, proc: ProcRunner): { status: 'ok' | 'skipped' | 'blocked'; detail: string } {
+  if (!existsSync(join(repoDir, SCHEDULE_RELATIVE_PATH))) return { status: 'skipped', detail: '' };
+  const isGitRepo = proc('git', ['rev-parse', '--git-dir'], { cwd: repoDir }).status === 0;
+  if (!isGitRepo) return { status: 'skipped', detail: '' };
+  const status = proc('git', ['status', '--porcelain', '--', SCHEDULE_RELATIVE_PATH], { cwd: repoDir });
+  if (!(status.stdout || '').trim()) return { status: 'skipped', detail: '' };
+  const add = proc('git', ['add', '--', SCHEDULE_RELATIVE_PATH], { cwd: repoDir });
+  if (add.status !== 0) return { status: 'blocked', detail: `git add ${SCHEDULE_RELATIVE_PATH} failed (exit ${add.status}): ${firstLine(add.stderr || add.stdout)}` };
+  const commit = proc('git', ['commit', '-m', 'Pin the local termfleet provider URL'], { cwd: repoDir });
+  if (commit.status !== 0) return { status: 'blocked', detail: `git commit failed (exit ${commit.status}): ${firstLine(commit.stderr || commit.stdout)}` };
+  return { status: 'ok', detail: `committed ${SCHEDULE_RELATIVE_PATH} (provider pin) — working tree clean.` };
+}
+
+export async function stepProviderUp(sel: SelectionRecordRef, opts: { proc?: ProcRunner; bringUp?: Partial<BringUpOptions>; dryRun?: boolean } = {}): Promise<ExecuteStepResult> {
   if (sel.substrate !== 'local') {
     return step('provider-up', 'skipped', `substrate=${sel.substrate} — provider bring-up only applies to the local substrate`);
+  }
+  if (opts.dryRun) {
+    // THE critical dry-run leg (see this file's own PR/near-miss note): a REAL termfleet bring-up is itself
+    // the first half of the hazard this whole unit exists to close. `planBringUpProvider` computes the
+    // SAME action/ports a real call would via only non-mutating reads/probes (readProviderState,
+    // verifyConsoleIdentity/verifyProviderIdentity's read-only HTTP GETs, pickProviderPorts' bind-then-
+    // close probe) — it never spawns `npx termfleet ...`, never pins scheduler/schedule.json, and (per the
+    // D3 fix above) never commits that pin either — commitSchedulePinIfDirty is simply never reached.
+    const plan = await planBringUpProvider({ cwd: sel.detect.repoDir, ...opts.bringUp });
+    const status: StepStatus = plan.action === 'would-refuse-foreign-occupant' ? 'blocked' : 'ok';
+    return step('provider-up', status, plan.detail, {
+      dryRun: true,
+      wouldBringUp: { action: plan.action, consoleUrl: plan.consoleUrl, providerUrl: plan.providerUrl, consolePort: plan.consolePort, providerPort: plan.providerPort },
+    });
   }
   let result;
   try {
@@ -432,7 +588,13 @@ export async function stepProviderUp(sel: SelectionRecordRef, opts: { bringUp?: 
   if (result.action === 'foreign-occupant-refused') {
     return step('provider-up', 'blocked', result.detail);
   }
-  return step('provider-up', 'ok', result.detail, { providerUrl: result.providerUrl });
+
+  const pin = commitSchedulePinIfDirty(sel.detect.repoDir, opts.proc ?? defaultProc);
+  if (pin.status === 'blocked') {
+    return step('provider-up', 'blocked', `provider is up (${result.detail}) but committing the pinned ${SCHEDULE_RELATIVE_PATH} failed: ${pin.detail}`);
+  }
+  const detail = pin.detail ? `${result.detail} ${pin.detail}` : result.detail;
+  return step('provider-up', 'ok', detail, { providerUrl: result.providerUrl });
 }
 
 // =========================================================================================================
@@ -444,7 +606,7 @@ export async function stepProviderUp(sel: SelectionRecordRef, opts: { bringUp?: 
 export async function stepCiAndProvision(
   sel: SelectionRecordRef,
   authRecord: AuthorizeRecordRef | undefined,
-  opts: { proc: ProcRunner; profilesRoot: string; ownerRepo?: string },
+  opts: { proc: ProcRunner; profilesRoot: string; ownerRepo?: string; dryRun?: boolean },
 ): Promise<ExecuteStepResult> {
   if (sel.pack.codeHost !== 'github') {
     return step('ci-and-provision', 'skipped', `codeHost=${sel.pack.codeHost} — no CI scaffold/provisioning needed`);
@@ -458,9 +620,9 @@ export async function stepCiAndProvision(
     return step('ci-and-provision', 'blocked', 'no --owner-repo <owner/name> supplied — a GitHub-target EXECUTE cannot provision without knowing the real target repo');
   }
 
-  const ci: CiScaffoldResult = ensureCiScaffold(repoDir, sel.pack);
+  const ci: CiScaffoldResult = ensureCiScaffold(repoDir, sel.pack, { dryRun: opts.dryRun });
   if (!ci.ok) {
-    return step('ci-and-provision', 'blocked', `TA.3 CI scaffold BLOCKED: ${ci.blocker}`);
+    return step('ci-and-provision', 'blocked', `${opts.dryRun ? '[DRY-RUN] would be ' : ''}TA.3 CI scaffold BLOCKED: ${ci.blocker}`);
   }
 
   const discovered = authRecord?.checkNameDiscovery;
@@ -491,6 +653,24 @@ export async function stepCiAndProvision(
     return step('ci-and-provision', 'blocked', `${provisionSrc} declares no branch_protection block`);
   }
   manifest.branch_protection.required_checks = requiredChecks;
+
+  if (opts.dryRun) {
+    // Two real mutations skipped here: (1) writing the patched manifest into repoDir (a real file this
+    // path would otherwise `writeFileSync`), and (2) `scripts/provision-target-repo.ts` — a REAL PUT
+    // against `${opts.ownerRepo}`'s branch protection settings on GitHub. Neither runs. The a13 independent
+    // live-protection re-verification is skipped too — there is nothing real to independently re-verify.
+    const patchedManifestPath = join(repoDir, '.open-autonomy-install-provision.json');
+    return step(
+      'ci-and-provision',
+      'ok',
+      `[DRY-RUN] CI scaffold plan: ${formatCiScaffoldResult(ci) || '(no authored-workflow checks needed)'}; would run: bun ${PROVISION_TARGET_REPO_SCRIPT} ` +
+        `--repo ${opts.ownerRepo} --source ${repoDir} --manifest ${patchedManifestPath} — branch_protection.required_checks=[${requiredChecks.join(', ')}] ` +
+        `(source: ${checkNameSource}). NOT executed — no real branch-protection/CI mutation against ${opts.ownerRepo}. Independent live-protection ` +
+        `re-verification (hardening #4, A13) is skipped: nothing was actually provisioned to verify.`,
+      { dryRun: true, wouldProvision: { ownerRepo: opts.ownerRepo, requiredChecks, manifestPath: patchedManifestPath } },
+    );
+  }
+
   const patchedManifestPath = join(repoDir, '.open-autonomy-install-provision.json');
   writeFileSync(patchedManifestPath, JSON.stringify(manifest, null, 2));
 
@@ -524,12 +704,21 @@ export async function stepCiAndProvision(
 }
 
 // =========================================================================================================
-// Step 7 — seed the board with DRAFT items only. Dispatches the profile's planner ONCE via the paused-safe
-// primary dispatch channel TC.2's audit skill established. ⛔ Real dispatch launches a real agent — this
-// function only ever constructs+calls the command through an injectable proc; this unit's own acceptance
-// stubs it (see PR body's explicit mocked-sequencing disclosure). Never mutates board state itself.
-// =========================================================================================================
-
+// Step 7 — seed the board with DRAFT items only. Dispatches the profile's REAL originator (setup-pack.yml's
+// board_seed_recipe.originator_skill) ONCE via the paused-safe primary dispatch channel TC.2's audit skill
+// established. ⛔ Real dispatch launches a real agent — this function only ever constructs+calls the
+// command through an injectable proc; this unit's own acceptance stubs it (see PR body's explicit
+// mocked-sequencing disclosure). Never mutates board state itself.
+//
+// CRITICAL#2 FIX (aggregate-review round 2) — renamed from `buildPlannerDispatchCommand`: the old name and
+// its hardcoded `AUTONOMY_AGENT: 'planner'` assumed every profile's originator is the planner. It is not —
+// simple-sdlc's setup-pack.yml declares `originator_skill: draft` (its ir.yml roster carries no `planner`
+// agent at all — see profiles/simple-sdlc/setup-pack.yml's own comment). `originatorSkill` is now a REQUIRED
+// parameter the caller resolves from the pack (`sel.pack.board_seed_recipe.originator_skill`), never a
+// literal baked in here. Applied to BOTH substrate branches for the same reason (packages/substrate-github/
+// src/emit.ts emits one `.github/workflows/<role>.yml` per agent role, so the gh-actions branch's dispatch
+// target is exactly as originator-dependent as the local branch's AUTONOMY_AGENT, even though every profile
+// that can run gh-actions today happens to declare `planner` — this stays correct if that ever changes).
 export interface DispatchCommand {
   cmd: string;
   args: string[];
@@ -539,7 +728,7 @@ export interface DispatchCommand {
 /** `repoDir` is REQUIRED for a local-substrate command (not optional) — see the "install-scoped, never
  *  ambient" note below; this is a deliberate signature change from an earlier draft that omitted it (found
  *  live, see this file's own PR-body incident note). */
-export function buildPlannerDispatchCommand(substrate: Substrate, repoDir: string | undefined, ownerRepo?: string): DispatchCommand {
+export function buildBoardSeedDispatchCommand(substrate: Substrate, repoDir: string | undefined, originatorSkill: string, ownerRepo?: string): DispatchCommand {
   if (substrate === 'local') {
     // INSTALL-SCOPED, NEVER AMBIENT (live-verified incident during this unit's own acceptance proof — see
     // PR body): a bare `node scripts/run-agent.mjs` with no TERMFLEET_PROVIDER_URL falls back to the
@@ -551,14 +740,14 @@ export function buildPlannerDispatchCommand(substrate: Substrate, repoDir: strin
     // scheduler/schedule.json pin (TG.1's durable artifact, via provider.ts's `readSchedulePin`) whenever
     // one exists, so a real dispatch can only ever reach the provider THIS install's own Phase-4 step 5
     // brought up — never an unrelated ambient one.
-    const env: Record<string, string> = { AUTONOMY_AGENT: 'planner' };
+    const env: Record<string, string> = { AUTONOMY_AGENT: originatorSkill };
     if (repoDir) {
       const pin = readSchedulePin(repoDir);
       if (pin) env.TERMFLEET_PROVIDER_URL = pin;
     }
     return { cmd: 'node', args: ['scripts/run-agent.mjs'], env };
   }
-  const args = ['workflow', 'run', 'planner.yml'];
+  const args = ['workflow', 'run', `${originatorSkill}.yml`];
   if (ownerRepo) args.push('--repo', ownerRepo);
   return { cmd: 'gh', args };
 }
@@ -567,18 +756,115 @@ export interface SeedBoardResult extends ExecuteStepResult {
   command: DispatchCommand;
 }
 
-export function stepSeedBoardDrafts(sel: SelectionRecordRef, opts: { proc: ProcRunner; ownerRepo?: string }): SeedBoardResult {
-  const command = buildPlannerDispatchCommand(sel.substrate, sel.detect.repoDir, opts.ownerRepo);
+// The launch harness (which coding CLI termfleet drives) — mirrors packages/substrate-local/src/
+// runner-config.ts's RUNNER_DEFAULTS.harness default ('claude'); TERMFLEET_AGENT overrides it identically
+// at real dispatch time (backend.mjs) and here, so this check probes the EXACT path a real launch resolves.
+const DEFAULT_LAUNCH_HARNESS = 'claude';
+
+export function stepSeedBoardDrafts(sel: SelectionRecordRef, opts: { proc: ProcRunner; ownerRepo?: string; dryRun?: boolean; plannedFiles?: string[] }): SeedBoardResult {
+  const originatorSkill = sel.pack.board_seed_recipe.originator_skill;
+  const command = buildBoardSeedDispatchCommand(sel.substrate, sel.detect.repoDir, originatorSkill, opts.ownerRepo);
+
+  // CRITICAL#2 FIX, part (b) — loud-failure guard, scoped to THIS unit's own dispatch layer.
+  // packages/substrate-local/src/backend.mjs's `launch()` silently falls back to the BARE AGENT NAME as the
+  // literal prompt text (`promptExists ? readFileSync(promptFile, 'utf8') : agent`) whenever no compiled
+  // prompt file exists for AUTONOMY_AGENT — a real coding CLI would then be handed e.g. the literal string
+  // "planner" as its entire instructions. That silent-fallback pattern lives in shared runtime code used by
+  // every launch path in the system (the loop driver, the PM's own nested launches, a human's `oa dispatch`)
+  // — not something this install-time orchestration unit owns or can safely change here (rewriting a shared
+  // primitive's error-handling contract needs its own reviewed unit, with every OTHER caller's expectations
+  // re-verified — out of scope for a two-defect fix PR). What THIS unit CAN and does guarantee: its own
+  // seed-board-drafts dispatch can never be the one that walks into that fallback. Step 1 (compile) already
+  // ran earlier in this exact EXECUTE sequence and, for a local-substrate profile, materializes
+  // `scripts/prompts/<harness>/<role>.txt` for every real agent role in the profile's ir.yml (packages/
+  // substrate-local/src/emit.ts's `promptFiles`) — so if the resolved originator's prompt file is missing,
+  // that is itself evidence of a real defect (the pack's declared originator_skill doesn't match the
+  // profile's own compiled agent roster) and this step now fails LOUDLY here, before ever spawning anything,
+  // instead of silently reaching backend.mjs's fallback.
+  //
+  // --dry-run interaction: the check is read-only (existsSync only — no side effect), so it is SAFE to run
+  // identically under dry-run, but its DATA SOURCE must change: under a real run, step 1 (compile) really
+  // wrote the prompt file, so a real on-disk existsSync is the right question. Under dry-run, step 1's own
+  // dry-run branch (stepCompile) never wrote anything for real — it only returned a `wouldWrite` file list
+  // (threaded through here as `opts.plannedFiles`, the exact same list stepCommitHarness's own dry-run
+  // branch already consumes) — so the right question under dry-run is "is the prompt file IN the compile
+  // plan", not "does it exist on disk yet". A prediction that the real run WOULD refuse to dispatch is
+  // exactly the kind of blocked prediction stepCompile/stepCiAndProvision's own dry-run branches already
+  // surface (see runExecute's own dry-run header comment). If `plannedFiles` is empty/absent (compile itself
+  // was blocked, or ran through a non-dry-run-listing proc stub), this step makes no claim either way —
+  // mirrors stepCommitHarness's own "0 planned files — nothing to plan" discipline: never over-claim a block
+  // this step can't actually back up.
+  if (sel.substrate === 'local' && sel.detect.repoDir) {
+    const harness = process.env.TERMFLEET_AGENT || DEFAULT_LAUNCH_HARNESS;
+    const relPromptPath = join('scripts', 'prompts', harness, `${originatorSkill}.txt`);
+    const promptFile = join(sel.detect.repoDir, relPromptPath);
+    const missing = opts.dryRun
+      ? opts.plannedFiles && opts.plannedFiles.length > 0 && !opts.plannedFiles.includes(relPromptPath)
+      : !existsSync(promptFile);
+    if (missing) {
+      return {
+        ...step(
+          'seed-board-drafts',
+          'blocked',
+          `${opts.dryRun ? '[DRY-RUN] would refuse' : 'refusing'} to dispatch AUTONOMY_AGENT=${originatorSkill}: no compiled launch prompt ${opts.dryRun ? `is planned at ${relPromptPath}` : `exists at ${promptFile}`}. ` +
+            `Dispatching anyway would silently fall through to backend.mjs's bare-agent-name prompt fallback and hand ` +
+            `a real coding CLI the literal text "${originatorSkill}" as its entire prompt — refused ${opts.dryRun ? '(predicted)' : 'before spawning anything'}. This means the pack's board_seed_recipe.originator_skill ` +
+            `("${originatorSkill}") is out of sync with the profile's own compiled ir.yml agent roster, or step 1 (compile) ` +
+            `has not actually run for this repoDir/harness — check profiles/${sel.profile}/setup-pack.yml against ` +
+            `profiles/${sel.profile}/ir.yml.`,
+          opts.dryRun ? { dryRun: true } : {},
+        ),
+        command,
+      };
+    }
+  }
+
+  if (opts.dryRun) {
+    // Reuses the SAME construct-never-execute discipline install-handoff.ts's go-live logic already proves
+    // safe (buildLocalGoLive/buildHostedGoLive: construct a DispatchCommand, never call proc on it). This is
+    // real agent dispatch in production (see this file's own header — deliberately, by design, outside
+    // dry-run); under --dry-run, `opts.proc` is never called for it at all.
+    const envDetail = command.env ? ` (env: ${Object.entries(command.env).map(([k, v]) => `${k}=${v}`).join(', ')})` : '';
+    return {
+      ...step(
+        'seed-board-drafts',
+        'ok',
+        `[DRY-RUN] would dispatch ${originatorSkill} (this profile's real board_seed_recipe.originator_skill) once via \`${command.cmd} ${command.args.join(' ')}\`${envDetail} — NOT executed; no real agent ever launched.`,
+        { dryRun: true },
+      ),
+      command,
+    };
+  }
+
   const env = command.env ? { ...process.env, ...command.env } : process.env;
   const r = opts.proc(command.cmd, command.args, { cwd: sel.detect.repoDir, env });
   if (r.status !== 0) {
-    return { ...step('seed-board-drafts', 'blocked', `planner dispatch failed (${command.cmd} ${command.args.join(' ')}, exit ${r.status}): ${firstLine(r.stderr || r.stdout)}`), command };
+    // LOW#5 fix (owner-mandated aggregate skeptic review round 2 — the missing-prompt-file case itself is
+    // now refused LOUDLY above, before ever reaching this proc call at all, by CRITICAL#2's own pre-flight
+    // guard; this is a DIFFERENT failure — the prompt/skill exists, but the dispatched PROCESS itself still
+    // failed). Two concrete gaps the bare "<originator> dispatch failed" message used to hide:
+    //  (1) a genuine SPAWN failure (e.g. `node`/`gh` missing from PATH) sets `r.error`, not stderr/stdout —
+    //      the old message silently dropped it and printed the useless firstLine-of-nothing "(no output)".
+    //  (2) the dispatched process is `node scripts/run-agent.mjs` -> `autonomy-runner.mjs launch <role>`,
+    //      which on a real failure THROWS — an uncaught Node error's stderr leads with the SOURCE LINE that
+    //      threw (`      throw new Error(...)`), not the message; the real "Error: ..." text is a few lines
+    //      further down. `firstLine` grabbed the useless source-line; `firstErrLine` finds the real message.
+    const cause = r.error ? r.error.message : firstErrLine(r.stderr || r.stdout);
+    const harness = process.env.TERMFLEET_AGENT || DEFAULT_LAUNCH_HARNESS;
+    const hint =
+      sel.substrate === 'local'
+        ? `the compiled "${originatorSkill}" prompt already exists (the pre-flight check above passed), so this ` +
+          `looks like a runtime dispatch problem, not a missing skill — check that a termfleet provider is ` +
+          `reachable (TERMFLEET_PROVIDER_URL / \`oa provider status\`) and that the coding CLI ("${harness}") is ` +
+          `installed and authenticated`
+        : `check \`gh auth status\` and that .github/workflows/${originatorSkill}.yml was compiled and pushed to ${opts.ownerRepo ?? '<owner/repo>'}`;
+    return { ...step('seed-board-drafts', 'blocked', `${originatorSkill} dispatch failed (${command.cmd} ${command.args.join(' ')}, exit ${r.status}): ${cause} — ${hint}`), command };
   }
   return {
     ...step(
       'seed-board-drafts',
       'ok',
-      `dispatched the planner once via ${command.cmd} ${command.args.join(' ')} — seeds DRAFT items only; never self-promotes to ready/oa-approved (that is the planner's own doctrine, pr-139: "file drafts, never ready" — this orchestrator holds no board-mutation code path of its own).`,
+      `dispatched ${originatorSkill} (this profile's real board_seed_recipe.originator_skill) once via ${command.cmd} ${command.args.join(' ')} — seeds DRAFT items only; never self-promotes to ready/oa-approved (that is the originator's own doctrine, pr-139: "file drafts, never ready" — this orchestrator holds no board-mutation code path of its own).`,
     ),
     command,
   };
@@ -587,6 +873,16 @@ export function stepSeedBoardDrafts(sel: SelectionRecordRef, opts: { proc: ProcR
 // =========================================================================================================
 // runExecute — the orchestrator. Fail-closed: halts on the first 'blocked' step (dependency order); a
 // 'skipped' step (N/A for this profile/substrate) never halts the sequence.
+//
+// --dry-run (`opts.dryRun`): every step above accepts its own `dryRun` flag and, when set, never performs
+// the step's real side-effecting operation (no real npm install, no real compile write, no real git commit,
+// no real termfleet bring-up, no real branch-protection mutation, no real agent dispatch) — see each step's
+// own comment for its specific plan. Under dryRun this orchestrator ALSO never halts early on a 'blocked'
+// step: a dry-run's whole purpose is a full end-to-end rehearsal report, so a step that predicts a real run
+// WOULD block still lets every later step run and report its own prediction too (each step's dry-run plan is
+// computed independently of its siblings' real effects, since none of them performed one) — `ok`/`blocker` on
+// the final report still honestly reflect the first step that predicted a block, unchanged from the real
+// (non-dry-run) semantics.
 // =========================================================================================================
 
 export interface ExecuteOptions {
@@ -600,6 +896,9 @@ export interface ExecuteOptions {
   force?: boolean;
   proc?: ProcRunner;
   bringUp?: Partial<BringUpOptions>;
+  /** never performs a real npm install / compile write / git commit / termfleet bring-up / branch-protection
+   *  mutation / agent dispatch — see runExecute's own header + each step's comment for its exact plan. */
+  dryRun?: boolean;
 }
 
 export interface ExecuteReport {
@@ -608,10 +907,12 @@ export interface ExecuteReport {
   substrate: Substrate;
   steps: ExecuteStepResult[];
   blocker?: string;
+  dryRun?: boolean;
 }
 
 export async function runExecute(opts: ExecuteOptions): Promise<ExecuteReport> {
   const proc = opts.proc ?? defaultProc;
+  const dryRun = opts.dryRun === true;
   const sel = loadSelectionRecord(opts.record);
   if (opts.repoDir) sel.detect.repoDir = opts.repoDir;
   const profilesRoot = opts.profilesRoot ?? bundledProfilesRoot;
@@ -621,55 +922,67 @@ export async function runExecute(opts: ExecuteOptions): Promise<ExecuteReport> {
   if (opts.authorize) authRecord = loadAuthorizeRecord(opts.authorize);
 
   const steps: ExecuteStepResult[] = [];
-  const halted = (): ExecuteReport | undefined => {
+  const finish = (): ExecuteReport => {
+    const blocked = steps.find((s) => s.status === 'blocked');
+    return { ok: !blocked, profile: sel.profile, substrate: sel.substrate, steps, ...(blocked ? { blocker: blocked.detail } : {}), ...(dryRun ? { dryRun: true } : {}) };
+  };
+  // Real mode: stop at the first blocked step (fail-closed, dependency order — a later step's real
+  // preconditions may depend on an earlier one's real effect). Dry-run mode: never stop early — every step's
+  // plan is computed independently of its siblings' (non-)effects, so the whole chain always finishes and
+  // reports every phase's prediction, per this unit's own "operator can safely see ALL phases" mandate.
+  const haltIfBlocked = (): ExecuteReport | undefined => {
+    if (dryRun) return undefined;
     const last = steps.at(-1)!;
-    if (last.status === 'blocked') return { ok: false, profile: sel.profile, substrate: sel.substrate, steps, blocker: last.detail };
-    return undefined;
+    return last.status === 'blocked' ? finish() : undefined;
   };
 
-  steps.push(stepInstallDeps(sel, { proc, detectFile: opts.detect }));
+  // D1 fix: compile MUST run before install-deps — see the file-header "EXECUTE order" note above for the
+  // full root cause + rationale (a fresh self-driving install used to self-clobber at the compile step).
+  steps.push(stepCompile(sel, { proc, force: opts.force, dryRun }));
   {
-    const h = halted();
+    const h = haltIfBlocked();
+    if (h) return h;
+  }
+  const compileStep = steps.find((s) => s.id === 'compile');
+  const plannedFiles = (compileStep?.wouldWrite as string[] | undefined) ?? undefined;
+
+  steps.push(stepInstallDeps(sel, { proc, detectFile: opts.detect, dryRun }));
+  {
+    const h = haltIfBlocked();
     if (h) return h;
   }
 
-  steps.push(stepCompile(sel, { proc, force: opts.force }));
+  steps.push(stepDirectionFill(sel, { fillFile: opts.directionFill, profileDir, dryRun }));
   {
-    const h = halted();
+    const h = haltIfBlocked();
     if (h) return h;
   }
 
-  steps.push(stepDirectionFill(sel, { fillFile: opts.directionFill, profileDir }));
+  steps.push(stepCommitHarness(sel, { proc, dryRun, plannedFiles }));
   {
-    const h = halted();
+    const h = haltIfBlocked();
     if (h) return h;
   }
 
-  steps.push(stepCommitHarness(sel, { proc }));
+  steps.push(await stepProviderUp(sel, { proc, bringUp: opts.bringUp, dryRun }));
   {
-    const h = halted();
+    const h = haltIfBlocked();
     if (h) return h;
   }
 
-  steps.push(await stepProviderUp(sel, { bringUp: opts.bringUp }));
+  steps.push(await stepCiAndProvision(sel, authRecord, { proc, profilesRoot, ownerRepo: opts.ownerRepo, dryRun }));
   {
-    const h = halted();
+    const h = haltIfBlocked();
     if (h) return h;
   }
 
-  steps.push(await stepCiAndProvision(sel, authRecord, { proc, profilesRoot, ownerRepo: opts.ownerRepo }));
+  steps.push(stepSeedBoardDrafts(sel, { proc, ownerRepo: opts.ownerRepo, dryRun, plannedFiles }));
   {
-    const h = halted();
+    const h = haltIfBlocked();
     if (h) return h;
   }
 
-  steps.push(stepSeedBoardDrafts(sel, { proc, ownerRepo: opts.ownerRepo }));
-  {
-    const h = halted();
-    if (h) return h;
-  }
-
-  return { ok: true, profile: sel.profile, substrate: sel.substrate, steps };
+  return finish();
 }
 
 export function renderExecuteHuman(report: ExecuteReport): string {
@@ -754,6 +1067,11 @@ export interface ValidateOptions {
   fetchImpl?: typeof fetch;
   live?: boolean;
   sessionProbe?: SessionProbe;
+  /** VALIDATE's report-computation itself is already read-only (oa doctor/oa maturity are report verbs) —
+   *  the ONE real write in this path is `computeMaturity`'s own `.open-autonomy/install.json` (default
+   *  `write: true`). Under --dry-run this is suppressed (`write: false`) so a dry-run VALIDATE leaves the
+   *  target repo's disk byte-for-byte untouched, same as every other phase. */
+  dryRun?: boolean;
 }
 
 export interface ValidateReport {
@@ -781,6 +1099,7 @@ export async function runValidate(opts: ValidateOptions): Promise<ValidateReport
   const maturityOpts: MaturityOptions = { cwd: repoDir, profileDir, proc, live };
   if (opts.fetchImpl) maturityOpts.fetchImpl = opts.fetchImpl;
   if (opts.sessionProbe) maturityOpts.sessionProbe = opts.sessionProbe;
+  if (opts.dryRun) maturityOpts.write = false;
   const maturity = await computeMaturity(maturityOpts);
 
   // (a) direction filled — TE.3's own mechanical invariant.

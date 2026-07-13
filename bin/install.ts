@@ -25,7 +25,8 @@
 //                        (self-driving) model-proxy decision — named security boundaries the agent must
 //                        not self-grant (DESIGN §Phase 3).
 //   G4a GO-LIVE  (TE.6)  verifies the human already promoted the first board item to ready/oa-approved,
-//                        then CONSTRUCTS (never executes) the substrate-specific go-live command.
+//                        then (local only) PERFORMS the safe `oa resume` fence-lift for real and
+//                        CONSTRUCTS (never executes) `oa start` — the launch half — for the human to run.
 //
 // --auto-approve (alias --non-interactive) is the TEST/PROOF HARNESS's own mechanism for driving straight
 // through G1/G3 with safe, named defaults in a single invocation — documented per-flag below, and NEVER a
@@ -55,12 +56,15 @@
 //     of a real one-shot install (DESIGN §Phase 4), not a safety gap.
 //   - Go-live (HAND-OFF, TE.6's `runG4a`): TE.6's own `buildLocalGoLive`/`buildHostedGoLive` NEVER execute a
 //     launch command under any code path (structurally — no `spawn`/`proc` call of the constructed
-//     `startCommand`/`command` exists in install-handoff.ts) — they only ever construct+report it. This
+//     `startCommand`/`command` exists in install-handoff.ts) — they only ever construct+report it. (Local
+//     substrate's safe `oa resume` fence-lift is the one exception — a real `unlinkSync`, zero spawn risk,
+//     performed for real once G4a verifies readiness; see install-handoff.ts's own header for the split.) This
 //     orchestrator inherits that guarantee unchanged: it prints/records `report.handoff.goLive`, it never
 //     spawns it. Every dispatch/launch-command this file's own phases construct forces the provider URL
-//     from the install's own `scheduler/schedule.json` pin (TE.5's `buildPlannerDispatchCommand` / TE.6's
+//     from the install's own `scheduler/schedule.json` pin (TE.5's `buildBoardSeedDispatchCommand` / TE.6's
 //     `buildLocalGoLive` — reused verbatim, never reinvented) — never an ambient/box-wide provider.
-import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { detect, type DetectReport } from './install-detect.ts';
 import { run as runSelect, type SelectionRecord, type RunResult as SelectRunResult } from './install-select.ts';
@@ -78,7 +82,8 @@ import {
 import { runG4a, G4B_RUNBOOK, type Launcher, type RunG4aReport } from './install-handoff.ts';
 import { proveAdvancing, renderReportHuman as renderProveAdvancingHuman, type ProveAdvancingReport } from './install-prove-advancing.ts';
 import { profilesRoot as bundledProfilesRoot } from './bundled-profiles.ts';
-import type { BringUpOptions } from '../packages/local-runner-cli/src/provider.ts';
+import { cleanupProbe } from './doctor-checks.ts';
+import { providerDown, readProviderState, type BringUpOptions } from '../packages/local-runner-cli/src/provider.ts';
 import type { ProcRunner } from '../packages/local-runner-cli/src/types.ts';
 import { defaultProc } from '../packages/local-runner-cli/src/proc.ts';
 import type { ProcFn } from './recommend-profile.ts';
@@ -152,6 +157,20 @@ export interface InstallOptions {
   bringUp?: Partial<BringUpOptions>;
   /** test seam only — overrides Phase 0's own call to TE.1's `detect()`. Production never sets this. */
   detectHook?: (repoDir: string, proc: ProcRunner) => Promise<DetectReport>;
+
+  /** THE SAFE WAY TO REHEARSE A REAL INSTALL (see this file's own header + the USAGE banner below): runs
+   *  every phase for real EXCEPT every side-effecting operation EXECUTE/HAND-OFF would otherwise perform —
+   *  no real npm/bun install, no real compile write (reuses autonomy-compile.ts's own built-in file-list
+   *  dry-run), no real git commit, no real termfleet provider bring-up (the single most important leg — a
+   *  real provider bring-up is itself the first half of the near-miss this flag exists to close), no real
+   *  branch-protection/CI mutation, no real agent dispatch, no real `oa resume` unlink, no real go-live
+   *  launch (already construct-only). Orthogonal to `--auto-approve`: `--dry-run` alone still pauses at each
+   *  human gate exactly like a normal run (safety of REAL operations and interactive-gate pausing are
+   *  different concerns) — combine `--dry-run --auto-approve` for a full non-interactive rehearsal of the
+   *  entire chain. Defaults `--work-dir` OUTSIDE the target repo (a fresh tmp dir) when not explicitly
+   *  overridden, so a dry-run leaves the target repo's working tree byte-for-byte untouched (verifiable via
+   *  `git status`), not just free of npm/git/termfleet mutations. */
+  dryRun?: boolean;
 
   // ---- G1 SELECT --------------------------------------------------------------------------------------
   pick?: string;
@@ -327,6 +346,17 @@ export async function phaseAuthorize(ctx: Ctx, selectionFile: string): Promise<G
   const batch = parsed.batch;
   const o = ctx.opts;
 
+  // ⛔ --dry-run NEVER opens a real GitHub PR — --live-probe (TE.4's runProbePr) is the one operation in the
+  // G1-G3 phases that is a genuine, real mutation against a real GitHub repo (open a throwaway PR, push a
+  // branch), unlike every other DETECT/SELECT/DIRECTION/AUTHORIZE call, which is read-only. Refused loudly
+  // here rather than silently dropped, so a caller who passed both flags together learns why nothing opened.
+  if (ctx.opts.dryRun && o.liveProbe) {
+    return blocked(
+      `--live-probe ${o.liveProbe} opens a REAL throwaway PR against a real GitHub repo — refusing under --dry-run ` +
+        '(the whole point of dry-run is zero live side effects). Re-run without --dry-run once you are ready for a real probe.',
+    );
+  }
+
   const spendCadence = o.spendCadence ?? (ctx.autoApprove ? '*/15' : undefined);
   const spendWip = o.spendWip ?? (ctx.autoApprove ? 1 : undefined);
   const consentHarness = o.consentHarnessCommit ?? ctx.autoApprove;
@@ -388,22 +418,25 @@ export async function phaseExecute(ctx: Ctx, selectionFile: string): Promise<Exe
     force: ctx.opts.force,
     proc: ctx.proc,
     bringUp: ctx.opts.bringUp,
+    dryRun: ctx.opts.dryRun,
   });
   writeWork(ctx, '04-execute.json', report);
   return report;
 }
 
 export async function phaseValidate(ctx: Ctx, selectionFile: string): Promise<ValidateReport> {
-  const report = await runValidate({ record: selectionFile, repoDir: ctx.repoDir, profilesRoot: ctx.profilesRoot, proc: ctx.proc, live: true });
+  const report = await runValidate({ record: selectionFile, repoDir: ctx.repoDir, profilesRoot: ctx.profilesRoot, proc: ctx.proc, live: true, dryRun: ctx.opts.dryRun });
   writeWork(ctx, '05-validate.json', report);
   return report;
 }
 
 // =========================================================================================================
-// Phase 6 — HAND-OFF (TE.6, G4a). Verify-only + construct-only — see file header's SAFETY note. Always
-// attempted (it is read-only + construct-only, never a launch), even when G4a's own verification reports
-// "not ready" — that is an honest, expected outcome (the board holds drafts only until a human promotes an
-// item), never a defect this orchestrator should hide or refuse to report.
+// Phase 6 — HAND-OFF (TE.6, G4a). Verify, then (local only, once verified ready) perform the safe `oa
+// resume` fence-lift for real, and construct-only for `oa start` — see file header's SAFETY note; no
+// launch/spawn ever happens here. Always attempted (never a launch, even the real `resume()` is a single
+// safe unlink, not a process spawn), even when G4a's own verification reports "not ready" — that is an
+// honest, expected outcome (the board holds drafts only until a human promotes an item), never a defect
+// this orchestrator should hide or refuse to report.
 // =========================================================================================================
 
 export function phaseHandoff(ctx: Ctx, selection: SelectionRecord): RunG4aReport {
@@ -413,7 +446,8 @@ export function phaseHandoff(ctx: Ctx, selection: SelectionRecord): RunG4aReport
     profileDir: join(ctx.profilesRoot, selection.profile),
     ownerRepo: ctx.opts.ownerRepo,
     proc: ctx.proc,
-    local: ctx.opts.launcher ? { launcher: ctx.opts.launcher } : undefined,
+    local: ctx.opts.launcher || ctx.opts.dryRun ? { launcher: ctx.opts.launcher, dryRun: ctx.opts.dryRun } : undefined,
+    dryRun: ctx.opts.dryRun,
   });
   writeWork(ctx, '06-handoff.json', report);
   return report;
@@ -426,7 +460,10 @@ export function phaseHandoff(ctx: Ctx, selection: SelectionRecord): RunG4aReport
 
 export async function phaseProveAdvancing(ctx: Ctx, selection: SelectionRecord): Promise<ProveAdvancingReport> {
   const profileDir = join(ctx.profilesRoot, selection.profile);
-  const report = await proveAdvancing(ctx.repoDir, profileDir, { proc: ctx.proc, repo: ctx.opts.ownerRepo, writeInstallJson: true });
+  // --dry-run: PROVE ADVANCING's report computation is already read-only; its one real write is
+  // `.open-autonomy/install.json` (writeInstallJson) — suppressed here for the same "target repo stays
+  // byte-for-byte untouched" reason every other phase's real write is suppressed under dry-run.
+  const report = await proveAdvancing(ctx.repoDir, profileDir, { proc: ctx.proc, repo: ctx.opts.ownerRepo, writeInstallJson: !ctx.opts.dryRun });
   writeWork(ctx, '07-prove-advancing.json', report);
   return report;
 }
@@ -444,6 +481,9 @@ export interface InstallReport {
   question?: string;
   resumeHint?: string;
   workDir: string;
+  /** true iff this run was `--dry-run` — never a real side-effecting operation was performed anywhere in
+   *  the chain (see runInstall's own comment + install.ts's file header). */
+  dryRun?: boolean;
   detect?: DetectReport;
   selection?: SelectionRecord;
   direction?: DirectionRecord;
@@ -454,10 +494,36 @@ export interface InstallReport {
   proveAdvancing?: ProveAdvancingReport;
 }
 
+/** LOW#6 fix (owner-mandated aggregate skeptic review of `oa install`): `classification === 'COMPLETED'`
+ *  only means EXECUTE's own steps all reported ok/skipped — it says nothing about whether VALIDATE (the very
+ *  next phase, using fresher/independent signals — doctor, live A13 protection, and a live re-read of the
+ *  board) still finds the install isn't yet ready to advance. That gap is real, not hypothetical: EXECUTE's
+ *  step 7 (`stepSeedBoardDrafts`) only checks that ITS OWN dispatch spawn exited 0 — the dispatched planner
+ *  runs asynchronously and may not have filed a draft yet by the time VALIDATE's `checkBoardSeededWithDrafts`
+ *  re-reads the board a moment later, which then reports `canAdvanceToG4=false` even though EXECUTE was
+ *  entirely clean (bin/install.test.ts's own "FULL CHAIN dry-run" test hits exactly this: EXECUTE reports
+ *  `ok: true`/COMPLETED, yet `report.handoff.verification.ready` is `false` because the mocked dispatch never
+ *  actually filed anything). Exit 0 must mean "ready to advance", not merely "nothing errored" — a caller
+ *  gating on exit code alone (`oa install ... && start-the-loop`) would otherwise wrongly proceed. This gives
+ *  that state its OWN documented exit code (4), distinct from both 0 (fully ready) and 1 (a genuine step
+ *  failure) — see USAGE's "Exit codes" line and renderInstallHuman's prominent "NOT READY: ..." line. */
+export function installExitCode(report: InstallReport): number {
+  if (report.classification === 'PAUSED') return 3;
+  if (report.classification !== 'COMPLETED') return 1;
+  if (report.validate && !report.validate.canAdvanceToG4) return 4;
+  return 0;
+}
+
 export async function runInstall(opts: InstallOptions): Promise<InstallReport> {
   const proc = opts.proc ?? defaultProc;
+  const dryRun = opts.dryRun === true;
   const profilesRoot = opts.profilesRoot ?? bundledProfilesRoot;
-  const workDir = opts.workDir ?? join(opts.repoDir, '.open-autonomy', 'install-work');
+  // --dry-run defaults --work-dir OUTSIDE the target repo (a fresh tmp dir) rather than
+  // `<repoDir>/.open-autonomy/install-work` (the real-run default) — every phase's own audit-trail write
+  // (writeWork, below) is otherwise harmless bookkeeping, but a dry-run's whole promise is "the target repo
+  // is left byte-for-byte untouched", so it must never create so much as an audit file inside repoDir unless
+  // the caller explicitly asks (an explicit --work-dir still wins either way).
+  const workDir = opts.workDir ?? (dryRun ? mkdtempSync(join(tmpdir(), 'oa-install-dry-run-')) : join(opts.repoDir, '.open-autonomy', 'install-work'));
   mkdirSync(workDir, { recursive: true });
   const ctx: Ctx = { repoDir: opts.repoDir, workDir, profilesRoot, proc, autoApprove: opts.autoApprove === true, opts };
 
@@ -466,29 +532,34 @@ export async function runInstall(opts: InstallOptions): Promise<InstallReport> {
 
   const g1 = await phaseSelect(ctx, detectFile);
   if (g1.status !== 'ok' || !g1.record) {
-    return { classification: g1.status === 'paused' ? 'PAUSED' : 'BLOCKED', stoppedAt: 'G1', question: g1.question, resumeHint: g1.resumeHint, workDir, detect: detectReport };
+    return { classification: g1.status === 'paused' ? 'PAUSED' : 'BLOCKED', stoppedAt: 'G1', question: g1.question, resumeHint: g1.resumeHint, workDir, dryRun, detect: detectReport };
   }
   const selection = g1.record;
   const selectionFile = join(workDir, '01-selection.json');
 
   const g2 = phaseDirection(ctx, selectionFile);
   if (g2.status !== 'ok' || !g2.record) {
-    return { classification: g2.status === 'paused' ? 'PAUSED' : 'BLOCKED', stoppedAt: 'G2', question: g2.question, resumeHint: g2.resumeHint, workDir, detect: detectReport, selection };
+    return { classification: g2.status === 'paused' ? 'PAUSED' : 'BLOCKED', stoppedAt: 'G2', question: g2.question, resumeHint: g2.resumeHint, workDir, dryRun, detect: detectReport, selection };
   }
 
   const g3 = await phaseAuthorize(ctx, selectionFile);
   if (g3.status !== 'ok' || !g3.record) {
-    return { classification: g3.status === 'paused' ? 'PAUSED' : 'BLOCKED', stoppedAt: 'G3', question: g3.question, resumeHint: g3.resumeHint, workDir, detect: detectReport, selection, direction: g2.record };
+    return { classification: g3.status === 'paused' ? 'PAUSED' : 'BLOCKED', stoppedAt: 'G3', question: g3.question, resumeHint: g3.resumeHint, workDir, dryRun, detect: detectReport, selection, direction: g2.record };
   }
 
   const executeReport = await phaseExecute(ctx, selectionFile);
-  if (!executeReport.ok) {
+  // Real mode: a blocked EXECUTE halts the chain (VALIDATE/HAND-OFF/PROVE-ADVANCING all reason about REAL
+  // post-EXECUTE state that never happened). Dry-run mode: EXECUTE's own steps never halt each other either
+  // (see runExecute's header) — for the same reason, a PREDICTED block in one step must not hide every later
+  // phase's own prediction from the operator; the whole point of --dry-run is seeing the full chain.
+  if (!executeReport.ok && !dryRun) {
     return {
       classification: 'BLOCKED',
       stoppedAt: 'EXECUTE',
       question: executeReport.blocker,
       resumeHint: 'inspect the EXECUTE report above for the exact blocked step, fix it, and re-invoke (idempotent steps skip cleanly).',
       workDir,
+      dryRun,
       detect: detectReport,
       selection,
       direction: g2.record,
@@ -502,8 +573,13 @@ export async function runInstall(opts: InstallOptions): Promise<InstallReport> {
   const proveAdvancingReport = await phaseProveAdvancing(ctx, selection);
 
   return {
-    classification: 'COMPLETED',
+    // dry-run with a step that predicted a block still finishes the whole chain (above) but must not claim
+    // COMPLETED — it honestly reports BLOCKED (a real run would have stopped there) while still attaching
+    // every phase's report for full visibility.
+    classification: !executeReport.ok ? 'BLOCKED' : 'COMPLETED',
+    ...(!executeReport.ok ? { stoppedAt: 'EXECUTE' as const, question: executeReport.blocker } : {}),
     workDir,
+    dryRun,
     detect: detectReport,
     selection,
     direction: g2.record,
@@ -516,17 +592,191 @@ export async function runInstall(opts: InstallOptions): Promise<InstallReport> {
 }
 
 // =========================================================================================================
+// MEDIUM#4 FIX (aggregate-review round 2) — orphaned termfleet processes survive a killed orchestrator.
+//
+// ROOT CAUSE: EXECUTE step 5 (TG.1's own `bringUpProvider`, invoked via `phaseExecute` -> `runExecute` ->
+// `stepProviderUp`) spawns the real termfleet console+provider as DETACHED child processes so they survive
+// this orchestrator process exiting normally (the intended lifetime: they keep serving the install's
+// ongoing autonomous loop long after `oa install` itself has finished). That same detachment means a
+// SIGKILL — a dropped terminal, Ctrl-C escalating past a stuck handler, an OOM kill — leaves them running
+// with nothing supervising them: a live, unsupervised termfleet provider an operator may not even know
+// exists.
+//
+// FIX: trap SIGINT/SIGTERM (the two signals a Node process CAN observe — see the honest SIGKILL residual
+// note below) for the duration of THIS invocation and, if fired, clean up the provider — but ONLY if THIS
+// run is the one that (re)started it. Blindly killing on every signal would be WORSE than the bug: the
+// provider is deliberately long-lived (a human re-running `oa install` later, e.g. to progress past a
+// paused gate, must never have their Ctrl-C nuke an already-running provider serving live agent sessions
+// from a previous run). `ProviderState.startedAt` (provider.ts's `bringUpProvider`/`startOn`) already
+// records exactly when the CURRENTLY-RECORDED console/provider pids were spawned — comparing it against
+// this invocation's own start timestamp distinguishes "I started this" ('started'/'restarted', a fresh
+// startedAt) from "this predates me" ('noop', a stale startedAt) with zero new state and zero API surface
+// added to install-execute.ts/provider.ts — reusing `providerDown` (the exact `oa provider down` primitive)
+// verbatim for the actual kill.
+//
+// RESIDUAL LIMITATION (documented honestly, not hidden): SIGKILL cannot be trapped by the process it is
+// sent to — POSIX delivers it straight to the kernel, no handler ever runs. A SIGKILL'd `oa install` still
+// orphans a provider it just started; this fix cannot and does not claim otherwise. RECOVERY for that case
+// already exists independent of this fix: `oa provider status`/`oa provider down` (packages/local-runner-
+// cli/src/index.ts, wrapping `providerStatus`/`providerDown`) read this install's DURABLE on-disk state
+// (.open-autonomy/runner-state/provider/state.json), not in-memory process tracking — an operator can
+// discover and clean up an orphan after the fact regardless of which process (or none) is still alive to
+// ask. `oa doctor --live` also independently probes the pinned provider's /healthz reachability
+// (doctor.ts's `checkProviderHealth`), so an orphan's presence is discoverable through the normal health-
+// check path too, not just the dedicated provider subcommand.
+// =========================================================================================================
+
+/** Exported for this unit's own live signal-handling proof (see bin/install.test.ts) — the exact function
+ *  the SIGINT/SIGTERM handler below calls, so the test exercises the real decision logic, not a re-
+ *  implementation of it. `sinceMs` is the invoking CLI's own start timestamp (`Date.now()`), captured BEFORE
+ *  `runInstall` (and so before any `bringUpProvider` call it may make) begins. */
+export function cleanupOrphanedProvider(repoDir: string, sinceMs: number, opts: { now?: () => string; kill?: (pid: number, signal: NodeJS.Signals) => void } = {}): { attempted: boolean; detail: string } {
+  const state = readProviderState(repoDir);
+  if (!state || state.stoppedAt) {
+    return { attempted: false, detail: 'no provider (or already stopped) recorded for this install — nothing to clean up' };
+  }
+  if (new Date(state.startedAt).getTime() < sinceMs) {
+    return {
+      attempted: false,
+      detail: `a provider is up but its recorded startedAt (${state.startedAt}) predates this invocation — it was NOT started by this run, leaving it running untouched (the intended steady state; use \`oa provider down\` if you actually want it stopped).`,
+    };
+  }
+  const r = providerDown({ cwd: repoDir, now: opts.now, kill: opts.kill });
+  return { attempted: true, detail: `this run's own termfleet provider (startedAt ${state.startedAt}) was orphaned by the signal — cleaned up: ${r.detail}` };
+}
+
+// DISCOVERED WHILE BUILDING THIS FIX'S LIVE PROOF — a second, pre-existing signal-handling hazard, closed
+// as part of landing this one: `bin/doctor-checks.ts` (pulled in transitively by this file's own
+// `install-select.ts` -> `install-detect.ts` import, for its `checkAuth`/`checkEnv`/`checkProvider` checks)
+// registers ITS OWN module-level `process.on('SIGINT'|'SIGTERM'|'SIGHUP', ...)` handler (doctor-checks.ts's
+// own `cleanupProbe` — cleans up ITS `oa doctor --live`'s worktree-probe artifact) that calls
+// `process.exit(130)` UNCONDITIONALLY. Node/Bun invoke same-event listeners in REGISTRATION order, and a
+// listener that calls `process.exit()` terminates the process immediately — no later-registered listener
+// for that event ever runs. Because ES module imports are always evaluated before the importing module's
+// own top-level code, doctor-checks.ts's handler is ALWAYS registered before this file's own `if
+// (import.meta.main)` block runs — so a plain `process.on('SIGINT', ...)` registered below would NEVER
+// fire (verified live: exit code was consistently doctor-checks.ts's own hardcoded 130, provider cleanup
+// never ran). FIX: `process.prependListener` puts THIS handler first regardless of import-time registration
+// order, and it explicitly also calls doctor-checks.ts's own exported `cleanupProbe()` (idempotent — a
+// second/redundant call, including doctor-checks.ts's own listener never getting to run because this
+// handler already calls `process.exit()`, is a safe no-op) so that hazard's own cleanup is never silently
+// dropped by winning the race. (In practice `checkHarness`/`cleanupProbe`'s `activeProbe` is never armed
+// during a normal `oa install` run — `phaseValidate` calls packages/local-runner-cli/src/doctor.ts's own
+// smaller `doctor()`, a different function despite the similar name, never bin/doctor-checks.ts's
+// `runDoctor`/`checkHarness` — so this call is currently always a no-op in THIS caller; it is kept as
+// defense-in-depth against a future code path in this chain reaching `checkHarness`, and because it is the
+// one-line fix that makes the listener-ordering hazard fully honest rather than merely worked around.)
+
+/** Installs the SIGINT/SIGTERM orphan-provider-cleanup handlers for a `runInstall()` invocation covering
+ *  `repoDir`, armed from `invocationStartedAtMs` (see `cleanupOrphanedProvider`'s own doc for what that
+ *  timestamp scopes). Returns `disarm()` — call it the instant `runInstall()` returns, so a normal finish
+ *  (COMPLETED/PAUSED/BLOCKED) never triggers signal-based cleanup (see this file's header comment: the
+ *  provider staying up after a normal finish is the intended steady state).
+ *
+ *  Extracted into its own exported function (rather than inlined in the `import.meta.main` CLI block below)
+ *  for exactly one reason: `import.meta.main` is false whenever this module is *imported* rather than run
+ *  as the entrypoint, so the CLI block never executes under import — which is precisely how this unit's own
+ *  live SIGINT proof drives `runInstall()` (it must inject a stub for the one dangerous real-agent-dispatch
+ *  subprocess call, so it imports `runInstall` as a library rather than shelling out to a real `bun
+ *  bin/install.ts` process). A hand-copied replica of this registration in the proof script would test its
+ *  OWN logic, not this file's — and did, during this fix's own development, silently mask the exact
+ *  prependListener/cleanupProbe fix below not yet existing. Calling this SAME exported function from both
+ *  the real CLI and the live proof closes that gap: the proof exercises the literal code this file runs. */
+export function installOrphanCleanupHandlers(repoDir: string, invocationStartedAtMs: number): { disarm: () => void } {
+  let cleanupArmed = true;
+  const onInterruptSignal = (signal: NodeJS.Signals) => {
+    if (!cleanupArmed) return; // already handled (or already past runInstall) — never double-act
+    cleanupArmed = false;
+    // Run doctor-checks.ts's OWN cleanup FIRST (see this function's own header comment for the full
+    // listener-ordering hazard this neutralizes) — idempotent/safe even though it is always a no-op for
+    // this caller today.
+    cleanupProbe();
+    const c = cleanupOrphanedProvider(repoDir, invocationStartedAtMs);
+    process.stderr.write(`\n[oa install] ${signal} received mid-run — ${c.detail}\n`);
+    if (!c.attempted) {
+      process.stderr.write(
+        '[oa install] NOTE: SIGKILL cannot be trapped by this process at all (POSIX delivers it straight to the ' +
+          'kernel) — a SIGKILL\'d run gets no cleanup chance and may still orphan a provider it started; recover ' +
+          'via `oa provider status` / `oa provider down`, which read this install\'s durable on-disk state, not ' +
+          'process liveness.\n',
+      );
+    }
+    process.exit(signal === 'SIGINT' ? 130 : 143);
+  };
+  // prependListener (NOT .on/.addListener): guarantees this handler runs BEFORE doctor-checks.ts's own
+  // module-level SIGINT/SIGTERM listener (registered earlier, at import time) — otherwise that listener's
+  // unconditional `process.exit(130)` would terminate the process before this one ever ran.
+  process.prependListener('SIGINT', () => onInterruptSignal('SIGINT'));
+  process.prependListener('SIGTERM', () => onInterruptSignal('SIGTERM'));
+  return { disarm: () => { cleanupArmed = false; } };
+}
+
+// =========================================================================================================
 // Rendering.
 // =========================================================================================================
+
+/** Collects every "[DRY-RUN] would ..." plan the EXECUTE/HAND-OFF phases recorded into one short recap, so
+ *  an operator/reviewer never has to re-read the full step-by-step output just to see what a REAL run would
+ *  have done. Purely a presentation convenience over data already on the report — nothing computed here. */
+function renderDryRunSummary(report: InstallReport): string {
+  const lines: string[] = ['DRY-RUN SUMMARY — what a REAL (non-dry-run) run would have done, phase by phase:'];
+  const steps = report.execute?.steps ?? [];
+  const byId = (id: string) => steps.find((s) => s.id === id);
+
+  const deps = byId('install-deps');
+  const wouldInstall = deps?.wouldInstall as string[] | undefined;
+  lines.push(`  deps:      ${wouldInstall?.length ? `would run: ${wouldInstall.join('; ')}` : 'nothing to install (already present)'}`);
+
+  const compile = byId('compile');
+  const wouldWrite = compile?.wouldWrite as string[] | undefined;
+  lines.push(`  compile:   ${wouldWrite ? `would write ${wouldWrite.length} file(s) into ${report.detect?.repoDir ?? report.selection?.detect.repoDir ?? '(repoDir)'}` : '(not reached)'}`);
+
+  const commit = byId('commit-harness');
+  const wouldCommit = commit?.wouldCommit as string[] | undefined;
+  lines.push(`  commit:    ${wouldCommit?.length ? `would run: git add -f -- <${wouldCommit.length} file(s)> && git commit -m "Install the open-autonomy harness"` : '(nothing planned — see the commit-harness step above)'}`);
+
+  const provider = byId('provider-up');
+  const wouldBringUp = provider?.wouldBringUp as { action?: string; consoleUrl?: string; providerUrl?: string } | undefined;
+  lines.push(`  provider:  ${wouldBringUp ? `${wouldBringUp.action} — console ${wouldBringUp.consoleUrl ?? '(n/a)'}, provider ${wouldBringUp.providerUrl ?? '(n/a)'}` : '(not reached, or substrate != local)'}`);
+
+  const provision = byId('ci-and-provision');
+  const wouldProvision = provision?.wouldProvision as { ownerRepo?: string; requiredChecks?: string[] } | undefined;
+  lines.push(`  provision: ${wouldProvision ? `would provision ${wouldProvision.ownerRepo} with checks [${wouldProvision.requiredChecks?.join(', ')}]` : '(not reached, or substrate != gh-actions)'}`);
+
+  const seed = byId('seed-board-drafts');
+  lines.push(`  dispatch:  ${seed?.command ? `would run: ${(seed.command as { cmd: string; args: string[] }).cmd} ${(seed.command as { cmd: string; args: string[] }).args.join(' ')}` : '(not reached)'}`);
+
+  const goLive = report.handoff?.goLive;
+  if (goLive && 'startCommand' in goLive) {
+    lines.push(`  go-live:   would run: ${goLive.startCommand.cmd} ${goLive.startCommand.args.join(' ')} (already construct-only even outside --dry-run)`);
+  } else if (goLive && 'command' in goLive && goLive.command) {
+    lines.push(`  go-live:   would run: ${goLive.command.cmd} ${goLive.command.args.join(' ')} (already construct-only even outside --dry-run)`);
+  } else {
+    lines.push(`  go-live:   not ready — ${report.handoff?.verification.message ?? '(hand-off not reached)'}`);
+  }
+  lines.push('');
+  lines.push('Zero of the above were actually run. Re-invoke without --dry-run once you are ready for the real thing.');
+  return lines.join('\n');
+}
 
 export function renderInstallHuman(report: InstallReport): string {
   const lines: string[] = [];
   lines.push('OA INSTALL — the one-shot install agent (TE.8)');
   lines.push('='.repeat(70));
+  if (report.dryRun) {
+    lines.push('');
+    lines.push('*** DRY-RUN — THE SAFE WAY TO REHEARSE A REAL INSTALL — NO REAL SIDE EFFECTS WERE PERFORMED ***');
+    lines.push(
+      'Every phase below ran for real EXCEPT every mutating operation (npm/bun install, compile writes, git ' +
+        'commit, termfleet provider bring-up, branch-protection/CI mutation, agent dispatch, go-live launch) — ' +
+        'those are reported as PLANS ("[DRY-RUN] would ...") only, never performed. See DRY-RUN SUMMARY below.',
+    );
+  }
   lines.push(`work-dir: ${report.workDir}`);
   lines.push('');
 
-  if (report.classification !== 'COMPLETED') {
+  if (report.classification !== 'COMPLETED' && !report.execute) {
+    // Paused/blocked before EXECUTE ever ran (G1/G2/G3) — nothing else to print.
     lines.push(`${report.classification} at ${report.stoppedAt}`);
     lines.push('');
     if (report.question) lines.push(report.question);
@@ -537,6 +787,25 @@ export function renderInstallHuman(report: InstallReport): string {
     return lines.join('\n');
   }
 
+  if (report.classification !== 'COMPLETED') {
+    // dry-run only (see runInstall's own comment): EXECUTE predicted a block but the whole chain still ran
+    // so every later phase's own prediction is visible too — say so plainly before the per-phase detail.
+    lines.push(`${report.classification} at ${report.stoppedAt} — a REAL run would have stopped here (dry-run continues anyway to show every phase's plan):`);
+    if (report.question) lines.push(`  ${report.question}`);
+    lines.push('');
+  }
+
+  // LOW#6 fix (owner-mandated aggregate skeptic review): make it impossible to read this report as fully
+  // done when it isn't — a completed-with-no-hard-failure chain can still leave VALIDATE's canAdvanceToG4
+  // false (e.g. step 7 only checks that ITS OWN dispatch spawn exited 0, not that the dispatched planner
+  // actually finished filing a draft before VALIDATE's board-seeded check ran). Surfaced prominently, right
+  // up front — see also installExitCode(), which gives this state its own distinct nonzero exit code so a
+  // script gating on exit code alone can't conflate "ran clean" with "ready to advance".
+  if (report.classification === 'COMPLETED' && report.validate && !report.validate.canAdvanceToG4) {
+    lines.push(`NOT READY: the chain completed with no hard step failure, but VALIDATE reports canAdvanceToG4 = false — ${report.validate.blockers.join('; ') || '(see VALIDATE detail below)'}`);
+    lines.push('');
+  }
+
   lines.push(`selected: ${report.selection!.profile} @ ${report.selection!.substrate} (G1: ${report.selection!.g1.answer})`);
   lines.push(`direction: ${report.direction!.action} — ${report.direction!.invariant.reason}`);
   lines.push(`authorize: ${report.authorize!.g3.answer}`);
@@ -545,7 +814,7 @@ export function renderInstallHuman(report: InstallReport): string {
   lines.push('');
   lines.push(renderValidateHuman(report.validate!));
   lines.push('');
-  lines.push('HAND-OFF (G4a) — verify + construct-only, NEVER executed by this tool:');
+  lines.push('HAND-OFF (G4a) — verify, then (local) `oa resume` performed for real; `oa start` construct-only, NEVER executed by this tool:');
   lines.push(`  ${report.handoff!.verification.message}`);
   if (report.handoff!.goLive) {
     const gl = report.handoff!.goLive;
@@ -554,11 +823,19 @@ export function renderInstallHuman(report: InstallReport): string {
   lines.push('');
   lines.push(renderProveAdvancingHuman(report.proveAdvancing!, report.detect!.repoDir));
   lines.push('');
+
+  if (report.dryRun) {
+    lines.push(renderDryRunSummary(report));
+    lines.push('');
+  }
+
   lines.push(
-    `HONEST CEILING: this run never launches a real agent (board-seeding is the only real dispatch, and go-` +
-      `live is construct-only) — expect M3/INSTALLED or, once a human has promoted a board item, M4/ARMED; ` +
-      `M5/RUNNING requires the human's own G4a promotion + running the printed go-live command themselves, ` +
-      `and M6/ADVANCING is an async follow-up (DESIGN hardening #1/#2), never a same-session guarantee.`,
+    `HONEST CEILING: this run never launches a real agent (board-seeding is the only real dispatch; go-` +
+      `live's \`oa start\` launch half is construct-only, though \`oa resume\` — the safe fence-lift — is ` +
+      `performed for real once G4a verifies readiness${report.dryRun ? ' (skipped entirely under --dry-run)' : ''}) — expect M3/INSTALLED or, once a human has promoted ` +
+      `a board item, M4/ARMED; M5/RUNNING requires the human's own G4a promotion + running the printed \`oa ` +
+      `start\` command themselves, and M6/ADVANCING is an async follow-up (DESIGN hardening #1/#2), never a ` +
+      `same-session guarantee.`,
   );
   return lines.join('\n');
 }
@@ -573,17 +850,32 @@ export interface CliOptions extends InstallOptions {
 
 const USAGE = `usage: bun bin/install.ts <repoDir> [options]
 
+*** --dry-run — THE SAFE WAY TO REHEARSE A REAL INSTALL. RUN THIS FIRST. ***
+    Runs the ENTIRE chain (all 7 phases) against your REAL repo but NEVER performs a real side-effecting
+    operation anywhere in it: no real npm/bun install, no real compile write, no real git commit,
+    no real termfleet provider bring-up (the critical one — a real provider bring-up is itself half the
+    hazard a real install carries), no real branch-protection/CI mutation, no real agent dispatch,
+    no real go-live launch. Every one of those is reported instead as a plan ("[DRY-RUN] would ..."), and a
+    DRY-RUN SUMMARY recaps every phase's plan at the end. This is the DEFAULT SAFE PATH for evaluating/
+    testing this tool — combine with --auto-approve for a full non-interactive rehearsal:
+      bun bin/install.ts <repoDir> --dry-run --auto-approve
+
 Chains all 7 install phases (DETECT -> SELECT -> DIRECTION -> AUTHORIZE -> EXECUTE -> VALIDATE -> HAND-OFF
 -> PROVE ADVANCING) into one command, pausing at each of the 4 human gates by default:
 
   G1 PROFILE    confirm/override the recommended profile+substrate (or validate a --pick)
   G2 DIRECTION  the mission is yours — this tool never invents it, only detects/applies what you supply
   G3 AUTHORIZE  spend cadence+WIP, harness-commit, (GitHub) admin+identity, (self-driving) model-proxy
-  G4a GO-LIVE   verifies you already promoted the first board item to ready/oa-approved, then constructs
-                (never executes) the go-live command for you to run yourself
+  G4a GO-LIVE   verifies you already promoted the first board item to ready/oa-approved, then (local only)
+                automatically performs the safe \`oa resume\` fence-lift, and constructs (never executes)
+                \`oa start\` — the launch half — for you to run yourself
 
 Global:
-  --work-dir <dir>              default: <repoDir>/.open-autonomy/install-work
+  --dry-run                     THE SAFE WAY TO REHEARSE — see the banner above. Orthogonal to
+                                 --auto-approve (this flag only ever concerns REAL side effects, never
+                                 interactive-gate pausing) — combine both for a full non-interactive rehearsal.
+  --work-dir <dir>              default: <repoDir>/.open-autonomy/install-work (--dry-run default: a fresh
+                                 tmp dir OUTSIDE <repoDir>, so the target repo stays byte-for-byte untouched)
   --profiles-root <dir>         default: this checkout's bundled profiles/
   --json                        machine-readable final report
   --owner-repo <owner/name>     required for a GitHub-target EXECUTE/HAND-OFF
@@ -614,13 +906,18 @@ G3 AUTHORIZE answers:
   --consent-gh-admin --identity <own-token|bot-reviewer>     (GitHub profiles only)
   --consent-proxy <deploy-own|get-allowlisted>               (self-driving-shaped profiles only)
   --live-probe <owner/repo>       opens a REAL throwaway probe PR — real GitHub side effects, use deliberately
+                                   (refused under --dry-run — never opens a real PR)
 
 HAND-OFF:
   --launcher <tmux|nohup>        local go-live launcher shape (default tmux)
 
-Exit codes: 0 completed the chain (through PROVE ADVANCING; the FINAL maturity/M6 stage is a report, never
-a failure) · 1 blocked (a genuine defect — see the printed detail) · 2 usage error · 3 paused at a gate
-(interactive, awaiting your answer — see "TO CONTINUE" in the output).
+Exit codes: 0 completed the chain AND VALIDATE confirms it is ready to advance (through PROVE ADVANCING; the
+FINAL maturity/M6 stage is a report, never a failure) · 1 blocked (a genuine defect — see the printed detail)
+· 2 usage error · 3 paused at a gate (interactive, awaiting your answer — see "TO CONTINUE" in the output)
+· 4 completed with NO hard step failure but NOT yet ready to advance (VALIDATE's canAdvanceToG4 = false —
+see the printed "NOT READY: ..." line/blockers; an expected pre-G4 state on its own, e.g. the dispatched
+planner hadn't finished filing a draft yet, never a defect by itself — but distinct from full readiness so a
+script gating on exit code alone doesn't wrongly treat it as "done").
 `;
 
 export function parseArgs(argv: string[]): { opts: CliOptions; error?: string } {
@@ -662,6 +959,9 @@ export function parseArgs(argv: string[]): { opts: CliOptions; error?: string } 
       case '--auto-approve':
       case '--non-interactive':
         opts.autoApprove = true;
+        break;
+      case '--dry-run':
+        opts.dryRun = true;
         break;
       case '--pick': {
         const v = takeValue(a);
@@ -793,11 +1093,19 @@ if (import.meta.main) {
     process.stderr.write(`error: repoDir "${opts.repoDir}" does not exist\n`);
     process.exit(2);
   }
+
+  // MEDIUM#4 fix — see `installOrphanCleanupHandlers`'s own doc (above `cleanupOrphanedProvider`) for the
+  // full root cause + rationale. Armed for the duration of THIS invocation only; disarmed the instant
+  // runInstall returns (a clean finish — COMPLETED, PAUSED, or BLOCKED — is the process exiting normally,
+  // which is never a reason to touch the provider; only an interrupting SIGINT/SIGTERM mid-run is).
+  const invocationStartedAtMs = Date.now();
+  const { disarm } = installOrphanCleanupHandlers(opts.repoDir, invocationStartedAtMs);
+
   const report = await runInstall(opts);
+  disarm(); // a normal finish never triggers signal-based provider cleanup — see comment above
   const out = opts.json ? JSON.stringify(report, null, 2) : renderInstallHuman(report);
   process.stdout.write(`${out}\n`);
-  const code = report.classification === 'COMPLETED' ? 0 : report.classification === 'PAUSED' ? 3 : 1;
-  process.exit(code);
+  process.exit(installExitCode(report));
 }
 
 // Re-exported so a caller/test can print the G4b async babysit runbook without importing install-handoff.ts

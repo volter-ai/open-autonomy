@@ -52,12 +52,37 @@ const REQUIRED_FILES = [
 // hardcoded name list — the hardcoded [developer, reviewer, pm, planner].yml this used to be would silently
 // stop validating (or falsely fail) the moment a self-driving fork renamed/added/removed an agent. A
 // `kind: human` actor carries no workflowFile (docs/SPEC.md#the-ir) and is correctly skipped.
+//
+// D2 FIX — TARGET-AWARE: `workflowFile` (core/manifest.ts's `emitAutonomy`) is stamped onto every non-human
+// agent UNCONDITIONALLY — the manifest is deliberately substrate-NEUTRAL (this file's own header). But only
+// a gh-actions compile ever MATERIALIZES `.github/workflows/<agent>.yml` on disk (substrate-github/emit.ts's
+// engine); a local compile never does — substrate-local/emit.ts's own header: "It never emits github's
+// execution layer — no workflows..." — by design, a local install doesn't need them. self-driving's
+// `codeHost` is 'github' (truthfully GitHub-hosted) even when its TARGET is 'local' (only the scheduler
+// loop runs on the operator's box — maturity.ts's own A12/A13 comment), so a self-driving@local compile
+// legitimately never writes these files, yet the old unconditional "every manifest agent needs a workflow
+// file on disk" check demanded them anyway — permanently blocking A12 (and therefore M3) for a correctly
+// compiled, sanctioned self-driving@local install.
+//
+// The fix: only REQUIRE a workflow file here when THIS install's own compile actually produced it — i.e.
+// it is listed in `.open-autonomy/generated.json`'s `files[]` (core/file-manifest.ts's durable per-install
+// provenance record of exactly what this specific compile wrote; substrate-github's emit lists
+// `.github/workflows/<name>.yml` there, substrate-local's never does). This consults the REAL compiled
+// manifest instead of re-deriving "every agent needs a workflow file" from the IR's roster, so it stays
+// symmetric: a genuinely-hosted gh-actions install that generated a workflow file and then had it deleted
+// post-compile is STILL required to have it (it's in generated.json, `existsSync` below still fails loud);
+// a local install that never generated one is correctly never asked for it. `generated.json` is itself
+// written by every real compile (local or github) alongside REQUIRED_FILES — if it's missing/unreadable (a
+// legacy install, or something has corrupted the install), this deliberately falls back to the PRE-EXISTING
+// unfiltered behavior (require every manifest-listed workflow file) rather than silently relaxing the check
+// when provenance can't be established.
 function agentWorkflowFiles(root: string): string[] {
+  let candidates: string[];
   try {
     const manifest = Bun.YAML.parse(readFileSync(`${root}/.open-autonomy/autonomy.yml`, 'utf8')) as {
       agents?: Record<string, { workflowFile?: string }>;
     };
-    return Object.values(manifest.agents ?? {})
+    candidates = Object.values(manifest.agents ?? {})
       .map((a) => a.workflowFile)
       .filter((f): f is string => Boolean(f))
       .map((f) => `.github/workflows/${f}`)
@@ -65,6 +90,16 @@ function agentWorkflowFiles(root: string): string[] {
   } catch {
     return []; // no manifest yet -> the missing `.open-autonomy/autonomy.yml` file check above already fails loud
   }
+
+  let generatedFiles: string[] | null = null;
+  try {
+    const generated = JSON.parse(readFileSync(`${root}/.open-autonomy/generated.json`, 'utf8')) as { files?: unknown };
+    generatedFiles = Array.isArray(generated.files) ? generated.files.filter((f): f is string => typeof f === 'string') : [];
+  } catch {
+    generatedFiles = null; // missing/unreadable generated.json -> cannot establish provenance, fall back below
+  }
+  if (generatedFiles === null) return candidates; // unfiltered — matches pre-D2-fix behavior
+  return candidates.filter((f) => generatedFiles!.includes(f));
 }
 
 const REQUIRED_ENV = [

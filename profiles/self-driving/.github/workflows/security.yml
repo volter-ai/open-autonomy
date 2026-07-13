@@ -17,9 +17,23 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+      # setup-bun installs the `bun` BINARY only — no project dependency install here. Neither real step
+      # below needs one: check-supply-chain.ts auto-discovers every bun.lock directly off disk (no import,
+      # no node_modules) and exits 0 cleanly with "no bun.lock found" when there is none; zizmor only reads
+      # workflow YAML. A `bun install --frozen-lockfile || bun install` used to sit here and was actively
+      # harmful on a non-bun (e.g. pnpm-only) adopter repo: the frozen install fails trying to migrate
+      # pnpm-lock.yaml, the fallback plain `bun install` then can't link a git-based dependency and trips
+      # the adopter's own `preinstall` guard (which rejects any non-pnpm manager) — proven live ("pnpm: not
+      # found" / "preinstall script ... exited 1"). Dropping the install makes this workflow correct for
+      # EVERY adopter, bun-managed or not.
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
-      - run: bun install --frozen-lockfile || bun install
       - name: Supply-chain (lockfile integrity + bun audit)
         run: bun scripts/check-supply-chain.ts
       - name: Workflow static analysis (zizmor)
-        run: pipx run zizmor==1.26.1 --offline --min-severity high .github/workflows/
+        # --config .github/zizmor.yml: scopes suppressions to this repo's own workflows (the engine emits
+        # this file per-install from the IR's agent workflows — see packages/substrate-github/src/emit.ts's
+        # zizmorConfig() — so it always exists by the time this job runs on a real install). Adopters may
+        # extend it with their own suppressions for pre-existing, human-authored workflows this profile
+        # didn't write (e.g. a deploy workflow with an intentional pull_request_target) without touching
+        # this file.
+        run: pipx run zizmor==1.26.1 --offline --min-severity high --config .github/zizmor.yml .github/workflows/

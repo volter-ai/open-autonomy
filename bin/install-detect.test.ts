@@ -23,6 +23,7 @@ import {
   detectGhFacts,
   detectGitFacts,
   detectLanguageAndBuild,
+  detectTools,
   parseArgs,
   renderHuman,
   type ProcFn,
@@ -366,6 +367,111 @@ describe('detectExistingInstall', () => {
     expect(after.reinstall).toBe(true);
     expect(after.manifestPresent).toBe(true);
     expect(after.pausedPresent).toBe(true); // fresh compiles start paused
+  });
+});
+
+// =========================================================================================================
+// detectTools — ztrack/termfleet presence (regression coverage for the bun-global-cache-leak defect: the
+// original code used `createRequire(join(repoDir, 'package.json')).resolve(pkg)`, which under BUN falls
+// back to bun's GLOBAL install cache (~/.bun/install/cache/<pkg>@...) even when repoDir has zero local
+// node_modules — because THIS repo's own packages/substrate-local/package.json declares a real
+// `termfleet` dependency, populating that shared global cache. Live-proven against the OLD code: a fresh
+// scratch dir with zero node_modules wrongly reported termfleet AND ztrack as present. Every test below
+// exercises the REAL filesystem (real mkdtemp dirs, a real `npm install` for the positive case) — no
+// resolver mocking — because the defect was specifically in resolver behavior, which a mock would hide.
+// =========================================================================================================
+describe('detectTools', () => {
+  test(
+    'acceptance (a)+(b): fresh dir, zero node_modules -> ztrack + termfleet both ABSENT, immune to bun\'s ' +
+      'global package cache (this box\'s own ~/.bun/install/cache genuinely contains a termfleet entry, ' +
+      'populated by this very repo\'s own packages/substrate-local dependency — the regression this guards)',
+    async () => {
+      const dir = track(mkdtempSync(join(tmpdir(), 'te1-tools-fresh-')));
+      writeFileSync(join(dir, 'package.json'), JSON.stringify({ name: 'fresh-target', version: '1.0.0' }));
+      const facts = await detectTools(dir);
+      expect(facts.ztrack.vendored).toBe(false);
+      expect(facts.termfleet.installed).toBe(false);
+    },
+    15000,
+  );
+
+  test(
+    'acceptance (c): real `npm install termfleet` into a scratch target -> termfleet reported PRESENT ' +
+      '(a genuine local install, not global-cache leakage)',
+    async () => {
+      const dir = track(mkdtempSync(join(tmpdir(), 'te1-tools-real-install-')));
+      writeFileSync(join(dir, 'package.json'), JSON.stringify({ name: 'real-install-target', version: '1.0.0' }));
+      const r = spawnSync('npm', ['install', 'termfleet', '--no-audit', '--no-fund'], { cwd: dir, encoding: 'utf8' });
+      expect(r.status).toBe(0);
+      const facts = await detectTools(dir);
+      expect(facts.termfleet.installed).toBe(true);
+    },
+    120000,
+  );
+
+  test(
+    'acceptance (d): workspace-member-scoped install (dependency declared in a workspace member, ' +
+      'installed only to <member>/node_modules/<pkg>, NOT hoisted to the workspace root — exactly this ' +
+      'repo\'s own real termfleet layout: packages/substrate-local/node_modules/termfleet, no root ' +
+      'node_modules/termfleet) -> still reported PRESENT, not a false negative',
+    () => {
+      const dir = track(mkdtempSync(join(tmpdir(), 'te1-tools-workspace-')));
+      writeFileSync(join(dir, 'package.json'), JSON.stringify({ name: 'ws-root', version: '1.0.0', workspaces: ['packages/*'] }));
+      const memberNodeModules = join(dir, 'packages', 'sub-pkg', 'node_modules', 'termfleet');
+      mkdirSync(memberNodeModules, { recursive: true });
+      writeFileSync(join(memberNodeModules, 'package.json'), JSON.stringify({ name: 'termfleet', version: '0.1.5' }));
+      // sanity: confirm this really is NOT hoisted to the root, i.e. this test is exercising the
+      // workspace-scoped branch, not the trivial direct-hit branch.
+      expect(() => readFileSync(join(dir, 'node_modules', 'termfleet', 'package.json'))).toThrow();
+      return detectTools(dir).then((facts) => {
+        expect(facts.termfleet.installed).toBe(true);
+      });
+    },
+    15000,
+  );
+
+  test(
+    'acceptance (d), pnpm/yarn object-form workspaces ({ packages: [...] }) -> same workspace-scoped ' +
+      'lookup applies',
+    async () => {
+      const dir = track(mkdtempSync(join(tmpdir(), 'te1-tools-ws-obj-')));
+      writeFileSync(
+        join(dir, 'package.json'),
+        JSON.stringify({ name: 'ws-root', version: '1.0.0', workspaces: { packages: ['packages/*'] } }),
+      );
+      const memberNodeModules = join(dir, 'packages', 'sub-pkg', 'node_modules', 'ztrack');
+      mkdirSync(memberNodeModules, { recursive: true });
+      writeFileSync(join(memberNodeModules, 'package.json'), JSON.stringify({ name: 'ztrack', version: '1.0.0' }));
+      const facts = await detectTools(dir);
+      expect(facts.ztrack.vendored).toBe(true);
+    },
+    15000,
+  );
+
+  test(
+    'acceptance (d) true-positive-preserved: this repo\'s OWN detect run (real workspace dependency, ' +
+      'non-hoisted) still reports ztrack + termfleet present',
+    async () => {
+      const facts = await detectTools(REPO_ROOT);
+      expect(facts.ztrack.vendored).toBe(true);
+      expect(facts.termfleet.installed).toBe(true);
+    },
+    15000,
+  );
+
+  test('malformed package.json in repoDir -> no crash, honest false (never assumed present)', async () => {
+    const dir = track(mkdtempSync(join(tmpdir(), 'te1-tools-malformed-')));
+    writeFileSync(join(dir, 'package.json'), '{ not valid json');
+    const facts = await detectTools(dir);
+    expect(facts.ztrack.vendored).toBe(false);
+    expect(facts.termfleet.installed).toBe(false);
+  });
+
+  test('no package.json at all in repoDir -> no crash, honest false', async () => {
+    const dir = track(mkdtempSync(join(tmpdir(), 'te1-tools-nopkg-')));
+    const facts = await detectTools(dir);
+    expect(facts.ztrack.vendored).toBe(false);
+    expect(facts.termfleet.installed).toBe(false);
   });
 });
 

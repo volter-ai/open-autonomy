@@ -97,6 +97,27 @@ describe('ensureCiScaffold — acceptance path 1: bare repo, detectable language
     rmSync(dir, { recursive: true, force: true });
   });
 
+  test('--dry-run: reports would-author with the exact path/language it would use, writes NOTHING to disk', () => {
+    const dir = tmpRepo();
+    writePackageJson(dir, { test: true });
+    const r = ensureCiScaffold(dir, CI_PACK, { dryRun: true });
+    expect(r.ok).toBe(true);
+    expect(r.results).toHaveLength(1);
+    expect(r.results[0]).toMatchObject({ check: 'ci', status: 'would-author', workflowPath: join('.github', 'workflows', 'ci.yml') });
+    expect(r.results[0]!.detail).toMatch(/\[DRY-RUN\]/);
+    expect(existsSync(join(dir, '.github'))).toBe(false);
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  test('--dry-run: an undetectable language still reports the SAME named blocker as the real path, writes nothing', () => {
+    const dir = tmpRepo(); // no package.json — undetectable
+    const r = ensureCiScaffold(dir, CI_PACK, { dryRun: true });
+    expect(r.ok).toBe(false);
+    expect(r.blocker).toMatch(/language is undetectable/);
+    expect(existsSync(join(dir, '.github'))).toBe(false);
+    rmSync(dir, { recursive: true, force: true });
+  });
+
   test('re-running after authoring is a no-op: second invocation reports already-realized, file byte-untouched', () => {
     const dir = tmpRepo();
     writePackageJson(dir, { test: true });

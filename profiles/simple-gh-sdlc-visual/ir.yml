@@ -211,6 +211,7 @@ resources:
   # via the local reconcilers, which dispatch review for `agent/*` PRs, not human ones).
   - .github/workflows/agent-review-human.yml
   - .github/workflows/smoke.yml
+  - .github/workflows/fix-guards.yml   # regression guards for two previously-fixed defects — see scripts/regression/fix-guards.mjs
   - .github/workflows/ci.yml
   - .github/dependabot.yml
   # the gate scripts those carried workflows call — shared standards, byte-identical across carrying
@@ -226,6 +227,10 @@ resources:
   - scripts/evidence-attach.mjs
   - scripts/world-smoke.mjs
   - scripts/next-free-issue-id.mjs
+  # profile-level regression guards for two previously-upstreamed fixes (vendor-scan shape-
+  # completeness in world-smoke.mjs; provenance stamping in demo-runner.mjs) — see the script's
+  # own header for the full technique and the explicit twin-validation out-of-scope note.
+  - scripts/regression/fix-guards.mjs
   # the canonical demo-runner library (INSTALLED, not prose): every demo/visual-state script under
   # policy.box.visual_evidence.demo_dir/state_dir drives its flow through runDemo() here — recordVideo
   # WebM per run, each screenshot a stamped video moment, enforced validateDemoStep — instead of a

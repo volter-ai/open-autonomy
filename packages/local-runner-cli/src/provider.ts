@@ -466,6 +466,94 @@ function bestEffortKill(pid: number | undefined, kill: KillImpl = killProcessTre
   }
 }
 
+// =========================================================================================================
+// planBringUpProvider (TE.5 --dry-run seam) — the SAME idempotency/identity decision `bringUpProvider`
+// makes, computed WITHOUT ever spawning a process, pinning the schedule, or writing any state file. Every
+// read here is already independently safe: `readProviderState`/`readSchedulePin` are plain file reads;
+// `verifyConsoleIdentity`/`verifyProviderIdentity` are non-mutating HTTP GETs to a URL a PRIOR real
+// bring-up (not this call) may already be serving; `pickProviderPorts` only ever *binds-then-immediately-
+// closes* a candidate port to test freedom (`defaultIsPortFree`) — it never keeps the socket open, never
+// spawns termfleet, never writes anything. This is the one bring-up leg the near-miss this unit fixes was
+// actually about (a real termfleet provider is itself the first half of the hazard) — a dry-run caller must
+// see the exact ports/URL a real run would use without that real run ever happening.
+export interface PlanBringUpResult {
+  action: 'would-noop' | 'would-restart' | 'would-start' | 'would-refuse-foreign-occupant';
+  detail: string;
+  providerUrl?: string;
+  consoleUrl?: string;
+  consolePort?: number;
+  providerPort?: number;
+}
+
+export async function planBringUpProvider(opts: BringUpOptions = {}): Promise<PlanBringUpResult> {
+  const cwd = opts.cwd ?? process.cwd();
+  const fetchImpl = opts.fetchImpl ?? fetch;
+  const isPortFree = opts.isPortFree ?? defaultIsPortFree;
+
+  const existing = readProviderState(cwd);
+  if (existing) {
+    const [consoleId, providerId] = await Promise.all([
+      verifyConsoleIdentity(existing.consoleUrl, fetchImpl),
+      verifyProviderIdentity(existing.providerUrl, fetchImpl),
+    ]);
+    if (providerId.reachable && providerId.isTermfleet) {
+      return {
+        action: 'would-noop',
+        providerUrl: existing.providerUrl,
+        consoleUrl: existing.consoleUrl,
+        consolePort: existing.consolePort,
+        providerPort: existing.providerPort,
+        detail:
+          `[DRY-RUN] would be a no-op: provider ${existing.providerUrl} already answers as termfleet (${providerId.detail}); ` +
+          `console ${consoleId.isTermfleet ? 'also healthy' : `NOT healthy (${consoleId.detail})`}. Nothing would be spawned/pinned.`,
+      };
+    }
+    if (providerId.reachable && !providerId.isTermfleet) {
+      return {
+        action: 'would-refuse-foreign-occupant',
+        detail:
+          `[DRY-RUN] would REFUSE: ${existing.providerUrl} (this install's pinned port) is occupied by a FOREIGN ` +
+          `(non-termfleet) service — ${providerId.detail}. A real run would not restart or re-pin over it.`,
+      };
+    }
+    return {
+      action: 'would-restart',
+      providerUrl: existing.providerUrl,
+      consoleUrl: existing.consoleUrl,
+      consolePort: existing.consolePort,
+      providerPort: existing.providerPort,
+      detail:
+        `[DRY-RUN] would restart termfleet on the SAME already-pinned ports — console ${existing.consoleUrl}, ` +
+        `provider ${existing.providerUrl} (currently unreachable: ${providerId.detail}). A real run would SIGTERM the ` +
+        `recorded pids (${existing.consolePid ?? '?'}/${existing.providerPid ?? '?'}) and re-spawn on the same pair; never re-derived.`,
+    };
+  }
+
+  // Fresh bring-up: derive the SAME repo-unique candidate pair a real call would pick — a pure bind-probe,
+  // never a spawn.
+  const { consolePort, providerPort } = await pickProviderPorts({
+    repoPath: cwd,
+    isPortFree,
+    rangeStart: opts.rangeStart,
+    rangeEnd: opts.rangeEnd,
+    forbidden: opts.forbidden,
+  });
+  const consoleUrl = `http://127.0.0.1:${consolePort}`;
+  const providerUrl = `http://127.0.0.1:${providerPort}`;
+  return {
+    action: 'would-start',
+    providerUrl,
+    consoleUrl,
+    consolePort,
+    providerPort,
+    detail:
+      `[DRY-RUN] would start termfleet on repo-unique ports derived from ${cwd} — console ${consoleUrl}, provider ` +
+      `${providerUrl} (via \`npx --yes termfleet console serve --port ${consolePort}\` + \`npx --yes termfleet ` +
+      `provider serve --kind virtual-tmux --port ${providerPort}\`), then pin scheduler/schedule.json ` +
+      `env.TERMFLEET_PROVIDER_URL="${providerUrl}". NOT spawned, NOT pinned by this call.`,
+  };
+}
+
 /** Bring up a repo-unique-port termfleet provider for the compiled install at `cwd`, idempotently. See
  *  the module header for the full (i)-(v) contract. */
 export async function bringUpProvider(opts: BringUpOptions = {}): Promise<BringUpResult> {

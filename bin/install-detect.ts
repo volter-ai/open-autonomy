@@ -47,7 +47,6 @@
 // Test-glob note (same pattern as TA.3/TD.2): `check:core`'s glob (`packages/*/src/*.test.ts`) does not
 // reach `bin/`, so `bin/install-detect.test.ts` is wired into its own `check:install-detect` package.json
 // script, added to the `check` composite (see package.json).
-import { createRequire } from 'node:module';
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { spawnSync } from 'node:child_process';
@@ -337,6 +336,85 @@ function ownNodeFloor(): string {
   }
 }
 
+// BUGFIX (post-merge live review, see PR "fix(install-detect): termfleet detection was leaking bun's
+// global package cache"): the original ztrack/termfleet checks below used
+// `createRequire(join(repoDir, 'package.json')).resolve(pkg)`. Under Node this correctly fails when
+// `pkg` is not reachable from `repoDir`'s own node_modules tree. Under BUN, `require.resolve` (and
+// bun's own module resolver generally) additionally falls back to bun's GLOBAL install cache
+// (`~/.bun/install/cache/<pkg>@<version>@@@1`) — a cache shared across every bun-managed project on the
+// box — even when `repoDir` has ZERO local `node_modules`. Live-proven: against a fresh scratch target
+// with no node_modules at all, `node -e` resolution of 'termfleet' correctly throws MODULE_NOT_FOUND,
+// but the identical `bun -e` resolution silently succeeds, resolving into THIS repo's own bun global
+// cache entry (populated because packages/substrate-local/package.json declares a real `termfleet`
+// dependency) — not anything actually installed in the target. Concretely, this made
+// `bin/install-execute.ts`'s `stepInstallDeps` (which trusts this DETECT report) SKIP the real
+// `npm install termfleet` in a genuinely fresh target repo, so termfleet was never installed there, and
+// a later live EXECUTE step failed with `ERR_MODULE_NOT_FOUND: Cannot find package 'termfleet'`.
+//
+// Fix: `packagePresentInRepoDir` below does a plain, bun-cache-immune FILESYSTEM check scoped strictly
+// to `repoDir` — never a module-resolver call that can escape to a shared cache. It checks two real,
+// observed installation shapes (see this repo's own `node_modules` for both, verified live):
+//   1. Direct/hoisted: `<repoDir>/node_modules/<pkg>` — what `npm install <pkg>` in a target repo root
+//      produces (this is what `bin/install-execute.ts`'s own --detect-less fallback already checked —
+//      see its `existsSync(join(repoDir, 'node_modules', pkg))`), and also npm/yarn/pnpm's typical
+//      single-root-hoist for a workspace-wide dependency.
+//   2. Workspace-member-scoped (NOT hoisted to root): `<repoDir>/<workspaceGlob-member>/node_modules/<pkg>`
+//      — what THIS repo's own bun install actually produced for its real `termfleet` dependency
+//      (declared only in packages/substrate-local/package.json, installed to
+//      packages/substrate-local/node_modules/termfleet, NOT root node_modules/termfleet) — required so
+//      running this detector on open-autonomy's own repo (where termfleet is a real workspace
+//      dependency) doesn't regress into a false NEGATIVE. Reads repoDir's own package.json
+//      `workspaces` field (npm/yarn/bun array form, or pnpm/yarn object `{ packages: [...] }` form) and
+//      only supports the common `dir/*` glob convention (this repo's own `"packages/*"` and the
+//      overwhelming majority of real-world workspace layouts) plus literal member paths — it does not
+//      implement full glob syntax. KNOWN LIMITATION (documented, not silently wrong): pnpm's
+//      content-addressable `.pnpm` store with symlink-only node_modules, and deeply nested/non-hoisted
+//      npm dependency trees (a transitive dep resolved several levels down, not at a workspace root),
+//      are not walked — those would still read as "not installed" here. That is an honest false
+//      negative (this checker under-reports), never the false POSITIVE this fix removes — the safe
+//      direction for a check that gates whether `npm install <pkg>` runs again.
+function packagePresentInRepoDir(repoDir: string, pkgName: string): { present: boolean; via?: string } {
+  const direct = join(repoDir, 'node_modules', pkgName);
+  if (existsSync(direct)) return { present: true, via: direct };
+
+  const pkgJsonPath = join(repoDir, 'package.json');
+  if (!existsSync(pkgJsonPath)) return { present: false };
+
+  let workspaceGlobs: string[] = [];
+  try {
+    const pkg = JSON.parse(readFileSync(pkgJsonPath, 'utf8')) as {
+      workspaces?: string[] | { packages?: string[] };
+    };
+    if (Array.isArray(pkg.workspaces)) workspaceGlobs = pkg.workspaces;
+    else if (Array.isArray(pkg.workspaces?.packages)) workspaceGlobs = pkg.workspaces.packages;
+  } catch {
+    return { present: false }; // malformed package.json — no crash, honest negative.
+  }
+
+  for (const pattern of workspaceGlobs) {
+    if (pattern.endsWith('/*')) {
+      const baseDir = join(repoDir, pattern.slice(0, -2));
+      if (!existsSync(baseDir)) continue;
+      let entries: string[];
+      try {
+        entries = readdirSync(baseDir, { withFileTypes: true })
+          .filter((e) => e.isDirectory())
+          .map((e) => e.name);
+      } catch {
+        continue;
+      }
+      for (const entry of entries) {
+        const candidate = join(baseDir, entry, 'node_modules', pkgName);
+        if (existsSync(candidate)) return { present: true, via: candidate };
+      }
+    } else {
+      const candidate = join(repoDir, pattern, 'node_modules', pkgName);
+      if (existsSync(candidate)) return { present: true, via: candidate };
+    }
+  }
+  return { present: false };
+}
+
 export interface ToolFacts {
   node: { version: string; floor: string; meetsFloor: boolean };
   git: { present: boolean; version?: string };
@@ -363,34 +441,21 @@ export async function detectTools(repoDir: string): Promise<ToolFacts> {
   const bunP = probe('bun', ['--version']);
   notes.push(bunP.present ? `bun present: ${bunP.output}` : 'bun NOT found on PATH (the emitted scripts/runner.ts and ztrack presets run under bun)');
 
-  // ztrack: vendored (resolves from repoDir's own node_modules) vs global (a `ztrack` binary directly on
-  // PATH, NOT scoped to repoDir — spawnSync does not prepend a cwd's node_modules/.bin to PATH).
-  let ztrackVendored = false;
-  if (existsSync(join(repoDir, 'package.json'))) {
-    try {
-      createRequire(join(repoDir, 'package.json')).resolve('ztrack');
-      ztrackVendored = true;
-    } catch {
-      ztrackVendored = false;
-    }
-  }
+  // ztrack: vendored (a real `<repoDir>/node_modules/ztrack` or workspace-member node_modules entry —
+  // a plain filesystem check, see packagePresentInRepoDir's header comment for why NOT a
+  // require.resolve-style call) vs global (a `ztrack` binary directly on PATH, NOT scoped to repoDir —
+  // spawnSync does not prepend a cwd's node_modules/.bin to PATH).
+  const ztrackVendored = packagePresentInRepoDir(repoDir, 'ztrack').present;
   const ztrackGlobalP = probe('ztrack', ['--version']);
   const ztrackNote = `ztrack vendored=${ztrackVendored} (resolves from ${repoDir}/node_modules), global=${ztrackGlobalP.present} (a bare 'ztrack' on PATH)`;
   notes.push(ztrackNote);
 
-  // termfleet: installed (resolves from repoDir's node_modules) — a RUNNING provider is NOT required at
-  // detect time (DESIGN §Phase 0), so "reachable" is reported honestly via checkProvider's real TCP+
-  // /healthz-identity probe, never assumed. SKIP (not installed / nothing running yet) reads as
-  // 'not-running', not a failure.
-  let termfleetInstalled = false;
-  if (existsSync(join(repoDir, 'package.json'))) {
-    try {
-      createRequire(join(repoDir, 'package.json')).resolve('termfleet');
-      termfleetInstalled = true;
-    } catch {
-      termfleetInstalled = false;
-    }
-  }
+  // termfleet: installed (a real `<repoDir>/node_modules/termfleet` or workspace-member node_modules
+  // entry — a plain filesystem check, see packagePresentInRepoDir's header comment) — a RUNNING provider
+  // is NOT required at detect time (DESIGN §Phase 0), so "reachable" is reported honestly via
+  // checkProvider's real TCP+/healthz-identity probe, never assumed. SKIP (not installed / nothing
+  // running yet) reads as 'not-running', not a failure.
+  const termfleetInstalled = packagePresentInRepoDir(repoDir, 'termfleet').present;
   const providerCheck = await checkProvider(repoDir);
   let reachable: ToolFacts['termfleet']['reachable'];
   if (providerCheck.status === 'PASS') reachable = 'reachable';
@@ -452,7 +517,7 @@ export function buildHumanGates(gh: GhFacts, onGitHub: boolean, codingCli: Check
       id: 'gh-admin',
       name: 'GitHub repo-admin (branch-protection provisioning)',
       status: 'blocked',
-      detail: `${gh.adminBasis} — a non-admin token cannot provision branch protection (the PUT will 403/404 and provision-target-repo continues past a failed protection PUT, scripts/provision-target-repo.ts:305); this is a human gate, not an autonomous step.`,
+      detail: `${gh.adminBasis} — a non-admin token cannot provision branch protection (the PUT will 403/404 and provision-target-repo continues past a failed protection PUT, scripts/provision-target-repo.ts:363); this is a human gate, not an autonomous step.`,
     });
   } else {
     gates.push({

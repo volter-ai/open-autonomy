@@ -7,7 +7,7 @@
 // which base ensureWorktree picks; it only lets a caller ask "which one, and what SHA").
 import { afterEach, describe, expect, test } from 'bun:test';
 import { spawnSync } from 'node:child_process';
-import { existsSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { AutonomyIR } from '@open-autonomy/core';
@@ -71,6 +71,50 @@ describe('worktreeProbe (in-process export)', () => {
       expect(result.sha).toBe(headSha);
       expect(existsSync(result.worktree)).toBe(true);
       // Cleanup mirrors what doctor itself does (never this function's own job).
+      sh('git', ['worktree', 'remove', '--force', result.worktree], dir);
+      sh('git', ['branch', '-D', branch], dir);
+    } finally {
+      process.chdir(cwd);
+    }
+  });
+
+  // Fix 1 (pnpm-workspace-install-hardening): pnpm (and any workspace-aware manager that skips full
+  // hoisting) keeps each workspace member's OWN node_modules/.bin rather than hoisting everything to root
+  // — proven live as `pnpm db:migrate` dying "knex not found" inside a fresh worktree even though the main
+  // checkout had `apps/server/node_modules/.bin/knex`. ensureWorktree must link EVERY declared workspace
+  // member's node_modules into the new worktree, not just the root's.
+  test('links a workspace MEMBER\'s own node_modules into the worktree too (pnpm-style non-hoisted layout), not just the root', () => {
+    const { dir } = scaffoldLocalGitRepo();
+    // Declare an npm/yarn/bun-style workspaces field so the member glob is discoverable without relying on
+    // the bare apps/packages convention fallback. Also declare a "packages/foo" SOURCE file (committed) so
+    // the member directory itself is real/tracked, exactly like a real workspace member — node_modules
+    // itself is deliberately left UNCOMMITTED/untracked in both spots (mirrors reality: node_modules is
+    // gitignored everywhere, root and per-package alike, and `git worktree add` only ever materializes
+    // committed files — a real worktree never inherits an existing node_modules on its own).
+    writeFileSync(join(dir, 'package.json'), JSON.stringify({ name: 'host-app', workspaces: ['packages/*'] }));
+    mkdirSync(join(dir, 'packages', 'foo'), { recursive: true });
+    writeFileSync(join(dir, 'packages', 'foo', 'package.json'), JSON.stringify({ name: '@host-app/foo' }));
+    gitIn(dir, 'add', '-A');
+    gitIn(dir, 'commit', '-q', '-m', 'declare packages/* workspace with a member package.json');
+    // Now create the (gitignored, uncommitted) node_modules dirs — root AND the member's own — the same
+    // shape `pnpm install` leaves on disk without ever touching git.
+    mkdirSync(join(dir, 'packages', 'foo', 'node_modules', '.bin'), { recursive: true });
+    writeFileSync(join(dir, 'packages', 'foo', 'node_modules', '.bin', 'some-tool'), '#!/bin/sh\necho hi\n');
+    mkdirSync(join(dir, 'node_modules'), { recursive: true });
+    writeFileSync(join(dir, 'node_modules', 'marker.txt'), 'root\n');
+
+    const cwd = process.cwd();
+    process.chdir(dir);
+    try {
+      const branch = `oa-doctor/probe-workspace-${Date.now()}`;
+      const result = worktreeProbe(branch);
+      const rootLink = join(result.worktree, 'node_modules');
+      const memberLink = join(result.worktree, 'packages', 'foo', 'node_modules');
+      expect(existsSync(rootLink)).toBe(true);
+      expect(realpathSync(rootLink)).toBe(realpathSync(join(dir, 'node_modules')));
+      expect(existsSync(memberLink)).toBe(true);
+      expect(realpathSync(memberLink)).toBe(realpathSync(join(dir, 'packages', 'foo', 'node_modules')));
+      expect(existsSync(join(result.worktree, 'packages', 'foo', 'node_modules', '.bin', 'some-tool'))).toBe(true);
       sh('git', ['worktree', 'remove', '--force', result.worktree], dir);
       sh('git', ['branch', '-D', branch], dir);
     } finally {

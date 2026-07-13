@@ -43,6 +43,16 @@ export interface IRAgent {
   // Optional formal result of a skill agent's run: a value that validates against `result.schema` (a JSON
   // Schema object). A declarative seam for a typed result; absent ⇒ the agent just runs and acts directly.
   result?: { schema: Record<string, unknown> };
+  // An opaque shell command the runner executes in the session's OWN cwd (the worktree it is about to be
+  // launched into, or process.cwd() for a trunk launch) — BEFORE the session spawns, with the same env the
+  // session itself will see. Methodology-free: this is DATA the profile supplies, never a hardcoded
+  // per-agent branch in the runner — it runs identically for any agent that declares one and is a no-op for
+  // any agent that doesn't (docs/SPEC.md#the-runner). Best-effort: a nonzero exit is logged, never fatal —
+  // it arms optional session-local state (e.g. a loop-control marker a session's own hooks read), not a gate
+  // on whether the session gets to run. Realized today by the LOCAL substrate only
+  // (packages/substrate-local/src/runner-frontend.ts); gh-actions has no realization yet (a pre-skill
+  // workflow step is a reasonable future extension, left for when a profile actually needs it there).
+  prelaunch?: string;
 }
 
 /** The first cron trigger across an agent's triggers, if any — the only trigger the IR interprets. */
@@ -198,6 +208,10 @@ export function validateIR(ir: AutonomyIR): string[] {
           errors.push(`agent ${name}: review target '${a.review}' must hold code:review`);
       }
     }
+    // prelaunch is opaque shell-command DATA (docs/SPEC.md#the-runner) — validated only for shape (a
+    // non-empty string), never interpreted here. The runner is the one place it is ever executed.
+    if (a.prelaunch !== undefined && (typeof a.prelaunch !== 'string' || a.prelaunch.length === 0))
+      errors.push(`agent ${name}: prelaunch must be a non-empty shell-command string`);
     if (a.result !== undefined) {
       if (!a.result.schema || typeof a.result.schema !== 'object')
         errors.push(`agent ${name}: result must be { schema: <object> }`);

@@ -16,6 +16,31 @@
 //   GH_TOKEN, GITHUB_RUN_ID  (the repo is resolved from the remote via gh's {owner}/{repo} placeholders)
 import { execFileSync } from 'node:child_process';
 
+const sh = (cmd: string, args: string[], opts: { allowFail?: boolean } = {}): string => {
+  try {
+    return execFileSync(cmd, args, { encoding: 'utf8' }).trim();
+  } catch (e) {
+    if (opts.allowFail) return '';
+    throw e;
+  }
+};
+const ok = (cmd: string, args: string[]): boolean => {
+  try {
+    execFileSync(cmd, args, { stdio: 'pipe' });
+    return true;
+  } catch {
+    return false;
+  }
+};
+const sleep = (s: number) => { try { execFileSync('sleep', [String(s)]); } catch { /* pacing */ } };
+// Dispatch a code-host workflow with retry — a bot-opened PR fires no pull_request event (GITHUB_TOKEN
+// anti-recursion), so ci/agent-review/merge are kicked here; a swallowed dispatch leaves a required check
+// unposted and the PR permanently unmergeable, so retry until it lands.
+const dispatch = (label: string, args: string[]): void => {
+  for (let i = 0; i < 6; i++) { if (ok('gh', ['workflow', 'run', ...args])) return; sleep(4); }
+  process.stdout.write(`${label} dispatch failed after retries (non-fatal)\n`);
+};
+
 // The ref shape catalog: a bare GitHub issue NUMBER (the original, only-ever-supported shape) vs a
 // non-numeric STORE id (e.g. `COMBO-9` — a work item tracked by a non-GitHub-issue store). Widened from
 // digit-only so a store ref is recognized at all (branch naming, the merged-duplicate dedup guard, the
@@ -54,8 +79,50 @@ export function isDedupCandidate(ref: string): boolean {
   return refKind(ref) !== 'none';
 }
 
+// Resolve the PR's base branch — the repo's default branch, whatever it's actually called (main, master,
+// dev, trunk, …). A real adopter hit this: a transient `gh api` hiccup during a propose run fell straight
+// through to the hardcoded 'main' literal on a repo whose default branch is `dev` (no `main` branch exists
+// there AT ALL) — so `gh pr create --base main` failed opaquely ("No commits between main and
+// agent/issue-LOCAL-1") and the propose effect ran silently to a dead end: no PR opened, no clear diagnosis.
+// Fixed priority chain, each stage only reached if the one before it is exhausted:
+//   1. `gh api repos/{owner}/{repo} --jq .default_branch` — the authoritative source — retried 3x (same
+//      bounded-retry/sleep idiom as `dispatch()` above), because ONE network hiccup shouldn't be treated the
+//      same as "this call can never work".
+//   2. The LOCAL git remote's own record of the default branch (`git symbolic-ref refs/remotes/origin/HEAD`),
+//      the standard git mechanism for this — populated by a fresh clone or `git remote set-head origin -a`.
+//      This is exactly right for any repo with ANY trunk name, and needs no network call at all.
+//   3. The hardcoded 'main' literal — now the LAST resort, not the first.
+export interface ResolveBaseBranchDeps {
+  ghApiDefaultBranch: () => string; // '' on failure
+  gitSymbolicRefOriginHead: () => string; // '' on failure/unset
+  sleep: (s: number) => void;
+  attempts?: number; // retries for stage 1; defaults to 3
+}
+
+const realDeps: ResolveBaseBranchDeps = {
+  ghApiDefaultBranch: () => sh('gh', ['api', 'repos/{owner}/{repo}', '--jq', '.default_branch'], { allowFail: true }),
+  gitSymbolicRefOriginHead: () => {
+    // Typical value: "refs/remotes/origin/main" — the branch name is everything after the last slash.
+    const ref = sh('git', ['symbolic-ref', 'refs/remotes/origin/HEAD'], { allowFail: true });
+    return ref ? ref.replace(/^refs\/remotes\/origin\//, '') : '';
+  },
+  sleep,
+};
+
+export function resolveBaseBranch(deps: ResolveBaseBranchDeps = realDeps): string {
+  const attempts = deps.attempts ?? 3;
+  for (let i = 0; i < attempts; i++) {
+    const base = deps.ghApiDefaultBranch();
+    if (base) return base;
+    if (i < attempts - 1) deps.sleep(4);
+  }
+  const local = deps.gitSymbolicRefOriginHead();
+  if (local) return local;
+  return 'main';
+}
+
 // Everything below is the EFFECT itself (git/gh side effects) — gated behind `import.meta.main` so this
-// module stays safely IMPORTABLE (this file's own unit test imports only the pure functions above; without
+// module stays safely IMPORTABLE (this file's own unit tests import only the pure functions above; without
 // this gate, importing the module for that would immediately run the whole propose against whatever `gh`/
 // `git` happen to be on PATH). `bun scripts/agent-propose.ts` (the only way it is ever actually invoked —
 // every workflow/runner call site runs it as a script, never imports it) still sets `import.meta.main`,
@@ -69,31 +136,6 @@ if (import.meta.main) {
   const reviewWorkflow = (env.REVIEW_WORKFLOW ?? '').trim();
   const reviewAgent = (env.REVIEW_AGENT ?? '').trim();
   const branch = ref ? `agent/issue-${ref}` : `agent/${rid}`;
-
-  const sh = (cmd: string, args: string[], opts: { allowFail?: boolean } = {}): string => {
-    try {
-      return execFileSync(cmd, args, { encoding: 'utf8' }).trim();
-    } catch (e) {
-      if (opts.allowFail) return '';
-      throw e;
-    }
-  };
-  const ok = (cmd: string, args: string[]): boolean => {
-    try {
-      execFileSync(cmd, args, { stdio: 'pipe' });
-      return true;
-    } catch {
-      return false;
-    }
-  };
-  const sleep = (s: number) => { try { execFileSync('sleep', [String(s)]); } catch { /* pacing */ } };
-  // Dispatch a code-host workflow with retry — a bot-opened PR fires no pull_request event (GITHUB_TOKEN
-  // anti-recursion), so ci/agent-review/merge are kicked here; a swallowed dispatch leaves a required check
-  // unposted and the PR permanently unmergeable, so retry until it lands.
-  const dispatch = (label: string, args: string[]): void => {
-    for (let i = 0; i < 6; i++) { if (ok('gh', ['workflow', 'run', ...args])) return; sleep(4); }
-    process.stdout.write(`${label} dispatch failed after retries (non-fatal)\n`);
-  };
 
   // Deterministic dedup backstop: if this branch ALREADY has a merged PR, the work has landed — never open a
   // duplicate. (A proposer can be relaunched in the lag between a PR merging and the work item's tracker
@@ -177,8 +219,9 @@ if (import.meta.main) {
   }
 
   // Resolve the repo through gh's `{owner}/{repo}` placeholders (filled from the remote) — works ambiently on
-  // GitHub Actions AND a local runner, so this effect needs no injected GITHUB_REPOSITORY.
-  const base = sh('gh', ['api', 'repos/{owner}/{repo}', '--jq', '.default_branch'], { allowFail: true }) || 'main';
+  // GitHub Actions AND a local runner, so this effect needs no injected GITHUB_REPOSITORY. See
+  // resolveBaseBranch() above for the retry + local-git-fallback chain (api retries -> origin/HEAD -> 'main').
+  const base = resolveBaseBranch();
   let body = sh('bash', ['-c', 'cat .agent-run/artifacts/pr.md 2>/dev/null || true'], { allowFail: true }) || `Automated agent change (${rid}).`;
   if (trailer) body = `${trailer}\n\n${body}`;
   if (!ok('gh', ['pr', 'create', '--base', base, '--head', branch, '--title', `Agent: ${rid}`, '--body', body])) {

@@ -16,7 +16,7 @@
 //               beating the schedule pin ("ambient TERMFLEET_PROVIDER_URL, beats everything"). This file
 //               NEVER executes the constructed `start` command — every acceptance leg for it stops at
 //               "the command was constructed correctly," mirroring install-execute.ts's own
-//               `buildPlannerDispatchCommand` discipline (and its own regression test shape) exactly.
+//               `buildBoardSeedDispatchCommand` discipline (and its own regression test shape) exactly.
 //     - HOSTED (gh-actions): per DESIGN hardening #7's ORIGINAL text, "there's no paused file — the
 //       analogue is removing an `agent-paused` label". That assumption does NOT survive contact with the
 //       actual code (verified, not assumed, per this program's standing rule #2/#6):
@@ -59,7 +59,7 @@
 //
 // ⛔⛔⛔ ABSOLUTE SAFETY: nothing in this file ever spawns `oa start`, `tmux new-session`, or any other
 // dispatch/launch command for real — every "go-live" function here only ever CONSTRUCTS a `DispatchCommand`
-// (cmd/args/env), the exact same construct-only discipline TE.5's `buildPlannerDispatchCommand` uses, and
+// (cmd/args/env), the exact same construct-only discipline TE.5's `buildBoardSeedDispatchCommand` uses, and
 // every constructed local `start` command's env is asserted, never executed, in this unit's own tests.
 import { existsSync } from 'node:fs';
 import { basename } from 'node:path';
@@ -145,6 +145,12 @@ export interface BuildLocalGoLiveOptions {
   /** injectable — tests pass a stub that just records the unlink attempt; defaults to pause.ts's REAL
    *  `resume()` (safe: file removal only, matches this module's own header). */
   resumeFn?: typeof resumeReal;
+  /** --dry-run: `resume()` is normally performed for real even in this module's own default operation
+   *  (single `unlinkSync`, zero spawn risk — see this file's own header). Under --dry-run that real file
+   *  removal is skipped too: a dry-run's own contract is "the target repo is left byte-for-byte untouched",
+   *  and removing `.open-autonomy/paused` would show up as a real change in `git status`. Reports what
+   *  WOULD happen via a pure read (`isPaused`/`pausedMarkerPath`) instead. */
+  dryRun?: boolean;
 }
 
 /** Constructs (and, for the safe `resume` half only, PERFORMS) the local go-live sequence. Refuses —
@@ -164,8 +170,11 @@ export function buildLocalGoLive(repoDir: string, opts: BuildLocalGoLiveOptions 
     };
   }
 
-  const resumeFn = opts.resumeFn ?? resumeReal;
-  const resume = resumeFn({ cwd: repoDir });
+  // --dry-run: never call the real resume() (a real unlinkSync) — read-only equivalent instead (see this
+  // option's own doc comment for why even this otherwise-safe write is suppressed under dry-run).
+  const resume = opts.dryRun
+    ? { wasPaused: isPaused(repoDir), path: pausedMarkerPath(repoDir) }
+    : (opts.resumeFn ?? resumeReal)({ cwd: repoDir });
 
   const forcedEnv: Record<string, string> = { TERMFLEET_PROVIDER_URL: pin };
   const sessionName = opts.sessionName ?? `oa-${basename(repoDir)}`;
@@ -193,13 +202,16 @@ export function buildLocalGoLive(repoDir: string, opts: BuildLocalGoLiveOptions 
     startCommand = { cmd: 'nohup', args: ['sh', '-c', `oa start >> ${logFile} 2>&1 &`], env: forcedEnv };
   }
 
+  const resumeVerb = opts.dryRun
+    ? `${resume.wasPaused ? '[DRY-RUN] would lift the fence (currently paused)' : '[DRY-RUN] would be a no-op (not currently paused)'}`
+    : `resume ${resume.wasPaused ? 'lifted the fence (was paused)' : 'no-op (was not paused)'}`;
   return {
     status: 'ok',
     pin,
     resume,
     startCommand,
     message:
-      `[oa] go-live: resume ${resume.wasPaused ? 'lifted the fence (was paused)' : 'no-op (was not paused)'} at ${resume.path}; ` +
+      `[oa] go-live: ${resumeVerb} at ${resume.path}; ` +
       `constructed ${launcher} launch of \`oa start\` with TERMFLEET_PROVIDER_URL FORCED to this install's own schedule pin ` +
       `(${pin}) — never ambient. NOT executed by this call.`,
   };
@@ -310,6 +322,9 @@ export interface RunG4aOptions {
   ownerRepo?: string;
   proc?: ProcRunner;
   local?: BuildLocalGoLiveOptions;
+  /** top-level convenience — forwarded into `local.dryRun` (an explicit `local.dryRun` still wins) so a
+   *  caller need not remember to nest it under `local` just to get the safe HAND-OFF behavior. */
+  dryRun?: boolean;
 }
 
 export interface RunG4aReport {
@@ -328,7 +343,8 @@ export function runG4a(opts: RunG4aOptions): RunG4aReport {
   if (!verification.ready) return { verification };
 
   if (opts.substrate === 'local') {
-    return { verification, goLive: buildLocalGoLive(opts.repoDir, opts.local) };
+    const local: BuildLocalGoLiveOptions = { ...opts.local, dryRun: opts.local?.dryRun ?? opts.dryRun };
+    return { verification, goLive: buildLocalGoLive(opts.repoDir, local) };
   }
   if (!opts.ownerRepo) {
     return {
@@ -435,8 +451,10 @@ const USAGE = [
   '         [--profile-dir <dir>] [--actor <name>] [--owner-repo <owner/name>] [--launcher tmux|nohup] [--json]',
   '       bun bin/install-handoff.ts runbook   # prints the G4b async babysit protocol',
   '',
-  '⛔ SAFETY: `go-live` never executes a launch — it only ever VERIFIES G4a (board promotion) and',
-  'CONSTRUCTS the substrate-specific go-live command/action, printing it for a human to run.',
+  '⛔ SAFETY: `go-live` never executes a launch. It VERIFIES G4a (board promotion), and (local substrate',
+  'only, once verified) PERFORMS the safe `oa resume` fence-lift for real (a single unlink, no spawn) —',
+  'then CONSTRUCTS the launch half (`oa start` locally, or the hosted PUBLIC_AGENT_REPO_PAUSED clear),',
+  'printing it for a human to run.',
 ].join('\n');
 
 function flagValue(argv: string[], name: string): string | undefined {

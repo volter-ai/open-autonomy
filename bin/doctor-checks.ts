@@ -420,6 +420,38 @@ export function checkEnv(cwd: string): CheckResult {
     notes.push('ztrack resolves from node_modules');
   }
 
+  // b2. @termfleet/core actually installed + resolvable (mirrors (b) above exactly, for a REQUIRED runtime
+  // dependency instead of a devDependency): packages/substrate-local/src/backend.mjs and runner.ts both
+  // `import { resolveDefaultProvider } from '@termfleet/core/local-providers.js'` at runtime, at first live
+  // scheduler tick — so an install where this doesn't resolve is not merely degraded, it's DEAD on its
+  // first tick. Under npm's default hoisting this often worked "by luck" (something else in the tree
+  // transitively pulled @termfleet/core in); under pnpm's strict non-hoisting layout nothing hoists it, so
+  // it silently ERR_MODULE_NOT_FOUNDs with no doctor/preflight signal beforehand (proven live). Scoped to
+  // installs where the local substrate is actually in play — same signal checkLive (check 7) already gates
+  // its own dispatch-path checks on: scripts/run-agent.mjs existing (the local runner's real entry point;
+  // a github-substrate install never emits it, so this never false-alarms there).
+  const localRunnerInPlay = existsSync(join(cwd, 'scripts', 'run-agent.mjs'));
+  if (localRunnerInPlay) {
+    let termfleetCoreResolvable = true;
+    try {
+      createRequire(join(cwd, 'package.json')).resolve('@termfleet/core/local-providers.js');
+    } catch {
+      termfleetCoreResolvable = false;
+    }
+    if (!termfleetCoreResolvable) {
+      problems.push(
+        "'@termfleet/core/local-providers.js' is not resolvable from node_modules — it is a REQUIRED runtime " +
+          "dependency of the local runner (packages/substrate-local's backend.mjs and runner.ts both import it at " +
+          "the very first scheduler tick), not merely a dev tool: without it every dispatch dies ERR_MODULE_NOT_FOUND. " +
+          'Fix: npm install @termfleet/core (or your package manager\'s equivalent — e.g. pnpm add @termfleet/core, ' +
+          'yarn add @termfleet/core, bun add @termfleet/core; under npm hoisting this sometimes resolves ' +
+          "transitively without being declared, but a non-hoisting installer like pnpm never hoists it for you).",
+      );
+    } else {
+      notes.push('@termfleet/core resolves from node_modules');
+    }
+  }
+
   // c. the pty module termfleet ACTUALLY depends on -- never a hardcoded name -- load-probed in a child.
   const termfleetEntry = resolveFromRepo(cwd, 'termfleet');
   if (termfleetEntry) {

@@ -135,11 +135,20 @@ are added to a catalog first, then implemented by substrates — purely additive
 2. **Trigger param sources** ([§Trigger params](#trigger-params)) — what a trigger can forward to the agent:
    `subject.ref` · `subject.actor` · `subject.text` · `trigger.kind`. A trigger declares
    `params: { OPAQUE_NAME: source }`; the substrate resolves the source from its firing context.
-3. **Agent fields** (no opaque config box) — the only non-capability field is `timeout`:
+3. **Agent fields** (no opaque config box) — the non-capability fields are `timeout` and `prelaunch`:
 
    | field | meaning | github | local |
    |---|---|---|---|
    | `timeout` | minutes before kill | job `timeout-minutes` | runner kill-after |
+   | `prelaunch` | an opaque shell command the runner runs in the session's own cwd, BEFORE it spawns (best-effort: a nonzero exit is logged, never fatal) | *(no realization yet — local-only for v1)* | `spawnSync(prelaunch, { shell: true, cwd })` before the session spawns |
+
+   `prelaunch` is not a reintroduction of a config box — it is a single opaque DATA string with one
+   documented realization (the runner executes it verbatim, never interprets it), the same shape as
+   `review` naming a reviewer agent. It exists to arm optional session-local state (e.g. a marker file a
+   session's own hooks read) that must exist *before* the session starts looking for it — something no
+   agent's own skill prompt can do, since the skill only runs once the session has already spawned.
+   Declared per-agent; absent ⇒ no-op (most agents declare none). See [§The Runner](#the-runner) for the
+   full contract.
 
    There is **no** `config` box. Everything the box once carried is now either a capability (authority),
    substrate-DERIVED (the workflow filename = `<agent>.yml`; the model endpoint is provisioned for every
@@ -237,6 +246,26 @@ the work item — the caller (the PM) names the branch — and it injects **no**
 needs its repo or PR resolves them through its own code-host tool (e.g. `gh api repos/{owner}/{repo}/…`, which
 `gh` fills from the remote). So the runner never names a code host, on any substrate.
 
+**`prelaunch` is a methodology-free pre-spawn hook, not a lifecycle stage.** An agent may declare an opaque
+`prelaunch: <shell command>` (`IRAgent.prelaunch`, `packages/core/src/ir.ts`). Where realized, the runner
+executes it in the session's own cwd — the worktree it is about to be launched into (or `process.cwd()` for
+a trunk launch, no `--branch`) — **before** the session spawns, with the same env the session itself will
+see. The runner treats it as **opaque data** the profile supplies: it never hardcodes a per-agent branch to
+decide whether to run one, and it runs identically for any agent that declares a `prelaunch:` (a no-op for
+every agent that doesn't — most agents declare none). This exists because a session's own tooling (its skill
+prompt, its own Stop/SubagentStop hooks) only runs *after* the session has already spawned — too late to
+arm state (e.g. a marker file) that tooling needs to see from its very first moment. It is **best-effort**:
+a nonzero exit is logged and the launch proceeds anyway — a prelaunch arms optional session-local state, it
+is never a gate on whether the session gets to run.
+
+Realized today by the **local** substrate only (`packages/substrate-local/src/runner-frontend.ts`'s
+`launch()`). gh-actions has **no realization yet** — deliberately deferred to a future change rather than
+guessed at here: a plausible shape would be an extra pre-skill step in the generated per-agent workflow, but
+that only pays for itself once a concrete gh-actions use case needs it. Declaring `prelaunch` on a profile
+compiled only to `gh-actions` is accepted (validated for shape, carried into the manifest) but has no effect
+there today — the same "declared, substrate may not implement it yet" posture as an unsupported capability
+(see [§Conformance](#conformance--the-support-matrix)).
+
 ### What is NOT an agent
 
 Not everything in an installation is an IR agent. Three kinds sit outside the standard:
@@ -260,12 +289,49 @@ first-class, not failure.**
 **What `compile` warns on today (BL-22 dev/04 — minimal, not full feature-conformance):** `bin/
 autonomy-compile.ts` warns when the substrate you're compiling ONTO isn't in the profile's own declared
 `targets:` (e.g. `targets: [local]` but you ran `compile … gh-actions`) — the shallow, easy-to-derive
-signal that a combination is unproven for this profile. It does NOT yet warn on the deeper claim this
-section used to make ("uses a feature its target does not support" — e.g. a profile using event triggers
-against a substrate whose conformance battery reports them unsupported): that needs `compile` to consult
-the conformance battery's per-feature matrix, which isn't wired up. `open-autonomy lint <profileDir>`
-(BL-22 dev/04) runs the same pre-materialize validation (parse + compile to every declared target +
-skill/folder-name check) without writing anything, for a profile of your own.
+signal that a combination is unproven for this profile. There is still no GENERAL per-feature conformance
+oracle (`compile` does not consult the conformance battery's per-feature matrix for arbitrary
+feature/substrate pairs — that remains unwired). `open-autonomy lint <profileDir>` (BL-22 dev/04) runs the
+same pre-materialize validation (parse + compile to every declared target + skill/folder-name check)
+without writing anything, for a profile of your own.
+
+**The one feature/substrate pair `compile` DOES check — event triggers on `local`.** `event` triggers are
+the substrate-native escape hatch; a `local` install has no webhook listener to fire one. Before, an agent
+whose only trigger was an `event` kind compiled clean onto `local` and then silently never ran — the exact
+"declared, correct, and never invoked" failure this section warns against. `compileLocal`
+(`packages/substrate-local/src/emit.ts`) now closes that one pair concretely, and does so by DELIVERING the
+trigger where it can and ERRORING where it can't (a hard compile error, not a warning — silently dropping a
+declared trigger is never acceptable):
+
+- **Delivered** — the review edge. A `code:propose` agent names its reviewer via `review:` (the merge
+  boundary's review edge). `compileLocal` emits `scripts/reconcile-open-reviews.mjs`, a polled reconciler
+  (registered in `scheduler/schedule.json`) that dispatches that reviewer for any open agent PR whose head
+  lacks the `agent-review` status — the local realization of the `issue_comment`/`pull_request_target`
+  trigger a `gh-actions` install would fire natively. The reviewer AGENT is read from the compiled
+  manifest (`agents.<proposer>.review`); only `agent-review` (a contract constant, see
+  [Contract constants vs tunable policy](#contract-constants-vs-tunable-policy--which-names-belong-to-the-standard))
+  is a literal.
+- **Errored** — everything else. An agent whose entire trigger set is `event`-kind, with no portable
+  `dispatch` trigger of its own, not named by any `review:` edge, and with no agent anywhere in the profile
+  holding `agent:launch` (so no orchestrator could reach it another way either) has no local delivery path
+  at all → `compileLocal` fails loud, naming the agent and the fixes (add a `dispatch`/`cron` trigger, make
+  it a `review:` target, or compile onto `gh-actions`). This escape-clause set (dispatch / review-target /
+  an `agent:launch` holder exists) is what keeps the check from false-positiving on a normal PM-dispatched
+  worker whose `event` trigger is just the gh-actions realization of the PM's own `agent:launch`.
+
+**Local-substrate robustness reconcilers.** `local` has no webhook re-fire, so `compileLocal` emits two
+more polled reconcilers (same emit-not-resource category as the runner backend — they exist only because
+of a `local`-runner gap, not code-host scaffolding constant across runners:
+[CODE_HOST_RESOURCES.md](CODE_HOST_RESOURCES.md)), both gated on a `github` code host with a `code:propose`
+agent and registered in `scheduler/schedule.json`:
+
+- `scripts/reconcile-ready-branches.mjs` — propose-recovery. A `code:propose` session that finished (its
+  commits landed on its `agent/*` branch) but whose propose effect never ran (the window was killed before
+  any tick observed it) leaves a ready branch with no PR; this opens it.
+- `scripts/reconcile-open-checks.mjs` — check convergence. Required status checks are dispatched once at
+  propose time; if the head sha moves or the PR goes BEHIND under strict branch protection, nothing
+  re-posts them. This re-dispatches the missing/stale checks (reading the required contexts from the code
+  host's own branch protection, never a hardcoded list) and brings a BEHIND branch current first.
 
 **Runner core (MUST):** `launch` / `list` / `cancel`, ids received (not invented), params passed verbatim.
 **Trigger core (MUST):** fire `cron` and launch the agent. PM-on-cron is the universal dispatcher, so cron

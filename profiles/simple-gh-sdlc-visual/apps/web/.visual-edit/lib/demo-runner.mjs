@@ -30,7 +30,8 @@
 //     OTP-from-store login) before the first page exists.
 //
 // summary.json shape (superset):
-//   { generatedAt, runner, runId, script, mode, demo:{slug,name}, status,
+//   { generatedAt, runner, runId, script, mode, gitSha, gitDirty, gitBranch,
+//     demo:{slug,name}, status,
 //     appUrl, outDir, video, startedAt, finishedAt, total, pass, fail,
 //     runError:{message,stack}|null, diagnostics:{issues},
 //     evidence:{screenshot},
@@ -40,6 +41,7 @@
 //
 // Framework-free: plain .mjs, Playwright only.
 
+import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -110,6 +112,9 @@ export async function runDemo({
   }
 
   const startedAt = new Date().toISOString();
+  // Captured ONCE at run start so it's stable even if the tree changes mid-run.
+  // Best-effort: git provenance must never break a demo run.
+  const { gitSha, gitDirty, gitBranch } = captureGitProvenance(HERE);
   const viewport = contextOptions.viewport || DEFAULT_VIEWPORT;
 
   let browser;
@@ -149,6 +154,9 @@ export async function runDemo({
       runId,
       script: demo.script || null,
       mode,
+      gitSha,
+      gitDirty,
+      gitBranch,
       demo: { slug: demo.slug, name: demo.name },
       status: runError ? 'fail' : 'pass',
       appUrl,
@@ -269,4 +277,39 @@ function attachDiagnostics(page, diagnostics) {
 
 function writeJson(filePath, value) {
   fs.writeFileSync(filePath, `${JSON.stringify(value, null, 2)}\n`);
+}
+
+// Evidence-integrity provenance: stamp WHICH code revision the demo ran
+// against, so a baseline run's world logs being overwritten later doesn't
+// erase the record of what SHA produced them. Best-effort — resolves the
+// repo root via `git rev-parse --show-toplevel` (the runner may execute
+// from a worktree, so this is never hardcoded) and never throws; git
+// failures must not break a demo run.
+function captureGitProvenance(cwd) {
+  let root;
+  try {
+    root = execFileSync('git', ['rev-parse', '--show-toplevel'], { cwd, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim();
+  } catch {
+    return { gitSha: null, gitDirty: null, gitBranch: null };
+  }
+  const git = (args) => execFileSync('git', args, { cwd: root, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim();
+  let gitSha = null;
+  let gitDirty = null;
+  let gitBranch = null;
+  try {
+    gitSha = git(['rev-parse', 'HEAD']);
+  } catch {
+    gitSha = null;
+  }
+  try {
+    gitDirty = git(['status', '--porcelain']).length > 0;
+  } catch {
+    gitDirty = null;
+  }
+  try {
+    gitBranch = git(['rev-parse', '--abbrev-ref', 'HEAD']);
+  } catch {
+    gitBranch = null;
+  }
+  return { gitSha, gitDirty, gitBranch };
 }

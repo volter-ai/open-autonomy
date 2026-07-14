@@ -2,6 +2,10 @@
 
 Status: exploratory v2 architecture implemented alongside the deployed `autonomy.ir.v1` profile format.
 
+Implementation checkpoints, formal obligations, evidence standards, and completion gates are defined in
+[`ORGANIZATION-IR-AC.md`](./ORGANIZATION-IR-AC.md). That document governs acceptance of this experimental work;
+`ROADMAP.md` remains the single canonical product roadmap.
+
 Implemented experimental surfaces:
 
 - TypeScript definition and state models;

@@ -45,6 +45,7 @@ export interface NormalizedJob {
   intervalSeconds: number;
   retrySeconds: number;
   fence?: string;
+  workspace?: 'shared' | 'isolated';
   agent: string | null;
 }
 
@@ -68,6 +69,7 @@ export interface RawScheduleScriptObject {
   intervalSeconds?: number;
   retrySeconds?: number;
   fence?: string;
+  workspace?: 'shared' | 'isolated';
   agent?: string;
 }
 export interface RawScheduleJob {
@@ -76,6 +78,7 @@ export interface RawScheduleJob {
   intervalSeconds?: number;
   retrySeconds?: number;
   fence?: string;
+  workspace?: 'shared' | 'isolated';
   agent?: string;
 }
 export interface RawSchedule {

@@ -33,6 +33,8 @@ export interface OAManifest {
       capabilities?: string[];
       timeout?: number;
       review?: string; // the reviewer agent that judges this proposer's PRs (the merge-boundary review edge)
+      // Portable launch isolation, carried as a closed typed field rather than hidden in policy/config.
+      execution?: { workspace: 'shared' | 'isolated' };
       // Opaque shell-command DATA the LOCAL runner executes in the session's own cwd before it spawns (see
       // IRAgent.prelaunch, ir.ts). Carried verbatim like `review`/`timeout` — never interpreted here.
       prelaunch?: string;
@@ -78,6 +80,7 @@ export function emitAutonomy(ir: AutonomyIR): OAManifest {
       ...(typeof agent.timeout === 'number' ? { timeout: agent.timeout } : {}),
       ...(agent.capabilities?.length ? { capabilities: agent.capabilities } : {}),
       ...(agent.review ? { review: agent.review } : {}),
+      ...(agent.execution ? { execution: agent.execution } : {}),
       ...(agent.prelaunch ? { prelaunch: agent.prelaunch } : {}),
     };
   }

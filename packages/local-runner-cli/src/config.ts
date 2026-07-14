@@ -29,7 +29,10 @@ function normalizeJob(
   }
   const agent = ('agent' in obj ? obj.agent : undefined) ?? agentOf(cmd);
   const fence = ('fence' in obj ? obj.fence : undefined) ?? (legacy ? '.open-autonomy/paused' : undefined);
-  return { name, cmd, intervalSeconds, retrySeconds, ...(fence ? { fence } : {}), agent };
+  const workspace = 'workspace' in obj ? obj.workspace : undefined;
+  if (workspace !== undefined && workspace !== 'shared' && workspace !== 'isolated')
+    throw new Error(`[oa] schedule.json: job "${name}" workspace must be "shared" or "isolated"`);
+  return { name, cmd, intervalSeconds, retrySeconds, ...(fence ? { fence } : {}), ...(workspace ? { workspace } : {}), agent };
 }
 
 export function normalizeSchedule(raw: RawSchedule): NormalizedSchedule {

@@ -71,6 +71,28 @@ describe('validateIR — actor kind', () => {
   });
 });
 
+describe('validateIR — portable execution workspace', () => {
+  test('accepts both closed workspace modes and omission', () => {
+    expect(validateIR(ir({ a: agent() }))).toEqual([]);
+    expect(validateIR(ir({ a: agent({ execution: { workspace: 'shared' } }) }))).toEqual([]);
+    expect(validateIR(ir({ a: agent({ execution: { workspace: 'isolated' } }) }))).toEqual([]);
+  });
+
+  test('rejects an invalid mode, malformed execution value, and unknown execution keys', () => {
+    expect(validateIR(ir({ a: agent({ execution: { workspace: 'private' } as never }) })).some((e) => e.includes('execution.workspace'))).toBe(true);
+    expect(validateIR(ir({ a: agent({ execution: 'isolated' as never }) })).some((e) => e.includes('execution must be'))).toBe(true);
+    const unknown = agent({ execution: { workspace: 'isolated', branch: 'invented' } as never });
+    expect(validateIR(ir({ a: unknown })).some((e) => e.includes('execution.branch is unknown'))).toBe(true);
+  });
+
+  test('rejects workspace isolation where no model session workspace exists', () => {
+    const script = agent({ behavior: 'scripts/sweep.ts', execution: { workspace: 'isolated' } });
+    const human = agent({ kind: 'human', execution: { workspace: 'isolated' } });
+    expect(validateIR(ir({ script })).some((e) => e.includes('launchable skill agents only'))).toBe(true);
+    expect(validateIR(ir({ human })).some((e) => e.includes('launchable skill agents only'))).toBe(true);
+  });
+});
+
 describe('validateIR — code:merge is gate-only (the merge boundary)', () => {
   test('rejects code:merge on an agent', () => {
     const a = agent({ capabilities: ['code:propose', 'code:merge'] });

@@ -79,6 +79,7 @@ agents:
   # note. `planner` (below) is a second scheduled actor, but file-only — it never dispatches or lands.
   manager:
     behavior: manager
+    execution: { workspace: isolated }
     capabilities: [code:propose, tasks:author, tasks:converse]
     triggers:
       - cron: "*/30 * * * *"     # AUTONOMY_SINGLETON dedups overlapping ticks (scripts/run-agent.mjs)
@@ -92,6 +93,7 @@ agents:
   # file's header note above for the `code:propose` scope decision.
   planner:
     behavior: planner
+    execution: { workspace: isolated }
     capabilities: [tasks:author, tasks:converse, code:propose]
     triggers:
       - cron: "13 5 * * *"       # daily-style, offset from manager's tick; SELF-THROTTLE (SKILL.md) is
@@ -108,6 +110,7 @@ agents:
   # cron only ever re-runs its own read-only checklist, self-throttled per skills/audit/SKILL.md.
   audit:
     behavior: audit
+    execution: { workspace: isolated }
     capabilities: [tasks:converse, code:propose@docs/audits]
     triggers:
       - dispatch: true

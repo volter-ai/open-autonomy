@@ -19,7 +19,7 @@ export interface GuardResult {
  *  deterministic scripts/*.ts behavior) never touches it — the check is scoped to schedules that
  *  actually need it, never a false alarm on one that doesn't. */
 export function needsRunner(cmds: string[]): boolean {
-  return cmds.some((c) => c.includes('run-agent.mjs'));
+  return cmds.some((c) => /scripts\/(?:run-agent\.mjs|runner\.ts)/.test(c));
 }
 
 /** termfleet-installed check: node_modules/termfleet must exist before a schedule that launches a skill

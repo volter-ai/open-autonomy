@@ -43,6 +43,20 @@ describe('emitAutonomy — policy box', () => {
   });
 });
 
+describe('emitAutonomy — execution workspace', () => {
+  test('carries an explicit portable workspace mode and omits the field when undeclared', () => {
+    const isolated = emitAutonomy({
+      ...irWithBox({}),
+      agents: {
+        isolated: { behavior: 'isolated', capabilities: ['tasks:converse'], triggers: [{ cron: '* * * * *' }], execution: { workspace: 'isolated' } },
+        legacy: { behavior: 'legacy', capabilities: ['tasks:converse'], triggers: [{ cron: '* * * * *' }] },
+      },
+    });
+    expect(isolated.agents?.isolated?.execution).toEqual({ workspace: 'isolated' });
+    expect(isolated.agents?.legacy?.execution).toBeUndefined();
+  });
+});
+
 describe('emitAutonomy — a kind:human actor', () => {
   const irWithMaintainer = (): AutonomyIR => ({
     schema: 'autonomy.ir.v1',

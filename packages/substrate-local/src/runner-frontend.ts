@@ -50,10 +50,10 @@ export class PausedError extends Error {
     this.name = 'PausedError';
   }
 }
-function pausedMessage(): string {
+function pausedMessage(fence = PAUSED_PATH): string {
   return (
-    '[runner] PAUSED — this install starts paused so an existing backlog is never dispatched unreviewed.\n' +
-    '[runner] review the board, then unpause:  rm .open-autonomy/paused'
+    `[runner] PAUSED — launch is fenced by ${fence}.\n` +
+    `[runner] review the relevant work, then unpause:  rm ${fence}`
   );
 }
 
@@ -78,6 +78,7 @@ interface ManifestAgent {
   params?: Record<string, string>;
   capabilities?: string[];
   review?: string; // the reviewer agent that judges this proposer's PRs (the merge-boundary review edge)
+  execution?: { workspace?: string }; // portable isolation request; validated by core when compiled
   // An opaque shell command declared on ONE agent's manifest entry (e.g. a loop-control arm) that the
   // runner executes in the session's own cwd BEFORE spawning it. The runner stays METHODOLOGY-FREE here:
   // this string is DATA the manifest supplies, never a hardcoded per-agent branch — the runner would run
@@ -92,7 +93,7 @@ interface ManifestAgent {
 // cannot run the effect; the loop's reaper observes the session finishing. So launch RECORDS a pending effect
 // (keyed by the session's terminalId — the join key the reaper reports back), and the loop runs it once that
 // session is gone (scheduler/run.mjs's reconcilePendingEffects). The effect is gated on two EXPLICIT, universal
-// signals — never on a capability: (1) the launch was ISOLATED (a `--branch` was named — see below), and (2)
+// signals — never on a capability: (1) the caller explicitly named a proposal branch, and (2)
 // the install targets a `github` CODE HOST (a declared IR signal; only there does a finished branch become a
 // PR — a local-git code host has the PM merge worktrees, no PR). The runner never learns what the effect DOES
 // — no issue/tracker/branch methodology re-enters it (architecture invariant `substrate-is-runner-only`).
@@ -275,11 +276,16 @@ function launchHuman(agent: string, params: LaunchParams = {}): void {
 }
 
 // --- worktree isolation (local analogue of github's per-job fresh checkout) ---
-// The PM ASSIGNS a branch and hands the SAME `--branch` to develop and review, so they share one isolated
-// worktree; the runner just EXECUTES the branch it's given — it derives nothing and decides nothing. A
-// launch with no `--branch` (the cron PM, the drafter) runs on the trunk checkout. The PM names the branch
-// with the issue id (e.g. `agent/issue-<id>`) so ztrack check/loop auto-scope off the branch inside it.
+// Two orthogonal requests use the same worktree primitive:
+//   - `--branch <name>`: join/create that explicit branch and retain the existing proposal lifecycle;
+//   - `--workspace isolated` (or manifest execution.workspace): create a fresh unique branch/worktree only.
+// The latter is launch fencing, not a proposal signal. With neither request, the session uses trunk.
 const worktreePathFor = (branch: string): string => resolve('.worktrees', branch.replace(/[^0-9A-Za-z._-]/g, '-'));
+let isolationSequence = 0;
+export function isolationBranch(agent: string, now = Date.now(), pid = process.pid): string {
+  const safeAgent = agent.replace(/[^0-9A-Za-z._-]/g, '-').replace(/^-+|-+$/g, '') || 'agent';
+  return `autonomy/run-${safeAgent}-${now}-${pid}-${++isolationSequence}`;
+}
 
 function git(args: string[], cwd?: string): { status: number | null; stdout: string; stderr: string } {
   const r = spawnSync('git', args, { encoding: 'utf8', ...(cwd ? { cwd } : {}) });
@@ -526,7 +532,7 @@ async function defaultHarness(): Promise<string> {
 /** Launch an agent with forwarded params (agent:launch). Resolves to the launch's exit code; the pre-check
  *  refusal (and the pause gate, OA-07) throw instead — see runCli, which maps both to a nonzero exit. */
 export async function launch(agent: string, params: LaunchParams = {}): Promise<number> {
-  const { kind, skill: behavior = '', params: declared = {}, review = '', prelaunch = '' } = manifestAgent(agent);
+  const { kind, skill: behavior = '', params: declared = {}, review = '', prelaunch = '', execution } = manifestAgent(agent);
 
   if (kind === 'human') {
     // The THIRD route: a person cannot be executed — park the ask instead (see the human route above).
@@ -535,8 +541,9 @@ export async function launch(agent: string, params: LaunchParams = {}): Promise<
     return 0;
   }
 
-  if (existsSync(PAUSED_PATH)) {
-    console.error(pausedMessage());
+  const fence = typeof params.fence === 'string' && params.fence ? params.fence : PAUSED_PATH;
+  if (existsSync(fence)) {
+    console.error(pausedMessage(fence));
     throw new PausedError();
   }
 
@@ -552,13 +559,14 @@ export async function launch(agent: string, params: LaunchParams = {}): Promise<
     return r.status ?? 1;
   }
 
-  // Skill agent: a termfleet session via the launch adapter (forwards params verbatim). ISOLATION is requested
-  // EXPLICITLY: the caller names a `--branch` and the runner runs the session in that branch's worktree
-  // (created/reused here). No `--branch` => run on the trunk checkout. The caller (the PM) decides who is
-  // isolated and spells it out; the runner derives nothing and reads no capability. `--branch` is a
-  // runner-control param, never forwarded to the agent. (github's runner isolates via the job checkout and
-  // ignores `--branch`, so the same PM launch is substrate-agnostic.)
-  const branch = typeof params.branch === 'string' && params.branch ? params.branch : '';
+  // Skill agent: a termfleet session via the launch adapter. Workspace isolation and proposal lifecycle
+  // are intentionally orthogonal. An explicit branch preserves the established named-work lifecycle;
+  // `workspace: isolated` creates a unique worktree but never requests a proposal effect.
+  const explicitBranch = typeof params.branch === 'string' && params.branch ? params.branch : '';
+  const requestedWorkspace = params.workspace ?? execution?.workspace ?? 'shared';
+  if (requestedWorkspace !== 'shared' && requestedWorkspace !== 'isolated')
+    throw new Error(`[runner] invalid workspace mode "${requestedWorkspace}" (expected "shared" or "isolated")`);
+  const branch = explicitBranch || (requestedWorkspace === 'isolated' ? isolationBranch(agent) : '');
   const worktree = branch ? worktreePathFor(branch) : '';
   // Read the declared code host ONCE per launch and reuse it for both decisions it gates: the worktree base
   // (below) and the post-session propose effect (below, at the github-only branch).
@@ -602,7 +610,7 @@ export async function launch(agent: string, params: LaunchParams = {}): Promise<
     throw new SkillMissingError(message);
   }
 
-  const names = Object.keys(params).filter((k) => k !== 'branch');
+  const names = Object.keys(params).filter((k) => k !== 'branch' && k !== 'workspace' && k !== 'fence');
   const env: Record<string, string> = {
     ...(process.env as Record<string, string>),
     AUTONOMY_AGENT: agent,
@@ -627,13 +635,13 @@ export async function launch(agent: string, params: LaunchParams = {}): Promise<
     }
   }
 
-  // An ISOLATED session on a github CODE HOST gets a post-session effect recorded: when the session finishes,
+  // An EXPLICIT PROPOSAL-BRANCH session on a github CODE HOST gets a post-session effect recorded: when the session finishes,
   // the loop turns that worktree into a PR (agent-propose) — the local mirror of github's post-skill propose
   // step. Gated on two explicit signals, never a capability: a worktree exists (a `--branch` was named) and
   // the install's code host is `github` (where finished branches become PRs). Capture the launch output to
   // learn the session's terminalId (the join key the reaper reports back); every other launch (the PM, the
   // drafter, a local-git worker, the reviewer) stays live (stdio inherit).
-  if (worktree && codeHost === 'github') {
+  if (explicitBranch && worktree && codeHost === 'github') {
     const r = spawnSync('node', [join(scriptsDir, 'run-agent.mjs')], { encoding: 'utf8', env, cwd: worktree });
     if (r.stdout) process.stdout.write(r.stdout);
     if (r.stderr) process.stderr.write(r.stderr);
@@ -743,7 +751,7 @@ function parseFlags(args: string[]): LaunchParams {
 export async function runCli(argv: string[]): Promise<number> {
   const [cmd, agent, ...rest] = argv;
   if (!cmd || !agent || agent.startsWith('--')) {
-    console.error('usage: runner.ts <launch|list|get|update|cancel|worktree-probe> <agent|id|branch> [--ref <work-item>] [--key value ...]');
+    console.error('usage: runner.ts <launch|list|get|update|cancel|worktree-probe> <agent|id|branch> [--ref <work-item>] [--workspace <shared|isolated>] [--fence <path>] [--key value ...]');
     return 2;
   }
   if (cmd === 'worktree-probe') {

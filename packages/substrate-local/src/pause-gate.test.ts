@@ -241,6 +241,31 @@ describe('the emitted scripts/runner.ts — launch() refuses while paused (AC-4)
       rmSync(dir, { recursive: true, force: true });
     }
   });
+
+  test('an explicit job fence is honored independently of the legacy global fence', () => {
+    const { dir, sentinel } = scaffoldRunner({ paused: true }); // global .open-autonomy/paused exists
+    try {
+      const custom = '.open-autonomy/audits-paused';
+      const allowed = spawnSync('bun', ['scripts/runner.ts', 'launch', 'develop', '--fence', custom], {
+        cwd: dir,
+        encoding: 'utf8',
+      });
+      expect(allowed.status).toBe(0); // the absent declared fence wins; the unrelated global marker does not
+      expect(existsSync(sentinel)).toBe(true);
+
+      rmSync(sentinel);
+      writeFileSync(join(dir, custom), 'paused\n');
+      const blocked = spawnSync('bun', ['scripts/runner.ts', 'launch', 'develop', '--fence', custom], {
+        cwd: dir,
+        encoding: 'utf8',
+      });
+      expect(blocked.status).not.toBe(0);
+      expect(blocked.stderr).toContain(`rm ${custom}`);
+      expect(existsSync(sentinel)).toBe(false);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
 });
 
 describe('the emitted scripts/runner.ts — the human route is EXEMPT from the pause gate', () => {

@@ -1,7 +1,8 @@
 // autonomy.ir.v1 — the substrate-agnostic standard. See docs/SPEC.md#the-ir.
-// One unit: an agent = behavior + capabilities + triggers(+params) (+ optional timeout/result/kind). There
-// is NO per-agent config box. The core only validates spec-validity and WIRES; it never interprets what a
-// capability does or where a trigger param is sourced — that is each substrate's (partial) implementation.
+// One unit: an agent = behavior + capabilities + triggers(+params) (+ typed portable execution fields).
+// There is NO opaque per-agent config box. The core validates the closed portable contract and WIRES; it
+// never interprets what a capability does or where a trigger param is sourced — that is each substrate's
+// (partial) implementation.
 
 // A trigger fires an agent and forwards `params` to it (the Runner contract's opaque LaunchParams).
 // `params` maps an opaque param NAME (the profile's choice; the core never interprets it) to a
@@ -24,6 +25,7 @@ export type Trigger =
 // An actor's kind: `agent` (machine) or `human` (person). The role is intrinsic and declared; how the
 // role is *realized* (script / model / person / simulator-in-test) is the substrate's choice.
 export type ActorKind = 'agent' | 'human';
+export type WorkspaceMode = 'shared' | 'isolated';
 
 // The one unit of the IR — an actor (kind: agent|human). There is no `workflow`/`launch`/`run`/`raw`; an
 // actor carries its own triggers, and how it is realized + how its output is trusted are the substrate's
@@ -33,6 +35,11 @@ export interface IRAgent {
   capabilities: string[]; // its authority (docs/SPEC.md#capabilities); pure authority, no trust
   triggers: Trigger[]; // when it fires + the params it forwards (≥1; only cron is interpreted)
   kind?: ActorKind; // the role; default `agent`. `human` → realized by routing to a person (or a simulator in test).
+  // Portable launch isolation. `isolated` asks a realizing runner for a fresh workspace for every launch;
+  // it does NOT imply a branch name, proposal, PR, review, or merge lifecycle. Those remain separate,
+  // explicit runner/profile concerns. `shared` names the ordinary checkout explicitly; omission preserves
+  // the historical shared-workspace behavior for existing profiles.
+  execution?: { workspace: WorkspaceMode };
   timeout?: number; // a run-time bound (minutes); an agnostic resource limit the substrate realizes
   // The review edge of the merge boundary: a code:propose agent names the INDEPENDENT reviewer agent that
   // judges its proposals. Requesting that review is mechanical WIRING, not a judgment — so the substrate
@@ -195,6 +202,19 @@ export function validateIR(ir: AutonomyIR): string[] {
     if (!a.triggers || a.triggers.length === 0) errors.push(`agent ${name}: needs at least one trigger`);
     if (a.kind !== undefined && a.kind !== 'agent' && a.kind !== 'human')
       errors.push(`agent ${name}: kind must be 'agent' or 'human'`);
+    if (a.execution !== undefined) {
+      if (typeof a.execution !== 'object' || a.execution === null || Array.isArray(a.execution)) {
+        errors.push(`agent ${name}: execution must be { workspace: 'shared' | 'isolated' }`);
+      } else {
+        const execution = a.execution as unknown as Record<string, unknown>;
+        for (const key of Object.keys(execution))
+          if (key !== 'workspace') errors.push(`agent ${name}: execution.${key} is unknown (only 'workspace' is portable)`);
+        if (execution.workspace !== 'shared' && execution.workspace !== 'isolated')
+          errors.push(`agent ${name}: execution.workspace must be 'shared' or 'isolated'`);
+        else if (a.kind === 'human' || (a.behavior && isScript(a.behavior)))
+          errors.push(`agent ${name}: execution.workspace is for launchable skill agents only`);
+      }
+    }
     // The review edge must name an INDEPENDENT reviewer (the merge boundary): it must exist, hold
     // code:review, and not be the proposer itself — otherwise the auto-review wiring would point at a
     // non-reviewer or let an agent route its own proposal to itself.
@@ -260,6 +280,9 @@ const KNOWN_DOCUMENT_ROLES = new Set(['vision', 'constitution', 'roadmap']);
 export function irShape(ir: AutonomyIR) {
   return {
     agents: Object.keys(ir.agents).sort(),
+    execution: Object.entries(ir.agents)
+      .map(([agent, a]) => ({ agent, workspace: a.execution?.workspace ?? 'shared' }))
+      .sort((x, y) => x.agent.localeCompare(y.agent)),
     capabilities: unionStrs(Object.values(ir.agents).map((a) => a.capabilities ?? [])),
     triggers: Object.entries(ir.agents)
       .map(([name, a]) => ({

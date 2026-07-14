@@ -34,18 +34,23 @@ describe('the post-session effect is gated on EXPLICIT signals, never a capabili
     expect(rt).toContain('const codeHost = manifestCodeHost();'); // read once per launch (OA-02: also gates the worktree base)
     // pin the FULL propose-gate line — a bare `codeHost === 'github'` also matches the worktree-base gate
     // in ensureWorktree (OA-02), so it alone would not catch a regression ungating the propose effect
-    expect(rt).toContain("if (worktree && codeHost === 'github')"); // gated on worktree + the declared code-host signal
+    expect(rt).toContain("if (explicitBranch && worktree && codeHost === 'github')"); // proposal is explicit, not inferred from isolation
     expect(rt).toContain("'scripts/agent-propose.ts'"); // the github code host's publish effect (git + gh)
     // the capability is GONE from the runner's behavior gating (it was a fictional local permission):
     expect(rt).not.toContain('code:propose');
     expect(rt).not.toContain('holdsPropose');
-    expect(rt).not.toContain('isolationBranch');
+    expect(rt).toContain('isolationBranch'); // generic fresh-workspace naming, unrelated to issue/role doctrine
   });
 
   test('isolation is requested EXPLICITLY by the caller naming --branch (no auto-derivation from a ref)', () => {
     // a worktree is created only when params.branch is given; the runner derives no branch from the ref/capability
     expect(rt).toContain('params.branch'); // the explicit isolation signal
     expect(rt).not.toMatch(/agent\/issue-\$\{[^}]*ref/i); // no `agent/issue-${ref}` auto-derivation in the runner
+  });
+
+  test('workspace-only isolation is distinct from the explicit proposal branch', () => {
+    expect(rt).toContain("requestedWorkspace === 'isolated' ? isolationBranch(agent) : ''");
+    expect(rt).toContain("k !== 'branch' && k !== 'workspace' && k !== 'fence'"); // runner controls are never forwarded to the agent
   });
 
   test('the runner stays CODE-HOST-BLIND — it injects no GITHUB_REPOSITORY identity', () => {

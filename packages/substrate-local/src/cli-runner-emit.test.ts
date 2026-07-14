@@ -20,6 +20,17 @@ const baseIr: AutonomyIR = {
 };
 
 const cliRunnerIr: AutonomyIR = { ...baseIr, policy: { box: { local: { runner: 'cli' } } } };
+const isolatedProseIr: AutonomyIR = {
+  ...cliRunnerIr,
+  agents: {
+    planner: {
+      behavior: 'planner',
+      capabilities: ['tasks:author'],
+      triggers: [{ cron: '13 5 * * *' }],
+      execution: { workspace: 'isolated' },
+    },
+  },
+};
 
 describe('isCliRunner', () => {
   test('false when policy.box carries no local.runner key (the default)', () => {
@@ -62,6 +73,18 @@ describe('compileLocal — policy.box.local.runner === "cli" opt-in', () => {
     expect(schedule.jobs[0]).not.toHaveProperty('agent');
     expect(JSON.stringify(schedule)).not.toContain('eligibility');
     expect(JSON.stringify(schedule)).not.toContain('reconciled');
+  });
+
+  test('carries declared workspace isolation and routes the scheduled prose launch through the Runner', () => {
+    const schedule = JSON.parse(compileLocal(isolatedProseIr).generated['scheduler/schedule.json']) as { jobs: Array<Record<string, unknown>> };
+    expect(schedule.jobs[0]).toMatchObject({
+      name: 'planner',
+      agent: 'planner',
+      workspace: 'isolated',
+      command: 'AUTONOMY_SINGLETON=1 bun scripts/runner.ts launch planner --workspace isolated --fence .open-autonomy/paused',
+    });
+    expect(JSON.stringify(schedule)).not.toContain('code:propose');
+    expect(JSON.stringify(schedule)).not.toContain('pull-request');
   });
 
   test('every other generated file is byte-identical to the non-opted-in compile (the opt-in is additive, scoped to run.mjs only)', () => {

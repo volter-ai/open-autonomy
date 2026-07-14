@@ -22,6 +22,7 @@ export function ingestAutonomy(m: OAManifest): AutonomyIR {
       triggers,
       ...(typeof a.timeout === 'number' ? { timeout: a.timeout } : {}),
       ...(a.review ? { review: a.review } : {}),
+      ...(a.execution ? { execution: a.execution } : {}),
     };
   }
 

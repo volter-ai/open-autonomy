@@ -13,6 +13,9 @@ describe('needsRunner', () => {
   test('true when any command touches run-agent.mjs', () => {
     expect(needsRunner(['bun scripts/sweep.ts', 'AUTONOMY_AGENT=manager node scripts/run-agent.mjs'])).toBe(true);
   });
+  test('true when isolation routes a scheduled launch through runner.ts', () => {
+    expect(needsRunner(['AUTONOMY_SINGLETON=1 bun scripts/runner.ts launch planner --workspace isolated'])).toBe(true);
+  });
   test('false for a script-only schedule', () => {
     expect(needsRunner(['bun scripts/sweep.ts', 'bun scripts/other.ts'])).toBe(false);
   });

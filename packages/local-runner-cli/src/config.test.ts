@@ -46,6 +46,21 @@ describe('normalizeSchedule', () => {
     expect(() => normalizeSchedule({ maxConcurrent: 0, jobs: [{ name: 'x', command: 'echo x' }] })).toThrow(/maxConcurrent/);
     expect(() => normalizeSchedule({ jobs: [{ name: 'hot-loop', command: 'echo x', intervalSeconds: 0 }] })).toThrow(/intervalSeconds > 0/);
   });
+
+  test('carries the closed workspace execution field without deriving role semantics', () => {
+    const schedule = normalizeSchedule({
+      jobs: [{
+        name: 'arbitrary',
+        agent: 'arbitrary',
+        command: 'bun scripts/runner.ts launch arbitrary --workspace isolated',
+        workspace: 'isolated',
+      }],
+    });
+    expect(schedule.jobs[0]?.workspace).toBe('isolated');
+    expect(() => normalizeSchedule({
+      jobs: [{ name: 'bad', command: 'true', workspace: 'private' as never }],
+    })).toThrow('workspace must be');
+  });
 });
 
 test('the substrate implementation contains no tracker or PR eligibility hook', () => {

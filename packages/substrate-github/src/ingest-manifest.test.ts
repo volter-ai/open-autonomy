@@ -56,3 +56,23 @@ describe('emitAutonomy → ingestAutonomy — documents.roles round-trip', () =>
     expect(back.resources.filter((p) => p === 'docs/VISION.md')).toHaveLength(1);
   });
 });
+
+describe('emitAutonomy → ingestAutonomy — execution workspace round-trip', () => {
+  test('preserves an explicit isolated workspace instead of silently reverting it to shared', () => {
+    const ir: AutonomyIR = {
+      schema: 'autonomy.ir.v1',
+      targets: ['gh-actions'],
+      agents: {
+        planner: {
+          behavior: 'planner',
+          capabilities: ['tasks:author'],
+          triggers: [{ cron: '13 5 * * *' }],
+          execution: { workspace: 'isolated' },
+        },
+      },
+      policy: { box: {} },
+      resources: [],
+    };
+    expect(ingestAutonomy(emitAutonomy(ir)).agents.planner?.execution).toEqual({ workspace: 'isolated' });
+  });
+});

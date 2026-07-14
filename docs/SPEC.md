@@ -85,7 +85,8 @@ agents:
     triggers:                          # when it fires; three forms — cron | event | dispatch
       - { dispatch: true, params: { ISSUE: subject.ref } }  # portable: launched on demand by the orchestrator
       - { event: issue_comment }                            # substrate-native escape hatch
-    timeout: 30                        # a run-time bound (minutes) — the only non-capability field
+    execution: { workspace: isolated } # a fresh workspace per launch; no implied PR lifecycle
+    timeout: 30                        # a run-time bound (minutes)
 
   maintainer:                          # kind: human — a person; intrinsic, not a substrate choice
     kind: human
@@ -109,7 +110,7 @@ resources: [docs/standards/code.md]    # verbatim files; the standard never inte
 | **behavior** | what the actor does — a SKILL (prose); a `kind: human` actor's is the task spec a person is handed | the substrate *realizes* it: `kind: agent` → a credentialed job runs the skill via a model; `kind: human` → a real person (prod) or a simulator (test) |
 | **capabilities** | the actor's authority — from the capability catalog ([§Capabilities](#capabilities)); realized as the agent's own scoped token | the substrate realizes each as a permission on that token |
 | **triggers** | when it fires + the **params** it forwards. Three forms: `cron` (time), the portable `dispatch` (on-demand via the Runner — [§The Runner](#the-runner)), and the substrate-native `event` | the substrate's trigger executor; `cron` and `dispatch` are portable, `event` is carried |
-| **timeout** | optional run-time bound (minutes) — the only non-capability field | the substrate's job timeout |
+| **timeout** | optional run-time bound (minutes) | the substrate's job timeout |
 
 An actor also carries a **kind** (`agent` | `human`, default `agent`) — a discriminator, not a fifth slot.
 `kind` (the role) is the profile's; *realization* (how the role is filled — model/person/simulator) is the
@@ -135,11 +136,12 @@ are added to a catalog first, then implemented by substrates — purely additive
 2. **Trigger param sources** ([§Trigger params](#trigger-params)) — what a trigger can forward to the agent:
    `subject.ref` · `subject.actor` · `subject.text` · `trigger.kind`. A trigger declares
    `params: { OPAQUE_NAME: source }`; the substrate resolves the source from its firing context.
-3. **Agent fields** (no opaque config box) — the non-capability fields are `timeout` and `prelaunch`:
+3. **Agent fields** (no opaque config box) — closed, typed launch fields include:
 
    | field | meaning | github | local |
    |---|---|---|---|
    | `timeout` | minutes before kill | job `timeout-minutes` | runner kill-after |
+   | `execution.workspace` | `shared` or a fresh `isolated` workspace; never an implied proposal | fresh job checkout | fresh unique git worktree |
    | `prelaunch` | an opaque shell command the runner runs in the session's own cwd, BEFORE it spawns (best-effort: a nonzero exit is logged, never fatal) | *(no realization yet — local-only for v1)* | `spawnSync(prelaunch, { shell: true, cwd })` before the session spawns |
 
    `prelaunch` is not a reintroduction of a config box — it is a single opaque DATA string with one
@@ -238,13 +240,17 @@ The `agent:*` capability axis **is** this contract — an agent with `agent:laun
 operator always holds the full contract over a running agent (the control plane). Full detail in
 [§The Runner](#the-runner).
 
-**Isolation is requested explicitly, and the runner stays code-host-blind.** A worker that produces an
-isolated change is launched with a `--branch <name>` runner-control param; the runner runs it in that branch's
-own workspace (a local runner: a git worktree; a gh-actions runner: the job's fresh checkout, which makes
-`--branch` a no-op). No `--branch` ⇒ the trunk workspace. The runner derives this from neither a capability nor
-the work item — the caller (the PM) names the branch — and it injects **no** code-host identity: an agent that
-needs its repo or PR resolves them through its own code-host tool (e.g. `gh api repos/{owner}/{repo}/…`, which
-`gh` fills from the remote). So the runner never names a code host, on any substrate.
+**Workspace isolation is explicit and independent from proposal lifecycle.** A launchable skill agent may declare
+`execution: { workspace: isolated }`; every launch then receives a fresh workspace (a local runner uses a
+uniquely named git branch/worktree; a hosted job already has a fresh checkout). The equivalent one-off CLI
+request is `--workspace isolated`; `--workspace shared` explicitly selects the ordinary checkout. This is
+launch fencing only: it does not imply a PR, review, merge, work item, or branch-naming convention.
+
+Separately, a caller may supply `--branch <name>` to join/create a particular isolated branch. That explicit
+branch retains any profile/substrate proposal lifecycle attached to named work. The runner derives neither
+form from a capability, role name, or work item, and injects no code-host identity: an agent that needs its
+repo or PR resolves it through its own code-host tool. Thus `execution.workspace`, branch assignment, and
+proposal publication remain three distinct contracts.
 
 **`prelaunch` is a methodology-free pre-spawn hook, not a lifecycle stage.** An agent may declare an opaque
 `prelaunch: <shell command>` (`IRAgent.prelaunch`, `packages/core/src/ir.ts`). Where realized, the runner

@@ -80,6 +80,16 @@ function isHuman(agent: IRAgent): boolean {
   return agent.kind === 'human';
 }
 
+// Compile a scheduled actor's declared execution contract into the generic Runner seam. Isolation is
+// launch mechanics only: it neither selects a role nor asks for a proposal/PR. Existing profiles that omit
+// execution keep the historical direct shared-checkout launch unchanged.
+function scheduledCommand(role: string, agent: IRAgent): string {
+  if (isScript(agent.behavior)) return `bun ${agent.behavior}`;
+  if (agent.execution?.workspace === 'isolated')
+    return `AUTONOMY_SINGLETON=1 bun scripts/runner.ts launch ${role} --workspace isolated --fence .open-autonomy/paused`;
+  return `AUTONOMY_AGENT=${role} AUTONOMY_SINGLETON=1 node scripts/run-agent.mjs`;
+}
+
 // Inverse of secondsToCron for the simple every-N-minutes cron form the local loop honors.
 export function cronToSeconds(cron: string): number {
   const value = cron.trim();
@@ -160,7 +170,7 @@ if (args.includes('--once') && existsSync(PAUSED)) {
 // (the FIRST command an adopter runs, per docs/OPERATIONS.md: \`node scheduler/run.mjs --once\`). A
 // script-only schedule (every agent a deterministic scripts/*.ts behavior) never touches the runner, so
 // the check is scoped to schedules that actually need it — never a false alarm on one that doesn't.
-const needsRunner = schedule.scripts.some((c) => c.includes('run-agent.mjs'));
+const needsRunner = schedule.scripts.some((c) => /scripts\\/(?:run-agent\\.mjs|runner\\.ts)/.test(c));
 if (needsRunner) {
   const repoRoot = join(here, '..');
   const termfleetDir = join(repoRoot, 'node_modules', 'termfleet');
@@ -668,11 +678,7 @@ export function compileLocal(ir: AutonomyIR, opts: { runner?: RunnerName; destDi
   const intervalSeconds = cronAgents[0] ? cronToSeconds(cronOf(cronAgents[0][1]) as string) : 900;
   generated['scheduler/run.mjs'] = isCliRunner(ir) ? CLI_RUNNER_SHIM : LOOP_DRIVER;
   // A script agent runs its behavior via bun; a prose-skill agent is launched through the runner.
-  const scheduleScripts = cronAgents.map(([role, a]) =>
-    // A prose cron agent is single-instance per tick (AUTONOMY_SINGLETON) — see run-agent.mjs. A
-    // script agent is a fast deterministic run, no guard needed.
-    isScript(a.behavior) ? `bun ${a.behavior}` : `AUTONOMY_AGENT=${role} AUTONOMY_SINGLETON=1 node scripts/run-agent.mjs`,
-  );
+  const scheduleScripts = cronAgents.map(([role, a]) => scheduledCommand(role, a));
   // A github code host's propose effect is NOT scheduled here — it is a per-session lifecycle effect the loop
   // driver runs when a proposer's session finishes (see LOOP_DRIVER's reconcilePendingEffects + runner.ts's
   // effect markers), mirroring github's post-skill job step. A local-git code host has no PRs (the calling role merges).
@@ -711,11 +717,11 @@ export function compileLocal(ir: AutonomyIR, opts: { runner?: RunnerName; destDi
       const script = isScript(agent.behavior);
       return {
         name: role,
-        command: script ? `bun ${agent.behavior}` : `AUTONOMY_AGENT=${role} AUTONOMY_SINGLETON=1 node scripts/run-agent.mjs`,
+        command: scheduledCommand(role, agent),
         intervalSeconds: cronToSeconds(cronOf(agent) as string),
         retrySeconds: Math.min(300, cronToSeconds(cronOf(agent) as string)),
         fence: '.open-autonomy/paused',
-        ...(!script ? { agent: role } : {}),
+        ...(!script ? { agent: role, ...(agent.execution ? { workspace: agent.execution.workspace } : {}) } : {}),
       };
     });
     const extraJobs = scheduleScripts.slice(cronAgents.length).map((command, index) => ({

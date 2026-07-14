@@ -27,3 +27,5 @@ export * from './organization-compiler-passes';
 export * from './organization-migrate';
 export * from './organization-expression';
 export * from './organization-behavior';
+export * from './organization-component';
+export * from './organization-component-catalog';

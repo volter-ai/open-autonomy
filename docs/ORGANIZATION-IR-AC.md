@@ -445,6 +445,18 @@ Slack, a coding worker runtime, GitHub/local Git, and one durable work store.
 **Falsifier.** Two providers both mutate authoritative work state and the deployment is accepted without a declared
 synchronization and conflict-resolution mechanism.
 
+**Implementation record (2026-07-14).** P6 introduces external `autonomy.component.v2` manifests for partial
+multi-facet products and directional `autonomy.adapter.v1` contracts. State contracts never infer favorable
+distributed semantics: authority, consistency, delivery, ordering, idempotency, recovery, and identity each admit
+explicit `unknown`. Interfaces bind versioned commands and observations; manifests also cover configuration,
+topology/cardinality, isolation/trust and credential flow, health/failure/upgrade/rollback, capacity, cost, evidence
+class, content digests, and origin signatures. Composition rejects overlapping authoritative state owners unless a
+named coherence protocol covers all owners. Adapters separately account for identity, causality, retries, conflicts,
+pre/postconditions, loss, direction, and reversibility. The initial catalog models Hermes, Slack, a coding-worker
+runtime, Git, and a durable work store; claims without adequate evidence remain unknown or asserted rather than
+silently promoted. Machine-matched obligations and adversarial fixtures live in `organization-coverage.test.ts` and
+`organization-component.test.ts`.
+
 ### P7. Compatibility assurance and constructive deployment solving
 
 **Semantic model.** Compatibility asks for a globally coherent witness, not pointwise feature coverage:

@@ -134,6 +134,20 @@ export const ORGANIZATION_SEMANTIC_COVERAGE: readonly SemanticCoverageEntry[] = 
   entry('ContextItem', 'id kind content tokens priority required trust evidence labels provenance', 'compiler', 'implemented', 'evidence- and trust-labeled contextual contribution', 'P5'),
   entry('ContextPlan', 'included excluded totalTokens errors', 'compiler', 'implemented', 'deterministic bounded context selection result', 'P5'),
   entry('InvocationPlan', 'actor behavior implementation instructions context tools authority effects', 'compiler', 'implemented', 'noncanonical inspectable execution plan separating identity, behavior, implementation, context, and authority', 'P5'),
+  entry('ManifestEvidence', 'assurance source observedAt notes', 'compiler', 'implemented', 'epistemic disposition and provenance for one component claim', 'P6'),
+  entry('VersionedSchema', 'id version schema', 'compiler', 'implemented', 'named versioned command, observation, configuration, or adapter endpoint schema', 'P6'),
+  entry('InterfaceContract', 'id version transport commands observations authentication', 'compiler', 'implemented', 'versioned component interaction boundary', 'P6'),
+  entry('StateFacetContract', 'state authority consistency delivery ordering idempotency recovery identity evidence', 'compiler', 'implemented', 'distributed state authority and delivery contract without convenient defaults', 'P6'),
+  entry('FailureContract', 'detection healthCriterion recovery upgrade rollback evidence', 'compiler', 'implemented', 'health, failure, recovery, upgrade, and rollback claim', 'P6'),
+  entry('TrustContract', 'principal zone enforcedBy credentials isolation evidence', 'compiler', 'implemented', 'enforcing principal, trust zone, credential flow, and isolation claim', 'P6'),
+  entry('QuantityContract', 'value unit per attribution uncertainty effectiveAt evidence', 'compiler', 'implemented', 'unit-bearing capacity or cost claim with uncertainty and time basis', 'P6'),
+  entry('TopologyContract', 'mode minimumInstances maximumInstances isolation placement evidence', 'compiler', 'implemented', 'component deployment topology, cardinality, placement, and isolation', 'P6'),
+  entry('ManifestSignature', 'algorithm keyId value covers', 'compiler', 'implemented', 'origin signature metadata over a component content digest', 'P6'),
+  entry('FacetProvision', 'facet operations interface properties evidence', 'compiler', 'implemented', 'partial multi-facet provision bound to an interface and evidence', 'P6'),
+  entry('ComponentManifestV2', 'schema id version digest signatures configuration facets interfaces state trust failure topology capacity cost requires conflictsWith extensions', 'compiler', 'implemented', 'external typed multi-facet component contract', 'P6'),
+  entry('AdapterContract', 'schema id version direction from to interfaceMappings identity causality retry conflicts preconditions postconditions losses reversible reverseAdapter enforcement evidence', 'compiler', 'implemented', 'directional typed semantic translation or enforcement contract', 'P6'),
+  entry('ComponentValidationResult', 'errors warnings', 'compiler', 'implemented', 'component, adapter, or composition validation findings', 'P6'),
+  entry('ComponentComposition', 'instances authorities coherence adapters', 'compiler', 'implemented', 'configured provider graph with explicit state owners and coherence protocols', 'P6'),
 ] as const;
 
 export interface AuditResidual {
@@ -144,7 +158,6 @@ export interface AuditResidual {
 
 /** B0 residual parking is closed: every known gap has a punch-list owner. */
 export const ORGANIZATION_AUDIT_RESIDUALS: readonly AuditResidual[] = [
-  { id: 'OAIR-R006', finding: 'component manifests lack typed interfaces, state, failure, trust, capacity, cost, and adapter contracts', owner: 'P6' },
   { id: 'OAIR-R007', finding: 'requirements are catalog-level feature flags rather than atomic semantic obligations', owner: 'P7' },
   { id: 'OAIR-R008', finding: 'compatibility has no assurance policy, certificates, constructive search, or unsatisfied cores', owner: 'P7' },
   { id: 'OAIR-R009', finding: 'v1 lowering relies on handwritten actor projection and has no staged contract-preserving IR', owner: 'P8' },
@@ -177,7 +190,7 @@ export const ORGANIZATION_BASELINE_OBLIGATIONS: readonly BaselineObligation[] = 
   { id: 'B0-ALG-1', claim: 'profile patch ordering and conflicts have a complete algebra', disposition: 'preserved', assurance: 'property-tested', evidence: 'organization-profile.test.ts deterministic ordered last-writer and organization-behavior.test.ts instruction identity/conflict laws' },
   { id: 'B0-ALG-2', claim: 'successful sequential state materialization composes over trace prefixes', disposition: 'preserved', assurance: 'property-tested', evidence: 'organization-state.test.ts prefix composition fixture' },
   { id: 'B0-DIST-1', claim: 'state/claim declarations do not imply unimplemented distributed guarantees', disposition: 'unresolved', assurance: 'assumed', residual: 'OAIR-R011' },
-  { id: 'B0-SEC-1', claim: 'every declared capability and policy names a technical enforcement boundary', disposition: 'unresolved', assurance: 'unknown', residual: 'OAIR-R006' },
+  { id: 'B0-SEC-1', claim: 'every declared capability and policy names a technical enforcement boundary', disposition: 'preserved', assurance: 'statically-checked', evidence: 'TrustContract and enforcement AdapterContract require enforcing principals and trust zones; deployment discharge remains P7' },
   { id: 'B0-PROV-1', claim: 'source assertions are distinguishable from independently verified evidence', disposition: 'unresolved', assurance: 'unknown', residual: 'OAIR-R011' },
   { id: 'B0-REF-1', claim: 'v2 to v1 lowering accounts for every atomic source obligation', disposition: 'unresolved', assurance: 'property-tested', evidence: 'organization-compile.test.ts covers catalog-level features only', residual: 'OAIR-R007' },
   { id: 'B0-RES-1', claim: 'every B0 audit gap has a unique later punch-list owner', disposition: 'preserved', assurance: 'statically-checked', evidence: 'organization-coverage.test.ts residual ownership checks' },
@@ -235,4 +248,15 @@ export const ORGANIZATION_P5_OBLIGATIONS: readonly BaselineObligation[] = [
   { id: 'P5-ORG-1', claim: 'actor identity, behavior, and runtime implementation remain separate', disposition: 'preserved', assurance: 'property-tested', evidence: 'organization-behavior.test.ts invocation plan identity/behavior/implementation fixture' },
   { id: 'P5-ALG-1', claim: 'instruction assembly defines stable identity, order, conflict, permutation, and idempotence behavior', disposition: 'preserved', assurance: 'property-tested', evidence: 'organization-behavior.test.ts instruction algebra fixtures' },
   { id: 'P5-ADV-1', claim: 'untrusted context retains its trust class and cannot become instruction or capability authority through formatting', disposition: 'preserved', assurance: 'property-tested', evidence: 'organization-behavior.test.ts injected Slack-like context and authority-isolation fixture' },
+] as const;
+
+export const ORGANIZATION_P6_OBLIGATIONS: readonly BaselineObligation[] = [
+  { id: 'P6-DIST-1', claim: 'each state facet explicitly declares authority, consistency, delivery, ordering, idempotency, recovery, and identity semantics', disposition: 'preserved', assurance: 'statically-checked', evidence: 'StateFacetContract plus semantic coverage AST guard and unknown-preservation catalog test' },
+  { id: 'P6-DIST-2', claim: 'cross-provider bridges declare identity, causality, retry, and conflict translation', disposition: 'preserved', assurance: 'property-tested', evidence: 'AdapterContract and organization-component.test.ts Slack bridge and coherence counterexamples' },
+  { id: 'P6-SEC-1', claim: 'guarantee claims name enforcing principals, trust zones, credential flow, isolation, and evidence class', disposition: 'preserved', assurance: 'property-tested', evidence: 'TrustContract validation and missing-boundary fixtures' },
+  { id: 'P6-OPS-1', claim: 'version, configuration, health, upgrade, rollback, failure, recovery, topology, and cardinality are representable', disposition: 'preserved', assurance: 'property-tested', evidence: 'ComponentManifestV2 validators and health/cardinality counterexamples' },
+  { id: 'P6-ECO-1', claim: 'capacity and cost have units, attribution, time basis, uncertainty, and observation time where volatile', disposition: 'preserved', assurance: 'property-tested', evidence: 'QuantityContract and volatile quantity counterexample' },
+  { id: 'P6-INT-1', claim: 'commands, observations, configuration, and adapter endpoints use versioned schemas and explicit interface mappings', disposition: 'preserved', assurance: 'property-tested', evidence: 'VersionedSchema, InterfaceContract, AdapterContract, and initial catalog validation' },
+  { id: 'P6-ADV-1', claim: 'component content is digest-sealed and asserted or signed origin is not treated as claim truth', disposition: 'preserved', assurance: 'property-tested', evidence: 'organization-component.test.ts manifest substitution and attestation-warning fixtures' },
+  { id: 'P6-ADP-1', claim: 'adapter direction, preconditions, postconditions, loss, translation, and reversibility are explicit', disposition: 'preserved', assurance: 'property-tested', evidence: 'organization-component.test.ts false inverse, implicit loss, and endpoint inversion fixtures' },
 ] as const;

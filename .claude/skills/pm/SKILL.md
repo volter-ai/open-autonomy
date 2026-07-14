@@ -101,8 +101,8 @@ decided and why:
   `bun scripts/runner.ts launch develop --ref <n> --branch agent/issue-<n>`. Never launch a second `develop`
   run for an issue that already has one in flight.
 - **Fresh + underspecified** → comment the specific questions; label `needs-info`; **engage the requester** (Step 2c).
-- **Out of scope / risky** (it touches a topic in `policy.risk.human_required_topics` — read the list from
-  `.open-autonomy/autonomy.yml`, the one source; never keep your own — or is otherwise beyond the org's
+- **Out of scope / risky** (it touches a semantic stop topic in
+  `docs/standards/risk-and-review.md`, or is otherwise beyond the org's
   authority) → comment why; label `human-required`; **engage the maintainer** (Step 2c).
 - **Has an open PR that FAILED** (`ci`, `security`, or `agent-review` failure) → read the failure from the
   session and the PR/issue comments, then **ENFORCE THE REWORK CAP FIRST so a broken issue can't loop

@@ -1,0 +1,187 @@
+{
+  "schema": "open-autonomy.enforcement.v1",
+  "target": "gh-actions",
+  "generated": true,
+  "controls": [
+    {
+      "control": "policy.maxConcurrent",
+      "owner": "substrate",
+      "status": "partial",
+      "realization": "workflow concurrency prevents overlap per generated group, not as a global fleet cap"
+    },
+    {
+      "control": "agent.draft.capabilities",
+      "owner": "code-host",
+      "status": "partial",
+      "realization": "workflow token permissions map known capability bases; scoped suffixes remain advisory"
+    },
+    {
+      "control": "agent.draft.timeout",
+      "owner": "runner",
+      "status": "enforced",
+      "realization": "timeout-minutes on the generated job"
+    },
+    {
+      "control": "agent.draft.trigger.dispatch",
+      "owner": "substrate",
+      "status": "enforced",
+      "realization": "GitHub Actions workflow trigger"
+    },
+    {
+      "control": "agent.develop.capabilities",
+      "owner": "code-host",
+      "status": "partial",
+      "realization": "workflow token permissions map known capability bases; scoped suffixes remain advisory"
+    },
+    {
+      "control": "agent.develop.timeout",
+      "owner": "runner",
+      "status": "enforced",
+      "realization": "timeout-minutes on the generated job"
+    },
+    {
+      "control": "agent.develop.trigger.event:issue_comment",
+      "owner": "substrate",
+      "status": "enforced",
+      "realization": "GitHub Actions workflow trigger"
+    },
+    {
+      "control": "agent.pm.capabilities",
+      "owner": "code-host",
+      "status": "partial",
+      "realization": "workflow token permissions map known capability bases; scoped suffixes remain advisory"
+    },
+    {
+      "control": "agent.pm.timeout",
+      "owner": "runner",
+      "status": "enforced",
+      "realization": "timeout-minutes on the generated job"
+    },
+    {
+      "control": "agent.pm.trigger.cron",
+      "owner": "substrate",
+      "status": "enforced",
+      "realization": "GitHub Actions workflow trigger"
+    },
+    {
+      "control": "agent.reviewer.capabilities",
+      "owner": "code-host",
+      "status": "partial",
+      "realization": "workflow token permissions map known capability bases; scoped suffixes remain advisory"
+    },
+    {
+      "control": "agent.reviewer.timeout",
+      "owner": "runner",
+      "status": "enforced",
+      "realization": "timeout-minutes on the generated job"
+    },
+    {
+      "control": "agent.reviewer.trigger.event:issue_comment",
+      "owner": "substrate",
+      "status": "enforced",
+      "realization": "GitHub Actions workflow trigger"
+    },
+    {
+      "control": "agent.reviewer.trigger.event:pull_request_target",
+      "owner": "substrate",
+      "status": "enforced",
+      "realization": "GitHub Actions workflow trigger"
+    },
+    {
+      "control": "agent.planner.capabilities",
+      "owner": "code-host",
+      "status": "partial",
+      "realization": "workflow token permissions map known capability bases; scoped suffixes remain advisory"
+    },
+    {
+      "control": "agent.planner.timeout",
+      "owner": "runner",
+      "status": "enforced",
+      "realization": "timeout-minutes on the generated job"
+    },
+    {
+      "control": "agent.planner.trigger.cron",
+      "owner": "substrate",
+      "status": "enforced",
+      "realization": "GitHub Actions workflow trigger"
+    },
+    {
+      "control": "agent.strategist.capabilities",
+      "owner": "code-host",
+      "status": "partial",
+      "realization": "workflow token permissions map known capability bases; scoped suffixes remain advisory"
+    },
+    {
+      "control": "agent.strategist.timeout",
+      "owner": "runner",
+      "status": "enforced",
+      "realization": "timeout-minutes on the generated job"
+    },
+    {
+      "control": "agent.strategist.trigger.cron",
+      "owner": "substrate",
+      "status": "enforced",
+      "realization": "GitHub Actions workflow trigger"
+    },
+    {
+      "control": "agent.strategy_reviewer.capabilities",
+      "owner": "code-host",
+      "status": "partial",
+      "realization": "workflow token permissions map known capability bases; scoped suffixes remain advisory"
+    },
+    {
+      "control": "agent.strategy_reviewer.timeout",
+      "owner": "runner",
+      "status": "enforced",
+      "realization": "timeout-minutes on the generated job"
+    },
+    {
+      "control": "agent.strategy_reviewer.trigger.event:issue_comment",
+      "owner": "substrate",
+      "status": "enforced",
+      "realization": "GitHub Actions workflow trigger"
+    },
+    {
+      "control": "agent.strategy_reviewer.trigger.event:pull_request_target",
+      "owner": "substrate",
+      "status": "enforced",
+      "realization": "GitHub Actions workflow trigger"
+    },
+    {
+      "control": "agent.maintainer.capabilities",
+      "owner": "code-host",
+      "status": "partial",
+      "realization": "workflow token permissions map known capability bases; scoped suffixes remain advisory"
+    },
+    {
+      "control": "agent.maintainer.human-dispatch",
+      "owner": "runner",
+      "status": "unsupported",
+      "realization": "human is declared but no engagement/completion adapter is emitted"
+    },
+    {
+      "control": "agent.maintainer.trigger.dispatch",
+      "owner": "substrate",
+      "status": "enforced",
+      "realization": "GitHub Actions workflow trigger"
+    },
+    {
+      "control": "agent.audit.capabilities",
+      "owner": "code-host",
+      "status": "partial",
+      "realization": "workflow token permissions map known capability bases; scoped suffixes remain advisory"
+    },
+    {
+      "control": "agent.audit.trigger.dispatch",
+      "owner": "substrate",
+      "status": "enforced",
+      "realization": "GitHub Actions workflow trigger"
+    },
+    {
+      "control": "agent.audit.trigger.cron",
+      "owner": "substrate",
+      "status": "enforced",
+      "realization": "GitHub Actions workflow trigger"
+    }
+  ]
+}

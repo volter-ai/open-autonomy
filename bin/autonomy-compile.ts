@@ -1,6 +1,7 @@
 #!/usr/bin/env bun
 // Compile a profile (an `autonomy.ir.v1` ir.yml) onto a substrate, producing an installation.
-//   bun bin/autonomy-compile.ts <profileName|profileDir> <local|gh-actions> [outDir] [--force] [--provider-url <url>]
+//   bun bin/autonomy-compile.ts <profileName|profileDir> <local|gh-actions> [outDir] [--force]
+//     [--provider-url <url>] [--local-schedule-config <json>]
 //   ("github" accepted as alias for gh-actions)
 // The first arg is either a BUNDLED profile name (e.g. `self-driving`, resolved to the profiles/ shipped
 // with this package) or a path to a profile dir of your own. With no outDir, prints the installation's file
@@ -30,6 +31,7 @@ import {
   validateSkillFrontmatterIn,
 } from '@open-autonomy/core';
 import type { CompileOutput } from '@open-autonomy/core';
+import type { LocalScheduleConfig } from '@open-autonomy/substrate-local';
 import { KNOWN_GOOD_ZTRACK, resolveZtrackPreset } from './ztrack-preset.ts';
 import { checkNamespaceCollisions } from './collision-check.ts';
 import { settingsMergeStrategies, CLAUDE_SETTINGS_PATH } from './settings-merge.ts';
@@ -88,15 +90,17 @@ function profileMentions(dir: string, token: string): boolean {
   return false;
 }
 
-// `--force` and `--provider-url <url>` are flags, not positional — filter both (and the url's own token)
-// out before reading the three positional args.
+// Compile flags are not positional — filter them and their values before reading the three positional
+// args. Local schedule configuration is target data supplied by the adopter, never profile policy.
 const rawArgs = process.argv.slice(2);
 const force = rawArgs.includes('--force');
 const providerUrlFlagIdx = rawArgs.indexOf('--provider-url');
 const providerUrl = providerUrlFlagIdx >= 0 ? rawArgs[providerUrlFlagIdx + 1] : undefined;
+const scheduleConfigFlagIdx = rawArgs.indexOf('--local-schedule-config');
+const scheduleConfigPath = scheduleConfigFlagIdx >= 0 ? rawArgs[scheduleConfigFlagIdx + 1] : undefined;
+const usage =
+  'usage: autonomy-compile <profileName|profileDir> <local|gh-actions> [outDir] [--force] [--provider-url <url>] [--local-schedule-config <json>]';
 if (providerUrlFlagIdx >= 0) {
-  const usage =
-    'usage: autonomy-compile <profileName|profileDir> <local|gh-actions> [outDir] [--force] [--provider-url <url>]';
   // A missing value, OR the next token being ANOTHER flag (`--provider-url --force` would silently swallow
   // `--force` as the URL), OR an unparseable URL — all reject rather than emit a garbage pin into
   // scheduler/schedule.json's env.
@@ -112,17 +116,37 @@ if (providerUrlFlagIdx >= 0) {
     process.exit(2);
   }
 }
+let scheduleConfig: LocalScheduleConfig | undefined;
+if (scheduleConfigFlagIdx >= 0) {
+  if (!scheduleConfigPath || scheduleConfigPath.startsWith('-')) {
+    console.error(`${usage}\n  --local-schedule-config requires a JSON file path`);
+    process.exit(2);
+  }
+  try {
+    scheduleConfig = JSON.parse(readFileSync(scheduleConfigPath, 'utf8')) as LocalScheduleConfig;
+  } catch (error) {
+    console.error(`${usage}\n  could not read --local-schedule-config ${scheduleConfigPath}: ${(error as Error).message}`);
+    process.exit(2);
+  }
+}
 const [profileArg, substrateArg, outDir] = rawArgs.filter(
-  (a, i) => a !== '--force' && (providerUrlFlagIdx < 0 || (i !== providerUrlFlagIdx && i !== providerUrlFlagIdx + 1)),
+  (a, i) =>
+    a !== '--force' &&
+    (providerUrlFlagIdx < 0 || (i !== providerUrlFlagIdx && i !== providerUrlFlagIdx + 1)) &&
+    (scheduleConfigFlagIdx < 0 || (i !== scheduleConfigFlagIdx && i !== scheduleConfigFlagIdx + 1)),
 );
 // `gh-actions` is the runner-substrate; accept `github` as a back-compat alias. `local` unchanged.
 const substrate = substrateArg === 'github' ? 'gh-actions' : substrateArg;
 if (!profileArg || (substrate !== 'local' && substrate !== 'gh-actions')) {
-  console.error(`usage: autonomy-compile <profileName|profileDir> <local|gh-actions> [outDir] [--force] [--provider-url <url>]\n  bundled profiles: ${bundledProfileNames().join(', ') || '(none found)'}`);
+  console.error(`${usage}\n  bundled profiles: ${bundledProfileNames().join(', ') || '(none found)'}`);
   process.exit(2);
 }
 if (providerUrl && substrate !== 'local') {
   console.error(`open-autonomy: WARNING — --provider-url only applies to the "local" substrate's scheduler/schedule.json; ignored for "${substrate}".`);
+}
+if (scheduleConfig && substrate !== 'local') {
+  console.error(`open-autonomy: --local-schedule-config only applies to the "local" substrate`);
+  process.exit(2);
 }
 
 const profileDir = resolveProfile(profileArg);
@@ -150,7 +174,7 @@ let out: CompileOutput;
 try {
   out =
     substrate === 'local'
-      ? (await import('@open-autonomy/substrate-local')).compileLocal(ir, { destDir: outDir, providerUrl })
+      ? (await import('@open-autonomy/substrate-local')).compileLocal(ir, { destDir: outDir, providerUrl, scheduleConfig })
       : (await import('@open-autonomy/substrate-github')).compileGithub(ir);
 } catch (e) {
   // A lazy sibling-data read (emit.ts) throws an actionable packaging-bug Error naming the missing file —

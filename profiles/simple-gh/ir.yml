@@ -1,148 +1,71 @@
-# simple-gh — the single-manager GitHub PR loop, plus a scheduled `planner` (D3) that keeps the
-# board fed from the vision. THREE DECLARED AGENTS — `manager` and `planner` scheduled (manager the
-# only one that dispatches or lands; planner file-only), plus `audit` — operator-dispatched AND (TC.3)
-# a low-frequency weekly cron for drift auditing (see below; still never a second WORK loop). The cron
-# `manager` session on a capable model (a) dispatches strongest-model research/plan/review subagents
-# in-session, (b) writes plans as docs registered as ztrack document sources, (c) dispatches
-# weaker-model implementation subagents on isolated git worktrees, and (d) LANDS work by merging each
-# PR itself — but ONLY after every required CI check is green and a fresh review-subagent pass is
-# recorded. The cron `planner` session reads this repo's declared vision (+ constitution, where one
-# exists) and files its own docs-only plan-doc PRs when the board is starving — never dispatching,
-# never merging, never promoting anything to `ready` itself (see `skills/planner/SKILL.md`). The
-# planner exists because a seed-only board empties (D8): both proven downstream instances this
-# doctrine was extracted from — supercode's parity board and twin's new-twin roadmap queue — drained
-# to zero before a planner existed to refill them.
+# simple-gh — a local, human-supervised GitHub loop with three disjoint scheduled roles.
 #
-# The third agent, `audit`, is declared below — it is OPERATOR-dispatched (`dispatch: true`, unchanged
-# since TC.1) AND, as of TC.3, carries its own weekly `cron` trigger for ongoing drift auditing. Neither
-# `manager` nor `planner` holds `agent:launch`, so neither can ever fire this actor THROUGH THE
-# SUBSTRATE (a scheduled agent may at most run the audit checklist as an in-session read-only research
-# brief) — an explicit operator dispatch or audit's own cron tick are the only two things that ever
-# launch it. The cron addition does NOT make this a second WORK-dispatching loop: `audit` still holds no
-# `agent:launch` of its own, and a cron-fired run executes the exact same read-only, report-only
-# checklist a dispatch-fired run does — never launches another agent/session, never merges, never fixes
-# — self-throttled against redundant runs within its own cadence window (see
-# skills/audit/SKILL.md's SELF-THROTTLE section, the same shape as `planner`'s own self-throttle above,
-# retained as duplicate-publication protection across restarts and explicit dispatches). `manager` and
-# `planner` remain the loop's only continuously-ticking WORK actors; `audit`'s cron is a much slower,
-# independent self-check cadence layered on top — see skills/audit/SKILL.md's identity section.
-#
-# Landing model = twin-sdlc's owner-decided merge (no auto-merge, ever), with the manager as the
-# operator's deputy. Honesty: on `local` all of this runs on ONE credential — the deterministic gate is
-# branch protection (repo CI required, `enforce_admins: true`), per docs/INSTALL-AGENT.md's ranking of
-# what actually protects a local install ("your real CI in the gate" is #1). There is no independent
-# `agent-review` status here (that would be a self-check on a shared token, not a real gate) — the
-# review is a strongest-model subagent whose verdict is recorded as a structured PR comment, and the
-# only *mechanical* gate is the repo's own required CI checks + `enforce_admins`. See README.md's
-# HONESTY section for the full accounting (single-credential reality, Claude-harness-only model tiering,
-# the deliberate merge.yml/reconcile-merged-issues.ts omission + its re-add condition).
-#
-# One unit: an agent = behavior + capabilities + triggers(+params). See docs/SPEC.md#the-ir,
-# docs/SPEC.md#the-runner, docs/SPEC.md#capabilities (the merge boundary: no agent may hold both
-# code:propose and code:review, and code:merge is gate-only — never granted to any agent. This profile
-# resolves that constraint by declaring `code:propose` on `manager`, `planner`, AND `audit` (the last
-# narrowly SCOPED `code:propose@docs/audits` for its own dated report PR only, never product code; the
-# scope is a doctrinal constraint, not a mechanically enforced one, per docs/SPEC.md's "Scope (optional)"
-# note — see skills/audit/SKILL.md's Hard rails). None of the three ever holds `code:review`; review is
-# a harness subagent dispatch, not a second IR actor, for both `manager`'s own PRs and `audit`'s. Merge —
-# of any PR, including `audit`'s and `planner`'s — is a human-credential act the manager or the operator
-# performs, never a capability `audit` or `planner` holds; `planner`'s plan-doc PRs land via the manager
-# or the operator, not itself).
-#
-# Capability-scope note on `planner`'s `code:propose` (deliberately UNSCOPED, not `@docs/plans`, unlike
-# `audit`'s narrowly-scoped grant above): a scope suffix (`code:propose@roadmap`, per
-# `profiles/self-driving/ir.yml`'s strategist/planner) is DOCTRINE ONLY —
-# `packages/substrate-github/src/emit.ts`'s `capsToPermissions` strips everything after `@` before
-# mapping to a GitHub permission (`rawC.split('@')[0]`), so it never narrows the actual token;
-# docs/SPEC.md#capabilities calls this out explicitly ("not a deterministic guard script"). Given that, a
-# scope suffix is only ever an honesty claim about what the agent actually touches — and `@docs/plans`
-# would be a FALSE one here: `ztrack import --register` (the planner's own registration step,
-# `skills/planner/SKILL.md` OUTPUT §2) is documented, in ztrack's own source (`importDriver.ts` — "the
-# ONLY config mutation this whole feature ever performs"), to append entries to the project's tracker
-# config file OUTSIDE `docs/plans/`. Since this profile's board isn't scoped to one directory the way
-# self-driving's roadmap is to one file, this declares unscoped `code:propose` — exactly matching the
-# proven supercode instance's own live capability declaration (`tasks:author, tasks:converse,
-# code:propose`, unscoped) — rather than assert a narrower claim the agent doesn't keep.
+# Manager executes the approved roadmap. Planner grows the product roadmap from vision versus
+# repository reality. Kaizen studies run history for process failures. Task state belongs to the
+# configured task service; branches, checks, reviews, and merges belong to the GitHub code host; the
+# local substrate only schedules and runs actors.
 schema: autonomy.ir.v1
 
-# The pattern is a person's machine + their gh credential: there is no meaningful gh-actions realization
-# of "the manager merges with the operator's token" (a hosted scoped token can't merge, by design).
-# Declaring local-only is honest and keeps `check:profiles` green without inventing a hosted story.
 targets: [local]
 codeHost: github
 
 agents:
-  # The only agent that DISPATCHES or LANDS anything. Research/plan/review/implementation workers are
-  # harness-native SUBAGENTS inside this one session (Claude Code's Agent tool: per-dispatch `model`
-  # override + `isolation: "worktree"`), never separate OA actors — see README.md's harness-assumption
-  # note. `planner` (below) is a second scheduled actor, but file-only — it never dispatches or lands.
   manager:
     behavior: manager
     execution: { workspace: isolated }
-    capabilities: [code:propose, tasks:author, tasks:converse]
+    capabilities: [code:propose, tasks:author, tasks:converse, agent:launch@maintainer]
     triggers:
-      - cron: "*/30 * * * *"     # AUTONOMY_SINGLETON dedups overlapping ticks (scripts/run-agent.mjs)
+      - cron: "*/30 * * * *"
 
-  # D3: keeps the board fed from the vision on its own daily-style cadence, independent of the
-  # manager's tick. Reads the repo's declared vision/constitution docs, measures or judges the delta
-  # against the board, and — only when it's actually starving — authors + registers a plan doc and
-  # opens a docs-only PR on its own `plan/<date>` branch. Never dispatches, never merges, never
-  # promotes anything to `ready`; the manager (or the operator) is the only one who ever lands what it
-  # files, via §7's board-PR landing path (the F1 carve-out) — see `skills/planner/SKILL.md` and this
-  # file's header note above for the `code:propose` scope decision.
   planner:
     behavior: planner
     execution: { workspace: isolated }
     capabilities: [tasks:author, tasks:converse, code:propose]
     triggers:
-      - cron: "13 5 * * *"       # daily-style, offset from manager's tick; content throttle in SKILL.md
-                                  # prevents duplicate publication across restarts/manual dispatches
+      - cron: "23 6 * * *"
 
-  # Conformance auditor of THIS INSTALL (not the product it builds) — verifies changes made to it
-  # aren't inconsistent, contradictory, or against OA's own philosophy/structure (§II.10 of the OA
-  # self-dev architecture study). Read-only against the install with exactly one write: composing and
-  # opening its own dated report PR under docs/audits/ — never a fix, never a merge, never another
-  # dispatch (no agent:launch). Fires on an explicit operator `dispatch` (unchanged since TC.1) AND, as
-  # of TC.3, its own weekly `cron` for ongoing drift auditing — see skills/audit/SKILL.md's identity
-  # section for why a third declared agent here still doesn't add a third WORK-ticking actor: only
-  # `manager` and `planner`, above, hold `agent:launch`/dispatch other agents on their crons; `audit`'s
-  # cron only ever re-runs its own read-only checklist, self-throttled per skills/audit/SKILL.md.
-  audit:
-    behavior: audit
+  kaizen:
+    behavior: kaizen
     execution: { workspace: isolated }
-    capabilities: [tasks:converse, code:propose@docs/audits]
+    capabilities: [tasks:author, tasks:converse, code:propose]
+    triggers:
+      - cron: "41 7 * * 4"
+
+  maintainer:
+    kind: human
+    behavior: maintainer
+    capabilities: [tasks:converse, code:review]
     triggers:
       - dispatch: true
-        params: { TARGET_REF: subject.ref }   # optional: an issue/PR the one-line summary comment lands on
-      # TC.3: low-frequency drift-mode cron. Sunday 09:51 UTC — a fixed WEEKLY slot (this repo's own
-      # precedent for "low frequency," self-driving's strategist `23 7 * * 1`,
-      # profiles/self-driving/ir.yml) chosen off every other cron this profile declares (manager's
-      # */30, planner's daily 05:13) so it never collides with a higher-frequency tick. A cron-fired run
-      # carries no params (never TARGET_REF, never MODE) — always drift mode, per skills/audit/
-      # SKILL.md's existing "no MODE -> drift mode" default; the operator-dispatch form above is
-      # unchanged and still the only path to setup-completion mode or a TARGET_REF comment.
-      - cron: "51 9 * * 0"
 
 policy:
-  maxConcurrent: 1               # local scheduler hard cap across declared agent jobs; harness-native
-                                 # subagent fan-out inside one session remains role doctrine
+  maxConcurrent: 1
   box:
     tracker:
-      ztrackPreset: simple-gh-sdlc   # BL-29: tracker PRESET name, not a profile reference — no preset
-                                     # named 'simple-gh' exists; the value names the simple-gh-sdlc PRESET
-                                     # (ztrack), which merely shares its name with the unrelated bundled
-                                     # simple-gh-sdlc PROFILE (../simple-gh-sdlc/) — an install may run a
-                                     # different preset (e.g. simple-sdlc)
-    models:                      # read by skills/manager/SKILL.md at runtime (check:policy-consumers)
-      research: strongest        # research / plan / review subagents (model-tier label, not a model id)
-      implement: capable         # implementation subagents on worktrees (model-tier label, not a model id)
-    manager:
-      merge_policy: manual-after-review   # read by the manager skill: NEVER merge without required
-                                          # checks green + a fresh recorded review-subagent pass
+      tool: npx ztrack
+      # BL-29: this names the ztrack preset, not the unrelated simple-gh-sdlc OA profile.
+      ztrackPreset: simple-gh-sdlc
+
+    # Portable lifecycle names mapped onto the bundled ztrack preset. Agents consume these through the
+    # task service; the scheduler never reads them.
+    taskStates:
+      open: draft
+      ready: ready
+      working: in-progress
+      review: in-review
+      inputRequired: human-required
+      blocked: blocked
+      done: done
+      rejected: rejected
+
+    models:
+      research: strongest
+      implement: capable
+
     risk:
-      human_required_paths:      # the OA harness itself + the profile source (mirrors simple-gh-sdlc's
-        - .github/workflows/**   #   list, minus the workers/prompt-routing files this single-agent kit
-        - .claude/skills/**      #   doesn't carry — full harness-self-blessing coverage kept otherwise)
+      human_required_paths:
+        - .github/workflows/**
+        - .claude/skills/**
         - .codex/skills/**
         - .open-autonomy/**
         - scheduler/run.mjs
@@ -160,11 +83,6 @@ policy:
         - .volter/tracker/validation/**
 
 resources:
-  # Deliberately minimal — NO merge.yml / reconcile-merged-issues.ts (GitHub-Issues-only machinery; the
-  # manager flips ztrack state post-merge itself, landed via the board-PR path — SKILL.md §7 — never a
-  # direct push; see README's re-add-if-sync-github note) and no security/dependabot surface by default
-  # (adopter opt-in, per INSTALL-AGENT ask #4). Every entry below has a physical copy source in this
-  # profile directory (lint/compile fail on a missing one).
   - .claude/settings.json
   - standards/workflow.md
   - standards/issue-and-evidence.md

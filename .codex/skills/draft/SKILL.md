@@ -37,7 +37,8 @@ number (which is its identity and PR cross-reference).
 6. If the request is too vague to shape into provable ACs, do NOT mark it ready: comment the specific
    questions and add the `needs-info` label instead — the PM's human-seam doctrine (Step 2c) takes it from
    there (engage the requester, escalate on SLA).
-7. If the request is out of the org's authority (touches a `human_required_topics` topic) rather than merely
+7. If the request is out of the org's authority (touches a semantic stop topic in
+   `docs/standards/risk-and-review.md`) rather than merely
    vague, do NOT mark it ready either: comment why and label `human-required` instead of `needs-info`.
 
 End with `OUTCOME: drafted` (issue is `ready` + has ACs) or `OUTCOME: blocked <reason>`.

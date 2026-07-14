@@ -19,8 +19,8 @@ and a denial test.
 - [x] Emit a target-specific enforcement report for typed runner controls.
 - [x] Make local workspace isolation use shared control state, the remote default branch for a GitHub
   code host, durable leases, clean-workspace reclamation, and dirty-workspace quarantine.
-- [x] Emit one per-job local schedule contract with independent fences/cadence/retry data and deny
-  scheduled launches at the declared local-agent concurrency cap.
+- [x] Emit one per-job local schedule contract and accept validated, adopter-owned local target data for
+  independent fences/retry timing; deny scheduled launches at the declared local-agent concurrency cap.
 - [ ] Move concurrency admission into the shared Runner launch path so manual dispatch and
   agent-initiated launches cannot bypass the scheduled-launch cap; until then the report remains partial.
 - [ ] Scope local capabilities with actor credentials/tool/filesystem/network boundaries; until then the

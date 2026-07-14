@@ -207,13 +207,6 @@ policy:
       - profiles/self-driving/scripts/reconcile-merged-issues.ts
       - profiles/self-driving/scripts/check-supply-chain.ts
       - docs/VISION.md
-    human_required_topics:
-      - auth
-      - secrets
-      - billing
-      - deployment
-      - destructive data migration
-      - dependency trust
   merge:
     maintainer_block_labels:
       - do-not-merge
@@ -228,3 +221,4 @@ policy:
       high: priority:high
       medium: priority:medium
       low: priority:low
+  maxConcurrent: 5

@@ -72,4 +72,67 @@ describe('compileLocal — one scheduler contract', () => {
       command: 'AUTONOMY_SINGLETON=1 bun scripts/runner.ts launch planner --workspace isolated --fence .open-autonomy/paused',
     });
   });
+
+  test('applies adopter-owned independent fences and retry timing without profile or scheduler role logic', () => {
+    const ir: AutonomyIR = {
+      ...baseIr,
+      agents: {
+        executor: {
+          behavior: 'executor',
+          capabilities: ['tasks:author'],
+          triggers: [{ cron: '*/30 * * * *' }],
+          execution: { workspace: 'isolated' },
+        },
+        analyst: {
+          behavior: 'analyst',
+          capabilities: ['tasks:author'],
+          triggers: [{ cron: '23 6 * * *' }],
+          execution: { workspace: 'isolated' },
+        },
+      },
+    };
+    const compiled = compileLocal(ir, {
+      scheduleConfig: {
+        schema: 'open-autonomy.local-schedule-config.v1',
+        defaults: { fence: '.open-autonomy/execution-paused', retrySeconds: 120 },
+        agents: { analyst: { fence: '.open-autonomy/analysis-paused', retrySeconds: 3600 } },
+      },
+    });
+    const schedule = JSON.parse(compiled.generated['scheduler/schedule.json']) as { jobs: Array<Record<string, unknown>> };
+
+    expect(schedule.jobs[0]).toMatchObject({
+      name: 'executor',
+      fence: '.open-autonomy/execution-paused',
+      retrySeconds: 120,
+      command: 'AUTONOMY_SINGLETON=1 bun scripts/runner.ts launch executor --workspace isolated --fence .open-autonomy/execution-paused',
+    });
+    expect(schedule.jobs[1]).toMatchObject({
+      name: 'analyst',
+      fence: '.open-autonomy/analysis-paused',
+      retrySeconds: 3600,
+      command: 'AUTONOMY_SINGLETON=1 bun scripts/runner.ts launch analyst --workspace isolated --fence .open-autonomy/analysis-paused',
+    });
+    expect(compiled.generated['.open-autonomy/paused']).toContain('rm .open-autonomy/paused');
+    expect(compiled.generated['.open-autonomy/execution-paused']).toContain('rm .open-autonomy/execution-paused');
+    expect(compiled.generated['.open-autonomy/analysis-paused']).toContain('rm .open-autonomy/analysis-paused');
+    const manifest = JSON.parse(compiled.generated['.open-autonomy/generated.json']) as { files: string[] };
+    expect(manifest.files).not.toContain('.open-autonomy/paused');
+    expect(manifest.files).not.toContain('.open-autonomy/execution-paused');
+    expect(manifest.files).not.toContain('.open-autonomy/analysis-paused');
+  });
+
+  test('fails closed on unknown agents and unsafe fence paths in local schedule config', () => {
+    expect(() => compileLocal(baseIr, {
+      scheduleConfig: {
+        schema: 'open-autonomy.local-schedule-config.v1',
+        agents: { missing: { fence: '.open-autonomy/paused' } },
+      },
+    })).toThrow(/does not name a scheduled agent/);
+    expect(() => compileLocal(baseIr, {
+      scheduleConfig: {
+        schema: 'open-autonomy.local-schedule-config.v1',
+        defaults: { fence: '../outside' },
+      },
+    })).toThrow(/safe relative path/);
+  });
 });

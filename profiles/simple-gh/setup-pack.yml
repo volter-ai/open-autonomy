@@ -1,55 +1,26 @@
-# simple-gh's hand-authored SetupPack facts (TS.1/TP.2). Everything NOT here (targets, codeHost, roster,
-# required_checks, enforce_admins, labels) is a VIEW computed from ir.yml + provision.json by
-# packages/core/src/setup-pack.ts's getSetupPack — see that file for the schema + what each field means.
-#
-# landing_mode: no `agent-review` status exists in this profile at all (ir.yml's header: "there is no
-# independent agent-review status here — that would be a self-check on a shared token") — the `manager`
-# merges each PR itself only after real CI is green + a fresh review-subagent verdict is recorded
-# (skills/manager/SKILL.md §5, policy.box.manager.merge_policy: manual-after-review in ir.yml).
+# Hand-authored setup facts for the simple-gh local, human-supervised profile. Roster, targets,
+# codeHost, required checks, enforce_admins, and labels are derived from ir.yml + provision.json.
 landing_mode: manual-after-review
 
-# check_realizations: `ci` is the repo's OWN real CI — this profile ships no workflow of its own (the
-# adopter's CI is the gate, provision.json's `required_checks: ["ci"]` is a placeholder to be replaced with
-# the adopter's real check name(s) before provisioning a real target repo). No `agent-review`/`security`
-# entries — this landing_mode deliberately carries neither.
-#
-# TP.2 reconciliation (required_checks IS the profile's PRESCRIPTION, not adopter-discovered fact): the
-# `required_checks` pack field (see packages/core/src/setup-pack.ts's field comment) is a VIEW over THIS
-# provision.json — on this profile that view is literally `["ci"]`, the shipped placeholder. That is not a
-# bug the pack needs to "fix" by guessing a real name; the pack's job is to state what the profile
-# prescribes, and this profile prescribes "your own CI, however it's named." Discovering the adopter's real
-# check-run name(s) for a specific target repo is TE.4's job (an install-time probe-PR step, not built by
-# this unit) — it reads the pack's prescription, discovers the live names, and overrides them before
-# `provision-target-repo` runs. This pack stays `["ci"]` until TE.4 exists; nothing here should hand-edit it
-# per adopter.
 check_realizations:
   - check: ci
     via: authored-workflow
 
-# board_seed_recipe: the board is ztrack (local machine store). `planner` (D3) is the originator — it reads
-# the declared vision/constitution and, only when the board is starving, authors + registers a plan doc
-# (`ztrack import --register`, skills/planner/SKILL.md OUTPUT §2). Promotion to a dispatchable item is a
-# ztrack STATE transition (to `ready`) the manager makes after judging the plan doc — never a GitHub label
-# (this profile has no GitHub-issue board). Because branch protection + enforce_admins:true make a direct
-# board-state push to `main` mechanically unlandable (no check-runs at push time — GH006), every board
-# mutation (ztrack state flips, plan-doc registration, paused re-arm) lands through the SCOPED self-merge
-# carve-out described in skills/manager/SKILL.md §7 (the F1 carve-out) — the installer itself needs this
-# exact path when it seeds a fresh board.
+# Planner originates product proposals through the task service. The task service allocates identifiers;
+# an attributable Maintainer promotes approved `open` work to `ready`. A committed task backing requires
+# an ordinary reviewed PR—never a direct push and no tracker-file self-review carve-out.
 board_seed_recipe:
   originator_skill: planner
   promotion_fence: state
   import_verb: "ztrack import --register"
-  landing_path: board-pr-carveout
+  landing_path: reviewed-pr
 
-# direction_spec: omitted — ir.yml declares no `documents.roles` block, so getSetupPack derives `operator`
-# (this profile's positioning lives in the repo the operator brings, per README's operator-as-direction
-# framing; TE.3 only authors an anchor when the repo genuinely lacks readable positioning).
-
+# No documents.roles block is declared because this overlay profile adopts an existing repository. The
+# Planner resolves that repository's durable positioning and asks a Maintainer when none exists.
 maturity_signals:
-  m3_tool: doctor          # local-only profile — no gh-preflight rung
-  m4_predicate: ztrack     # the board IS a ztrack store, not GitHub issues
-  m6_signal: per-issue     # the manager flips ztrack state itself on each landed PR (no roadmap rollup)
+  m3_tool: doctor
+  m4_predicate: ztrack
+  m6_signal: per-issue
 
-extra_rungs: []             # simple-gh's ladder has no rungs beyond the common M0-M5 spine
-
-terminal_stage: M5          # one-shot target; this profile has no M6 rollup signal (per-issue only)
+extra_rungs: []
+terminal_stage: M5

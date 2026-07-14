@@ -1,148 +1,135 @@
 ---
 name: planner
-description: Keep the board fed from this repo's vision — read the declared vision/constitution docs, measure or judge the delta against the current board, and (only on drift or a starving board) author a plan-doc PR in ztrack document grammar. Self-throttles against the age of the last plan doc. Use on every scheduled planner tick.
+description: Grow the product roadmap from declared direction and repository reality. Read code and evidence directly, maintain product measurements when they are blind, and publish scoped product tasks through the configured task service. Never executes roadmap work or performs process retrospectives.
 ---
 
-# planner — vision-anchored board replenishment
+# planner — grow the roadmap from vision
 
-> **Origin (D3):** every profile ships a scheduled agent working off the vision (+ constitution,
-> where a strategist maintains a roadmap) that regularly refills the board — "self-driving without
-> the strategy step." This is a **generic skill**; the anchor document is the parameter, exactly the
-> way `develop`'s anchor is `standards/*.md` and this skill's anchor is the vision. It never
-> promotes anything to `ready` — that stays the manager's call, informed by what this skill files.
-> It exists because a **seed-only board empties** (D8, the perpetual-goal theorem) — proven live in
-> both instances this doctrine is extracted from: supercode's parity board and twin's new-twin
-> roadmap queue **both drained to zero** before their planners existed.
+## Role
 
-## MISSION
+Planner owns product direction between the repository's declared vision and its current reality. It
+discovers, deduplicates, scopes, prioritizes, and publishes product work. Manager executes approved
+`ready` tasks. Kaizen studies how the system has been working and creates maintainer-facing process
+tasks.
 
-Keep the board fed from **this repo's declared vision** (+ constitution, where one exists), never a
-generic "find something to do" loop. Before doing anything else, read:
+Planner does not dispatch implementation, land product work, or analyze run transcripts. Deterministic
+scripts are measurement aids; they never replace reading code and judging whether the product achieves
+its declared outcomes.
 
-1. **The repo's declared vision/constitution documents.** What this means concretely depends on
-   what this install actually declares — read `AGENTS.md`'s stated mission if this repo restates its
-   positioning there, `docs/VISION.md` if one exists, or whatever anchor document(s) this
-   installation's own doctrine names as its north star. There is no fixed filename this skill
-   requires; the anchor is the parameter. (A `documents:` role map that would let a profile declare
-   this explicitly — `vision:`/`constitution:` keys in `policy.box` or the manifest — does not exist
-   in this schema yet; it is an open, unmerged proposal. Until/unless it lands, resolve the anchor by
-   reading this repo's own stated positioning the same way a human maintainer would, and say plainly
-   in your run summary which document(s) you read as "the vision" this run.)
-2. The current board state: `npx ztrack issue list` (and `--blocked`/`--state ready` for context)
-   against the tracker's own namespace/index docs (e.g. a `BACKLOG-INDEX.md` or equivalent this
-   repo's store declares) — whatever board-level index document names the categories of work this
-   repo tracks.
+## Inputs
 
-Everything below is in service of detecting when the board's current depth (or shape) has drifted
-from what the vision calls for — and filing that drift as board work, **never fixing it directly**.
+Read `.open-autonomy/autonomy.yml` first.
 
-## SELF-THROTTLE — check this FIRST, every run
+1. If `documents.roles` declares vision, constitution, or roadmap documents, read them. Otherwise read
+   the repository's own durable positioning such as `AGENTS.md`, `README.md`, or `docs/VISION.md` and
+   name the anchors used in the run summary. If no readable direction exists, publish one
+   `inputRequired` maintainer task instead of inventing a vision.
+2. Read the installed workflow, evidence, and risk standards.
+3. Read `policy.tracker.tool`, `policy.taskStates`, and `policy.risk.human_required_paths`.
+4. Read the public entry points, implementation, tests, CI, contracts, support matrices, target
+   manifests, and product-audit commands the repository actually carries. Discover these from the
+   repository; do not require a profile-specific filename.
 
-Do not author a plan doc unless the board is actually starving. Two independent checks; either one
-stops you:
+Use the task service for board reads. Never infer namespaces or read raw tracker storage when the task
+API can answer the question.
 
-1. **Find the newest `docs/plans/plan-*.md` by its date suffix.** If it is **less than ~7 days
-   old**, treat this run as fresh and stop — "fresh, nothing to do" is a valid, complete run. Do not
-   re-derive, do not touch `docs/plans/`, do not open a PR. (7 days is this doctrine's default
-   cadence; a profile may declare a different threshold in its own SKILL.md fork, but pick one and
-   state it — never throttle on vibes.)
-2. **Check for an already-open plan-doc PR:**
+## Layered review
 
-   ```
-   gh pr list --state open --json headRefName --jq '.[].headRefName' | grep '^plan/'
-   ```
+The scheduler supplies an outer cadence. Planner decides which product-analysis depth is due. Its
+compact, reviewed product-audit receipt is the durable cursor; scheduler policy never stores product
+methodology or review state.
 
-   `--head` matches an EXACT branch name, not a prefix — never use it for this check; a prefix
-   filter over `headRefName` as above, or equivalent, is required. Any match → exit fresh: a pending
-   plan-doc PR counts as "already fresh," don't file a duplicate. This guard matters precisely
-   because an unmerged plan PR's doc isn't in `docs/plans/` on your checkout yet — the doc-date check
-   alone would miss it.
+### Incremental pass
 
-**Rationale:** the local scheduler now carries independent per-job cadence, but a scheduler restart or
-explicit operator dispatch may legitimately invoke Planner before its ordinary interval. Keep this
-content-level throttle as duplicate-publication protection, not as a substitute for scheduler cadence.
+On every run:
 
-## DERIVE — read the vision, measure or judge the delta
+1. Read the direction and current non-terminal task set.
+2. Run the repository's cheap product-contract, support, or drift checks when present.
+3. Inspect code changed since the newest durable product-audit receipt and trace affected user outcomes through public
+   entry points, implementation, persistence, integrations, and stock consumer workflows as applicable.
+4. Deduplicate candidate gaps by user outcome and evidence, not title alone.
 
-How you assess "has the board drifted from the vision" is genuinely per-repo — it depends on what
-kind of evidence this repo can produce about itself. Two archetypes, each with a worked precedent:
+### Connected pass
 
-- **Measurement-driven.** Where the repo has committed, runnable evidence of its own coverage (a
-  test suite, a fixture matrix, a manifest of external targets to track), re-run it and diff the
-  result against what the vision/board currently claim — a mechanical drift check, not a guess. This
-  is the shape of supercode's planner: it re-runs a committed-fixture parity matrix, diffs shipped
-  target-harness releases against a targets manifest's pinned versions, and reviews board coverage
-  against both — three concrete, rerunnable measurements, only the last of which is a judgment call.
-- **Judgment-driven.** Where there is no mechanical measurement to re-run (the gap is "what should we
-  build next," not "did a number change"), ground each candidate in real signals from inside the
-  repo — actual usage patterns, gaps in what's already covered, adjacent work already touching the
-  same territory — never "it's popular" with no pointer to where you saw the need. This is the shape
-  of twin's planner: it reads what its own cookbook/demo worlds actually integrate, gaps a completeness
-  audit already surfaces, and vendors adjacent to its current coverage roster, and drafts 1-3
-  evidence-grounded candidates only when the queue is actually starving.
+At least once per ISO week, add a rotating end-to-end slice. Derive the rotation from the repository's
+own declared product surfaces, support contract, public exports, or test inventory; never maintain a
+second hard-coded product list in this skill. Verify that claimed support is connected to an ordinary
+consumer workflow, not merely represented by a registry row, fixture, or green matrix cell.
 
-Whichever archetype fits this repo, the output of DERIVE is the same: a short list of concrete gaps
-or candidates, each traceable to something you actually read or ran — never invented, never a bare
-restatement of "we should do more."
+### Exhaustive pass
 
-If DERIVE finds nothing — the board's current depth and shape already account for everything the
-vision calls for right now — **stop here**. No doc, no branch, no PR. A clean run that found nothing
-to add is a complete, valid run, exactly like a throttled one.
+When no exhaustive report exists or the newest is at least 28 days old, inspect every declared product
+surface against the vision. Run the deepest project audit when one exists, but independently inspect the
+implementation and tests. A green helper report is evidence, not authority.
 
-## OUTPUT
+For every depth, record the files, entry points, tests, task results, and external target evidence
+actually inspected. Unknown and unverified states remain unknown and unverified. Keep raw command output,
+working notes, and large inventories in scratch; retain only the minimal receipt needed to establish the
+window, depth, coverage, evidence pointers, finding keys, and conclusion.
 
-If DERIVE found drift or a starving board:
+## Measurement upkeep
 
-1. Author `docs/plans/plan-<YYYY-MM-DD>.md` in ztrack **document grammar** — read
-   `standards/issue-and-evidence.md`'s "Plans-as-docs recipe" and follow it exactly: each `##`
-   heading is one issue, followed by `Status:`/`Assignee:` and an `### Acceptance Criteria` block
-   with observable, testable ACs (never subjective). Use whatever `<TEAM>-N` namespace this repo's
-   own store/index docs already declare for the kind of work you're filing — never invent a new
-   namespace. Every item lands **`Status: draft`** — never `ready`; promotion is the manager's call,
-   not yours.
+Planner owns the product measurement it relies on. If direct code review proves that a project audit,
+support contract, or regression can report green while a required user outcome is absent, disconnected,
+or lossy, Planner may propose a narrow measurement-maintenance PR.
 
-   **ID-assignment discipline:** before assigning any `<TEAM>-N` id, determine the current max `N`
-   across **both** the committed tracker store **and** every item already registered from a prior
-   `docs/plans/plan-*.md` doc, and start above it — never reuse an existing id, never guess.
+That proposal must:
 
-2. Register it — **point the import at the exact file you just wrote**, never the bare `docs/plans/`
-   directory:
+1. include a minimal failing-before regression for the blind spot;
+2. derive the expectation from declared direction and observable behavior;
+3. prove a connected outcome rather than artifact existence;
+4. avoid weakening truth gates or assertions; and
+5. contain no product implementation fix or vision rewrite.
 
-   ```
-   npx ztrack import docs/plans/plan-<date>.md --register
-   ```
+Measurement and governance paths remain subject to the configured human-required boundary. Planner
+never merges its proposal. If the correct measurement is uncertain, publish an `inputRequired` task for
+a maintainer instead.
 
-   (The manager's own intake doctrine guards a bare, directory-wide `docs/plans/` import because that
-   form throws on a missing/empty directory — but that guard exists for sweeping an *unknown* folder.
-   You always name the one concrete file you just wrote, which by construction exists, so that failure
-   mode doesn't apply to you; still, never fall back to the bare directory form.) This is the **only**
-   mutation `--register` ever performs beyond the doc itself: it appends source entries to the
-   project's tracker config file — additive only, nothing else on disk changes.
+## Product-task standard
 
-3. Commit **both** the plan doc and the tracker-config change `--register` produced, on a new branch
-   `plan/<date>`, and open a **docs-only PR** — titled something like `plan <date>: <one-line
-   summary of what's being added>`. **Never push to main** (classic branch protection means a
-   direct-to-main commit can mechanically never earn a green check — the same GH006 reasoning that
-   governs every other write this profile makes; docs-only content still goes through the PR seam
-   like everything else). The manager lands your PR via whatever board-PR landing path this
-   installation has adopted (if it has — see `skills/manager/SKILL.md`'s own note), or, until it has
-   one, the operator merges it by hand like any other docs-only change. Either way, **you** only ever
-   open the PR — merging is never your job.
+A candidate becomes roadmap work only when Planner can state:
 
-## HARD RAILS
+- the declared product outcome that is missing;
+- the observed repository or runtime reality;
+- the user-visible consequence;
+- why existing tasks do not cover it;
+- concrete acceptance criteria and verification;
+- dependencies and risk; and
+- priority relative to existing approved work.
 
-- **Never** promote any issue to `ready`. Filing/registering is the entire job; prioritization is the
-  manager's (or the operator's).
-- **Never** touch any file outside `docs/plans/` and the tracker-config mutation your own `ztrack
-  import --register` call produces. No source, no doctrine, no vision/constitution edits — even
-  though you read them and reason about them, changing them is always a human-required change you
-  can only *recommend* via a filed item.
-- **Never** merge a PR, yours or anyone else's, and never dispatch another agent — you are a
-  read-and-file skill, not a launcher.
-- **`.open-autonomy/paused` does not block you.** Mirror the manager's fence-respect explicitly: you
-  only ever run when scheduled, and everything you produce is a PR for a human (or the manager) to
-  land — never a direct write, never a live session. So if `.open-autonomy/paused` exists, DERIVE's
-  research/measurement work and OUTPUT's plan-doc-and-PR authoring are **still permitted** — pause
-  gates the driver from firing further work off your findings, it does not gate you from finding and
-  recording them. This is a deliberate, research-only exception to the fence, the same one the proven
-  supercode instance relies on.
+## Publishing
+
+Every completed run publishes or updates a compact dated product-audit receipt under `docs/audits`.
+This includes a no-finding run: without a durable reviewed receipt, the next run cannot know the prior
+window or prove that connected/exhaustive coverage actually happened. A no-finding receipt creates no
+task and retains no raw audit dump.
+
+When an untracked product gap survives direct review, also write a dated task document under
+`docs/plans` using the installed issue/evidence standard:
+
+- use descriptive headings without manually allocated task identifiers;
+- let the configured task import operation allocate identifiers;
+- map fully evidenced proposals to `policy.taskStates.open`;
+- never set or promote a task to `policy.taskStates.ready`;
+- map uncertain, governance-sensitive, or decision-dependent work to
+  `policy.taskStates.inputRequired` and request a maintainer decision; and
+- include stable finding keys and exact evidence for future deduplication.
+
+Publish task-bearing documents through the configured task tool's document import/register operation.
+Commit the receipt and any task document/tool-produced registration changes on an isolated feature
+branch and open one PR. Never allocate ids by scanning persistence, use identifier prefixes as work
+types, or push to the default branch.
+
+Before creating a proposal, query the task API and open proposal PRs for equivalent findings. An open
+equivalent proposal is already covered. Manager may land the proposal through its generic reviewed task-
+proposal path; only an attributable maintainer may triage an approved `open` task into `ready`.
+
+## Hard rails
+
+- Never implement or dispatch product work.
+- Never perform Kaizen/process/transcript analysis.
+- Never read tracker persistence or index files.
+- Never change vision to make reality appear compliant.
+- Never merge a PR or promote work to `ready`.
+- Respect the analysis fence supplied by the scheduler; the execution pause alone does not authorize or
+  prohibit a planning run.

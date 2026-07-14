@@ -95,8 +95,8 @@ agents:
     triggers:
       - dispatch: true
         params: { TARGET_REF: subject.ref }   # optional: an issue/PR the one-line summary comment lands on
-      # TC.3: low-frequency drift-mode cron, Sunday 09:51 UTC — see profiles/simple-gh/ir.yml's audit
-      # actor for the full cadence rationale (self-driving's weekly strategist precedent, offset from
+      # TC.3: low-frequency drift-mode cron, Sunday 09:51 UTC — see this actor's shared skill for the
+      # full cadence rationale (self-driving's weekly strategist precedent, offset from
       # this profile's own pm */15 and planner daily 06:37 ticks). No params: cron never carries MODE or
       # TARGET_REF, so a cron-fired run is always drift mode (skills/audit/SKILL.md's existing default).
       - cron: "51 9 * * 0"

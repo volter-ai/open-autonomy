@@ -62,8 +62,8 @@ agents:
   # `dispatch` (unchanged since TC.1) AND, as of TC.3, its own weekly `cron` for ongoing drift auditing —
   # see skills/audit/SKILL.md's identity section: the PM holds `agent:launch` for its own architecture
   # (launching draft/develop/review), so the "operator-dispatched only" guarantee for the DISPATCH path
-  # is DOCTRINAL (the PM's own SKILL.md never names `audit` as something it launches), not structural the
-  # way simple-gh's subagent-fanout manager is — the skill documents this distinction itself. The cron
+  # is DOCTRINAL (the PM's own SKILL.md never names `audit` as something it launches), not structural —
+  # the skill documents this distinction itself. The cron
   # path doesn't weaken that: `audit` itself holds no `agent:launch`, so a cron-fired run can still only
   # ever re-run its own read-only checklist, never dispatch anything else — self-throttled per
   # skills/audit/SKILL.md so the shared local tick (which fires every declared cron agent, PM included)
@@ -74,10 +74,10 @@ agents:
     triggers:
       - dispatch: true
         params: { TARGET_REF: subject.ref }   # optional: an issue this run's one-line summary lands on
-      # TC.3: low-frequency drift-mode cron, Sunday 09:51 UTC — see profiles/simple-gh/ir.yml's audit
-      # actor for the full cadence rationale (self-driving's weekly strategist precedent). This profile
+      # TC.3: low-frequency drift-mode cron, Sunday 09:51 UTC — see this actor's shared skill for the
+      # full cadence rationale (self-driving's weekly strategist precedent). This profile
       # has no other daily/weekly cron to offset from (only pm's */15), so the same weekly slot is used
-      # for consistency across all four profiles. No params: a cron-fired run is always drift mode.
+      # for consistency across all three carrying profiles. No params: a cron-fired run is always drift mode.
       - cron: "51 9 * * 0"
 
 policy:

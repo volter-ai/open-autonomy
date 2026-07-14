@@ -41,6 +41,7 @@
     ".gitignore",
     ".open-autonomy/architecture-invariants.yml",
     ".open-autonomy/autonomy.yml",
+    ".open-autonomy/enforcement.json",
     ".open-autonomy/generated.json",
     ".open-autonomy/human-required-paths.json",
     ".open-autonomy/review-rubric.yml",

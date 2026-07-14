@@ -324,6 +324,9 @@ npx open-autonomy compile simple-sdlc local .
 
 # GitHub code host — agents run locally, changes land as auto-merging PRs on GitHub.
 npx open-autonomy compile simple-gh-sdlc local .
+
+# Human-supervised GitHub loop — Manager executes, Planner grows product work, Kaizen studies process.
+npx open-autonomy compile simple-gh local .
 ```
 
 This is an **overlay**: it lays down `scheduler/` (the loop driver + schedule), `scripts/` (the local
@@ -333,6 +336,33 @@ callout just below), `standards/`, and `.open-autonomy/` — and, for the GitHub
 `.gitignore`, so it's safe to run over an existing repo. No clone of this repo is required — `npx
 open-autonomy …` runs the published CLI. (`self-driving` also compiles to `local`; `simple-sdlc` is
 local-git only.)
+
+For a local installation that needs independent fences or retry timing, keep the substrate-owned data
+in a separate JSON file rather than adding scheduler fields to profile policy. Example
+`.open-autonomy/local-schedule-config.json`:
+
+```json
+{
+  "schema": "open-autonomy.local-schedule-config.v1",
+  "defaults": { "fence": ".open-autonomy/paused", "retrySeconds": 300 },
+  "agents": {
+    "planner": { "fence": ".open-autonomy/audits-paused", "retrySeconds": 3600 },
+    "kaizen": { "fence": ".open-autonomy/audits-paused", "retrySeconds": 3600 }
+  }
+}
+```
+
+Compile it with:
+
+```bash
+npx open-autonomy compile simple-gh local . \
+  --local-schedule-config .open-autonomy/local-schedule-config.json
+```
+
+The compiler rejects unknown agents, unsafe fence paths, unknown keys, and invalid retry values. The
+configuration affects only generic local jobs. It cannot declare task eligibility, publication policy,
+review methodology, or role behavior. Every job remains fenced; omitted values retain the conservative
+`.open-autonomy/paused` default.
 
 If any of these paths **already exist and differ**, the compile refuses by name instead of silently
 overwriting (`--force` to override) — except `.claude/settings.json`, handled specially next.

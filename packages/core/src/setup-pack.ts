@@ -52,11 +52,10 @@ export interface BoardSeedRecipe {
   //     or a maintainer" for roadmap-originated issues, filed already `ready`).
   promotion_fence: 'label' | 'state' | 'upstream-ratified';
   import_verb: string; // the mechanical act that files an item (e.g. 'tasks:author', 'ztrack import --register')
-  // Whether seeding a board mutation lands DIRECTLY (no PR needed — e.g. `tasks:author` issue creation is
-  // not a merge) or must go through a PR, in simple-gh's case a SCOPED self-merge carve-out because branch
-  // protection makes a direct board-state push mechanically unlandable (skills/manager/SKILL.md §7, the F1
-  // carve-out) — the installer itself needs this path when it seeds a fresh board.
-  landing_path: 'direct' | 'board-pr-carveout';
+  // Whether seeding lands directly (e.g. task-service issue creation), through an ordinary reviewed PR,
+  // or through a legacy scoped board-state carve-out. The installer needs the distinction because a
+  // committed task backing cannot be made durable by mutating the default branch directly.
+  landing_path: 'direct' | 'reviewed-pr' | 'board-pr-carveout';
 }
 
 // How a profile captures its "why" (DESIGN §Phase 2). 'none' is a legitimate value (a profile that
@@ -214,7 +213,7 @@ export function getSetupPack(profileDir: string): SetupPack {
 
 const LANDING_MODES = new Set<LandingMode>(['auto-merge', 'manual-after-review', 'pr-free']);
 const PROMOTION_FENCES = new Set(['label', 'state', 'upstream-ratified']);
-const LANDING_PATHS = new Set(['direct', 'board-pr-carveout']);
+const LANDING_PATHS = new Set(['direct', 'reviewed-pr', 'board-pr-carveout']);
 const DIRECTION_MODES = new Set<DirectionMode>(['none', 'operator', 'documents.roles']);
 const M3_TOOLS = new Set<M3Tool>(['doctor', 'gh-preflight']);
 const M4_PREDICATES = new Set<M4Predicate>(['ztrack', 'gh-issues']);

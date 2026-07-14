@@ -22,3 +22,4 @@ export * from './organization-coverage';
 export * from './organization-modules';
 export * from './organization-canonical';
 export * from './organization-normalize';
+export * from './organization-compiler';

@@ -101,6 +101,18 @@ export const ORGANIZATION_SEMANTIC_COVERAGE: readonly SemanticCoverageEntry[] = 
   entry('NormalizedSourceMapEntry', 'output sources', 'compiler', 'implemented', 'many-to-many normalized-output provenance relation', 'P2'),
   entry('NormalizedOrganizationIR', 'schema root modules sourceMap digest', 'compiler', 'implemented', 'closed canonical compiler form plus nonsemantic source map and digest', 'P2'),
   entry('NormalizationResult', 'normalized errors', 'compiler', 'implemented', 'all-or-nothing normalization result', 'P2'),
+  entry('SourceSpan', 'location path start end', 'compiler', 'implemented', 'authored or generated source location and optional text coordinates', 'P3'),
+  entry('RelatedDiagnostic', 'message source', 'compiler', 'implemented', 'secondary source-linked diagnostic context', 'P3'),
+  entry('FixSuggestion', 'message replacement', 'compiler', 'implemented', 'non-authoritative proposed repair', 'P3'),
+  entry('CompilerDiagnostic', 'code severity message phase source related suggestion', 'compiler', 'implemented', 'stable machine-readable compiler finding', 'P3'),
+  entry('PassSourceRelation', 'output sources', 'compiler', 'partial', 'many-to-many pass output/source provenance relation', 'P3'),
+  entry('PassObligation', 'id claim status evidence', 'compiler', 'partial', 'pass-created or discharged semantic obligation', 'P3'),
+  entry('CompilerPassResult', 'output diagnostics sourceMap obligations', 'compiler', 'implemented', 'typed pass output and accounting channels', 'P3'),
+  entry('CompilerPassContext', 'completedPasses', 'compiler', 'implemented', 'immutable set of satisfied pass dependencies', 'P3'),
+  entry('CompilerPass', 'id input output requires provider run', 'compiler', 'implemented', 'typed partial transformation registered by core or provider', 'P3'),
+  entry('PassRunRecord', 'pass input output sourceMap obligations', 'compiler', 'implemented', 'inspectable execution receipt for one pass', 'P3'),
+  entry('CompilerPipelineResult', 'output level diagnostics passes', 'compiler', 'implemented', 'pipeline output or failure with deterministic evidence', 'P3'),
+  entry('CompilerExecutionPolicy', 'maxDiagnostics redact', 'compiler', 'implemented', 'diagnostic resource and disclosure boundary', 'P3'),
 ] as const;
 
 export interface AuditResidual {

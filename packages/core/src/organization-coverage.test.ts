@@ -18,6 +18,7 @@ const publicSurfaceFiles = [
   'organization-modules.ts',
   'organization-canonical.ts',
   'organization-normalize.ts',
+  'organization-compiler.ts',
 ];
 
 function declaredInterfaceFields(): Map<string, string[]> {

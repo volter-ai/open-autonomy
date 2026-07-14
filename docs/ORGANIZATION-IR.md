@@ -115,6 +115,13 @@ artifact types                              artifact instances and provenance
 The state document may be a materialized view of an event log. It is not configuration fed back into the
 definition implicitly.
 
+The portable reference materializer recognizes explicit work, assignment, claim, attempt, artifact, decision,
+and budget events. It checks event identity and backward causation, reduces them without external effects, and
+then validates the resulting state against the organization definition. This gives substrate implementations a
+conformance boundary: their storage and scheduling mechanisms may differ, but the same portable trace must have
+the same observable state. Unknown native events must first be lifted by a component-owned adapter; the core
+reducer does not guess their meaning.
+
 ## Semantic planes
 
 The v2 module is organized into linked catalogs rather than one universal agent object.

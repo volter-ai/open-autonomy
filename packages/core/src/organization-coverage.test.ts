@@ -4,6 +4,7 @@ import ts from 'typescript';
 import {
   ORGANIZATION_AUDIT_RESIDUALS,
   ORGANIZATION_BASELINE_OBLIGATIONS,
+  ORGANIZATION_P1_OBLIGATIONS,
   ORGANIZATION_SEMANTIC_COVERAGE,
 } from './organization-coverage';
 
@@ -67,6 +68,16 @@ describe('B0 semantic coverage and residual accounting', () => {
     for (const obligation of ORGANIZATION_BASELINE_OBLIGATIONS) {
       if (obligation.disposition === 'unresolved') expect(residualIds.has(obligation.residual ?? '')).toBe(true);
       else expect(obligation.evidence?.trim().length).toBeGreaterThan(0);
+    }
+  });
+
+  test('accounts for every formal P1 obligation with evidence and no unresolved disposition', () => {
+    const audit = readFileSync('docs/ORGANIZATION-IR-LENS-AUDIT.md', 'utf8');
+    const documented = [...audit.matchAll(/^\| (P1-[A-Z]+-\d+) /gm)].map((match) => match[1]).sort();
+    expect(ORGANIZATION_P1_OBLIGATIONS.map((item) => item.id).sort()).toEqual(documented);
+    for (const obligation of ORGANIZATION_P1_OBLIGATIONS) {
+      expect(obligation.disposition).not.toBe('unresolved');
+      expect(obligation.evidence?.trim().length).toBeGreaterThan(0);
     }
   });
 });

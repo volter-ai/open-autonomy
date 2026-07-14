@@ -8,6 +8,9 @@ export type Id = string;
 export type JsonSchema = Record<string, unknown>;
 export type Expression = string;
 export type Duration = string;
+export type OrganizationCatalogName =
+  | 'types' | 'behaviors' | 'tools' | 'memories' | 'capabilities' | 'actors' | 'units' | 'relations'
+  | 'goals' | 'workTypes' | 'initialWork' | 'protocols' | 'policies' | 'budgets' | 'decisions' | 'artifacts';
 
 export interface SourceRef {
   uri: string;
@@ -27,6 +30,8 @@ export interface ImportDecl {
   namespace?: string;
   format?: string;
   required?: boolean;
+  /** Optional per-catalog visibility restriction; omitted means all declarations are visible. */
+  symbols?: Partial<Record<OrganizationCatalogName, Id[]>>;
 }
 
 export interface TypeDecl extends AnnotationSet {

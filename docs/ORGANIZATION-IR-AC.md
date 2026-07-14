@@ -291,6 +291,12 @@ and deterministic snapshots of the closed graph and provenance.
 **Falsifier.** Two semantically identical module graphs normalize differently after namespace alpha-renaming or
 input reordering, or a reference resolves to a declaration of the wrong sort.
 
+**Implementation record.** `organization-modules.ts` resolves a bounded graph through an abstract loader, separates
+canonical module ID from retrieval location and digest, enforces scheme/integrity policy and named-symbol visibility,
+and produces closed sort-checked reference edges with use-site and declaration-site provenance. Generated disjoint
+import signatures exercise identity, associativity, and order independence; aliases do not enter qualified identity.
+The P1 obligation ledger is machine-matched to every P1 row in the formal-lens audit.
+
 ### P2. Elaboration, normalization, and semantic hashing
 
 **Semantic model.** Normalization is a semantics-preserving canonical projection `N` from authored organizations

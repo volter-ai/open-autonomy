@@ -1,4 +1,4 @@
-import type { ImportDecl, OrganizationIR, SourceRef } from './organization-ir';
+import type { ImportDecl, OrganizationCatalogName, OrganizationIR, SourceRef } from './organization-ir';
 
 export type ModuleId = string & { readonly __moduleId: unique symbol };
 export type QualifiedDeclarationId = string & { readonly __qualifiedDeclarationId: unique symbol };
@@ -10,6 +10,8 @@ export interface LoadedOrganizationModule {
   location: string;
   organization: OrganizationIR;
   digest?: string;
+  /** Loaded source size for graph resource accounting; canonical JSON size is used when omitted. */
+  bytes?: number;
 }
 
 export interface OrganizationModuleLoader {
@@ -21,10 +23,25 @@ export interface ModuleResolutionLimits {
   maxDepth?: number;
 }
 
+export interface ModuleResolverPolicy extends ModuleResolutionLimits {
+  /** URI schemes permitted for non-relative imports. Empty/omitted means loader-defined. */
+  allowedSchemes?: string[];
+  /** Schemes for which every import must carry an expected digest. */
+  requireDigestForSchemes?: string[];
+  maxTotalBytes?: number;
+}
+
+export interface ImportBinding {
+  module: ModuleId;
+  localName: string;
+  source: SourceRef;
+  symbols?: ImportDecl['symbols'];
+}
+
 export interface ResolvedModuleNode {
   module: LoadedOrganizationModule;
   /** Local alias -> stable imported module identity. */
-  imports: Record<string, ModuleId>;
+  imports: Record<string, ImportBinding>;
 }
 
 export interface ResolvedModuleGraph {
@@ -42,6 +59,8 @@ export interface ResolvedReferenceUse {
   path: string;
   authored: string;
   target: QualifiedDeclarationId;
+  source: { location: string; path: string };
+  declaration: { module: ModuleId; location: string; path: string };
 }
 
 export interface ReferenceResolutionResult {
@@ -60,13 +79,14 @@ export function qualifyDeclaration(moduleId: ModuleId, catalog: string, declarat
 export async function resolveOrganizationModules(
   root: LoadedOrganizationModule,
   loader: OrganizationModuleLoader,
-  limits: ModuleResolutionLimits = {},
+  limits: ModuleResolverPolicy = {},
 ): Promise<ModuleResolutionResult> {
   const maxModules = limits.maxModules ?? 256;
   const maxDepth = limits.maxDepth ?? 32;
   const errors: string[] = [];
   const modules = new Map<ModuleId, ResolvedModuleNode>();
   const active: ModuleId[] = [];
+  let totalBytes = 0;
 
   const visit = async (loaded: LoadedOrganizationModule, depth: number): Promise<void> => {
     if (!moduleIdPattern.test(loaded.moduleId)) {
@@ -86,12 +106,24 @@ export async function resolveOrganizationModules(
     if (prior) {
       if (prior.module.digest && loaded.digest && prior.module.digest !== loaded.digest)
         errors.push(`module '${loaded.moduleId}': canonical identity resolved to conflicting digests`);
+      else if (prior.module.location !== loaded.location && (!prior.module.digest || !loaded.digest || prior.module.digest !== loaded.digest))
+        errors.push(`module '${loaded.moduleId}': multiple locations require one matching digest`);
       return;
     }
     if (modules.size >= maxModules) {
       errors.push(`module graph exceeds ${maxModules} modules`);
       return;
     }
+    const moduleBytes = loaded.bytes ?? new TextEncoder().encode(JSON.stringify(loaded.organization)).byteLength;
+    if (moduleBytes < 0 || !Number.isFinite(moduleBytes)) {
+      errors.push(`module '${loaded.moduleId}': invalid loaded byte size`);
+      return;
+    }
+    if (limits.maxTotalBytes !== undefined && totalBytes + moduleBytes > limits.maxTotalBytes) {
+      errors.push(`module graph exceeds ${limits.maxTotalBytes} bytes`);
+      return;
+    }
+    totalBytes += moduleBytes;
 
     const node: ResolvedModuleNode = { module: loaded, imports: {} };
     modules.set(loaded.moduleId, node);
@@ -109,10 +141,24 @@ export async function resolveOrganizationModules(
         continue;
       }
       namespaces.add(namespace);
+      const scheme = uriScheme(declaration.source.uri);
+      if (scheme && limits.allowedSchemes?.length && !limits.allowedSchemes.includes(scheme)) {
+        errors.push(`module '${loaded.moduleId}' import '${localName}': URI scheme '${scheme}' is not allowed`);
+        continue;
+      }
+      if (scheme && limits.requireDigestForSchemes?.includes(scheme) && !declaration.source.digest) {
+        errors.push(`module '${loaded.moduleId}' import '${localName}': scheme '${scheme}' requires a digest`);
+        continue;
+      }
       try {
         const imported = await loader.load(declaration.source, loaded);
         assertImportDigest(declaration.source, imported);
-        node.imports[namespace] = imported.moduleId;
+        const symbolErrors = validateImportedSymbols(declaration, imported);
+        if (symbolErrors.length) {
+          errors.push(...symbolErrors.map((message) => `module '${loaded.moduleId}' import '${localName}': ${message}`));
+          continue;
+        }
+        node.imports[namespace] = { module: imported.moduleId, localName, source: structuredClone(declaration.source), symbols: structuredClone(declaration.symbols) };
         await visit(imported, depth + 1);
       } catch (error) {
         if (declaration.required === false) continue;
@@ -140,8 +186,13 @@ export function resolveQualifiedReference(
   const possibleNamespace = slash < 0 ? undefined : reference.slice(0, slash);
   const namespace = possibleNamespace && fromNode?.imports[possibleNamespace] ? possibleNamespace : undefined;
   const localId = namespace ? reference.slice(slash + 1) : reference;
-  const targetModule = namespace ? fromNode?.imports[namespace] : from;
+  const binding = namespace ? fromNode?.imports[namespace] : undefined;
+  const targetModule = binding?.module ?? from;
   if (!targetModule || !localId) return undefined;
+  if (binding?.symbols) {
+    const visible = binding.symbols[catalog as OrganizationCatalogName];
+    if (!visible?.includes(localId)) return undefined;
+  }
   const catalogValue = graph.modules[targetModule]?.module.organization[catalog];
   if (!catalogValue || typeof catalogValue !== 'object' || !(localId in catalogValue)) return undefined;
   return qualifyDeclaration(targetModule, String(catalog), localId);
@@ -178,7 +229,12 @@ export function resolveOrganizationReferences(graph: ResolvedModuleGraph): Refer
         errors.push(`module '${moduleId}' ${use.path}: ambiguous reference '${use.authored}' matches ${matches.map((x) => x.catalog).join(', ')}`);
         continue;
       }
-      references.push({ module: moduleId, path: use.path, authored: use.authored, target: matches[0].target });
+      const [targetModule, targetPath] = splitQualified(matches[0].target);
+      references.push({
+        module: moduleId, path: use.path, authored: use.authored, target: matches[0].target,
+        source: { location: node.module.location, path: use.path },
+        declaration: { module: targetModule, location: graph.modules[targetModule].module.location, path: targetPath },
+      });
     }
   }
   references.sort((a, b) => `${a.module}:${a.path}`.localeCompare(`${b.module}:${b.path}`));
@@ -250,4 +306,29 @@ export function assertImportDigest(source: SourceRef, loaded: LoadedOrganization
 
 export function importNamespace(localName: string, declaration: ImportDecl): string {
   return declaration.namespace ?? localName;
+}
+
+function uriScheme(uri: string): string | undefined {
+  const match = uri.match(/^([A-Za-z][A-Za-z0-9+.-]*):/);
+  return match?.[1].toLowerCase();
+}
+
+function splitQualified(id: QualifiedDeclarationId): [ModuleId, string] {
+  const marker = id.indexOf('#');
+  return [id.slice(0, marker) as ModuleId, id.slice(marker + 1)];
+}
+
+function validateImportedSymbols(declaration: ImportDecl, imported: LoadedOrganizationModule): string[] {
+  const errors: string[] = [];
+  for (const [catalog, ids] of Object.entries(declaration.symbols ?? {})) {
+    const values = imported.organization[catalog as OrganizationCatalogName];
+    if (!values || typeof values !== 'object') {
+      errors.push(`unknown or empty exported catalog '${catalog}'`);
+      continue;
+    }
+    if (!Array.isArray(ids)) { errors.push(`symbols.${catalog} must be an array`); continue; }
+    if (new Set(ids).size !== ids.length) errors.push(`symbols.${catalog} contains duplicates`);
+    for (const id of ids) if (!(id in values)) errors.push(`symbols.${catalog}: missing declaration '${id}'`);
+  }
+  return errors;
 }

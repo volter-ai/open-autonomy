@@ -17,8 +17,8 @@ const organization = (name: string, extra: Partial<OrganizationIR> = {}): Organi
   ...extra,
 });
 
-const loaded = (moduleId: string, location: string, value: OrganizationIR, digest?: string): LoadedOrganizationModule => ({
-  moduleId: moduleId as ModuleId, location, organization: value, digest,
+const loaded = (moduleId: string, location: string, value: OrganizationIR, digest?: string, bytes?: number): LoadedOrganizationModule => ({
+  moduleId: moduleId as ModuleId, location, organization: value, digest, bytes,
 });
 
 function memoryLoader(entries: Record<string, LoadedOrganizationModule>): OrganizationModuleLoader {
@@ -77,6 +77,11 @@ describe('P1 organization module graph', () => {
       memoryLoader({ child }), { maxModules: 1 },
     );
     expect(bounded.errors).toContain('module graph exceeds 1 modules');
+    const byteBounded = await resolveOrganizationModules(
+      loaded('acme/root', 'mem:/root.yml', organization('root', { imports: { child: { source: { uri: 'child' } } } }), undefined, 50),
+      memoryLoader({ child }), { maxTotalBytes: 60 },
+    );
+    expect(byteBounded.errors).toContain('module graph exceeds 60 bytes');
   });
 
   test('sorts modules and errors independently of authored import map order', async () => {
@@ -89,6 +94,53 @@ describe('P1 organization module graph', () => {
     const right = await run({ alpha: { source: { uri: 'a' } }, zed: { source: { uri: 'z' } } });
     expect(Object.keys(left.graph?.modules ?? {})).toEqual(['acme/a', 'acme/root', 'acme/z']);
     expect(left).toEqual(right);
+  });
+
+  test('satisfies identity, associativity, and order independence for disjoint import signatures', async () => {
+    const modules = Object.fromEntries(Array.from({ length: 12 }, (_, index) => {
+      const key = `m${index}`;
+      return [key, loaded(`acme/${key}`, `mem:/${key}.yml`, organization(key), `sha256:${key}`)];
+    }));
+    const loader = memoryLoader(modules);
+    const imports = Object.fromEntries(Object.keys(modules).map((key) => [key, { source: { uri: key } }]));
+    const resolve = async (parts: Array<Record<string, { source: { uri: string } }>>) =>
+      resolveOrganizationModules(loaded('acme/root', 'mem:/root.yml', organization('root', { imports: Object.assign({}, ...parts) })), loader);
+    const empty = await resolve([]);
+    const emptyExplicit = await resolve([{}]);
+    expect(empty).toEqual(emptyExplicit);
+    for (let splitA = 0; splitA <= 12; splitA += 3) {
+      const keys = Object.keys(imports);
+      const a = Object.fromEntries(keys.slice(0, splitA).map((key) => [key, imports[key]]));
+      const b = Object.fromEntries(keys.slice(splitA, 8).map((key) => [key, imports[key]]));
+      const c = Object.fromEntries(keys.slice(8).map((key) => [key, imports[key]]));
+      const left = await resolve([Object.assign({}, a, b), c]);
+      const right = await resolve([a, Object.assign({}, b, c)]);
+      const permuted = await resolve([c, a, b]);
+      expect(left).toEqual(right);
+      expect(left).toEqual(permuted);
+    }
+  });
+
+  test('rejects one canonical identity loaded from unverifiably different locations', async () => {
+    const first = loaded('acme/shared', 'mem:/one.yml', organization('shared'));
+    const second = loaded('acme/shared', 'mem:/two.yml', organization('shared'));
+    const root = loaded('acme/root', 'mem:/root.yml', organization('root', { imports: {
+      first: { source: { uri: 'one' } }, second: { source: { uri: 'two' } },
+    } }));
+    const result = await resolveOrganizationModules(root, memoryLoader({ one: first, two: second }));
+    expect(result.errors).toContain("module 'acme/shared': multiple locations require one matching digest");
+  });
+
+  test('rejects non-ASCII/confusable canonical ids and namespaces', async () => {
+    const child = loaded('acme/child', 'mem:/child.yml', organization('child'));
+    const badNamespace = loaded('acme/root', 'mem:/root.yml', organization('root', {
+      imports: { child: { source: { uri: 'child' }, namespace: 'téam' } },
+    }));
+    expect((await resolveOrganizationModules(badNamespace, memoryLoader({ child }))).errors)
+      .toContain("module 'acme/root' import 'child': invalid namespace 'téam'");
+    const badId = loaded('acme/teаm', 'mem:/bad.yml', organization('bad')); // contains Cyrillic а
+    expect((await resolveOrganizationModules(badId, memoryLoader({}))).errors)
+      .toContain("module 'acme/teаm': invalid canonical module id");
   });
 
   test('closes and sort-checks local and namespaced references without flattening modules', async () => {
@@ -106,10 +158,51 @@ describe('P1 organization module graph', () => {
     expect(references.errors).toEqual([]);
     expect(references.references).toContainEqual(expect.objectContaining({
       module: root.moduleId, path: 'actors.worker.behaviors[0]', target: qualifyDeclaration(library.moduleId, 'behaviors', 'work'),
+      source: { location: 'mem:/root.yml', path: 'actors.worker.behaviors[0]' },
+      declaration: { module: library.moduleId, location: 'mem:/lib.yml', path: 'behaviors/work' },
     }));
     expect(references.references).toContainEqual(expect.objectContaining({
       module: library.moduleId, path: 'behaviors.work.inputs.request', target: qualifyDeclaration(library.moduleId, 'types', 'request'),
     }));
+  });
+
+  test('enforces named-symbol visibility and validates selected declarations eagerly', async () => {
+    const library = loaded('acme/lib', 'mem:/lib.yml', organization('lib', {
+      behaviors: {
+        visible: { kind: 'skill', source: { uri: './visible.md' } },
+        hidden: { kind: 'skill', source: { uri: './hidden.md' } },
+      },
+      actors: { worker: { kind: 'agent', behaviors: ['visible'] } },
+    }));
+    const root = loaded('acme/root', 'mem:/root.yml', organization('root', {
+      imports: { lib: { source: { uri: 'lib' }, symbols: { behaviors: ['visible'] } } },
+      actors: { worker: { kind: 'agent', behaviors: ['lib/hidden'] } },
+    }));
+    const graph = (await resolveOrganizationModules(root, memoryLoader({ lib: library }))).graph!;
+    expect(resolveOrganizationReferences(graph).errors).toContain(
+      "module 'acme/root' actors.worker.behaviors[0]: unresolved behaviors reference 'lib/hidden'",
+    );
+
+    root.organization.imports!.lib.symbols = { behaviors: ['missing'] };
+    const invalid = await resolveOrganizationModules(root, memoryLoader({ lib: library }));
+    expect(invalid.errors).toContain("module 'acme/root' import 'lib': symbols.behaviors: missing declaration 'missing'");
+  });
+
+  test('applies explicit URI-scheme and digest policy before invoking the loader', async () => {
+    let calls = 0;
+    const loader: OrganizationModuleLoader = { async load() { calls++; throw new Error('must not load'); } };
+    const root = loaded('acme/root', 'mem:/root.yml', organization('root', { imports: {
+      forbidden: { source: { uri: 'https://example.invalid/a.yml' } },
+      unpinned: { source: { uri: 'oci:example/org:latest' } },
+    } }));
+    const result = await resolveOrganizationModules(root, loader, {
+      allowedSchemes: ['oci'], requireDigestForSchemes: ['oci'],
+    });
+    expect(calls).toBe(0);
+    expect(result.errors).toEqual([
+      "module 'acme/root' import 'forbidden': URI scheme 'https' is not allowed",
+      "module 'acme/root' import 'unpinned': scheme 'oci' requires a digest",
+    ]);
   });
 
   test('rejects missing, wrong-sort, ambiguous union-sort, and namespace-shadowed references', async () => {

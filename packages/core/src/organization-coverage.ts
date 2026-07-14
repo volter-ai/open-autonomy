@@ -20,7 +20,7 @@ const entry = (
 export const ORGANIZATION_SEMANTIC_COVERAGE: readonly SemanticCoverageEntry[] = [
   entry('SourceRef', 'uri digest mediaType', 'portable', 'partial', 'content address or location with optional integrity and media type', 'P1'),
   entry('AnnotationSet', 'labels documentation provenance extensions', 'portable', 'partial', 'nonsemantic metadata, source assertions, and namespaced extension payload', 'P2'),
-  entry('ImportDecl', 'source namespace format required', 'portable', 'declared', 'module dependency and local namespace binding', 'P1'),
+  entry('ImportDecl', 'source namespace format required symbols', 'portable', 'partial', 'module dependency, local namespace binding, and named-symbol visibility', 'P1'),
   entry('TypeDecl', 'schema', 'portable', 'partial', 'named structural data type', 'P5'),
   entry('BehaviorDecl', 'kind source inline inputs outputs instructions tools memories behaviors', 'portable', 'partial', 'typed reusable behavior and its declared dependencies', 'P5'),
   entry('InstructionAssembly', 'precedence fragments conflict', 'portable', 'declared', 'ordered instruction composition contract', 'P5'),
@@ -96,7 +96,6 @@ export interface AuditResidual {
 
 /** B0 residual parking is closed: every known gap has a punch-list owner. */
 export const ORGANIZATION_AUDIT_RESIDUALS: readonly AuditResidual[] = [
-  { id: 'OAIR-R001', finding: 'imports, namespaces, canonical module identity, and integrity are declared but unresolved', owner: 'P1' },
   { id: 'OAIR-R002', finding: 'normalization, canonical serialization, semantic hashing, and source maps are absent', owner: 'P2' },
   { id: 'OAIR-R003', finding: 'diagnostics are strings and compiler passes have no typed framework', owner: 'P3' },
   { id: 'OAIR-R004', finding: 'schema migration and replay-version framework is absent', owner: 'P4' },
@@ -138,4 +137,16 @@ export const ORGANIZATION_BASELINE_OBLIGATIONS: readonly BaselineObligation[] = 
   { id: 'B0-PROV-1', claim: 'source assertions are distinguishable from independently verified evidence', disposition: 'unresolved', assurance: 'unknown', residual: 'OAIR-R011' },
   { id: 'B0-REF-1', claim: 'v2 to v1 lowering accounts for every atomic source obligation', disposition: 'unresolved', assurance: 'property-tested', evidence: 'organization-compile.test.ts covers catalog-level features only', residual: 'OAIR-R007' },
   { id: 'B0-RES-1', claim: 'every B0 audit gap has a unique later punch-list owner', disposition: 'preserved', assurance: 'statically-checked', evidence: 'organization-coverage.test.ts residual ownership checks' },
+] as const;
+
+export const ORGANIZATION_P1_OBLIGATIONS: readonly BaselineObligation[] = [
+  { id: 'P1-SEM-1', claim: 'module linking preserves declaration meaning and named-symbol visibility', disposition: 'preserved', assurance: 'property-tested', evidence: 'organization-modules.test.ts named visibility and disjoint composition' },
+  { id: 'P1-TYP-1', claim: 'successful graphs close every declared reference at its required sort', disposition: 'preserved', assurance: 'property-tested', evidence: 'organization-modules.test.ts local/namespaced closure and wrong-sort cases' },
+  { id: 'P1-ALG-1', claim: 'disjoint import composition has identity, associativity, and order independence', disposition: 'preserved', assurance: 'property-tested', evidence: 'organization-modules.test.ts generated disjoint import signatures' },
+  { id: 'P1-ALG-2', claim: 'namespace alias renaming preserves qualified nominal identity', disposition: 'preserved', assurance: 'property-tested', evidence: 'organization-modules.test.ts alias-independent identities' },
+  { id: 'P1-GRA-1', claim: 'module resolution terminates within declared depth, node, and byte bounds and reports cycles', disposition: 'preserved', assurance: 'property-tested', evidence: 'organization-modules.test.ts cycle and bound fixtures' },
+  { id: 'P1-SEC-1', claim: 'resolver scheme, integrity, and resource policy fails closed before unsafe load', disposition: 'preserved', assurance: 'property-tested', evidence: 'organization-modules.test.ts URI policy, digest substitution, and bounds' },
+  { id: 'P1-PROV-1', claim: 'resolved references retain authored-use and declaration-site provenance', disposition: 'preserved', assurance: 'property-tested', evidence: 'organization-modules.test.ts cross-module source/declaration locations' },
+  { id: 'P1-EVO-1', claim: 'logical identity is distinct from retrieval location and structural digest', disposition: 'preserved', assurance: 'statically-checked', evidence: 'ModuleId, LoadedOrganizationModule.location, and digest are separate fields' },
+  { id: 'P1-ADV-1', claim: 'namespace squatting, non-ASCII confusables, identity substitution, and graph exhaustion fail closed', disposition: 'preserved', assurance: 'property-tested', evidence: 'organization-modules.test.ts namespace ambiguity, ASCII identifiers, digest/location collisions, and bounds' },
 ] as const;

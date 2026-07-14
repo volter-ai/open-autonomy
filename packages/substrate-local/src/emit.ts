@@ -515,7 +515,8 @@ const params = forward.flatMap((k) => (process.env[k] ? ['--' + k, process.env[k
 if (process.env.AUTONOMY_SINGLETON) {
   try {
     const all = JSON.parse(spawnSync('node', [runner, 'list'], { encoding: 'utf8' }).stdout || '[]');
-    const busy = all.filter((s) => s.agent === agent && (s.status === 'running' || s.status === 'paused'));
+    const busy = all.filter((s) => s.agent === agent
+      && (s.status === 'running' || s.status === 'paused' || s.status === 'awaiting-human'));
     if (busy.length) { console.log(\`[run-agent] \${agent} already in flight (\${busy.length}); skipping this tick\`); process.exit(0); }
   } catch { /* backend unavailable -> fall through and try the launch */ }
 }

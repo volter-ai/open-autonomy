@@ -61,7 +61,11 @@ describe('the post-session effect is gated on EXPLICIT signals, never a capabili
 
   test('cron agents are single-instance (AUTONOMY_SINGLETON) so PM ticks do not pile up', () => {
     const out = compileLocal(ghLocalIr);
-    expect(out.generated['scripts/run-agent.mjs']).toContain('AUTONOMY_SINGLETON'); // the skip-if-busy guard
+    const driver = out.generated['scripts/run-agent.mjs'];
+    expect(driver).toContain('AUTONOMY_SINGLETON'); // the skip-if-busy guard
+    expect(driver).toContain("s.status === 'running'");
+    expect(driver).toContain("s.status === 'paused'");
+    expect(driver).toContain("s.status === 'awaiting-human'");
     const schedule = JSON.parse(out.generated['scheduler/schedule.json']) as { scripts: string[] };
     expect(schedule.scripts.some((s) => s.includes('AUTONOMY_SINGLETON=1'))).toBe(true); // the PM tick sets it
   });

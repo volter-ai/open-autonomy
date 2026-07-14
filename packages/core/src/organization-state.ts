@@ -37,6 +37,7 @@ export function materializeOrganizationState(
   });
   const errors: string[] = [];
   const knownEvents = new Set((state.events ?? []).map((event) => event.id));
+  let lastObservedAt = Date.parse(state.observedAt);
 
   if (state.organization.name !== definition.name)
     errors.push(`base state belongs to '${state.organization.name}', not '${definition.name}'`);
@@ -46,6 +47,10 @@ export function materializeOrganizationState(
     if (!event.id) { errors.push(`${path}: id is required`); continue; }
     if (knownEvents.has(event.id)) { errors.push(`${path}: duplicate event id`); continue; }
     if (!event.at || Number.isNaN(Date.parse(event.at))) { errors.push(`${path}.at: valid timestamp is required`); continue; }
+    if (Date.parse(event.at) < lastObservedAt) {
+      errors.push(`${path}.at: timestamp precedes the accepted observation sequence`);
+      continue;
+    }
     if (event.causation && !knownEvents.has(event.causation)) {
       errors.push(`${path}.causation: unknown prior event '${event.causation}'`);
       continue;
@@ -57,6 +62,7 @@ export function materializeOrganizationState(
     (state.events ??= []).push(structuredClone(event));
     state.revision += 1;
     state.observedAt = event.at;
+    lastObservedAt = Date.parse(event.at);
   }
 
   if (errors.length) return { errors };
@@ -70,11 +76,13 @@ function applyEvent(state: OrganizationStateIR, definition: OrganizationIR, even
   const requireSubject = (): string | undefined => subjectId ? undefined : `${path}.subject.id is required`;
   const requireActor = (): string | undefined => event.actor ? undefined : `${path}.actor is required`;
   const fail = (...values: Array<string | undefined>) => values.filter((value): value is string => Boolean(value));
+  const requireSubjectKind = (kind: string): string | undefined =>
+    event.subject?.kind === kind ? undefined : `${path}.subject.kind must be '${kind}'`;
 
   switch (event.type) {
     case 'work.created': {
-      const missing = requireSubject();
-      if (missing) return [missing];
+      const missing = fail(requireSubject(), requireSubjectKind('work'));
+      if (missing.length) return missing;
       if (state.work?.[subjectId!]) return [`${path}: work '${subjectId}' already exists`];
       const work = data as unknown as WorkItemState;
       const type = definition.workTypes?.[work.type];
@@ -84,8 +92,8 @@ function applyEvent(state: OrganizationStateIR, definition: OrganizationIR, even
       return [];
     }
     case 'work.transitioned': {
-      const missing = requireSubject();
-      if (missing) return [missing];
+      const missing = fail(requireSubject(), requireSubjectKind('work'));
+      if (missing.length) return missing;
       const work = state.work?.[subjectId!];
       if (!work) return [`${path}: unknown work '${subjectId}'`];
       const to = data.to as string | undefined;
@@ -100,8 +108,8 @@ function applyEvent(state: OrganizationStateIR, definition: OrganizationIR, even
       return [];
     }
     case 'work.assigned': {
-      const missing = requireSubject();
-      if (missing) return [missing];
+      const missing = fail(requireSubject(), requireSubjectKind('work'));
+      if (missing.length) return missing;
       const work = state.work?.[subjectId!];
       if (!work) return [`${path}: unknown work '${subjectId}'`];
       const assignees = data.assignees as string[] | undefined;
@@ -112,7 +120,7 @@ function applyEvent(state: OrganizationStateIR, definition: OrganizationIR, even
       return [];
     }
     case 'claim.acquired': {
-      const missing = fail(requireSubject(), requireActor());
+      const missing = fail(requireSubject(), requireSubjectKind('claim'), requireActor());
       if (missing.length) return missing;
       if (!state.work?.[String(data.work)]) return [`${path}.data.work: unknown work '${String(data.work)}'`];
       if (state.claims?.[subjectId!]) return [`${path}: claim '${subjectId}' already exists`];
@@ -120,7 +128,7 @@ function applyEvent(state: OrganizationStateIR, definition: OrganizationIR, even
       return [];
     }
     case 'claim.released': case 'claim.revoked': case 'claim.expired': {
-      const missing = requireSubject(); if (missing) return [missing];
+      const missing = fail(requireSubject(), requireSubjectKind('claim')); if (missing.length) return missing;
       const claim = state.claims?.[subjectId!];
       if (!claim) return [`${path}: unknown claim '${subjectId}'`];
       if (claim.status !== 'active') return [`${path}: claim '${subjectId}' is not active`];
@@ -128,7 +136,7 @@ function applyEvent(state: OrganizationStateIR, definition: OrganizationIR, even
       return [];
     }
     case 'attempt.started': {
-      const missing = fail(requireSubject(), requireActor()); if (missing.length) return missing;
+      const missing = fail(requireSubject(), requireSubjectKind('attempt'), requireActor()); if (missing.length) return missing;
       const workId = String(data.work);
       if (!state.work?.[workId]) return [`${path}.data.work: unknown work '${workId}'`];
       if (state.attempts?.[subjectId!]) return [`${path}: attempt '${subjectId}' already exists`];
@@ -138,7 +146,7 @@ function applyEvent(state: OrganizationStateIR, definition: OrganizationIR, even
       return [];
     }
     case 'attempt.status': {
-      const missing = requireSubject(); if (missing) return [missing];
+      const missing = fail(requireSubject(), requireSubjectKind('attempt')); if (missing.length) return missing;
       const attempt = state.attempts?.[subjectId!];
       if (!attempt) return [`${path}: unknown attempt '${subjectId}'`];
       const status = data.status as AttemptState['status'];
@@ -148,16 +156,17 @@ function applyEvent(state: OrganizationStateIR, definition: OrganizationIR, even
       return [];
     }
     case 'artifact.recorded': {
-      const missing = requireSubject(); if (missing) return [missing];
+      const missing = fail(requireSubject(), requireSubjectKind('artifact')); if (missing.length) return missing;
       (state.artifacts ??= {})[subjectId!] = structuredClone(data) as unknown as ArtifactState;
       return [];
     }
     case 'decision.recorded': {
-      const missing = requireSubject(); if (missing) return [missing];
+      const missing = fail(requireSubject(), requireSubjectKind('decision')); if (missing.length) return missing;
       (state.decisions ??= {})[subjectId!] = structuredClone(data) as unknown as DecisionState;
       return [];
     }
     case 'budget.consumed': {
+      const missing = requireSubjectKind('budget'); if (missing) return [missing];
       const budget = subjectId;
       if (!budget || !definition.budgets?.[budget]) return [`${path}: unknown budget '${String(budget)}'`];
       const amount = Number(data.amount);

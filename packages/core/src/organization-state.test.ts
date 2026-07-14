@@ -63,4 +63,15 @@ describe('portable organization state materialization', () => {
     expect(result.errors).toContain('events.same: duplicate event id');
     expect(result.errors).toContain("events.e3.causation: unknown prior event 'future'");
   });
+
+  test('rejects mismatched subject kinds and regressing sequential observation time', () => {
+    const result = materializeOrganizationState(definition, [
+      event('e1', 'work.created', '2026-07-14T12:01:00Z', { subject: { kind: 'attempt', id: 'w1' }, data: { type: 'change' } }),
+      event('e2', 'work.created', '2026-07-14T12:02:00Z', { subject: { kind: 'work', id: 'w2' }, data: { type: 'change' } }),
+      event('e3', 'work.assigned', '2026-07-14T12:01:30Z', { subject: { kind: 'work', id: 'w2' }, data: { assignees: ['coder'] } }),
+    ]);
+    expect(result.state).toBeUndefined();
+    expect(result.errors).toContain("events.e1.subject.kind must be 'work'");
+    expect(result.errors).toContain('events.e3.at: timestamp precedes the accepted observation sequence');
+  });
 });

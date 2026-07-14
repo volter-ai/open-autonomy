@@ -88,7 +88,7 @@ export function instantiateProfile(
   const errors = validateOrganizationProfile(profile);
   const parameters: Record<string, ProfileValue> = {};
   for (const [name, declaration] of Object.entries(profile.parameters ?? {})) {
-    const value = supplied[name] ?? declaration.default;
+    const value = Object.prototype.hasOwnProperty.call(supplied, name) ? supplied[name] : declaration.default;
     if (value === undefined) {
       if (declaration.required) errors.push(`parameter '${name}' is required`);
       continue;
@@ -99,7 +99,13 @@ export function instantiateProfile(
   for (const name of Object.keys(supplied)) if (!profile.parameters?.[name]) errors.push(`unknown parameter '${name}'`);
   if (errors.length) return { parameters, variants: [], errors };
 
-  let organization = substituteParameters(structuredClone(profile.template), parameters) as OrganizationIR;
+  let organization: OrganizationIR;
+  try {
+    organization = substituteParameters(structuredClone(profile.template), parameters) as OrganizationIR;
+  } catch (error) {
+    errors.push(error instanceof Error ? error.message : String(error));
+    return { parameters, variants: [], errors };
+  }
   const variants: string[] = [];
   for (const [name, variant] of Object.entries(profile.variants ?? {})) {
     if (!variant.when.every((condition) => matchesCondition(parameters[condition.parameter], condition))) continue;

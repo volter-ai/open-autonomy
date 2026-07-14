@@ -29,6 +29,24 @@ describe('autonomy.profile.v1', () => {
     expect(instantiateProfile(profile(), { teamName: 'ok', concurrency: 101 }).errors).toContain("parameter 'concurrency' must be <= 100");
   });
 
+  test('does not replace an explicitly supplied null with a default', () => {
+    const nullable = profile();
+    nullable.parameters = {
+      ...nullable.parameters,
+      label: { type: 'string', default: 'default-label' },
+    };
+    const result = instantiateProfile(nullable, { teamName: 'ok', label: null });
+    expect(result.errors).toContain("parameter 'label' must be string");
+    expect(result.parameters.label).toBeNull();
+  });
+
+  test('returns an instantiation error instead of throwing for an unbound template placeholder', () => {
+    const unbound = profile();
+    unbound.template.name = '${{ params.notDeclared }}';
+    expect(() => instantiateProfile(unbound, { teamName: 'ok' })).not.toThrow();
+    expect(instantiateProfile(unbound, { teamName: 'ok' }).errors).toContain("unbound profile parameter 'notDeclared'");
+  });
+
   test('rejects a patch whose path cannot be realized', () => {
     const broken: OrganizationProfileIR = {
       ...profile(),

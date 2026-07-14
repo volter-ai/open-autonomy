@@ -7,6 +7,7 @@ import {
 } from './organization-ir';
 import type { V1LoweringOptions } from './organization-compile';
 import type { DeploymentIR, SubstrateComponentManifest } from './organization-substrate';
+import { validateOrganizationProfile, type OrganizationProfileIR } from './organization-profile';
 
 export function parseOrganizationIr(yamlText: string): OrganizationIR {
   const ir = parseYaml(yamlText) as OrganizationIR;
@@ -42,4 +43,11 @@ export function parseV1LoweringOptions(yamlText: string): V1LoweringOptions {
   }
   if (errors.length) throw new Error(`invalid v1 lowering options:\n  ${errors.join('\n  ')}`);
   return options;
+}
+
+export function parseOrganizationProfile(yamlText: string): OrganizationProfileIR {
+  const profile = parseYaml(yamlText) as OrganizationProfileIR;
+  const errors = validateOrganizationProfile(profile);
+  if (errors.length) throw new Error(`invalid organization profile:\n  ${errors.join('\n  ')}`);
+  return profile;
 }

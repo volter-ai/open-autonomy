@@ -1,0 +1,66 @@
+schema: autonomy.profile.v1
+name: coding-team
+version: 0.1.0
+description: A parameterized family of supervised coding organizations.
+
+parameters:
+  teamName: { type: string, required: true, pattern: "^[a-z][a-z0-9-]+$" }
+  concurrency: { type: integer, default: 4, minimum: 1, maximum: 100 }
+  assignmentMode: { type: string, default: lease, enum: [direct, claim, lease] }
+  strictReview: { type: boolean, default: true }
+
+template:
+  schema: autonomy.organization.v2
+  name: "${{ params.teamName }}"
+  behaviors:
+    manager: { kind: skill, source: { uri: ./skills/manager/SKILL.md } }
+    coder: { kind: skill, source: { uri: ./skills/coder/SKILL.md } }
+    reviewer: { kind: skill, source: { uri: ./skills/reviewer/SKILL.md } }
+  capabilities:
+    manage: { resourceKinds: [work], actions: [create, assign, transition] }
+    propose: { resourceKinds: [code], actions: [write, propose] }
+    review: { resourceKinds: [proposal], actions: [inspect, attest] }
+  actors:
+    manager:
+      kind: agent
+      behaviors: [manager]
+      capabilities: [{ capability: manage }]
+      activation: [{ kind: continuous }]
+    coders:
+      kind: collective
+      behaviors: [coder]
+      capabilities: [{ capability: propose }]
+      capacity: { concurrent: "${{ params.concurrency }}" }
+    reviewer:
+      kind: agent
+      behaviors: [reviewer]
+      capabilities: [{ capability: review }]
+  workTypes:
+    change:
+      lifecycle:
+        initial: ready
+        terminal: [done, rejected]
+        states: { ready: {}, working: {}, review: {}, done: {}, rejected: {} }
+        transitions:
+          - { from: ready, to: working, event: claim, authority: [propose] }
+          - { from: working, to: review, event: propose, authority: [propose] }
+          - { from: review, to: done, event: accept, authority: [review] }
+          - { from: review, to: rejected, event: reject, authority: [review] }
+      assignment:
+        mode: "${{ params.assignmentMode }}"
+        candidates: [coders]
+        exclusive: true
+      verification:
+        required: true
+        verifier: [reviewer]
+        independent: true
+
+variants:
+  relaxed-review:
+    when: [{ parameter: strictReview, operator: eq, value: false }]
+    patches:
+      - { operation: set, path: /workTypes/change/verification/independent, value: false }
+  direct-assignment:
+    when: [{ parameter: assignmentMode, operator: eq, value: direct }]
+    patches:
+      - { operation: remove, path: /workTypes/change/assignment/exclusive }

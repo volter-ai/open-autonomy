@@ -41,6 +41,12 @@ lower(organization, proven deployment) -> artifacts + preservation report
 
 Target choice and provider wiring never change the denotation of the organization.
 
+`autonomy.profile.v1` makes the profile distinction concrete. It contains typed parameters, an OrganizationIR
+template, and deterministic conditional patches. Instantiation validates parameter types and bounds, applies
+matching variants in declaration order, and must produce an ordinary valid OrganizationIR before substrate
+selection begins. Profiles therefore express organization families without gaining access to deployment or
+provider configuration.
+
 ## Substrate is a composition, not a product category
 
 A substrate is a graph of multi-facet capability providers. Facets overlap: Hermes may provide actor,

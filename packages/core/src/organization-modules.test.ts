@@ -2,6 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import type { OrganizationIR, SourceRef } from './organization-ir';
 import {
   qualifyDeclaration,
+  resolveOrganizationReferences,
   resolveOrganizationModules,
   resolveQualifiedReference,
   type LoadedOrganizationModule,
@@ -88,5 +89,45 @@ describe('P1 organization module graph', () => {
     const right = await run({ alpha: { source: { uri: 'a' } }, zed: { source: { uri: 'z' } } });
     expect(Object.keys(left.graph?.modules ?? {})).toEqual(['acme/a', 'acme/root', 'acme/z']);
     expect(left).toEqual(right);
+  });
+
+  test('closes and sort-checks local and namespaced references without flattening modules', async () => {
+    const library = loaded('acme/lib', 'mem:/lib.yml', organization('lib', {
+      types: { request: { schema: { type: 'object' } } },
+      tools: { edit: { protocol: 'mcp' } },
+      behaviors: { work: { kind: 'skill', source: { uri: './work.md' }, inputs: { request: 'request' }, tools: ['edit'] } },
+    }));
+    const root = loaded('acme/root', 'mem:/root.yml', organization('root', {
+      imports: { lib: { source: { uri: 'lib' } } },
+      actors: { worker: { kind: 'agent', behaviors: ['lib/work'] } },
+    }));
+    const resolved = await resolveOrganizationModules(root, memoryLoader({ lib: library }));
+    const references = resolveOrganizationReferences(resolved.graph!);
+    expect(references.errors).toEqual([]);
+    expect(references.references).toContainEqual(expect.objectContaining({
+      module: root.moduleId, path: 'actors.worker.behaviors[0]', target: qualifyDeclaration(library.moduleId, 'behaviors', 'work'),
+    }));
+    expect(references.references).toContainEqual(expect.objectContaining({
+      module: library.moduleId, path: 'behaviors.work.inputs.request', target: qualifyDeclaration(library.moduleId, 'types', 'request'),
+    }));
+  });
+
+  test('rejects missing, wrong-sort, ambiguous union-sort, and namespace-shadowed references', async () => {
+    const child = loaded('acme/child', 'mem:/child.yml', organization('child'));
+    const root = loaded('acme/root', 'mem:/root.yml', organization('root', {
+      imports: { team: { source: { uri: 'child' } } },
+      behaviors: { work: { kind: 'skill', source: { uri: './work.md' }, tools: ['missing'] } },
+      actors: {
+        worker: { kind: 'agent', behaviors: ['work'], reportsTo: ['both'] },
+        both: { kind: 'agent', behaviors: ['work'] },
+        'team/local': { kind: 'agent', behaviors: ['work'] },
+      },
+      units: { both: { kind: 'team' } },
+    }));
+    const resolved = await resolveOrganizationModules(root, memoryLoader({ child }));
+    const references = resolveOrganizationReferences(resolved.graph!);
+    expect(references.errors).toContain("module 'acme/root' behaviors.work.tools[0]: unresolved tools reference 'missing'");
+    expect(references.errors).toContain("module 'acme/root' actors.worker.reportsTo[0]: ambiguous reference 'both' matches actors, units");
+    expect(references.errors).toContain("module 'acme/root' actors.team/local: local id is ambiguous with namespace 'team'");
   });
 });

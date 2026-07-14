@@ -492,6 +492,18 @@ enumeration over small registries, and obligation-ledger completeness checks.
 
 **Falsifier.** Every requirement has some provider, yet the accepted composition violates a cross-provider invariant.
 
+**Implementation record (2026-07-14).** P7 derives stable atomic obligations from every present semantic leaf and
+adds durable-identity obligations, then records one provider/interface/evidence witness, explicit assumption, loss,
+or unresolved disposition for each. Manually authored compositions and generated candidates pass the same independent
+validator. The finite solver enumerates facet assignments with deterministic tie breaking and lexicographically
+optimizes only compatible candidates across approximation, assumptions, preferences, economic uncertainty, cost,
+latency, capacity, and provider count. Bounded search exhaustion is never reported as incompatibility. Incompatibility
+requires a classified atomic witness core; if exhaustive search cannot derive a valid core for a global contradiction,
+the honest result is `undetermined`. High-risk witnesses require an evidenced enforcing principal/trust zone, state
+witnesses jointly check authority, consistency, ordering, recovery, and identity, and asserted evidence is unusable
+without an identified scoped acceptance. Evidence is in `organization-solver.test.ts` and the machine-matched P7
+ledger in `organization-coverage.test.ts`.
+
 ### P8. Progressive lowering and preservation
 
 **Semantic model.** Deployment-aware internal passes lower organization semantics through control and execution

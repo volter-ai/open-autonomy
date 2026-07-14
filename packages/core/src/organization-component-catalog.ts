@@ -30,6 +30,7 @@ function component(id: string, version: string, facets: Array<[string, FacetKind
 }
 
 export const HERMES_COMPONENT = component('hermes-agent', '226e8de', [
+  ['actor', 'actor', ['identity', 'run'], 'hermes-worker-lane', research('communication-topology-c')],
   ['work', 'work', ['create', 'claim', 'transition', 'comment'], 'hermes-kanban-db', research('state-transition-semantics')],
   ['session', 'session', ['launch', 'resume'], 'hermes-worker-lane', research('failure-detector-and-recovery')],
   ['execution', 'execution', ['dispatch', 'heartbeat', 'reclaim'], 'hermes-worker-lane', research('delivery-claims-and-execution-multiplicity')],

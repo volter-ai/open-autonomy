@@ -29,3 +29,4 @@ export * from './organization-expression';
 export * from './organization-behavior';
 export * from './organization-component';
 export * from './organization-component-catalog';
+export * from './organization-solver';

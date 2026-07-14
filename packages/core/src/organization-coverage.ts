@@ -148,6 +148,14 @@ export const ORGANIZATION_SEMANTIC_COVERAGE: readonly SemanticCoverageEntry[] = 
   entry('AdapterContract', 'schema id version direction from to interfaceMappings identity causality retry conflicts preconditions postconditions losses reversible reverseAdapter enforcement evidence', 'compiler', 'implemented', 'directional typed semantic translation or enforcement contract', 'P6'),
   entry('ComponentValidationResult', 'errors warnings', 'compiler', 'implemented', 'component, adapter, or composition validation findings', 'P6'),
   entry('ComponentComposition', 'instances authorities coherence adapters', 'compiler', 'implemented', 'configured provider graph with explicit state owners and coherence protocols', 'P6'),
+  entry('AtomicObligation', 'id path claim facet operation risk required state', 'compiler', 'implemented', 'one source-derived mandatory semantic realization claim', 'P7'),
+  entry('AssumptionAcceptance', 'assumption acceptedBy scope expires untilVersion', 'compiler', 'implemented', 'identified scoped and bounded acceptance of a deployment assumption', 'P7'),
+  entry('AssurancePolicy', 'minimum allowApproximation acceptedAssumptions asOf', 'compiler', 'implemented', 'risk-indexed minimum evidence and approximation policy', 'P7'),
+  entry('ObligationWitness', 'obligation disposition provider facet evidence adapter assumptions losses errors', 'compiler', 'implemented', 'provider or adapter discharge with evidence, assumptions, loss, and errors', 'P7'),
+  entry('CompatibilityLedger', 'obligations witnesses unresolved', 'compiler', 'implemented', 'complete atomic requirement-to-witness accounting', 'P7'),
+  entry('DeploymentCandidateV2', 'composition ledger objective', 'compiler', 'implemented', 'independently checkable feasible composition and explicit objective vector', 'P7'),
+  entry('SearchDomain', 'completeness maxCandidates preferredManifests', 'compiler', 'implemented', 'declared finite exhaustive or bounded heuristic solver domain and deterministic preferences', 'P7'),
+  entry('DeploymentSearchResult', 'status candidates explored complete unsatisfiedCore coreMinimality errors', 'compiler', 'implemented', 'constructive candidates, exhaustion boundary, or classified incompatibility explanation', 'P7'),
 ] as const;
 
 export interface AuditResidual {
@@ -158,8 +166,6 @@ export interface AuditResidual {
 
 /** B0 residual parking is closed: every known gap has a punch-list owner. */
 export const ORGANIZATION_AUDIT_RESIDUALS: readonly AuditResidual[] = [
-  { id: 'OAIR-R007', finding: 'requirements are catalog-level feature flags rather than atomic semantic obligations', owner: 'P7' },
-  { id: 'OAIR-R008', finding: 'compatibility has no assurance policy, certificates, constructive search, or unsatisfied cores', owner: 'P7' },
   { id: 'OAIR-R009', finding: 'v1 lowering relies on handwritten actor projection and has no staged contract-preserving IR', owner: 'P8' },
   { id: 'OAIR-R010', finding: 'Hermes/Slack/coding-worker composed deployment is not implemented end to end', owner: 'P9' },
   { id: 'OAIR-R011', finding: 'state reducer is sequential and lacks causal DAG, evidence, authorization, corrections, and conformance', owner: 'P10' },
@@ -192,7 +198,7 @@ export const ORGANIZATION_BASELINE_OBLIGATIONS: readonly BaselineObligation[] = 
   { id: 'B0-DIST-1', claim: 'state/claim declarations do not imply unimplemented distributed guarantees', disposition: 'unresolved', assurance: 'assumed', residual: 'OAIR-R011' },
   { id: 'B0-SEC-1', claim: 'every declared capability and policy names a technical enforcement boundary', disposition: 'preserved', assurance: 'statically-checked', evidence: 'TrustContract and enforcement AdapterContract require enforcing principals and trust zones; deployment discharge remains P7' },
   { id: 'B0-PROV-1', claim: 'source assertions are distinguishable from independently verified evidence', disposition: 'unresolved', assurance: 'unknown', residual: 'OAIR-R011' },
-  { id: 'B0-REF-1', claim: 'v2 to v1 lowering accounts for every atomic source obligation', disposition: 'unresolved', assurance: 'property-tested', evidence: 'organization-compile.test.ts covers catalog-level features only', residual: 'OAIR-R007' },
+  { id: 'B0-REF-1', claim: 'v2 to v1 lowering accounts for every atomic source obligation', disposition: 'unresolved', assurance: 'property-tested', evidence: 'P7 now derives atomic obligations; staged lowering coverage remains P8', residual: 'OAIR-R009' },
   { id: 'B0-RES-1', claim: 'every B0 audit gap has a unique later punch-list owner', disposition: 'preserved', assurance: 'statically-checked', evidence: 'organization-coverage.test.ts residual ownership checks' },
 ] as const;
 
@@ -259,4 +265,16 @@ export const ORGANIZATION_P6_OBLIGATIONS: readonly BaselineObligation[] = [
   { id: 'P6-INT-1', claim: 'commands, observations, configuration, and adapter endpoints use versioned schemas and explicit interface mappings', disposition: 'preserved', assurance: 'property-tested', evidence: 'VersionedSchema, InterfaceContract, AdapterContract, and initial catalog validation' },
   { id: 'P6-ADV-1', claim: 'component content is digest-sealed and asserted or signed origin is not treated as claim truth', disposition: 'preserved', assurance: 'property-tested', evidence: 'organization-component.test.ts manifest substitution and attestation-warning fixtures' },
   { id: 'P6-ADP-1', claim: 'adapter direction, preconditions, postconditions, loss, translation, and reversibility are explicit', disposition: 'preserved', assurance: 'property-tested', evidence: 'organization-component.test.ts false inverse, implicit loss, and endpoint inversion fixtures' },
+] as const;
+
+export const ORGANIZATION_P7_OBLIGATIONS: readonly BaselineObligation[] = [
+  { id: 'P7-CSP-1', claim: 'every emitted candidate independently revalidates all supported mandatory constraints', disposition: 'preserved', assurance: 'property-tested', evidence: 'organization-solver.test.ts revalidates every exhaustive-search candidate' },
+  { id: 'P7-CSP-2', claim: 'completeness is limited to declared finite exhaustive domains and bounded exhaustion never means incompatible', disposition: 'preserved', assurance: 'property-tested', evidence: 'organization-solver.test.ts zero-bound exhaustion and finite-domain fixtures' },
+  { id: 'P7-CSP-3', claim: 'incompatibility is returned only with a classified valid atomic witness core; unexplained global failure is undetermined', disposition: 'preserved', assurance: 'property-tested', evidence: 'organization-solver.test.ts assurance contradiction core and SearchResult coreMinimality' },
+  { id: 'P7-REF-1', claim: 'each semantic leaf induces an atomic obligation discharged by a provider/interface witness under explicit assumptions', disposition: 'preserved', assurance: 'property-tested', evidence: 'organization-solver.test.ts leaf derivation, witness ledger, and independent validation' },
+  { id: 'P7-DIST-1', claim: 'authority, consistency, identity, ordering, recovery, and overlapping ownership constrain the global candidate', disposition: 'preserved', assurance: 'property-tested', evidence: 'organization-solver witness state checks and split-brain manual-candidate fixture' },
+  { id: 'P7-SEC-1', claim: 'high-risk witnesses require an evidenced enforcing principal and trust zone before economic optimization', disposition: 'preserved', assurance: 'property-tested', evidence: 'organization-solver witness trust checks and component trust validation' },
+  { id: 'P7-ECO-1', claim: 'feasible candidates use an explicit lexicographic preference, uncertainty, cost, latency, capacity, and provider-count vector', disposition: 'preserved', assurance: 'statically-checked', evidence: 'DeploymentCandidateV2 objective and compareObjective ordering after unresolved filtering' },
+  { id: 'P7-EPI-1', claim: 'witnesses retain claim evidence and asserted claims require identified scoped nonexpired acceptance', disposition: 'preserved', assurance: 'property-tested', evidence: 'organization-solver.test.ts accepted/unaccepted assertion fixtures' },
+  { id: 'P7-DET-1', claim: 'equal pinned inputs and objective policy yield stable candidate ordering', disposition: 'preserved', assurance: 'property-tested', evidence: 'organization-solver.test.ts reversed-registry deterministic objective sequence' },
 ] as const;

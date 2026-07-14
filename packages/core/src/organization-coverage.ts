@@ -156,6 +156,21 @@ export const ORGANIZATION_SEMANTIC_COVERAGE: readonly SemanticCoverageEntry[] = 
   entry('DeploymentCandidateV2', 'composition ledger objective', 'compiler', 'implemented', 'independently checkable feasible composition and explicit objective vector', 'P7'),
   entry('SearchDomain', 'completeness maxCandidates preferredManifests', 'compiler', 'implemented', 'declared finite exhaustive or bounded heuristic solver domain and deterministic preferences', 'P7'),
   entry('DeploymentSearchResult', 'status candidates explored complete unsatisfiedCore coreMinimality errors', 'compiler', 'implemented', 'constructive candidates, exhaustion boundary, or classified incompatibility explanation', 'P7'),
+  entry('SemanticContractIR', 'assumptions guarantees observations', 'compiler', 'implemented', 'assumption/guarantee and observable-event semantics for an internal lowering level', 'P8'),
+  entry('ControlActorPlan', 'actor behaviors activation authority sourceObligations', 'compiler', 'implemented', 'target-independent actor control requirements and provenance', 'P8'),
+  entry('ControlWorkPlan', 'workType states transitions authority sourceObligations', 'compiler', 'implemented', 'target-independent work transition control and authority', 'P8'),
+  entry('ControlPlanIR', 'schema organization contract actors work enforcements', 'compiler', 'implemented', 'deployment-aware target-independent control form', 'P8'),
+  entry('ExecutionStep', 'id actor behavior provider runtime endpoint isolation credentialRefs instructionRenderer sourceObligations', 'compiler', 'implemented', 'provider-bound runtime invocation template below organization semantics', 'P8'),
+  entry('ExecutionPlanIR', 'schema organization contract steps stateAuthorities providerConfiguration', 'compiler', 'implemented', 'provider-configured execution form with runtime security boundaries', 'P8'),
+  entry('LoweringDisposition', 'obligation disposition targets witness explanation', 'compiler', 'implemented', 'per-obligation preservation, weakening, rejection, or unresolved accounting', 'P8'),
+  entry('ObservationProjection', 'source target relation', 'compiler', 'implemented', 'declared observation relation between adjacent semantic levels', 'P8'),
+  entry('PreservationCertificate', 'pass from to assumptions guarantees requiredProgress observationProjections dispositions losses', 'compiler', 'implemented', 'checkable conditional preservation report for one lowering pass', 'P8'),
+  entry('LoweringSourceRelation', 'output sources', 'compiler', 'implemented', 'many-to-many generated target to source obligation provenance', 'P8'),
+  entry('LoweringResult', 'output sourceMap certificate newObligations losses errors', 'compiler', 'implemented', 'atomic lowering output, proof evidence, feedback obligations, losses, and failures', 'P8'),
+  entry('ExecutionLoweringOptions', 'runtimes', 'compiler', 'implemented', 'runtime, endpoint, isolation, credential, renderer, and provider selection below Organization IR', 'P8'),
+  entry('FixedPointLoweringResult', 'candidate control execution certificates obligations errors', 'compiler', 'implemented', 'closed deployment/lowering fixed point or backtracking failure evidence', 'P8'),
+  entry('V1ExecutionLoweringOptions', 'targets codeHost policy resources', 'compiler', 'implemented', 'bounded native v1 emission environment', 'P8'),
+  entry('V1ExecutionLoweringResult', 'output sourceMap certificate losses errors', 'compiler', 'implemented', 'mechanical bounded v1 target plus preservation evidence', 'P8'),
 ] as const;
 
 export interface AuditResidual {
@@ -166,7 +181,6 @@ export interface AuditResidual {
 
 /** B0 residual parking is closed: every known gap has a punch-list owner. */
 export const ORGANIZATION_AUDIT_RESIDUALS: readonly AuditResidual[] = [
-  { id: 'OAIR-R009', finding: 'v1 lowering relies on handwritten actor projection and has no staged contract-preserving IR', owner: 'P8' },
   { id: 'OAIR-R010', finding: 'Hermes/Slack/coding-worker composed deployment is not implemented end to end', owner: 'P9' },
   { id: 'OAIR-R011', finding: 'state reducer is sequential and lacks causal DAG, evidence, authorization, corrections, and conformance', owner: 'P10' },
   { id: 'OAIR-R012', finding: 'identical canonical organization has not been proven on a dissimilar second substrate', owner: 'P11' },
@@ -198,7 +212,7 @@ export const ORGANIZATION_BASELINE_OBLIGATIONS: readonly BaselineObligation[] = 
   { id: 'B0-DIST-1', claim: 'state/claim declarations do not imply unimplemented distributed guarantees', disposition: 'unresolved', assurance: 'assumed', residual: 'OAIR-R011' },
   { id: 'B0-SEC-1', claim: 'every declared capability and policy names a technical enforcement boundary', disposition: 'preserved', assurance: 'statically-checked', evidence: 'TrustContract and enforcement AdapterContract require enforcing principals and trust zones; deployment discharge remains P7' },
   { id: 'B0-PROV-1', claim: 'source assertions are distinguishable from independently verified evidence', disposition: 'unresolved', assurance: 'unknown', residual: 'OAIR-R011' },
-  { id: 'B0-REF-1', claim: 'v2 to v1 lowering accounts for every atomic source obligation', disposition: 'unresolved', assurance: 'property-tested', evidence: 'P7 now derives atomic obligations; staged lowering coverage remains P8', residual: 'OAIR-R009' },
+  { id: 'B0-REF-1', claim: 'v2 to v1 lowering accounts for every atomic source obligation', disposition: 'preserved', assurance: 'property-tested', evidence: 'organization-lowering.test.ts staged control/execution and bounded mechanical v1 coverage checks' },
   { id: 'B0-RES-1', claim: 'every B0 audit gap has a unique later punch-list owner', disposition: 'preserved', assurance: 'statically-checked', evidence: 'organization-coverage.test.ts residual ownership checks' },
 ] as const;
 
@@ -277,4 +291,14 @@ export const ORGANIZATION_P7_OBLIGATIONS: readonly BaselineObligation[] = [
   { id: 'P7-ECO-1', claim: 'feasible candidates use an explicit lexicographic preference, uncertainty, cost, latency, capacity, and provider-count vector', disposition: 'preserved', assurance: 'statically-checked', evidence: 'DeploymentCandidateV2 objective and compareObjective ordering after unresolved filtering' },
   { id: 'P7-EPI-1', claim: 'witnesses retain claim evidence and asserted claims require identified scoped nonexpired acceptance', disposition: 'preserved', assurance: 'property-tested', evidence: 'organization-solver.test.ts accepted/unaccepted assertion fixtures' },
   { id: 'P7-DET-1', claim: 'equal pinned inputs and objective policy yield stable candidate ordering', disposition: 'preserved', assurance: 'property-tested', evidence: 'organization-solver.test.ts reversed-registry deterministic objective sequence' },
+] as const;
+
+export const ORGANIZATION_P8_OBLIGATIONS: readonly BaselineObligation[] = [
+  { id: 'P8-SEM-1', claim: 'control and execution levels declare assumptions, guarantees, required progress, and observable schemas', disposition: 'preserved', assurance: 'statically-checked', evidence: 'SemanticContractIR, ControlPlanIR, ExecutionPlanIR, and semantic coverage AST guard' },
+  { id: 'P8-REF-1', claim: 'lowering preserves source safety and required progress under explicit assumptions or reports weakening', disposition: 'preserved', assurance: 'property-tested', evidence: 'organization-lowering.test.ts complete dispositions and new progress-obligation validation' },
+  { id: 'P8-REF-2', claim: 'preservation certificates compose only across aligned levels, discharged assumptions, and observation maps', disposition: 'preserved', assurance: 'property-tested', evidence: 'organization-lowering.test.ts level, assumption, and observation mismatch counterexamples' },
+  { id: 'P8-COMP-1', claim: 'every atomic source obligation has a target mapping or compilation fails', disposition: 'preserved', assurance: 'property-tested', evidence: 'organization-lowering.test.ts ledger omission, disposition equality, and bounded v1 rejection fixtures' },
+  { id: 'P8-COMP-2', claim: 'lowering-created obligations trigger candidate backtracking and executable emission requires fixed-point closure', disposition: 'preserved', assurance: 'property-tested', evidence: 'organization-lowering.test.ts insecure-first candidate backtracking and no-emission fixture' },
+  { id: 'P8-SEC-1', claim: 'credentials, endpoints, isolation, provider configuration, and prompt rendering appear only below Organization IR', disposition: 'preserved', assurance: 'property-tested', evidence: 'organization-lowering.test.ts source immutability and execution-step boundary fixture' },
+  { id: 'P8-PROV-1', claim: 'control, execution, and v1 targets retain many-to-many source obligation and provider provenance', disposition: 'preserved', assurance: 'property-tested', evidence: 'organization-lowering.test.ts source maps, step obligations, witnesses, and v1 certificate fixture' },
 ] as const;

@@ -536,6 +536,17 @@ tests across equivalent source organizations.
 
 **Falsifier.** A source policy is absent from both emitted enforcement and the preservation/loss report.
 
+**Implementation record (2026-07-14).** P8 adds deployment-aware `autonomy.control.v1` and
+`autonomy.execution.v1` internal forms. Each level declares assumptions, guarantees, required-progress obligations,
+and versioned observations. Every pass returns output, many-to-many source relations, a conditional preservation
+certificate, newly induced obligations, losses, and errors. Certificates compose only when levels, intermediate
+assumptions, and observation projections align. Execution lowering introduces explicit isolation and credential-scope
+obligations, revalidates them against the deployment, and backtracks across candidates; native emission is impossible
+until this fixed point closes. Runtime endpoints, credentials, isolation, renderers, and provider configuration enter
+only in Execution IR. A bounded mechanical Execution IR to `autonomy.ir.v1` pass replaces handwritten projection for
+its supported subset and rejects unsupported multiplicity or activations. Machine-matched evidence and adversarial
+fixtures live in `organization-lowering.test.ts` and `organization-coverage.test.ts`.
+
 ### P9. Hermes autonomous-coding vertical slice
 
 **Semantic model.** The slice is an architectural falsification experiment, not proof that Hermes is the universal

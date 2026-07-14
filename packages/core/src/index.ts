@@ -30,3 +30,4 @@ export * from './organization-behavior';
 export * from './organization-component';
 export * from './organization-component-catalog';
 export * from './organization-solver';
+export * from './organization-lowering';

@@ -876,13 +876,16 @@ export async function runCli(argv: string[]): Promise<number> {
   }
   if (cmd === 'launch') {
     const flags = parseFlags(rest);
-    // `--ref` is the work item (`subject.ref`); locally we forward it under the target's OWN declared
-    // param name (the param whose source is `subject.ref`), so the worker reads e.g. $ZTRACK_ISSUE.
+    // `--ref` is the work item (`subject.ref`); when the target declares a source mapping, forward it
+    // under that target's OWN param name (so a worker reads e.g. $ZTRACK_ISSUE). Otherwise retain the
+    // portable `ref` key itself — human asks and generic runners surface it directly in list/get.
     if ('ref' in flags) {
       const { params: declared = {} } = manifestAgent(agent);
       const refParam = Object.entries(declared).find(([, src]) => src === 'subject.ref')?.[0];
-      if (refParam) flags[refParam] = flags.ref;
-      delete flags.ref;
+      if (refParam) {
+        flags[refParam] = flags.ref;
+        delete flags.ref;
+      }
     }
     try {
       return await launch(agent, flags);

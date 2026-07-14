@@ -623,6 +623,19 @@ corrupted/forged event fixtures, and crash/recovery fault injection.
 
 **Falsifier.** Replaying the same accepted causal history under the same versions produces a different portable state.
 
+**Implementation record (2026-07-14).** P10 introduces authenticated `autonomy.event.v2` envelopes and a
+version-pinned accepted causal history. Acceptance independently checks identity, content digest, issuer/event
+authority, subject binding, authentication, provenance, replay, resource bounds, parent closure, and cycles. Event
+contracts declare subject-aware read/write sets and require concurrency to commute, reject, or use explicit ID or
+authority arbitration; wall clocks never create causal order. Exact duplicates are idempotent, missing-parent events
+remain partition-pending, and immutable correction/retraction events causally supersede active history. Exact-version
+component adapters either lift with native provenance or return an observability gap—unknown native events never gain
+guessed meaning. Materialization rebuilds state from the active canonical history in causal mode and differential
+tests prove prefix composition, topological-order invariance, and serialized replay equality. Conformance separately
+reports lifecycle, authority, evidence, budget, protocol, safety, observability gaps, and liveness assumptions.
+Clock-explicit bounded temporal monitors return counterexamples or finite-prefix `unknown`, never infer unbounded
+liveness from silence. Evidence lives in `organization-causal-state.test.ts` and the P10 machine ledger.
+
 ### P11. Second dissimilar substrate
 
 **Semantic model.** Substrate independence is supported only if the same compatible organizational meaning can be

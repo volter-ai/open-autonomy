@@ -19,6 +19,10 @@ export interface MaterializationResult {
   errors: string[];
 }
 
+export interface MaterializationOptions {
+  order?: 'timestamp' | 'causal';
+}
+
 /**
  * Pure reference materializer for the portable event vocabulary. Substrates may
  * store state however they choose, but a conforming event projection must reduce
@@ -28,6 +32,7 @@ export function materializeOrganizationState(
   definition: OrganizationIR,
   events: StateEvent[],
   base?: OrganizationStateIR,
+  options: MaterializationOptions = {},
 ): MaterializationResult {
   const state: OrganizationStateIR = structuredClone(base ?? {
     schema: 'autonomy.state.v1',
@@ -47,7 +52,7 @@ export function materializeOrganizationState(
     if (!event.id) { errors.push(`${path}: id is required`); continue; }
     if (knownEvents.has(event.id)) { errors.push(`${path}: duplicate event id`); continue; }
     if (!event.at || Number.isNaN(Date.parse(event.at))) { errors.push(`${path}.at: valid timestamp is required`); continue; }
-    if (Date.parse(event.at) < lastObservedAt) {
+    if (options.order !== 'causal' && Date.parse(event.at) < lastObservedAt) {
       errors.push(`${path}.at: timestamp precedes the accepted observation sequence`);
       continue;
     }
@@ -61,8 +66,8 @@ export function materializeOrganizationState(
     knownEvents.add(event.id);
     (state.events ??= []).push(structuredClone(event));
     state.revision += 1;
-    state.observedAt = event.at;
-    lastObservedAt = Date.parse(event.at);
+    if (Date.parse(event.at) >= lastObservedAt) state.observedAt = event.at;
+    lastObservedAt = Math.max(lastObservedAt, Date.parse(event.at));
   }
 
   if (errors.length) return { errors };

@@ -86,6 +86,7 @@ export const ORGANIZATION_SEMANTIC_COVERAGE: readonly SemanticCoverageEntry[] = 
   entry('CompatibilityDiagnostic', 'feature status provider message', 'compiler', 'partial', 'legacy compatibility explanation', 'P3'),
   entry('CompatibilityResult', 'status requirements selections diagnostics', 'compiler', 'partial', 'legacy deployment compatibility report', 'P7'),
   entry('MaterializationResult', 'state errors', 'compiler', 'partial', 'all-or-nothing sequential state reduction result', 'P10'),
+  entry('MaterializationOptions', 'order', 'compiler', 'implemented', 'explicit legacy timestamp or prevalidated causal reducer ordering mode', 'P10'),
   entry('V1ActorProjection', 'behavior capabilities triggers kind timeout review prelaunch result', 'compiler', 'partial', 'temporary explicit adapter from v2 actor to v1 runner actor', 'P8'),
   entry('V1LoweringOptions', 'deployment components targets codeHost actors policy resources documents', 'compiler', 'partial', 'temporary combined deployment and v1 emission configuration', 'P8'),
   entry('V1LoweringResult', 'ir compatibility errors', 'compiler', 'partial', 'v1 emission plus compatibility report', 'P8'),
@@ -185,6 +186,19 @@ export const ORGANIZATION_SEMANTIC_COVERAGE: readonly SemanticCoverageEntry[] = 
   entry('ControllerTransition', 'state effects errors', 'compiler', 'implemented', 'pure controller state transition with explicit effects and failures', 'P9'),
   entry('HermesWorkerEvent', 'eventId kind work actor worker runId fence at session runtime isolation credentialScopes question cost artifactDigest evidence verdict', 'observation', 'implemented', 'fenced Hermes/worker lifecycle observation with identity, security, cost, and evidence', 'P9'),
   entry('HermesCommandPlan', 'executable argv idempotencyKey verify', 'compiler', 'implemented', 'shell-free Hermes CLI adapter command with mandatory post-state verification', 'P9'),
+  entry('PortableEventV2', 'schema reducer id type at issuer actor subject parents correlation epistemic provenance evidence payload corrects retracts integrity', 'observation', 'implemented', 'versioned authenticated causal portable event with explicit epistemic and repair semantics', 'P10'),
+  entry('EventAccessContract', 'type reads writes resolution authorityOrder', 'compiler', 'implemented', 'event read/write footprint and concurrent conflict arbitration contract', 'P10'),
+  entry('EventIssuerPolicy', 'issuer eventTypes subjects requireAuthenticated', 'compiler', 'implemented', 'issuer authorization, subject binding, and authentication requirement', 'P10'),
+  entry('CausalAcceptancePolicy', 'eventSchema reducer issuers contracts maximumEvents', 'compiler', 'implemented', 'version-pinned bounded event acceptance and concurrency policy', 'P10'),
+  entry('AcceptedCausalHistory', 'schema eventSchema reducer events order active corrections retractions gaps', 'observation', 'implemented', 'immutable accepted DAG, canonical linearization, active repair projection, and gaps', 'P10'),
+  entry('CausalAcceptanceResult', 'history pending duplicates errors', 'compiler', 'implemented', 'accepted history, partition-pending events, exact duplicates, or rejection evidence', 'P10'),
+  entry('NativeObservation', 'provider schema version id at data provenance authenticated', 'observation', 'implemented', 'versioned provider-native observation before semantic lifting', 'P10'),
+  entry('NativeLiftAdapter', 'id provider nativeSchema nativeVersion portableTypes lift', 'compiler', 'implemented', 'component-owned exact-schema lifting boundary', 'P10'),
+  entry('LiftResult', 'event gap errors', 'compiler', 'implemented', 'portable event, explicit observability gap, or invalid adapter result', 'P10'),
+  entry('CausalMaterializationResult', 'state history errors', 'compiler', 'implemented', 'portable state rebuilt from accepted causal history', 'P10'),
+  entry('TraceConformanceReport', 'status lifecycle authority evidence budget protocol safety observabilityGaps livenessAssumptions', 'compiler', 'implemented', 'multi-property trace conformance with explicit unknown observability and liveness assumptions', 'P10'),
+  entry('TemporalMonitor', 'id kind triggerType responseType bound clock fairnessAssumptions', 'compiler', 'implemented', 'bounded clock-explicit safety or response property with fairness assumptions', 'P10'),
+  entry('TemporalFinding', 'monitor status counterexample assumptions', 'compiler', 'implemented', 'satisfied, violated, or finite-prefix-unknown temporal result with witness trace', 'P10'),
 ] as const;
 
 export interface AuditResidual {
@@ -195,7 +209,6 @@ export interface AuditResidual {
 
 /** B0 residual parking is closed: every known gap has a punch-list owner. */
 export const ORGANIZATION_AUDIT_RESIDUALS: readonly AuditResidual[] = [
-  { id: 'OAIR-R011', finding: 'state reducer is sequential and lacks causal DAG, evidence, authorization, corrections, and conformance', owner: 'P10' },
   { id: 'OAIR-R012', finding: 'identical canonical organization has not been proven on a dissimilar second substrate', owner: 'P11' },
   { id: 'OAIR-R013', finding: 'formal lifecycle, authority, protocol, information-flow, resource, and loop analyses are absent', owner: 'P12' },
   { id: 'OAIR-R014', finding: 'external standard mappings lack versioned semantic coverage and loss reports', owner: 'P13' },
@@ -222,9 +235,9 @@ export const ORGANIZATION_BASELINE_OBLIGATIONS: readonly BaselineObligation[] = 
   { id: 'B0-TYP-1', claim: 'current portable references resolve only to their declared semantic sort', disposition: 'preserved', assurance: 'property-tested', evidence: 'organization-ir.test.ts dangling and wrong-catalog reference fixtures' },
   { id: 'B0-ALG-1', claim: 'profile patch ordering and conflicts have a complete algebra', disposition: 'preserved', assurance: 'property-tested', evidence: 'organization-profile.test.ts deterministic ordered last-writer and organization-behavior.test.ts instruction identity/conflict laws' },
   { id: 'B0-ALG-2', claim: 'successful sequential state materialization composes over trace prefixes', disposition: 'preserved', assurance: 'property-tested', evidence: 'organization-state.test.ts prefix composition fixture' },
-  { id: 'B0-DIST-1', claim: 'state/claim declarations do not imply unimplemented distributed guarantees', disposition: 'unresolved', assurance: 'assumed', residual: 'OAIR-R011' },
+  { id: 'B0-DIST-1', claim: 'state/claim declarations do not imply unimplemented distributed guarantees', disposition: 'preserved', assurance: 'property-tested', evidence: 'P6 explicit unknown state contracts and P10 causal conflict/reconciliation fixtures' },
   { id: 'B0-SEC-1', claim: 'every declared capability and policy names a technical enforcement boundary', disposition: 'preserved', assurance: 'statically-checked', evidence: 'TrustContract and enforcement AdapterContract require enforcing principals and trust zones; deployment discharge remains P7' },
-  { id: 'B0-PROV-1', claim: 'source assertions are distinguishable from independently verified evidence', disposition: 'unresolved', assurance: 'unknown', residual: 'OAIR-R011' },
+  { id: 'B0-PROV-1', claim: 'source assertions are distinguishable from independently verified evidence', disposition: 'preserved', assurance: 'property-tested', evidence: 'PortableEventV2 epistemic/evidence statuses and P10 reported-success counterexample' },
   { id: 'B0-REF-1', claim: 'v2 to v1 lowering accounts for every atomic source obligation', disposition: 'preserved', assurance: 'property-tested', evidence: 'organization-lowering.test.ts staged control/execution and bounded mechanical v1 coverage checks' },
   { id: 'B0-RES-1', claim: 'every B0 audit gap has a unique later punch-list owner', disposition: 'preserved', assurance: 'statically-checked', evidence: 'organization-coverage.test.ts residual ownership checks' },
 ] as const;
@@ -326,4 +339,15 @@ export const ORGANIZATION_P9_OBLIGATIONS: readonly BaselineObligation[] = [
   { id: 'P9-ECO-1', claim: 'cost, latency, queue depth, attempts, and progress attribute to durable work and enforce limits', disposition: 'preserved', assurance: 'property-tested', evidence: 'ControllerMetrics/Attempt fields and organization-hermes-controller.test.ts cost/queue/progress fixtures' },
   { id: 'P9-ADV-1', claim: 'forged completion, prompt-like Slack text, replay, stale fencing, stale approval, and shell payloads fail safely', disposition: 'preserved', assurance: 'property-tested', evidence: 'organization-hermes-controller.test.ts attack corpus and shell-free Hermes argv plan' },
   { id: 'P9-ORG-1', claim: 'manager state, accountable actor, assignee, claimant actor, worker, session, runtime, and reviewer remain distinct', disposition: 'preserved', assurance: 'property-tested', evidence: 'organization-hermes-controller.test.ts identity separation and independent-review fixtures' },
+] as const;
+
+export const ORGANIZATION_P10_OBLIGATIONS: readonly BaselineObligation[] = [
+  { id: 'P10-ALG-1', claim: 'successful causal materialization composes over every accepted trace prefix', disposition: 'preserved', assurance: 'property-tested', evidence: 'organization-causal-state.test.ts prefix-then-append versus whole-history replay' },
+  { id: 'P10-ALG-2', claim: 'causally independent events commute by access contract or invoke explicit deterministic arbitration/rejection', disposition: 'preserved', assurance: 'property-tested', evidence: 'organization-causal-state.test.ts reordered commuting work and conflicting artifact fixtures' },
+  { id: 'P10-TEMP-1', claim: 'temporal properties declare finite bounds, clocks, fairness assumptions, and finite-prefix unknown', disposition: 'preserved', assurance: 'property-tested', evidence: 'TemporalMonitor and organization-causal-state.test.ts open/closed observation fixtures' },
+  { id: 'P10-DIST-1', claim: 'duplicate, reorder, late arrival, correction, retraction, and partition reconciliation have versioned semantics', disposition: 'preserved', assurance: 'property-tested', evidence: 'organization-causal-state.test.ts duplicate/reorder/pending/correction/retraction corpus' },
+  { id: 'P10-EPI-1', claim: 'assertion, report, observation, inference, attestation, and verification remain distinct', disposition: 'preserved', assurance: 'property-tested', evidence: 'PortableEventV2 epistemic/evidence graph and reported completion rejection fixture' },
+  { id: 'P10-DB-1', claim: 'portable state rebuilds from accepted history under pinned event/reducer versions', disposition: 'preserved', assurance: 'property-tested', evidence: 'organization-causal-state.test.ts serialized history differential replay and snapshot equality' },
+  { id: 'P10-SEC-1', claim: 'event identity, issuer authorization, integrity, subject binding, provenance, authentication, and replay are independently checked', disposition: 'preserved', assurance: 'property-tested', evidence: 'organization-causal-state.test.ts corrupt, unauthorized, wrong-subject, unsigned, and duplicate fixtures' },
+  { id: 'P10-REF-1', claim: 'exact native schema adapters lift to conforming portable traces or explicit gaps without guessed meaning', disposition: 'preserved', assurance: 'property-tested', evidence: 'organization-causal-state.test.ts exact Hermes adapter, unknown-version/kind gaps, and conformance report' },
 ] as const;

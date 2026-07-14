@@ -19,3 +19,4 @@ export * from './organization-substrate';
 export * from './organization-profile';
 export * from './organization-state';
 export * from './organization-coverage';
+export * from './organization-modules';

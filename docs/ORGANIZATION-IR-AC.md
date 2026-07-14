@@ -252,6 +252,11 @@ acceptance specification. Their existence is not evidence that the corresponding
 **Falsifier.** A currently accepted field, deployment, or event has no semantic disposition, assurance status, or
 assigned residual.
 
+**Implementation record.** `packages/core/src/organization-coverage.ts` is the machine-readable coverage,
+baseline-obligation, and residual registry. Its test parses all exported experimental interfaces and fails when a
+field lacks an entry, when a formal B0 audit ID lacks an obligation, or when an unresolved obligation has no P1-P13
+owner. This closes B0 accounting without claiming that forward-assigned residuals are already implemented.
+
 ### P1. Modules, imports, namespaces, and stable identity
 
 **Semantic model.** A module exports a sorted signature of declarations. Resolution links a finite module graph

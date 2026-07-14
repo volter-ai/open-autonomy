@@ -74,4 +74,21 @@ describe('portable organization state materialization', () => {
     expect(result.errors).toContain("events.e1.subject.kind must be 'work'");
     expect(result.errors).toContain('events.e3.at: timestamp precedes the accepted observation sequence');
   });
+
+  test('materializes successful traces compositionally over prefixes', () => {
+    const prefix = [
+      event('e1', 'work.created', '2026-07-14T12:00:00Z', { subject: { kind: 'work', id: 'w1' }, data: { type: 'change' } }),
+      event('e2', 'work.transitioned', '2026-07-14T12:01:00Z', { subject: { kind: 'work', id: 'w1' }, data: { to: 'working', event: 'claim' } }),
+    ];
+    const suffix = [
+      event('e3', 'attempt.started', '2026-07-14T12:02:00Z', { actor: 'coder', subject: { kind: 'attempt', id: 'a1' }, data: { work: 'w1' } }),
+      event('e4', 'attempt.status', '2026-07-14T12:03:00Z', { subject: { kind: 'attempt', id: 'a1' }, data: { status: 'succeeded' } }),
+    ];
+    const whole = materializeOrganizationState(definition, [...prefix, ...suffix]);
+    const first = materializeOrganizationState(definition, prefix);
+    const continued = materializeOrganizationState(definition, suffix, first.state);
+    expect(first.errors).toEqual([]);
+    expect(continued.errors).toEqual([]);
+    expect(continued.state).toEqual(whole.state);
+  });
 });

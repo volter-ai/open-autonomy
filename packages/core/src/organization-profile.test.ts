@@ -22,6 +22,21 @@ describe('autonomy.profile.v1', () => {
     expect(result.organization?.workTypes?.change.assignment?.exclusive).toBeUndefined();
   });
 
+  test('makes overlapping patch order observable with deterministic last-writer semantics', () => {
+    const ordered = profile();
+    ordered.variants = {
+      first: { when: [{ parameter: 'strictReview', operator: 'eq', value: true }], patches: [{ operation: 'set', path: '/name', value: 'first' }] },
+      second: { when: [{ parameter: 'strictReview', operator: 'eq', value: true }], patches: [{ operation: 'set', path: '/name', value: 'second' }] },
+    };
+    const forward = instantiateProfile(ordered, { teamName: 'base' });
+    ordered.variants = { second: ordered.variants.second, first: ordered.variants.first };
+    const reverse = instantiateProfile(ordered, { teamName: 'base' });
+    expect(forward.variants).toEqual(['first', 'second']);
+    expect(forward.organization?.name).toBe('second');
+    expect(reverse.variants).toEqual(['second', 'first']);
+    expect(reverse.organization?.name).toBe('first');
+  });
+
   test('rejects missing, unknown, incorrectly typed, and out-of-range parameters', () => {
     expect(instantiateProfile(profile()).errors).toContain("parameter 'teamName' is required");
     expect(instantiateProfile(profile(), { teamName: 'ok', ghost: true }).errors).toContain("unknown parameter 'ghost'");

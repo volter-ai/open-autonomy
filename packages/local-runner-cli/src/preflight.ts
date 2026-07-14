@@ -35,7 +35,7 @@ export interface PreflightOptions {
 export async function runPreflight(schedule: NormalizedSchedule, opts: PreflightOptions): Promise<PreflightResult> {
   const proc = opts.proc ?? defaultProc;
   const ambient = opts.ambient ?? process.env;
-  const cmds = schedule.scripts.map((s) => s.cmd);
+  const cmds = schedule.jobs.map((job) => job.cmd);
 
   if (needsRunner(cmds)) {
     const termfleet = checkTermfleetInstalled(opts.cwd);
@@ -50,7 +50,7 @@ export async function runPreflight(schedule: NormalizedSchedule, opts: Preflight
     }
     // OA-09: log the EFFECTIVE provider URL + ORIGIN once, before any tick — a misattachment is visible in
     // the first line of output instead of never. Re-export the ORIGIN so nested resolves (run-agent.mjs ->
-    // autonomy-runner.mjs, or a PM's own nested launch) can report the same schedule-vs-env distinction —
+    // autonomy-runner.mjs, or any nested launch) can report the same schedule-vs-env distinction —
     // this is the only point that still knows which side the pin came from.
     const provider = await resolveProvider(schedule.env, ambient, opts.resolveDefault ?? defaultResolveDefaultProvider);
     if (provider) {

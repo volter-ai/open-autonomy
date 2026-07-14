@@ -2,7 +2,7 @@
 // reconciler is driver-lifetime-only in memory (mirrors run.mjs's own `idleSince`/backoff — "deliberately
 // not persisted"), so `oa status` run as a separate one-shot process needs SOMETHING durable to report
 // "last fire" from: a small telemetry record under .open-autonomy/runner-state/last-fire/<agent>.json,
-// written by the reconciler on every ACTUAL state-gated fire. This is informational only — it drives
+// written by the scheduler on every actual fire. This is informational only — it drives
 // nothing (the marker file stays the sole source of truth for pause/resume; last-fire is read-only
 // telemetry `oa status` surfaces, never a second control channel).
 import { mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
@@ -15,7 +15,7 @@ function lastFireDir(cwd: string): string {
   return join(cwd, '.open-autonomy', 'runner-state', 'last-fire');
 }
 
-/** Record an actual reconciler fire — called by reconciler.ts, never by a human-facing verb. */
+/** Record an actual scheduled fire — called by reconciler.ts, never by a human-facing verb. */
 export function recordFire(cwd: string, agentKey: string, cmd: string): void {
   const dir = lastFireDir(cwd);
   try {
@@ -69,11 +69,11 @@ export async function status(opts: { cwd?: string; sessionRunnerFactory?: (cwd: 
   const lastFires = readLastFires(cwd);
 
   const rationaleLines: string[] = [];
-  rationaleLines.push(paused ? 'fence: PAUSED — no new waves will start; an in-flight wave (if any) drains to completion.' : 'fence: unpaused — the reconciler may fire eligible reconciled agents.');
+  rationaleLines.push(paused ? 'fence: PAUSED — no new jobs will start; an in-flight job (if any) drains to completion.' : 'fence: unpaused — due jobs may fire.');
   if (sessions === null) rationaleLines.push('sessions: unknown (probe unavailable — is `oa start` running, or was the runner ever installed?)');
   else if (sessions.length === 0) rationaleLines.push('sessions: none live.');
   else rationaleLines.push(`sessions: ${sessions.length} live (${sessions.map((s) => `${s.agent}:${s.status}`).join(', ')}).`);
-  if (!lastFires.length) rationaleLines.push('last-fire: no reconciled fire recorded yet (either `oa start` hasn\'t run, or nothing has been eligible yet).');
+  if (!lastFires.length) rationaleLines.push('last-fire: no scheduled fire recorded yet (either `oa start` has not run, or no job has become due).');
   else for (const lf of lastFires) rationaleLines.push(`last-fire[${lf.agent}]: ${lf.firedAt}`);
 
   return {

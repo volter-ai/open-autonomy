@@ -55,10 +55,13 @@ describe('compileLocal — policy.box.local.runner === "cli" opt-in', () => {
     expect(runMjs.length).toBeLessThan(1000); // genuinely thin
   });
 
-  test('schedule.json emission is UNCHANGED (legacy shape) under the opt-in — @volter/oa accepts it as-is', () => {
-    const withCli = compileLocal(cliRunnerIr).generated['scheduler/schedule.json'];
-    const withoutCli = compileLocal(baseIr).generated['scheduler/schedule.json'];
-    expect(withCli).toBe(withoutCli); // opt-in changes ONLY run.mjs, nothing else
+  test('emits generic per-job schedule data without role or task eligibility fields', () => {
+    const schedule = JSON.parse(compileLocal(cliRunnerIr).generated['scheduler/schedule.json']) as { jobs: Array<Record<string, unknown>> };
+    expect(schedule.jobs).toHaveLength(1);
+    expect(schedule.jobs[0]).toMatchObject({ name: 'sweep', command: 'bun scripts/sweep.ts', intervalSeconds: 900 });
+    expect(schedule.jobs[0]).not.toHaveProperty('agent');
+    expect(JSON.stringify(schedule)).not.toContain('eligibility');
+    expect(JSON.stringify(schedule)).not.toContain('reconciled');
   });
 
   test('every other generated file is byte-identical to the non-opted-in compile (the opt-in is additive, scoped to run.mjs only)', () => {
@@ -68,7 +71,7 @@ describe('compileLocal — policy.box.local.runner === "cli" opt-in', () => {
     const keysB = Object.keys(withoutCli).sort();
     expect(keysA).toEqual(keysB);
     for (const k of keysA) {
-      if (k === 'scheduler/run.mjs') continue; // the one intentional divergence
+      if (k === 'scheduler/run.mjs' || k === 'scheduler/schedule.json') continue;
       if (k === '.open-autonomy/autonomy.yml') continue; // carries the policy box itself, legitimately differs
       expect(withCli[k]).toBe(withoutCli[k]);
     }
@@ -110,14 +113,13 @@ describe('compileLocal — CLI-runner shim, real subprocess proof', () => {
     }
   });
 
-  test('the shim still honors the PAUSED fence (same marker-file contract, same message vocabulary)', () => {
+  test('the shim honors the job fence by skipping the fenced job', () => {
     const { dir, sentinel } = scaffoldWithRealOaPackage(cliRunnerIr);
     try {
       mkdirSync(join(dir, '.open-autonomy'), { recursive: true });
       writeFileSync(join(dir, '.open-autonomy', 'paused'), 'test paused\n');
       const r = spawnSync('node', ['scheduler/run.mjs', '--once'], { cwd: dir, encoding: 'utf8' });
-      expect(r.status).not.toBe(0);
-      expect(r.stderr).toContain('PAUSED');
+      expect(r.status).toBe(0);
       expect(existsSync(sentinel)).toBe(false);
     } finally {
       rmSync(dir, { recursive: true, force: true });

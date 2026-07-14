@@ -803,10 +803,10 @@ describe('A14 — board-has-dispatchable-work wraps hasDispatchableWork', () => 
     expect(s.evidence).toContain('1/1 actionable/ready');
   });
 
-  test('no profileDir and no actor -> unverifiable (never throws out of this signal)', async () => {
+  test('no profileDir and no actor -> uses the substrate-independent ztrack task-service default', async () => {
     const s = await a14BoardHasDispatchableWork('/fake/repo', {});
     expect(s.present).toBe(false);
-    expect(s.evidence).toContain('unverifiable');
+    expect(s.evidence).toContain('source=task-service-default');
   });
 });
 

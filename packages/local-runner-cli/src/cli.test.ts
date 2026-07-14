@@ -54,13 +54,12 @@ describe('oa (real node subprocess)', () => {
     }
   });
 
-  test('--once while paused exits nonzero naming PAUSED (argv-compatible with the legacy scheduler/run.mjs --once contract)', () => {
+  test('--once while paused skips legacy jobs behind the default fence', () => {
     const dir = tmpRepo({ intervalSeconds: 900, scripts: ['bun scripts/sweep.ts'] });
     try {
       spawnSync('node', [BIN, 'pause'], { cwd: dir, encoding: 'utf8' });
       const r = spawnSync('node', [BIN, '--once'], { cwd: dir, encoding: 'utf8' });
-      expect(r.status).not.toBe(0);
-      expect(r.stderr).toContain('PAUSED');
+      expect(r.status).toBe(0);
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }

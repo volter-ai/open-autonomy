@@ -82,8 +82,15 @@ function isHuman(agent: IRAgent): boolean {
 
 // Inverse of secondsToCron for the simple every-N-minutes cron form the local loop honors.
 export function cronToSeconds(cron: string): number {
-  const m = /^\*\/(\d+) \* \* \* \*$/.exec(cron.trim());
-  return m ? Number(m[1]) * 60 : 900;
+  const value = cron.trim();
+  let match = /^\*\/(\d+) \* \* \* \*$/.exec(value);
+  if (match) return Number(match[1]) * 60;
+  match = /^\d+ \*\/(\d+) \* \* \*$/.exec(value);
+  if (match) return Number(match[1]) * 3600;
+  if (/^\d+ \d+ \* \* \*$/.test(value)) return 86400;
+  if (/^\d+ \d+ \* \* [\d,-]+$/.test(value)) return 7 * 86400;
+  if (/^\d+ \d+ [\d,-]+ \* \*$/.test(value)) return 28 * 86400;
+  return 900;
 }
 
 // The loop driver: fires the schedule's commands every interval, and (continuous mode) reaps idle agent
@@ -180,7 +187,6 @@ if (needsRunner) {
   const RUNNER_SPECS = [
     ['termfleet', 'termfleet'],
     ['@termfleet/core', '@termfleet/core/local-providers.js'],
-    ['ztrack', 'ztrack/preset-kit'],
   ];
   const firstErrLine = (s) => {
     const lines = (s || '').split('\\n').map((l) => l.trim()).filter(Boolean);
@@ -283,7 +289,7 @@ if (needsRunner) {
     // is what lets a future consumer safely pipe/parse this process's stdout.
     console.error(\`[loop] provider \${providerUrl} (\${providerSource})\`);
     // Re-export the ORIGIN as a hint (AUTONOMY_PROVIDER_URL_SOURCE) so a NESTED resolve — this tick's
-    // run-agent.mjs -> autonomy-runner.mjs, or the PM's own nested \`runner.ts launch developer ...\` —  can
+    // run-agent.mjs -> autonomy-runner.mjs, or any nested \`runner.ts launch ...\` — can
     // report the same schedule-vs-env distinction. By the time those processes run, schedule.env and
     // process.env are already merged (fireTick below / runner-frontend.ts's own env spread), so this is the
     // only point that still knows which side the pin came from. Matched by the AUTONOMY.* export filter in
@@ -297,8 +303,8 @@ if (needsRunner) {
 // inside its tmux session with \`Unknown command: /develop\` — and nothing upstream ever sees it (the dead
 // session reads as 'done'). Same shape as the termfleet guard just above: plain spawnSync, no-op when the
 // precondition doesn't apply, refuse-with-names otherwise. Runs once, before the first tick, in both
-// --once and continuous mode — the earliest point that can stop the PM (and therefore every downstream
-// zombie) with one message. The manifest (.open-autonomy/generated.json) is the authoritative, exact list
+// --once and continuous mode — the earliest point that can stop a scheduled agent and all of its
+// downstream launches with one message. The manifest (.open-autonomy/generated.json) is the authoritative, exact list
 // of what compile wrote — never a guess, never a scan of user files.
 const GENERATED_MANIFEST = join(here, '..', '.open-autonomy', 'generated.json');
 const isGitRepo = spawnSync('git', ['rev-parse', '--git-dir'], { stdio: 'ignore' }).status === 0;
@@ -568,17 +574,16 @@ function promptFiles(ir: AutonomyIR): Record<string, string> {
 // some OTHER agent in the profile holds `agent:launch` at all (an orchestrator that could, in principle, launch
 // it on its own schedule/logic — prose the IR can't read, but its EXISTENCE is a decidable, structural
 // fact). Only when NEITHER escape applies do we know for certain — from the IR alone, with no false
-// positives against any profile in this repo (self-driving's `develop` has no `dispatch` trigger of its
-// own, but self-driving's `pm` holds `agent:launch`, so `develop` is not flagged; only a profile with
-// genuinely NO orchestrator at all and an event-only, non-reviewed agent is flagged) — that compiling to
-// `local` would silently drop the trigger.
+// positives against a profile with an explicit orchestrator: only a profile with genuinely NO
+// `agent:launch` capability and an event-only, non-reviewed agent is flagged. In that case the IR alone
+// proves that compiling to `local` would silently drop the trigger.
 export function undeliverableEventAgents(ir: AutonomyIR): string[] {
   // ASSUMPTION worth naming: the review-target escape assumes the reviews reconciler will actually be
   // emitted to deliver it — but that reconciler is gated on `ir.codeHost === 'github'` (compileLocal below;
   // a `local-git` code host has no PRs to poll). So a `local-git` profile with a review-edge `event` agent
   // is exempted here yet gets NO delivery. Moot for every bundled profile today (every one with a `review:`
   // edge is `codeHost: github`), and a `local-git` reviewer is a contradiction in terms anyway (nothing to
-  // review — the PM merges worktrees directly), so this isn't tightened to `&& ir.codeHost === 'github'`;
+  // review — the calling role merges worktrees directly), so this isn't tightened to `&& ir.codeHost === 'github'`;
   // if a real local-git-with-review profile ever appears, add that clause and a delivery path together.
   const reviewTargets = new Set<string>();
   for (const agent of Object.values(ir.agents)) if (agent.review) reviewTargets.add(agent.review);
@@ -659,17 +664,17 @@ export function compileLocal(ir: AutonomyIR, opts: { runner?: RunnerName; destDi
   generated['scheduler/run.mjs'] = isCliRunner(ir) ? CLI_RUNNER_SHIM : LOOP_DRIVER;
   // A script agent runs its behavior via bun; a prose-skill agent is launched through the runner.
   const scheduleScripts = cronAgents.map(([role, a]) =>
-    // A prose cron agent (the PM) is single-instance per tick (AUTONOMY_SINGLETON) — see run-agent.mjs. A
+    // A prose cron agent is single-instance per tick (AUTONOMY_SINGLETON) — see run-agent.mjs. A
     // script agent is a fast deterministic run, no guard needed.
     isScript(a.behavior) ? `bun ${a.behavior}` : `AUTONOMY_AGENT=${role} AUTONOMY_SINGLETON=1 node scripts/run-agent.mjs`,
   );
   // A github code host's propose effect is NOT scheduled here — it is a per-session lifecycle effect the loop
   // driver runs when a proposer's session finishes (see LOOP_DRIVER's reconcilePendingEffects + runner.ts's
-  // effect markers), mirroring github's post-skill job step. A local-git code host has no PRs (the PM merges).
+  // effect markers), mirroring github's post-skill job step. A local-git code host has no PRs (the calling role merges).
   //
   // OA2/OA3: the reconciler backstops (reconcilers.ts) all operate on github PRs/branch-protection — they
   // are meaningless (and would just fail every tick resolving `gh api repos/{owner}/{repo}`) on a
-  // `local-git` code host, which has no PRs at all (the PM merges worktrees directly, per the comment
+  // `local-git` code host, which has no PRs at all (the calling role merges worktrees directly, per the comment
   // above). Gated on `ir.codeHost === 'github'` AND at least one code:propose agent existing — an install
   // with neither never needed a github-PR reconciler in the first place. Wired into the same schedule the
   // cron loop already fires, right after the cron agents, so every tick both dispatches scheduled work AND
@@ -696,7 +701,33 @@ export function compileLocal(ir: AutonomyIR, opts: { runner?: RunnerName; destDi
   // `Object.assign({}, schedule.env, process.env)` — an ambient TERMFLEET_PROVIDER_URL still overrides this
   // compiled default, matching the documented TERMFLEET_* override doctrine (runner-config.ts).
   const env = opts.providerUrl ? { TERMFLEET_PROVIDER_URL: opts.providerUrl } : {};
-  generated['scheduler/schedule.json'] = `${JSON.stringify({ intervalSeconds, env, scripts: scheduleScripts }, null, 2)}\n`;
+  if (isCliRunner(ir)) {
+    const cronJobs = cronAgents.map(([role, agent]) => {
+      const script = isScript(agent.behavior);
+      return {
+        name: role,
+        command: script ? `bun ${agent.behavior}` : `AUTONOMY_AGENT=${role} AUTONOMY_SINGLETON=1 node scripts/run-agent.mjs`,
+        intervalSeconds: cronToSeconds(cronOf(agent) as string),
+        retrySeconds: Math.min(300, cronToSeconds(cronOf(agent) as string)),
+        fence: '.open-autonomy/paused',
+        ...(!script ? { agent: role } : {}),
+      };
+    });
+    const extraJobs = scheduleScripts.slice(cronAgents.length).map((command, index) => ({
+      name: `trigger-delivery-${index + 1}`,
+      command,
+      intervalSeconds,
+      retrySeconds: Math.min(300, intervalSeconds),
+      fence: '.open-autonomy/paused',
+    }));
+    generated['scheduler/schedule.json'] = `${JSON.stringify({
+      ...(ir.policy.maxConcurrent ? { maxConcurrent: ir.policy.maxConcurrent } : {}),
+      env,
+      jobs: [...cronJobs, ...extraJobs],
+    }, null, 2)}\n`;
+  } else {
+    generated['scheduler/schedule.json'] = `${JSON.stringify({ intervalSeconds, env, scripts: scheduleScripts }, null, 2)}\n`;
+  }
   Object.assign(generated, promptFiles(ir));
 
   // Copies: skill behaviors + the profile's resources at the repo root, so the agents' cwd-relative gh +

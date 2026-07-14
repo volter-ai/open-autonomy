@@ -25,8 +25,7 @@ export function buildTickEnv(scheduleEnv: Record<string, string>, ambient: NodeJ
   return env;
 }
 
-/** Fire a list of shell commands in sequence (inherits stdio) — the `--once` / non-reconciled-script
- *  primitive. */
+/** Fire a list of opaque shell commands in sequence (inherits stdio). */
 export function fireCommands(cmds: string[], env: NodeJS.ProcessEnv, proc: ProcRunner): ProcResult[] {
   return cmds.map((cmd) => proc(cmd, [], { shell: true, stdio: 'inherit', env }));
 }

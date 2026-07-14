@@ -15,16 +15,29 @@ function tmpRepo(schedule: object): string {
   return dir;
 }
 
-describe('oa once — fires the FULL schedule unconditionally, no state-gating', () => {
-  test('PAUSED is checked FIRST — before even the termfleet dependency check — so paused reports PAUSED, never masked by an unrelated failure', async () => {
+describe('oa once — fires each currently unfenced job once, with no cadence state', () => {
+  test('a legacy pause fence skips its job before runner preflight', async () => {
     const dir = tmpRepo({ intervalSeconds: 900, scripts: ['AUTONOMY_AGENT=manager node scripts/run-agent.mjs'] });
     try {
       pause({ cwd: dir });
       const stub = new StubProc(); // no handlers registered — a termfleet-missing check would also fail, but PAUSED must win
       const r = await once({ cwd: dir, proc: stub.runner });
-      expect(r.ok).toBe(false);
-      expect(r.reason).toContain('PAUSED');
+      expect(r.ok).toBe(true);
+      expect(r.fired).toBe(0);
       expect(stub.calls).toHaveLength(0); // never even reached the termfleet/OA-04/OA-03 guards
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test('the global pause fence also blocks generic jobs with no job-specific fence', async () => {
+    const dir = tmpRepo({ jobs: [{ name: 'maintenance', command: 'bun scripts/maintenance.ts', intervalSeconds: 900 }] });
+    try {
+      pause({ cwd: dir });
+      const stub = new StubProc();
+      const r = await once({ cwd: dir, proc: stub.runner });
+      expect(r).toEqual({ ok: true, fired: 0 });
+      expect(stub.calls).toHaveLength(0);
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }

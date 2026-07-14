@@ -18,7 +18,7 @@ export { hasDispatchableWork, resolveBoardKind, readMaturitySignals } from './bo
 export type { DispatchableWorkOptions, DispatchableWorkVerdict, BoardKind, BoardKindSource } from './board-readiness.ts';
 export { missionAdvancingSignal } from './m6-signal.ts';
 export type { Signal as MissionAdvancingSignal, MissionAdvancingContext, MissionAdvancingSignalFn } from './m6-signal.ts';
-export type { NormalizedSchedule, NormalizedScript } from './types.ts';
+export type { NormalizedJob, NormalizedSchedule, NormalizedScript } from './types.ts';
 export { bringUpProvider, providerStatus, providerDown } from './provider.ts';
 export type { BringUpOptions, BringUpResult, ProviderState, ProviderStatusResult, ProviderDownResult } from './provider.ts';
 export {
@@ -81,8 +81,8 @@ function pkgVersion(): string {
 
 const HELP = `oa <command> [args]  (@volter/oa v${pkgVersion()}) — the local open-autonomy substrate as a CLI
 
-  oa start                     continuous mode: the state-gated reconciler heartbeat (was: node scheduler/run.mjs)
-  oa once                      fire the full schedule exactly once, unconditionally (was: node scheduler/run.mjs --once)
+  oa start                     continuous generic job scheduler (was: node scheduler/run.mjs)
+  oa once                      fire every currently unfenced job once (was: node scheduler/run.mjs --once)
   oa pause [reason]             touch .open-autonomy/paused — blocks NEW waves; in-flight waves drain to completion
   oa resume                     remove .open-autonomy/paused — the operator's act, re-arms the reconciler
   oa status                     fence state + live sessions + last-fire info

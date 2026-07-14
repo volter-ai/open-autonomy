@@ -571,6 +571,20 @@ answer, worker loss, reassignment, review rejection, and successful completion.
 **Falsifier.** A Slack reply resumes the wrong task, or restarting the manager duplicates an already acknowledged
 external effect.
 
+**Implementation record (2026-07-14).** P9 supplies a pure, snapshot-complete Hermes-centered controller with
+durable work, conversations, claims, attempts, effects, approvals, metrics, and external-event deduplication. Its
+strict Slack grammar distinguishes new work, status questions, blocked-question answers, mutations, controller
+commands, and ambiguity while preserving channel/thread/work identities. Worker and reviewer queues reserve separate
+capacity; least-dispatched FIFO ordering, claim TTLs, monotonically increasing fences, retry/cost/progress bounds, and
+stable escalation prevent duplicate ownership and unbounded loops. Verified evidence and independent review gate
+completion. Repository writes require single-use, scoped, expiring, artifact-bound approval. Hermes effects render as
+shell-free argument vectors and require post-state verification because live testing found that refused Hermes CLI
+mutations may still exit zero. The isolated real board `oa-p9-proof-20260714` demonstrated idempotent creation of two
+unrelated tasks, independent-process restart visibility, heartbeat, stale-run refusal, reclaim/reassignment, typed
+needs-input blocking, delayed-answer correlation, new attempts, and completion on pinned Hermes `226e8de8`; exact IDs
+and honest failed probes are recorded in `docs/evidence/P9-HERMES-LIVE-TRACE.md`. External Slack credentials were not
+used; signed-envelope HCI/security behavior is deterministically exercised in `organization-hermes-controller.test.ts`.
+
 ### P10. Lifting, state materialization, and conformance
 
 **Semantic model.** Native observations are lifted by component-owned adapters into a portable causal event graph.

@@ -171,6 +171,20 @@ export const ORGANIZATION_SEMANTIC_COVERAGE: readonly SemanticCoverageEntry[] = 
   entry('FixedPointLoweringResult', 'candidate control execution certificates obligations errors', 'compiler', 'implemented', 'closed deployment/lowering fixed point or backtracking failure evidence', 'P8'),
   entry('V1ExecutionLoweringOptions', 'targets codeHost policy resources', 'compiler', 'implemented', 'bounded native v1 emission environment', 'P8'),
   entry('V1ExecutionLoweringResult', 'output sourceMap certificate losses errors', 'compiler', 'implemented', 'mechanical bounded v1 target plus preservation evidence', 'P8'),
+  entry('ControllerPrincipal', 'externalId actor scopes', 'observation', 'implemented', 'verified external principal mapping to durable actor and allowed operations', 'P9'),
+  entry('ControllerWork', 'id title accountable assignees reviewer status priority createdSequence dispatchCount progress attempts activeClaim blockedQuestion retryBudget costBudget costConsumed repository', 'observation', 'implemented', 'durable managed work with distinct responsibility, control, progress, and resource state', 'P9'),
+  entry('ControllerClaim', 'id work actor worker fence acquiredAt expiresAt status', 'observation', 'implemented', 'exclusive leased and fenced execution ownership', 'P9'),
+  entry('ControllerAttempt', 'id work actor worker claim fence status startedAt endedAt session runtime isolation credentialScopes cost evidence', 'observation', 'implemented', 'bounded execution attempt with distinct runtime identities, security, economics, and evidence', 'P9'),
+  entry('ControllerConversation', 'id transport channel thread relatedWork messages', 'observation', 'implemented', 'transport/thread correlation without equating conversation and work', 'P9'),
+  entry('ControllerEffect', 'id kind idempotencyKey work payload status acknowledgedExternalId', 'observation', 'implemented', 'durable idempotent external-effect outbox record', 'P9'),
+  entry('ControllerApproval', 'id work artifactDigest principal scope expiresAt used', 'observation', 'implemented', 'single-use scoped expiring artifact-bound approval', 'P9'),
+  entry('ControllerMetrics', 'ticks queueDepth running progress cost latencySamples oscillations', 'observation', 'implemented', 'loop, queue, progress, economic, latency, and oscillation observability', 'P9'),
+  entry('HermesControllerState', 'schema organization revision paused sequence principals work claims attempts conversations effects approvals seenEvents metrics', 'observation', 'implemented', 'restartable complete controller snapshot independent of hidden model context', 'P9'),
+  entry('HermesControllerPolicy', 'workerCapacity reviewerCapacity claimTtl maxTicksWithoutProgress maxOscillations allowedRepositories requiredCompletionEvidence', 'compiler', 'implemented', 'admission, fencing, loop, repository, and verification enforcement bounds', 'P9'),
+  entry('SlackEnvelope', 'eventId principal channel thread text at signatureVerified', 'observation', 'implemented', 'authenticated deduplicable Slack transport input', 'P9'),
+  entry('ControllerTransition', 'state effects errors', 'compiler', 'implemented', 'pure controller state transition with explicit effects and failures', 'P9'),
+  entry('HermesWorkerEvent', 'eventId kind work actor worker runId fence at session runtime isolation credentialScopes question cost artifactDigest evidence verdict', 'observation', 'implemented', 'fenced Hermes/worker lifecycle observation with identity, security, cost, and evidence', 'P9'),
+  entry('HermesCommandPlan', 'executable argv idempotencyKey verify', 'compiler', 'implemented', 'shell-free Hermes CLI adapter command with mandatory post-state verification', 'P9'),
 ] as const;
 
 export interface AuditResidual {
@@ -181,7 +195,6 @@ export interface AuditResidual {
 
 /** B0 residual parking is closed: every known gap has a punch-list owner. */
 export const ORGANIZATION_AUDIT_RESIDUALS: readonly AuditResidual[] = [
-  { id: 'OAIR-R010', finding: 'Hermes/Slack/coding-worker composed deployment is not implemented end to end', owner: 'P9' },
   { id: 'OAIR-R011', finding: 'state reducer is sequential and lacks causal DAG, evidence, authorization, corrections, and conformance', owner: 'P10' },
   { id: 'OAIR-R012', finding: 'identical canonical organization has not been proven on a dissimilar second substrate', owner: 'P11' },
   { id: 'OAIR-R013', finding: 'formal lifecycle, authority, protocol, information-flow, resource, and loop analyses are absent', owner: 'P12' },
@@ -301,4 +314,16 @@ export const ORGANIZATION_P8_OBLIGATIONS: readonly BaselineObligation[] = [
   { id: 'P8-COMP-2', claim: 'lowering-created obligations trigger candidate backtracking and executable emission requires fixed-point closure', disposition: 'preserved', assurance: 'property-tested', evidence: 'organization-lowering.test.ts insecure-first candidate backtracking and no-emission fixture' },
   { id: 'P8-SEC-1', claim: 'credentials, endpoints, isolation, provider configuration, and prompt rendering appear only below Organization IR', disposition: 'preserved', assurance: 'property-tested', evidence: 'organization-lowering.test.ts source immutability and execution-step boundary fixture' },
   { id: 'P8-PROV-1', claim: 'control, execution, and v1 targets retain many-to-many source obligation and provider provenance', disposition: 'preserved', assurance: 'property-tested', evidence: 'organization-lowering.test.ts source maps, step obligations, witnesses, and v1 certificate fixture' },
+] as const;
+
+export const ORGANIZATION_P9_OBLIGATIONS: readonly BaselineObligation[] = [
+  { id: 'P9-DIST-1', claim: 'restart, duplicate delivery, delay, worker loss, and reassignment preserve acknowledged effects and fenced exclusive ownership', disposition: 'preserved', assurance: 'live-observed', evidence: 'organization-hermes-controller.test.ts fault schedule plus docs/evidence/P9-HERMES-LIVE-TRACE.md runs 1-4' },
+  { id: 'P9-CTRL-1', claim: 'the controller loop has progress metrics, tick/retry/cost/oscillation bounds, and terminal escalation', disposition: 'preserved', assurance: 'property-tested', evidence: 'organization-hermes-controller.test.ts stalled loop and positive-cost exhaustion fixtures' },
+  { id: 'P9-QUE-1', claim: 'worker and reviewer admission reserve independent capacity and use deterministic least-dispatched FIFO ordering', disposition: 'preserved', assurance: 'property-tested', evidence: 'organization-hermes-controller.test.ts overload, reservation, fairness, and reviewer-capacity fixtures' },
+  { id: 'P9-HCI-1', claim: 'signed Slack messages classify and correlate questions, answers, mutations, commands, new work, or recoverable ambiguity', disposition: 'preserved', assurance: 'property-tested', evidence: 'organization-hermes-controller.test.ts complete intent grammar, wrong-question, and replay fixtures' },
+  { id: 'P9-SEC-1', claim: 'Slack identity, repository scope, credentials, completion evidence, review, and artifact approval are enforced at typed boundaries', disposition: 'preserved', assurance: 'property-tested', evidence: 'organization-hermes-controller.test.ts signature, scope, forged evidence, self-review, and approval fixtures' },
+  { id: 'P9-OPS-1', claim: 'pause, inspect, repair, effect failure, restart, and recovery use durable state rather than hidden conversation memory', disposition: 'preserved', assurance: 'live-observed', evidence: 'snapshot/restart tests and independent Hermes CLI process observations in P9-HERMES-LIVE-TRACE.md' },
+  { id: 'P9-ECO-1', claim: 'cost, latency, queue depth, attempts, and progress attribute to durable work and enforce limits', disposition: 'preserved', assurance: 'property-tested', evidence: 'ControllerMetrics/Attempt fields and organization-hermes-controller.test.ts cost/queue/progress fixtures' },
+  { id: 'P9-ADV-1', claim: 'forged completion, prompt-like Slack text, replay, stale fencing, stale approval, and shell payloads fail safely', disposition: 'preserved', assurance: 'property-tested', evidence: 'organization-hermes-controller.test.ts attack corpus and shell-free Hermes argv plan' },
+  { id: 'P9-ORG-1', claim: 'manager state, accountable actor, assignee, claimant actor, worker, session, runtime, and reviewer remain distinct', disposition: 'preserved', assurance: 'property-tested', evidence: 'organization-hermes-controller.test.ts identity separation and independent-review fixtures' },
 ] as const;

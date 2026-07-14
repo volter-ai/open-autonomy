@@ -30,8 +30,10 @@ describe('compileLocal — one scheduler contract', () => {
 
   test('always emits generic per-job schedule data', () => {
     const schedule = JSON.parse(compileLocal(baseIr).generated['scheduler/schedule.json']) as {
+      schema: string;
       jobs: Array<Record<string, unknown>>;
     };
+    expect(schedule.schema).toBe('open-autonomy.local-schedule.v2');
     expect(schedule.jobs).toHaveLength(1);
     expect(schedule.jobs[0]).toMatchObject({
       name: 'sweep',

@@ -783,6 +783,7 @@ export function compileLocal(ir: AutonomyIR, opts: { runner?: RunnerName; destDi
     fence: '.open-autonomy/paused',
   }));
   generated['scheduler/schedule.json'] = `${JSON.stringify({
+    schema: 'open-autonomy.local-schedule.v2',
     ...(ir.policy.maxConcurrent ? { maxConcurrent: ir.policy.maxConcurrent } : {}),
     env,
     jobs: [...cronJobs, ...extraJobs],

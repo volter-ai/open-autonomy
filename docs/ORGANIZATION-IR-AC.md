@@ -2,6 +2,10 @@
 
 Status: normative for the experimental Organization IR work on `experiment/organization-ir-v2`.
 
+The required lenses are instantiated into concrete obligations, evidence, limits, and falsifiers in
+[`ORGANIZATION-IR-LENS-AUDIT.md`](./ORGANIZATION-IR-LENS-AUDIT.md). A checkpoint cannot close by citing the lens
+names below without satisfying that audit.
+
 This document is not a second product roadmap. `docs/ROADMAP.md` remains the canonical roadmap. This document
 defines the acceptance criteria, formal obligations, evidence standards, and completeness accounting used to
 open and close Organization IR implementation items.

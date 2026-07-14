@@ -156,6 +156,34 @@ export function renderDiagnostic(diagnostic: CompilerDiagnostic): string {
   return `${location}${diagnostic.severity.toUpperCase()} ${diagnostic.code} [${diagnostic.phase}] ${escapeControls(diagnostic.message)}`;
 }
 
+/** Compose A->B and B->C provenance. A later source location equal to an earlier output is substituted. */
+export function composeSourceRelations(
+  earlier: PassSourceRelation[], later: PassSourceRelation[],
+): PassSourceRelation[] {
+  const byOutput = new Map(earlier.map((relation) => [relation.output, relation.sources]));
+  return later.map((relation) => ({
+    output: relation.output,
+    sources: deduplicateSpans(relation.sources.flatMap((source) => byOutput.get(source.location) ?? [source])),
+  })).sort((a, b) => compareText(a.output, b.output));
+}
+
+/** Project one generated-location diagnostic to its authored sources, retaining all additional origins as related. */
+export function projectDiagnostic(
+  diagnostic: CompilerDiagnostic, sourceMap: PassSourceRelation[],
+): CompilerDiagnostic {
+  if (!diagnostic.source) return structuredClone(diagnostic);
+  const relation = sourceMap.find((item) => item.output === diagnostic.source!.location);
+  if (!relation?.sources.length) return structuredClone(diagnostic);
+  const [primary, ...additional] = relation.sources;
+  return {
+    ...structuredClone(diagnostic), source: structuredClone(primary),
+    related: [
+      ...(diagnostic.related ?? []),
+      ...additional.map((source) => ({ message: 'additional source of generated construct', source: structuredClone(source) })),
+    ],
+  };
+}
+
 async function executePass(
   pass: CompilerPass<unknown, unknown>, input: unknown, completed: ReadonlySet<string>,
 ): Promise<CompilerPassResult<unknown>> {
@@ -207,6 +235,15 @@ function sanitizeDiagnostic(value: CompilerDiagnostic, secrets: string[]): Compi
 
 function escapeControls(value: string): string {
   return value.replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F\u001B]/g, (char) => `\\u${char.charCodeAt(0).toString(16).padStart(4, '0')}`);
+}
+
+function deduplicateSpans(spans: SourceSpan[]): SourceSpan[] {
+  const seen = new Set<string>();
+  return spans.filter((span) => {
+    const key = JSON.stringify(span);
+    if (seen.has(key)) return false;
+    seen.add(key); return true;
+  });
 }
 
 function deepFreeze<T>(value: T): Readonly<T> {

@@ -123,7 +123,6 @@ export interface AuditResidual {
 
 /** B0 residual parking is closed: every known gap has a punch-list owner. */
 export const ORGANIZATION_AUDIT_RESIDUALS: readonly AuditResidual[] = [
-  { id: 'OAIR-R003', finding: 'diagnostics are strings and compiler passes have no typed framework', owner: 'P3' },
   { id: 'OAIR-R004', finding: 'schema migration and replay-version framework is absent', owner: 'P4' },
   { id: 'OAIR-R005', finding: 'expression, behavior, instruction, context, and profile-patch semantics are incomplete', owner: 'P5' },
   { id: 'OAIR-R006', finding: 'component manifests lack typed interfaces, state, failure, trust, capacity, cost, and adapter contracts', owner: 'P6' },
@@ -186,4 +185,14 @@ export const ORGANIZATION_P2_OBLIGATIONS: readonly BaselineObligation[] = [
   { id: 'P2-PROV-1', claim: 'source maps are separate from semantic digest and retain many-to-many reference origins', disposition: 'preserved', assurance: 'property-tested', evidence: 'organization-normalize.test.ts imported-reference source relation and annotation hash invariance' },
   { id: 'P2-ADV-1', claim: 'canonicalization rejects ambiguous runtime values and retains semantic labels/extensions/opaque content', disposition: 'preserved', assurance: 'property-tested', evidence: 'organization-canonical.test.ts cycles/nonfinite/undefined and organization-normalize.test.ts opaque content' },
   { id: 'P2-DET-1', claim: 'digest records canonicalization algorithm, semantic domain, and normalized pinned module content', disposition: 'preserved', assurance: 'property-tested', evidence: 'organization-canonical.test.ts domain/version framing plus P1 pinned import policy' },
+] as const;
+
+export const ORGANIZATION_P3_OBLIGATIONS: readonly BaselineObligation[] = [
+  { id: 'P3-TYP-1', claim: 'passes declare input/output levels and dependencies', disposition: 'preserved', assurance: 'statically-checked', evidence: 'CompilerPass type plus runtime plugin level/dependency checks' },
+  { id: 'P3-COMP-1', claim: 'passes receive immutable clones and are deterministic over declared inputs', disposition: 'preserved', assurance: 'property-tested', evidence: 'organization-compiler.test.ts mutation rejection and caller-input preservation' },
+  { id: 'P3-COMP-2', claim: 'fatal pass failure prevents dependent emission while independent analyses continue', disposition: 'preserved', assurance: 'property-tested', evidence: 'organization-compiler.test.ts fatal pipeline and sibling analysis fixtures' },
+  { id: 'P3-PROV-1', claim: 'many-to-many source relations compose and real profile/module diagnostics project to authored paths', disposition: 'preserved', assurance: 'property-tested', evidence: 'organization-compiler.test.ts composition plus organization-compiler-passes.test.ts real passes' },
+  { id: 'P3-OPS-1', claim: 'diagnostics have stable codes, deterministic order, JSON shape, and resource bounds', disposition: 'preserved', assurance: 'property-tested', evidence: 'organization-compiler.test.ts sorting and diagnostic-limit fixtures' },
+  { id: 'P3-ADV-1', claim: 'diagnostic rendering escapes controls and policy redacts named secrets', disposition: 'preserved', assurance: 'property-tested', evidence: 'organization-compiler.test.ts ANSI/control and redaction fixture' },
+  { id: 'P3-EXT-1', claim: 'provider passes register without product branches and collisions fail closed', disposition: 'preserved', assurance: 'property-tested', evidence: 'organization-compiler.test.ts provider registry fixture' },
 ] as const;

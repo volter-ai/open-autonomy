@@ -1,6 +1,8 @@
 import { describe, expect, test } from 'bun:test';
 import {
   CompilerPassRegistry,
+  composeSourceRelations,
+  projectDiagnostic,
   renderDiagnostic,
   runCompilerAnalyses,
   runCompilerPipeline,
@@ -88,5 +90,28 @@ describe('P3 compiler pass and diagnostics framework', () => {
     expect(registry.list()).toEqual(['provider.example/lower']);
     expect(() => registry.register(pass('provider.example/lower', 'execution', 'native', () => ({ output: {} })))).toThrow('already registered');
     expect(() => registry.register(pass('bad pass', 'execution', 'native', () => ({ output: {} })))).toThrow('invalid compiler pass id');
+  });
+
+  test('composes many-to-many source relations and projects generated diagnostics', () => {
+    const composed = composeSourceRelations(
+      [{ output: 'compiler:/normalized/actor', sources: [
+        { location: 'mem:/profile.yml', path: '/template/actors/worker' },
+        { location: 'mem:/role.yml', path: '/actors/worker' },
+      ] }],
+      [{ output: 'compiler:/execution/worker', sources: [
+        { location: 'compiler:/normalized/actor' },
+        { location: 'mem:/deployment.yml', path: '/bindings/worker' },
+      ] }],
+    );
+    expect(composed[0].sources).toHaveLength(3);
+    const projected = projectDiagnostic({
+      code: 'EXEC-INVALID', severity: 'error', phase: 'lower', message: 'bad worker',
+      source: { location: 'compiler:/execution/worker' },
+    }, composed);
+    expect(projected.source).toEqual({ location: 'mem:/profile.yml', path: '/template/actors/worker' });
+    expect(projected.related?.map((item) => item.source)).toEqual([
+      { location: 'mem:/role.yml', path: '/actors/worker' },
+      { location: 'mem:/deployment.yml', path: '/bindings/worker' },
+    ]);
   });
 });

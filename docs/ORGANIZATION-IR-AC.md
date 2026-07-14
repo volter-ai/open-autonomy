@@ -356,6 +356,12 @@ fixtures; typed rejection of invalid pass order where practical.
 **Falsifier.** The same input yields differently ordered diagnostics, or a lowered error cannot be traced to the
 authored declaration that caused it.
 
+**Implementation record.** `organization-compiler.ts` provides immutable typed passes, explicit levels and
+dependencies, independent analyses, deterministic structured diagnostics, bounded/redacted rendering, provider pass
+registration, obligation receipts, and composable many-to-many source relations. Real profile instantiation, module
+resolution, and normalization adapters emit stable codes at authored paths. Every P3 audit obligation is
+machine-matched to named evidence.
+
 ### P4. Versioning and migration
 
 **Semantic model.** A migration is an explicit version-indexed transformation with a stated preservation or loss

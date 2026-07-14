@@ -96,7 +96,6 @@ export interface AuditResidual {
 
 /** B0 residual parking is closed: every known gap has a punch-list owner. */
 export const ORGANIZATION_AUDIT_RESIDUALS: readonly AuditResidual[] = [
-  { id: 'OAIR-R002', finding: 'normalization, canonical serialization, semantic hashing, and source maps are absent', owner: 'P2' },
   { id: 'OAIR-R003', finding: 'diagnostics are strings and compiler passes have no typed framework', owner: 'P3' },
   { id: 'OAIR-R004', finding: 'schema migration and replay-version framework is absent', owner: 'P4' },
   { id: 'OAIR-R005', finding: 'expression, behavior, instruction, context, and profile-patch semantics are incomplete', owner: 'P5' },
@@ -149,4 +148,15 @@ export const ORGANIZATION_P1_OBLIGATIONS: readonly BaselineObligation[] = [
   { id: 'P1-PROV-1', claim: 'resolved references retain authored-use and declaration-site provenance', disposition: 'preserved', assurance: 'property-tested', evidence: 'organization-modules.test.ts cross-module source/declaration locations' },
   { id: 'P1-EVO-1', claim: 'logical identity is distinct from retrieval location and structural digest', disposition: 'preserved', assurance: 'statically-checked', evidence: 'ModuleId, LoadedOrganizationModule.location, and digest are separate fields' },
   { id: 'P1-ADV-1', claim: 'namespace squatting, non-ASCII confusables, identity substitution, and graph exhaustion fail closed', disposition: 'preserved', assurance: 'property-tested', evidence: 'organization-modules.test.ts namespace ambiguity, ASCII identifiers, digest/location collisions, and bounds' },
+] as const;
+
+export const ORGANIZATION_P2_OBLIGATIONS: readonly BaselineObligation[] = [
+  { id: 'P2-SEM-1', claim: 'elaboration preserves declared meaning under the documented default and reference rules', disposition: 'preserved', assurance: 'property-tested', evidence: 'organization-normalize.test.ts closed form/default and semantic mutation corpus; preservation remains tested, not proved' },
+  { id: 'P2-ALG-1', claim: 'normalization is idempotent', disposition: 'preserved', assurance: 'property-tested', evidence: 'organization-normalize.test.ts re-normalization equality' },
+  { id: 'P2-ALG-2', claim: 'irrelevant object order does not change canonical output or digest while array order remains semantic', disposition: 'preserved', assurance: 'property-tested', evidence: 'organization-canonical.test.ts generated key permutations and ordered arrays' },
+  { id: 'P2-ALG-3', claim: 'namespace alpha-renaming yields equal normalized modules and semantic digest', disposition: 'preserved', assurance: 'property-tested', evidence: 'organization-normalize.test.ts alias-renaming fixture' },
+  { id: 'P2-COMP-1', claim: 'invalid closed-reference input cannot return a partial successful normal form', disposition: 'preserved', assurance: 'property-tested', evidence: 'organization-normalize.test.ts unresolved reference fixture' },
+  { id: 'P2-PROV-1', claim: 'source maps are separate from semantic digest and retain many-to-many reference origins', disposition: 'preserved', assurance: 'property-tested', evidence: 'organization-normalize.test.ts imported-reference source relation and annotation hash invariance' },
+  { id: 'P2-ADV-1', claim: 'canonicalization rejects ambiguous runtime values and retains semantic labels/extensions/opaque content', disposition: 'preserved', assurance: 'property-tested', evidence: 'organization-canonical.test.ts cycles/nonfinite/undefined and organization-normalize.test.ts opaque content' },
+  { id: 'P2-DET-1', claim: 'digest records canonicalization algorithm, semantic domain, and normalized pinned module content', disposition: 'preserved', assurance: 'property-tested', evidence: 'organization-canonical.test.ts domain/version framing plus P1 pinned import policy' },
 ] as const;

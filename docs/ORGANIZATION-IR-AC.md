@@ -329,6 +329,12 @@ defined denotational semantics or checkable certificate, it remains tested/assum
 **Falsifier.** Re-normalization changes output, or a capability/policy/instruction change leaves the semantic hash
 unchanged when that field is declared semantic.
 
+**Implementation record.** `organization-normalize.ts` produces a closed internal normal form with canonical
+qualified references, explicit empty defaults, canonical module ordering, separate many-to-many source maps, and a
+domain/version-framed semantic digest. Imports and retrieval locations are absent from semantic payload; annotation
+documentation/provenance are excluded only at known annotation locations, while labels, extensions, and opaque
+behavior content remain semantic. All eight P2 lens obligations are machine-matched to evidence.
+
 ### P3. Structured diagnostics, source maps, and compiler passes
 
 **Semantic model.** A pass is a typed partial transformation that may return output, diagnostics, source-map

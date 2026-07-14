@@ -30,14 +30,29 @@ describe('oa once — fires each currently unfenced job once, with no cadence st
     }
   });
 
-  test('the global pause fence also blocks generic jobs with no job-specific fence', async () => {
+  test('the conventional pause marker does not block a generic job that declares no such fence', async () => {
     const dir = tmpRepo({ jobs: [{ name: 'maintenance', command: 'bun scripts/maintenance.ts', intervalSeconds: 900 }] });
     try {
       pause({ cwd: dir });
-      const stub = new StubProc();
+      const stub = new StubProc().on(() => true, () => ok(''));
       const r = await once({ cwd: dir, proc: stub.runner });
-      expect(r).toEqual({ ok: true, fired: 0 });
-      expect(stub.calls).toHaveLength(0);
+      expect(r).toEqual({ ok: true, fired: 1 });
+      expect(stub.calls.some((call) => call.cmd === 'bun scripts/maintenance.ts')).toBe(true);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test('reports a nonzero scheduled command as a failed once run', async () => {
+    const dir = tmpRepo({ jobs: [{ name: 'broken', command: 'bun scripts/broken.ts', intervalSeconds: 900 }] });
+    try {
+      const stub = new StubProc().on(() => true, (cmd) => cmd === 'bun scripts/broken.ts'
+        ? { status: 7, stdout: '', stderr: 'broken' }
+        : ok(''));
+      const r = await once({ cwd: dir, proc: stub.runner });
+      expect(r.ok).toBe(false);
+      expect(r.fired).toBe(1);
+      expect(r.reason).toContain('1 of 1');
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }

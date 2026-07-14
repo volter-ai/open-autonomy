@@ -343,4 +343,15 @@ describe('reconcilePendingEffects (real emitted scheduler/run.mjs) — the compl
     },
     15000,
   );
+
+  test(
+    'retains the durable marker when the effect fails so a later loop can retry it',
+    async () => {
+      const { dir, markerPath } = scaffold();
+      writeFileSync(join(dir, 'scripts', 'effect.mjs'), 'process.exit(7);\n');
+      await runLoopUntil(dir, { STUB_LIVE_IDS: '' }, () => false, 800);
+      expect(existsSync(markerPath)).toBe(true);
+    },
+    5000,
+  );
 });

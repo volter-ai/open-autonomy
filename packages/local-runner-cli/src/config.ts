@@ -20,8 +20,8 @@ function normalizeJob(
   if (typeof cmd !== 'string' || !cmd.trim()) throw new Error(`[oa] schedule.json: job ${index + 1} needs a command`);
   const name = ('name' in obj && obj.name) || agentOf(cmd) || `job-${index + 1}`;
   const intervalSeconds = Number(obj.intervalSeconds ?? topIntervalSeconds);
-  if (!Number.isFinite(intervalSeconds) || intervalSeconds < 0) {
-    throw new Error(`[oa] schedule.json: job "${name}" needs intervalSeconds >= 0`);
+  if (!Number.isFinite(intervalSeconds) || intervalSeconds <= 0) {
+    throw new Error(`[oa] schedule.json: job "${name}" needs intervalSeconds > 0`);
   }
   const retrySeconds = Number(('retrySeconds' in obj ? obj.retrySeconds : undefined) ?? intervalSeconds);
   if (!Number.isFinite(retrySeconds) || retrySeconds < 0) {

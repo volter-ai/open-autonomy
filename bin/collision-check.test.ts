@@ -189,6 +189,20 @@ describe('probeResolution — the authoritative Check C, DI-driven', () => {
     expect(probeResolution('/repo', 'termfleet', 'termfleet', io)).toEqual({ ok: true });
   });
 
+  test('canonicalizes an aliased cwd before comparing it with Node\'s canonical resolved path', () => {
+    const canonical = '/private/var/repo';
+    const dirs = new Set([`${canonical}/node_modules`, `${canonical}/node_modules/termfleet`]);
+    const io: CollisionIO = {
+      ...fakeIo(
+        { [`${canonical}/node_modules/termfleet/package.json`]: '{}' },
+        dirs,
+        () => ({ status: 0, stdout: `file://${canonical}/node_modules/termfleet/dist/index.js\n`, stderr: '' }),
+      ),
+      realpathSync: (p) => (p === '/var/repo' ? canonical : p),
+    };
+    expect(probeResolution('/var/repo', 'termfleet', 'termfleet', io)).toEqual({ ok: true });
+  });
+
   test('node exits nonzero (resolution genuinely fails) → resolution-failed', () => {
     const dirs = new Set(['/repo/node_modules', '/repo/node_modules/termfleet']);
     const io = fakeIo(
@@ -221,7 +235,7 @@ describe('probeResolution — the authoritative Check C, DI-driven', () => {
         dirs,
         () => ({ status: 0, stdout: 'file:///repo/node_modules/termfleet/dist/index.js\n', stderr: '' }),
       ),
-      realpathSync: () => '/repo/packages/core', // the symlink's REAL target lives inside the repo, not node_modules
+      realpathSync: (p) => (p === '/repo/node_modules/termfleet' ? '/repo/packages/core' : p), // the symlink's REAL target lives inside the repo, not node_modules
     };
     const r = probeResolution('/repo', 'termfleet', 'termfleet', io);
     expect(r.ok).toBe(false);
@@ -446,7 +460,7 @@ describe('checkNamespaceCollisions — LIVE fixtures (real fs, real symlinks, re
     // fixture path built from the UNRESOLVED tmpdir() would make probeResolution's cwd-vs-realpath
     // comparisons see two different spellings of the same directory (a spawned `node` child's
     // import.meta.resolve fully realpaths its result) and spuriously fail even a genuinely clean fixture.
-    // Resolving once here (same fix as probeResolution's own cwd-absolutizing) keeps every path in these
+    // Canonicalizing once here (the same operation probeResolution now performs itself) keeps every path in these
     // fixtures canonical from the start, matching how a real repo checkout's cwd is not itself a symlink.
     return realpathSync(mkdtempSync(join(tmpdir(), 'oa-collision-live-')));
   }

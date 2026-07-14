@@ -1,9 +1,9 @@
 import { describe, expect, test } from 'bun:test';
-import { mkdirSync, mkdtempSync, realpathSync, rmSync, unlinkSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, realpathSync, rmSync, unlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { backoffMsFor, start } from './reconciler.ts';
+import { backoffMsFor, reconcilePendingEffects, start } from './reconciler.ts';
 import { StubProc, ok } from './test-support/stub-proc.ts';
 import { StubSessionRunner } from './test-support/stub-session-runner.ts';
 
@@ -68,8 +68,11 @@ describe('generic substrate scheduler', () => {
     } finally { rmSync(dir, { recursive: true, force: true }); }
   });
 
-  test('the global pause fence blocks every generic job independently of job-specific fences', async () => {
-    const dir = repo({ jobs: [{ name: 'maintenance', command: 'bun maintenance.ts', intervalSeconds: 60 }] });
+  test('job fences are independent: the conventional pause marker does not override another fence', async () => {
+    const dir = repo({ jobs: [
+      { name: 'ordinary', command: 'bun ordinary.ts', intervalSeconds: 60, fence: '.open-autonomy/paused' },
+      { name: 'audit', command: 'bun audit.ts', intervalSeconds: 60, fence: '.open-autonomy/audits-paused' },
+    ] });
     try {
       mkdirSync(join(dir, '.open-autonomy'), { recursive: true });
       writeFileSync(join(dir, '.open-autonomy', 'paused'), 'operator fence\n');
@@ -78,9 +81,10 @@ describe('generic substrate scheduler', () => {
       let beats = 0;
       const running = start({ cwd: dir, proc: stub.runner, signal: stop.signal, pollMs: 15, sessionRunnerFactory: async () => new StubSessionRunner(), onHeartbeat: () => { beats += 1; } });
       await waitFor(() => beats >= 3);
-      expect(stub.calls.some((call) => call.cmd === 'bun maintenance.ts')).toBe(false);
+      expect(stub.calls.some((call) => call.cmd === 'bun ordinary.ts')).toBe(false);
+      expect(stub.calls.some((call) => call.cmd === 'bun audit.ts')).toBe(true);
       unlinkSync(join(dir, '.open-autonomy', 'paused'));
-      await waitFor(() => stub.calls.some((call) => call.cmd === 'bun maintenance.ts'));
+      await waitFor(() => stub.calls.some((call) => call.cmd === 'bun ordinary.ts'));
       stop.abort();
       await running;
     } finally { rmSync(dir, { recursive: true, force: true }); }
@@ -108,6 +112,45 @@ describe('generic substrate scheduler', () => {
     } finally { rmSync(dir, { recursive: true, force: true }); }
   });
 
+  test('maxConcurrent session pressure does not suppress synchronous substrate jobs', async () => {
+    const dir = repo({ maxConcurrent: 1, jobs: [
+      { name: 'one', agent: 'one', command: 'AUTONOMY_AGENT=one node scripts/run-agent.mjs', intervalSeconds: 60 },
+      { name: 'maintenance', command: 'bun maintenance.ts', intervalSeconds: 60 },
+    ] }, true);
+    try {
+      const sessions = new StubSessionRunner();
+      sessions.addSession({ id: 'existing', agent: 'one', status: 'running' });
+      const stub = procFor(dir).onArgs('bun maintenance.ts', [], () => ok(''));
+      const stop = new AbortController();
+      const running = start({ cwd: dir, proc: stub.runner, ambient: { TERMFLEET_PROVIDER_URL: 'http://pinned' }, signal: stop.signal, pollMs: 15, sessionRunnerFactory: async () => sessions });
+      await waitFor(() => stub.calls.some((call) => call.cmd === 'bun maintenance.ts'));
+      expect(stub.calls.some((call) => call.cmd.includes('run-agent.mjs'))).toBe(false);
+      stop.abort();
+      await running;
+    } finally { rmSync(dir, { recursive: true, force: true }); }
+  });
+
+  test('successful cadence survives a scheduler restart instead of immediately refiring', async () => {
+    const dir = repo({ jobs: [{ name: 'daily-audit', command: 'bun audit.ts', intervalSeconds: 86400 }] });
+    try {
+      const stub = new StubProc().onArgs('bun audit.ts', [], () => ok(''));
+      const firstStop = new AbortController();
+      const first = start({ cwd: dir, proc: stub.runner, signal: firstStop.signal, pollMs: 10, sessionRunnerFactory: async () => new StubSessionRunner() });
+      await waitFor(() => stub.calls.filter((call) => call.cmd === 'bun audit.ts').length === 1);
+      firstStop.abort();
+      await first;
+
+      let beats = 0;
+      const secondStop = new AbortController();
+      const second = start({ cwd: dir, proc: stub.runner, signal: secondStop.signal, pollMs: 10, sessionRunnerFactory: async () => new StubSessionRunner(), onHeartbeat: () => { beats += 1; } });
+      await waitFor(() => beats >= 3);
+      secondStop.abort();
+      await second;
+      expect(stub.calls.filter((call) => call.cmd === 'bun audit.ts')).toHaveLength(1);
+      expect(existsSync(join(dir, '.open-autonomy', 'runner-state', 'schedule-state.json'))).toBe(true);
+    } finally { rmSync(dir, { recursive: true, force: true }); }
+  });
+
   test('a failed command retries on retrySeconds rather than its normal cadence', async () => {
     const dir = repo({ jobs: [{ name: 'retry', command: 'bun retry.ts', intervalSeconds: 3600, retrySeconds: 0.03 }] });
     try {
@@ -122,21 +165,39 @@ describe('generic substrate scheduler', () => {
     } finally { rmSync(dir, { recursive: true, force: true }); }
   });
 
-  test('repeated launch failures receive generic exponential backoff', async () => {
+  test('repeated launch failures engage generic exponential backoff without a hot fourth attempt', async () => {
     const dir = repo({ jobs: [{ name: 'unstable', command: 'bun unstable.ts', intervalSeconds: 3600, retrySeconds: 0.01 }] });
     try {
       let attempts = 0;
-      const stub = new StubProc().onArgs('bun unstable.ts', [], () => ({ status: ++attempts < 4 ? 1 : 0, stdout: '', stderr: '' }));
+      const stub = new StubProc().onArgs('bun unstable.ts', [], () => ({ status: (++attempts, 1), stdout: '', stderr: '' }));
       const stop = new AbortController();
-      const started = Date.now();
       const running = start({ cwd: dir, proc: stub.runner, signal: stop.signal, pollMs: 10, sessionRunnerFactory: async () => new StubSessionRunner() });
-      await waitFor(() => attempts >= 4, 3000);
-      const elapsed = Date.now() - started;
+      await waitFor(() => attempts >= 3);
+      await new Promise((resolve) => setTimeout(resolve, 100));
+      expect(attempts).toBe(3);
       stop.abort();
       await running;
-      expect(elapsed).toBeGreaterThanOrEqual(900);
     } finally { rmSync(dir, { recursive: true, force: true }); }
   });
+});
+
+test('a failed post-session effect keeps its durable marker and retries until success', async () => {
+  const dir = repo({ jobs: [{ name: 'maintenance', command: 'bun maintenance.ts', intervalSeconds: 60 }] });
+  try {
+    const effectsDir = join(dir, '.open-autonomy', 'runner-state', 'effects');
+    mkdirSync(effectsDir, { recursive: true });
+    const marker = join(effectsDir, 'session-1.json');
+    writeFileSync(marker, JSON.stringify({ id: 'session-1', agent: 'worker', effect: 'scripts/effect.ts', worktree: dir }));
+    let succeeds = false;
+    const proc = new StubProc().onArgs('bun', ['scripts/effect.ts'], () => ({ status: succeeds ? 0 : 1, stdout: '', stderr: '' }));
+    const runner = new StubSessionRunner();
+
+    await reconcilePendingEffects(dir, runner, proc.runner);
+    expect(existsSync(marker)).toBe(true);
+    succeeds = true;
+    await reconcilePendingEffects(dir, runner, proc.runner);
+    expect(existsSync(marker)).toBe(false);
+  } finally { rmSync(dir, { recursive: true, force: true }); }
 });
 
 test('backoff escalates generically after repeated fast deaths', () => {

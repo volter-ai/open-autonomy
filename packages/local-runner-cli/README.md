@@ -44,7 +44,7 @@ npm install @volter/oa
 compiles every bundled profile and would fail on any drift.
 
 Existing legacy `scripts` schedules remain readable. New CLI-runner compiles emit the generic `jobs`
-shape, with independent cadence/retry/fence data and no task-backend or role-specific fields.
+shape, with independent cadence/retry/fence data and no scheduler-owned task-backend or role semantics.
 
 ## Verbs
 
@@ -52,8 +52,8 @@ shape, with independent cadence/retry/fence data and no task-backend or role-spe
 |---|---|---|
 | `oa start` | continuous generic job scheduler with fences, session singleton, concurrency, retry/backoff, reaping, and opaque effects | `node scheduler/run.mjs` |
 | `oa once` | fire every currently unfenced job once | `node scheduler/run.mjs --once` |
-| `oa pause [reason]` | touch `.open-autonomy/paused` — blocks NEW waves; an in-flight wave drains to completion | `touch .open-autonomy/paused` |
-| `oa resume` | remove `.open-autonomy/paused` — the operator's act (a human ran the CLI); re-arms the reconciler within one heartbeat | `rm .open-autonomy/paused` |
+| `oa pause [reason]` | touch the conventional `.open-autonomy/paused` fence; jobs assigned that fence drain and stop | `touch .open-autonomy/paused` |
+| `oa resume` | remove `.open-autonomy/paused`; jobs assigned that fence are re-armed within one heartbeat | `rm .open-autonomy/paused` |
 | `oa status` | fence state + rationale, live sessions (via the runner SDK), and last-fire info per job | — (new) |
 | `oa dispatch <agent>` | fire exactly the one schedule line for `<agent>` now, bypassing the fence (the documented first-run-while-paused workaround) | `AUTONOMY_AGENT=<agent> node scripts/run-agent.mjs` |
 | `oa doctor [--live] [--json]` | offline: OA-04 dep-integrity probe + fence state + `schedule.json` parse + prompts/skills existence per declared agent; `--live` additionally probes the provider `/healthz` over the network | — (new; folds in checks that used to live only in `bin/doctor.ts`/`bin/collision-check.ts`) |
@@ -61,13 +61,13 @@ shape, with independent cadence/retry/fence data and no task-backend or role-spe
 | `oa provider status` | report whether the pinned provider (and console) are up and really answering as termfleet | — (new) |
 | `oa provider down` | stop the provider/console this install brought up (best-effort SIGTERM to the whole process tree — `npx` forks the real server rather than exec-replacing itself) | — (new) |
 
-## Design contract (unchanged, honored throughout)
+## Design contract
 
-- **`.open-autonomy/paused` stays the source of truth.** `oa pause` touches it (never deletes it — deletion
-  is the operator's act, spelled `oa resume` or `rm .open-autonomy/paused`, identical authority either way).
-  `oa status` and the reconciler only ever *read* it. This CLI is ergonomics over the file, **never** a
-  daemon holding state of its own — kill `oa start` and the fence file is still the only thing that
-  matters; a fresh `oa start` on the same repo picks up exactly where the file says to.
+- **Fence state lives in declared marker files.** Emitted jobs use `.open-autonomy/paused` by default, and
+  `oa pause`/`oa resume` manipulate that conventional marker. A profile can assign another marker to an
+  independently controlled job, as the example below does for audits. The scheduler reads each job's
+  declared fence; it does not hardcode one marker as an override for every job. Marker files remain the
+  source of truth across scheduler restarts—there is no hidden fence state in a daemon.
 - **The repo keeps committing `autonomy.yml`/`schedule.json`/prompts.** This package reads them from `cwd`
   — nothing is bundled, cached, or baked in at publish time. Point `oa` at a different repo and it reads
   *that* repo's config.
@@ -78,14 +78,15 @@ shape, with independent cadence/retry/fence data and no task-backend or role-spe
   {
     "maxConcurrent": 1,
     "jobs": [
-      { "name": "manager", "command": "AUTONOMY_AGENT=manager AUTONOMY_SINGLETON=1 node scripts/run-agent.mjs",
-        "intervalSeconds": 1800, "retrySeconds": 300, "fence": ".open-autonomy/paused", "agent": "manager" },
-      { "name": "planner", "command": "AUTONOMY_AGENT=planner node scripts/run-agent.mjs",
-        "intervalSeconds": 86400, "retrySeconds": 300, "fence": ".open-autonomy/audits-paused", "agent": "planner" }
+      { "name": "worker", "command": "AUTONOMY_AGENT=worker AUTONOMY_SINGLETON=1 node scripts/run-agent.mjs",
+        "intervalSeconds": 1800, "retrySeconds": 300, "fence": ".open-autonomy/paused", "agent": "worker" },
+      { "name": "audit", "command": "bun scripts/audit.ts",
+        "intervalSeconds": 86400, "retrySeconds": 300, "fence": ".open-autonomy/audits-paused" }
     ]
   }
   ```
-  Each job gets independent timing/backoff state. No job name selects task behavior.
+  Each job gets independent timing/backoff state, persisted atomically across scheduler restarts. No job
+  name selects task behavior.
 - **The full run.mjs guard chain runs in BOTH modes.** `oa start` and `oa once` share one preflight
   (`src/preflight.ts`) that runs before any tick, in run.mjs's exact order: termfleet-installed refusal ->
   the OA-04 dep-integrity collision probe (a workspace member shadowing

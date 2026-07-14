@@ -44,6 +44,7 @@ describe('normalizeSchedule', () => {
       { name: 'same', command: 'echo two' },
     ] })).toThrow(/duplicate job name/);
     expect(() => normalizeSchedule({ maxConcurrent: 0, jobs: [{ name: 'x', command: 'echo x' }] })).toThrow(/maxConcurrent/);
+    expect(() => normalizeSchedule({ jobs: [{ name: 'hot-loop', command: 'echo x', intervalSeconds: 0 }] })).toThrow(/intervalSeconds > 0/);
   });
 });
 

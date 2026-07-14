@@ -7,7 +7,7 @@
 // spawn order (prelaunch's file write happens before the stub records the session).
 import { afterEach, describe, expect, test } from 'bun:test';
 import { spawnSync } from 'node:child_process';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import type { AutonomyIR } from '@open-autonomy/core';
@@ -33,7 +33,7 @@ afterEach(() => {
 // equipped, and committed to a real git repo — mirrors launch-verification.test.ts's scaffold() exactly.
 function scaffold(ir: AutonomyIR): { dir: string } {
   const out = compileLocal(ir);
-  const dir = mkdtempSync(join(tmpdir(), 'oa-prelaunch-'));
+  const dir = realpathSync(mkdtempSync(join(tmpdir(), 'oa-prelaunch-')));
   tmps.push(dir);
   for (const [path, content] of Object.entries(out.generated)) {
     mkdirSync(join(dir, dirname(path)), { recursive: true });

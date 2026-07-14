@@ -1,8 +1,8 @@
-// `oa status` — fence state + rationale text, sessions via the runner SDK path, last-fire info. The
-// reconciler is driver-lifetime-only in memory (mirrors run.mjs's own `idleSince`/backoff — "deliberately
-// not persisted"), so `oa status` run as a separate one-shot process needs SOMETHING durable to report
-// "last fire" from: a small telemetry record under .open-autonomy/runner-state/last-fire/<agent>.json,
-// written by the scheduler on every actual fire. This is informational only — it drives
+// `oa status` — fence state + rationale text, sessions via the runner SDK path, last-fire info.
+// It runs as a separate one-shot process, so it reads a small telemetry record under
+// .open-autonomy/runner-state/last-fire/<agent>.json rather than coupling its display to the scheduler's
+// durable cadence state. The telemetry record is written by the scheduler on every actual fire. This is
+// informational only — it drives
 // nothing (the marker file stays the sole source of truth for pause/resume; last-fire is read-only
 // telemetry `oa status` surfaces, never a second control channel).
 import { mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
@@ -69,7 +69,9 @@ export async function status(opts: { cwd?: string; sessionRunnerFactory?: (cwd: 
   const lastFires = readLastFires(cwd);
 
   const rationaleLines: string[] = [];
-  rationaleLines.push(paused ? 'fence: PAUSED — no new jobs will start; an in-flight job (if any) drains to completion.' : 'fence: unpaused — due jobs may fire.');
+  rationaleLines.push(paused
+    ? 'conventional fence: PAUSED — jobs assigned .open-autonomy/paused will not start; jobs may declare another fence.'
+    : 'conventional fence: unpaused — jobs assigned .open-autonomy/paused may fire when due; other job fences are independent.');
   if (sessions === null) rationaleLines.push('sessions: unknown (probe unavailable — is `oa start` running, or was the runner ever installed?)');
   else if (sessions.length === 0) rationaleLines.push('sessions: none live.');
   else rationaleLines.push(`sessions: ${sessions.length} live (${sessions.map((s) => `${s.agent}:${s.status}`).join(', ')}).`);

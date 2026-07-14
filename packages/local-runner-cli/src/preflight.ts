@@ -6,8 +6,8 @@
 //      export lands in the SAME env object buildTickEnv reads (process.env by default), so it propagates
 //      into every launched session exactly like run.mjs's `process.env.AUTONOMY_PROVIDER_URL_SOURCE = …`.
 //   4. OA-03 uncommitted-harness refusal      (unconditional; AUTONOMY_ALLOW_UNCOMMITTED_HARNESS=1 downgrades)
-// `oa once` checks the PAUSED marker BEFORE calling this (run.mjs's --once did the same), so a paused
-// install always reports PAUSED as the reason nothing ran, never a coincidental preflight failure.
+// `oa once` filters fenced jobs BEFORE calling this, so a fully fenced schedule returns without a
+// coincidental preflight failure for work that will not run.
 import type { NormalizedSchedule, ProcRunner } from './types.ts';
 import { defaultProc } from './proc.ts';
 import { checkDepIntegrity, checkTermfleetInstalled, checkUncommittedHarness, needsRunner } from './guards.ts';

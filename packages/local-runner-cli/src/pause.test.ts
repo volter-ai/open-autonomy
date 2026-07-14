@@ -10,7 +10,7 @@ function tmpRepo(): string {
   return dir;
 }
 
-describe('the paused marker file — DESIGN CONTRACT: source of truth, CLI is ergonomics only', () => {
+describe('the conventional paused marker — declared job fence, CLI is ergonomics only', () => {
   test('isPaused is false when no marker exists', () => {
     const dir = tmpRepo();
     try {
@@ -82,7 +82,7 @@ describe('the paused marker file — DESIGN CONTRACT: source of truth, CLI is er
     const dir = tmpRepo();
     try {
       const msg = pausedMessage(dir);
-      expect(msg).toContain('PAUSED');
+      expect(msg).toContain('CONVENTIONAL FENCE PRESENT');
       expect(msg).toContain('oa resume');
       expect(msg).toContain(pausedMarkerPath(dir));
     } finally {
@@ -103,6 +103,6 @@ describe('the paused marker file — DESIGN CONTRACT: source of truth, CLI is er
 
   test('DRAIN_NOTE documents drain-not-kill semantics', () => {
     expect(DRAIN_NOTE).toContain('drain');
-    expect(DRAIN_NOTE.toLowerCase()).toContain('never kills an in-flight wave');
+    expect(DRAIN_NOTE.toLowerCase()).toContain('never kills an in-flight job');
   });
 });

@@ -1,6 +1,6 @@
 // Generic local substrate loop. It realizes cadence, fences, concurrency, retries, session singleton,
 // reaping, and opaque completion effects. It does not query tasks, PRs, or role-specific state.
-import { existsSync, readFileSync, readdirSync, unlinkSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, unlinkSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { NormalizedJob, ProcRunner, Session, SessionRunner } from './types.ts';
 import { defaultProc } from './proc.ts';
@@ -19,6 +19,33 @@ interface JobState {
   launchedAt: number;
   consecutiveFastDeaths: number;
   backoffUntil: number;
+}
+
+interface DurableScheduleState {
+  schema: 'open-autonomy.local-schedule-state.v1';
+  jobs: Record<string, { attemptedAtMs: number; status: number; error?: string }>;
+}
+
+function scheduleStatePath(cwd: string): string {
+  return join(cwd, '.open-autonomy', 'runner-state', 'schedule-state.json');
+}
+
+function loadDurableState(cwd: string): DurableScheduleState {
+  const empty: DurableScheduleState = { schema: 'open-autonomy.local-schedule-state.v1', jobs: {} };
+  try {
+    const loaded = JSON.parse(readFileSync(scheduleStatePath(cwd), 'utf8')) as DurableScheduleState;
+    return loaded?.schema === empty.schema && loaded.jobs && typeof loaded.jobs === 'object' ? loaded : empty;
+  } catch {
+    return empty;
+  }
+}
+
+function saveDurableState(cwd: string, state: DurableScheduleState): void {
+  const path = scheduleStatePath(cwd);
+  mkdirSync(join(cwd, '.open-autonomy', 'runner-state'), { recursive: true });
+  const temporary = `${path}.${process.pid}.tmp`;
+  writeFileSync(temporary, `${JSON.stringify(state, null, 2)}\n`);
+  renameSync(temporary, path);
 }
 
 export function backoffMsFor(n: number, intervalMs: number): number {
@@ -51,8 +78,7 @@ export interface StartOptions {
 }
 
 const active = (session: Session): boolean => session.status === 'running' || session.status === 'paused' || session.status === 'awaiting-human';
-const fenced = (cwd: string, job: NormalizedJob): boolean =>
-  existsSync(join(cwd, '.open-autonomy', 'paused')) || (!!job.fence && existsSync(join(cwd, job.fence)));
+const fenced = (cwd: string, job: NormalizedJob): boolean => !!job.fence && existsSync(join(cwd, job.fence));
 
 export async function start(opts: StartOptions = {}): Promise<void> {
   const cwd = opts.cwd ?? process.cwd();
@@ -85,7 +111,20 @@ export async function start(opts: StartOptions = {}): Promise<void> {
   }
 
   const runner = await (opts.sessionRunnerFactory ?? defaultSessionRunner)(cwd);
-  const states = new Map(schedule.jobs.map((job) => [job.name, { lastFire: 0, nextFireAt: 0, launchedAt: 0, consecutiveFastDeaths: 0, backoffUntil: 0 }]));
+  const durableState = loadDurableState(cwd);
+  const states = new Map(schedule.jobs.map((job) => {
+    const prior = durableState.jobs[job.name];
+    const attemptedAtMs = Number(prior?.attemptedAtMs);
+    const hasPrior = Number.isFinite(attemptedAtMs) && attemptedAtMs > 0 && Number.isFinite(Number(prior?.status));
+    const delayMs = Number(prior?.status) === 0 ? job.intervalSeconds * 1000 : job.retrySeconds * 1000;
+    return [job.name, {
+      lastFire: hasPrior ? attemptedAtMs : 0,
+      nextFireAt: hasPrior ? attemptedAtMs + delayMs : 0,
+      launchedAt: hasPrior && prior!.status === 0 && !!job.agent ? attemptedAtMs : 0,
+      consecutiveFastDeaths: 0,
+      backoffUntil: 0,
+    } satisfies JobState];
+  }));
   const scheduledAgents = new Set(schedule.jobs.map((job) => job.agent).filter((agent): agent is string => !!agent));
   const idleSince = new Map<string, number>();
   let heartbeat = 0;
@@ -110,6 +149,8 @@ export async function start(opts: StartOptions = {}): Promise<void> {
         if (lifetimeMs < fastDeathMs) {
           state.consecutiveFastDeaths += 1;
           state.nextFireAt = now + job.retrySeconds * 1000;
+          durableState.jobs[job.name] = { attemptedAtMs: now, status: 1, error: `session ended after ${lifetimeMs}ms` };
+          saveDurableState(cwd, durableState);
           if (state.consecutiveFastDeaths >= 3) {
             state.backoffUntil = now + backoffMsFor(state.consecutiveFastDeaths, job.retrySeconds * 1000);
           }
@@ -119,13 +160,19 @@ export async function start(opts: StartOptions = {}): Promise<void> {
         }
       }
 
-      if (fenced(cwd, job) || inFlight || activeCount >= schedule.maxConcurrent) continue;
+      if (fenced(cwd, job) || inFlight || (!!job.agent && activeCount >= schedule.maxConcurrent)) continue;
       if (now < state.backoffUntil || now < state.nextFireAt) continue;
 
       const env = buildTickEnv(schedule.env, ambient, 'cron');
       const result = proc(job.cmd, [], { shell: true, stdio: 'inherit', env });
       state.lastFire = now;
       recordFire(cwd, job.name, job.cmd);
+      durableState.jobs[job.name] = {
+        attemptedAtMs: now,
+        status: result.status ?? 1,
+        ...(result.error ? { error: result.error.message } : {}),
+      };
+      saveDurableState(cwd, durableState);
       if (result.status !== 0 || result.error) {
         state.consecutiveFastDeaths += 1;
         state.nextFireAt = now + job.retrySeconds * 1000;
@@ -185,8 +232,12 @@ async function reconcilePendingEffects(cwd: string, runner: SessionRunner, proc:
     }
     if (live.has(marker.id)) continue;
     console.log(`[oa] post-session effect: ${marker.agent} (${marker.id}) -> ${marker.effect} in ${marker.worktree}`);
-    proc('bun', [marker.effect], { cwd: marker.worktree, stdio: 'inherit', env: { ...process.env, ...marker.env } });
-    try { unlinkSync(path); } catch { /* ignore */ }
+    const result = proc('bun', [marker.effect], { cwd: marker.worktree, stdio: 'inherit', env: { ...process.env, ...marker.env } });
+    if (result.status === 0 && !result.error) {
+      try { unlinkSync(path); } catch { /* ignore */ }
+    } else {
+      console.error(`[oa] post-session effect failed; retaining ${file} for retry: ${result.error?.message ?? `exit ${result.status ?? 'unknown'}`}`);
+    }
   }
 }
 

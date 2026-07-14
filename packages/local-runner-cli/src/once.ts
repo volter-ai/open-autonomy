@@ -21,8 +21,7 @@ export async function once(
   const ambient = opts.ambient ?? process.env;
 
   const schedule = loadSchedule(cwd);
-  const globallyPaused = existsSync(join(cwd, '.open-autonomy', 'paused'));
-  const activeJobs = schedule.jobs.filter((job) => !globallyPaused && (!job.fence || !existsSync(join(cwd, job.fence))));
+  const activeJobs = schedule.jobs.filter((job) => !job.fence || !existsSync(join(cwd, job.fence)));
   const cmds = activeJobs.map((job) => job.cmd);
   if (!cmds.length) return { ok: true, fired: 0 };
 
@@ -41,6 +40,8 @@ export async function once(
     return result;
   }
 
-  fireCommands(cmds, buildTickEnv(schedule.env, ambient, 'cron'), proc);
+  const results = fireCommands(cmds, buildTickEnv(schedule.env, ambient, 'cron'), proc);
+  const failed = results.filter((result) => result.status !== 0 || result.error);
+  if (failed.length) return { ok: false, fired: cmds.length, reason: `${failed.length} of ${cmds.length} job(s) failed` };
   return { ok: true, fired: cmds.length };
 }

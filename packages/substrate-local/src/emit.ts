@@ -454,8 +454,12 @@ async function reconcilePendingEffects(runner) {
     try { marker = JSON.parse(readFileSync(path, 'utf8')); } catch { try { unlinkSync(path); } catch {} continue; }
     if (live.has(marker.id)) continue; // session still running -> its effect runs after it finishes
     console.log(\`[loop] post-session effect: \${marker.agent} (\${marker.id}) -> \${marker.effect} in \${marker.worktree}\`);
-    spawnSync('bun', [marker.effect], { cwd: marker.worktree, stdio: 'inherit', env: Object.assign({}, process.env, marker.env) });
-    try { unlinkSync(path); } catch {}
+    const result = spawnSync('bun', [marker.effect], { cwd: marker.worktree, stdio: 'inherit', env: Object.assign({}, process.env, marker.env) });
+    if (result.status === 0 && !result.error) {
+      try { unlinkSync(path); } catch {}
+    } else {
+      console.error(\`[loop] post-session effect failed; retaining \${file} for retry: \${result.error?.message ?? \`exit \${result.status ?? 'unknown'}\`}\`);
+    }
   }
 }
 const idleSince = new Map();

@@ -83,8 +83,8 @@ const HELP = `oa <command> [args]  (@volter/oa v${pkgVersion()}) — the local o
 
   oa start                     continuous generic job scheduler (was: node scheduler/run.mjs)
   oa once                      fire every currently unfenced job once (was: node scheduler/run.mjs --once)
-  oa pause [reason]             touch .open-autonomy/paused — blocks NEW waves; in-flight waves drain to completion
-  oa resume                     remove .open-autonomy/paused — the operator's act, re-arms the reconciler
+  oa pause [reason]             touch the conventional .open-autonomy/paused job fence
+  oa resume                     remove .open-autonomy/paused and re-arm jobs assigned that fence
   oa status                     fence state + live sessions + last-fire info
   oa dispatch <agent>           fire exactly the one schedule line for <agent> now, bypassing the fence
   oa doctor [--live] [--json]   offline checks: dep-integrity + fence + schedule.json + prompts/skills;
@@ -113,8 +113,8 @@ const HELP = `oa <command> [args]  (@volter/oa v${pkgVersion()}) — the local o
                                 'oa install --help' for the full flow, or see it directly with
                                 'bun bin/install.ts --help'.
 
-The '.open-autonomy/paused' marker file is the source of truth; this CLI is ergonomics over the file, never
-a daemon holding its own state. schedule.json/autonomy.yml/prompts are read from the current working
+Fence marker files declared by scheduled jobs are the source of truth; this CLI is ergonomics over the
+conventional '.open-autonomy/paused' marker, never a daemon holding its own state. schedule.json/autonomy.yml/prompts are read from the current working
 directory (the repo root) — nothing is bundled or cached from a prior install.
 `;
 

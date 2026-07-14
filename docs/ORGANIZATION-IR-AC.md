@@ -412,6 +412,16 @@ differential fixtures demonstrating that runtime renderers preserve the same fra
 **Falsifier.** A behavior can invoke an undeclared effect, or a lower-precedence user fragment silently overrides a
 higher-precedence organizational constraint.
 
+**Implementation record (2026-07-14).** P5 defines a dialect-tagged expression envelope and bounded portable
+predicate AST; external/native dialects remain explicitly opaque. Composed behavior contracts account for typed
+inputs, outputs, tools, memories, context, and direct or tool-induced effects, with substitution and actor-authority
+checks. Instruction assembly has stable derived identities, explicit layer precedence, deterministic ordering, and
+declared conflict handling. Context planning is deterministic over explicit token estimates and preserves trust,
+evidence class, and provenance. The resulting invocation plan is inspectable but noncanonical: actor identity,
+behavior, runtime implementation, prompt material, contextual evidence, and capability authority remain separate.
+The machine-matched P5 ledger and counterexamples live in `organization-coverage.test.ts`,
+`organization-expression.test.ts`, and `organization-behavior.test.ts`.
+
 ### P6. Substrate component and adapter manifests
 
 **Semantic model.** A component implements one or more facet algebras with operations and laws. A product may

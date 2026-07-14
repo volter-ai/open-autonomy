@@ -25,3 +25,5 @@ export * from './organization-normalize';
 export * from './organization-compiler';
 export * from './organization-compiler-passes';
 export * from './organization-migrate';
+export * from './organization-expression';
+export * from './organization-behavior';

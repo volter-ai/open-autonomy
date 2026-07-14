@@ -6,7 +6,7 @@
 
 export type Id = string;
 export type JsonSchema = Record<string, unknown>;
-export type Expression = string;
+export type Expression = string | ExpressionDecl;
 export type Duration = string;
 export type OrganizationCatalogName =
   | 'types' | 'behaviors' | 'tools' | 'memories' | 'capabilities' | 'actors' | 'units' | 'relations'
@@ -16,6 +16,15 @@ export interface SourceRef {
   uri: string;
   digest?: string;
   mediaType?: string;
+}
+
+export interface ExpressionDecl {
+  language: 'oa-expr-v1' | 'cel' | 'rego' | 'json-logic' | 'javascript' | 'native' | string;
+  source: unknown;
+  resultType?: 'boolean' | 'number' | 'string' | 'null' | 'array' | 'object' | 'unknown';
+  freeVariables?: string[];
+  effects?: EffectDecl[];
+  analyzability?: 'portable' | 'declared' | 'opaque';
 }
 
 export interface AnnotationSet {
@@ -49,11 +58,21 @@ export interface BehaviorDecl extends AnnotationSet {
   tools?: Id[];
   memories?: Id[];
   behaviors?: Id[];
+  effects?: EffectDecl[];
+  context?: BehaviorContextRequirement;
 }
+
+export interface BehaviorContextRequirement {
+  required?: Array<'organization' | 'goal-ancestry' | 'work-ancestry' | 'actor' | 'artifacts' | 'conversation' | 'memory'>;
+  maximumTokens?: number;
+  trust?: Array<'trusted' | 'untrusted' | 'external'>;
+}
+
+export type InstructionLayer = 'constitution' | 'organization' | 'role' | 'task' | 'skill' | 'conversation' | 'runtime';
 
 /** Prompt construction is modeled, not hidden in an opaque behavior string. */
 export interface InstructionAssembly {
-  precedence?: Array<'constitution' | 'organization' | 'role' | 'task' | 'skill' | 'conversation' | 'runtime'>;
+  precedence?: InstructionLayer[];
   fragments: InstructionFragment[];
   conflict?: 'reject' | 'higher-precedence' | 'most-restrictive' | 'runtime';
 }
@@ -65,6 +84,7 @@ export interface InstructionFragment extends AnnotationSet {
   text?: string;
   when?: Expression;
   priority?: number;
+  layer?: InstructionLayer;
 }
 
 export interface ToolDecl extends AnnotationSet {

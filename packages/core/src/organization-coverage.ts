@@ -19,12 +19,14 @@ const entry = (
 
 export const ORGANIZATION_SEMANTIC_COVERAGE: readonly SemanticCoverageEntry[] = [
   entry('SourceRef', 'uri digest mediaType', 'portable', 'partial', 'content address or location with optional integrity and media type', 'P1'),
+  entry('ExpressionDecl', 'language source resultType freeVariables effects analyzability', 'portable', 'implemented', 'dialect-tagged expression envelope with explicit portable-analysis boundary', 'P5'),
   entry('AnnotationSet', 'labels documentation provenance extensions', 'portable', 'partial', 'nonsemantic metadata, source assertions, and namespaced extension payload', 'P2'),
   entry('ImportDecl', 'source namespace format required symbols', 'portable', 'partial', 'module dependency, local namespace binding, and named-symbol visibility', 'P1'),
   entry('TypeDecl', 'schema', 'portable', 'partial', 'named structural data type', 'P5'),
-  entry('BehaviorDecl', 'kind source inline inputs outputs instructions tools memories behaviors', 'portable', 'partial', 'typed reusable behavior and its declared dependencies', 'P5'),
-  entry('InstructionAssembly', 'precedence fragments conflict', 'portable', 'declared', 'ordered instruction composition contract', 'P5'),
-  entry('InstructionFragment', 'id role source text when priority', 'portable', 'declared', 'provenanced conditional instruction contribution', 'P5'),
+  entry('BehaviorDecl', 'kind source inline inputs outputs instructions tools memories behaviors effects context', 'portable', 'implemented', 'typed reusable behavior and its declared dependencies', 'P5'),
+  entry('BehaviorContextRequirement', 'required maximumTokens trust', 'portable', 'implemented', 'behavior-level contextual kind, resource, and trust requirements', 'P5'),
+  entry('InstructionAssembly', 'precedence fragments conflict', 'portable', 'implemented', 'ordered instruction composition contract', 'P5'),
+  entry('InstructionFragment', 'id role source text when priority layer', 'portable', 'implemented', 'provenanced conditional instruction contribution', 'P5'),
   entry('ToolDecl', 'input output effects protocol endpoint idempotency', 'portable', 'partial', 'typed callable capability and effect contract', 'P5'),
   entry('MemoryDecl', 'kind scope retention consistency source schema', 'portable', 'declared', 'scoped retained information facility', 'P5'),
   entry('EffectDecl', 'resource action mode reversible', 'portable', 'declared', 'abstract externally relevant effect', 'P5'),
@@ -121,6 +123,17 @@ export const ORGANIZATION_SEMANTIC_COVERAGE: readonly SemanticCoverageEntry[] = 
   entry('MigrationOptions', 'allowLossy', 'compiler', 'implemented', 'explicit authorization for semantic loss', 'P4'),
   entry('MigrationResult', 'document plan dispositions sourceMap errors', 'compiler', 'implemented', 'atomic migration result or structured failure', 'P4'),
   entry('ReplayVersionPin', 'organizationDigest eventSchema reducerVersion compilerVersion', 'compiler', 'implemented', 'complete interpretation version set for historical trace replay', 'P4'),
+  entry('ExpressionAnalysis', 'status language resultType freeVariables errors', 'compiler', 'implemented', 'portable analysis result or explicit opaque/invalid disposition', 'P5'),
+  entry('ExpressionEvaluation', 'value analysis errors', 'compiler', 'implemented', 'side-effect-free portable expression evaluation result', 'P5'),
+  entry('BehaviorContract', 'behavior inputs outputs effects tools memories context', 'compiler', 'implemented', 'composed typed behavior input, output, dependency, context, and effect contract', 'P5'),
+  entry('EffectCoverage', 'effect status grants', 'compiler', 'implemented', 'authority coverage disposition for one required effect', 'P5'),
+  entry('BehaviorAssignmentAnalysis', 'contract effects errors', 'compiler', 'implemented', 'actor-to-behavior authority and contract analysis', 'P5'),
+  entry('AssembledInstruction', 'id layer role text source priority', 'compiler', 'implemented', 'stable instruction fragment in an explicit precedence linearization', 'P5'),
+  entry('InstructionProgram', 'fragments digest errors', 'compiler', 'implemented', 'deterministic inspectable instruction assembly result', 'P5'),
+  entry('InstructionAssemblyOptions', 'additional environment opaqueCondition', 'compiler', 'implemented', 'runtime instruction inputs and explicit opaque-condition policy', 'P5'),
+  entry('ContextItem', 'id kind content tokens priority required trust evidence labels provenance', 'compiler', 'implemented', 'evidence- and trust-labeled contextual contribution', 'P5'),
+  entry('ContextPlan', 'included excluded totalTokens errors', 'compiler', 'implemented', 'deterministic bounded context selection result', 'P5'),
+  entry('InvocationPlan', 'actor behavior implementation instructions context tools authority effects', 'compiler', 'implemented', 'noncanonical inspectable execution plan separating identity, behavior, implementation, context, and authority', 'P5'),
 ] as const;
 
 export interface AuditResidual {
@@ -131,7 +144,6 @@ export interface AuditResidual {
 
 /** B0 residual parking is closed: every known gap has a punch-list owner. */
 export const ORGANIZATION_AUDIT_RESIDUALS: readonly AuditResidual[] = [
-  { id: 'OAIR-R005', finding: 'expression, behavior, instruction, context, and profile-patch semantics are incomplete', owner: 'P5' },
   { id: 'OAIR-R006', finding: 'component manifests lack typed interfaces, state, failure, trust, capacity, cost, and adapter contracts', owner: 'P6' },
   { id: 'OAIR-R007', finding: 'requirements are catalog-level feature flags rather than atomic semantic obligations', owner: 'P7' },
   { id: 'OAIR-R008', finding: 'compatibility has no assurance policy, certificates, constructive search, or unsatisfied cores', owner: 'P7' },
@@ -162,7 +174,7 @@ export const ORGANIZATION_BASELINE_OBLIGATIONS: readonly BaselineObligation[] = 
   { id: 'B0-SEM-1', claim: 'every current public interface field is present in the semantic coverage registry', disposition: 'preserved', assurance: 'statically-checked', evidence: 'organization-coverage.test.ts exported-interface AST comparison' },
   { id: 'B0-SEM-2', claim: 'profile, organization, deployment, compiler result, and operational state remain distinct artifacts', disposition: 'preserved', assurance: 'property-tested', evidence: 'organization-profile.test.ts full flow and separate YAML parsers' },
   { id: 'B0-TYP-1', claim: 'current portable references resolve only to their declared semantic sort', disposition: 'preserved', assurance: 'property-tested', evidence: 'organization-ir.test.ts dangling and wrong-catalog reference fixtures' },
-  { id: 'B0-ALG-1', claim: 'profile patch ordering and conflicts have a complete algebra', disposition: 'unresolved', assurance: 'unknown', residual: 'OAIR-R005' },
+  { id: 'B0-ALG-1', claim: 'profile patch ordering and conflicts have a complete algebra', disposition: 'preserved', assurance: 'property-tested', evidence: 'organization-profile.test.ts deterministic ordered last-writer and organization-behavior.test.ts instruction identity/conflict laws' },
   { id: 'B0-ALG-2', claim: 'successful sequential state materialization composes over trace prefixes', disposition: 'preserved', assurance: 'property-tested', evidence: 'organization-state.test.ts prefix composition fixture' },
   { id: 'B0-DIST-1', claim: 'state/claim declarations do not imply unimplemented distributed guarantees', disposition: 'unresolved', assurance: 'assumed', residual: 'OAIR-R011' },
   { id: 'B0-SEC-1', claim: 'every declared capability and policy names a technical enforcement boundary', disposition: 'unresolved', assurance: 'unknown', residual: 'OAIR-R006' },
@@ -211,4 +223,16 @@ export const ORGANIZATION_P4_OBLIGATIONS: readonly BaselineObligation[] = [
   { id: 'P4-EVO-1', claim: 'artifact families have independent deterministic version graphs and unsupported edges reject', disposition: 'preserved', assurance: 'property-tested', evidence: 'organization-migrate.test.ts organization/state independent no-path fixtures' },
   { id: 'P4-EVO-2', claim: 'historical replay pins organization, event, reducer, and compiler interpretation versions', disposition: 'preserved', assurance: 'statically-checked', evidence: 'ReplayVersionPin and organization-migrate.test.ts complete key fixture' },
   { id: 'P4-OPS-1', claim: 'pure document migration is immutable and atomic with no partial document on step failure', disposition: 'preserved', assurance: 'property-tested', evidence: 'organization-migrate.test.ts input immutability and failure behavior; live-state migration is out of this pure registry scope' },
+] as const;
+
+export const ORGANIZATION_P5_OBLIGATIONS: readonly BaselineObligation[] = [
+  { id: 'P5-SEM-1', claim: 'behavior denotes typed inputs, outputs, effects, dependencies, and contextual requirements', disposition: 'preserved', assurance: 'property-tested', evidence: 'organization-behavior.test.ts composed behavior contract fixtures' },
+  { id: 'P5-TYP-1', claim: 'behavior substitution preserves input acceptance, promised outputs, and effect containment', disposition: 'preserved', assurance: 'property-tested', evidence: 'organization-behavior.test.ts substitution counterexamples' },
+  { id: 'P5-SEM-2', claim: 'portable analysis is applied only to the defined bounded expression dialect', disposition: 'preserved', assurance: 'property-tested', evidence: 'organization-expression.test.ts portable, opaque, invalid, and generated evaluation fixtures' },
+  { id: 'P5-CTX-1', claim: 'instruction and context assembly are deterministic under explicit precedence, policy, and token estimates', disposition: 'preserved', assurance: 'property-tested', evidence: 'organization-behavior.test.ts permutation, precedence, filter, and token-bound fixtures' },
+  { id: 'P5-EPI-1', claim: 'reported, observed, inferred, assumed, attested, and verified context remain distinguishable', disposition: 'preserved', assurance: 'property-tested', evidence: 'organization-behavior.test.ts evidence/trust/provenance preservation fixture' },
+  { id: 'P5-SEC-1', claim: 'instruction assembly does not confer authority for privileged effects', disposition: 'preserved', assurance: 'property-tested', evidence: 'organization-behavior.test.ts unauthorized invocation rejection despite available instructions/context' },
+  { id: 'P5-ORG-1', claim: 'actor identity, behavior, and runtime implementation remain separate', disposition: 'preserved', assurance: 'property-tested', evidence: 'organization-behavior.test.ts invocation plan identity/behavior/implementation fixture' },
+  { id: 'P5-ALG-1', claim: 'instruction assembly defines stable identity, order, conflict, permutation, and idempotence behavior', disposition: 'preserved', assurance: 'property-tested', evidence: 'organization-behavior.test.ts instruction algebra fixtures' },
+  { id: 'P5-ADV-1', claim: 'untrusted context retains its trust class and cannot become instruction or capability authority through formatting', disposition: 'preserved', assurance: 'property-tested', evidence: 'organization-behavior.test.ts injected Slack-like context and authority-isolation fixture' },
 ] as const;

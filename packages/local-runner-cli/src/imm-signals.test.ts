@@ -822,7 +822,11 @@ describe('IMM_SIGNALS / collectImmSignals — the library surface', () => {
   test('collectImmSignals runs every signal and returns a full Record<id, Signal>', async () => {
     const dir = tmpRepo();
     try {
-      const signals = await collectImmSignals(dir, { proc: defaultProc, live: false });
+      // Individual suites above exercise each probe against real filesystem/git/subprocess fixtures.
+      // This aggregate contract only verifies complete keyed composition, so keep its subprocess seam
+      // deterministic and fast under the full parallel CI sweep instead of duplicating all live probes.
+      const stub = new StubProc().on(() => true, () => fail('aggregate probe stub', 1));
+      const signals = await collectImmSignals(dir, { proc: stub.runner, live: false });
       expect(Object.keys(signals).sort()).toEqual(Object.keys(IMM_SIGNALS).sort());
       expect(signals.A8).toBe(signals.A10);
       for (const [id, sig] of Object.entries(signals)) {

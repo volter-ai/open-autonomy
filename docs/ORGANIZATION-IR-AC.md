@@ -383,6 +383,12 @@ counterexample proving unknown fields cannot disappear silently.
 
 **Falsifier.** A migration succeeds after dropping a semantic field without a loss diagnostic.
 
+**Implementation record.** `organization-migrate.ts` supplies independent artifact-family version graphs,
+deterministic shortest planning, immutable atomic document steps, destination validation, per-field dispositions,
+unaccounted-removal rejection, explicit lossy authorization, provenance composition, and complete replay-version
+pins. No speculative production schema edge is registered; synthetic edges test the framework and round-trip claims.
+All six P4 obligations are machine-matched to evidence.
+
 ### P5. Semantic envelopes for expressions, behavior, instructions, and context
 
 **Semantic model.** Behaviors are typed computations with input, output, effects, and contextual requirements.

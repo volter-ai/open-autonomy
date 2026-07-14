@@ -470,10 +470,15 @@ export interface ValidationResult {
   warnings: string[];
 }
 
+export interface OrganizationValidationOptions {
+  /** Defer references through declared namespaces to the module resolver; local dangling refs still fail. */
+  allowImportedReferences?: boolean;
+}
+
 const idPattern = /^[A-Za-z][A-Za-z0-9._/-]*$/;
 
 /** Validate cross-references and universal invariants without imposing one organizational topology. */
-export function validateOrganizationIR(ir: OrganizationIR): ValidationResult {
+export function validateOrganizationIR(ir: OrganizationIR, options: OrganizationValidationOptions = {}): ValidationResult {
   const errors: string[] = [];
   const warnings: string[] = [];
   if (ir.schema !== 'autonomy.organization.v2') errors.push(`bad schema: ${String(ir.schema)}`);
@@ -492,8 +497,10 @@ export function validateOrganizationIR(ir: OrganizationIR): ValidationResult {
 
   const has = (map: Record<string, unknown> | undefined, id: string) => map?.[id] !== undefined;
   const actorOrUnit = (id: string) => has(ir.actors, id) || has(ir.units, id);
+  const namespaces = new Set(Object.entries(ir.imports ?? {}).map(([name, declaration]) => declaration.namespace ?? name));
+  const deferredImport = (id: string) => options.allowImportedReferences === true && namespaces.has(id.split('/')[0]) && id.includes('/');
   const checkRefs = (path: string, refs: string[] | undefined, exists: (id: string) => boolean, kind: string) => {
-    for (const ref of refs ?? []) if (!exists(ref)) errors.push(`${path}: unknown ${kind} '${ref}'`);
+    for (const ref of refs ?? []) if (!exists(ref) && !deferredImport(ref)) errors.push(`${path}: unknown ${kind} '${ref}'`);
   };
 
   for (const [id, behavior] of Object.entries(ir.behaviors ?? {})) {
@@ -510,32 +517,32 @@ export function validateOrganizationIR(ir: OrganizationIR): ValidationResult {
     checkRefs(`actors.${id}.reportsTo`, actor.reportsTo, actorOrUnit, 'actor or unit');
     checkRefs(`actors.${id}.constraints`, actor.constraints, (x) => has(ir.policies, x), 'policy');
     for (const grant of actor.capabilities ?? []) {
-      if (!has(ir.capabilities, grant.capability)) errors.push(`actors.${id}.capabilities: unknown capability '${grant.capability}'`);
-      if (grant.budget && !has(ir.budgets, grant.budget)) errors.push(`actors.${id}.capabilities: unknown budget '${grant.budget}'`);
+      if (!has(ir.capabilities, grant.capability) && !deferredImport(grant.capability)) errors.push(`actors.${id}.capabilities: unknown capability '${grant.capability}'`);
+      if (grant.budget && !has(ir.budgets, grant.budget) && !deferredImport(grant.budget)) errors.push(`actors.${id}.capabilities: unknown budget '${grant.budget}'`);
     }
     for (const [index, activation] of (actor.activation ?? []).entries()) {
-      if (activation.protocol && !has(ir.protocols, activation.protocol))
+      if (activation.protocol && !has(ir.protocols, activation.protocol) && !deferredImport(activation.protocol))
         errors.push(`actors.${id}.activation[${index}].protocol: unknown protocol '${activation.protocol}'`);
-      if (activation.workType && !has(ir.workTypes, activation.workType))
+      if (activation.workType && !has(ir.workTypes, activation.workType) && !deferredImport(activation.workType))
         errors.push(`actors.${id}.activation[${index}].workType: unknown work type '${activation.workType}'`);
     }
   }
   for (const [id, unit] of Object.entries(ir.units ?? {})) {
-    if (unit.parent && !has(ir.units, unit.parent)) errors.push(`units.${id}.parent: unknown unit '${unit.parent}'`);
+    if (unit.parent && !has(ir.units, unit.parent) && !deferredImport(unit.parent)) errors.push(`units.${id}.parent: unknown unit '${unit.parent}'`);
     checkRefs(`units.${id}.members`, unit.members, actorOrUnit, 'actor or unit');
     checkRefs(`units.${id}.goals`, unit.goals, (x) => has(ir.goals, x), 'goal');
     checkRefs(`units.${id}.policies`, unit.policies, (x) => has(ir.policies, x), 'policy');
     checkRefs(`units.${id}.decisionRules`, unit.decisionRules, (x) => has(ir.decisions, x), 'decision rule');
   }
   for (const [id, relation] of Object.entries(ir.relations ?? {})) {
-    if (!actorOrUnit(relation.from)) errors.push(`relations.${id}.from: unknown actor or unit '${relation.from}'`);
-    if (!actorOrUnit(relation.to)) errors.push(`relations.${id}.to: unknown actor or unit '${relation.to}'`);
+    if (!actorOrUnit(relation.from) && !deferredImport(relation.from)) errors.push(`relations.${id}.from: unknown actor or unit '${relation.from}'`);
+    if (!actorOrUnit(relation.to) && !deferredImport(relation.to)) errors.push(`relations.${id}.to: unknown actor or unit '${relation.to}'`);
     if (relation.from === relation.to) warnings.push(`relations.${id}: self-relation`);
-    if (relation.protocol && !has(ir.protocols, relation.protocol)) errors.push(`relations.${id}.protocol: unknown protocol '${relation.protocol}'`);
+    if (relation.protocol && !has(ir.protocols, relation.protocol) && !deferredImport(relation.protocol)) errors.push(`relations.${id}.protocol: unknown protocol '${relation.protocol}'`);
   }
   for (const [id, goal] of Object.entries(ir.goals ?? {})) {
-    if (goal.parent && !has(ir.goals, goal.parent)) errors.push(`goals.${id}.parent: unknown goal '${goal.parent}'`);
-    if (goal.owner && !actorOrUnit(goal.owner)) errors.push(`goals.${id}.owner: unknown actor or unit '${goal.owner}'`);
+    if (goal.parent && !has(ir.goals, goal.parent) && !deferredImport(goal.parent)) errors.push(`goals.${id}.parent: unknown goal '${goal.parent}'`);
+    if (goal.owner && !actorOrUnit(goal.owner) && !deferredImport(goal.owner)) errors.push(`goals.${id}.owner: unknown actor or unit '${goal.owner}'`);
   }
   for (const [id, type] of Object.entries(ir.workTypes ?? {})) {
     validateLifecycle(`workTypes.${id}.lifecycle`, type.lifecycle, errors);
@@ -547,11 +554,11 @@ export function validateOrganizationIR(ir: OrganizationIR): ValidationResult {
   }
   for (const [id, work] of Object.entries(ir.initialWork ?? {})) {
     const type = ir.workTypes?.[work.type];
-    if (!type) errors.push(`initialWork.${id}.type: unknown work type '${work.type}'`);
-    if (work.goal && !has(ir.goals, work.goal)) errors.push(`initialWork.${id}.goal: unknown goal '${work.goal}'`);
-    if (work.parent && !has(ir.initialWork, work.parent)) errors.push(`initialWork.${id}.parent: unknown initial work '${work.parent}'`);
+    if (!type && !deferredImport(work.type)) errors.push(`initialWork.${id}.type: unknown work type '${work.type}'`);
+    if (work.goal && !has(ir.goals, work.goal) && !deferredImport(work.goal)) errors.push(`initialWork.${id}.goal: unknown goal '${work.goal}'`);
+    if (work.parent && !has(ir.initialWork, work.parent) && !deferredImport(work.parent)) errors.push(`initialWork.${id}.parent: unknown initial work '${work.parent}'`);
     checkRefs(`initialWork.${id}.dependencies`, work.dependencies, (x) => has(ir.initialWork, x), 'initial work');
-    if (work.accountable && !actorOrUnit(work.accountable)) errors.push(`initialWork.${id}.accountable: unknown actor or unit '${work.accountable}'`);
+    if (work.accountable && !actorOrUnit(work.accountable) && !deferredImport(work.accountable)) errors.push(`initialWork.${id}.accountable: unknown actor or unit '${work.accountable}'`);
     checkRefs(`initialWork.${id}.assignees`, work.assignees, actorOrUnit, 'actor or unit');
     if (type && work.initialState && !type.lifecycle.states[work.initialState])
       errors.push(`initialWork.${id}.initialState: unknown state '${work.initialState}' for type '${work.type}'`);
@@ -562,7 +569,7 @@ export function validateOrganizationIR(ir: OrganizationIR): ValidationResult {
   detectDependencyCycles(ir.initialWork, errors);
   for (const [id, budget] of Object.entries(ir.budgets ?? {})) {
     if (!(budget.limit >= 0)) errors.push(`budgets.${id}.limit must be non-negative`);
-    if (budget.parent && !has(ir.budgets, budget.parent)) errors.push(`budgets.${id}.parent: unknown budget '${budget.parent}'`);
+    if (budget.parent && !has(ir.budgets, budget.parent) && !deferredImport(budget.parent)) errors.push(`budgets.${id}.parent: unknown budget '${budget.parent}'`);
   }
   return { errors, warnings };
 }

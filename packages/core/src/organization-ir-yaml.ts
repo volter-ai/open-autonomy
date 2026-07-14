@@ -11,7 +11,7 @@ import { validateOrganizationProfile, type OrganizationProfileIR } from './organ
 
 export function parseOrganizationIr(yamlText: string): OrganizationIR {
   const ir = parseYaml(yamlText) as OrganizationIR;
-  const result = validateOrganizationIR(ir);
+  const result = validateOrganizationIR(ir, { allowImportedReferences: true });
   if (result.errors.length) throw new Error(`invalid organization IR:\n  ${result.errors.join('\n  ')}`);
   return ir;
 }

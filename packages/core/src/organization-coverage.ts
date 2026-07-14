@@ -68,6 +68,7 @@ export const ORGANIZATION_SEMANTIC_COVERAGE: readonly SemanticCoverageEntry[] = 
   entry('BudgetUsageState', 'budget consumed reserved asOf', 'observation', 'partial', 'observed resource reservation and consumption', 'P10'),
   entry('OrganizationEvent', 'id type at actor subject causation correlation data', 'observation', 'partial', 'portable causally linked operational observation envelope', 'P10'),
   entry('ValidationResult', 'errors warnings', 'compiler', 'implemented', 'legacy human-readable validation result', 'P3'),
+  entry('OrganizationValidationOptions', 'allowImportedReferences', 'compiler', 'implemented', 'explicit deferral of declared-namespace references to module closure', 'P1'),
   entry('ProfileParameter', 'type description required default enum minimum maximum pattern items', 'portable', 'implemented', 'typed profile-family parameter domain', 'B0'),
   entry('ProfileCondition', 'parameter operator value', 'portable', 'implemented', 'deterministic profile variant predicate', 'B0'),
   entry('ProfilePatch', 'operation path value', 'portable', 'partial', 'ordered organization-template transformation', 'P5'),
@@ -113,6 +114,13 @@ export const ORGANIZATION_SEMANTIC_COVERAGE: readonly SemanticCoverageEntry[] = 
   entry('PassRunRecord', 'pass input output sourceMap obligations', 'compiler', 'implemented', 'inspectable execution receipt for one pass', 'P3'),
   entry('CompilerPipelineResult', 'output level diagnostics passes', 'compiler', 'implemented', 'pipeline output or failure with deterministic evidence', 'P3'),
   entry('CompilerExecutionPolicy', 'maxDiagnostics redact', 'compiler', 'implemented', 'diagnostic resource and disclosure boundary', 'P3'),
+  entry('MigrationDisposition', 'source target disposition explanation', 'compiler', 'implemented', 'per-field preservation, transformation, default, or removal accounting', 'P4'),
+  entry('MigrationStepResult', 'document dispositions sourceMap', 'compiler', 'implemented', 'one immutable migration output with loss and provenance accounting', 'P4'),
+  entry('MigrationEdge', 'id kind from to lossy migrate validate', 'compiler', 'implemented', 'version-addressed artifact-family transformation contract', 'P4'),
+  entry('MigrationPlan', 'kind from to steps lossy', 'compiler', 'implemented', 'deterministic migration path and aggregate loss marker', 'P4'),
+  entry('MigrationOptions', 'allowLossy', 'compiler', 'implemented', 'explicit authorization for semantic loss', 'P4'),
+  entry('MigrationResult', 'document plan dispositions sourceMap errors', 'compiler', 'implemented', 'atomic migration result or structured failure', 'P4'),
+  entry('ReplayVersionPin', 'organizationDigest eventSchema reducerVersion compilerVersion', 'compiler', 'implemented', 'complete interpretation version set for historical trace replay', 'P4'),
 ] as const;
 
 export interface AuditResidual {
@@ -123,7 +131,6 @@ export interface AuditResidual {
 
 /** B0 residual parking is closed: every known gap has a punch-list owner. */
 export const ORGANIZATION_AUDIT_RESIDUALS: readonly AuditResidual[] = [
-  { id: 'OAIR-R004', finding: 'schema migration and replay-version framework is absent', owner: 'P4' },
   { id: 'OAIR-R005', finding: 'expression, behavior, instruction, context, and profile-patch semantics are incomplete', owner: 'P5' },
   { id: 'OAIR-R006', finding: 'component manifests lack typed interfaces, state, failure, trust, capacity, cost, and adapter contracts', owner: 'P6' },
   { id: 'OAIR-R007', finding: 'requirements are catalog-level feature flags rather than atomic semantic obligations', owner: 'P7' },
@@ -195,4 +202,13 @@ export const ORGANIZATION_P3_OBLIGATIONS: readonly BaselineObligation[] = [
   { id: 'P3-OPS-1', claim: 'diagnostics have stable codes, deterministic order, JSON shape, and resource bounds', disposition: 'preserved', assurance: 'property-tested', evidence: 'organization-compiler.test.ts sorting and diagnostic-limit fixtures' },
   { id: 'P3-ADV-1', claim: 'diagnostic rendering escapes controls and policy redacts named secrets', disposition: 'preserved', assurance: 'property-tested', evidence: 'organization-compiler.test.ts ANSI/control and redaction fixture' },
   { id: 'P3-EXT-1', claim: 'provider passes register without product branches and collisions fail closed', disposition: 'preserved', assurance: 'property-tested', evidence: 'organization-compiler.test.ts provider registry fixture' },
+] as const;
+
+export const ORGANIZATION_P4_OBLIGATIONS: readonly BaselineObligation[] = [
+  { id: 'P4-SEM-1', claim: 'every migration step accounts for transformed and removed fields', disposition: 'preserved', assurance: 'property-tested', evidence: 'organization-migrate.test.ts dispositions and unaccounted-removal rejection' },
+  { id: 'P4-REF-1', claim: 'lossless claims are round-trip tested and lossy paths require explicit authorization', disposition: 'preserved', assurance: 'property-tested', evidence: 'organization-migrate.test.ts rename round trip and loss authorization' },
+  { id: 'P4-PROV-1', claim: 'migration outputs carry source relations and transformation explanations', disposition: 'preserved', assurance: 'property-tested', evidence: 'organization-migrate.test.ts v1-to-v2 source map and dispositions' },
+  { id: 'P4-EVO-1', claim: 'artifact families have independent deterministic version graphs and unsupported edges reject', disposition: 'preserved', assurance: 'property-tested', evidence: 'organization-migrate.test.ts organization/state independent no-path fixtures' },
+  { id: 'P4-EVO-2', claim: 'historical replay pins organization, event, reducer, and compiler interpretation versions', disposition: 'preserved', assurance: 'statically-checked', evidence: 'ReplayVersionPin and organization-migrate.test.ts complete key fixture' },
+  { id: 'P4-OPS-1', claim: 'pure document migration is immutable and atomic with no partial document on step failure', disposition: 'preserved', assurance: 'property-tested', evidence: 'organization-migrate.test.ts input immutability and failure behavior; live-state migration is out of this pure registry scope' },
 ] as const;

@@ -121,7 +121,7 @@ export function instantiateProfile(
       }
     }
   }
-  const validation = validateOrganizationIR(organization);
+  const validation = validateOrganizationIR(organization, { allowImportedReferences: true });
   errors.push(...validation.errors.map((x) => `instantiated organization: ${x}`));
   return errors.length ? { parameters, variants, errors } : { organization, parameters, variants, errors };
 }

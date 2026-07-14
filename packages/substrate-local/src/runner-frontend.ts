@@ -75,10 +75,12 @@ function pausedMessage(fence = PAUSED_PATH): string {
 // A skill agent's launch prompt is `/behavior` (claude) or `$behavior` (codex) — emit.ts:436-437 — which the
 // coding CLI resolves against THIS session's cwd (the worktree, or the trunk checkout with no `--branch`). A
 // worktree materializes only what is committed on its base; a missing/uncommitted/renamed skill there dies
-// silently inside the model session ("Unknown command: /develop") with no signal anywhere upstream (the
-// audit's F-7: the runner reports success, the dead session later reads `done`, the PM re-dispatches
-// forever). This check is a plain existsSync, deterministic and free — it runs BEFORE any termfleet spend
-// and refuses the launch outright: no session is created, no post-session effect marker is recorded.
+// silently inside the model session ("Unknown command: /develop") with no signal anywhere upstream. A
+// same-named but STALE skill is just as dangerous: starting a feature-branch scheduler while github
+// isolation correctly bases work on origin's default branch used to execute the old doctrine silently.
+// The pre-check therefore verifies existence everywhere and exact control-checkout parity for anonymous
+// `workspace: isolated` launches. It runs BEFORE any termfleet spend and refuses outright: no session is
+// created and no post-session effect marker is recorded.
 export class SkillMissingError extends Error {
   constructor(message: string) {
     super(message);
@@ -660,14 +662,24 @@ export async function launch(agent: string, params: LaunchParams = {}): Promise<
   const worktreeStatus = branch ? ensureWorktree(branch, worktree, codeHost) : '';
   const createdWorktreeThisCall = !!branch && worktreeStatus !== 'existing';
 
-  // OA-08 pre-check: does this launch's skill invocation actually resolve in the session's cwd? Applies with
-  // OR without `--branch` (a trunk-checkout launch of a skill missing from the main checkout dies the exact
-  // same way). Runs AFTER the pause gate above (a paused install refuses first) and before any termfleet
-  // spend — no session is created, no post-session effect marker is recorded, on refusal.
+  // OA-08 pre-check: does this launch's skill invocation resolve to the SAME doctrine selected by the
+  // control checkout? Existence applies with or without a branch. Content parity applies to anonymous
+  // scheduled isolation only: an explicit proposal branch is allowed to carry branch-local content, but a
+  // fresh scheduled workspace must not silently execute an older same-named skill from remote trunk.
+  // Runs after the pause gate and before any termfleet spend.
   const cwd = worktree || process.cwd();
   const harness = process.env.TERMFLEET_AGENT || (await defaultHarness());
   const skillPath = skillPathFor(harness, behavior, cwd);
-  if (!existsSync(skillPath)) {
+  const controlSkillPath = skillPathFor(harness, behavior, installRoot());
+  const missing = !existsSync(skillPath);
+  const stale =
+    !missing &&
+    requestedWorkspace === 'isolated' &&
+    !explicitBranch &&
+    resolve(cwd) !== resolve(installRoot()) &&
+    existsSync(controlSkillPath) &&
+    readFileSync(skillPath, 'utf8') !== readFileSync(controlSkillPath, 'utf8');
+  if (missing || stale) {
     const baseSha = git(['rev-parse', 'HEAD'], cwd).stdout.trim() || '(unknown)';
     // Recoverability: a worktree is frozen at the base commit it was created on, and `ensureWorktree`
     // early-returns on an existing one — so a refused `--branch` launch that LEFT its just-created worktree
@@ -681,13 +693,18 @@ export async function launch(agent: string, params: LaunchParams = {}): Promise<
       git(['worktree', 'remove', '--force', worktree]);
       git(['branch', '-D', branch]);
     }
-    const message =
-      `[runner] launch refused: ${agent}'s skill "${behavior}" is missing at\n` +
-      `  ${skillPath} — the session would die at launch ("Unknown command: /${behavior}").\n` +
-      `  The worktree contains only files committed on its base; commit the harness on trunk\n` +
-      `  (docs/OPERATIONS.md#local-runner-quickstart, "Commit the harness"), or check the skill\n` +
-      `  exists for harness "${harness}".` +
-      (branch ? ` (branch ${branch}, base ${baseSha})` : '');
+    const message = missing
+      ? `[runner] launch refused: ${agent}'s skill "${behavior}" is missing at\n` +
+        `  ${skillPath} — the session would die at launch ("Unknown command: /${behavior}").\n` +
+        `  The worktree contains only files committed on its base; commit the harness on trunk\n` +
+        `  (docs/OPERATIONS.md#local-runner-quickstart, "Commit the harness"), or check the skill\n` +
+        `  exists for harness "${harness}".` +
+        (branch ? ` (branch ${branch}, base ${baseSha})` : '')
+      : `[runner] launch refused: ${agent}'s skill "${behavior}" is stale in the isolated workspace at\n` +
+        `  ${skillPath}\n` +
+        `  Its content differs from the control checkout at ${controlSkillPath}. GitHub isolation bases new\n` +
+        `  scheduled work on the remote default branch; merge and push the reviewed harness there before\n` +
+        `  starting the scheduler. (branch ${branch}, base ${baseSha})`;
     console.error(message);
     throw new SkillMissingError(message);
   }

@@ -422,6 +422,12 @@ every re-compile/upgrade. **No push is required:** on the local-git code host, w
 **local** trunk — committing locally is sufficient. GitHub code host installs (`simple-gh-sdlc`)
 additionally push as part of their normal PR flow.
 
+For a GitHub code-host install, do not start the scheduler from an unmerged feature branch. Fresh
+isolated workspaces intentionally base on the remote default branch, because that is the reviewed
+deployment state. Merge and push the harness there first. The Runner compares an anonymous isolated
+launch's skill with the control checkout and refuses before model spend when their contents differ; this
+prevents a feature-branch scheduler or stale trunk from silently executing older same-named doctrine.
+
 **Deleted a harness file on purpose?** (e.g. you don't want `.github/workflows/security.yml`.) A
 **re-compile refuses** instead of silently re-creating it — it names the path and explains it was listed in
 a prior `.open-autonomy/generated.json` but is now gone from disk; `--force` re-creates it (reported as

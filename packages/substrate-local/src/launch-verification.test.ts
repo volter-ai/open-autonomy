@@ -324,6 +324,32 @@ describe('scripts/runner.ts launch — the skill pre-check (runner-frontend.ts v
     expect(sessions[1]!.cwd).not.toBe(sessions[0]!.cwd); // every isolated launch is fresh, even across processes
     expect(effectsCount(dir)).toBe(0);
   });
+
+  test('workspace-only isolation refuses a stale same-named skill before termfleet spend', () => {
+    const { dir } = scaffold();
+    gitOk(dir, ['checkout', '-q', '-b', 'feature/new-doctrine']);
+    writeFileSync(
+      join(dir, '.claude', 'skills', 'develop', 'SKILL.md'),
+      '---\nname: develop\ndescription: reviewed replacement doctrine\n---\n\n# develop v2\n',
+    );
+    gitOk(dir, ['add', '.claude/skills/develop/SKILL.md']);
+    gitOk(dir, ['commit', '-q', '-m', 'replace develop doctrine']);
+    const sentinel = join(dir, 'sentinel.log');
+
+    const r = spawnSync('bun', ['scripts/runner.ts', 'launch', 'develop', '--workspace', 'isolated'], {
+      cwd: dir,
+      encoding: 'utf8',
+      env: env({ OA08_SESSION_SENTINEL: sentinel }),
+    });
+
+    expect(r.status).not.toBe(0);
+    expect(r.stderr).toContain('skill "develop" is stale');
+    expect(r.stderr).toContain('content differs from the control checkout');
+    expect(r.stderr).toContain('remote default branch');
+    expect(existsSync(sentinel)).toBe(false);
+    expect(readdirSync(join(dir, '.worktrees'))).toEqual([]); // refused launch cleaned its fresh worktree
+    expect(gitOk(dir, ['branch', '--list', 'autonomy/run-develop-*'])).toBe('');
+  });
 });
 
 // --- C. the REAL emitted scripts/autonomy-runner.mjs — the backend guard (AC-4, AC-6) -------------------

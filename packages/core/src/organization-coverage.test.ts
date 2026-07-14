@@ -15,6 +15,9 @@ const publicSurfaceFiles = [
   'organization-substrate.ts',
   'organization-state.ts',
   'organization-compile.ts',
+  'organization-modules.ts',
+  'organization-canonical.ts',
+  'organization-normalize.ts',
 ];
 
 function declaredInterfaceFields(): Map<string, string[]> {
@@ -26,7 +29,8 @@ function declaredInterfaceFields(): Map<string, string[]> {
       if (!ts.isInterfaceDeclaration(statement)) continue;
       if (!statement.modifiers?.some((modifier) => modifier.kind === ts.SyntaxKind.ExportKeyword)) continue;
       result.set(statement.name.text, statement.members
-        .filter(ts.isPropertySignature)
+        .filter((member): member is ts.PropertySignature | ts.MethodSignature =>
+          ts.isPropertySignature(member) || ts.isMethodSignature(member))
         .map((member) => member.name.getText(source))
         .sort());
     }

@@ -86,6 +86,21 @@ export const ORGANIZATION_SEMANTIC_COVERAGE: readonly SemanticCoverageEntry[] = 
   entry('V1ActorProjection', 'behavior capabilities triggers kind timeout review prelaunch result', 'compiler', 'partial', 'temporary explicit adapter from v2 actor to v1 runner actor', 'P8'),
   entry('V1LoweringOptions', 'deployment components targets codeHost actors policy resources documents', 'compiler', 'partial', 'temporary combined deployment and v1 emission configuration', 'P8'),
   entry('V1LoweringResult', 'ir compatibility errors', 'compiler', 'partial', 'v1 emission plus compatibility report', 'P8'),
+  entry('LoadedOrganizationModule', 'moduleId location organization digest bytes', 'compiler', 'implemented', 'loader result separating canonical identity, retrieval provenance, content, integrity, and resource size', 'P1'),
+  entry('OrganizationModuleLoader', 'load', 'compiler', 'implemented', 'effect boundary for module retrieval and relative resolution', 'P1'),
+  entry('ModuleResolutionLimits', 'maxModules maxDepth', 'compiler', 'implemented', 'module graph node and depth resource bounds', 'P1'),
+  entry('ModuleResolverPolicy', 'allowedSchemes requireDigestForSchemes maxTotalBytes', 'compiler', 'implemented', 'import scheme, integrity, and byte-bound policy', 'P1'),
+  entry('ImportBinding', 'module localName source symbols', 'compiler', 'implemented', 'local alias binding to canonical module and named visibility', 'P1'),
+  entry('ResolvedModuleNode', 'module imports', 'compiler', 'implemented', 'one loaded module and its resolved import environment', 'P1'),
+  entry('ResolvedModuleGraph', 'root modules', 'compiler', 'implemented', 'closed bounded module graph', 'P1'),
+  entry('ModuleResolutionResult', 'graph errors', 'compiler', 'implemented', 'all-or-nothing module graph resolution result', 'P1'),
+  entry('ResolvedReferenceUse', 'module path authored target source declaration pointer', 'compiler', 'implemented', 'sort-checked reference edge with authored and declaration provenance', 'P1'),
+  entry('ReferenceResolutionResult', 'references errors', 'compiler', 'implemented', 'all reference closure edges or deterministic failures', 'P1'),
+  entry('SemanticDigest', 'algorithm canonicalization domain value', 'compiler', 'implemented', 'domain-separated versioned structural digest', 'P2'),
+  entry('CanonicalizationPolicy', 'nonsemanticKeys', 'compiler', 'implemented', 'explicit caller-selected semantic exclusion policy', 'P2'),
+  entry('NormalizedSourceMapEntry', 'output sources', 'compiler', 'implemented', 'many-to-many normalized-output provenance relation', 'P2'),
+  entry('NormalizedOrganizationIR', 'schema root modules sourceMap digest', 'compiler', 'implemented', 'closed canonical compiler form plus nonsemantic source map and digest', 'P2'),
+  entry('NormalizationResult', 'normalized errors', 'compiler', 'implemented', 'all-or-nothing normalization result', 'P2'),
 ] as const;
 
 export interface AuditResidual {

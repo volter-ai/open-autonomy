@@ -76,3 +76,13 @@ describe('emitAutonomy → ingestAutonomy — execution workspace round-trip', (
     expect(ingestAutonomy(emitAutonomy(ir)).agents.planner?.execution).toEqual({ workspace: 'isolated' });
   });
 });
+
+describe('emitAutonomy → ingestAutonomy — typed policy round-trip', () => {
+  test('preserves maxConcurrent without leaking it into the opaque policy box', () => {
+    const ir = irWith();
+    ir.policy = { maxConcurrent: 3, box: { wip: { maxInProgress: 1 } } };
+    const back = ingestAutonomy(emitAutonomy(ir));
+    expect(back.policy.maxConcurrent).toBe(3);
+    expect(back.policy.box).toEqual({ wip: { maxInProgress: 1 } });
+  });
+});

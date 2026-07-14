@@ -40,9 +40,9 @@ export interface OAManifest {
       prelaunch?: string;
     }
   >;
-  // Portable governance data, carried verbatim — each substrate reads the keys it knows
-  // (autonomy/risk/merge/planner for github) and a profile's own knob (e.g. wip) survives untouched.
-  policy?: Record<string, unknown>;
+  // Portable typed controls plus opaque governance data. Typed controls are serialized here so the
+  // substrate-neutral manifest can round-trip them; the opaque box cannot override their values.
+  policy?: { maxConcurrent?: number } & Record<string, unknown>;
 }
 
 /** Serialize an IR to the open-autonomy manifest. */
@@ -84,8 +84,13 @@ export function emitAutonomy(ir: AutonomyIR): OAManifest {
       ...(agent.prelaunch ? { prelaunch: agent.prelaunch } : {}),
     };
   }
-  // Carry the policy box verbatim — it is opaque governance, not a fixed schema (see OAManifest.policy).
-  const policy = (ir.policy.box ?? {}) as OAManifest['policy'];
+  // Carry opaque governance verbatim, then overlay typed controls so an opaque box cannot forge or erase
+  // the standard field. Keeping maxConcurrent in the manifest also lets future Runner admission consume
+  // the same declaration the scheduler already realizes.
+  const policy: NonNullable<OAManifest['policy']> = {
+    ...(ir.policy.box ?? {}),
+    ...(ir.policy.maxConcurrent !== undefined ? { maxConcurrent: ir.policy.maxConcurrent } : {}),
+  };
   return {
     schema: 'open-autonomy.autonomy.v1',
     ...(ir.codeHost ? { codeHost: ir.codeHost } : {}),

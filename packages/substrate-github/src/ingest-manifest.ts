@@ -28,9 +28,14 @@ export function ingestAutonomy(m: OAManifest): AutonomyIR {
 
   const autonomy = m.policy?.autonomy as Record<string, unknown> | undefined;
   const maxConcurrent =
-    typeof autonomy?.max_open_agent_prs === 'number' ? (autonomy.max_open_agent_prs as number) : undefined;
+    typeof m.policy?.maxConcurrent === 'number'
+      ? m.policy.maxConcurrent
+      : typeof autonomy?.max_open_agent_prs === 'number'
+        ? (autonomy.max_open_agent_prs as number)
+        : undefined;
   // Carry the policy governance data verbatim; see emitAutonomy. An unknown knob round-trips.
   const policyBox: Record<string, unknown> = { ...(m.policy ?? {}) };
+  delete policyBox.maxConcurrent; // typed above; never duplicate the standard field into the opaque box
   // The manifest's role LABELS, if present and well-formed (`vision` required, matching validateIR) — full
   // fidelity for a decompile → recompile round-trip (U2, supercode study §II.9.1). A manifest with no roles
   // (or a malformed one, e.g. missing vision) yields no `documents` field, same as before U2 existed.

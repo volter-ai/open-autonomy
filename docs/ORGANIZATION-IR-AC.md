@@ -6,6 +6,10 @@ This document is not a second product roadmap. `docs/ROADMAP.md` remains the can
 defines the acceptance criteria, formal obligations, evidence standards, and completeness accounting used to
 open and close Organization IR implementation items.
 
+The criteria below create obligations; they do not discharge them. A law written here has assurance status
+`unknown` until its checkpoint records appropriate evidence. Implementations must not cite this specification itself
+as proof that an implementation satisfies it.
+
 ## Objective
 
 Open Autonomy must account for meaning from authored organization through deployment and observation:
@@ -15,7 +19,7 @@ Profile + parameters
   -> Organization IR
   -> elaborated organization
   -> requirements
-  -> Deployment IR + compatibility proof
+  -> Deployment IR + compatibility assurance report
   -> progressive lowering
   -> native artifacts and execution
   -> lifted portable events
@@ -28,9 +32,9 @@ The four durable authored or exchanged artifacts remain distinct:
 1. Profile: a typed family of organizations.
 2. Organization IR: target-independent organizational meaning.
 3. Substrate component manifests: provider facets, interfaces, restrictions, and adapters.
-4. Deployment IR: selected instances, bindings, authorities, configuration, and proof dispositions.
+4. Deployment IR: selected instances, bindings, authorities, configuration, and semantic dispositions.
 
-Normalized forms, control plans, execution plans, invocation plans, source maps, and proof objects are initially
+Normalized forms, control plans, execution plans, invocation plans, source maps, and assurance certificates are initially
 compiler artifacts. They do not become required authored formats merely because the compiler exposes them for
 inspection.
 
@@ -39,28 +43,55 @@ inspection.
 Completeness is always relative to a declared semantic domain. Open Autonomy does not claim to represent every
 possible organization or prove arbitrary behavior of language models and external services.
 
-Within the supported domain, every semantically relevant construct and proof obligation must have exactly one
-visible disposition:
+The supported semantic domain itself must be enumerated in a versioned **semantic coverage ledger**. Each source
+construct and field records its denotation, applicable invariants, requirements it induces, observable effects,
+extension behavior, and whether it is portable, dialect-bound, or unsupported. Otherwise “complete within the
+supported domain” is circular: the implementation could silently narrow the domain to what it happens to handle.
+
+Two orthogonal classifications are required. Constructs that contain several independently realizable properties
+must first be decomposed into atomic semantic obligations. Every atomic obligation has exactly one **semantic
+disposition**:
 
 ```text
-preserved | adapter-realized | approximated | rejected | unknown
+preserved | adapter-realized | approximated | rejected | unresolved
 ```
 
 - `preserved`: a selected provider natively realizes the required observable semantics.
 - `adapter-realized`: a declared adapter enforces or translates those semantics.
 - `approximated`: the organization permits a precisely stated weakening.
 - `rejected`: the requested realization is incompatible.
-- `unknown`: evidence is insufficient; unknown never means supported.
+- `unresolved`: no sound disposition has yet been established; unresolved never means supported.
+
+Separately, every claim made in support of that disposition has exactly one **assurance status**:
+
+```text
+proved | statically-checked | model-checked | property-tested | conformance-tested
+| live-observed | externally-attested | assumed | unknown
+```
+
+One claim has one current assurance classification but may retain multiple evidence records and their provenance.
+These axes must not be conflated. A construct may be `preserved` according to a component manifest while the
+provider claim remains merely `externally-attested` or `unknown`. An adapter can preserve semantics, but its
+preservation claim may only have fixture-level evidence. `Unknown` describes evidence, not what transformation
+happened to a source construct.
 
 No construct, requirement, effect, state class, trust boundary, or relevant observation may disappear silently.
 The compiler must distinguish:
 
+- **domain completeness**: the supported, extension, and rejected semantic domains are enumerated rather than inferred
+  from implemented code;
 - **representational completeness**: every in-scope concept has a representation;
 - **referential completeness**: every portable reference is resolved and correctly sorted;
+- **constraint consistency**: no accepted organization or deployment contains jointly unsatisfiable mandatory
+  obligations within the analyzed domain;
 - **operational completeness**: every required runtime responsibility has an owner;
-- **proof completeness**: every obligation has a disposition and evidence class;
+- **proof-accounting completeness**: every obligation has a semantic disposition and assurance status;
 - **observational completeness**: every correctness-relevant effect is observable or recorded as a gap;
-- **lowering completeness**: every source construct is preserved, adapted, approximated, rejected, or unknown.
+- **lowering completeness**: every atomic source obligation is preserved, adapter-realized, approximated, rejected,
+  or unresolved.
+
+These properties are checked independently. For example, a document may be referentially complete but internally
+inconsistent, or lowering-complete while relying on assurance claims that deployment policy does not accept.
 
 ## Review method
 
@@ -110,6 +141,10 @@ Claims must record the strongest evidence actually obtained:
 Evidence must match the claim. A prompt is not an authorization boundary; a manifest assertion is not a live
 conformance proof; a unit test is not a proof of arbitrary concurrent behavior.
 
+“Proof” in compiler APIs means a checkable certificate over a stated formal model. Results supported only by tests,
+attestations, or assumptions must be named compatibility or assurance reports, not proofs. The report may contain
+proved obligations alongside weaker ones.
+
 ## Cross-cutting lenses
 
 Apply lenses in proportion to the construct. Each applicable lens must yield obligations or be explicitly marked
@@ -137,11 +172,36 @@ not applicable.
 | Economic | Are cost and resource tradeoffs explicit and attributable? | Budgets, reservations and optimization objectives |
 | Adversarial | How can ambiguity, replay, forgery, or authority laundering break the claim? | Threat models and negative tests |
 | Interoperability | Should the concept adopt, embed, adapt, or extend an existing standard? | Mappings and round-trip/conformance tests |
+| Compiler | Can the representation be transformed compositionally without hidden target knowledge? | Typed passes, diagnostics, source maps and coverage checks |
+| Constraint solving | Are obligations jointly satisfiable, and can failure be explained minimally? | SMT/CSP/search, validation and unsatisfied cores |
+| Formal verification | Which claims are decidable or checkable under an explicit model? | Certificates, model checking, property tests and counterexamples |
 
 Classical information theory is reserved for analyses that define probabilistic variables and quantities such as
 entropy, mutual information, channel capacity, leakage, or rate-distortion. Context relevance, provenance, and
 actor knowledge belong to context-engineering, information-flow, and epistemic lenses unless such a quantitative
 model is actually supplied.
+
+### Required lens coverage
+
+The following is minimum coverage, not a claim that other lenses are irrelevant. A checkpoint review must include
+each marked lens or explicitly justify non-applicability for a particular sub-item.
+
+| Item | Required lenses |
+|---|---|
+| B0 existing implementation audit | Semantic, type, algebraic, distributed, security, provenance, refinement |
+| P1 modules and identity | Semantic, type, algebraic, graph, security, provenance, evolution, adversarial |
+| P2 normalization and hashing | Semantic, algebraic, compiler, provenance, adversarial |
+| P3 diagnostics and passes | Type, compiler, provenance, operational, adversarial |
+| P4 versions and migrations | Semantic, refinement, provenance, operational/evolution |
+| P5 behavior and context | Semantic, type/effect, epistemic, context, security, organizational, adversarial |
+| P6 component manifests | Distributed, security/trust, operational, economic, interoperability, adversarial |
+| P7 compatibility and solving | Constraint solving, refinement, distributed, security, economic, epistemic |
+| P8 lowering | Semantic, refinement, compiler, security, provenance |
+| P9 Hermes slice | Distributed, control, queueing, HCI, security, operational, economic, adversarial |
+| P10 events and conformance | Algebraic, temporal, distributed, epistemic, database/provenance, security |
+| P11 second substrate | Semantic, refinement, interoperability, operational, economic |
+| P12 formal analyses | Type theoretic, graph theoretic, transition/temporal, order/lattice, control theoretic, queueing/resource, formal verification |
+| P13 ecosystem mappings | Semantic, refinement, interoperability, evolution, adversarial |
 
 ## Global engineering gate
 
@@ -153,9 +213,10 @@ Every checkpoint must:
 - produce deterministic output and deterministically ordered diagnostics;
 - document public behavior and unsupported cases;
 - preserve source provenance where available;
+- update the semantic coverage and obligation ledgers for every affected construct;
 - introduce no substrate-specific concept into Organization IR;
 - make no compiler-internal IR a mandatory authored artifact;
-- silently discard no unsupported semantic construct;
+- never silently discard an unsupported semantic construct;
 - state what is proved, tested, assumed, and unknown;
 - land as a small independently reviewable commit.
 
@@ -163,6 +224,29 @@ Property-based tests are required where an item asserts an algebraic law over a 
 Golden examples alone do not discharge algebraic claims.
 
 ## Punch list
+
+### B0. Audit the existing experimental implementation
+
+The profile instantiator, Organization IR validator, deployment checker, v1 lowerer, and state reducer predate this
+acceptance specification. Their existence is not evidence that the corresponding obligations are discharged.
+
+**Engineering ACs.**
+
+- Inventory every current Organization IR, profile, component, deployment, and state field in the semantic coverage
+  ledger; mark absent semantics, validation, lowering, and observation explicitly.
+- Classify every existing compatibility claim on both the semantic-disposition and assurance axes.
+- Test current profile parameter/variant ordering, null/default behavior, patch conflicts, and substrate separation.
+- Test current requirement derivation for coverage gaps rather than assuming every typed field induces a requirement.
+- Test the reducer against duplicate delivery, invalid subjects, causal gaps, time ordering, partial failure, and
+  continuation from a base state; record where its sequential model is intentionally provisional.
+- Replace any documentation claim that exceeds the actual evidence with a scoped claim or open obligation.
+- Produce a prioritized residual list; B0 closes only when every residual is assigned to a later punch-list item or
+  rejected as out of scope.
+
+**Evidence.** Field-to-semantics inventory, negative tests, obligation ledger, and residual ownership table.
+
+**Falsifier.** A currently accepted field, deployment, or event has no semantic disposition, assurance status, or
+assigned residual.
 
 ### P1. Modules, imports, namespaces, and stable identity
 
@@ -182,9 +266,12 @@ resolve(alphaRename(A)) ~= resolve(A)                    alpha-equivalence
 
 - Resolve through an abstract loader; compiler core performs no direct filesystem or network access.
 - Resolve relative URIs against the importing module URI, not the process working directory.
+- Require resolver policy for allowed schemes, integrity/digest verification where reproducibility is claimed, and
+  bounded graph depth/size; mutable imports without a lock or digest cannot contribute to reproducible compilation.
 - Support explicit namespaces and reject duplicate, ambiguous, or escaping references.
 - Detect missing modules, missing exports, wrong-sort references, and complete import cycles.
-- Produce fully qualified logical identities independent of absolute machine paths.
+- Produce fully qualified logical identities from canonical module identity, never the local namespace alias or an
+  absolute machine path; alpha-renaming an alias therefore preserves both meaning and normalized identity.
 - Preserve import-site and declaration-site provenance.
 - Produce the same closed graph regardless of map or loader enumeration order.
 - Leave no unresolved portable reference in a successful result.
@@ -215,12 +302,14 @@ x ~= y implies N(x) = N(y) for declared equivalences    canonicality
 - Reject invalid input rather than return a partially valid normal form.
 - Compute versioned semantic hashes unaffected by formatting, map order, timestamps, absolute paths, source maps,
   and documentation-only changes declared nonsemantic.
-- Ensure every semantic change in the locked test corpus changes the appropriate digest.
+- Ensure every semantic change in the locked test corpus changes the appropriate digest. This is cryptographic
+  collision evidence, not a mathematical proof that collisions are impossible.
 - Include imported module semantics transitively while retaining durable nominal identities through content change.
 - Preserve a many-to-many source map separately from semantic content.
 
-**Evidence.** Property tests for idempotence and ordering invariance, mutation tests for semantic sensitivity, and
-cross-process canonical serialization fixtures.
+**Evidence.** Per-rule preservation arguments, property tests for idempotence and ordering invariance, mutation tests
+for semantic sensitivity, and cross-process canonical serialization fixtures. Until preservation is derived from a
+defined denotational semantics or checkable certificate, it remains tested/assumed rather than proved.
 
 **Falsifier.** Re-normalization changes output, or a capability/policy/instruction change leaves the semantic hash
 unchanged when that field is declared semantic.
@@ -259,6 +348,8 @@ relation. Organization, profile, component manifest, deployment, and state schem
 - Require explicit authorization for lossy migration.
 - Make migration planning deterministic and already-current migration a no-op.
 - Retain enough reducer/compiler version metadata to replay historical traces.
+- Implement the migration framework now, but add schema-specific migrations only when a real version edge exists;
+  speculative migrations before semantics stabilize are not required.
 
 **Evidence.** Golden fixtures for every supported edge, round-trip tests where reversibility is claimed, and a
 counterexample proving unknown fields cannot disappear silently.
@@ -304,13 +395,14 @@ implement multiple overlapping facets. Adapters are directional, typed, versione
 - Keep manifests external to Organization IR and keep organization-specific shims forbidden.
 - Record whether each manifest claim is asserted, conformance-tested, live-observed, or unknown.
 
-**Evidence.** Schema fixtures, composition counterexamples, adapter round trips, and initial manifests for Hermes,
+**Evidence.** Schema fixtures, composition counterexamples, preservation/loss conformance tests (and round trips only
+where reversibility is claimed), and initial manifests for Hermes,
 Slack, a coding worker runtime, GitHub/local Git, and one durable work store.
 
 **Falsifier.** Two providers both mutate authoritative work state and the deployment is accepted without a declared
 synchronization and conflict-resolution mechanism.
 
-### P7. Compatibility proof and constructive deployment solving
+### P7. Compatibility assurance and constructive deployment solving
 
 **Semantic model.** Compatibility asks for a globally coherent witness, not pointwise feature coverage:
 
@@ -318,32 +410,42 @@ synchronization and conflict-resolution mechanism.
 find d such that d satisfies requirements(o)
 ```
 
-The witness accounts for provider selection, configuration, bindings, authority, adapters, assumptions, and loss.
+The report accounts for provider selection, configuration, bindings, authority, adapters, assumptions, loss, and
+the assurance status of each supporting claim. It becomes a proof only for the subset discharged by checkable
+certificates under explicit assumptions.
 
 **Engineering ACs.**
 
 - Derive requirements from every semantic construct, not only manually listed feature flags.
-- Produce a proof ledger containing requirements, witnesses, evidence classes, adapters, assumptions, losses, and
+- Produce an obligation ledger containing requirements, witnesses, evidence classes, adapters, assumptions, losses, and
   unresolved obligations.
 - Validate manually authored deployments before constructing deployments automatically.
 - Resolve global composition properties including identity, ordering, authority, consistency, recovery, and trust.
 - Generate candidates, propagate constraints, backtrack, and return minimal unsatisfied cores.
+- Be sound over every supported constraint: every emitted candidate revalidates independently. State solver
+  completeness only for a declared finite fragment; heuristically bounded searches must report incompleteness or
+  exhaustion rather than `incompatible`.
 - Optimize preferences, cost, capacity, and latency only after mandatory semantics are satisfied.
-- Never classify required `unknown` or unaccepted approximation as compatible.
+- Apply an explicit assurance policy that sets the minimum acceptable assurance by obligation/risk class and records
+  who accepted each assumption, for what scope, and until what version or expiry.
+- Never classify a required unresolved disposition, unknown assurance claim disallowed by policy, or unaccepted
+  approximation as executable-compatible.
 - Store the selected realization and dispositions in Deployment IR without embedding the entire registry.
 
 **Evidence.** Solver soundness fixtures, deliberately unsatisfiable cores, differential comparison with exhaustive
-enumeration over small registries, and proof-ledger completeness checks.
+enumeration over small registries, and obligation-ledger completeness checks.
 
 **Falsifier.** Every requirement has some provider, yet the accepted composition violates a cross-provider invariant.
 
 ### P8. Progressive lowering and preservation
 
 **Semantic model.** Deployment-aware internal passes lower organization semantics through control and execution
-forms. Every pass establishes a refinement relation and accounts for semantic loss.
+forms. Semantics are assumption/guarantee contracts over declared observations, not only sets of allowed traces:
+trace inclusion alone can preserve safety while losing a required liveness behavior. Every pass must preserve the
+source guarantees under its stated environmental assumptions, or identify an explicit contract weakening.
 
 ```text
-organization + proven deployment
+organization + provisionally compatible deployment
   -> control plan
   -> execution plan
   -> invocation plans and native artifacts
@@ -352,10 +454,13 @@ organization + proven deployment
 **Engineering ACs.**
 
 - Define internal Control Plan, Execution Plan, and Invocation Plan only as demanded by real lowerings.
-- Require a compatible deployment proof before emission of executable artifacts.
+- Require a provisionally compatible deployment candidate before feasibility lowering; allow lowering to return new
+  obligations and force solver backtracking. Emit executable artifacts only after the final obligation set closes
+  under deployment policy.
 - Return output, source maps, preservation witnesses, new obligations, and losses from every pass.
 - Support solver backtracking when a lowering alternative creates an unsatisfied obligation.
-- Compose pass witnesses transitively and report any unaccounted source construct as an error.
+- Compose pass certificates transitively only where their assumptions and observation projections align; report any
+  unaccounted source obligation as an error.
 - Keep prompt rendering, credentials, process isolation, endpoints, and provider configuration below Organization IR.
 - Continue supporting `autonomy.ir.v1` as one bounded lowering target.
 
@@ -390,20 +495,31 @@ external effect.
 
 ### P10. Lifting, state materialization, and conformance
 
-**Semantic model.** Native observations are lifted by component-owned adapters into a causally ordered portable
-trace. State is a deterministic fold over accepted events, and conformance compares observed traces with required
+**Semantic model.** Native observations are lifted by component-owned adapters into a portable causal event graph.
+A materializer may consume a canonical linearization only after proving that concurrent independent events commute,
+or applying an explicit deterministic conflict policy. Conformance compares the accepted history with required
 organization semantics.
 
 ```text
 state(T ++ U) = apply(state(T), U)                        prefix composition
 ```
 
+For two causally independent events `a` and `b` that touch commuting state, the materializer must additionally show:
+
+```text
+apply(apply(s, a), b) = apply(apply(s, b), a)             topological-order invariance
+```
+
+If they do not commute, the event contract must provide arbitration, rejection, or an authoritative order; wall-clock
+timestamps alone are insufficient.
+
 **Engineering ACs.**
 
 - Version portable event schemas and reducer semantics.
 - Distinguish assertion, observation, inference, attestation, and verification.
 - Define duplicate, reorder, concurrency, correction, and retraction behavior.
-- Use causal order rather than assuming trustworthy wall-clock total order.
+- Use causal order rather than assuming trustworthy wall-clock total order; validate actor/subject identity,
+  authorization, event integrity, and provenance independently of causal well-formedness.
 - Lift provider observations without allowing native events to acquire guessed portable meaning.
 - Rebuild materialized state from the accepted event history.
 - Check lifecycle, authority, evidence, budget, protocol, and safety properties over traces.
@@ -424,8 +540,10 @@ realized by structurally different provider compositions.
 
 - Select a control/work provider unlike the Hermes-centered composition, plus separate interaction and worker
   execution providers where possible.
-- Compile the same organization without editing its target-independent semantics.
-- Permit only deployment configuration and explicitly parameterized organizational specialization to differ.
+- Compile byte-identical canonical semantic payload and semantic digest without editing or specializing its
+  target-independent semantics; source maps and nonsemantic provenance need not be byte-identical.
+- Permit deployment configuration to differ. A separately reported profile-specialization experiment may test a
+  broader family, but it does not count as the substrate-independence proof for the same organization.
 - Compare projected portable traces, dispositions, assumptions, losses, cost, and failure behavior.
 - Reject any construct whose apparent portability depended on a Hermes-specific concept.
 
@@ -435,10 +553,10 @@ difference.
 **Falsifier.** Supporting the second system requires adding its product-specific state or command vocabulary to
 Organization IR.
 
-### P12. Deeper analyses and ecosystem mappings
+### P12. Deeper formal analyses
 
-**Semantic model.** Analyses consume explicit semantics and return proofs, counterexamples, assumptions, or unknown;
-external formats are frontends/backends, not replacements for organizational meaning unless their domains coincide.
+**Semantic model.** Analyses consume explicit semantics and return checkable results, counterexamples, assumptions,
+or unknown.
 
 **Engineering ACs.**
 
@@ -446,20 +564,36 @@ external formats are frontends/backends, not replacements for organizational mea
   protocol compatibility, information flow, budget bounds, retry amplification, and control-loop progress analyses.
 - State finite bounds and fairness/environment assumptions for temporal results.
 - Prefer counterexample traces over bare failure messages.
-- Adopt existing standards where meanings match; embed narrower standards; adapt different representations; invent
-  only missing organizational semantics.
-- Implement mappings for selected Oracle Agent Spec, MCP, A2A, CloudEvents/OpenTelemetry, workflow, policy, and
-  provider formats only with explicit round-trip or loss reports.
 
-**Evidence.** Model-checking corpora, property tests, known counterexamples, standard conformance fixtures, and
-round-trip preservation reports.
+**Evidence.** Model-checking corpora, property tests, known counterexamples, and independently checked result
+certificates where available.
 
 **Falsifier.** An analysis reports a property as proved while relying on an opaque expression or unstated fairness
 assumption.
 
+### P13. Ecosystem mappings
+
+**Semantic model.** External formats are frontends, backends, or embedded dialects—not replacements for
+organizational meaning unless their semantic domains coincide.
+
+**Engineering ACs.**
+
+- Adopt existing standards where meanings match; embed narrower standards; adapt different representations; invent
+  only missing organizational semantics.
+- Define the supported semantic subset and version for every mapping.
+- Implement selected Oracle Agent Spec, MCP, A2A, CloudEvents/OpenTelemetry, workflow, policy, and provider mappings
+  only with per-construct dispositions and explicit round-trip or loss reports.
+- Preserve unknown extensions when safe or reject them; never silently erase them during round trip.
+- Separate wire-protocol interoperability from semantic equivalence.
+
+**Evidence.** Standard conformance fixtures, versioned interoperability matrices, round-trip tests where equivalence
+is claimed, and loss fixtures where it is not.
+
+**Falsifier.** A successful import/export silently drops a construct in the mapping's declared supported subset.
+
 ## Foundation completion gate
 
-P1-P4 are complete only when one repeatable scenario can:
+P1-P4 are complete only when B0 is complete and one repeatable scenario can:
 
 1. Load and validate a parameterized profile.
 2. Instantiate it without substrate access.
@@ -468,19 +602,48 @@ P1-P4 are complete only when one repeatable scenario can:
 5. Emit complete source maps, structured diagnostics, and a versioned semantic hash.
 6. Demonstrate normalization idempotence and declared module-composition laws over generated cases.
 7. Project a deliberately invalid variant back to precise authored source locations.
-8. Validate a manually authored composed deployment.
-9. Lower the valid organization to the existing v1 target.
-10. Repeat with byte-identical canonical output, hash, diagnostics, compatibility result, and lowered output.
+8. Migrate a real supported schema-version fixture or, until such an edge exists, prove deterministic rejection of
+   unsupported versions and no-op handling of the current version.
+9. Repeat with byte-identical canonical output, hash, and diagnostics.
+
+Validation against the existing manually authored deployment and v1 lowerer remains a required nonregression test,
+but does not gate the semantic completion of P1-P4 on the future P6-P8 architecture.
 
 ## Vertical-slice completion gate
 
 P5-P10 are complete only when one target-independent autonomous coding organization can be deployed through a
 Hermes-centered composition, managed through Slack, executed by multiple coding workers, restarted under injected
-failures, and reconstructed from lifted portable events with no undisposed required obligation.
+failures, and reconstructed from lifted portable events with no unresolved required obligation and every assurance
+claim satisfying the declared deployment policy.
 
 Passing the happy path is insufficient. The evidence corpus must include duplicate and reordered messages, manager
 restart, worker loss, claim expiry and fencing, delayed human response, review rejection, exhausted retry/budget,
 forged or unverifiable evidence, and an explicitly unsupported configuration.
+
+## Semantic coverage ledger
+
+The coverage ledger prevents scope from being defined retrospectively by whatever the compiler happens to support.
+It is versioned with the semantic model and has one row for every public construct or field, including extension
+points. Rows may share a denotation, but none may be omitted.
+
+| Field | Meaning |
+|---|---|
+| Schema/version/path | Stable location of the construct in its owning artifact |
+| Domain status | Portable, dialect-bound, extension, deprecated, or rejected |
+| Denotation | The state, relation, computation, contract, or observation represented |
+| Identity/equivalence | Whether identity is nominal/structural/runtime and which changes preserve meaning |
+| Static invariants | Type, reference, graph, and local consistency rules |
+| Induced obligations | Requirements the construct creates for analysis, deployment, lowering, and observation |
+| Composition rule | How the construct combines and whether order/conflict matters |
+| Lowering coverage | Passes or adapters responsible, or an assigned residual |
+| Observation coverage | Portable events/evidence that demonstrate relevant effects, or an explicit gap |
+| Security/trust owner | Principal and enforcement boundary for sensitive effects |
+| Evolution rule | Defaulting, migration, extension, and unknown-field behavior |
+| Evidence/residual | Tests, analysis, open obligation, or declared unsupported case |
+
+The ledger describes language coverage; it does not assert that a particular deployment preserves a construct. That
+claim belongs in the per-organization obligation ledger and receives its own semantic disposition and assurance
+status.
 
 ## Obligation ledger
 
@@ -494,14 +657,14 @@ design notes.
 | Origin | Organization/source construct creating it |
 | Owner | Compiler pass, component, adapter, operator, or external environment responsible |
 | Assumptions | Conditions under which evidence applies |
-| Evidence | Type/proof/test/conformance/observation/attestation/assumption/unknown |
-| Disposition | Preserved, adapter-realized, approximated, rejected, or unknown |
+| Semantic disposition | Preserved, adapter-realized, approximated, rejected, or unresolved |
+| Assurance status | Proved, checked/tested at a named level, observed, attested, assumed, or unknown |
 | Source map | Authored location and related declarations |
 | Counterexample | Trace or configuration that would falsify the claim |
 
 A checkpoint cannot close while a required obligation is absent from this accounting. A deployment cannot compile
-while a required obligation is rejected, impermissibly approximated, or unknown under its declared loss and
-assumption policy.
+while a required obligation is rejected, impermissibly approximated, unresolved, or supported only by an assurance
+status forbidden by its declared assurance policy.
 
 ## Definition of done
 
@@ -513,7 +676,8 @@ standard when, over its declared semantic domain:
 - every deployment responsibility has an authoritative owner and enforcement boundary;
 - every lowering step carries preservation evidence or explicit loss;
 - every correctness-relevant runtime effect is observable or identified as an observability gap;
-- every guarantee says whether it is proved, tested, attested, assumed, or unknown;
+- every semantic construct has coverage-ledger entries, and every guarantee separately states its disposition and
+  assurance status;
 - two materially dissimilar substrate compositions realize the same compatible organization without target-specific
   changes to Organization IR;
 - minimal counterexamples are first-class outputs rather than hidden test failures.

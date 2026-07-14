@@ -824,6 +824,7 @@ describe('IMM_SIGNALS / collectImmSignals — the library surface', () => {
     try {
       const signals = await collectImmSignals(dir, { proc: defaultProc, live: false });
       expect(Object.keys(signals).sort()).toEqual(Object.keys(IMM_SIGNALS).sort());
+      expect(signals.A8).toBe(signals.A10);
       for (const [id, sig] of Object.entries(signals)) {
         expect(typeof sig.present).toBe('boolean');
         expect(sig.evidence.length).toBeGreaterThan(0);

@@ -547,9 +547,18 @@ export const IMM_SIGNALS: Record<string, SignalFn> = {
 };
 
 export async function collectImmSignals(installDir: string, ctx: SignalContext = {}): Promise<Record<string, Signal>> {
-  const out: Record<string, Signal> = {};
-  for (const [id, fn] of Object.entries(IMM_SIGNALS)) {
-    out[id] = await fn(installDir, ctx);
-  }
-  return out;
+  // Every signal is a read-only observation, so independent probes can run concurrently. Cache by
+  // function identity as well: multiple signal ids may intentionally alias the exact same probe (A8/A10
+  // both mean doctor-pass), and rerunning an expensive subprocess cannot produce additional evidence.
+  const pending = new Map<SignalFn, Promise<Signal>>();
+  const entries = Object.entries(IMM_SIGNALS);
+  const measured = await Promise.all(entries.map(async ([id, fn]) => {
+    let result = pending.get(fn);
+    if (!result) {
+      result = fn(installDir, ctx);
+      pending.set(fn, result);
+    }
+    return [id, await result] as const;
+  }));
+  return Object.fromEntries(measured);
 }

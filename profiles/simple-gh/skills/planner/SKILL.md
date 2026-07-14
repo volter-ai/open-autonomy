@@ -58,11 +58,9 @@ stops you:
    because an unmerged plan PR's doc isn't in `docs/plans/` on your checkout yet — the doc-date check
    alone would miss it.
 
-**Rationale:** the local runner's `scheduler/schedule.json` has one shared tick interval for every
-declared agent — the scheduler fires **every** tick regardless of whether there's anything new to
-say. This throttle *is* the planner's real cadence; the cron line in `ir.yml` is only ever the outer
-bound. (Per-agent cadence proper is a separate, larger upstream item — until it exists, self-throttle
-here, exactly as both proven instances already do.)
+**Rationale:** the local scheduler now carries independent per-job cadence, but a scheduler restart or
+explicit operator dispatch may legitimately invoke Planner before its ordinary interval. Keep this
+content-level throttle as duplicate-publication protection, not as a substitute for scheduler cadence.
 
 ## DERIVE — read the vision, measure or judge the delta
 

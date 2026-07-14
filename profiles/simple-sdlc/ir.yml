@@ -100,7 +100,6 @@ policy:
         - profiles/**/skills/**
         - profiles/**/scheduler/**
         - .volter/tracker/validation/**
-      human_required_topics: [auth, secrets, billing, deployment, destructive data migration, dependency trust]
     dispatch:
       # Day-one fence (OA-07): with mode "allowlist", the PM may only dispatch issues carrying `allow_label`.
       # Existing-backlog opt-in = label the items you want worked (bulk: `ztrack issue edit <id>

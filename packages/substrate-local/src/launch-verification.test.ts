@@ -112,6 +112,11 @@ function scaffold(): { dir: string } {
   gitOk(dir, ['config', 'user.name', 'oa08-test']);
   gitOk(dir, ['add', '-A']);
   gitOk(dir, ['commit', '-q', '-m', 'install harness']);
+  // github-target isolation must follow the remote default branch. Point origin back at this hermetic
+  // repo so each launch's fetch sees the fixture's latest committed main without network access.
+  gitOk(dir, ['remote', 'add', 'origin', '.']);
+  gitOk(dir, ['fetch', '-q', 'origin', 'main']);
+  gitOk(dir, ['symbolic-ref', 'refs/remotes/origin/HEAD', 'refs/remotes/origin/main']);
   return { dir };
 }
 

@@ -6,7 +6,7 @@ import { readFileSync, readdirSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { stringify as stringifyYaml } from 'yaml';
-import { cronOf, emitAutonomy, withGeneratedManifest } from '@open-autonomy/core';
+import { cronOf, emitAutonomy, enforcementReport, withGeneratedManifest } from '@open-autonomy/core';
 import type { AutonomyIR, CompileOutput, IRAgent } from '@open-autonomy/core';
 
 // Lazy sibling-data reads (OA-01): these used to be module-scope `readFileSync`s, which meant merely
@@ -607,5 +607,6 @@ export function compileGithub(ir: AutonomyIR): CompileOutput {
   // content as `gitignore` (no dot) and we emit it to `.gitignore` in the installation. (Standard template
   // workaround; cf. create-react-app/Next.) Every other dotfile packs fine, so this maps only `.gitignore`.
   for (const r of ir.resources) copies.push({ from: r === '.gitignore' ? 'gitignore' : r, to: r });
+  generated['.open-autonomy/enforcement.json'] = `${JSON.stringify(enforcementReport(ir, 'gh-actions'), null, 2)}\n`;
   return withGeneratedManifest({ generated, copies });
 }

@@ -23,8 +23,7 @@
 # checklist a dispatch-fired run does — never launches another agent/session, never merges, never fixes
 # — self-throttled against redundant runs within its own cadence window (see
 # skills/audit/SKILL.md's SELF-THROTTLE section, the same shape as `planner`'s own self-throttle above,
-# needed for the identical reason: the local loop driver fires every declared cron script on ONE shared
-# tick interval, so a weekly IR cron string is only the outer bound on that substrate). `manager` and
+# retained as duplicate-publication protection across restarts and explicit dispatches). `manager` and
 # `planner` remain the loop's only continuously-ticking WORK actors; `audit`'s cron is a much slower,
 # independent self-check cadence layered on top — see skills/audit/SKILL.md's identity section.
 #
@@ -96,8 +95,8 @@ agents:
     execution: { workspace: isolated }
     capabilities: [tasks:author, tasks:converse, code:propose]
     triggers:
-      - cron: "13 5 * * *"       # daily-style, offset from manager's tick; SELF-THROTTLE (SKILL.md) is
-                                  # the real cadence control until per-agent cadence exists (see U4)
+      - cron: "13 5 * * *"       # daily-style, offset from manager's tick; content throttle in SKILL.md
+                                  # prevents duplicate publication across restarts/manual dispatches
 
   # Conformance auditor of THIS INSTALL (not the product it builds) — verifies changes made to it
   # aren't inconsistent, contradictory, or against OA's own philosophy/structure (§II.10 of the OA
@@ -125,11 +124,8 @@ agents:
       - cron: "51 9 * * 0"
 
 policy:
-  maxConcurrent: 1               # declared intent, not mechanically enforced (conformance/status surface
-                                 # only): the local driver fires every cron agent each shared tick and the
-                                 # singleton guard is per-agent — a planner session CAN overlap a manager
-                                 # tick; the planner's SKILL self-throttle keeps that overlap a no-op.
-                                 # Manager's subagent fan-out is doctrine-capped, not IR-capped
+  maxConcurrent: 1               # local scheduler hard cap across declared agent jobs; harness-native
+                                 # subagent fan-out inside one session remains role doctrine
   box:
     tracker:
       ztrackPreset: simple-gh-sdlc   # BL-29: tracker PRESET name, not a profile reference — no preset
@@ -143,7 +139,6 @@ policy:
     manager:
       merge_policy: manual-after-review   # read by the manager skill: NEVER merge without required
                                           # checks green + a fresh recorded review-subagent pass
-      max_rework_attempts: 2     # per-issue rework cap before human-required escalation
     risk:
       human_required_paths:      # the OA harness itself + the profile source (mirrors simple-gh-sdlc's
         - .github/workflows/**   #   list, minus the workers/prompt-routing files this single-agent kit
@@ -163,7 +158,6 @@ policy:
         - scripts/transcript.ts
         - profiles/**/skills/**
         - .volter/tracker/validation/**
-      human_required_topics: [auth, secrets, billing, deployment, destructive data migration, dependency trust]
 
 resources:
   # Deliberately minimal — NO merge.yml / reconcile-merged-issues.ts (GitHub-Issues-only machinery; the

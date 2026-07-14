@@ -30,7 +30,7 @@ single shared credential, not a real gate — see README.md's HONESTY section). 
   current head SHA** — a pass recorded against an older SHA is stale (any later push invalidates it) and
   requires a fresh review before merge.
 - A red check or a `fail` verdict is a **hard block** — never merge around it, never `--admin`, never
-  push directly to the default branch. Rework (bounded by `manager.max_rework_attempts`) or escalate
+  push directly to the default branch. Rework (bounded to two attempts by the manager skill) or escalate
   `human-required` — see the manager SKILL.md §5.
 
 Review passes only when:
@@ -66,8 +66,8 @@ landing) carve-out for exactly `.open-autonomy/board-*` and `.open-autonomy/paus
 only — never deletion) is self-mergeable on green CI per §7's own terms; every other path under
 `.open-autonomy/**` keeps the unqualified stop rule above.
 
-When a diff touches any of the above, or the issue's topic is in `human_required_topics` (auth, secrets,
-billing, deployment, destructive data migration, dependency trust): **stop**, label the issue
+When a diff touches any of the above, or the issue concerns auth, secrets, billing, deployment,
+destructive data migration, or dependency trust: **stop**, label the issue
 `human-required`, and engage the operator instead of proceeding or merging. Never edit the harness, this
 profile's own source, or the ztrack validation preset yourself — those changes are always the operator's
 call.
@@ -78,7 +78,7 @@ call.
    having explicitly signed off first.
 2. Label the issue `human-required` and leave a comment explaining exactly what triggered the stop (the
    path or topic, and why).
-3. Wait — do not relaunch an implementation subagent against that issue, and do not count it against
-   `manager.max_rework_attempts` (it isn't a rework loop, it's a scope stop).
+3. Wait — do not relaunch an implementation subagent against that issue, and do not count it as a
+   rework attempt (it isn't a rework loop, it's a scope stop).
 4. Resume normal dispatch only once a human has responded (removed the label, or explicitly authorized
    the change in the issue).

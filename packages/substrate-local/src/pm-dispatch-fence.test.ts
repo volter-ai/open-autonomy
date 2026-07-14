@@ -160,6 +160,9 @@ function scaffold(): { dir: string } {
 
   gitOk(dir, ['add', '-A']);
   gitOk(dir, ['commit', '-q', '-m', 'install harness + ztrack board (simple-sdlc preset)']);
+  gitOk(dir, ['remote', 'add', 'origin', '.']);
+  gitOk(dir, ['fetch', '-q', 'origin', 'main']);
+  gitOk(dir, ['symbolic-ref', 'refs/remotes/origin/HEAD', 'refs/remotes/origin/main']);
   return { dir };
 }
 

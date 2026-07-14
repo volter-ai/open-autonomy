@@ -3,7 +3,7 @@ import { existsSync, mkdirSync, mkdtempSync, realpathSync, rmSync, unlinkSync, w
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { backoffMsFor, reconcilePendingEffects, start } from './reconciler.ts';
+import { backoffMsFor, reconcilePendingEffects, reconcileWorkspaceLeases, start } from './reconciler.ts';
 import { StubProc, ok } from './test-support/stub-proc.ts';
 import { StubSessionRunner } from './test-support/stub-session-runner.ts';
 
@@ -197,6 +197,103 @@ test('a failed post-session effect keeps its durable marker and retries until su
     succeeds = true;
     await reconcilePendingEffects(dir, runner, proc.runner);
     expect(existsSync(marker)).toBe(false);
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+function workspaceLease(dir: string, id: string, worktree: string): string {
+  const leases = join(dir, '.open-autonomy', 'runner-state', 'workspaces');
+  mkdirSync(leases, { recursive: true });
+  const path = join(leases, `${id}.json`);
+  writeFileSync(path, JSON.stringify({
+    schema: 'open-autonomy.workspace-lease.v1',
+    id,
+    agent: 'planner',
+    branch: `agent/planner/${id}`,
+    worktree,
+    createdAt: new Date().toISOString(),
+  }));
+  return path;
+}
+
+test('a finished clean isolated workspace is removed with its branch and lease', async () => {
+  const dir = repo({ jobs: [{ name: 'maintenance', command: 'bun maintenance.ts', intervalSeconds: 60 }] });
+  try {
+    const worktree = join(dir, '.worktrees', 'planner-clean');
+    mkdirSync(worktree, { recursive: true });
+    const lease = workspaceLease(dir, 'session-clean', worktree);
+    const proc = new StubProc()
+      .onArgs('git', ['status', '--porcelain'], () => ok(''))
+      .onArgs('git', ['worktree', 'remove'], () => ok())
+      .onArgs('git', ['branch', '-D'], () => ok());
+    await reconcileWorkspaceLeases(dir, new StubSessionRunner(), proc.runner);
+    expect(existsSync(lease)).toBe(false);
+    expect(proc.calls.some((call) => call.args[0] === 'worktree' && call.args[1] === 'remove')).toBe(true);
+    expect(proc.calls.some((call) => call.args[0] === 'branch' && call.args[1] === '-D')).toBe(true);
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+test('a finished dirty workspace is retained and receives a durable quarantine receipt', async () => {
+  const dir = repo({ jobs: [{ name: 'maintenance', command: 'bun maintenance.ts', intervalSeconds: 60 }] });
+  try {
+    const worktree = join(dir, '.worktrees', 'planner-dirty');
+    mkdirSync(worktree, { recursive: true });
+    const lease = workspaceLease(dir, 'session-dirty', worktree);
+    const proc = new StubProc().onArgs('git', ['status', '--porcelain'], () => ok(' M important.txt\n'));
+    await reconcileWorkspaceLeases(dir, new StubSessionRunner(), proc.runner);
+    expect(existsSync(lease)).toBe(false);
+    expect(existsSync(worktree)).toBe(true);
+    const receipt = join(dir, '.open-autonomy', 'runner-state', 'workspace-quarantine', 'session-dirty.json');
+    expect(existsSync(receipt)).toBe(true);
+    await expect(Bun.file(receipt).text()).resolves.toContain('uncommitted changes');
+    expect(proc.calls.some((call) => call.args[0] === 'worktree')).toBe(false);
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+test('live sessions and pending completion effects fence workspace cleanup', async () => {
+  const dir = repo({ jobs: [{ name: 'maintenance', command: 'bun maintenance.ts', intervalSeconds: 60 }] });
+  try {
+    const liveWorktree = join(dir, '.worktrees', 'planner-live');
+    const effectWorktree = join(dir, '.worktrees', 'planner-effect');
+    mkdirSync(liveWorktree, { recursive: true });
+    mkdirSync(effectWorktree, { recursive: true });
+    const liveLease = workspaceLease(dir, 'session-live', liveWorktree);
+    const effectLease = workspaceLease(dir, 'session-effect', effectWorktree);
+    const effects = join(dir, '.open-autonomy', 'runner-state', 'effects');
+    mkdirSync(effects, { recursive: true });
+    writeFileSync(join(effects, 'session-effect.json'), '{}');
+    const runner = new StubSessionRunner();
+    runner.addSession({ id: 'session-live', agent: 'planner', status: 'running' });
+    const proc = new StubProc();
+    await reconcileWorkspaceLeases(dir, runner, proc.runner);
+    expect(existsSync(liveLease)).toBe(true);
+    expect(existsSync(effectLease)).toBe(true);
+    expect(proc.calls).toHaveLength(0);
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+test('a shared worktree waits for every session lease before cleanup', async () => {
+  const dir = repo({ jobs: [{ name: 'maintenance', command: 'bun maintenance.ts', intervalSeconds: 60 }] });
+  try {
+    const worktree = join(dir, '.worktrees', 'shared-review');
+    mkdirSync(worktree, { recursive: true });
+    const developerLease = workspaceLease(dir, 'session-developer', worktree);
+    const reviewerLease = workspaceLease(dir, 'session-reviewer', worktree);
+    const runner = new StubSessionRunner();
+    runner.addSession({ id: 'session-reviewer', agent: 'reviewer', status: 'running' });
+    const proc = new StubProc()
+      .onArgs('git', ['status', '--porcelain'], () => ok(''))
+      .onArgs('git', ['worktree', 'remove'], () => ok())
+      .onArgs('git', ['branch', '-D'], () => ok());
+    await reconcileWorkspaceLeases(dir, runner, proc.runner);
+    expect(existsSync(developerLease)).toBe(true);
+    expect(existsSync(reviewerLease)).toBe(true);
+    expect(proc.calls).toHaveLength(0);
+
+    runner.endSession('session-reviewer');
+    await reconcileWorkspaceLeases(dir, runner, proc.runner);
+    expect(existsSync(developerLease)).toBe(false);
+    expect(existsSync(reviewerLease)).toBe(false);
+    expect(proc.calls.filter((call) => call.args[0] === 'worktree')).toHaveLength(1);
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });
 

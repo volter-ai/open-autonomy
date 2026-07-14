@@ -1,7 +1,6 @@
 // @volter/oa — the local substrate as a versioned CLI. Public API surface: every verb is both a callable
 // function (for programmatic use — e.g. a future fleet console) and reachable via `runCli(argv)`, which
-// `src/bin/oa.ts` (the `oa` executable) and an emitted `scheduler/run.mjs` shim (see
-// packages/substrate-local/src/emit.ts's opt-in `policy.box.local.runner === "cli"`) both call.
+// `src/bin/oa.ts` (the `oa` executable) calls.
 export { start } from './reconciler.ts';
 export type { StartOptions } from './reconciler.ts';
 export { once } from './once.ts';
@@ -118,9 +117,7 @@ conventional '.open-autonomy/paused' marker, never a daemon holding its own stat
 directory (the repo root) — nothing is bundled or cached from a prior install.
 `;
 
-/** Legacy-argv-compatible entry point: an emitted `scheduler/run.mjs` shim calls this with
- *  `process.argv.slice(2)` exactly as the pre-U4 template did, so `node scheduler/run.mjs --once` /
- *  `node scheduler/run.mjs` (no args = continuous) keep working unchanged under the opt-in CLI emission. */
+/** Programmatic argv-compatible entry point used by the `oa` executable. */
 export async function runCli(argv: string[]): Promise<number> {
   const [cmd, ...rest] = argv;
   const cwd = process.cwd();

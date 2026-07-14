@@ -161,8 +161,8 @@ describe('compileLocal — emits the review-delivery reconciler (OA2b) only when
   test('emits scripts/reconcile-open-reviews.mjs and registers it in scheduler/schedule.json', () => {
     const out = compileLocal(irWithReviewEdge);
     expect(Object.keys(out.generated)).toContain('scripts/reconcile-open-reviews.mjs');
-    const schedule = JSON.parse(out.generated['scheduler/schedule.json']) as { scripts: string[] };
-    expect(schedule.scripts.some((s) => s.includes('reconcile-open-reviews.mjs'))).toBe(true);
+    const schedule = JSON.parse(out.generated['scheduler/schedule.json']) as { jobs: Array<{ command: string }> };
+    expect(schedule.jobs.some((job) => job.command.includes('reconcile-open-reviews.mjs'))).toBe(true);
   });
 
   test('the emitted script is parameterized off the manifest — no hardcoded "reviewer"/"agent-review" agent name literal in the SOURCE beyond the seam-contract status context', () => {

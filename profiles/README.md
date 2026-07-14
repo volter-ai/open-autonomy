@@ -190,7 +190,6 @@ what's shipped today, as a starting vocabulary, not a spec:
 | `human.maintainers_var` | repo variable naming who to engage for a human-required item (falls back to the repo owner) | `scripts/human-approval-gate.ts`, `scripts/provision-deploy.ts`, the maintainer/pm skills |
 | `human.sla_minutes` | how long a human-required item waits before the PM escalates | the pm/maintainer skills |
 | `risk.human_required_paths` | glob/name list of paths that force human-approval scope | `scripts/human-approval-gate.ts`, the pm/reviewer/maintainer skills |
-| `risk.human_required_topics` | topic list (auth, secrets, …) that force human-approval scope | the pm/reviewer skills |
 | `merge.maintainer_block_labels` | the one hold-label vocabulary the auto-merge rearm sweep and the pm/reviewer skills consult | `scripts/rearm-auto-merge.ts`, `scripts/open-autonomy-preflight.ts`, the pm/reviewer skills |
 | `planner.issue_origin_label_prefix` / `phase_label_prefix` / `priority_labels` | the planner's label conventions | the planner skill, `scripts/open-autonomy-preflight.ts` |
 | `tracker.ztrackPreset` | the ztrack preset name (survives a fork renaming the profile directory) | `bin/ztrack-preset.ts` (used by `bin/autonomy-compile.ts`'s local next-steps print) |

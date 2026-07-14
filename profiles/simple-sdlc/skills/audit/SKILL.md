@@ -82,7 +82,7 @@ every run — it is check-zero, not optional housekeeping.
 
 - **Local target:** check `$AUTONOMY_TRIGGER_KIND` — **`cron` → this is the scheduler's own automatic
   fire; anything else (unset, or `dispatch`) → an operator explicitly launched you.** This is set at the
-  point of firing, not baked into the schedule-line string: the legacy loop driver's `fireTick`
+  point of firing, not baked into the schedule-line string: the emitted loop driver's `fireJobs`
   (`packages/substrate-local/src/emit.ts`'s compiled `scheduler/run.mjs`) tags every command it fires
   `AUTONOMY_TRIGGER_KIND=cron`; the `@volter/oa` reconciler's automatic heartbeat
   (`packages/local-runner-cli/src/reconciler.ts`) does the same. **`AUTONOMY_SINGLETON` is *not* this
@@ -125,18 +125,10 @@ stops you:
    `--head` (which matches an exact branch name only). Any match → throttle the same way as (1): a
    pending audit report already covers this cadence window.
 
-**Rationale, cited:** this mirrors `skills/planner/SKILL.md`'s own SELF-THROTTLE section, verbatim in
-spirit, because it exists for the identical structural reason. On the **local** target, the loop
-driver's `fireTick` runs **every** command in `schedule.scripts` on **one shared interval**
-(`packages/substrate-local/src/emit.ts`'s `LOOP_DRIVER`) — there is no per-agent cron interpretation
-locally; a "weekly" `cron:` string in `ir.yml` is only ever the *outer* bound (the same fact self-driving's
-own `strategist` cron and every profile's `planner` cron already live with). Without this throttle, a
-cron-bearing `audit` would run its full checklist and attempt to land a report on **every** manager/pm
-tick — turning "low-frequency drift auditing" into report spam and defeating the whole point of TC.3's
-cadence choice. On the **`gh-actions`** target the compiled workflow's `schedule:` block IS honored
-natively by GitHub (real weekly firing, no shared-tick problem) — the throttle there is defense-in-depth
-only (it protects against, e.g., an operator's `workflow_dispatch` immediately preceding a scheduled
-firing, or a `schedule:` misfire after a workflow edit), never the primary cadence control on that target.
+**Rationale:** both local and GitHub Actions now realize the declared per-agent cadence. This content
+throttle remains defense-in-depth against scheduler restarts, an explicit operator dispatch immediately
+before a scheduled firing, and duplicate publication while an earlier audit PR is still open. It is not
+a substitute for substrate cadence.
 
 **Everything else about a cron-fired run is unchanged:** no MODE is ever forwarded on a cron tick (cron
 carries no `params:` in `ir.yml` — only the operator-dispatch trigger can carry `TARGET_REF`, and only the
@@ -431,7 +423,7 @@ verb's own header records ("manual dispatch bypasses the fence by design; … th
 `packages/local-runner-cli/src/dispatch.ts:1-8`). **As of TC.3, `oa dispatch audit` DOES work for this
 actor** (corrected from an earlier, now-false claim here): that verb fires an agent's *schedule line*, and
 this actor now has one — its own weekly `cron` trigger gave it a `scheduler/schedule.json` entry (the
-compiled `scripts` list carries every cron-bearing agent, `audit` included as of TC.3). `oa dispatch audit`
+compiled `jobs` list carries every cron-bearing agent, `audit` included as of TC.3). `oa dispatch audit`
 tags its own fire `AUTONOMY_TRIGGER_KIND=dispatch` (§ CRON-TRIGGERED RUNS above), so it correctly bypasses
 the self-throttle and gets a full run — but it carries no `MODE`, so it runs **drift mode**, never
 setup-completion mode. For setup-completion mode specifically (this section's actual subject), the

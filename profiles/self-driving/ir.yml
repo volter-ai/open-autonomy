@@ -282,7 +282,6 @@ policy:
         - profiles/self-driving/scripts/rearm-auto-merge.ts
         - profiles/self-driving/scripts/reconcile-merged-issues.ts
         - profiles/self-driving/scripts/check-supply-chain.ts
-      human_required_topics: [auth, secrets, billing, deployment, destructive data migration, dependency trust]
     merge:
       # (ci/agent-review/security/human-approval being required, and per-head-SHA re-earn, are the seam
       # CONTRACT — enforced by branch protection + the gates, described in docs/SPEC.md, not tunable

@@ -27,7 +27,7 @@ export async function once(
 
   // The full run.mjs guard chain (termfleet / OA-04 / OA-09 origin log + AUTONOMY_PROVIDER_URL_SOURCE
   // export / OA-03) — SHARED with `oa start` via runPreflight so the two modes can never drift apart on
-  // what they refuse (the failure mode the pre-U4 template never had, because it was one file).
+  // what they refuse.
   const pre = await runPreflight({ ...schedule, jobs: activeJobs, scripts: activeJobs }, {
     cwd,
     proc,

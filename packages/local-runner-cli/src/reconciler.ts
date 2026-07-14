@@ -195,6 +195,7 @@ export async function start(opts: StartOptions = {}): Promise<void> {
         const reaped = await runner.reapIdle({ idleMs: idleReapMs, agents, since: idleSince });
         for (const result of reaped) console.log(`[oa] reaped idle ${result.agent} (${result.id})`);
         await reconcilePendingEffects(cwd, runner, proc);
+        await reconcileWorkspaceLeases(cwd, runner, proc);
       } catch (error) {
         console.error('[oa] reap error:', (error as Error)?.message ?? error);
       }
@@ -242,3 +243,87 @@ async function reconcilePendingEffects(cwd: string, runner: SessionRunner, proc:
 }
 
 export { reconcilePendingEffects };
+
+interface WorkspaceLease {
+  schema: 'open-autonomy.workspace-lease.v1';
+  id: string;
+  agent: string;
+  branch: string;
+  worktree: string;
+  createdAt: string;
+}
+
+/** Reclaim runner-owned isolated workspaces after their session and any completion effect finish.
+ * Clean worktrees are removed immediately. Dirty or unreadable worktrees are moved to a quarantine
+ * receipt exactly once so operator evidence is retained without an infinite cleanup retry loop. */
+export async function reconcileWorkspaceLeases(
+  cwd: string,
+  runner: SessionRunner,
+  proc: ProcRunner = defaultProc,
+): Promise<void> {
+  const leasesDir = join(cwd, '.open-autonomy', 'runner-state', 'workspaces');
+  const effectsDir = join(cwd, '.open-autonomy', 'runner-state', 'effects');
+  const quarantineDir = join(cwd, '.open-autonomy', 'runner-state', 'workspace-quarantine');
+  let files: string[] = [];
+  try {
+    files = readdirSync(leasesDir).filter((file) => file.endsWith('.json'));
+  } catch {
+    return;
+  }
+  let live: Set<string>;
+  try {
+    live = new Set((await runner.list()).map((session) => session.id));
+  } catch {
+    return;
+  }
+  const records: Array<{ file: string; path: string; lease: WorkspaceLease }> = [];
+  for (const file of files) {
+    const path = join(leasesDir, file);
+    let lease: WorkspaceLease;
+    try {
+      lease = JSON.parse(readFileSync(path, 'utf8')) as WorkspaceLease;
+      if (lease.schema !== 'open-autonomy.workspace-lease.v1' || !lease.id || !lease.branch || !lease.worktree)
+        throw new Error('invalid workspace lease');
+    } catch {
+      mkdirSync(quarantineDir, { recursive: true });
+      try { renameSync(path, join(quarantineDir, file)); } catch { /* leave it for inspection */ }
+      continue;
+    }
+    records.push({ file, path, lease });
+  }
+  const handled = new Set<string>();
+  for (const record of records) {
+    const { lease } = record;
+    if (handled.has(lease.worktree)) continue;
+    handled.add(lease.worktree);
+    const peers = records.filter((candidate) => candidate.lease.worktree === lease.worktree);
+    if (peers.some((peer) => live.has(peer.lease.id) || existsSync(join(effectsDir, peer.file)))) continue;
+    if (!existsSync(lease.worktree)) {
+      for (const peer of peers) try { unlinkSync(peer.path); } catch { /* retry later */ }
+      continue;
+    }
+    const status = proc('git', ['status', '--porcelain'], { cwd: lease.worktree });
+    if (status.status !== 0 || status.error || status.stdout.trim()) {
+      mkdirSync(quarantineDir, { recursive: true });
+      for (const peer of peers) {
+        const receipt = {
+          ...peer.lease,
+          quarantinedAt: new Date().toISOString(),
+          reason: status.status !== 0 || status.error ? 'git status failed' : 'worktree has uncommitted changes',
+        };
+        writeFileSync(join(quarantineDir, peer.file), `${JSON.stringify(receipt, null, 2)}\n`);
+        try { unlinkSync(peer.path); } catch { /* quarantine receipt is already durable */ }
+      }
+      console.error(`[oa] retained dirty workspace for ${lease.agent} (${lease.id}): ${lease.worktree}`);
+      continue;
+    }
+    const removed = proc('git', ['worktree', 'remove', lease.worktree], { cwd });
+    if (removed.status !== 0 || removed.error) {
+      console.error(`[oa] workspace cleanup failed for ${lease.agent} (${lease.id}); retaining lease`);
+      continue;
+    }
+    proc('git', ['branch', '-D', lease.branch], { cwd });
+    for (const peer of peers) try { unlinkSync(peer.path); } catch { /* cleanup already succeeded */ }
+    console.log(`[oa] cleaned workspace for ${lease.agent} (${lease.id})`);
+  }
+}

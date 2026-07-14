@@ -507,7 +507,7 @@ rename the thing every component must agree on).
   - the agent branch prefix `agent/`.
 - **Tunable policy** — a `policy.box` parameter **with a reader** (a declared key nothing reads doesn't
   exist — `check:policy-consumers` makes that state unrepresentable): `merge.maintainer_block_labels`,
-  `risk.human_required_paths` / `human_required_topics`, `human.sla_minutes` / `maintainers_var`, the
+  `risk.human_required_paths`, `human.sla_minutes` / `maintainers_var`, the
   planner's label prefixes. Declared per profile, read at **runtime** from the compiled
   `.open-autonomy/autonomy.yml`; an org tunes them per install and no component changes.
 

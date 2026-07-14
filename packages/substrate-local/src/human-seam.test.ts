@@ -28,9 +28,9 @@ describe('compileLocal — kind:human is DECLARED, never EXECUTED', () => {
   const out = compileLocal(ir);
 
   test('a human is excluded from scheduler/schedule.json even though it carries a cron', () => {
-    const schedule = JSON.parse(out.generated['scheduler/schedule.json']) as { scripts: string[] };
-    expect(schedule.scripts.some((s) => s.includes('request.ts'))).toBe(true); // the script agent IS scheduled
-    expect(schedule.scripts.some((s) => s.includes('approver'))).toBe(false); // the human is NOT
+    const schedule = JSON.parse(out.generated['scheduler/schedule.json']) as { jobs: Array<{ command: string }> };
+    expect(schedule.jobs.some((job) => job.command.includes('request.ts'))).toBe(true); // the script agent IS scheduled
+    expect(schedule.jobs.some((job) => job.command.includes('approver'))).toBe(false); // the human is NOT
   });
 
   test('a human gets no launch prompt (no harness to invoke)', () => {
@@ -65,6 +65,7 @@ describe('the emitted scripts/runner.ts — the human route (a REAL subprocess a
     mkdirSync(join(dir, '.open-autonomy'), { recursive: true });
     mkdirSync(join(dir, 'scripts'), { recursive: true });
     writeFileSync(join(dir, '.open-autonomy', 'autonomy.yml'), out.generated['.open-autonomy/autonomy.yml']);
+    writeFileSync(join(dir, '.open-autonomy', 'autonomy.json'), out.generated['.open-autonomy/autonomy.json']);
     writeFileSync(join(dir, 'scripts', 'runner.ts'), out.generated['scripts/runner.ts']);
     return dir;
   }

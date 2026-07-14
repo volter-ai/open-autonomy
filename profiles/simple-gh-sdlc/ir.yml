@@ -179,7 +179,6 @@ policy:
         - scripts/transcript.ts
         - profiles/**/skills/**
         - .volter/tracker/validation/**
-      human_required_topics: [auth, secrets, billing, deployment, destructive data migration, dependency trust]
 
 # The shared standards every skill reads (carried verbatim into the installation).
 resources:

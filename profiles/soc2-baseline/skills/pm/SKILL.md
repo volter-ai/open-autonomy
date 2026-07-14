@@ -23,8 +23,8 @@ GitHub — durable and visible to every stateless run — NOT in a local ztrack 
   auto-merge). You do not dispatch review.
 - **done** = the PR merged (the issue auto-closes via `Closes #<n>`).
 - **`needs-info` / `human-required`** = parked for a human; skip unless a human has
-  since replied. An issue touching a topic in `policy.risk.human_required_topics` (read the
-  list from `.open-autonomy/autonomy.yml` — the one source; never keep your own) is routed
+  since replied. An issue touching a semantic stop topic in `standards/risk-and-review.md`, or involving
+  compliance, access control, audit logging, or data retention, is routed
   `human-required` rather than dispatched. If a parked item has waited with no human reply
   longer than `policy.human.sla_minutes` (same file), post ONE fresh re-ping @mentioning the
   maintainers — at most once per SLA window, never every tick.

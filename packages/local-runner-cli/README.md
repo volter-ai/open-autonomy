@@ -17,34 +17,13 @@ through the configured task service.
 
 ## Adoption path
 
-**New installs (opt-in during compile):** set `policy.box.local.runner: "cli"` in the profile's `ir.yml`
-(the IR's only free-form governance slot is `policy.box` — see `docs/SPEC.md#the-ir`) before compiling.
-`compileLocal()` then emits a thin `scheduler/run.mjs` shim instead of the full byte-copied template:
+There is no profile-level scheduler selector. `compileLocal()` always emits the generic `jobs` schedule
+shape and a self-contained `scheduler/run.mjs`; profile policy cannot choose a different implementation.
+Historical `scripts` schedules remain readable during upgrades.
 
-```js
-#!/usr/bin/env node
-import { runCli } from '@volter/oa';
-const code = await runCli(process.argv.slice(2));
-process.exit(code);
-```
-
-argv-compatible with the legacy contract — `node scheduler/run.mjs --once` / `node scheduler/run.mjs`
-(continuous) both keep working unchanged. Add the dependency (the compile-time instructions print this
-reminder when the opt-in is set):
-
-```sh
-npm install @volter/oa
-```
-
-`package.json` (and its lockfile) join `human_required_paths` the same way `termfleet`/`ztrack` already do
-— governance relocates to **the pinned exact version**, not a copied file nobody re-reviews after install.
-
-**DEFAULT IS UNCHANGED.** A profile that never sets `policy.box.local.runner` gets today's full byte-copied
-`scheduler/run.mjs` template exactly as before — proven every run by `bun run check:profiles`, which
-compiles every bundled profile and would fail on any drift.
-
-Existing legacy `scripts` schedules remain readable. New CLI-runner compiles emit the generic `jobs`
-shape, with independent cadence/retry/fence data and no scheduler-owned task-backend or role semantics.
+This package exposes the richer operator CLI from an open-autonomy source checkout. It is currently
+private and unpublished, so compiled installs do not import it or print an unusable `npm install` step.
+Once it is published, adopting the CLI is a packaging/release change—not a new semantic policy key.
 
 ## Verbs
 
@@ -102,9 +81,8 @@ Every verb is unit-tested against **stubbed** `gh`/`ztrack`/the termfleet runner
 — no real network calls, no real termfleet provider, no spend. `src/cli.test.ts` additionally spawns the
 real `oa` executable as a real `node` subprocess (proving the package runs under plain `node` with zero
 build step — Node 22.18+'s built-in TypeScript type-stripping, matching this monorepo's own `engines`
-floor) and `packages/substrate-local/src/cli-runner-emit.test.ts` proves the `compileLocal()` opt-in end to
-end, including a real subprocess run of the emitted shim wired to this package via a real (symlinked, not
-stubbed) `node_modules/@volter/oa`.
+floor) and `packages/substrate-local/src/cli-runner-emit.test.ts` proves that every local compile emits the
+same generic job contract regardless of opaque profile policy.
 
 ```sh
 bun test packages/local-runner-cli/src/*.test.ts

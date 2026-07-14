@@ -1,0 +1,108 @@
+schema: autonomy.deployment.v1
+name: hermes-oa-control-local
+
+# Component manifests are embedded in this example for reviewability. A production compiler loads them
+# from a registry maintained by each substrate adapter.
+components:
+  hermes:
+    id: hermes
+    provides:
+      actors.identity: { realization: native, mechanism: persistent Hermes identities }
+      actors.behavior: { realization: native, mechanism: skills and instruction assembly }
+      actors.activation: { realization: native, mechanism: perpetual loop, schedules and channel events }
+      actors.capacity:
+        realization: adapter
+        mechanism: Hermes worker admission controller
+        properties: { maxConcurrent: 100 }
+      authority.capabilities: { realization: native, mechanism: tool and MCP grants }
+      interaction.protocols: { realization: native, mechanism: Slack channel adapter }
+      behavior.tools: { realization: native, mechanism: MCP and local tools }
+  oa-control:
+    id: oa-control
+    provides:
+      organization.units: { realization: native }
+      organization.relations: { realization: native }
+      purpose.goals: { realization: native }
+      work.types:
+        realization: native
+        mechanism: transactional work service
+        properties: { assignmentModes: [direct, claim, lease], atomicClaims: true }
+      governance.policies: { realization: native }
+      governance.budgets: { realization: native }
+      behavior.memories: { realization: native, mechanism: organizational memory service }
+      durable-work: { realization: native }
+      atomic-claims: { realization: native }
+      audit-events: { realization: native, mechanism: append-only event log }
+  codex:
+    id: codex
+    provides:
+      workers.execution:
+        realization: native
+        properties: { isolatedWorkspaces: true }
+  github:
+    id: github
+    provides:
+      independent-review: { realization: adapter, mechanism: protected review edge and status checks }
+
+providers:
+  manager: { component: hermes }
+  control: { component: oa-control }
+  coding: { component: codex }
+  code-host: { component: github }
+
+bindings:
+  - { feature: actors.identity, provider: manager }
+  - { feature: actors.behavior, provider: manager }
+  - { feature: actors.activation, provider: manager }
+  - { feature: actors.capacity, provider: manager }
+  - { feature: authority.capabilities, provider: manager }
+  - { feature: interaction.protocols, provider: manager }
+  - { feature: behavior.tools, provider: manager }
+  - { feature: organization.units, provider: control }
+  - { feature: organization.relations, provider: control }
+  - { feature: purpose.goals, provider: control }
+  - { feature: work.types, provider: control }
+  - { feature: governance.policies, provider: control }
+  - { feature: governance.budgets, provider: control }
+  - { feature: behavior.memories, provider: control }
+  - { feature: durable-work, provider: control }
+  - { feature: atomic-claims, provider: control }
+  - { feature: audit-events, provider: control }
+  - { feature: workers.execution, provider: coding }
+  - { feature: independent-review, provider: code-host }
+
+authorities:
+  work: control
+  conversations: manager
+
+# v1 projection is an adapter-development fixture, not substrate semantics authored by the organization.
+v1:
+  targets: [local]
+  codeHost: github
+  actors:
+    manager:
+      behavior: manager
+      capabilities: [tasks:author, tasks:converse, agent:launch, agent:list, agent:cancel]
+      triggers:
+        - { cron: "*/5 * * * *" }
+        - { event: slack_message, params: { SUBJECT_TEXT: subject.text, TARGET_REF: subject.ref } }
+      timeout: 30
+    coder-pool:
+      behavior: coder
+      capabilities: [code:propose, tasks:converse]
+      triggers: [{ dispatch: true, params: { TARGET_REF: subject.ref } }]
+      review: reviewer
+      timeout: 120
+    reviewer:
+      behavior: reviewer
+      capabilities: [code:review, tasks:converse]
+      triggers: [{ dispatch: true, params: { TARGET_REF: subject.ref } }]
+      timeout: 30
+  policy:
+    maxConcurrent: 20
+    box:
+      organizationState: { provider: control }
+  resources:
+    - skills/manager/SKILL.md
+    - skills/coder/SKILL.md
+    - skills/reviewer/SKILL.md

@@ -12,3 +12,7 @@ export * from './ir-yaml';
 export * from './upgrade';
 export * from './setup-pack';
 export * from './recommend';
+export * from './organization-ir';
+export * from './organization-ir-yaml';
+export * from './organization-compile';
+export * from './organization-substrate';

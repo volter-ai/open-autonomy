@@ -181,6 +181,7 @@ github and local are the **same recipe**; only `provision` differs. "Adopt into 
 | `README.md` | Product overview and quickstart | humans |
 | `docs/ARCHITECTURE.md` | Master map of the system | humans, agents needing orientation |
 | `docs/SPEC.md` | The standard (`autonomy.ir.v1`): actor model + the four catalogs + Runner + handoffs | humans, agents, substrate authors |
+| `docs/ORGANIZATION-IR.md` | Exploratory v2 organization/state IR: complete semantic planes, invariants, and lowering contract | IR and substrate authors |
 | `docs/OSS_AGENT_RUNBOOK.md` | Local checks, live smoke tests, operator commands | maintainers/operators |
 | `docs/OPERATIONS.md` | Operating OA: local quickstart, GitHub production rollout, release process | maintainers/operators |
 | `docs/ROADMAP.md` | Continuous roadmap, proof gates, and expanded product direction | planner/maintainers |

@@ -1,0 +1,183 @@
+schema: autonomy.organization.v2
+name: autonomous-coding-org
+version: 0.1.0
+
+imports:
+  oracle:
+    source: { uri: ./agents/agentspec.yml, mediaType: application/yaml }
+    format: oracle-agent-spec
+
+behaviors:
+  manager:
+    kind: skill
+    source: { uri: ./skills/manager/SKILL.md }
+    tools: [org-control]
+    memories: [organization-memory]
+    instructions:
+      precedence: [constitution, organization, role, task, skill, conversation, runtime]
+      conflict: most-restrictive
+      fragments:
+        - { role: identity, text: "Maintain progress across the complete portfolio." }
+        - { role: constraint, text: "Never treat a worker session as the work item." }
+  coder:
+    kind: agent-spec
+    source: { uri: "import:oracle#/agents/coder" }
+  reviewer:
+    kind: agent-spec
+    source: { uri: "import:oracle#/agents/reviewer" }
+
+tools:
+  org-control:
+    protocol: mcp
+    endpoint: { uri: mcp://open-autonomy/control }
+    idempotency: required
+    effects:
+      - { resource: work, action: update, mode: write, reversible: true }
+
+memories:
+  organization-memory:
+    kind: organizational
+    scope: organization
+    retention: indefinite
+    consistency: strong
+
+capabilities:
+  manage-work: { resourceKinds: [work], actions: [create, assign, transition, cancel], risk: medium }
+  propose-code: { resourceKinds: [repository], actions: [branch, commit, propose], risk: medium }
+  review-code: { resourceKinds: [proposal], actions: [inspect, attest], risk: medium }
+
+actors:
+  manager:
+    kind: agent
+    behaviors: [manager]
+    memberOf: [engineering]
+    capabilities:
+      - { capability: manage-work, scope: { labels: { domain: engineering } }, delegable: true, attenuation: required }
+    activation:
+      - { kind: continuous }
+      - { kind: message, protocol: slack-control }
+  coder-pool:
+    kind: collective
+    behaviors: [coder]
+    memberOf: [engineering]
+    capabilities: [{ capability: propose-code }]
+    capacity: { concurrent: 20 }
+  reviewer:
+    kind: agent
+    behaviors: [reviewer]
+    memberOf: [engineering]
+    capabilities: [{ capability: review-code }]
+
+units:
+  company:
+    kind: organization
+    purpose: Maintain and improve the software portfolio.
+    goals: [reliable-delivery]
+    policies: [independent-review]
+  engineering:
+    kind: team
+    parent: company
+    members: [manager, coder-pool, reviewer]
+    goals: [reliable-delivery]
+
+relations:
+  review-separation: { kind: reviews, from: reviewer, to: coder-pool }
+
+goals:
+  reliable-delivery:
+    statement: Deliver correct changes with bounded cost and recoverable failure.
+    owner: engineering
+    measures:
+      - { name: verified-throughput, direction: maximize, observation: metrics.verifiedChanges }
+      - { name: escaped-defects, target: 0, direction: minimize, observation: metrics.escapedDefects }
+
+workTypes:
+  code-change:
+    lifecycle:
+      initial: open
+      terminal: [done, rejected, cancelled]
+      states:
+        open: { category: queued }
+        ready: { category: queued }
+        working: { category: active }
+        review: { category: review }
+        input-required: { category: waiting }
+        blocked: { category: waiting }
+        done: { category: terminal }
+        rejected: { category: terminal }
+        cancelled: { category: terminal }
+      transitions:
+        - { from: open, to: ready, event: accept, authority: [manage-work] }
+        - { from: ready, to: working, event: claim, authority: [propose-code] }
+        - { from: working, to: review, event: propose, authority: [propose-code] }
+        - { from: review, to: done, event: verify, authority: [review-code] }
+        - { from: review, to: ready, event: request-rework, authority: [review-code] }
+        - { from: [open, ready, working, review, input-required, blocked], to: cancelled, event: cancel, authority: [manage-work] }
+    assignment:
+      mode: lease
+      candidates: [coder-pool]
+      exclusive: true
+      lease: { duration: PT2H, renewable: true, heartbeat: PT5M, recovery: release-and-requeue }
+    retry:
+      maxAttempts: 3
+      deduplicateBy: work.id
+      exhaustion: escalate
+    verification:
+      required: true
+      verifier: [reviewer]
+      independent: true
+      evidence: [commit, tests, review-attestation]
+    context:
+      include: [organization, goal-ancestry, work-ancestry, actor, artifacts, conversation, memory]
+      maximumTokens: 100000
+    requiredCapabilities: [propose-code]
+
+protocols:
+  slack-control:
+    roles: [operator, manager]
+    transport: slack
+    messages:
+      request:
+        from: operator
+        to: manager
+        correlation: [thread]
+      status:
+        from: manager
+        to: operator
+        correlation: [thread, work]
+      decision:
+        from: operator
+        to: manager
+        effects: [{ resource: decision, action: resolve, mode: authorize }]
+
+policies:
+  independent-review:
+    kind: quality
+    appliesTo: [{ kind: work, labels: { type: code-change } }]
+    rule: attempt.actor != verification.actor
+    enforcement: runtime
+    violation: deny
+
+budgets:
+  engineering-monthly:
+    resource: money
+    limit: 5000
+    unit: USD
+    period: P1M
+    onExhaustion: pause
+
+compiler:
+  guarantees: [durable-work, atomic-claims, independent-review, audit-events]
+  requirements:
+    work.types:
+      authoritativeState: work
+      constraints:
+        - { property: assignmentModes, operator: includes, value: lease }
+        - { property: atomicClaims, operator: eq, value: true }
+    interaction.protocols:
+      authoritativeState: conversations
+    workers.execution:
+      required: true
+      constraints:
+        - { property: isolatedWorkspaces, operator: eq, value: true }
+  lossPolicy: reject

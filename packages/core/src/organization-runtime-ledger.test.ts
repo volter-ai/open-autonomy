@@ -174,4 +174,12 @@ describe('runtime proof-accounting ledger', () => {
     expect(corpus.residualLedger).toEqual([]);
     expect(corpus.obligationLedger.filter((entry) => entry.checkpoint === 'R13').every((entry) => entry.assurance === 'property-tested' && entry.evidence.includes('ev-r13-review'))).toBe(true);
   });
+
+  test('closes R17 only after serializable registry and adversarial recovery evidence', () => {
+    const corpus = JSON.parse(readFileSync('docs/runtime-ledgers/r17-closure.json','utf8')) as RuntimeLedgerCorpus;
+    expect(validateRuntimeLedger(corpus, expected, manifest.items)).toEqual([]);
+    expect(corpus.checkpointStateLedger.find((entry) => entry.id === 'R17')?.status).toBe('complete');
+    expect(corpus.residualLedger).toEqual([]);
+    expect(corpus.obligationLedger.filter((entry) => entry.checkpoint === 'R17').every((entry) => entry.assurance === 'property-tested' && entry.evidence.includes('ev-r17-review'))).toBe(true);
+  });
 });

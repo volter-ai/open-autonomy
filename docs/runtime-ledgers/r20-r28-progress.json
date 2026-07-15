@@ -1,0 +1,240 @@
+{
+  "schema": "autonomy.runtime-progress-ledger.v1",
+  "purpose": "progress-and-residual-accounting-only",
+  "closureClaim": false,
+  "normativePredecessor": {
+    "path": "docs/runtime-ledgers/r19-closure.json",
+    "sha256": "sha256:d531c8db51aee1495d939a3ee339fceb78629634b1fee85065ebbd19ef39f8e0",
+    "immutable": true
+  },
+  "sources": [
+    {
+      "path": "docs/evidence/R20-R23-EXTERNAL-PARTICIPATION.md",
+      "sha256": "sha256:2970a3ca9d1a1578e7f64d679047b709f27c50319f7f9fd9d3b5ebf9d7aca33c",
+      "selector": "external-participation-rows",
+      "expectedCount": 9
+    },
+    {
+      "path": "docs/evidence/R21-LIVE-CAMPAIGN.json",
+      "sha256": "sha256:ac567dec901f1951d09004ac7ec12ab5e306c35933fe154515a905649e373c92",
+      "selector": "residuals",
+      "expectedCount": 24
+    },
+    {
+      "path": "docs/evidence/R22-EXTERNAL-CUSTODY-GATE.json",
+      "sha256": "sha256:54272e1eb14f52b70b8448bf8d3df81b37dec8b2b722e4f4e3831fc8eb5d1139",
+      "selector": "residuals",
+      "expectedCount": 1
+    },
+    {
+      "path": "docs/evidence/R23-LOCAL-PROPERTY-GATE.json",
+      "sha256": "sha256:c20a51632de12f79fb8e12203f478943bc7aad5c05eb4d9a2d88de9740bd24db",
+      "selector": "dependency-residuals",
+      "expectedCount": 10
+    },
+    {
+      "path": "docs/evidence/R24-V5-NESTED-HERMES-SMOKE.json",
+      "sha256": "sha256:de3c0b6b719a5567289234a5a1dd72d0c0661b038fe359843ee78a8ca01a6844",
+      "selector": "null-live-fields",
+      "expectedCount": 3
+    },
+    {
+      "path": "docs/evidence/rejected/R24-R25-ATTEMPTS.json",
+      "sha256": "sha256:76ba3b035365979157817e9a759175f67974f90e3b07a52b7962cc63071b13b3",
+      "selector": "rejected-attempt-reasons",
+      "expectedCount": 15
+    },
+    {
+      "path": "docs/evidence/R27-LIVE-CANARY-BUNDLE.json",
+      "sha256": "sha256:2301a65a4c4968f2c84a726392172d80cb2e64f2363bc609f1f21d72a185aa0d",
+      "selector": "unknown-telemetry",
+      "expectedCount": 1
+    },
+    {
+      "path": "docs/evidence/R28-REPOSITORY-DOGFOOD.json",
+      "sha256": "sha256:e8e736591b2fe0eaa2d6574fc6d4894f5de4d4d75ca05403616adb2cef87ec33",
+      "selector": "residuals",
+      "expectedCount": 11
+    }
+  ],
+  "checkpoints": [
+    {
+      "id": "R20",
+      "state": "ready",
+      "obligations": [
+        { "id": "R20-HCI-1", "assurance": "unknown" },
+        { "id": "R20-SEC-1", "assurance": "unknown" },
+        { "id": "R20-EPI-1", "assurance": "unknown" },
+        { "id": "R20-ADV-1", "assurance": "unknown" }
+      ],
+      "nextArtifact": {
+        "id": "R20-SLACK-AND-USABILITY-CAMPAIGN",
+        "requirements": [
+          "real signed Slack Events API and block-action requests",
+          "authorized and unauthorized identity bindings with duplicate, drop, restart, cross-thread, wrong-user, approval and revocation outcomes",
+          "preregistered unfamiliar usability, keyboard and screen-reader participant task matrix",
+          "durable effects, notifications and complete audit trail"
+        ]
+      }
+    },
+    {
+      "id": "R21",
+      "state": "blocked",
+      "obligations": [
+        { "id": "R21-SRE-1", "assurance": "unknown" },
+        { "id": "R21-QUE-1", "assurance": "unknown" },
+        { "id": "R21-DIST-1", "assurance": "unknown" },
+        { "id": "R21-OPS-1", "assurance": "unknown" },
+        { "id": "R21-SEC-1", "assurance": "unknown" }
+      ],
+      "nextArtifact": {
+        "id": "R21-EIGHT-SERVICE-DISASTER-CAMPAIGN",
+        "requirements": [
+          "deployed eight-service ramp and soak with per-service SLI, SLO, error-budget, queue, resource and billed-cost telemetry",
+          "owned process, storage, dependency, network, control-plane and regional faults",
+          "isolated restore with measured RPO/RTO and preserved revocations and acknowledged effects",
+          "external KMS, lifecycle drills and unfamiliar-operator alert-to-recovery trace"
+        ]
+      }
+    },
+    {
+      "id": "R22",
+      "state": "blocked",
+      "obligations": [
+        { "id": "R22-MEA-1", "assurance": "unknown" },
+        { "id": "R22-STAT-1", "assurance": "unknown" },
+        { "id": "R22-ADV-1", "assurance": "unknown" },
+        { "id": "R22-PRIV-1", "assurance": "unknown" },
+        { "id": "R22-HUM-1", "assurance": "unknown" }
+      ],
+      "nextArtifact": {
+        "id": "R22-HUMAN-CALIBRATION-AND-PRIVACY-BUNDLE",
+        "requirements": [
+          "immutable registration and complete item-by-rater matrix from at least two consenting distinct humans and Ed25519 keys",
+          "inter-rater agreement and simulator-to-real transfer error reported separately",
+          "population, consent, access, retention, deletion and release authority records",
+          "binding to the verified external-custody gate"
+        ]
+      }
+    },
+    {
+      "id": "R23",
+      "state": "blocked",
+      "obligations": [
+        { "id": "R23-MEA-1", "assurance": "unknown" },
+        { "id": "R23-ACC-1", "assurance": "unknown" },
+        { "id": "R23-ECO-1", "assurance": "unknown" },
+        { "id": "R23-ADV-1", "assurance": "unknown" }
+      ],
+      "nextArtifact": {
+        "id": "R23-REAL-HUMAN-AND-PROVIDER-ACCOUNTING-BUNDLE",
+        "requirements": [
+          "complete signed participant-by-task millisecond matrix from at least two real humans",
+          "authenticated usage and billing from at least two live provider authorities",
+          "provider, model, currency, unit, price date, retry lineage, horizon and work attribution",
+          "conservation, normalization, censoring, unknown and no-double-count verification"
+        ]
+      }
+    },
+    {
+      "id": "R24",
+      "state": "blocked",
+      "obligations": [
+        { "id": "R24-EXP-1", "assurance": "unknown" },
+        { "id": "R24-REF-1", "assurance": "unknown" },
+        { "id": "R24-STAT-1", "assurance": "unknown" },
+        { "id": "R24-FALS-1", "assurance": "unknown" },
+        { "id": "R24-LOCK-1", "assurance": "unknown" }
+      ],
+      "nextArtifact": {
+        "id": "R24-LIVE-MATCHED-BUNDLE-V5",
+        "requirements": [
+          "preregistered balanced multi-repetition native Hermes and Paperclip cells",
+          "authoritative provider revisions, raw transcripts, supervisor evidence and trusted external signing",
+          "all locked factors, matched faults, complete failures, timeouts, resources and human labor",
+          "semantic replay, effects, intervals, sensitivities and zero untriaged residuals"
+        ]
+      }
+    },
+    {
+      "id": "R25",
+      "state": "blocked",
+      "obligations": [
+        { "id": "R25-SEM-1", "assurance": "unknown" },
+        { "id": "R25-STAT-1", "assurance": "unknown" },
+        { "id": "R25-QUE-1", "assurance": "unknown" },
+        { "id": "R25-IDENT-1", "assurance": "unknown" }
+      ],
+      "nextArtifact": {
+        "id": "R25-HELDOUT-LIVE-CALIBRATION-V3",
+        "requirements": [
+          "bind only accepted R23 and R24 evidence",
+          "separate observed, estimated and assumed parameters with posterior uncertainty",
+          "held-out throughput, latency, cost, quality and bottleneck predictive coverage",
+          "ablation, sensitivity, identifiability classes and falsifying traces"
+        ]
+      }
+    },
+    {
+      "id": "R26",
+      "state": "blocked",
+      "obligations": [
+        { "id": "R26-CSP-1", "assurance": "unknown" },
+        { "id": "R26-DEC-1", "assurance": "unknown" },
+        { "id": "R26-CAU-1", "assurance": "unknown" },
+        { "id": "R26-ADV-1", "assurance": "unknown" }
+      ],
+      "nextArtifact": {
+        "id": "R26-CONSTRAINED-SEARCH-CERTIFICATE",
+        "requirements": [
+          "bind accepted R25 calibration, baseline and complete candidate set",
+          "feasibility, authority, budget, governance and rollout constraint proofs",
+          "Pareto and dominance calculations with causal-versus-prediction labels and uncertainty and complexity penalties",
+          "held-out backtests, typed patch, risks, rollback trigger and independent validator signature"
+        ]
+      }
+    },
+    {
+      "id": "R27",
+      "state": "blocked",
+      "obligations": [
+        { "id": "R27-CAU-1", "assurance": "unknown" },
+        { "id": "R27-STAT-1", "assurance": "unknown" },
+        { "id": "R27-SEC-1", "assurance": "unknown" },
+        { "id": "R27-PROV-1", "assurance": "unknown" }
+      ],
+      "nextArtifact": {
+        "id": "R27-COMPLETE-CAUSAL-CANARY-BUNDLE",
+        "requirements": [
+          "bind all closed dependencies and a trusted signing policy",
+          "immutable preregistration, code, assignment, exposure, outcome, exclusion and analysis chain",
+          "low-risk live canary with automatic guardrail rollback, cleanup and interference checks",
+          "design-validity, false-positive and interval-coverage evidence with novelty explicitly resolved or bounded"
+        ]
+      }
+    },
+    {
+      "id": "R28",
+      "state": "blocked",
+      "obligations": [
+        { "id": "R28-CTRL-1", "assurance": "unknown" },
+        { "id": "R28-ORG-1", "assurance": "unknown" },
+        { "id": "R28-SEC-1", "assurance": "unknown" },
+        { "id": "R28-REF-1", "assurance": "unknown" },
+        { "id": "R28-CAU-1", "assurance": "unknown" },
+        { "id": "R28-OPS-1", "assurance": "unknown" }
+      ],
+      "nextArtifact": {
+        "id": "R28-LONG-RUNNING-CANONICAL-DOGFOOD-CAMPAIGN",
+        "requirements": [
+          "bind closure digests for every prior checkpoint and use the canonical repository",
+          "independently authorized and externally identified proposer, evaluator, approver, deployer and auditor",
+          "accepted, rejected and automatic-rollback proposals with OS restart at every phase and effect and storage crash boundaries",
+          "global pause, deterministic safe state, preregistered measurable improvement without safety regression, complete causal reconstruction and zero residuals"
+        ]
+      }
+    }
+  ],
+  "importedResidualCount": 74,
+  "importedResidualDigest": "sha256:2d27a737bf52d74fff32aefbb6aaafa0bd798bb20f4d73c05026fabbbada03da"
+}

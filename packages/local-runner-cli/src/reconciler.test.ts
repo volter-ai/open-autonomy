@@ -35,6 +35,39 @@ async function waitFor(predicate: () => boolean, timeoutMs = 2000): Promise<void
 }
 
 describe('generic substrate scheduler', () => {
+  test('constructs the lifecycle runner after exporting the schedule-pinned provider', async () => {
+    const dir = repo({
+      env: { TERMFLEET_PROVIDER_URL: 'http://schedule-pinned' },
+      jobs: [{
+        name: 'agent',
+        command: 'AUTONOMY_AGENT=agent node scripts/run-agent.mjs',
+        intervalSeconds: 60,
+        fence: '.paused',
+      }],
+    }, true);
+    try {
+      writeFileSync(join(dir, '.paused'), 'paused\n');
+      const ambient: NodeJS.ProcessEnv = {};
+      const stop = new AbortController();
+      let observed: { url?: string; source?: string } = {};
+      await start({
+        cwd: dir,
+        proc: procFor(dir).runner,
+        ambient,
+        signal: stop.signal,
+        sessionRunnerFactory: async () => {
+          observed = {
+            url: ambient.TERMFLEET_PROVIDER_URL,
+            source: ambient.AUTONOMY_PROVIDER_URL_SOURCE,
+          };
+          stop.abort();
+          return new StubSessionRunner();
+        },
+      });
+      expect(observed).toEqual({ url: 'http://schedule-pinned', source: 'schedule' });
+    } finally { rmSync(dir, { recursive: true, force: true }); }
+  });
+
   test('fires an arbitrary agent without task or PR eligibility probes', async () => {
     const dir = repo({ jobs: [{ name: 'arbitrary', command: 'AUTONOMY_AGENT=anything node scripts/run-agent.mjs', intervalSeconds: 60 }] }, true);
     try {

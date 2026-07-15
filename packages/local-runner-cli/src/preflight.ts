@@ -2,9 +2,9 @@
 // top-level sequence (which executed before --once AND continuous mode alike):
 //   1. termfleet-installed refusal            (only when the schedule actually needs the runner)
 //   2. OA-04 dep-integrity collision probe    (same scoping)
-//   3. OA-09 provider-origin resolve + log + AUTONOMY_PROVIDER_URL_SOURCE export (same scoping) — the
-//      export lands in the SAME env object buildTickEnv reads (process.env by default), so it propagates
-//      into every launched session exactly like run.mjs's `process.env.AUTONOMY_PROVIDER_URL_SOURCE = …`.
+//   3. OA-09 provider resolve + log + URL/origin export (same scoping) — the exports land in the SAME env
+//      object buildTickEnv and the in-process lifecycle runner read (process.env by default), so launches,
+//      reaping, and reconciliation cannot resolve different providers.
 //   4. OA-03 uncommitted-harness refusal      (unconditional; AUTONOMY_ALLOW_UNCOMMITTED_HARNESS=1 downgrades)
 // `oa once` filters fenced jobs BEFORE calling this, so a fully fenced schedule returns without a
 // coincidental preflight failure for work that will not run.
@@ -49,12 +49,12 @@ export async function runPreflight(schedule: NormalizedSchedule, opts: Preflight
       return { ok: false, message: integrity.message };
     }
     // OA-09: log the EFFECTIVE provider URL + ORIGIN once, before any tick — a misattachment is visible in
-    // the first line of output instead of never. Re-export the ORIGIN so nested resolves (run-agent.mjs ->
-    // autonomy-runner.mjs, or any nested launch) can report the same schedule-vs-env distinction —
-    // this is the only point that still knows which side the pin came from.
+    // the first line of output instead of never. Pin this process before constructing the lifecycle runner,
+    // then re-export the ORIGIN so nested resolves can report the same schedule-vs-env distinction.
     const provider = await resolveProvider(schedule.env, ambient, opts.resolveDefault ?? defaultResolveDefaultProvider);
     if (provider) {
       console.error(`[oa] provider ${provider.url} (${provider.source})`);
+      ambient.TERMFLEET_PROVIDER_URL = provider.url;
       ambient.AUTONOMY_PROVIDER_URL_SOURCE = provider.source;
     }
   }

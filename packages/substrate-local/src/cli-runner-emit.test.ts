@@ -3,7 +3,7 @@
 // profile that never sets this key gets the exact same scheduler/run.mjs bytes as before this change (the
 // existing catalog — hello/self-driving/simple-sdlc/simple-gh-sdlc — all compile through the unopted-in
 // path; check:profiles already re-proves this for every bundled profile every run).
-import { describe, expect, test } from 'bun:test';
+import { beforeAll, describe, expect, test } from 'bun:test';
 import { spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -20,6 +20,12 @@ const baseIr: AutonomyIR = {
 };
 
 const cliRunnerIr: AutonomyIR = { ...baseIr, policy: { box: { local: { runner: 'cli' } } } };
+
+beforeAll(() => {
+  const root = resolve(import.meta.dirname, '..', '..', '..');
+  const built = spawnSync('bun', ['scripts/build-local-runner-cli.ts'], { cwd: root, encoding: 'utf8' });
+  if (built.status !== 0) throw new Error(`local CLI build failed:\n${built.stdout}\n${built.stderr}`);
+});
 
 describe('isCliRunner', () => {
   test('false when policy.box carries no local.runner key (the default)', () => {

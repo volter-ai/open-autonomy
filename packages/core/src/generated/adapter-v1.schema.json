@@ -1,0 +1,301 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://open-autonomy.dev/schema/AdapterContract.json",
+  "title": "Open Autonomy AdapterContract",
+  "$ref": "#/$defs/AdapterContract",
+  "$defs": {
+    "AdapterContract": {
+      "type": "object",
+      "properties": {
+        "schema": {
+          "const": "autonomy.adapter.v1"
+        },
+        "id": {
+          "type": "string"
+        },
+        "version": {
+          "type": "string"
+        },
+        "direction": {
+          "$ref": "#/$defs/AdapterDirection"
+        },
+        "from": {
+          "$ref": "#/$defs/VersionedSchema"
+        },
+        "to": {
+          "$ref": "#/$defs/VersionedSchema"
+        },
+        "interfaceMappings": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "from": {
+                "type": "string"
+              },
+              "to": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "from",
+              "to"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "identity": {
+          "anyOf": [
+            {
+              "const": "preserved"
+            },
+            {
+              "const": "mapped"
+            },
+            {
+              "const": "regenerated"
+            },
+            {
+              "const": "not-applicable"
+            }
+          ]
+        },
+        "causality": {
+          "anyOf": [
+            {
+              "const": "preserved"
+            },
+            {
+              "const": "mapped"
+            },
+            {
+              "const": "lost"
+            },
+            {
+              "const": "not-applicable"
+            }
+          ]
+        },
+        "retry": {
+          "anyOf": [
+            {
+              "const": "preserved"
+            },
+            {
+              "const": "translated"
+            },
+            {
+              "const": "lost"
+            },
+            {
+              "const": "not-applicable"
+            }
+          ]
+        },
+        "conflicts": {
+          "anyOf": [
+            {
+              "const": "preserved"
+            },
+            {
+              "const": "translated"
+            },
+            {
+              "const": "serialized"
+            },
+            {
+              "const": "lost"
+            },
+            {
+              "const": "not-applicable"
+            }
+          ]
+        },
+        "preconditions": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "postconditions": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "losses": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "reversible": {
+          "type": "boolean"
+        },
+        "reverseAdapter": {
+          "type": "string"
+        },
+        "enforcement": {
+          "$ref": "#/$defs/TrustContract"
+        },
+        "evidence": {
+          "$ref": "#/$defs/ManifestEvidence"
+        }
+      },
+      "required": [
+        "schema",
+        "id",
+        "version",
+        "direction",
+        "from",
+        "to",
+        "interfaceMappings",
+        "identity",
+        "causality",
+        "retry",
+        "conflicts",
+        "preconditions",
+        "postconditions",
+        "losses",
+        "reversible",
+        "evidence"
+      ],
+      "additionalProperties": false
+    },
+    "AdapterDirection": {
+      "anyOf": [
+        {
+          "const": "lowering"
+        },
+        {
+          "const": "lifting"
+        },
+        {
+          "const": "bridge"
+        },
+        {
+          "const": "enforcement"
+        }
+      ]
+    },
+    "VersionedSchema": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "version": {
+          "type": "string"
+        },
+        "schema": {
+          "type": "object",
+          "additionalProperties": {}
+        }
+      },
+      "required": [
+        "id",
+        "version"
+      ],
+      "additionalProperties": false
+    },
+    "TrustContract": {
+      "type": "object",
+      "properties": {
+        "principal": {
+          "type": "string"
+        },
+        "zone": {
+          "type": "string"
+        },
+        "enforcedBy": {
+          "type": "string"
+        },
+        "credentials": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string"
+              },
+              "scope": {
+                "type": "string"
+              },
+              "flow": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "name",
+              "scope",
+              "flow"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "isolation": {
+          "type": "string"
+        },
+        "evidence": {
+          "$ref": "#/$defs/ManifestEvidence"
+        }
+      },
+      "required": [
+        "principal",
+        "zone",
+        "enforcedBy",
+        "evidence"
+      ],
+      "additionalProperties": false
+    },
+    "ManifestEvidence": {
+      "type": "object",
+      "properties": {
+        "assurance": {
+          "$ref": "#/$defs/ClaimAssurance"
+        },
+        "source": {
+          "type": "object",
+          "properties": {
+            "uri": {
+              "type": "string"
+            },
+            "digest": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "uri"
+          ],
+          "additionalProperties": false
+        },
+        "observedAt": {
+          "type": "string"
+        },
+        "notes": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "assurance"
+      ],
+      "additionalProperties": false
+    },
+    "ClaimAssurance": {
+      "anyOf": [
+        {
+          "const": "asserted"
+        },
+        {
+          "const": "conformance-tested"
+        },
+        {
+          "const": "live-observed"
+        },
+        {
+          "const": "unknown"
+        }
+      ]
+    }
+  }
+}

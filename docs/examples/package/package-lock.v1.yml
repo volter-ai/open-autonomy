@@ -1,0 +1,11 @@
+schema: autonomy.package-lock.v1
+root: example
+registrySnapshot: sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+packages:
+  example:
+    name: dev.open-autonomy/example
+    version: 1.0.0
+    digest: sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
+    registry: https://registry.example.invalid
+    mirrors: []
+    dependencies: {}

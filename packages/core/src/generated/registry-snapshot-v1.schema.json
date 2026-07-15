@@ -1,0 +1,95 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://open-autonomy.dev/schema/RegistrySnapshot.json",
+  "title": "Open Autonomy RegistrySnapshot",
+  "$ref": "#/$defs/RegistrySnapshot",
+  "$defs": {
+    "RegistrySnapshot": {
+      "type": "object",
+      "properties": {
+        "schema": {
+          "const": "autonomy.registry-snapshot.v1"
+        },
+        "registry": {
+          "type": "string"
+        },
+        "sequence": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "generatedAt": {
+          "type": "string"
+        },
+        "records": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/RegistryVersionRecord"
+          }
+        },
+        "revokedKeys": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "schema",
+        "registry",
+        "sequence",
+        "generatedAt",
+        "records"
+      ],
+      "additionalProperties": false
+    },
+    "RegistryVersionRecord": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "pattern": "^(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\\.)*[a-z0-9](?:[a-z0-9-]*[a-z0-9])?/(?!.*//)[a-z0-9](?:[a-z0-9._/-]*[a-z0-9])?$"
+        },
+        "version": {
+          "type": "string",
+          "pattern": "^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)(?:-[0-9A-Za-z.-]+)?(?:\\+[0-9A-Za-z.-]+)?$"
+        },
+        "digest": {
+          "$ref": "#/$defs/PackageDigest"
+        },
+        "locations": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "signerKeys": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "publishedAt": {
+          "type": "string"
+        },
+        "yankedAt": {
+          "type": "string"
+        },
+        "revokedAt": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "version",
+        "digest",
+        "locations",
+        "publishedAt"
+      ],
+      "additionalProperties": false
+    },
+    "PackageDigest": {
+      "type": "string",
+      "pattern": "^sha256:[a-f0-9]{64}$"
+    }
+  }
+}

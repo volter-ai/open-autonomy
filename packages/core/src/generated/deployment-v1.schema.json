@@ -1,0 +1,81 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://open-autonomy.dev/schema/DeploymentIR.json",
+  "title": "Open Autonomy DeploymentIR",
+  "$ref": "#/$defs/DeploymentIR",
+  "$defs": {
+    "DeploymentIR": {
+      "type": "object",
+      "properties": {
+        "schema": {
+          "const": "autonomy.deployment.v1"
+        },
+        "name": {
+          "type": "string"
+        },
+        "providers": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/ProviderInstance"
+          }
+        },
+        "bindings": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/DeploymentBinding"
+          }
+        },
+        "authorities": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "schema",
+        "name",
+        "providers"
+      ],
+      "additionalProperties": false
+    },
+    "ProviderInstance": {
+      "type": "object",
+      "properties": {
+        "component": {
+          "type": "string"
+        },
+        "configuration": {
+          "type": "object",
+          "additionalProperties": {}
+        }
+      },
+      "required": [
+        "component"
+      ],
+      "additionalProperties": false
+    },
+    "DeploymentBinding": {
+      "type": "object",
+      "properties": {
+        "feature": {
+          "type": "string"
+        },
+        "provider": {
+          "type": "string"
+        },
+        "through": {
+          "type": "string"
+        },
+        "interface": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "feature",
+        "provider"
+      ],
+      "additionalProperties": false
+    }
+  }
+}

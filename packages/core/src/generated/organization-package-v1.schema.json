@@ -1,0 +1,147 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://open-autonomy.dev/schema/OrganizationPackageManifest.json",
+  "title": "Open Autonomy OrganizationPackageManifest",
+  "$ref": "#/$defs/OrganizationPackageManifest",
+  "$defs": {
+    "OrganizationPackageManifest": {
+      "type": "object",
+      "properties": {
+        "schema": {
+          "const": "autonomy.package.v1"
+        },
+        "name": {
+          "type": "string",
+          "pattern": "^(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\\.)*[a-z0-9](?:[a-z0-9-]*[a-z0-9])?/(?!.*//)[a-z0-9](?:[a-z0-9._/-]*[a-z0-9])?$"
+        },
+        "version": {
+          "type": "string",
+          "pattern": "^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)(?:-[0-9A-Za-z.-]+)?(?:\\+[0-9A-Za-z.-]+)?$"
+        },
+        "root": {
+          "type": "string"
+        },
+        "files": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/PackageFileRecord"
+          },
+          "minItems": 1
+        },
+        "dependencies": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/PackageDependency"
+          }
+        },
+        "signatures": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/PackageSignature"
+          }
+        },
+        "provenance": {
+          "type": "object",
+          "properties": {
+            "source": {
+              "type": "string"
+            },
+            "revision": {
+              "type": "string"
+            },
+            "builder": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "source"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "schema",
+        "name",
+        "version",
+        "root",
+        "files"
+      ],
+      "additionalProperties": false
+    },
+    "PackageFileRecord": {
+      "type": "object",
+      "properties": {
+        "path": {
+          "type": "string",
+          "pattern": "^(?!/)(?!.*(?:^|/)\\.{1,2}(?:/|$))(?!.*\\\\)(?!.*//).+$"
+        },
+        "digest": {
+          "$ref": "#/$defs/PackageDigest"
+        },
+        "bytes": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "mediaType": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "path",
+        "digest",
+        "bytes"
+      ],
+      "additionalProperties": false
+    },
+    "PackageDigest": {
+      "type": "string",
+      "pattern": "^sha256:[a-f0-9]{64}$"
+    },
+    "PackageDependency": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "pattern": "^(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\\.)*[a-z0-9](?:[a-z0-9-]*[a-z0-9])?/(?!.*//)[a-z0-9](?:[a-z0-9._/-]*[a-z0-9])?$"
+        },
+        "version": {
+          "type": "string",
+          "pattern": "^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)(?:-[0-9A-Za-z.-]+)?(?:\\+[0-9A-Za-z.-]+)?$"
+        },
+        "digest": {
+          "$ref": "#/$defs/PackageDigest"
+        }
+      },
+      "required": [
+        "name",
+        "version",
+        "digest"
+      ],
+      "additionalProperties": false
+    },
+    "PackageSignature": {
+      "type": "object",
+      "properties": {
+        "algorithm": {
+          "type": "string"
+        },
+        "keyId": {
+          "type": "string"
+        },
+        "value": {
+          "type": "string"
+        },
+        "covers": {
+          "const": "package-digest"
+        }
+      },
+      "required": [
+        "algorithm",
+        "keyId",
+        "value",
+        "covers"
+      ],
+      "additionalProperties": false
+    }
+  }
+}

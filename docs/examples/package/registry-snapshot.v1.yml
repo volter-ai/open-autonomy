@@ -1,0 +1,12 @@
+schema: autonomy.registry-snapshot.v1
+registry: https://registry.example.invalid
+sequence: 1
+generatedAt: 2026-07-15T00:00:00Z
+records:
+  - name: dev.open-autonomy/example
+    version: 1.0.0
+    digest: sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
+    locations:
+      - https://registry.example.invalid
+    publishedAt: 2026-07-15T00:00:00Z
+revokedKeys: []

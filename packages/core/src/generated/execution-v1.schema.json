@@ -1,0 +1,144 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://open-autonomy.dev/schema/ExecutionPlanIR.json",
+  "title": "Open Autonomy ExecutionPlanIR",
+  "$ref": "#/$defs/ExecutionPlanIR",
+  "$defs": {
+    "ExecutionPlanIR": {
+      "type": "object",
+      "properties": {
+        "schema": {
+          "const": "autonomy.execution.v1"
+        },
+        "organization": {
+          "type": "string"
+        },
+        "contract": {
+          "$ref": "#/$defs/SemanticContractIR"
+        },
+        "steps": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ExecutionStep"
+          }
+        },
+        "stateAuthorities": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        },
+        "providerConfiguration": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "object",
+            "additionalProperties": {}
+          }
+        }
+      },
+      "required": [
+        "schema",
+        "organization",
+        "contract",
+        "steps",
+        "stateAuthorities",
+        "providerConfiguration"
+      ],
+      "additionalProperties": false
+    },
+    "SemanticContractIR": {
+      "type": "object",
+      "properties": {
+        "assumptions": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "guarantees": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "observations": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "object",
+            "properties": {
+              "schema": {
+                "type": "string"
+              },
+              "version": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "schema",
+              "version"
+            ],
+            "additionalProperties": false
+          }
+        }
+      },
+      "required": [
+        "assumptions",
+        "guarantees",
+        "observations"
+      ],
+      "additionalProperties": false
+    },
+    "ExecutionStep": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "actor": {
+          "type": "string"
+        },
+        "behavior": {
+          "type": "string"
+        },
+        "provider": {
+          "type": "string"
+        },
+        "runtime": {
+          "type": "string"
+        },
+        "endpoint": {
+          "type": "string"
+        },
+        "isolation": {
+          "type": "string"
+        },
+        "credentialRefs": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "instructionRenderer": {
+          "type": "string"
+        },
+        "sourceObligations": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "id",
+        "actor",
+        "behavior",
+        "provider",
+        "runtime",
+        "isolation",
+        "credentialRefs",
+        "sourceObligations"
+      ],
+      "additionalProperties": false
+    }
+  }
+}

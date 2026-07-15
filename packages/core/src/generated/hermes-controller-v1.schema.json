@@ -1,0 +1,636 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://open-autonomy.dev/schema/HermesControllerState.json",
+  "title": "Open Autonomy HermesControllerState",
+  "$ref": "#/$defs/HermesControllerState",
+  "$defs": {
+    "HermesControllerState": {
+      "type": "object",
+      "properties": {
+        "schema": {
+          "const": "autonomy.hermes-controller.v1"
+        },
+        "organization": {
+          "type": "string"
+        },
+        "revision": {
+          "type": "number"
+        },
+        "paused": {
+          "type": "boolean"
+        },
+        "sequence": {
+          "type": "number"
+        },
+        "principals": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/ControllerPrincipal"
+          }
+        },
+        "work": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/ControllerWork"
+          }
+        },
+        "claims": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/ControllerClaim"
+          }
+        },
+        "attempts": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/ControllerAttempt"
+          }
+        },
+        "conversations": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/ControllerConversation"
+          }
+        },
+        "effects": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/ControllerEffect"
+          }
+        },
+        "approvals": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/ControllerApproval"
+          }
+        },
+        "seenEvents": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "metrics": {
+          "$ref": "#/$defs/ControllerMetrics"
+        }
+      },
+      "required": [
+        "schema",
+        "organization",
+        "revision",
+        "paused",
+        "sequence",
+        "principals",
+        "work",
+        "claims",
+        "attempts",
+        "conversations",
+        "effects",
+        "approvals",
+        "seenEvents",
+        "metrics"
+      ],
+      "additionalProperties": false
+    },
+    "ControllerPrincipal": {
+      "type": "object",
+      "properties": {
+        "externalId": {
+          "type": "string"
+        },
+        "actor": {
+          "type": "string"
+        },
+        "scopes": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "externalId",
+        "actor",
+        "scopes"
+      ],
+      "additionalProperties": false
+    },
+    "ControllerWork": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "title": {
+          "type": "string"
+        },
+        "accountable": {
+          "type": "string"
+        },
+        "assignees": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "reviewer": {
+          "type": "string"
+        },
+        "status": {
+          "$ref": "#/$defs/ControllerWorkStatus"
+        },
+        "priority": {
+          "type": "number"
+        },
+        "createdSequence": {
+          "type": "number"
+        },
+        "dispatchCount": {
+          "type": "number"
+        },
+        "progress": {
+          "type": "number"
+        },
+        "attempts": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "activeClaim": {
+          "type": "string"
+        },
+        "blockedQuestion": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "text": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "id",
+            "text"
+          ],
+          "additionalProperties": false
+        },
+        "retryBudget": {
+          "type": "number"
+        },
+        "costBudget": {
+          "type": "number"
+        },
+        "costConsumed": {
+          "type": "number"
+        },
+        "repository": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "title",
+        "accountable",
+        "assignees",
+        "status",
+        "priority",
+        "createdSequence",
+        "dispatchCount",
+        "progress",
+        "attempts",
+        "retryBudget",
+        "costBudget",
+        "costConsumed",
+        "repository"
+      ],
+      "additionalProperties": false
+    },
+    "ControllerWorkStatus": {
+      "anyOf": [
+        {
+          "const": "queued"
+        },
+        {
+          "const": "dispatching"
+        },
+        {
+          "const": "running"
+        },
+        {
+          "const": "blocked-input"
+        },
+        {
+          "const": "review"
+        },
+        {
+          "const": "reviewing"
+        },
+        {
+          "const": "done"
+        },
+        {
+          "const": "failed"
+        },
+        {
+          "const": "escalated"
+        },
+        {
+          "const": "paused"
+        }
+      ]
+    },
+    "ControllerClaim": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "work": {
+          "type": "string"
+        },
+        "actor": {
+          "type": "string"
+        },
+        "worker": {
+          "type": "string"
+        },
+        "fence": {
+          "type": "number"
+        },
+        "acquiredAt": {
+          "type": "number"
+        },
+        "expiresAt": {
+          "type": "number"
+        },
+        "status": {
+          "anyOf": [
+            {
+              "const": "active"
+            },
+            {
+              "const": "released"
+            },
+            {
+              "const": "expired"
+            },
+            {
+              "const": "superseded"
+            }
+          ]
+        }
+      },
+      "required": [
+        "id",
+        "work",
+        "actor",
+        "worker",
+        "fence",
+        "acquiredAt",
+        "expiresAt",
+        "status"
+      ],
+      "additionalProperties": false
+    },
+    "ControllerAttempt": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "work": {
+          "type": "string"
+        },
+        "actor": {
+          "type": "string"
+        },
+        "worker": {
+          "type": "string"
+        },
+        "claim": {
+          "type": "string"
+        },
+        "fence": {
+          "type": "number"
+        },
+        "status": {
+          "anyOf": [
+            {
+              "const": "running"
+            },
+            {
+              "const": "blocked"
+            },
+            {
+              "const": "review"
+            },
+            {
+              "const": "succeeded"
+            },
+            {
+              "const": "failed"
+            },
+            {
+              "const": "lost"
+            },
+            {
+              "const": "rejected"
+            }
+          ]
+        },
+        "startedAt": {
+          "type": "number"
+        },
+        "endedAt": {
+          "type": "number"
+        },
+        "session": {
+          "type": "string"
+        },
+        "runtime": {
+          "type": "string"
+        },
+        "isolation": {
+          "type": "string"
+        },
+        "credentialScopes": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "cost": {
+          "type": "number"
+        },
+        "evidence": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "type": "string"
+              },
+              "uri": {
+                "type": "string"
+              },
+              "digest": {
+                "type": "string"
+              },
+              "verified": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "kind",
+              "uri",
+              "verified"
+            ],
+            "additionalProperties": false
+          }
+        }
+      },
+      "required": [
+        "id",
+        "work",
+        "actor",
+        "worker",
+        "claim",
+        "fence",
+        "status",
+        "startedAt",
+        "session",
+        "runtime",
+        "isolation",
+        "credentialScopes",
+        "cost"
+      ],
+      "additionalProperties": false
+    },
+    "ControllerConversation": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "transport": {
+          "const": "slack"
+        },
+        "channel": {
+          "type": "string"
+        },
+        "thread": {
+          "type": "string"
+        },
+        "relatedWork": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "messages": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "event": {
+                "type": "string"
+              },
+              "principal": {
+                "type": "string"
+              },
+              "intent": {
+                "$ref": "#/$defs/SlackIntent"
+              },
+              "text": {
+                "type": "string"
+              },
+              "at": {
+                "type": "number"
+              }
+            },
+            "required": [
+              "event",
+              "principal",
+              "intent",
+              "text",
+              "at"
+            ],
+            "additionalProperties": false
+          }
+        }
+      },
+      "required": [
+        "id",
+        "transport",
+        "channel",
+        "thread",
+        "relatedWork",
+        "messages"
+      ],
+      "additionalProperties": false
+    },
+    "SlackIntent": {
+      "anyOf": [
+        {
+          "const": "question"
+        },
+        {
+          "const": "answer"
+        },
+        {
+          "const": "mutation"
+        },
+        {
+          "const": "command"
+        },
+        {
+          "const": "new-work"
+        },
+        {
+          "const": "ambiguous"
+        }
+      ]
+    },
+    "ControllerEffect": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "kind": {
+          "anyOf": [
+            {
+              "const": "slack-reply"
+            },
+            {
+              "const": "hermes-create"
+            },
+            {
+              "const": "hermes-comment"
+            },
+            {
+              "const": "hermes-reassign"
+            },
+            {
+              "const": "worker-launch"
+            },
+            {
+              "const": "repository-write"
+            }
+          ]
+        },
+        "idempotencyKey": {
+          "type": "string"
+        },
+        "work": {
+          "type": "string"
+        },
+        "payload": {
+          "type": "object",
+          "additionalProperties": {}
+        },
+        "status": {
+          "anyOf": [
+            {
+              "const": "pending"
+            },
+            {
+              "const": "acknowledged"
+            },
+            {
+              "const": "failed"
+            }
+          ]
+        },
+        "acknowledgedExternalId": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "kind",
+        "idempotencyKey",
+        "payload",
+        "status"
+      ],
+      "additionalProperties": false
+    },
+    "ControllerApproval": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "work": {
+          "type": "string"
+        },
+        "artifactDigest": {
+          "type": "string"
+        },
+        "principal": {
+          "type": "string"
+        },
+        "scope": {
+          "type": "string"
+        },
+        "expiresAt": {
+          "type": "number"
+        },
+        "used": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "id",
+        "work",
+        "artifactDigest",
+        "principal",
+        "scope",
+        "expiresAt",
+        "used"
+      ],
+      "additionalProperties": false
+    },
+    "ControllerMetrics": {
+      "type": "object",
+      "properties": {
+        "ticks": {
+          "type": "number"
+        },
+        "queueDepth": {
+          "type": "number"
+        },
+        "running": {
+          "type": "number"
+        },
+        "progress": {
+          "type": "number"
+        },
+        "cost": {
+          "type": "number"
+        },
+        "latencySamples": {
+          "type": "array",
+          "items": {
+            "type": "number"
+          }
+        },
+        "oscillations": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "ticks",
+        "queueDepth",
+        "running",
+        "progress",
+        "cost",
+        "latencySamples",
+        "oscillations"
+      ],
+      "additionalProperties": false
+    }
+  }
+}

@@ -1,0 +1,63 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://open-autonomy.dev/schema/UpgradePlan.json",
+  "title": "Open Autonomy UpgradePlan",
+  "$ref": "#/$defs/UpgradePlan",
+  "$defs": {
+    "UpgradePlan": {
+      "type": "object",
+      "properties": {
+        "schema": {
+          "const": "open-autonomy.upgrade-plan.v1"
+        },
+        "changes": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/UpgradeChange"
+          }
+        },
+        "notes": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "schema",
+        "changes",
+        "notes"
+      ],
+      "additionalProperties": false
+    },
+    "UpgradeChange": {
+      "type": "object",
+      "properties": {
+        "path": {
+          "type": "string"
+        },
+        "action": {
+          "$ref": "#/$defs/UpgradeAction"
+        }
+      },
+      "required": [
+        "path",
+        "action"
+      ],
+      "additionalProperties": false
+    },
+    "UpgradeAction": {
+      "anyOf": [
+        {
+          "const": "add"
+        },
+        {
+          "const": "update"
+        },
+        {
+          "const": "delete"
+        }
+      ]
+    }
+  }
+}

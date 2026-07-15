@@ -1,0 +1,703 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://open-autonomy.dev/schema/OrganizationStateIR.json",
+  "title": "Open Autonomy OrganizationStateIR",
+  "$ref": "#/$defs/OrganizationStateIR",
+  "$defs": {
+    "OrganizationStateIR": {
+      "type": "object",
+      "properties": {
+        "labels": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        },
+        "documentation": {
+          "type": "string"
+        },
+        "provenance": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/SourceRef"
+          }
+        },
+        "extensions": {
+          "type": "object",
+          "additionalProperties": {}
+        },
+        "schema": {
+          "const": "autonomy.state.v1"
+        },
+        "organization": {
+          "type": "object",
+          "properties": {
+            "name": {
+              "type": "string"
+            },
+            "version": {
+              "type": "string"
+            },
+            "digest": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "name"
+          ],
+          "additionalProperties": false
+        },
+        "revision": {
+          "type": "number"
+        },
+        "observedAt": {
+          "type": "string"
+        },
+        "work": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/WorkItemState"
+          }
+        },
+        "attempts": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/AttemptState"
+          }
+        },
+        "claims": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/ClaimState"
+          }
+        },
+        "conversations": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/ConversationState"
+          }
+        },
+        "decisions": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/DecisionState"
+          }
+        },
+        "artifacts": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/ArtifactState"
+          }
+        },
+        "budgetUsage": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/BudgetUsageState"
+          }
+        },
+        "events": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/OrganizationEvent"
+          }
+        }
+      },
+      "required": [
+        "schema",
+        "organization",
+        "revision",
+        "observedAt"
+      ],
+      "additionalProperties": false
+    },
+    "SourceRef": {
+      "type": "object",
+      "properties": {
+        "uri": {
+          "type": "string"
+        },
+        "digest": {
+          "type": "string"
+        },
+        "mediaType": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "uri"
+      ],
+      "additionalProperties": false
+    },
+    "WorkItemState": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "$ref": "#/$defs/Id"
+        },
+        "state": {
+          "type": "string"
+        },
+        "goal": {
+          "$ref": "#/$defs/Id"
+        },
+        "parent": {
+          "$ref": "#/$defs/Id"
+        },
+        "dependencies": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Id"
+          }
+        },
+        "accountable": {
+          "$ref": "#/$defs/Id"
+        },
+        "assignees": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Id"
+          }
+        },
+        "currentAttempts": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Id"
+          }
+        },
+        "input": {},
+        "output": {},
+        "createdAt": {
+          "type": "string"
+        },
+        "updatedAt": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "type",
+        "state"
+      ],
+      "additionalProperties": false
+    },
+    "Id": {
+      "type": "string"
+    },
+    "AttemptState": {
+      "type": "object",
+      "properties": {
+        "work": {
+          "$ref": "#/$defs/Id"
+        },
+        "actor": {
+          "$ref": "#/$defs/Id"
+        },
+        "implementation": {
+          "$ref": "#/$defs/ImplementationChoice"
+        },
+        "status": {
+          "anyOf": [
+            {
+              "const": "queued"
+            },
+            {
+              "const": "running"
+            },
+            {
+              "const": "paused"
+            },
+            {
+              "const": "succeeded"
+            },
+            {
+              "const": "failed"
+            },
+            {
+              "const": "cancelled"
+            },
+            {
+              "const": "lost"
+            }
+          ]
+        },
+        "startedAt": {
+          "type": "string"
+        },
+        "endedAt": {
+          "type": "string"
+        },
+        "session": {
+          "type": "string"
+        },
+        "result": {},
+        "failure": {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string"
+            },
+            "message": {
+              "type": "string"
+            },
+            "retryable": {
+              "type": "boolean"
+            },
+            "signature": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "additionalProperties": false
+        },
+        "evidence": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Id"
+          }
+        }
+      },
+      "required": [
+        "work",
+        "actor",
+        "status"
+      ],
+      "additionalProperties": false
+    },
+    "ImplementationChoice": {
+      "type": "object",
+      "properties": {
+        "labels": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        },
+        "documentation": {
+          "type": "string"
+        },
+        "provenance": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/SourceRef"
+          }
+        },
+        "extensions": {
+          "type": "object",
+          "additionalProperties": {}
+        },
+        "when": {
+          "$ref": "#/$defs/Expression"
+        },
+        "substrate": {
+          "type": "string"
+        },
+        "model": {
+          "type": "string"
+        },
+        "runtime": {
+          "type": "string"
+        },
+        "configuration": {
+          "type": "object",
+          "additionalProperties": {}
+        }
+      },
+      "additionalProperties": false
+    },
+    "Expression": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "$ref": "#/$defs/ExpressionDecl"
+        }
+      ]
+    },
+    "ExpressionDecl": {
+      "type": "object",
+      "properties": {
+        "language": {
+          "anyOf": [
+            {
+              "const": "oa-expr-v1"
+            },
+            {
+              "const": "cel"
+            },
+            {
+              "const": "rego"
+            },
+            {
+              "const": "json-logic"
+            },
+            {
+              "const": "javascript"
+            },
+            {
+              "const": "native"
+            },
+            {
+              "type": "string"
+            }
+          ]
+        },
+        "source": {},
+        "resultType": {
+          "anyOf": [
+            {
+              "const": "boolean"
+            },
+            {
+              "const": "number"
+            },
+            {
+              "const": "string"
+            },
+            {
+              "const": "null"
+            },
+            {
+              "const": "array"
+            },
+            {
+              "const": "object"
+            },
+            {
+              "const": "unknown"
+            }
+          ]
+        },
+        "freeVariables": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "effects": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/EffectDecl"
+          }
+        },
+        "analyzability": {
+          "anyOf": [
+            {
+              "const": "portable"
+            },
+            {
+              "const": "declared"
+            },
+            {
+              "const": "opaque"
+            }
+          ]
+        }
+      },
+      "required": [
+        "language",
+        "source"
+      ],
+      "additionalProperties": false
+    },
+    "EffectDecl": {
+      "type": "object",
+      "properties": {
+        "resource": {
+          "type": "string"
+        },
+        "action": {
+          "type": "string"
+        },
+        "mode": {
+          "anyOf": [
+            {
+              "const": "read"
+            },
+            {
+              "const": "write"
+            },
+            {
+              "const": "append"
+            },
+            {
+              "const": "delete"
+            },
+            {
+              "const": "execute"
+            },
+            {
+              "const": "authorize"
+            },
+            {
+              "const": "communicate"
+            }
+          ]
+        },
+        "reversible": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "resource",
+        "action"
+      ],
+      "additionalProperties": false
+    },
+    "ClaimState": {
+      "type": "object",
+      "properties": {
+        "work": {
+          "$ref": "#/$defs/Id"
+        },
+        "actor": {
+          "$ref": "#/$defs/Id"
+        },
+        "acquiredAt": {
+          "type": "string"
+        },
+        "expiresAt": {
+          "type": "string"
+        },
+        "heartbeatAt": {
+          "type": "string"
+        },
+        "token": {
+          "type": "string"
+        },
+        "status": {
+          "anyOf": [
+            {
+              "const": "active"
+            },
+            {
+              "const": "released"
+            },
+            {
+              "const": "expired"
+            },
+            {
+              "const": "revoked"
+            }
+          ]
+        }
+      },
+      "required": [
+        "work",
+        "actor",
+        "acquiredAt",
+        "status"
+      ],
+      "additionalProperties": false
+    },
+    "ConversationState": {
+      "type": "object",
+      "properties": {
+        "protocol": {
+          "$ref": "#/$defs/Id"
+        },
+        "participants": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Id"
+          }
+        },
+        "externalRef": {
+          "type": "string"
+        },
+        "status": {
+          "type": "string"
+        },
+        "relatedWork": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Id"
+          }
+        },
+        "messages": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "$ref": "#/$defs/Id"
+              },
+              "type": {
+                "type": "string"
+              },
+              "sender": {
+                "$ref": "#/$defs/Id"
+              },
+              "sentAt": {
+                "type": "string"
+              },
+              "content": {},
+              "replyTo": {
+                "$ref": "#/$defs/Id"
+              }
+            },
+            "required": [
+              "id",
+              "sender",
+              "sentAt"
+            ],
+            "additionalProperties": false
+          }
+        }
+      },
+      "required": [
+        "participants"
+      ],
+      "additionalProperties": false
+    },
+    "DecisionState": {
+      "type": "object",
+      "properties": {
+        "rule": {
+          "$ref": "#/$defs/Id"
+        },
+        "question": {},
+        "participants": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Id"
+          }
+        },
+        "status": {
+          "anyOf": [
+            {
+              "const": "proposed"
+            },
+            {
+              "const": "pending"
+            },
+            {
+              "const": "decided"
+            },
+            {
+              "const": "rejected"
+            },
+            {
+              "const": "superseded"
+            }
+          ]
+        },
+        "outcome": {},
+        "rationale": {
+          "type": "string"
+        },
+        "evidence": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Id"
+          }
+        }
+      },
+      "required": [
+        "question",
+        "status"
+      ],
+      "additionalProperties": false
+    },
+    "ArtifactState": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "$ref": "#/$defs/Id"
+        },
+        "uri": {
+          "type": "string"
+        },
+        "digest": {
+          "type": "string"
+        },
+        "version": {
+          "type": "string"
+        },
+        "producedBy": {
+          "$ref": "#/$defs/Id"
+        },
+        "relatedWork": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Id"
+          }
+        }
+      },
+      "required": [
+        "uri"
+      ],
+      "additionalProperties": false
+    },
+    "BudgetUsageState": {
+      "type": "object",
+      "properties": {
+        "budget": {
+          "$ref": "#/$defs/Id"
+        },
+        "consumed": {
+          "type": "number"
+        },
+        "reserved": {
+          "type": "number"
+        },
+        "asOf": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "budget",
+        "consumed",
+        "asOf"
+      ],
+      "additionalProperties": false
+    },
+    "OrganizationEvent": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/Id"
+        },
+        "type": {
+          "type": "string"
+        },
+        "at": {
+          "type": "string"
+        },
+        "actor": {
+          "$ref": "#/$defs/Id"
+        },
+        "subject": {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string"
+            },
+            "id": {
+              "$ref": "#/$defs/Id"
+            }
+          },
+          "required": [
+            "kind",
+            "id"
+          ],
+          "additionalProperties": false
+        },
+        "causation": {
+          "$ref": "#/$defs/Id"
+        },
+        "correlation": {
+          "$ref": "#/$defs/Id"
+        },
+        "data": {}
+      },
+      "required": [
+        "id",
+        "type",
+        "at"
+      ],
+      "additionalProperties": false
+    }
+  }
+}

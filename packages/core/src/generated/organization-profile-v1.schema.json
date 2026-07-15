@@ -1,9 +1,205 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://open-autonomy.dev/schema/autonomy.organization.v2.json",
-  "title": "Open Autonomy OrganizationIR",
-  "$ref": "#/$defs/OrganizationIR",
+  "$id": "https://open-autonomy.dev/schema/OrganizationProfileIR.json",
+  "title": "Open Autonomy OrganizationProfileIR",
+  "$ref": "#/$defs/OrganizationProfileIR",
   "$defs": {
+    "OrganizationProfileIR": {
+      "type": "object",
+      "properties": {
+        "schema": {
+          "const": "autonomy.profile.v1"
+        },
+        "name": {
+          "type": "string"
+        },
+        "version": {
+          "type": "string"
+        },
+        "description": {
+          "type": "string"
+        },
+        "source": {
+          "$ref": "#/$defs/SourceRef"
+        },
+        "parameters": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/ProfileParameter"
+          }
+        },
+        "template": {
+          "$ref": "#/$defs/OrganizationIR"
+        },
+        "variants": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/ProfileVariant"
+          }
+        }
+      },
+      "required": [
+        "schema",
+        "name",
+        "template"
+      ],
+      "additionalProperties": false
+    },
+    "SourceRef": {
+      "type": "object",
+      "properties": {
+        "uri": {
+          "type": "string"
+        },
+        "digest": {
+          "type": "string"
+        },
+        "mediaType": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "uri"
+      ],
+      "additionalProperties": false
+    },
+    "ProfileParameter": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "anyOf": [
+            {
+              "const": "string"
+            },
+            {
+              "const": "number"
+            },
+            {
+              "const": "integer"
+            },
+            {
+              "const": "boolean"
+            },
+            {
+              "const": "array"
+            },
+            {
+              "const": "object"
+            }
+          ]
+        },
+        "description": {
+          "type": "string"
+        },
+        "required": {
+          "type": "boolean"
+        },
+        "default": {
+          "$ref": "#/$defs/ProfileValue"
+        },
+        "enum": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ProfileValue"
+          }
+        },
+        "minimum": {
+          "type": "number"
+        },
+        "maximum": {
+          "type": "number"
+        },
+        "pattern": {
+          "type": "string"
+        },
+        "items": {
+          "$ref": "#/$defs/Omit_ProfileParameter_default_required"
+        }
+      },
+      "required": [
+        "type"
+      ],
+      "additionalProperties": false
+    },
+    "ProfileValue": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "number"
+        },
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "null"
+        },
+        {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ProfileValue"
+          }
+        },
+        {
+          "type": "object",
+          "properties": {},
+          "additionalProperties": false
+        }
+      ]
+    },
+    "Omit_ProfileParameter_default_required": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "anyOf": [
+            {
+              "const": "string"
+            },
+            {
+              "const": "number"
+            },
+            {
+              "const": "integer"
+            },
+            {
+              "const": "boolean"
+            },
+            {
+              "const": "array"
+            },
+            {
+              "const": "object"
+            }
+          ]
+        },
+        "description": {
+          "type": "string"
+        },
+        "enum": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ProfileValue"
+          }
+        },
+        "minimum": {
+          "type": "number"
+        },
+        "maximum": {
+          "type": "number"
+        },
+        "pattern": {
+          "type": "string"
+        },
+        "items": {
+          "$ref": "#/$defs/Omit_ProfileParameter_default_required"
+        }
+      },
+      "required": [
+        "type"
+      ],
+      "additionalProperties": false
+    },
     "OrganizationIR": {
       "type": "object",
       "properties": {
@@ -145,24 +341,6 @@
         "schema",
         "name",
         "actors"
-      ],
-      "additionalProperties": false
-    },
-    "SourceRef": {
-      "type": "object",
-      "properties": {
-        "uri": {
-          "type": "string"
-        },
-        "digest": {
-          "type": "string"
-        },
-        "mediaType": {
-          "type": "string"
-        }
-      },
-      "required": [
-        "uri"
       ],
       "additionalProperties": false
     },
@@ -2520,6 +2698,97 @@
         "property",
         "operator",
         "value"
+      ],
+      "additionalProperties": false
+    },
+    "ProfileVariant": {
+      "type": "object",
+      "properties": {
+        "description": {
+          "type": "string"
+        },
+        "when": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ProfileCondition"
+          }
+        },
+        "patches": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ProfilePatch"
+          }
+        }
+      },
+      "required": [
+        "when",
+        "patches"
+      ],
+      "additionalProperties": false
+    },
+    "ProfileCondition": {
+      "type": "object",
+      "properties": {
+        "parameter": {
+          "type": "string"
+        },
+        "operator": {
+          "anyOf": [
+            {
+              "const": "eq"
+            },
+            {
+              "const": "neq"
+            },
+            {
+              "const": "in"
+            },
+            {
+              "const": "gte"
+            },
+            {
+              "const": "lte"
+            }
+          ]
+        },
+        "value": {
+          "$ref": "#/$defs/ProfileValue"
+        }
+      },
+      "required": [
+        "parameter",
+        "operator",
+        "value"
+      ],
+      "additionalProperties": false
+    },
+    "ProfilePatch": {
+      "type": "object",
+      "properties": {
+        "operation": {
+          "anyOf": [
+            {
+              "const": "set"
+            },
+            {
+              "const": "merge"
+            },
+            {
+              "const": "append"
+            },
+            {
+              "const": "remove"
+            }
+          ]
+        },
+        "path": {
+          "type": "string"
+        },
+        "value": {}
+      },
+      "required": [
+        "operation",
+        "path"
       ],
       "additionalProperties": false
     }

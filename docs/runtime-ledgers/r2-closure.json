@@ -1,0 +1,1553 @@
+{
+  "schema": "open-autonomy.runtime-ledger.v1",
+  "obligationLedger": [
+    {
+      "id": "R0-SEM-1",
+      "checkpoint": "R0",
+      "owner": "R0",
+      "disposition": "preserved",
+      "assurance": "property-tested",
+      "evidence": [
+        "ev-r0-baseline",
+        "ev-r0-full-gate"
+      ]
+    },
+    {
+      "id": "R0-SEC-1",
+      "checkpoint": "R0",
+      "owner": "R0",
+      "disposition": "preserved",
+      "assurance": "property-tested",
+      "evidence": [
+        "ev-r0-threats",
+        "ev-r0-reviews"
+      ]
+    },
+    {
+      "id": "R0-DIST-1",
+      "checkpoint": "R0",
+      "owner": "R0",
+      "disposition": "preserved",
+      "assurance": "property-tested",
+      "evidence": [
+        "ev-r0-threats",
+        "ev-r0-reviews"
+      ]
+    },
+    {
+      "id": "R0-ADV-1",
+      "checkpoint": "R0",
+      "owner": "R0",
+      "disposition": "preserved",
+      "assurance": "property-tested",
+      "evidence": [
+        "ev-r0-threats",
+        "ev-r0-reviews"
+      ]
+    },
+    {
+      "id": "R0-ACC-1",
+      "checkpoint": "R0",
+      "owner": "R0",
+      "disposition": "preserved",
+      "assurance": "property-tested",
+      "evidence": [
+        "ev-r0-ledger-tests",
+        "ev-r0-full-gate"
+      ]
+    },
+    {
+      "id": "R1-SEM-1",
+      "checkpoint": "R1",
+      "owner": "R1",
+      "disposition": "preserved",
+      "assurance": "property-tested",
+      "evidence": [
+        "ev-r1-spec",
+        "ev-r1-field-grammar",
+        "ev-r1-machine-grammar",
+        "ev-r1-drift-tests",
+        "ev-r1-external-review"
+      ]
+    },
+    {
+      "id": "R1-TYP-1",
+      "checkpoint": "R1",
+      "owner": "R1",
+      "disposition": "preserved",
+      "assurance": "property-tested",
+      "evidence": [
+        "ev-r1-field-grammar",
+        "ev-r1-machine-grammar",
+        "ev-r1-drift-tests",
+        "ev-r1-external-review"
+      ]
+    },
+    {
+      "id": "R1-ALG-1",
+      "checkpoint": "R1",
+      "owner": "R1",
+      "disposition": "preserved",
+      "assurance": "property-tested",
+      "evidence": [
+        "ev-r1-spec",
+        "ev-r1-semantic-tests",
+        "ev-r1-external-review"
+      ]
+    },
+    {
+      "id": "R1-EVO-1",
+      "checkpoint": "R1",
+      "owner": "R1",
+      "disposition": "preserved",
+      "assurance": "property-tested",
+      "evidence": [
+        "ev-r1-spec",
+        "ev-r1-field-grammar",
+        "ev-r1-semantic-tests",
+        "ev-r1-external-review"
+      ]
+    },
+    {
+      "id": "R2-SEM-1",
+      "checkpoint": "R2",
+      "owner": "R2",
+      "disposition": "preserved",
+      "assurance": "property-tested",
+      "evidence": [
+        "ev-r2-protocol",
+        "ev-r2-schema-corpus",
+        "ev-r2-package-tests",
+        "ev-r2-external-review"
+      ]
+    },
+    {
+      "id": "R2-SEC-1",
+      "checkpoint": "R2",
+      "owner": "R2",
+      "disposition": "preserved",
+      "assurance": "property-tested",
+      "evidence": [
+        "ev-r2-protocol",
+        "ev-r2-package-tests",
+        "ev-r2-external-review",
+        "ev-r2-full-gate"
+      ]
+    },
+    {
+      "id": "R2-ALG-1",
+      "checkpoint": "R2",
+      "owner": "R2",
+      "disposition": "preserved",
+      "assurance": "property-tested",
+      "evidence": [
+        "ev-r2-protocol",
+        "ev-r2-package-tests",
+        "ev-r2-external-review"
+      ]
+    },
+    {
+      "id": "R2-PROV-1",
+      "checkpoint": "R2",
+      "owner": "R2",
+      "disposition": "preserved",
+      "assurance": "property-tested",
+      "evidence": [
+        "ev-r2-schema-corpus",
+        "ev-r2-package-tests",
+        "ev-r2-external-review"
+      ]
+    },
+    {
+      "id": "R3-REF-1",
+      "checkpoint": "R3",
+      "owner": "R3",
+      "disposition": "unresolved",
+      "assurance": "unknown",
+      "evidence": []
+    },
+    {
+      "id": "R3-EPI-1",
+      "checkpoint": "R3",
+      "owner": "R3",
+      "disposition": "unresolved",
+      "assurance": "unknown",
+      "evidence": []
+    },
+    {
+      "id": "R3-ADV-1",
+      "checkpoint": "R3",
+      "owner": "R3",
+      "disposition": "unresolved",
+      "assurance": "unknown",
+      "evidence": []
+    },
+    {
+      "id": "R3-EVO-1",
+      "checkpoint": "R3",
+      "owner": "R3",
+      "disposition": "unresolved",
+      "assurance": "unknown",
+      "evidence": []
+    },
+    {
+      "id": "R4-SEM-1",
+      "checkpoint": "R4",
+      "owner": "R4",
+      "disposition": "unresolved",
+      "assurance": "unknown",
+      "evidence": []
+    },
+    {
+      "id": "R4-COMP-1",
+      "checkpoint": "R4",
+      "owner": "R4",
+      "disposition": "unresolved",
+      "assurance": "unknown",
+      "evidence": []
+    },
+    {
+      "id": "R4-FALS-1",
+      "checkpoint": "R4",
+      "owner": "R4",
+      "disposition": "unresolved",
+      "assurance": "unknown",
+      "evidence": []
+    },
+    {
+      "id": "R4-IND-1",
+      "checkpoint": "R4",
+      "owner": "R4",
+      "disposition": "unresolved",
+      "assurance": "unknown",
+      "evidence": []
+    },
+    {
+      "id": "R5-COMP-1",
+      "checkpoint": "R5",
+      "owner": "R5",
+      "disposition": "unresolved",
+      "assurance": "unknown",
+      "evidence": []
+    },
+    {
+      "id": "R5-ALG-1",
+      "checkpoint": "R5",
+      "owner": "R5",
+      "disposition": "unresolved",
+      "assurance": "unknown",
+      "evidence": []
+    },
+    {
+      "id": "R5-SEC-1",
+      "checkpoint": "R5",
+      "owner": "R5",
+      "disposition": "unresolved",
+      "assurance": "unknown",
+      "evidence": []
+    },
+    {
+      "id": "R5-EVO-1",
+      "checkpoint": "R5",
+      "owner": "R5",
+      "disposition": "unresolved",
+      "assurance": "unknown",
+      "evidence": []
+    },
+    {
+      "id": "R6-EXT-1",
+      "checkpoint": "R6",
+      "owner": "R6",
+      "disposition": "unresolved",
+      "assurance": "unknown",
+      "evidence": []
+    },
+    {
+      "id": "R6-REF-1",
+      "checkpoint": "R6",
+      "owner": "R6",
+      "disposition": "unresolved",
+      "assurance": "unknown",
+      "evidence": []
+    },
+    {
+      "id": "R6-OPS-1",
+      "checkpoint": "R6",
+      "owner": "R6",
+      "disposition": "unresolved",
+      "assurance": "unknown",
+      "evidence": []
+    },
+    {
+      "id": "R6-DIR-1",
+      "checkpoint": "R6",
+      "owner": "R6",
+      "disposition": "unresolved",
+      "assurance": "unknown",
+      "evidence": []
+    },
+    {
+      "id": "R7-CSP-1",
+      "checkpoint": "R7",
+      "owner": "R7",
+      "disposition": "unresolved",
+      "assurance": "unknown",
+      "evidence": []
+    },
+    {
+      "id": "R7-ECO-1",
+      "checkpoint": "R7",
+      "owner": "R7",
+      "disposition": "unresolved",
+      "assurance": "unknown",
+      "evidence": []
+    },
+    {
+      "id": "R7-REF-1",
+      "checkpoint": "R7",
+      "owner": "R7",
+      "disposition": "unresolved",
+      "assurance": "unknown",
+      "evidence": []
+    },
+    {
+      "id": "R7-EPI-1",
+      "checkpoint": "R7",
+      "owner": "R7",
+      "disposition": "unresolved",
+      "assurance": "unknown",
+      "evidence": []
+    },
+    {
+      "id": "R8-ALG-1",
+      "checkpoint": "R8",
+      "owner": "R8",
+      "disposition": "unresolved",
+      "assurance": "unknown",
+      "evidence": []
+    },
+    {
+      "id": "R8-SEC-1",
+      "checkpoint": "R8",
+      "owner": "R8",
+      "disposition": "unresolved",
+      "assurance": "unknown",
+      "evidence": []
+    },
+    {
+      "id": "R8-OPS-1",
+      "checkpoint": "R8",
+      "owner": "R8",
+      "disposition": "unresolved",
+      "assurance": "unknown",
+      "evidence": []
+    },
+    {
+      "id": "R8-PROV-1",
+      "checkpoint": "R8",
+      "owner": "R8",
+      "disposition": "unresolved",
+      "assurance": "unknown",
+      "evidence": []
+    },
+    {
+      "id": "R9-SEM-1",
+      "checkpoint": "R9",
+      "owner": "R9",
+      "disposition": "unresolved",
+      "assurance": "unknown",
+      "evidence": []
+    },
+    {
+      "id": "R9-REF-1",
+      "checkpoint": "R9",
+      "owner": "R9",
+      "disposition": "unresolved",
+      "assurance": "unknown",
+      "evidence": []
+    },
+    {
+      "id": "R9-EVO-1",
+      "checkpoint": "R9",
+      "owner": "R9",
+      "disposition": "unresolved",
+      "assurance": "unknown",
+      "evidence": []
+    },
+    {
+      "id": "R9-DOG-1",
+      "checkpoint": "R9",
+      "owner": "R9",
+      "disposition": "unresolved",
+      "assurance": "unknown",
+      "evidence": []
+    },
+    {
+      "id": "R10-SEC-1",
+      "checkpoint": "R10",
+      "owner": "R10",
+      "disposition": "unresolved",
+      "assurance": "unknown",
+      "evidence": []
+    },
+    {
+      "id": "R10-CAP-1",
+      "checkpoint": "R10",
+      "owner": "R10",
+      "disposition": "unresolved",
+      "assurance": "unknown",
+      "evidence": []
+    },
+    {
+      "id": "R10-DIST-1",
+      "checkpoint": "R10",
+      "owner": "R10",
+      "disposition": "unresolved",
+      "assurance": "unknown",
+      "evidence": []
+    },
+    {
+      "id": "R10-OPS-1",
+      "checkpoint": "R10",
+      "owner": "R10",
+      "disposition": "unresolved",
+      "assurance": "unknown",
+      "evidence": []
+    },
+    {
+      "id": "R11-ORG-1",
+      "checkpoint": "R11",
+      "owner": "R11",
+      "disposition": "unresolved",
+      "assurance": "unknown",
+      "evidence": []
+    },
+    {
+      "id": "R11-CTX-1",
+      "checkpoint": "R11",
+      "owner": "R11",
+      "disposition": "unresolved",
+      "assurance": "unknown",
+      "evidence": []
+    },
+    {
+      "id": "R11-DIST-1",
+      "checkpoint": "R11",
+      "owner": "R11",
+      "disposition": "unresolved",
+      "assurance": "unknown",
+      "evidence": []
+    },
+    {
+      "id": "R11-SEC-1",
+      "checkpoint": "R11",
+      "owner": "R11",
+      "disposition": "unresolved",
+      "assurance": "unknown",
+      "evidence": []
+    },
+    {
+      "id": "R11-EPI-1",
+      "checkpoint": "R11",
+      "owner": "R11",
+      "disposition": "unresolved",
+      "assurance": "unknown",
+      "evidence": []
+    },
+    {
+      "id": "R11-INT-1",
+      "checkpoint": "R11",
+      "owner": "R11",
+      "disposition": "unresolved",
+      "assurance": "unknown",
+      "evidence": []
+    },
+    {
+      "id": "R12-INT-1",
+      "checkpoint": "R12",
+      "owner": "R12",
+      "disposition": "unresolved",
+      "assurance": "unknown",
+      "evidence": []
+    },
+    {
+      "id": "R12-SEC-1",
+      "checkpoint": "R12",
+      "owner": "R12",
+      "disposition": "unresolved",
+      "assurance": "unknown",
+      "evidence": []
+    },
+    {
+      "id": "R12-REF-1",
+      "checkpoint": "R12",
+      "owner": "R12",
+      "disposition": "unresolved",
+      "assurance": "unknown",
+      "evidence": []
+    },
+    {
+      "id": "R13-ORG-1",
+      "checkpoint": "R13",
+      "owner": "R13",
+      "disposition": "unresolved",
+      "assurance": "unknown",
+      "evidence": []
+    },
+    {
+      "id": "R13-REF-1",
+      "checkpoint": "R13",
+      "owner": "R13",
+      "disposition": "unresolved",
+      "assurance": "unknown",
+      "evidence": []
+    },
+    {
+      "id": "R13-SEC-1",
+      "checkpoint": "R13",
+      "owner": "R13",
+      "disposition": "unresolved",
+      "assurance": "unknown",
+      "evidence": []
+    },
+    {
+      "id": "R14-EPI-1",
+      "checkpoint": "R14",
+      "owner": "R14",
+      "disposition": "unresolved",
+      "assurance": "unknown",
+      "evidence": []
+    },
+    {
+      "id": "R14-DIST-1",
+      "checkpoint": "R14",
+      "owner": "R14",
+      "disposition": "unresolved",
+      "assurance": "unknown",
+      "evidence": []
+    },
+    {
+      "id": "R14-REF-1",
+      "checkpoint": "R14",
+      "owner": "R14",
+      "disposition": "unresolved",
+      "assurance": "unknown",
+      "evidence": []
+    },
+    {
+      "id": "R14-EVO-1",
+      "checkpoint": "R14",
+      "owner": "R14",
+      "disposition": "unresolved",
+      "assurance": "unknown",
+      "evidence": []
+    },
+    {
+      "id": "R15-DIST-1",
+      "checkpoint": "R15",
+      "owner": "R15",
+      "disposition": "unresolved",
+      "assurance": "unknown",
+      "evidence": []
+    },
+    {
+      "id": "R15-OPS-1",
+      "checkpoint": "R15",
+      "owner": "R15",
+      "disposition": "unresolved",
+      "assurance": "unknown",
+      "evidence": []
+    },
+    {
+      "id": "R15-HCI-1",
+      "checkpoint": "R15",
+      "owner": "R15",
+      "disposition": "unresolved",
+      "assurance": "unknown",
+      "evidence": []
+    },
+    {
+      "id": "R15-EPI-1",
+      "checkpoint": "R15",
+      "owner": "R15",
+      "disposition": "unresolved",
+      "assurance": "unknown",
+      "evidence": []
+    },
+    {
+      "id": "R16-IND-1",
+      "checkpoint": "R16",
+      "owner": "R16",
+      "disposition": "unresolved",
+      "assurance": "unknown",
+      "evidence": []
+    },
+    {
+      "id": "R16-REF-1",
+      "checkpoint": "R16",
+      "owner": "R16",
+      "disposition": "unresolved",
+      "assurance": "unknown",
+      "evidence": []
+    },
+    {
+      "id": "R16-OPS-1",
+      "checkpoint": "R16",
+      "owner": "R16",
+      "disposition": "unresolved",
+      "assurance": "unknown",
+      "evidence": []
+    },
+    {
+      "id": "R16-ECO-1",
+      "checkpoint": "R16",
+      "owner": "R16",
+      "disposition": "unresolved",
+      "assurance": "unknown",
+      "evidence": []
+    },
+    {
+      "id": "R17-DB-1",
+      "checkpoint": "R17",
+      "owner": "R17",
+      "disposition": "unresolved",
+      "assurance": "unknown",
+      "evidence": []
+    },
+    {
+      "id": "R17-SEC-1",
+      "checkpoint": "R17",
+      "owner": "R17",
+      "disposition": "unresolved",
+      "assurance": "unknown",
+      "evidence": []
+    },
+    {
+      "id": "R17-EVO-1",
+      "checkpoint": "R17",
+      "owner": "R17",
+      "disposition": "unresolved",
+      "assurance": "unknown",
+      "evidence": []
+    },
+    {
+      "id": "R18-ALG-1",
+      "checkpoint": "R18",
+      "owner": "R18",
+      "disposition": "unresolved",
+      "assurance": "unknown",
+      "evidence": []
+    },
+    {
+      "id": "R18-DB-1",
+      "checkpoint": "R18",
+      "owner": "R18",
+      "disposition": "unresolved",
+      "assurance": "unknown",
+      "evidence": []
+    },
+    {
+      "id": "R18-PRIV-1",
+      "checkpoint": "R18",
+      "owner": "R18",
+      "disposition": "unresolved",
+      "assurance": "unknown",
+      "evidence": []
+    },
+    {
+      "id": "R18-PROV-1",
+      "checkpoint": "R18",
+      "owner": "R18",
+      "disposition": "unresolved",
+      "assurance": "unknown",
+      "evidence": []
+    },
+    {
+      "id": "R19-CTRL-1",
+      "checkpoint": "R19",
+      "owner": "R19",
+      "disposition": "unresolved",
+      "assurance": "unknown",
+      "evidence": []
+    },
+    {
+      "id": "R19-DIST-1",
+      "checkpoint": "R19",
+      "owner": "R19",
+      "disposition": "unresolved",
+      "assurance": "unknown",
+      "evidence": []
+    },
+    {
+      "id": "R19-SEM-1",
+      "checkpoint": "R19",
+      "owner": "R19",
+      "disposition": "unresolved",
+      "assurance": "unknown",
+      "evidence": []
+    },
+    {
+      "id": "R19-OPS-1",
+      "checkpoint": "R19",
+      "owner": "R19",
+      "disposition": "unresolved",
+      "assurance": "unknown",
+      "evidence": []
+    },
+    {
+      "id": "R20-HCI-1",
+      "checkpoint": "R20",
+      "owner": "R20",
+      "disposition": "unresolved",
+      "assurance": "unknown",
+      "evidence": []
+    },
+    {
+      "id": "R20-SEC-1",
+      "checkpoint": "R20",
+      "owner": "R20",
+      "disposition": "unresolved",
+      "assurance": "unknown",
+      "evidence": []
+    },
+    {
+      "id": "R20-EPI-1",
+      "checkpoint": "R20",
+      "owner": "R20",
+      "disposition": "unresolved",
+      "assurance": "unknown",
+      "evidence": []
+    },
+    {
+      "id": "R20-ADV-1",
+      "checkpoint": "R20",
+      "owner": "R20",
+      "disposition": "unresolved",
+      "assurance": "unknown",
+      "evidence": []
+    },
+    {
+      "id": "R21-SRE-1",
+      "checkpoint": "R21",
+      "owner": "R21",
+      "disposition": "unresolved",
+      "assurance": "unknown",
+      "evidence": []
+    },
+    {
+      "id": "R21-QUE-1",
+      "checkpoint": "R21",
+      "owner": "R21",
+      "disposition": "unresolved",
+      "assurance": "unknown",
+      "evidence": []
+    },
+    {
+      "id": "R21-DIST-1",
+      "checkpoint": "R21",
+      "owner": "R21",
+      "disposition": "unresolved",
+      "assurance": "unknown",
+      "evidence": []
+    },
+    {
+      "id": "R21-OPS-1",
+      "checkpoint": "R21",
+      "owner": "R21",
+      "disposition": "unresolved",
+      "assurance": "unknown",
+      "evidence": []
+    },
+    {
+      "id": "R21-SEC-1",
+      "checkpoint": "R21",
+      "owner": "R21",
+      "disposition": "unresolved",
+      "assurance": "unknown",
+      "evidence": []
+    },
+    {
+      "id": "R22-MEA-1",
+      "checkpoint": "R22",
+      "owner": "R22",
+      "disposition": "unresolved",
+      "assurance": "unknown",
+      "evidence": []
+    },
+    {
+      "id": "R22-STAT-1",
+      "checkpoint": "R22",
+      "owner": "R22",
+      "disposition": "unresolved",
+      "assurance": "unknown",
+      "evidence": []
+    },
+    {
+      "id": "R22-ADV-1",
+      "checkpoint": "R22",
+      "owner": "R22",
+      "disposition": "unresolved",
+      "assurance": "unknown",
+      "evidence": []
+    },
+    {
+      "id": "R22-PRIV-1",
+      "checkpoint": "R22",
+      "owner": "R22",
+      "disposition": "unresolved",
+      "assurance": "unknown",
+      "evidence": []
+    },
+    {
+      "id": "R22-HUM-1",
+      "checkpoint": "R22",
+      "owner": "R22",
+      "disposition": "unresolved",
+      "assurance": "unknown",
+      "evidence": []
+    },
+    {
+      "id": "R23-MEA-1",
+      "checkpoint": "R23",
+      "owner": "R23",
+      "disposition": "unresolved",
+      "assurance": "unknown",
+      "evidence": []
+    },
+    {
+      "id": "R23-ACC-1",
+      "checkpoint": "R23",
+      "owner": "R23",
+      "disposition": "unresolved",
+      "assurance": "unknown",
+      "evidence": []
+    },
+    {
+      "id": "R23-ECO-1",
+      "checkpoint": "R23",
+      "owner": "R23",
+      "disposition": "unresolved",
+      "assurance": "unknown",
+      "evidence": []
+    },
+    {
+      "id": "R23-ADV-1",
+      "checkpoint": "R23",
+      "owner": "R23",
+      "disposition": "unresolved",
+      "assurance": "unknown",
+      "evidence": []
+    },
+    {
+      "id": "R24-EXP-1",
+      "checkpoint": "R24",
+      "owner": "R24",
+      "disposition": "unresolved",
+      "assurance": "unknown",
+      "evidence": []
+    },
+    {
+      "id": "R24-REF-1",
+      "checkpoint": "R24",
+      "owner": "R24",
+      "disposition": "unresolved",
+      "assurance": "unknown",
+      "evidence": []
+    },
+    {
+      "id": "R24-STAT-1",
+      "checkpoint": "R24",
+      "owner": "R24",
+      "disposition": "unresolved",
+      "assurance": "unknown",
+      "evidence": []
+    },
+    {
+      "id": "R24-FALS-1",
+      "checkpoint": "R24",
+      "owner": "R24",
+      "disposition": "unresolved",
+      "assurance": "unknown",
+      "evidence": []
+    },
+    {
+      "id": "R24-LOCK-1",
+      "checkpoint": "R24",
+      "owner": "R24",
+      "disposition": "unresolved",
+      "assurance": "unknown",
+      "evidence": []
+    },
+    {
+      "id": "R25-SEM-1",
+      "checkpoint": "R25",
+      "owner": "R25",
+      "disposition": "unresolved",
+      "assurance": "unknown",
+      "evidence": []
+    },
+    {
+      "id": "R25-STAT-1",
+      "checkpoint": "R25",
+      "owner": "R25",
+      "disposition": "unresolved",
+      "assurance": "unknown",
+      "evidence": []
+    },
+    {
+      "id": "R25-QUE-1",
+      "checkpoint": "R25",
+      "owner": "R25",
+      "disposition": "unresolved",
+      "assurance": "unknown",
+      "evidence": []
+    },
+    {
+      "id": "R25-IDENT-1",
+      "checkpoint": "R25",
+      "owner": "R25",
+      "disposition": "unresolved",
+      "assurance": "unknown",
+      "evidence": []
+    },
+    {
+      "id": "R26-CSP-1",
+      "checkpoint": "R26",
+      "owner": "R26",
+      "disposition": "unresolved",
+      "assurance": "unknown",
+      "evidence": []
+    },
+    {
+      "id": "R26-DEC-1",
+      "checkpoint": "R26",
+      "owner": "R26",
+      "disposition": "unresolved",
+      "assurance": "unknown",
+      "evidence": []
+    },
+    {
+      "id": "R26-CAU-1",
+      "checkpoint": "R26",
+      "owner": "R26",
+      "disposition": "unresolved",
+      "assurance": "unknown",
+      "evidence": []
+    },
+    {
+      "id": "R26-ADV-1",
+      "checkpoint": "R26",
+      "owner": "R26",
+      "disposition": "unresolved",
+      "assurance": "unknown",
+      "evidence": []
+    },
+    {
+      "id": "R27-CAU-1",
+      "checkpoint": "R27",
+      "owner": "R27",
+      "disposition": "unresolved",
+      "assurance": "unknown",
+      "evidence": []
+    },
+    {
+      "id": "R27-STAT-1",
+      "checkpoint": "R27",
+      "owner": "R27",
+      "disposition": "unresolved",
+      "assurance": "unknown",
+      "evidence": []
+    },
+    {
+      "id": "R27-SEC-1",
+      "checkpoint": "R27",
+      "owner": "R27",
+      "disposition": "unresolved",
+      "assurance": "unknown",
+      "evidence": []
+    },
+    {
+      "id": "R27-PROV-1",
+      "checkpoint": "R27",
+      "owner": "R27",
+      "disposition": "unresolved",
+      "assurance": "unknown",
+      "evidence": []
+    },
+    {
+      "id": "R28-CTRL-1",
+      "checkpoint": "R28",
+      "owner": "R28",
+      "disposition": "unresolved",
+      "assurance": "unknown",
+      "evidence": []
+    },
+    {
+      "id": "R28-ORG-1",
+      "checkpoint": "R28",
+      "owner": "R28",
+      "disposition": "unresolved",
+      "assurance": "unknown",
+      "evidence": []
+    },
+    {
+      "id": "R28-SEC-1",
+      "checkpoint": "R28",
+      "owner": "R28",
+      "disposition": "unresolved",
+      "assurance": "unknown",
+      "evidence": []
+    },
+    {
+      "id": "R28-REF-1",
+      "checkpoint": "R28",
+      "owner": "R28",
+      "disposition": "unresolved",
+      "assurance": "unknown",
+      "evidence": []
+    },
+    {
+      "id": "R28-CAU-1",
+      "checkpoint": "R28",
+      "owner": "R28",
+      "disposition": "unresolved",
+      "assurance": "unknown",
+      "evidence": []
+    },
+    {
+      "id": "R28-OPS-1",
+      "checkpoint": "R28",
+      "owner": "R28",
+      "disposition": "unresolved",
+      "assurance": "unknown",
+      "evidence": []
+    }
+  ],
+  "semanticCoverageLedger": [
+    {
+      "construct": "public semantic and API baseline",
+      "checkpoint": "R0",
+      "disposition": "preserved",
+      "obligationIds": [
+        "R0-SEM-1"
+      ]
+    },
+    {
+      "construct": "principals, credentials, tenants, trust, effects, and data",
+      "checkpoint": "R0",
+      "disposition": "preserved",
+      "obligationIds": [
+        "R0-SEC-1"
+      ]
+    },
+    {
+      "construct": "distributed failure and recovery assumptions",
+      "checkpoint": "R0",
+      "disposition": "preserved",
+      "obligationIds": [
+        "R0-DIST-1"
+      ]
+    },
+    {
+      "construct": "finding ownership and rejection accounting",
+      "checkpoint": "R0",
+      "disposition": "preserved",
+      "obligationIds": [
+        "R0-ADV-1"
+      ]
+    },
+    {
+      "construct": "runtime proof-accounting closure",
+      "checkpoint": "R0",
+      "disposition": "preserved",
+      "obligationIds": [
+        "R0-ACC-1"
+      ]
+    },
+    {
+      "construct": "normative syntax, denotation, and unsupported-domain boundary",
+      "checkpoint": "R1",
+      "disposition": "preserved",
+      "obligationIds": [
+        "R1-SEM-1"
+      ]
+    },
+    {
+      "construct": "closed sorts, references, effects, and invalid-state rules",
+      "checkpoint": "R1",
+      "disposition": "preserved",
+      "obligationIds": [
+        "R1-TYP-1"
+      ]
+    },
+    {
+      "construct": "composition, identity, equivalence, ordering, and conflict algebra",
+      "checkpoint": "R1",
+      "disposition": "preserved",
+      "obligationIds": [
+        "R1-ALG-1"
+      ]
+    },
+    {
+      "construct": "defaults, extensions, versions, deprecation, and migration",
+      "checkpoint": "R1",
+      "disposition": "preserved",
+      "obligationIds": [
+        "R1-EVO-1"
+      ]
+    },
+    {
+      "construct": "logical, version, content, registry, and mirror identity separation",
+      "checkpoint": "R2",
+      "disposition": "preserved",
+      "obligationIds": [
+        "R2-SEM-1"
+      ]
+    },
+    {
+      "construct": "bounded exact resolution, trust, revocation, and dependency-confusion defenses",
+      "checkpoint": "R2",
+      "disposition": "preserved",
+      "obligationIds": [
+        "R2-SEC-1"
+      ]
+    },
+    {
+      "construct": "hermetic deterministic lock and package graph algebra",
+      "checkpoint": "R2",
+      "disposition": "preserved",
+      "obligationIds": [
+        "R2-ALG-1"
+      ]
+    },
+    {
+      "construct": "verified immutable package, signer, artifact-family, and source-pointer provenance",
+      "checkpoint": "R2",
+      "disposition": "preserved",
+      "obligationIds": [
+        "R2-PROV-1"
+      ]
+    }
+  ],
+  "residualLedger": [],
+  "checkpointStateLedger": [
+    {
+      "id": "R0",
+      "dependsOn": [],
+      "gate": "G1",
+      "status": "complete"
+    },
+    {
+      "id": "R1",
+      "dependsOn": [
+        "R0"
+      ],
+      "gate": "G1",
+      "status": "complete"
+    },
+    {
+      "id": "R2",
+      "dependsOn": [
+        "R1"
+      ],
+      "gate": "G1",
+      "status": "complete"
+    },
+    {
+      "id": "R3",
+      "dependsOn": [
+        "R1",
+        "R2"
+      ],
+      "gate": "G1",
+      "status": "ready"
+    },
+    {
+      "id": "R4",
+      "dependsOn": [
+        "R1",
+        "R2",
+        "R3"
+      ],
+      "gate": "G1",
+      "status": "blocked"
+    },
+    {
+      "id": "R5",
+      "dependsOn": [
+        "R1",
+        "R2"
+      ],
+      "gate": "G2",
+      "status": "blocked"
+    },
+    {
+      "id": "R6",
+      "dependsOn": [
+        "R3",
+        "R5"
+      ],
+      "gate": "G2",
+      "status": "blocked"
+    },
+    {
+      "id": "R7",
+      "dependsOn": [
+        "R5",
+        "R6"
+      ],
+      "gate": "G2",
+      "status": "blocked"
+    },
+    {
+      "id": "R8",
+      "dependsOn": [
+        "R5",
+        "R6",
+        "R7"
+      ],
+      "gate": "G2",
+      "status": "blocked"
+    },
+    {
+      "id": "R9",
+      "dependsOn": [
+        "R1",
+        "R5",
+        "R8"
+      ],
+      "gate": "G3",
+      "status": "blocked"
+    },
+    {
+      "id": "R10",
+      "dependsOn": [
+        "R6",
+        "R8"
+      ],
+      "gate": "G3",
+      "status": "blocked"
+    },
+    {
+      "id": "R11",
+      "dependsOn": [
+        "R6",
+        "R8",
+        "R10"
+      ],
+      "gate": "G3",
+      "status": "blocked"
+    },
+    {
+      "id": "R12",
+      "dependsOn": [
+        "R6",
+        "R8",
+        "R10"
+      ],
+      "gate": "G3",
+      "status": "blocked"
+    },
+    {
+      "id": "R13",
+      "dependsOn": [
+        "R6",
+        "R8",
+        "R10"
+      ],
+      "gate": "G3",
+      "status": "blocked"
+    },
+    {
+      "id": "R14",
+      "dependsOn": [
+        "R6",
+        "R8",
+        "R10"
+      ],
+      "gate": "G3",
+      "status": "blocked"
+    },
+    {
+      "id": "R15",
+      "dependsOn": [
+        "R8",
+        "R10",
+        "R11",
+        "R14"
+      ],
+      "gate": "G4",
+      "status": "blocked"
+    },
+    {
+      "id": "R16",
+      "dependsOn": [
+        "R8",
+        "R10",
+        "R11",
+        "R14"
+      ],
+      "gate": "G4",
+      "status": "blocked"
+    },
+    {
+      "id": "R17",
+      "dependsOn": [
+        "R2",
+        "R5",
+        "R8",
+        "R10"
+      ],
+      "gate": "G5",
+      "status": "blocked"
+    },
+    {
+      "id": "R18",
+      "dependsOn": [
+        "R14",
+        "R17"
+      ],
+      "gate": "G5",
+      "status": "blocked"
+    },
+    {
+      "id": "R19",
+      "dependsOn": [
+        "R15",
+        "R16",
+        "R17",
+        "R18"
+      ],
+      "gate": "G5",
+      "status": "blocked"
+    },
+    {
+      "id": "R20",
+      "dependsOn": [
+        "R10",
+        "R17",
+        "R18",
+        "R19"
+      ],
+      "gate": "G5",
+      "status": "blocked"
+    },
+    {
+      "id": "R21",
+      "dependsOn": [
+        "R15",
+        "R16",
+        "R17",
+        "R18",
+        "R19",
+        "R20"
+      ],
+      "gate": "G5",
+      "status": "blocked"
+    },
+    {
+      "id": "R22",
+      "dependsOn": [
+        "R3",
+        "R4",
+        "R8",
+        "R10",
+        "R11",
+        "R14",
+        "R16",
+        "R20",
+        "R21"
+      ],
+      "gate": "G6",
+      "status": "blocked"
+    },
+    {
+      "id": "R23",
+      "dependsOn": [
+        "R18",
+        "R20",
+        "R22"
+      ],
+      "gate": "G6",
+      "status": "blocked"
+    },
+    {
+      "id": "R24",
+      "dependsOn": [
+        "R15",
+        "R16",
+        "R21",
+        "R22",
+        "R23"
+      ],
+      "gate": "G6",
+      "status": "blocked"
+    },
+    {
+      "id": "R25",
+      "dependsOn": [
+        "R19",
+        "R23",
+        "R24"
+      ],
+      "gate": "G7",
+      "status": "blocked"
+    },
+    {
+      "id": "R26",
+      "dependsOn": [
+        "R7",
+        "R25"
+      ],
+      "gate": "G7",
+      "status": "blocked"
+    },
+    {
+      "id": "R27",
+      "dependsOn": [
+        "R19",
+        "R21",
+        "R22",
+        "R23",
+        "R24",
+        "R25",
+        "R26"
+      ],
+      "gate": "G7",
+      "status": "blocked"
+    },
+    {
+      "id": "R28",
+      "dependsOn": [
+        "R0",
+        "R1",
+        "R2",
+        "R3",
+        "R4",
+        "R5",
+        "R6",
+        "R7",
+        "R8",
+        "R9",
+        "R10",
+        "R11",
+        "R12",
+        "R13",
+        "R14",
+        "R15",
+        "R16",
+        "R17",
+        "R18",
+        "R19",
+        "R20",
+        "R21",
+        "R22",
+        "R23",
+        "R24",
+        "R25",
+        "R26",
+        "R27"
+      ],
+      "gate": "G8",
+      "status": "blocked"
+    }
+  ],
+  "evidenceLedger": [
+    {
+      "id": "ev-r0-baseline",
+      "kind": "artifact",
+      "uri": "docs/runtime-ledgers/baseline-manifest.json",
+      "producer": "scripts/initialize-runtime-ledgers.ts"
+    },
+    {
+      "id": "ev-r0-threats",
+      "kind": "artifact",
+      "uri": "docs/evidence/R0-BASELINE-THREAT-MODEL.md",
+      "producer": "runtime phase R0"
+    },
+    {
+      "id": "ev-r0-reviews",
+      "kind": "review",
+      "uri": "docs/evidence/R0-SKEPTICAL-REVIEWS.md",
+      "producer": "two independent read-only reviewers"
+    },
+    {
+      "id": "ev-r0-ledger-tests",
+      "kind": "test",
+      "uri": "packages/core/src/organization-runtime-ledger.test.ts",
+      "producer": "bun test"
+    },
+    {
+      "id": "ev-r0-full-gate",
+      "kind": "test",
+      "uri": "docs/evidence/R0-CLOSURE.md",
+      "producer": "bun run check"
+    },
+    {
+      "id": "ev-r1-spec",
+      "kind": "artifact",
+      "uri": "docs/ORGANIZATION-IR-SPEC.md",
+      "producer": "open-autonomy R1"
+    },
+    {
+      "id": "ev-r1-field-grammar",
+      "kind": "artifact",
+      "uri": "docs/ORGANIZATION-IR-FIELD-SEMANTICS.md",
+      "producer": "generated organization field semantics"
+    },
+    {
+      "id": "ev-r1-machine-grammar",
+      "kind": "artifact",
+      "uri": "packages/core/src/generated/organization-ir-v2.schema.json",
+      "producer": "generated organization schema"
+    },
+    {
+      "id": "ev-r1-drift-tests",
+      "kind": "test",
+      "uri": "packages/core/src/organization-spec.test.ts",
+      "producer": "Bun test runner"
+    },
+    {
+      "id": "ev-r1-semantic-tests",
+      "kind": "test",
+      "uri": "packages/core/src/organization-normalize.test.ts",
+      "producer": "Bun test runner"
+    },
+    {
+      "id": "ev-r1-external-review",
+      "kind": "review",
+      "uri": "docs/evidence/R1-EXTERNAL-IMPLEMENTER-REVIEW.md",
+      "producer": "independent clean-room review agent"
+    },
+    {
+      "id": "ev-r2-protocol",
+      "kind": "artifact",
+      "uri": "docs/ORGANIZATION-PACKAGE-SPEC.md",
+      "producer": "open-autonomy R2"
+    },
+    {
+      "id": "ev-r2-schema-corpus",
+      "kind": "artifact",
+      "uri": "packages/core/src/generated/artifact-schema-index.json",
+      "producer": "generated artifact schema corpus"
+    },
+    {
+      "id": "ev-r2-package-tests",
+      "kind": "test",
+      "uri": "packages/core/src/organization-package.test.ts",
+      "producer": "Bun test runner"
+    },
+    {
+      "id": "ev-r2-external-review",
+      "kind": "review",
+      "uri": "docs/evidence/R2-SKEPTICAL-REVIEW.md",
+      "producer": "independent adversarial review agent"
+    },
+    {
+      "id": "ev-r2-full-gate",
+      "kind": "test",
+      "uri": "packages/*/src/*.test.ts",
+      "producer": "Bun core gate"
+    }
+  ]
+}

@@ -1,0 +1,729 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://open-autonomy.dev/schema/ComponentManifestV2.json",
+  "title": "Open Autonomy ComponentManifestV2",
+  "$ref": "#/$defs/ComponentManifestV2",
+  "$defs": {
+    "ComponentManifestV2": {
+      "type": "object",
+      "properties": {
+        "schema": {
+          "const": "autonomy.component.v2"
+        },
+        "id": {
+          "type": "string"
+        },
+        "version": {
+          "type": "string"
+        },
+        "digest": {
+          "$ref": "#/$defs/SemanticDigest"
+        },
+        "signatures": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ManifestSignature"
+          }
+        },
+        "configuration": {
+          "$ref": "#/$defs/VersionedSchema"
+        },
+        "facets": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/FacetProvision"
+          }
+        },
+        "interfaces": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/InterfaceContract"
+          }
+        },
+        "state": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/StateFacetContract"
+          }
+        },
+        "trust": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/TrustContract"
+          }
+        },
+        "failure": {
+          "$ref": "#/$defs/FailureContract"
+        },
+        "topology": {
+          "$ref": "#/$defs/TopologyContract"
+        },
+        "capacity": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/QuantityContract"
+          }
+        },
+        "cost": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/QuantityContract"
+          }
+        },
+        "requires": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "conflictsWith": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "extensions": {
+          "type": "object",
+          "additionalProperties": {}
+        }
+      },
+      "required": [
+        "schema",
+        "id",
+        "version",
+        "configuration",
+        "facets",
+        "interfaces",
+        "state",
+        "trust",
+        "failure",
+        "topology"
+      ],
+      "additionalProperties": false
+    },
+    "SemanticDigest": {
+      "type": "object",
+      "properties": {
+        "algorithm": {
+          "const": "sha256"
+        },
+        "canonicalization": {
+          "const": "oa-c14n-v1"
+        },
+        "domain": {
+          "type": "string"
+        },
+        "value": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "algorithm",
+        "canonicalization",
+        "domain",
+        "value"
+      ],
+      "additionalProperties": false
+    },
+    "ManifestSignature": {
+      "type": "object",
+      "properties": {
+        "algorithm": {
+          "type": "string"
+        },
+        "keyId": {
+          "type": "string"
+        },
+        "value": {
+          "type": "string"
+        },
+        "covers": {
+          "const": "digest"
+        }
+      },
+      "required": [
+        "algorithm",
+        "keyId",
+        "value",
+        "covers"
+      ],
+      "additionalProperties": false
+    },
+    "VersionedSchema": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "version": {
+          "type": "string"
+        },
+        "schema": {
+          "type": "object",
+          "additionalProperties": {}
+        }
+      },
+      "required": [
+        "id",
+        "version"
+      ],
+      "additionalProperties": false
+    },
+    "FacetProvision": {
+      "type": "object",
+      "properties": {
+        "facet": {
+          "$ref": "#/$defs/FacetKind"
+        },
+        "operations": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "interface": {
+          "type": "string"
+        },
+        "properties": {
+          "type": "object",
+          "additionalProperties": {}
+        },
+        "evidence": {
+          "$ref": "#/$defs/ManifestEvidence"
+        }
+      },
+      "required": [
+        "facet",
+        "operations",
+        "interface",
+        "evidence"
+      ],
+      "additionalProperties": false
+    },
+    "FacetKind": {
+      "anyOf": [
+        {
+          "const": "actor"
+        },
+        {
+          "const": "behavior"
+        },
+        {
+          "const": "activation"
+        },
+        {
+          "const": "work"
+        },
+        {
+          "const": "interaction"
+        },
+        {
+          "const": "tool"
+        },
+        {
+          "const": "session"
+        },
+        {
+          "const": "context"
+        },
+        {
+          "const": "memory"
+        },
+        {
+          "const": "execution"
+        },
+        {
+          "const": "authority"
+        },
+        {
+          "const": "artifact"
+        },
+        {
+          "const": "event"
+        },
+        {
+          "const": "storage"
+        }
+      ]
+    },
+    "ManifestEvidence": {
+      "type": "object",
+      "properties": {
+        "assurance": {
+          "$ref": "#/$defs/ClaimAssurance"
+        },
+        "source": {
+          "type": "object",
+          "properties": {
+            "uri": {
+              "type": "string"
+            },
+            "digest": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "uri"
+          ],
+          "additionalProperties": false
+        },
+        "observedAt": {
+          "type": "string"
+        },
+        "notes": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "assurance"
+      ],
+      "additionalProperties": false
+    },
+    "ClaimAssurance": {
+      "anyOf": [
+        {
+          "const": "asserted"
+        },
+        {
+          "const": "conformance-tested"
+        },
+        {
+          "const": "live-observed"
+        },
+        {
+          "const": "unknown"
+        }
+      ]
+    },
+    "InterfaceContract": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "version": {
+          "type": "string"
+        },
+        "transport": {
+          "anyOf": [
+            {
+              "const": "function"
+            },
+            {
+              "const": "cli"
+            },
+            {
+              "const": "http"
+            },
+            {
+              "const": "mcp"
+            },
+            {
+              "const": "a2a"
+            },
+            {
+              "const": "database"
+            },
+            {
+              "const": "filesystem"
+            },
+            {
+              "const": "event"
+            },
+            {
+              "const": "external"
+            }
+          ]
+        },
+        "commands": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/VersionedSchema"
+          }
+        },
+        "observations": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/VersionedSchema"
+          }
+        },
+        "authentication": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "version",
+        "transport"
+      ],
+      "additionalProperties": false
+    },
+    "StateFacetContract": {
+      "type": "object",
+      "properties": {
+        "state": {
+          "type": "string"
+        },
+        "authority": {
+          "anyOf": [
+            {
+              "const": "authoritative"
+            },
+            {
+              "const": "replica"
+            },
+            {
+              "const": "cache"
+            },
+            {
+              "const": "none"
+            },
+            {
+              "const": "unknown"
+            }
+          ]
+        },
+        "consistency": {
+          "anyOf": [
+            {
+              "const": "strong"
+            },
+            {
+              "const": "causal"
+            },
+            {
+              "const": "eventual"
+            },
+            {
+              "const": "session"
+            },
+            {
+              "const": "unknown"
+            }
+          ]
+        },
+        "delivery": {
+          "anyOf": [
+            {
+              "const": "at-most-once"
+            },
+            {
+              "const": "at-least-once"
+            },
+            {
+              "const": "exactly-once"
+            },
+            {
+              "const": "best-effort"
+            },
+            {
+              "const": "none"
+            },
+            {
+              "const": "unknown"
+            }
+          ]
+        },
+        "ordering": {
+          "anyOf": [
+            {
+              "const": "total"
+            },
+            {
+              "const": "causal"
+            },
+            {
+              "const": "per-key"
+            },
+            {
+              "const": "none"
+            },
+            {
+              "const": "unknown"
+            }
+          ]
+        },
+        "idempotency": {
+          "anyOf": [
+            {
+              "const": "enforced"
+            },
+            {
+              "const": "supported"
+            },
+            {
+              "const": "caller"
+            },
+            {
+              "const": "none"
+            },
+            {
+              "const": "unknown"
+            }
+          ]
+        },
+        "recovery": {
+          "anyOf": [
+            {
+              "const": "automatic"
+            },
+            {
+              "const": "operator"
+            },
+            {
+              "const": "external"
+            },
+            {
+              "const": "none"
+            },
+            {
+              "const": "unknown"
+            }
+          ]
+        },
+        "identity": {
+          "anyOf": [
+            {
+              "const": "stable"
+            },
+            {
+              "const": "session"
+            },
+            {
+              "const": "ephemeral"
+            },
+            {
+              "const": "external"
+            },
+            {
+              "const": "unknown"
+            }
+          ]
+        },
+        "evidence": {
+          "$ref": "#/$defs/ManifestEvidence"
+        }
+      },
+      "required": [
+        "state",
+        "authority",
+        "consistency",
+        "delivery",
+        "ordering",
+        "idempotency",
+        "recovery",
+        "identity",
+        "evidence"
+      ],
+      "additionalProperties": false
+    },
+    "TrustContract": {
+      "type": "object",
+      "properties": {
+        "principal": {
+          "type": "string"
+        },
+        "zone": {
+          "type": "string"
+        },
+        "enforcedBy": {
+          "type": "string"
+        },
+        "credentials": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string"
+              },
+              "scope": {
+                "type": "string"
+              },
+              "flow": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "name",
+              "scope",
+              "flow"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "isolation": {
+          "type": "string"
+        },
+        "evidence": {
+          "$ref": "#/$defs/ManifestEvidence"
+        }
+      },
+      "required": [
+        "principal",
+        "zone",
+        "enforcedBy",
+        "evidence"
+      ],
+      "additionalProperties": false
+    },
+    "FailureContract": {
+      "type": "object",
+      "properties": {
+        "detection": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "healthCriterion": {
+          "type": "string"
+        },
+        "recovery": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "upgrade": {
+          "type": "string"
+        },
+        "rollback": {
+          "type": "string"
+        },
+        "evidence": {
+          "$ref": "#/$defs/ManifestEvidence"
+        }
+      },
+      "required": [
+        "detection",
+        "recovery",
+        "evidence"
+      ],
+      "additionalProperties": false
+    },
+    "TopologyContract": {
+      "type": "object",
+      "properties": {
+        "mode": {
+          "anyOf": [
+            {
+              "const": "embedded"
+            },
+            {
+              "const": "standalone"
+            },
+            {
+              "const": "client-server"
+            },
+            {
+              "const": "peer"
+            },
+            {
+              "const": "external"
+            },
+            {
+              "const": "unknown"
+            }
+          ]
+        },
+        "minimumInstances": {
+          "type": "number"
+        },
+        "maximumInstances": {
+          "type": "number"
+        },
+        "isolation": {
+          "anyOf": [
+            {
+              "const": "process"
+            },
+            {
+              "const": "container"
+            },
+            {
+              "const": "virtual-machine"
+            },
+            {
+              "const": "host"
+            },
+            {
+              "const": "logical"
+            },
+            {
+              "const": "external"
+            },
+            {
+              "const": "unknown"
+            }
+          ]
+        },
+        "placement": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "evidence": {
+          "$ref": "#/$defs/ManifestEvidence"
+        }
+      },
+      "required": [
+        "mode",
+        "minimumInstances",
+        "isolation",
+        "evidence"
+      ],
+      "additionalProperties": false
+    },
+    "QuantityContract": {
+      "type": "object",
+      "properties": {
+        "value": {
+          "type": "number"
+        },
+        "unit": {
+          "type": "string"
+        },
+        "per": {
+          "type": "string"
+        },
+        "attribution": {
+          "type": "string"
+        },
+        "uncertainty": {
+          "anyOf": [
+            {
+              "const": "exact"
+            },
+            {
+              "const": "bounded"
+            },
+            {
+              "const": "estimated"
+            },
+            {
+              "const": "volatile"
+            },
+            {
+              "const": "unknown"
+            }
+          ]
+        },
+        "effectiveAt": {
+          "type": "string"
+        },
+        "evidence": {
+          "$ref": "#/$defs/ManifestEvidence"
+        }
+      },
+      "required": [
+        "unit",
+        "attribution",
+        "uncertainty",
+        "evidence"
+      ],
+      "additionalProperties": false
+    }
+  }
+}

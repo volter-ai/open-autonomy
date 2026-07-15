@@ -1,9 +1,60 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://open-autonomy.dev/schema/autonomy.organization.v2.json",
-  "title": "Open Autonomy OrganizationIR",
-  "$ref": "#/$defs/OrganizationIR",
+  "$id": "https://open-autonomy.dev/schema/NormalizedOrganizationIR.json",
+  "title": "Open Autonomy NormalizedOrganizationIR",
+  "$ref": "#/$defs/NormalizedOrganizationIR",
   "$defs": {
+    "NormalizedOrganizationIR": {
+      "type": "object",
+      "properties": {
+        "schema": {
+          "const": "autonomy.normalized-organization.v1"
+        },
+        "root": {
+          "$ref": "#/$defs/ModuleId"
+        },
+        "modules": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/OrganizationIR"
+          }
+        },
+        "sourceMap": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/NormalizedSourceMapEntry"
+          }
+        },
+        "digest": {
+          "$ref": "#/$defs/SemanticDigest"
+        }
+      },
+      "required": [
+        "schema",
+        "root",
+        "modules",
+        "sourceMap",
+        "digest"
+      ],
+      "additionalProperties": false
+    },
+    "ModuleId": {
+      "allOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "object",
+          "properties": {
+            "__moduleId": {}
+          },
+          "required": [
+            "__moduleId"
+          ],
+          "additionalProperties": false
+        }
+      ]
+    },
     "OrganizationIR": {
       "type": "object",
       "properties": {
@@ -2519,6 +2570,62 @@
       "required": [
         "property",
         "operator",
+        "value"
+      ],
+      "additionalProperties": false
+    },
+    "NormalizedSourceMapEntry": {
+      "type": "object",
+      "properties": {
+        "output": {
+          "type": "string"
+        },
+        "sources": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "location": {
+                "type": "string"
+              },
+              "path": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "location",
+              "path"
+            ],
+            "additionalProperties": false
+          }
+        }
+      },
+      "required": [
+        "output",
+        "sources"
+      ],
+      "additionalProperties": false
+    },
+    "SemanticDigest": {
+      "type": "object",
+      "properties": {
+        "algorithm": {
+          "const": "sha256"
+        },
+        "canonicalization": {
+          "const": "oa-c14n-v1"
+        },
+        "domain": {
+          "type": "string"
+        },
+        "value": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "algorithm",
+        "canonicalization",
+        "domain",
         "value"
       ],
       "additionalProperties": false

@@ -1,0 +1,47 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://open-autonomy.dev/schema/ArtifactSchemaIndex.json",
+  "title": "Open Autonomy ArtifactSchemaIndex",
+  "$ref": "#/$defs/ArtifactSchemaIndex",
+  "$defs": {
+    "ArtifactSchemaIndex": {
+      "type": "object",
+      "properties": {
+        "schema": {
+          "const": "autonomy.artifact-schema-index.v1"
+        },
+        "artifacts": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ArtifactSchemaIndexEntry"
+          }
+        }
+      },
+      "required": [
+        "schema",
+        "artifacts"
+      ],
+      "additionalProperties": false
+    },
+    "ArtifactSchemaIndexEntry": {
+      "type": "object",
+      "properties": {
+        "schema": {
+          "type": "string"
+        },
+        "root": {
+          "type": "string"
+        },
+        "filename": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "schema",
+        "root",
+        "filename"
+      ],
+      "additionalProperties": false
+    }
+  }
+}

@@ -13,7 +13,7 @@ import type { CompileOutput } from './ir';
 
 export const GENERATED_MANIFEST_PATH = '.open-autonomy/generated.json';
 
-interface GeneratedManifest {
+export interface GeneratedManifest {
   schema: 'open-autonomy.generated.v1';
   files: string[];
 }

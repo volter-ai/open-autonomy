@@ -1,0 +1,13 @@
+schema: autonomy.package.v1
+name: dev.open-autonomy/example
+version: 1.0.0
+root: organization.yml
+files:
+  - path: organization.yml
+    digest: sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+    bytes: 128
+    mediaType: application/yaml
+dependencies: {}
+provenance:
+  source: https://example.invalid/source
+  revision: abc123

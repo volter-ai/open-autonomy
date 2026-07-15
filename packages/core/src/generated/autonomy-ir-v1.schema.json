@@ -1,0 +1,224 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://open-autonomy.dev/schema/AutonomyIR.json",
+  "title": "Open Autonomy AutonomyIR",
+  "$ref": "#/$defs/AutonomyIR",
+  "$defs": {
+    "AutonomyIR": {
+      "type": "object",
+      "properties": {
+        "schema": {
+          "const": "autonomy.ir.v1"
+        },
+        "targets": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "codeHost": {
+          "anyOf": [
+            {
+              "const": "github"
+            },
+            {
+              "const": "local-git"
+            }
+          ]
+        },
+        "agents": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/IRAgent"
+          }
+        },
+        "policy": {
+          "$ref": "#/$defs/IRPolicy"
+        },
+        "resources": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "documents": {
+          "type": "object",
+          "properties": {
+            "roles": {
+              "$ref": "#/$defs/DocumentRoles"
+            }
+          },
+          "required": [
+            "roles"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "schema",
+        "targets",
+        "agents",
+        "policy",
+        "resources"
+      ],
+      "additionalProperties": false
+    },
+    "IRAgent": {
+      "type": "object",
+      "properties": {
+        "behavior": {
+          "type": "string"
+        },
+        "capabilities": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "triggers": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Trigger"
+          }
+        },
+        "kind": {
+          "$ref": "#/$defs/ActorKind"
+        },
+        "timeout": {
+          "type": "number"
+        },
+        "review": {
+          "type": "string"
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "schema": {
+              "type": "object",
+              "additionalProperties": {}
+            }
+          },
+          "required": [
+            "schema"
+          ],
+          "additionalProperties": false
+        },
+        "prelaunch": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "behavior",
+        "capabilities",
+        "triggers"
+      ],
+      "additionalProperties": false
+    },
+    "Trigger": {
+      "anyOf": [
+        {
+          "type": "object",
+          "properties": {
+            "cron": {
+              "type": "string"
+            },
+            "params": {
+              "type": "object",
+              "additionalProperties": {
+                "type": "string"
+              }
+            }
+          },
+          "required": [
+            "cron"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "event": {
+              "type": "string"
+            },
+            "config": {
+              "type": "object",
+              "additionalProperties": {}
+            },
+            "params": {
+              "type": "object",
+              "additionalProperties": {
+                "type": "string"
+              }
+            }
+          },
+          "required": [
+            "event"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "dispatch": {
+              "const": true
+            },
+            "params": {
+              "type": "object",
+              "additionalProperties": {
+                "type": "string"
+              }
+            }
+          },
+          "required": [
+            "dispatch"
+          ],
+          "additionalProperties": false
+        }
+      ]
+    },
+    "ActorKind": {
+      "anyOf": [
+        {
+          "const": "agent"
+        },
+        {
+          "const": "human"
+        }
+      ]
+    },
+    "IRPolicy": {
+      "type": "object",
+      "properties": {
+        "maxConcurrent": {
+          "type": "number"
+        },
+        "box": {
+          "type": "object",
+          "additionalProperties": {}
+        }
+      },
+      "required": [
+        "box"
+      ],
+      "additionalProperties": false
+    },
+    "DocumentRoles": {
+      "type": "object",
+      "properties": {
+        "vision": {
+          "type": "string"
+        },
+        "constitution": {
+          "type": "string"
+        },
+        "roadmap": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "vision"
+      ],
+      "additionalProperties": false
+    }
+  }
+}

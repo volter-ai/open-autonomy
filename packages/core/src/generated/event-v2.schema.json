@@ -1,0 +1,171 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://open-autonomy.dev/schema/PortableEventV2.json",
+  "title": "Open Autonomy PortableEventV2",
+  "$ref": "#/$defs/PortableEventV2",
+  "$defs": {
+    "PortableEventV2": {
+      "type": "object",
+      "properties": {
+        "schema": {
+          "const": "autonomy.event.v2"
+        },
+        "reducer": {
+          "type": "string"
+        },
+        "id": {
+          "type": "string"
+        },
+        "type": {
+          "type": "string"
+        },
+        "at": {
+          "type": "string"
+        },
+        "issuer": {
+          "type": "string"
+        },
+        "actor": {
+          "type": "string"
+        },
+        "subject": {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string"
+            },
+            "id": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "id"
+          ],
+          "additionalProperties": false
+        },
+        "parents": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "correlation": {
+          "type": "string"
+        },
+        "epistemic": {
+          "$ref": "#/$defs/EpistemicStatus"
+        },
+        "provenance": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "uri": {
+                "type": "string"
+              },
+              "digest": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "uri"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "evidence": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "type": "string"
+              },
+              "uri": {
+                "type": "string"
+              },
+              "digest": {
+                "type": "string"
+              },
+              "status": {
+                "$ref": "#/$defs/EpistemicStatus"
+              }
+            },
+            "required": [
+              "kind",
+              "uri",
+              "status"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "payload": {
+          "type": "object",
+          "additionalProperties": {}
+        },
+        "corrects": {
+          "type": "string"
+        },
+        "retracts": {
+          "type": "string"
+        },
+        "integrity": {
+          "type": "object",
+          "properties": {
+            "algorithm": {
+              "const": "sha256"
+            },
+            "digest": {
+              "type": "string"
+            },
+            "authenticated": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "algorithm",
+            "digest",
+            "authenticated"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "schema",
+        "reducer",
+        "id",
+        "type",
+        "at",
+        "issuer",
+        "parents",
+        "epistemic",
+        "provenance",
+        "integrity"
+      ],
+      "additionalProperties": false
+    },
+    "EpistemicStatus": {
+      "anyOf": [
+        {
+          "const": "assertion"
+        },
+        {
+          "const": "report"
+        },
+        {
+          "const": "observation"
+        },
+        {
+          "const": "inference"
+        },
+        {
+          "const": "attestation"
+        },
+        {
+          "const": "verification"
+        }
+      ]
+    }
+  }
+}

@@ -1,0 +1,322 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://open-autonomy.dev/schema/RuntimeLedgerCorpus.json",
+  "title": "Open Autonomy RuntimeLedgerCorpus",
+  "$ref": "#/$defs/RuntimeLedgerCorpus",
+  "$defs": {
+    "RuntimeLedgerCorpus": {
+      "type": "object",
+      "properties": {
+        "schema": {
+          "const": "open-autonomy.runtime-ledger.v1"
+        },
+        "obligationLedger": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/RuntimeObligationEntry"
+          }
+        },
+        "semanticCoverageLedger": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "construct": {
+                "type": "string"
+              },
+              "checkpoint": {
+                "type": "string"
+              },
+              "disposition": {
+                "$ref": "#/$defs/RuntimeDisposition"
+              },
+              "obligationIds": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            },
+            "required": [
+              "construct",
+              "checkpoint",
+              "disposition",
+              "obligationIds"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "residualLedger": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/RuntimeResidualEntry"
+          }
+        },
+        "checkpointStateLedger": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "status": {
+                "$ref": "#/$defs/CheckpointStatus"
+              },
+              "dependsOn": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            },
+            "required": [
+              "id",
+              "status",
+              "dependsOn"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "evidenceLedger": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/EvidenceReference"
+          }
+        }
+      },
+      "required": [
+        "schema",
+        "obligationLedger",
+        "semanticCoverageLedger",
+        "residualLedger",
+        "checkpointStateLedger",
+        "evidenceLedger"
+      ],
+      "additionalProperties": false
+    },
+    "RuntimeObligationEntry": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "checkpoint": {
+          "type": "string"
+        },
+        "owner": {
+          "type": "string"
+        },
+        "disposition": {
+          "$ref": "#/$defs/RuntimeDisposition"
+        },
+        "assurance": {
+          "$ref": "#/$defs/RuntimeAssurance"
+        },
+        "evidence": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "rationale": {
+          "type": "string"
+        },
+        "losses": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "id",
+        "checkpoint",
+        "owner",
+        "disposition",
+        "assurance",
+        "evidence"
+      ],
+      "additionalProperties": false
+    },
+    "RuntimeDisposition": {
+      "anyOf": [
+        {
+          "const": "unresolved"
+        },
+        {
+          "const": "preserved"
+        },
+        {
+          "const": "adapter-realized"
+        },
+        {
+          "const": "approximated"
+        },
+        {
+          "const": "rejected"
+        }
+      ]
+    },
+    "RuntimeAssurance": {
+      "anyOf": [
+        {
+          "const": "unknown"
+        },
+        {
+          "const": "assumed"
+        },
+        {
+          "const": "externally-attested"
+        },
+        {
+          "const": "live-observed"
+        },
+        {
+          "const": "conformance-tested"
+        },
+        {
+          "const": "property-tested"
+        },
+        {
+          "const": "model-checked"
+        },
+        {
+          "const": "statically-checked"
+        },
+        {
+          "const": "proved"
+        }
+      ]
+    },
+    "RuntimeResidualEntry": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "checkpoint": {
+          "type": "string"
+        },
+        "category": {
+          "anyOf": [
+            {
+              "const": "semantic"
+            },
+            {
+              "const": "assurance"
+            },
+            {
+              "const": "implementation"
+            },
+            {
+              "const": "operational"
+            },
+            {
+              "const": "security"
+            },
+            {
+              "const": "measurement"
+            }
+          ]
+        },
+        "finding": {
+          "type": "string"
+        },
+        "owner": {
+          "type": "string"
+        },
+        "disposition": {
+          "anyOf": [
+            {
+              "const": "open"
+            },
+            {
+              "const": "accepted"
+            },
+            {
+              "const": "rejected"
+            },
+            {
+              "const": "resolved"
+            }
+          ]
+        },
+        "rationale": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "checkpoint",
+        "category",
+        "finding",
+        "owner",
+        "disposition"
+      ],
+      "additionalProperties": false
+    },
+    "CheckpointStatus": {
+      "anyOf": [
+        {
+          "const": "blocked"
+        },
+        {
+          "const": "ready"
+        },
+        {
+          "const": "in-progress"
+        },
+        {
+          "const": "complete"
+        }
+      ]
+    },
+    "EvidenceReference": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "kind": {
+          "anyOf": [
+            {
+              "const": "test"
+            },
+            {
+              "const": "artifact"
+            },
+            {
+              "const": "live-run"
+            },
+            {
+              "const": "attestation"
+            },
+            {
+              "const": "review"
+            }
+          ]
+        },
+        "uri": {
+          "type": "string"
+        },
+        "digest": {
+          "type": "string"
+        },
+        "producedAt": {
+          "type": "string"
+        },
+        "producer": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "kind",
+        "uri",
+        "producer"
+      ],
+      "additionalProperties": false
+    }
+  }
+}

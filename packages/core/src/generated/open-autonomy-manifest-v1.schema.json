@@ -1,0 +1,136 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://open-autonomy.dev/schema/OAManifest.json",
+  "title": "Open Autonomy OAManifest",
+  "$ref": "#/$defs/OAManifest",
+  "$defs": {
+    "OAManifest": {
+      "type": "object",
+      "properties": {
+        "schema": {
+          "type": "string"
+        },
+        "codeHost": {
+          "anyOf": [
+            {
+              "const": "github"
+            },
+            {
+              "const": "local-git"
+            }
+          ]
+        },
+        "documents": {
+          "allOf": [
+            {
+              "type": "object",
+              "properties": {
+                "resources": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "roles": {
+                  "$ref": "#/$defs/DocumentRoles"
+                }
+              },
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "additionalProperties": {}
+            }
+          ]
+        },
+        "skills": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        },
+        "agents": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "anyOf": [
+                  {
+                    "const": "agent"
+                  },
+                  {
+                    "const": "human"
+                  }
+                ]
+              },
+              "skill": {
+                "type": "string"
+              },
+              "workflowFile": {
+                "type": "string"
+              },
+              "params": {
+                "type": "object",
+                "additionalProperties": {
+                  "type": "string"
+                }
+              },
+              "triggers": {
+                "type": "object",
+                "properties": {
+                  "schedule": {
+                    "type": "string"
+                  },
+                  "dispatch": {
+                    "type": "boolean"
+                  }
+                },
+                "additionalProperties": false
+              },
+              "capabilities": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "timeout": {
+                "type": "number"
+              },
+              "review": {
+                "type": "string"
+              },
+              "prelaunch": {
+                "type": "string"
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "policy": {
+          "type": "object",
+          "additionalProperties": {}
+        }
+      },
+      "additionalProperties": false
+    },
+    "DocumentRoles": {
+      "type": "object",
+      "properties": {
+        "vision": {
+          "type": "string"
+        },
+        "constitution": {
+          "type": "string"
+        },
+        "roadmap": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "vision"
+      ],
+      "additionalProperties": false
+    }
+  }
+}

@@ -10,7 +10,7 @@ import type { DeploymentIR, SubstrateComponentManifest } from './organization-su
 import { validateOrganizationProfile, type OrganizationProfileIR } from './organization-profile';
 import { validateOrganizationStructure } from './organization-structural';
 
-function parseClosedYaml(yamlText: string): unknown {
+export function parseClosedYamlValue(yamlText: string): unknown {
   const document = parseDocument(yamlText, { schema: 'core', strict: true, uniqueKeys: true });
   if (document.errors.length) throw new Error(`invalid YAML:\n  ${document.errors.map((error) => error.message).join('\n  ')}`);
   const forbidden: string[] = [];
@@ -42,7 +42,7 @@ function assertJsonValue(value: unknown, path: string): void {
 }
 
 export function parseOrganizationIr(yamlText: string): OrganizationIR {
-  const value = parseClosedYaml(yamlText);
+  const value = parseClosedYamlValue(yamlText);
   const structural = validateOrganizationStructure(value);
   if (!structural.valid) throw new Error(`invalid organization IR structure:\n  ${structural.errors.join('\n  ')}`);
   const ir = value as OrganizationIR;

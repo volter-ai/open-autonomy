@@ -60,6 +60,13 @@ export interface ExecutionPlanIR {
   providerConfiguration: Record<string, Record<string, unknown>>;
 }
 
+export interface NativePlanIR {
+  schema: 'autonomy.native-plan.v1';
+  organization: string;
+  steps: ExecutionStep[];
+  authorities: Record<string, string>;
+}
+
 export interface LoweringDisposition {
   obligation: string;
   disposition: 'preserved' | 'weakened' | 'rejected' | 'unresolved';
@@ -203,7 +210,7 @@ export function composePreservationCertificates(first: PreservationCertificate, 
   return { certificate: { pass: `${first.pass}+${second.pass}`, from: first.from, to: second.to, assumptions: [...first.assumptions], guarantees: [...second.guarantees], requiredProgress: [...new Set([...first.requiredProgress, ...second.requiredProgress])], observationProjections: first.observationProjections.map((projection) => ({ source: projection.source, target: second.observationProjections.find((next) => next.source === projection.target)!.target, relation: projection.relation })), dispositions: [...first.dispositions, ...second.dispositions], losses: [...first.losses, ...second.losses] }, errors: [] };
 }
 
-export function emitExecutableArtifact(result: FixedPointLoweringResult): { artifact?: Record<string, unknown>; errors: string[] } {
+export function emitExecutableArtifact(result: FixedPointLoweringResult): { artifact?: NativePlanIR; errors: string[] } {
   if (!result.execution || !result.candidate || result.errors.length) return { errors: ['lowering fixed point is not closed'] };
   if (result.candidate.ledger.unresolved.length) return { errors: ['final deployment ledger has unresolved obligations'] };
   return { artifact: { schema: 'autonomy.native-plan.v1', organization: result.execution.organization, steps: structuredClone(result.execution.steps), authorities: structuredClone(result.execution.stateAuthorities) }, errors: [] };

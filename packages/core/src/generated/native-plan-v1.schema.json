@@ -1,0 +1,90 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://open-autonomy.dev/schema/NativePlanIR.json",
+  "title": "Open Autonomy NativePlanIR",
+  "$ref": "#/$defs/NativePlanIR",
+  "$defs": {
+    "NativePlanIR": {
+      "type": "object",
+      "properties": {
+        "schema": {
+          "const": "autonomy.native-plan.v1"
+        },
+        "organization": {
+          "type": "string"
+        },
+        "steps": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ExecutionStep"
+          }
+        },
+        "authorities": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "schema",
+        "organization",
+        "steps",
+        "authorities"
+      ],
+      "additionalProperties": false
+    },
+    "ExecutionStep": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "actor": {
+          "type": "string"
+        },
+        "behavior": {
+          "type": "string"
+        },
+        "provider": {
+          "type": "string"
+        },
+        "runtime": {
+          "type": "string"
+        },
+        "endpoint": {
+          "type": "string"
+        },
+        "isolation": {
+          "type": "string"
+        },
+        "credentialRefs": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "instructionRenderer": {
+          "type": "string"
+        },
+        "sourceObligations": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "id",
+        "actor",
+        "behavior",
+        "provider",
+        "runtime",
+        "isolation",
+        "credentialRefs",
+        "sourceObligations"
+      ],
+      "additionalProperties": false
+    }
+  }
+}

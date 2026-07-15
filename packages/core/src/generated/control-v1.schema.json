@@ -1,0 +1,203 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://open-autonomy.dev/schema/ControlPlanIR.json",
+  "title": "Open Autonomy ControlPlanIR",
+  "$ref": "#/$defs/ControlPlanIR",
+  "$defs": {
+    "ControlPlanIR": {
+      "type": "object",
+      "properties": {
+        "schema": {
+          "const": "autonomy.control.v1"
+        },
+        "organization": {
+          "type": "string"
+        },
+        "contract": {
+          "$ref": "#/$defs/SemanticContractIR"
+        },
+        "actors": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/ControlActorPlan"
+          }
+        },
+        "work": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/ControlWorkPlan"
+          }
+        },
+        "enforcements": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "policy": {
+                "type": "string"
+              },
+              "provider": {
+                "type": "string"
+              },
+              "sourceObligations": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            },
+            "required": [
+              "policy",
+              "sourceObligations"
+            ],
+            "additionalProperties": false
+          }
+        }
+      },
+      "required": [
+        "schema",
+        "organization",
+        "contract",
+        "actors",
+        "work",
+        "enforcements"
+      ],
+      "additionalProperties": false
+    },
+    "SemanticContractIR": {
+      "type": "object",
+      "properties": {
+        "assumptions": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "guarantees": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "observations": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "object",
+            "properties": {
+              "schema": {
+                "type": "string"
+              },
+              "version": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "schema",
+              "version"
+            ],
+            "additionalProperties": false
+          }
+        }
+      },
+      "required": [
+        "assumptions",
+        "guarantees",
+        "observations"
+      ],
+      "additionalProperties": false
+    },
+    "ControlActorPlan": {
+      "type": "object",
+      "properties": {
+        "actor": {
+          "type": "string"
+        },
+        "behaviors": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "activation": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "authority": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "sourceObligations": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "actor",
+        "behaviors",
+        "activation",
+        "authority",
+        "sourceObligations"
+      ],
+      "additionalProperties": false
+    },
+    "ControlWorkPlan": {
+      "type": "object",
+      "properties": {
+        "workType": {
+          "type": "string"
+        },
+        "states": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "transitions": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "from": {
+                "type": "string"
+              },
+              "to": {
+                "type": "string"
+              },
+              "event": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "from",
+              "to",
+              "event"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "authority": {
+          "type": "string"
+        },
+        "sourceObligations": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "workType",
+        "states",
+        "transitions",
+        "sourceObligations"
+      ],
+      "additionalProperties": false
+    }
+  }
+}

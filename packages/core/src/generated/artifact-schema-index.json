@@ -1,0 +1,115 @@
+{
+  "schema": "autonomy.artifact-schema-index.v1",
+  "artifacts": [
+    {
+      "schema": "autonomy.organization.v2",
+      "root": "OrganizationIR",
+      "filename": "organization-ir-v2.schema.json"
+    },
+    {
+      "schema": "autonomy.ir.v1",
+      "root": "AutonomyIR",
+      "filename": "autonomy-ir-v1.schema.json"
+    },
+    {
+      "schema": "open-autonomy.autonomy.v1",
+      "root": "OAManifest",
+      "filename": "open-autonomy-manifest-v1.schema.json"
+    },
+    {
+      "schema": "autonomy.state.v1",
+      "root": "OrganizationStateIR",
+      "filename": "organization-state-v1.schema.json"
+    },
+    {
+      "schema": "autonomy.profile.v1",
+      "root": "OrganizationProfileIR",
+      "filename": "organization-profile-v1.schema.json"
+    },
+    {
+      "schema": "autonomy.deployment.v1",
+      "root": "DeploymentIR",
+      "filename": "deployment-v1.schema.json"
+    },
+    {
+      "schema": "autonomy.component.v2",
+      "root": "ComponentManifestV2",
+      "filename": "component-v2.schema.json"
+    },
+    {
+      "schema": "autonomy.adapter.v1",
+      "root": "AdapterContract",
+      "filename": "adapter-v1.schema.json"
+    },
+    {
+      "schema": "autonomy.event.v2",
+      "root": "PortableEventV2",
+      "filename": "event-v2.schema.json"
+    },
+    {
+      "schema": "autonomy.history.v1",
+      "root": "AcceptedCausalHistory",
+      "filename": "history-v1.schema.json"
+    },
+    {
+      "schema": "autonomy.normalized-organization.v1",
+      "root": "NormalizedOrganizationIR",
+      "filename": "normalized-organization-v1.schema.json"
+    },
+    {
+      "schema": "autonomy.control.v1",
+      "root": "ControlPlanIR",
+      "filename": "control-v1.schema.json"
+    },
+    {
+      "schema": "autonomy.execution.v1",
+      "root": "ExecutionPlanIR",
+      "filename": "execution-v1.schema.json"
+    },
+    {
+      "schema": "autonomy.native-plan.v1",
+      "root": "NativePlanIR",
+      "filename": "native-plan-v1.schema.json"
+    },
+    {
+      "schema": "open-autonomy.runtime-ledger.v1",
+      "root": "RuntimeLedgerCorpus",
+      "filename": "runtime-ledger-v1.schema.json"
+    },
+    {
+      "schema": "autonomy.hermes-controller.v1",
+      "root": "HermesControllerState",
+      "filename": "hermes-controller-v1.schema.json"
+    },
+    {
+      "schema": "autonomy.package.v1",
+      "root": "OrganizationPackageManifest",
+      "filename": "organization-package-v1.schema.json"
+    },
+    {
+      "schema": "autonomy.package-lock.v1",
+      "root": "OrganizationPackageLock",
+      "filename": "organization-package-lock-v1.schema.json"
+    },
+    {
+      "schema": "autonomy.registry-snapshot.v1",
+      "root": "RegistrySnapshot",
+      "filename": "registry-snapshot-v1.schema.json"
+    },
+    {
+      "schema": "autonomy.artifact-schema-index.v1",
+      "root": "ArtifactSchemaIndex",
+      "filename": "artifact-schema-index-v1.schema.json"
+    },
+    {
+      "schema": "open-autonomy.upgrade-plan.v1",
+      "root": "UpgradePlan",
+      "filename": "upgrade-plan-v1.schema.json"
+    },
+    {
+      "schema": "open-autonomy.generated.v1",
+      "root": "GeneratedManifest",
+      "filename": "generated-manifest-v1.schema.json"
+    }
+  ]
+}

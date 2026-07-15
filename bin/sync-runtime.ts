@@ -37,6 +37,10 @@ const DEV_ONLY = new Set([
   'bench-judge.ts', 'bench-coverage.ts', 'bench-coverage.test.ts', 'bench-operate.ts',
   // Packaging tooling: builds the published node CLI bundle — dev-only, never shipped into an install.
   'build-cli.ts',
+  // Package build tooling for the separately versioned local-runner CLI.
+  'build-local-runner-cli.ts',
+  // Runtime-phase proof-accounting initializer; produces repository evidence, not install machinery.
+  'initialize-runtime-ledgers.ts',
   // Packaging tooling (OA-18): the single declaration of the bundle's sibling DATA files, shared by
   // build-cli.ts (copies them into dist/) and bin/doctor-checks.ts (check 1 asserts they shipped). A
   // build-time manifest, never runtime — like build-cli.ts, excluded from the install runtime mirror.

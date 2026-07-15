@@ -34,7 +34,7 @@ issue/comment/PR comment
   -> developer skill agent (credentialed, scoped token)
   -> the agent edits code + opens its own PR with auto-merge queued
   -> CI
-  -> reviewer agent posts the agent-review status
+  -> reviewer agent returns a bound verdict; the substrate realizes agent-review
   -> native auto-merge lands it (ci + agent-review green); on failure the PM
      decides from history — re-develop with context, or escalate
 ```
@@ -224,9 +224,10 @@ Done:
   capabilities + triggers + timeout + result); the github substrate; the self-driving profile.
 - Every agent is a credentialed **skill** (developer, pm, reviewer, strategist, strategy-reviewer,
   planner) run as one job whose token is scoped to its capabilities (least privilege).
-- The agent acts directly: it edits code and opens its own PR with auto-merge queued; reviewers post
-  the `agent-review` status; pm sweeps + launches; planner reconciles issues; strategist proposes roadmap.
-- The merge boundary: `code:review` (statuses:write, bless) and `code:propose` (contents:write, push)
+- Most agent effects are direct: developers edit code/open PRs; pm sweeps + launches; planner reconciles
+  issues; strategist proposes roadmap. A GitHub Actions merge reviewer returns a bound verdict whose trusted
+  runner effect posts `agent-review` last, so a partial reviewer failure cannot leave green behind.
+- The merge boundary: `code:review` (bless) and `code:propose` (contents:write, push)
   are never held by one agent; no agent can merge; branch protection + native auto-merge land a PR once
   `ci` + `agent-review` are green.
 - Bounded model proxy: OIDC-minted per-run tokens with spend/request caps (the budget guard); no

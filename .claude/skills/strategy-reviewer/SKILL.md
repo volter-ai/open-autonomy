@@ -18,9 +18,9 @@ apart by the diff:
   fabricate execution status (`status: active`/`done` is derived from issues, never written), and must not
   touch governance files.
 
-**Post your verdict yourself** as the `agent-review` commit status. You hold `statuses: write` and
-`issues: write`, and deliberately **no** `contents: write` — so you cannot merge. GitHub auto-merge lands the
-PR once `ci` and `agent-review` are green.
+You hold `code:review` and deliberately **no** `contents: write`, so you cannot merge. Write a bound review
+result; the runner's separate trusted effect persists it and posts `agent-review` last. GitHub auto-merge
+lands only after the required checks are green.
 
 The PR number is in the `TARGET_REF` environment variable.
 
@@ -31,14 +31,14 @@ The PR number is in the `TARGET_REF` environment variable.
    - **Scope guard:** review only roadmap proposals — PRs whose changed files are entirely within
      `.open-autonomy/roadmap.yml` + `.open-autonomy/strategist-archive.json`, ignoring any generated
      `.open-autonomy/history/**` run record (the strategist's own transcript, informational — not part of the
-     proposal). If the PR touches anything else (a code change), it is the code reviewer's job — exit without
-     posting a status.
+     proposal). If the PR touches anything else (a code change), it is the code reviewer's job — return
+     `skip` / `not-applicable`.
    - `gh pr diff "$TARGET_REF"` — the roadmap change. **Classify by the diff:** if it adds any item with
      `proposed: true`, treat it as a strategist proposal; otherwise it is a planner operational edit.
    - Read `docs/CONSTITUTION.md` and `.open-autonomy/strategy-rubric.yml` from the checkout.
 2. **Governance check (hard, both kinds):** the change may only touch `.open-autonomy/roadmap.yml` (+ for a
    strategist proposal, the idea archive). If it touches the constitution, merit criteria, proof gates,
-   workflows, or skills → post failure + label `human-required`; never ratify.
+   workflows, or skills → return failure / human-required; never ratify.
 3. Judge by kind:
    - **Strategist proposal:** for each new item check north-star alignment, merit, cited evidence,
      falsifiability, and non-redundancy. Pass / fail / human-required.
@@ -46,11 +46,10 @@ The PR number is in the `TARGET_REF` environment variable.
      item, no hand-written execution status, ids stay coherent, edits (decomposition/`planned`/ordering/
      wording) are consistent with the constitution and the items already ratified. Pass if consistent; fail
      with a specific reason otherwise. Do not apply the merit rubric to an operational edit.
-4. **Post the verdict** to the head SHA (`SHA` = headRefOid), to the repo (`gh` fills `{owner}/{repo}` from the
-   remote — works on GitHub Actions and a local runner alike; no `GITHUB_REPOSITORY` needed):
-   - Pass: `gh api -X POST "repos/{owner}/{repo}/statuses/$SHA" -f state=success -f context=agent-review -f description="<reason>"`
-   - Fail / human-required: `... -f state=failure -f context=agent-review ...` (and `gh pr edit "$TARGET_REF" --add-label human-required` when human-required).
-5. Comment the verdict + findings: `gh pr comment "$TARGET_REF" --body "Strategy review: <pass|fail>. <summary>"`.
+4. Write the required `open-autonomy.review.v1` JSON result to `$OSS_AGENT_REVIEW_RESULT_PATH`, using the
+   runner-provided schema and binding it to this PR + exact 40-character head SHA. Use success / approved for
+   a pass, failure / changes-requested or human-required for a rejection or escalation, and skip /
+   not-applicable only outside this lane. Do not post statuses, comments, or labels yourself.
 
 ## Constraints
 

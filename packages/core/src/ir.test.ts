@@ -104,8 +104,14 @@ describe('validateIR — code:merge is gate-only (the merge boundary)', () => {
 describe('validateIR — the review edge (deterministic routing target)', () => {
   test('accepts a proposer whose review names an independent code:review agent', () => {
     const dev = agent({ capabilities: ['code:propose'], review: 'rev' });
-    const rev = agent({ capabilities: ['code:review'] });
+    const rev = agent({ capabilities: ['code:review'], triggers: [{ dispatch: true, params: { TARGET_REF: 'subject.ref' } }] });
     expect(validateIR(ir({ dev, rev }))).toEqual([]);
+  });
+
+  test('rejects a merge reviewer that cannot receive the proposal subject', () => {
+    const dev = agent({ capabilities: ['code:propose'], review: 'rev' });
+    const rev = agent({ capabilities: ['code:review'] });
+    expect(validateIR(ir({ dev, rev })).some((e) => e.includes('must declare a trigger param sourced from subject.ref'))).toBe(true);
   });
 
   test('rejects review naming an unknown agent', () => {

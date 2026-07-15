@@ -11,7 +11,7 @@ import { join, resolve } from 'node:path';
 import { runClaudeAgent } from './agent.js';
 import { renderTranscript, redactSensitive } from './transcript.js';
 
-type Options = { issue?: string; context?: string; model: string; skill?: string; runId?: string };
+type Options = { issue?: string; context?: string; model: string; skill?: string; runId?: string; reviewResult?: string };
 
 const root = resolve(import.meta.dir, '..');
 
@@ -33,6 +33,7 @@ function parseArgs(argv: string[]): Options {
     model: argValue(argv, '--model') ?? process.env.PUBLIC_AGENT_MODEL ?? 'deepseek/deepseek-v4-flash',
     skill: argValue(argv, '--skill') ?? process.env.OSS_AGENT_SKILL_PATH,
     runId: argValue(argv, '--run-id'),
+    reviewResult: argValue(argv, '--review-result') ?? process.env.OSS_AGENT_REVIEW_RESULT_PATH,
   };
 }
 
@@ -60,7 +61,7 @@ function readIssue(issuePath: string): { number?: number; title?: string; body?:
   }
 }
 
-function buildPrompt(issuePath: string | undefined, taskDir: string, contextPath?: string, skillPath?: string): string {
+function buildPrompt(issuePath: string | undefined, taskDir: string, contextPath?: string, skillPath?: string, reviewResult?: string): string {
   const issue = issuePath ? readIssue(issuePath) : {};
   const context = contextPath && existsSync(contextPath) ? readFileSync(contextPath, 'utf8') : '';
   // The agent's role/instructions come from its skill (the per-agent variable); the rest is the universal
@@ -100,6 +101,18 @@ function buildPrompt(issuePath: string | undefined, taskDir: string, contextPath
     '- Do not read, print, or persist secrets.',
     '- Prefer focused checks over broad, slow commands.',
     '- Leave GitHub workflow/security-sensitive files alone unless your subject explicitly asks for them.',
+    ...(reviewResult ? [
+      '',
+      'Trusted review-effect boundary:',
+      '- You make the review judgment, but a separate trusted job publishes statuses, comments, and labels.',
+      '- Do NOT post commit statuses, PR comments, or labels yourself; your token intentionally cannot do so.',
+      `- Write exactly one JSON object to ${reviewResult} before you finish. It must have:`,
+      '  schema="open-autonomy.review.v1"; pr=<positive PR number>; headSha=<40-char SHA you reviewed>;',
+      '  verdict="success"|"failure"|"skip"; outcome="approved"|"changes-requested"|"human-required"|"not-applicable";',
+      '  summary=<concise string>; findings=<string[]>; humanApprovalRequired=<boolean>.',
+      '- success requires outcome=approved; failure requires changes-requested or human-required; skip requires not-applicable.',
+      '- Use skip only when the PR is outside your declared review lane. Missing/invalid output fails the review closed.',
+    ] : []),
     '',
     'If you change code, write a short PR summary (what changed + tests run) to',
     `${taskDir}/artifacts/pr.md so it becomes the pull request body.`,
@@ -119,7 +132,8 @@ async function main(): Promise<void> {
 
   const issuePath = options.issue ? resolve(options.issue) : undefined;
   const contextPath = options.context ? resolve(options.context) : undefined;
-  const prompt = buildPrompt(issuePath, taskDir, contextPath, options.skill ? resolve(options.skill) : undefined);
+  const reviewResult = options.reviewResult ? resolve(options.reviewResult) : undefined;
+  const prompt = buildPrompt(issuePath, taskDir, contextPath, options.skill ? resolve(options.skill) : undefined, reviewResult);
 
   // Claude Code talks the Anthropic Messages wire; point it at the bounded proxy and authenticate with the
   // minted run token — no provider key in the sandbox. Full tools, scoped by the job's own permissions.

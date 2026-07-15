@@ -1,7 +1,7 @@
 #!/usr/bin/env bun
 // The `human-approval` gate — a DETERMINISTIC, ADDITIONAL required check (alongside ci + agent-review). It is
 // the github realization of the actor model's human REVIEW task: a maintainer Approve on the CURRENT head SHA,
-// required ONLY for PRs that touch human-required scope (sensitive paths, or the `human-required` label).
+// required ONLY for PRs that touch human-required scope (sensitive paths or an approval-routing label).
 //
 // Why deterministic/script (vs an agent): it IS a security boundary — "did a maintainer approve this exact
 // head?" must not be a model judgment. AI review stays required separately (agent-review); this only adds the
@@ -32,6 +32,10 @@ export const isMaintainerPermission = (perm: string): boolean => perm === 'admin
 // a governance hold would conflate "review found defects" with "merge is held"). The gate treats it exactly
 // like `human-required` on the PR itself.
 export const DEVELOP_ONLY_LABEL = 'agent-develop-only';
+// Unlike `human-required`, this is NOT a merge/re-arm hold. It records only that a sound agent review routed
+// the PR through this additional gate. Keeping the meanings separate avoids a label that both asks for
+// approval and prevents the approved PR from ever being armed.
+export const HUMAN_APPROVAL_REQUIRED_LABEL = 'human-approval-required';
 
 // The develop-only decision from one linked issue's label lookup. FAILS CLOSED: this gate is a security
 // boundary, so an UNREADABLE label set (null — e.g. the workflow token lacks issues:read) scopes the PR
@@ -68,6 +72,10 @@ export function loadHumanRequiredGlobs(root = '.'): Bun.Glob[] {
 export function isSensitivePath(f: string, globs: Bun.Glob[]): boolean {
   if (f.startsWith('.open-autonomy/history/')) return false;
   return globs.some((g) => g.match(f));
+}
+export function requiresHumanApproval(labels: string[], developOnly: boolean, files: string[], globs: Bun.Glob[]): boolean {
+  return labels.includes('human-required') || labels.includes(HUMAN_APPROVAL_REQUIRED_LABEL)
+    || developOnly || files.some((f) => isSensitivePath(f, globs));
 }
 
 if (import.meta.main) {
@@ -136,8 +144,7 @@ if (import.meta.main) {
     }
     return developOnlyFromLookup(issueLabels);
   });
-  const scoped =
-    labels.includes('human-required') || developOnly || files.some((f) => isSensitivePath(f, HUMAN_REQUIRED_GLOBS));
+  const scoped = requiresHumanApproval(labels, developOnly, files, HUMAN_REQUIRED_GLOBS);
 
   // Does this login have maintainer (write+) permission on the repo? Verified per review event — one extra API
   // call, and the only trustworthy signal (see the qualifies() note on author_association).

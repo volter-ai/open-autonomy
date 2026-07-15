@@ -187,8 +187,9 @@ export function validateIR(ir: AutonomyIR): string[] {
     for (const cap of capBases)
       if (cap === 'code:merge')
         errors.push(`agent ${name}: code:merge is gate-only — no agent may merge`);
-    // The merge boundary itself: bless (code:review = statuses:write) and propose (code:propose =
-    // contents:write) are deliberately split so no single agent can write code AND certify it. Enforce it
+    // The merge boundary itself: bless (code:review) and propose (code:propose) are deliberately split so
+    // no single agent can write code AND certify it. A substrate may finalize the bound review result with
+    // its own status credential; the reviewer still owns the judgment. Enforce the authority split
     // here, not by convention (docs/SPEC.md#capabilities — the merge boundary).
     if (capBases.includes('code:review') && capBases.includes('code:propose'))
       errors.push(`agent ${name}: merge boundary — no agent may hold both code:review and code:propose`);
@@ -206,6 +207,10 @@ export function validateIR(ir: AutonomyIR): string[] {
         if (!reviewer) errors.push(`agent ${name}: review names unknown agent '${a.review}'`);
         else if (!(reviewer.capabilities ?? []).some((c) => typeof c === 'string' && c.split('@')[0] === 'code:review'))
           errors.push(`agent ${name}: review target '${a.review}' must hold code:review`);
+        else if (!(reviewer.triggers ?? []).some((trigger) =>
+          Object.values((trigger as { params?: Record<string, string> }).params ?? {}).includes('subject.ref'))) {
+          errors.push(`agent ${name}: review target '${a.review}' must declare a trigger param sourced from subject.ref`);
+        }
       }
     }
     // prelaunch is opaque shell-command DATA (docs/SPEC.md#the-runner) — validated only for shape (a

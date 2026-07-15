@@ -61,7 +61,8 @@ leaking into the agent runners; it's now a resource, decoupled from any agent ru
     `merge`) — it no longer arms auto-merge inline.
 - agent-runtime scripts: `claude-agent-run.ts` + `agent.ts` (the credentialed skill runner),
   `model-proxy-*` (token mint/exchange/revoke), `runner.ts`, `transcript.ts`, `agent-visual-verify.ts`,
-  `agent-propose.ts` — ONLY actor-execution machinery (the runner: which box, how it's wrapped, the
+  `agent-propose.ts`, `finalize-agent-review.ts` — ONLY actor-execution machinery (the runner: which box,
+  how capabilities are safely realized, how it's wrapped, the
   scoped token). Nothing else rides the mirror.
 - `.github/zizmor.yml`, `.open-autonomy/human-required-paths.json` (derived data)
 

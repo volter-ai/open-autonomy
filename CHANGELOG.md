@@ -7,6 +7,8 @@
 - Reviewer runs now wait for live required checks before model judgment, route mechanical failures back
   to rework instead of parking them on a person, allocate no bounded model run when those checks fail, and
   require a durable typed ask for genuine human decisions.
+- Human-approval re-evaluations now serialize instead of cancelling an in-flight required check, preventing
+  a valid exact-head authorization from remaining merge-blocked by a cancelled duplicate context.
 
 ## 0.4.2
 

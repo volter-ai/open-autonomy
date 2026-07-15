@@ -9,6 +9,10 @@ full 18-item adoption-fixes backlog (OA-01..OA-18) that closed that gap, the `si
 hardening, and a new bundled profile for locally-run agents landing PRs on GitHub.
 
 ### Fixed
+- **Local runner one-shot controls and session bootstrap reconciliation.** `oa once` and `oa dispatch`
+  now honor declared concurrency and fence controls, manual dispatch preserves the selected schedule job's
+  provider/env/singleton contract, and newly launched workspace leases plus completion effects survive the
+  bounded interval before a provider first exposes the terminal through `list`.
 - **Broken npm publish (OA-01).** `prepublishOnly` now runs `check:release-consistency` +
   `check:pack-smoke` — the packed tarball is installed into a throwaway project and every CLI verb is run
   under plain `node`, from the packed artifact, never the source tree — so a repeat of the missing-file

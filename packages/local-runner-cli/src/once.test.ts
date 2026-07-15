@@ -15,7 +15,7 @@ function tmpRepo(schedule: object): string {
   return dir;
 }
 
-describe('oa once — fires each currently unfenced job once, with no cadence state', () => {
+describe('oa once — makes one capacity-controlled pass with no cadence state', () => {
   test('a legacy pause fence skips its job before runner preflight', async () => {
     const dir = tmpRepo({ intervalSeconds: 900, scripts: ['AUTONOMY_AGENT=manager node scripts/run-agent.mjs'] });
     try {
@@ -68,6 +68,29 @@ describe('oa once — fires each currently unfenced job once, with no cadence st
       expect(r.ok).toBe(true);
       expect(r.fired).toBe(2);
       expect(stub.calls.filter((c) => c.cmd.startsWith('bun ')).length).toBe(2);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test('a one-shot pass honors maxConcurrent instead of launching every eligible agent', async () => {
+    const dir = tmpRepo({
+      maxConcurrent: 1,
+      jobs: [
+        { name: 'one', agent: 'one', command: 'node scripts/one.mjs', intervalSeconds: 900 },
+        { name: 'two', agent: 'two', command: 'node scripts/two.mjs', intervalSeconds: 900 },
+      ],
+    });
+    try {
+      const stub = new StubProc()
+        .on(() => true, () => ok(''))
+        .onArgs('node', [join(dir, 'scripts', 'autonomy-runner.mjs'), 'list'], () => ok('[]'));
+      const r = await once({ cwd: dir, proc: stub.runner });
+      expect(r.ok).toBe(true);
+      expect(r.fired).toBe(1);
+      expect(r.reason).toContain('1 job(s) deferred by maxConcurrent=1');
+      expect(stub.calls.some((call) => call.cmd === 'node scripts/one.mjs')).toBe(true);
+      expect(stub.calls.some((call) => call.cmd === 'node scripts/two.mjs')).toBe(false);
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }

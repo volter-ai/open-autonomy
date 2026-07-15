@@ -567,10 +567,11 @@ on the result" is the agent using its own capabilities.
 The github substrate computes permissions from capabilities. Ordinary effects remain direct. For the
 reviewer named by a proposer's `review:` edge, setup binds the PR/current SHA and invalidates stale green;
 the runner waits for live required mechanical checks (excluding its own review context and any independent
-human-approval gate), then the read-only model writes `open-autonomy.review.v1`. A failed prerequisite emits
-a bound `changes-requested` result without model judgment. A separate base-branch job validates and persists
-the effects, posting green last; a valid human task is recorded before its parked label. Missing output,
-model failure, stale binding, or partial effects never produces a current-head green. Landing remains native
+human-approval gate), and only then mints the bounded model token and lets the read-only model write
+`open-autonomy.review.v1`. A failed prerequisite allocates no model run and emits a bound
+`changes-requested` result without model judgment. A separate base-branch job validates and persists the
+effects, posting green last; a valid human task is recorded before its parked label. Missing output, model
+failure, stale binding, or partial effects never produces a current-head green. Landing remains native
 auto-merge gated by required checks.
 
 `config.permissions` does not exist; gh permission blocks are *computed*, never written in the IR.

@@ -427,6 +427,14 @@ function wrapperYml(
         `          mkdir -p .agent-run`,
         `          printf '{"number":0,"title":${JSON.stringify(name)},"body":""}\\n' > .agent-run/issue.json`,
       ];
+  // --max-requests is a runaway-loop guard, NOT the cost bound (--max-usd-cents is). 60 was too low for the
+  // orchestrator: the PM reviews the WHOLE board and routinely needs >60 calls. Keep 250 as the secondary
+  // guard so the dollar cap remains the primary bound.
+  const mintModelToken = (condition?: string): string[] => [
+    `      - name: Mint bounded model token`,
+    ...(condition ? [`        if: ${condition}`] : []),
+    `        run: bun scripts/model-proxy-mint.ts --run-id "${RID}" --models "${varOr('PUBLIC_AGENT_MODEL', gh.model)}" --max-usd-cents "\${{ vars.PUBLIC_AGENT_MAX_USD_CENTS || '200' }}" --max-requests "\${{ vars.PUBLIC_AGENT_MAX_REQUESTS || '250' }}" --issue .agent-run/issue.json`,
+  ];
   const reviewTarget = finalizesMergeReview && refParam ? [
     `      - name: Bind review target`,
     `        id: review_target`,
@@ -491,11 +499,13 @@ function wrapperYml(
       `      review_pr: \${{ steps.review_target.outputs.pr }}`,
       `      review_sha: \${{ steps.review_target.outputs.sha }}`,
     ] : []),
-    `    permissions: { contents: read, issues: read, pull-requests: read, id-token: write }`,
+    `    permissions: { contents: read, issues: read, pull-requests: read${finalizesMergeReview ? '' : ', id-token: write'} }`,
     `    env:`,
     `      GH_TOKEN: \${{ github.token }}`,
-    `      MODEL_PROXY_URL: \${{ vars.MODEL_PROXY_URL }}`,
-    `      MODEL_PROXY_OIDC_AUDIENCE: ${varOr('MODEL_PROXY_OIDC_AUDIENCE', gh.oidc_audience)}`,
+    ...(!finalizesMergeReview ? [
+      `      MODEL_PROXY_URL: \${{ vars.MODEL_PROXY_URL }}`,
+      `      MODEL_PROXY_OIDC_AUDIENCE: ${varOr('MODEL_PROXY_OIDC_AUDIENCE', gh.oidc_audience)}`,
+    ] : []),
     ...triggerParamsEnv(agent),
     `    steps:`,
     ...hardenRunner(gh),
@@ -505,13 +515,7 @@ function wrapperYml(
     `      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0`,
     `      - run: bun install --frozen-lockfile`,
     ...buildIssue,
-    `      - name: Mint bounded model token`,
-    // --max-requests is a runaway-loop guard, NOT the cost bound (--max-usd-cents is). 60 was too low for the
-    // orchestrator: the PM reviews the WHOLE board (every issue + PR + run session) and routinely needs >60
-    // model calls, so it would hit the cap mid-sweep, the proxy would reject the next call, and the CLI would
-    // exit non-zero — the run reported "failure" even though its work (triage, routing, reaping) succeeded.
-    // Raise to 250 so the $ cap is what actually bounds a run; a runaway is still stopped by --max-usd-cents.
-    `        run: bun scripts/model-proxy-mint.ts --run-id "${RID}" --models "${varOr('PUBLIC_AGENT_MODEL', gh.model)}" --max-usd-cents "\${{ vars.PUBLIC_AGENT_MAX_USD_CENTS || '200' }}" --max-requests "\${{ vars.PUBLIC_AGENT_MAX_REQUESTS || '250' }}" --issue .agent-run/issue.json`,
+    ...(!finalizesMergeReview ? mintModelToken() : []),
     // The agent job's token is scoped to its capabilities (docs/SPEC.md#capabilities). A merge reviewer is
     // further narrowed to read-only because the trusted effect owns status/comment publication.
     `  ${name}:`,
@@ -546,6 +550,7 @@ function wrapperYml(
       `        env:`,
       `          GH_TOKEN: \${{ github.token }}`,
       `        run: bun scripts/review-prerequisites.ts --pr "\${{ needs.setup.outputs.review_pr }}" --sha "\${{ needs.setup.outputs.review_sha }}" --result .agent-run/artifacts/result.json --github-output "$GITHUB_OUTPUT"${humanApprovalWorkflow ? ' --parallel human-approval' : ''}`,
+      ...mintModelToken("steps.review_prerequisites.outputs.run_model == 'true'"),
     ] : []),
     ...(finalizesMergeReview ? [
       `      - name: install Claude Code CLI`,
@@ -593,7 +598,7 @@ function wrapperYml(
     // slot silently (it only self-heals at token TTL ~2h, and slots are a scarce shared cap). Retry, and if it
     // still fails, surface it loudly — but stay non-fatal (the run's real work succeeded; TTL is the backstop).
     `      - name: Release the run slot (revoke minted token)`,
-    `        if: always()`,
+    `        if: ${finalizesMergeReview ? "always() && steps.review_prerequisites.outputs.run_model == 'true'" : 'always()'}`,
     `        run: |`,
     `          for i in 1 2 3 4 5; do bun scripts/model-proxy-revoke.ts --run-id "${RID}" && exit 0 || sleep 3; done`,
     `          echo "::warning::run-slot revoke failed after retries for ${RID}; slot will auto-reap at token TTL"`,

@@ -1,6 +1,6 @@
 # Autonomous Organization Runtime implementation acceptance and proof specification
 
-Status: normative planning specification for the phase after Organization IR B0–P13. No R0–R24 checkpoint is
+Status: normative planning specification for the phase after Organization IR B0–P13. No R0–R28 checkpoint is
 implemented or complete merely because it is specified here.
 
 The stable formal obligations for every checkpoint are instantiated in
@@ -45,7 +45,7 @@ The system must preserve these separations:
 
 ## Global closure rules
 
-Every item R0–R24 must include the review card from [`ORGANIZATION-IR-AC.md`](./ORGANIZATION-IR-AC.md), plus:
+Every item R0–R28 must include the review card from [`ORGANIZATION-IR-AC.md`](./ORGANIZATION-IR-AC.md), plus:
 
 ```text
 Live-system claim:
@@ -74,31 +74,39 @@ Every checkpoint must:
 
 ## Dependency spine
 
-```text
-R0
- ├─ R1 ─ R2 ─ R3 ─ R4
- ├─ R5 ─ R6 ─ R7 ─ R8 ─┬─ R9 ─ R10 ─ R11
- │                       └─ R12 ─ R13
- ├─ R14 ─ R15 ─ R16 ─ R17
- └─ R18 ─ R19 ─ R20 ─ R21 ─ R22 ─ R23 ─ R24
+The authoritative dependency graph is
+[`organization-runtime-punchlist.json`](./organization-runtime-punchlist.json). Checkpoint dependencies and milestone
+membership are machine-checked against it. Rendered summary:
 
-Cross-gates: R4 + R8 + R11 + R13 + R17 feed R18; R18–R20 feed R21; R21–R23 feed R24.
+```text
+R0 → specification/compiler R1–R8
+R8 → migration R9; identity R10 → worker R11; native adapters R12–R14
+R8/R10/R11/R14 → live substrates R15–R16
+R8/R10 → registry R17 → event store R18 → reconciler R19 → command plane R20 → SRE R21
+R3/R4/R8/R10/R11/R14/R16/R20/R21 → bench R22 → measures R23 → matched run R24
+R19/R23/R24 → twin R25 → planner R26 → experiments R27 → bounded improvement R28
 ```
 
 Parallel work is permitted only where the dependency relation allows it. A downstream checkpoint cannot use a mock
 of an unfinished upstream guarantee as completion evidence.
 
-## Required formal-lens coverage
+## Formal-lens routing summary
+
+This table is an aggregate routing aid, not a claim that every lens applies to every item in a range. The per-item
+rows in `ORGANIZATION-RUNTIME-LENS-AUDIT.md` are authoritative and machine-inventoried.
 
 | Item | Minimum lenses |
 |---|---|
 | R0 baseline | Semantic, refinement, security, distributed, operational, adversarial |
 | R1–R4 public standard | Semantic, type, algebraic, compiler, evolution, interoperability, formal verification |
 | R5–R8 SDK/compiler | Compiler, refinement, constraint solving, provenance, security, operational, adversarial |
-| R9–R13 native substrates | Distributed, temporal, refinement, interoperability, operational, security, economic |
-| R14–R17 control plane | Database, distributed, epistemic, HCI, organizational, security, operational |
-| R18–R20 bench/measurement | Measurement theory, statistics, information flow, economic, queueing, adversarial |
-| R21–R24 twin/optimization | Control, queueing, causal inference, decision theory, formal verification, HCI, security |
+| R9 migration | Semantic, refinement, compiler, evolution, operational, HCI |
+| R10 identity | Security, trust, distributed, operational, database/provenance, adversarial |
+| R11 worker execution | Semantic, context, distributed, security, operational, HCI, economic |
+| R12–R16 native substrates | Distributed, temporal, refinement, interoperability, operational, security, economic |
+| R17–R21 control plane/SRE | Database, distributed, epistemic, HCI, organizational, security, operational |
+| R22–R24 bench/measurement | Measurement theory, statistics, information flow, economic, queueing, adversarial |
+| R25–R28 twin/optimization | Control, queueing, causal inference, decision theory, formal verification, HCI, security |
 
 “Measurement theory,” “statistics,” “causal inference,” and “decision theory” are required only where quantitative
 claims are made. Each such claim must define its variables, estimand, population, uncertainty, and invalidating
@@ -113,7 +121,7 @@ conditions. Information-theoretic language is allowed only with defined random v
 **Engineering ACs.** Re-run the full closure gate on a clean checkout; freeze public semantic digests and fixture
 corpus; inventory all experimental APIs, trust boundaries, credentials, tenants, external effects, personal data,
 and live-provider assumptions; produce STRIDE-style threats plus distributed failure and economic-abuse models;
-assign every finding to R1–R24 or explicitly reject it with rationale; prohibit unowned residuals.
+assign every finding to R1–R28 or explicitly reject it with rationale; prohibit unowned residuals.
 
 **Evidence.** Reproducible baseline manifest, API/fixture hashes, threat model, residual-owner ledger, two independent
 skeptical reviews.
@@ -150,7 +158,7 @@ revocation tests, deterministic package digest across implementations.
 
 ## R3. Conformance specification and technology compatibility kit
 
-**Depends on:** R1–R2.
+**Depends on:** R1, R2.
 
 **Engineering ACs.** Define language, compiler, component, adapter, substrate, event-lifting, replay, and live-runtime
 conformance levels; publish machine-readable test manifests and expected evidence; distinguish mandatory, optional,
@@ -164,20 +172,21 @@ signed result bundle format.
 
 ## R4. Independent implementation and specification compatibility
 
-**Depends on:** R1–R3.
+**Depends on:** R1, R2, R3.
 
 **Engineering ACs.** Build or commission a minimal independent parser/normalizer/checker in a second language or
 codebase; exchange locked corpora; compare canonical bytes, diagnostics classes, semantic hashes, and migration
-results; classify every difference; establish compatibility and deprecation windows.
+results; define which specification, examples, tests, discussions, and implementation artifacts clean-room authors may
+inspect and record exposure; classify every difference; establish compatibility and deprecation windows.
 
-**Evidence.** Differential corpus run by separate toolchains, residual report at zero untriaged differences, external
-author feedback.
+**Evidence.** Differential corpus run by separate toolchains, author exposure/contamination record, residual report at
+zero untriaged differences, external author feedback.
 
 **Falsifier.** The specification is only implementable by reading private behavior of the TypeScript compiler.
 
 ## R5. Stable compiler API and artifact protocol
 
-**Depends on:** R1–R2.
+**Depends on:** R1, R2.
 
 **Engineering ACs.** Stabilize parse/link/normalize/analyze/solve/lower/emit/lift/replay interfaces; define immutable
 artifact envelopes, pass capabilities, cancellation, resource budgets, diagnostic streaming, cache keys, incremental
@@ -203,7 +212,7 @@ passes the appropriate TCK levels; forbidden dependency-direction test.
 
 ## R7. Deployment solver v2 and explainable planning
 
-**Depends on:** R5–R6.
+**Depends on:** R5, R6.
 
 **Engineering ACs.** Add version/region/tenant/topology/cardinality/capacity/SLO/data-residency/credential/upgrade and
 cost constraints; support Pareto frontiers rather than one scalar score; return minimal or classified unsatisfied
@@ -217,7 +226,7 @@ cores, stable Pareto ordering, stale-evidence rejection.
 
 ## R8. Reproducible deployment bundles and supply-chain security
 
-**Depends on:** R5–R7.
+**Depends on:** R5, R6, R7.
 
 **Engineering ACs.** Emit content-addressed deployment bundles containing canonical inputs, locks, selected manifests,
 lowering certificates, native artifacts, SBOM, provenance, policies, secret references, migrations, health probes,
@@ -229,9 +238,61 @@ secret scanner, environment-promotion differential.
 
 **Falsifier.** The running deployment cannot be traced to one immutable organization and compiler input set.
 
-## R9. Native MCP adapter suite
+## R9. Legacy migration, shadow compilation, and dogfood cutover
+
+**Depends on:** R1, R5, R8.
+
+**Engineering ACs.** Define a versioned frontend from supported `autonomy.ir.v1` profiles/installations into
+Organization IR v2; report exact equivalence, retained dialect, and loss per construct; dual-compile the real bundled
+profiles and compare emitted installations and observable behavior; shadow the self-driving organization before a
+staged cutover; preserve public commands and owned state; provide rollback to the prior compiler/runtime and explicit
+criteria for removing the legacy path.
+
+**Evidence.** Full real-profile migration corpus, v1/v2 differential compilation, shadow-run traces, one reversible
+dogfood canary, state/command compatibility tests, rollback drill, and zero untriaged migration residuals.
+
+**Falsifier.** The v2 platform is called adopted while the canonical self-driving organization still executes through
+an unobserved semantically distinct v1 path.
+
+## R10. Identity, secrets, and credential lifecycle plane
 
 **Depends on:** R6, R8.
+
+**Engineering ACs.** Implement tenant-scoped human, service, workload, provider-account, worker, and session identity;
+federation and explicit account linking; short-lived credential issuance/exchange, least-scope derivation, secret-store
+references, rotation, revocation, expiry, break-glass, audit, and deletion; bind credentials to deployment, actor,
+attempt, worker, repository/resource, and effect; define compromised-worker containment and behavior of queued,
+in-flight, replayed, and restored operations after revocation.
+
+**Evidence.** Identity graph and authorization tests, real secret-store integration, cross-tenant/confused-deputy/token-
+replay attacks, rotation during active work, immediate and partition-delayed revocation drills, break-glass use/revoke
+audit, backup restore with revoked credentials, and proof that bundles/logs contain no secret material.
+
+**Falsifier.** A credential remains usable for a new privileged effect after its revocation is authoritative and visible
+under the declared consistency model.
+
+## R11. Portable worker, coding-session, and model-execution layer
+
+**Depends on:** R6, R8, R10.
+
+**Engineering ACs.** Define and implement a worker-provider contract for launch, resume, inspect, heartbeat, question,
+answer, checkpoint, cancel, timeout, reclaim, and teardown; keep actor, behavior, attempt, claim, worker process, harness
+session, model endpoint, repository/worktree, account, and credential distinct; deliver content-addressed prompts,
+skills, policies, tools, context plans, token budgets, and output schemas; support Codex and at least one dissimilar
+coding harness; enforce filesystem/process/network/repository isolation; lift usage, questions, artifacts, evidence,
+and failures without trusting self-report.
+
+**Evidence.** Worker TCK, two harness adapters, session restart/resumption and lost-worker schedules, stale-fence and
+wrong-session attacks, prompt/skill/context digest verification, credential-scope and worktree-isolation tests,
+question round trip through a typed interaction test adapter, model/version attribution, cost conservation, and artifact
+verification independent of the worker.
+
+**Falsifier.** A resumed harness session can act for a different attempt, repository, actor, or credential scope because
+conversation identity was treated as execution authority.
+
+## R12. Native MCP adapter suite
+
+**Depends on:** R6, R8, R10.
 
 **Engineering ACs.** Implement negotiated native MCP transport and lifecycle for the pinned protocol revision; map
 tools, resources, prompts, elicitation, cancellation, progress, and errors only within declared subsets; preserve
@@ -243,9 +304,9 @@ subsets, typed losses elsewhere, version negotiation and downgrade rejection.
 
 **Falsifier.** Discovering an MCP tool or prompt grants organizational authority not present in the deployment.
 
-## R10. Native A2A and Agent Spec adapters
+## R13. Native A2A and Agent Spec adapters
 
-**Depends on:** R6, R8.
+**Depends on:** R6, R8, R10.
 
 **Engineering ACs.** Implement A2A agent-card discovery, messages, tasks, artifacts, streaming, cancellation, and
 input-required projection; implement Oracle Agent Spec behavior/flow import/export for the exact supported release;
@@ -257,9 +318,9 @@ lossy/nonlossy round trips, SSRF and schema-exhaustion tests.
 
 **Falsifier.** A remote card or serialized agent becomes a trusted organizational actor solely by being well formed.
 
-## R11. Native event, telemetry, workflow, and policy adapters
+## R14. Native event, telemetry, workflow, and policy adapters
 
-**Depends on:** R6, R8.
+**Depends on:** R6, R8, R10.
 
 **Engineering ACs.** Implement CloudEvents envelopes and selected bindings, OpenTelemetry traces/metrics/logs,
 Serverless Workflow lowering, and OPA/Rego enforcement interfaces; preserve trace versus control causality,
@@ -271,9 +332,9 @@ workflow preservation certificates, policy allow/deny/undefined/error fixtures.
 
 **Falsifier.** A valid event/span is accepted as verified organizational completion without an authorized lift.
 
-## R12. Live Hermes substrate implementation
+## R15. Live Hermes substrate implementation
 
-**Depends on:** R6–R8.
+**Depends on:** R8, R10, R11, R14.
 
 **Engineering ACs.** Replace proof-only composition with a supported Hermes provider implementing manifest discovery,
 deployment, configuration, durable work/control, worker execution integration, Slack interaction, health, upgrades,
@@ -284,23 +345,23 @@ rollback drills, identified run traces, zero manual hidden state.
 
 **Falsifier.** Recovery depends on model conversation memory or an operator command absent from the deployment plan.
 
-## R13. Live Paperclip substrate implementation
+## R16. Live Paperclip substrate implementation
 
-**Depends on:** R6–R8.
+**Depends on:** R8, R10, R11, R14.
 
 **Engineering ACs.** Implement Paperclip as an independently deployable work/control provider with separate worker and
 interaction providers; cover issue checkout, heartbeat, recovery, approvals, hierarchy, budgets, events, upgrades,
 lifting, and teardown; map native states without adding them to Organization IR; document stronger assumptions and
 weaker guarantees.
 
-**Evidence.** Same live TCK and fault schedule as R12, pinned source/container, differential portable traces, complete
+**Evidence.** Same live TCK and fault schedule as R15, pinned source/container, differential portable traces, complete
 behavioral residual classification, no shared controller implementation with Hermes.
 
 **Falsifier.** The second deployment secretly delegates its authoritative control semantics to the Hermes adapter.
 
-## R14. Desired-state organization registry
+## R17. Desired-state organization registry
 
-**Depends on:** R2, R5, R8.
+**Depends on:** R2, R5, R8, R10.
 
 **Engineering ACs.** Build a multi-tenant content-addressed registry for organizations, profiles, packages, bundles,
 deployments, policies, approvals, and versions; support optimistic concurrency, immutable history, branches,
@@ -311,9 +372,9 @@ audit reconstruction, large-history bounds.
 
 **Falsifier.** Two accepted writes can silently produce a desired state that corresponds to neither revision.
 
-## R15. Portable event store and observed-state materializer
+## R18. Portable event store and observed-state materializer
 
-**Depends on:** R11, R14.
+**Depends on:** R14, R17.
 
 **Engineering ACs.** Persist authenticated native envelopes, lift results, gaps, portable DAGs, corrections,
 retractions, snapshots, and projections; support partitions, late data, replay, compaction, retention/privacy deletion,
@@ -324,9 +385,9 @@ partition reconciliation, migration/rollback, tamper detection, deletion proofs 
 
 **Falsifier.** Materialized organization state cannot be reproduced from retained authoritative inputs and versions.
 
-## R16. Fleet reconciler and drift control
+## R19. Fleet reconciler and drift control
 
-**Depends on:** R12–R15.
+**Depends on:** R15, R16, R17, R18.
 
 **Engineering ACs.** Continuously compare desired deployment bundles with observed component state; classify semantic,
 configuration, version, health, capacity, credential, policy, and observation drift; plan idempotent repairs with
@@ -338,9 +399,9 @@ injection on both substrates, oscillation monitor, repair and refusal traces.
 
 **Falsifier.** Repeated reconcile of a converged healthy fleet causes effects, or irreconcilable drift is reported green.
 
-## R17. Human interaction and organizational command plane
+## R20. Human interaction and organizational command plane
 
-**Depends on:** R14–R16.
+**Depends on:** R10, R17, R18, R19.
 
 **Engineering ACs.** Provide typed Slack-first conversations for status, explanation, work creation, questions,
 answers, approvals, mutations, pause, resume, repair, and rollback; bind identity, tenant, channel/thread, work,
@@ -352,24 +413,43 @@ lost-message recovery, approval binding and revocation, complete audit trail.
 
 **Falsifier.** Ambiguous natural language directly performs a privileged mutation without a typed confirmation boundary.
 
-## R18. Benchmark protocol and workload registry
+## R21. Production reliability, scaling, and disaster operations
 
-**Depends on:** R3–R4, R8, R11, R13, R17.
+**Depends on:** R15, R16, R17, R18, R19, R20.
+
+**Engineering ACs.** Define API, compiler, registry, event-store, reconciler, interaction, worker, and adapter SLOs;
+capacity and admission limits; error budgets; regional/zone and dependency failure models; backpressure, load shedding,
+degraded/read-only modes, global and tenant pause, backup frequency, RPO/RTO, restore ordering, on-call diagnostics,
+safe maintenance, schema rollout, version-skew windows, and decommissioning; prove tenant isolation under overload and
+that recovery does not resurrect revoked authority or acknowledged effects.
+
+**Evidence.** Load/soak tests with queue and cost attribution, capacity-envelope report, dependency and regional fault
+drills, complete-system restore into an isolated environment, RPO/RTO measurements, rolling upgrade and downgrade,
+expired/revoked-credential recovery, overload fairness, runbooks exercised by an operator unfamiliar with the incident,
+and a resolved alert-to-root-cause trace.
+
+**Falsifier.** A declared recoverable outage either exceeds RPO/RTO without an error-budget violation or restores a
+state that can repeat an acknowledged privileged effect.
+
+## R22. Benchmark protocol and workload registry
+
+**Depends on:** R3, R4, R8, R10, R11, R14, R16, R20, R21.
 
 **Engineering ACs.** Define benchmark units, workload packages, train/dev/test separation, environment locks, seed and
 randomization policy, contamination controls, judge independence, stopping rules, retries, missing-data treatment,
-cost accounting, human simulation, privacy, and result schemas; register coding and noncoding organizational tasks;
-make criteria externally owned and immutable during a run.
+cost accounting, privacy, and result schemas; version human simulators, define their role contract and calibration
+population, quantify transfer error against real-human observations, and report simulated and real-human outcomes
+separately; register coding and noncoding organizational tasks; make criteria externally owned and immutable during a run.
 
-**Evidence.** Reproducible workload packages, adversarial gaming tests, inter-rater calibration, repeated-run variance,
-hidden test set, signed result bundles.
+**Evidence.** Reproducible workload packages, adversarial gaming tests, inter-rater and human-simulator calibration,
+simulated-versus-real transfer report, repeated-run variance, hidden test set, signed result bundles.
 
 **Falsifier.** The organization can improve its score by editing the grader, selecting only successful attempts, or
 accessing hidden answers.
 
-## R19. Organizational measurement and autonomy accounting
+## R23. Organizational measurement and autonomy accounting
 
-**Depends on:** R15, R17–R18.
+**Depends on:** R18, R20, R22.
 
 **Engineering ACs.** Define events and estimands for lead/cycle/wait time, throughput, WIP, first-pass yield, rework,
 defects, reliability, tokens, compute, money, human-minutes, interruption burden, escalation, autonomy ratio, and
@@ -381,22 +461,23 @@ cross-provider normalization, real-human timing calibration, confidence interval
 
 **Falsifier.** Moving hidden work to a human or external service improves reported autonomy or cost without attribution.
 
-## R20. Competitive benchmark execution on two live substrates
+## R24. Competitive benchmark execution on two live substrates
 
-**Depends on:** R12–R13, R18–R19.
+**Depends on:** R15, R16, R21, R22, R23.
 
 **Engineering ACs.** Run unchanged canonical organizations through matched workload cells on Hermes and Paperclip;
-randomize order, lock models/tools/repositories, measure uncertainty, inject matched faults, include failures and
-timeouts, compare portable outcomes and economic/operational residuals, and publish replayable result bundles.
+randomize order; lock models, tools, repositories, worker-harness versions, session policies, prompt/skill/context
+digests, renderers, isolation mechanisms, and credential scopes; measure uncertainty, inject matched faults, include
+failures and timeouts, compare portable outcomes and economic/operational residuals, and publish replayable result bundles.
 
 **Evidence.** Multiple independent live repetitions, identified provider revisions, raw/lifted traces, statistical
 report with effect sizes/error bars, zero untriaged differences.
 
 **Falsifier.** A ranking changes merely because one substrate received easier tasks, hidden manual help, or excluded failures.
 
-## R21. Organizational twin v1
+## R25. Organizational twin v1
 
-**Depends on:** R16, R19–R20.
+**Depends on:** R19, R23, R24.
 
 **Engineering ACs.** Build a versioned executable model of queues, service distributions, routing, retries, review,
 failures, budgets, human seams, and provider capacities; infer parameters with uncertainty; separate observed,
@@ -408,9 +489,9 @@ predictions, ablation and uncertainty coverage, falsifying traces.
 
 **Falsifier.** The twin is called calibrated while its prediction intervals systematically miss held-out observations.
 
-## R22. Counterfactual planner and constrained organization search
+## R26. Counterfactual planner and constrained organization search
 
-**Depends on:** R7, R21.
+**Depends on:** R7, R25.
 
 **Engineering ACs.** Search profile, component, capacity, routing, retry, review, and human-seam changes under semantic,
 security, budget, governance, and rollout constraints; distinguish prediction from causal effect; use Pareto fronts;
@@ -422,9 +503,9 @@ adversarial Goodhart/gaming corpus, independent certificate validation.
 
 **Falsifier.** The planner recommends an infeasible or authority-expanding change because it scores well in simulation.
 
-## R23. Safe experimentation, canaries, and causal evaluation
+## R27. Safe experimentation, canaries, and causal evaluation
 
-**Depends on:** R16, R18–R22.
+**Depends on:** R19, R21, R22, R23, R24, R25, R26.
 
 **Engineering ACs.** Support shadow, replay, canary, randomized, switchback, and stepped-wedge experiments where valid;
 pre-register hypotheses, metrics, guardrails, sample/stopping rules, assignment units, interference assumptions, and
@@ -435,7 +516,7 @@ automatic guardrail rollback, immutable preregistration and complete analysis bu
 
 **Falsifier.** A post-hoc metric or selectively stopped run is presented as causal evidence for an organization change.
 
-## R24. Bounded autonomous organization-improvement loop
+## R28. Bounded autonomous organization-improvement loop
 
 **Depends on:** every prior checkpoint.
 
@@ -465,32 +546,35 @@ the TypeScript implementation, and discrepancies are classified rather than hand
 A provider can be developed outside core, solved into a deployment, lowered reproducibly, packaged with provenance,
 and independently tested through the TCK.
 
-### G3 — Native-interoperability gate (R9–R11)
+### G3 — Migration, identity, execution, and native-interoperability gate (R9–R14)
 
-Every selected external standard has a native adapter for a versioned subset, official or authoritative fixtures,
-explicit trust boundaries, extension behavior, and exact loss reports. Descriptor-only support does not pass.
+The real profiles shadow-compile through v2; identity and credentials have a complete lifecycle; two coding harnesses
+pass the worker TCK; and every selected external standard has a native adapter for a versioned subset, official or
+authoritative fixtures, explicit trust boundaries, extension behavior, and exact loss reports. Descriptor-only
+support does not pass.
 
-### G4 — Two-live-substrate gate (R12–R13)
+### G4 — Two-live-substrate gate (R15–R16)
 
 The identical canonical organization runs on independent Hermes and Paperclip control/work implementations under the
 same adversarial schedule, with portable trace comparison and no shared hidden controller.
 
-### G5 — Truthful-control-plane gate (R14–R17)
+### G5 — Truthful production-control-plane gate (R17–R21)
 
 Desired state, observed history, reconciliation, and human authority remain reconstructible, tenant-isolated,
-interruptible, and operationally recoverable across crashes, upgrades, drift, and rollback.
+interruptible, and operationally recoverable within declared SLO/RPO/RTO bounds across overload, crashes, dependency
+and regional failures, upgrades, drift, and rollback.
 
-### G6 — Measurement gate (R18–R20)
+### G6 — Measurement gate (R22–R24)
 
 The benchmark can compare organization/substrate cells with locked workloads, complete cost and human-labor
 attribution, uncertainty, contamination controls, and replayable raw evidence.
 
-### G7 — Twin gate (R21–R23)
+### G7 — Twin gate (R25–R27)
 
 The twin predicts held-out outcomes with calibrated uncertainty; proposed interventions are constrained and evaluated
 under pre-registered causal designs or explicitly remain predictions.
 
-### G8 — Autonomous-organization gate (R24)
+### G8 — Autonomous-organization gate (R28)
 
 The running organization safely improves a bounded aspect of itself through independent evaluation and human-ratified
 deployment, survives faults, and can prove exactly why it promoted or rolled back the change.
@@ -499,7 +583,7 @@ deployment, survives faults, and can prove exactly why it promoted or rolled bac
 
 The phase cannot close until:
 
-1. all R0–R24 formal-lens rows are machine-matched to obligation-ledger entries;
+1. all R0–R28 formal-lens rows are machine-matched to obligation-ledger entries;
 2. every public interface field has a semantic-coverage owner;
 3. every required obligation has one disposition and one honest assurance status;
 4. every external version, live run, benchmark cell, and deployment bundle is pinned and resolvable;

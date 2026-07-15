@@ -14,6 +14,7 @@ import {
   ORGANIZATION_P8_OBLIGATIONS,
   ORGANIZATION_P9_OBLIGATIONS,
   ORGANIZATION_P10_OBLIGATIONS,
+  ORGANIZATION_P11_OBLIGATIONS,
   ORGANIZATION_SEMANTIC_COVERAGE,
 } from './organization-coverage';
 
@@ -35,6 +36,7 @@ const publicSurfaceFiles = [
   'organization-lowering.ts',
   'organization-hermes-controller.ts',
   'organization-causal-state.ts',
+  'organization-substrate-proof.ts',
 ];
 
 function declaredInterfaceFields(): Map<string, string[]> {
@@ -188,6 +190,16 @@ describe('B0 semantic coverage and residual accounting', () => {
     const documented = [...audit.matchAll(/^\| (P10-[A-Z]+-\d+) /gm)].map((match) => match[1]).sort();
     expect(ORGANIZATION_P10_OBLIGATIONS.map((item) => item.id).sort()).toEqual(documented);
     for (const obligation of ORGANIZATION_P10_OBLIGATIONS) {
+      expect(obligation.disposition).not.toBe('unresolved');
+      expect(obligation.evidence?.trim().length).toBeGreaterThan(0);
+    }
+  });
+
+  test('accounts for every formal P11 obligation with evidence and no unresolved disposition', () => {
+    const audit = readFileSync('docs/ORGANIZATION-IR-LENS-AUDIT.md', 'utf8');
+    const documented = [...audit.matchAll(/^\| (P11-[A-Z]+-\d+) /gm)].map((match) => match[1]).sort();
+    expect(ORGANIZATION_P11_OBLIGATIONS.map((item) => item.id).sort()).toEqual(documented);
+    for (const obligation of ORGANIZATION_P11_OBLIGATIONS) {
       expect(obligation.disposition).not.toBe('unresolved');
       expect(obligation.evidence?.trim().length).toBeGreaterThan(0);
     }

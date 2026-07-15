@@ -199,6 +199,11 @@ export const ORGANIZATION_SEMANTIC_COVERAGE: readonly SemanticCoverageEntry[] = 
   entry('TraceConformanceReport', 'status lifecycle authority evidence budget protocol safety observabilityGaps livenessAssumptions', 'compiler', 'implemented', 'multi-property trace conformance with explicit unknown observability and liveness assumptions', 'P10'),
   entry('TemporalMonitor', 'id kind triggerType responseType bound clock fairnessAssumptions', 'compiler', 'implemented', 'bounded clock-explicit safety or response property with fairness assumptions', 'P10'),
   entry('TemporalFinding', 'monitor status counterexample assumptions', 'compiler', 'implemented', 'satisfied, violated, or finite-prefix-unknown temporal result with witness trace', 'P10'),
+  entry('ComparableMeasurement', 'value unit uncertainty observedAt', 'observation', 'implemented', 'unit-bearing substrate comparison measurement with uncertainty and observation time', 'P11'),
+  entry('FailureScenarioResult', 'scenario outcome assumptions observations', 'observation', 'implemented', 'matched operational fault result with assumptions and observations', 'P11'),
+  entry('SubstrateRealizationProof', 'id normalized deployment history conformance measurements failures sourceRevision', 'compiler', 'implemented', 'pinned realization evidence for one provider composition', 'P11'),
+  entry('BehavioralResidual', 'category property left right semanticImpact', 'compiler', 'implemented', 'total classification of a cross-substrate behavioral difference', 'P11'),
+  entry('SubstrateComparisonReport', 'status canonicalBytesEqual digest portableStateEqual obligationSetEqual residuals errors', 'compiler', 'implemented', 'checkable substrate-independence conclusion and residual report', 'P11'),
 ] as const;
 
 export interface AuditResidual {
@@ -209,7 +214,6 @@ export interface AuditResidual {
 
 /** B0 residual parking is closed: every known gap has a punch-list owner. */
 export const ORGANIZATION_AUDIT_RESIDUALS: readonly AuditResidual[] = [
-  { id: 'OAIR-R012', finding: 'identical canonical organization has not been proven on a dissimilar second substrate', owner: 'P11' },
   { id: 'OAIR-R013', finding: 'formal lifecycle, authority, protocol, information-flow, resource, and loop analyses are absent', owner: 'P12' },
   { id: 'OAIR-R014', finding: 'external standard mappings lack versioned semantic coverage and loss reports', owner: 'P13' },
 ] as const;
@@ -350,4 +354,13 @@ export const ORGANIZATION_P10_OBLIGATIONS: readonly BaselineObligation[] = [
   { id: 'P10-DB-1', claim: 'portable state rebuilds from accepted history under pinned event/reducer versions', disposition: 'preserved', assurance: 'property-tested', evidence: 'organization-causal-state.test.ts serialized history differential replay and snapshot equality' },
   { id: 'P10-SEC-1', claim: 'event identity, issuer authorization, integrity, subject binding, provenance, authentication, and replay are independently checked', disposition: 'preserved', assurance: 'property-tested', evidence: 'organization-causal-state.test.ts corrupt, unauthorized, wrong-subject, unsigned, and duplicate fixtures' },
   { id: 'P10-REF-1', claim: 'exact native schema adapters lift to conforming portable traces or explicit gaps without guessed meaning', disposition: 'preserved', assurance: 'property-tested', evidence: 'organization-causal-state.test.ts exact Hermes adapter, unknown-version/kind gaps, and conformance report' },
+] as const;
+
+export const ORGANIZATION_P11_OBLIGATIONS: readonly BaselineObligation[] = [
+  { id: 'P11-SEM-1', claim: 'both realizations consume byte-identical canonical target-independent semantics and digest', disposition: 'preserved', assurance: 'property-tested', evidence: 'organization-substrate-proof.test.ts canonical equality and specialization falsifier' },
+  { id: 'P11-REF-1', claim: 'dissimilar compositions independently discharge the same atomic obligations and conform after portable projection', disposition: 'preserved', assurance: 'conformance-tested', evidence: 'organization-substrate-proof.test.ts independent ledgers, causal histories, state projections, and conformance gates' },
+  { id: 'P11-INT-1', claim: 'supporting either provider adds no product command or state vocabulary to Organization IR', disposition: 'preserved', assurance: 'property-tested', evidence: 'organization-substrate-proof.test.ts forbidden-vocabulary falsifier and provider manifests below the IR boundary' },
+  { id: 'P11-OPS-1', claim: 'matched faults, recovery assumptions, observations, and pinned revisions remain explicit residuals', disposition: 'preserved', assurance: 'conformance-tested', evidence: 'organization-substrate-proof.test.ts failure/assumption/operation residual corpus and docs/evidence/P11-PAPERCLIP-PROOF.md' },
+  { id: 'P11-ECO-1', claim: 'cost, latency, capacity, and human load compare with explicit units, uncertainty, and observation time', disposition: 'preserved', assurance: 'property-tested', evidence: 'ComparableMeasurement and organization-substrate-proof.test.ts four-dimensional comparison' },
+  { id: 'P11-FALS-1', claim: 'every observed difference receives a typed semantic-impact residual and unknown impact prevents proof', disposition: 'preserved', assurance: 'property-tested', evidence: 'compareSubstrateRealizations residual exhaustiveness and negative fixtures' },
 ] as const;

@@ -33,3 +33,4 @@ export * from './organization-solver';
 export * from './organization-lowering';
 export * from './organization-hermes-controller';
 export * from './organization-causal-state';
+export * from './organization-substrate-proof';

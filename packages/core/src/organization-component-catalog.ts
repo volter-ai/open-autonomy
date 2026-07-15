@@ -31,6 +31,7 @@ function component(id: string, version: string, facets: Array<[string, FacetKind
 
 export const HERMES_COMPONENT = component('hermes-agent', '226e8de', [
   ['actor', 'actor', ['identity', 'run'], 'hermes-worker-lane', research('communication-topology-c')],
+  ['behavior', 'behavior', ['invoke'], 'hermes-worker-lane', research('state-transition-semantics')],
   ['work', 'work', ['create', 'claim', 'transition', 'comment'], 'hermes-kanban-db', research('state-transition-semantics')],
   ['session', 'session', ['launch', 'resume'], 'hermes-worker-lane', research('failure-detector-and-recovery')],
   ['execution', 'execution', ['dispatch', 'heartbeat', 'reclaim'], 'hermes-worker-lane', research('delivery-claims-and-execution-multiplicity')],
@@ -56,8 +57,20 @@ export const DURABLE_WORK_STORE_COMPONENT = component('durable-work-store', 'abs
   ['event', 'event', ['append', 'read'], 'work-db', declared('docs/ORGANIZATION-IR.md')],
 ], [state('work', 'authoritative', declared('docs/ORGANIZATION-IR.md'), { consistency: 'strong', delivery: 'at-least-once', ordering: 'per-key', idempotency: 'enforced', recovery: 'automatic', identity: 'stable' })], declared('docs/ORGANIZATION-IR.md'));
 
+const paperclipEvidence = declared('git+file:///mnt/c/users/porta/research/repos/paperclip#90f85a7d11c517b1d09db90dbec97f4de7d96b83');
+export const PAPERCLIP_COMPONENT = component('paperclip', '90f85a7d', [
+  ['actor', 'actor', ['run', 'identity'], 'paperclip-api', paperclipEvidence],
+  ['work', 'work', ['create', 'transition', 'claim', 'query'], 'paperclip-api', paperclipEvidence],
+  ['goal', 'storage', ['represent'], 'paperclip-api', paperclipEvidence],
+  ['authority', 'authority', ['enforce', 'approve', 'account'], 'paperclip-api', paperclipEvidence],
+  ['event', 'event', ['observe'], 'paperclip-api', paperclipEvidence],
+], [
+  state('work', 'authoritative', paperclipEvidence, { consistency: 'strong', delivery: 'at-least-once', ordering: 'per-key', idempotency: 'supported', recovery: 'automatic', identity: 'stable' }),
+  state('budget', 'authoritative', paperclipEvidence, { consistency: 'strong', delivery: 'none', ordering: 'per-key', idempotency: 'enforced', recovery: 'automatic', identity: 'stable' }),
+], paperclipEvidence);
+
 export const INITIAL_COMPONENT_CATALOG: Record<string, ComponentManifestV2> = Object.fromEntries([
-  HERMES_COMPONENT, SLACK_COMPONENT, CODING_WORKER_COMPONENT, GIT_COMPONENT, DURABLE_WORK_STORE_COMPONENT,
+  HERMES_COMPONENT, SLACK_COMPONENT, CODING_WORKER_COMPONENT, GIT_COMPONENT, DURABLE_WORK_STORE_COMPONENT, PAPERCLIP_COMPONENT,
 ].map((value) => [value.id, value]));
 
 export const SLACK_CONVERSATION_BRIDGE: AdapterContract = {

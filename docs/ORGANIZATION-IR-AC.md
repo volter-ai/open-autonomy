@@ -658,6 +658,14 @@ difference.
 **Falsifier.** Supporting the second system requires adding its product-specific state or command vocabulary to
 Organization IR.
 
+**Implementation record.** P11 uses a pinned Paperclip control/work component with a separate worker, contrasted
+against a dissimilar controller composition. `compareSubstrateRealizations` requires byte-identical normalized
+semantics and digest, equal atomic obligation identities, independently conforming causal traces, and equal portable
+state projections. Operational assumptions, declared losses, matched faults, four unit-bearing economic dimensions,
+source revisions, and trace assurance are exhaustively classified as residuals. Semantic specialization, provider
+vocabulary leakage, divergent portable state, unresolved obligations, and nonconformance are negative fixtures.
+Evidence and scope limits are recorded in `docs/evidence/P11-PAPERCLIP-PROOF.md`.
+
 ### P12. Deeper formal analyses
 
 **Semantic model.** Analyses consume explicit semantics and return checkable results, counterexamples, assumptions,

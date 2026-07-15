@@ -15,7 +15,7 @@ describe('P6 typed component manifests', () => {
       expect(Object.values(manifest.facets).every((facet) => manifest.interfaces[facet.interface])).toBe(true);
       expect(manifest.state.every((state) => state.evidence.assurance !== undefined)).toBe(true);
     }
-    expect(Object.values(HERMES_COMPONENT.facets).map((facet) => facet.facet)).toEqual(['actor', 'work', 'session', 'execution', 'interaction', 'tool']);
+    expect(Object.values(HERMES_COMPONENT.facets).map((facet) => facet.facet)).toEqual(['actor', 'behavior', 'work', 'session', 'execution', 'interaction', 'tool']);
     expect(HERMES_COMPONENT.facets.interaction.evidence.assurance).toBe('unknown');
   });
 

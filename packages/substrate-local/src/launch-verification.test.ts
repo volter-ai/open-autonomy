@@ -49,8 +49,8 @@ describe('skillPathFor — truth table (claude/codex x trunk/worktree cwd)', () 
       join('/repo/.worktrees/agent-issue-7', '.codex', 'skills', 'develop', 'SKILL.md'),
     );
   });
-  test('an unrecognized harness falls back to the claude root (emit.ts: codex is the only special case)', () => {
-    expect(skillPathFor('gemini', 'develop', '/repo')).toBe(join('/repo', '.claude', 'skills', 'develop', 'SKILL.md'));
+  test('an undeclared harness is rejected instead of inheriting Claude files without its gate', () => {
+    expect(() => skillPathFor('gemini', 'develop', '/repo')).toThrow('unsupported TERMFLEET_AGENT="gemini"');
   });
 });
 
@@ -355,6 +355,24 @@ describe('scripts/runner.ts launch — the skill pre-check (runner-frontend.ts v
 // --- C. the REAL emitted scripts/autonomy-runner.mjs — the backend guard (AC-4, AC-6) -------------------
 
 describe('scripts/autonomy-runner.mjs launch — the backend guard (backend.mjs verbatim, TermfleetRunner)', () => {
+  test('an undeclared harness is refused before provider discovery or model execution', () => {
+    const { dir } = scaffold();
+    const sentinel = join(dir, 'sentinel.log');
+    const promptDir = join(dir, 'scripts', 'prompts', 'claude');
+
+    const r = spawnSync('node', ['scripts/autonomy-runner.mjs', 'launch', 'pm'], {
+      cwd: dir,
+      encoding: 'utf8',
+      env: env({ TERMFLEET_AGENT: 'gemini', OA08_SESSION_SENTINEL: sentinel, AUTONOMY_PROMPT_DIR: promptDir }),
+    });
+
+    expect(r.status).not.toBe(0);
+    expect(r.stderr).toContain('unsupported TERMFLEET_AGENT="gemini"');
+    expect(r.stderr).toContain('exactly "claude" and "codex"');
+    expect(r.stderr).toContain('Refusing before model execution');
+    expect(existsSync(sentinel)).toBe(false);
+  });
+
   test('AC-4: committed skill deletion (pm) -> the tick-launched PM is refused with a named error, no session', () => {
     const { dir } = scaffold();
     gitOk(dir, ['rm', '-r', '.claude/skills/pm']);

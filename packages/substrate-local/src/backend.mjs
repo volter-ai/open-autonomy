@@ -18,10 +18,23 @@ import { ProviderClient, providerRefFromUrl } from 'termfleet';
 import { resolveDefaultProvider } from '@termfleet/core/local-providers.js';
 import { RUNNER_DEFAULTS } from './runner-defaults.mjs';
 
+// The compiler emits prompts, skills, and completion gates for exactly these two harnesses. Refuse any
+// other Termfleet agent kind before provider discovery or model execution; falling through to Claude's
+// files would launch an ungated harness under a false compatibility claim.
+function resolveHarness(value) {
+  const harness = value || RUNNER_DEFAULTS.harness;
+  if (harness === 'claude' || harness === 'codex') return harness;
+  throw new Error(
+    `[runner] unsupported TERMFLEET_AGENT=${JSON.stringify(harness)}; this local substrate declares ` +
+      'exactly "claude" and "codex" because those are the harnesses whose prompts, skills, and ' +
+      'Stop/SubagentStop gates are compiled. Refusing before model execution.',
+  );
+}
+
 // Real local backend: drives termfleet via its ProviderClient SDK. The window name IS the agent; the
 // system never encodes anything else into it. Defaults come from RUNNER_DEFAULTS; TERMFLEET_* override.
 export class TermfleetRunner {
-  harness = process.env.TERMFLEET_AGENT || RUNNER_DEFAULTS.harness; // claude|codex|gemini — the coding CLI, not our agent
+  harness = resolveHarness(process.env.TERMFLEET_AGENT); // claude|codex — the coding CLI, not our agent
   #clientPromise;
   #client() {
     return (this.#clientPromise ??= resolveDefaultProvider({ url: process.env.TERMFLEET_PROVIDER_URL }).then((p) => {

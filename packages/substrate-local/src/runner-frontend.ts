@@ -582,11 +582,16 @@ export function worktreeProbe(branch: string): WorktreeProbeResult {
 }
 
 /** Where harness `harness` resolves behavior `behavior`'s skill invocation in `cwd` — mirrors EXACTLY the
- *  copy paths compileLocal installs (emit.ts:512-513): `codex` -> `.codex/skills/<behavior>/SKILL.md`, any
- *  other harness (`claude`, the default) -> `.claude/skills/<behavior>/SKILL.md`. Pure + exported (mirrors
- *  the `mergeInFlight`/`worktreeBase` precedent) so the claude/codex truth table is unit-testable with no
- *  process, env, or git involved at all. */
+ *  two copy paths compileLocal installs. Anything else is not a declared harness and must fail before a
+ *  worktree or model session is created. Pure + exported so the complete truth table is unit-testable. */
 export function skillPathFor(harness: string, behavior: string, cwd: string): string {
+  if (harness !== 'claude' && harness !== 'codex') {
+    throw new Error(
+      `[runner] unsupported TERMFLEET_AGENT=${JSON.stringify(harness)}; this local substrate declares ` +
+        'exactly "claude" and "codex" because those are the harnesses whose prompts, skills, and ' +
+        'Stop/SubagentStop gates are compiled. Refusing before model execution.',
+    );
+  }
   const skillsRoot = harness === 'codex' ? '.codex/skills' : '.claude/skills';
   return join(cwd, skillsRoot, behavior, 'SKILL.md');
 }
@@ -643,6 +648,10 @@ export async function launch(agent: string, params: LaunchParams = {}): Promise<
     return r.status ?? 1;
   }
 
+  // Resolve the declared harness before creating an isolated worktree. `skillPathFor` rejects every
+  // Termfleet agent kind the compiler does not equip with prompts, skills, and lifecycle gates.
+  const harness = process.env.TERMFLEET_AGENT || (await defaultHarness());
+
   // Skill agent: a termfleet session via the launch adapter. Workspace isolation and proposal lifecycle
   // are intentionally orthogonal. An explicit branch preserves the established named-work lifecycle;
   // `workspace: isolated` creates a unique worktree but never requests a proposal effect.
@@ -668,7 +677,6 @@ export async function launch(agent: string, params: LaunchParams = {}): Promise<
   // fresh scheduled workspace must not silently execute an older same-named skill from remote trunk.
   // Runs after the pause gate and before any termfleet spend.
   const cwd = worktree || process.cwd();
-  const harness = process.env.TERMFLEET_AGENT || (await defaultHarness());
   const skillPath = skillPathFor(harness, behavior, cwd);
   const controlSkillPath = skillPathFor(harness, behavior, installRoot());
   const missing = !existsSync(skillPath);

@@ -3,11 +3,14 @@ import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { parse as parseYaml } from 'yaml';
 import { parseIr } from '@open-autonomy/core';
+import { defaultAgentCommand } from '@termfleet/core/agent-launch.js';
 import { compileLocal } from './emit';
 
 const ROOT = join(import.meta.dir, '..', '..', '..');
 const PROFILE = join(ROOT, 'profiles', 'simple-gh');
 const ZTRACK_GATE = 'node_modules/ztrack/plugins/ztrack/hooks/stop-loop.sh';
+const WISHY_WASHY_AGENT_LANGUAGE =
+  /\b(?:when|where|if)\s+(?:supported|possible)\b|\bbest[- ]effort\b|\bsingle-model degradation\b|\bdegrades honestly\b/i;
 
 function installedCopy(out: ReturnType<typeof compileLocal>, path: string): string {
   const copy = out.copies.find(({ to }) => to === path);
@@ -108,6 +111,24 @@ describe('simple-gh — clean compiled role system', () => {
     expect(codexManager).toContain('gh pr merge "$PR_NUMBER" --squash');
   });
 
+  test('every installed skill and launch prompt forbids substrate/model degradation language', () => {
+    const ir = parseIr(readFileSync(join(PROFILE, 'ir.yml'), 'utf8'));
+    const out = compileLocal(ir);
+    const artifacts = [
+      ...out.copies
+        .filter(({ to }) => to.includes('/skills/'))
+        .map(({ from, to }) => ({ path: to, text: readFileSync(join(PROFILE, from), 'utf8') })),
+      ...Object.entries(out.generated)
+        .filter(([path]) => path.startsWith('scripts/prompts/'))
+        .map(([path, text]) => ({ path, text })),
+    ];
+
+    expect(artifacts.length).toBeGreaterThan(0);
+    for (const artifact of artifacts) {
+      expect(artifact.text, artifact.path).not.toMatch(WISHY_WASHY_AGENT_LANGUAGE);
+    }
+  });
+
   test('installed Claude and Codex artifacts enforce the same current Stop/SubagentStop gate', () => {
     const ir = parseIr(readFileSync(join(PROFILE, 'ir.yml'), 'utf8'));
     const out = compileLocal(ir);
@@ -127,6 +148,16 @@ describe('simple-gh — clean compiled role system', () => {
       expect(commands[0]).toContain('exit 2');
     }
     expect(existsSync(join(ROOT, ZTRACK_GATE))).toBe(true);
+  });
+
+  test('the installed Termfleet Codex launch activates project hooks without interactive trust', () => {
+    // Probe the exact @termfleet/core runtime dependency used by the provider, not a reimplemented command
+    // string. Codex otherwise skips untrusted project hooks, so either flag drifting away must fail CI.
+    const command = defaultAgentCommand('codex', undefined, { trustedCwd: ROOT });
+    expect(command).toContain('--dangerously-bypass-hook-trust');
+    expect(command).toContain('projects.');
+    expect(command).toContain('trust_level="trusted"');
+    expect(command.indexOf('--dangerously-bypass-hook-trust')).toBeGreaterThan(command.indexOf('codex'));
   });
 
   test('keeps task and role semantics out of scheduler source', () => {

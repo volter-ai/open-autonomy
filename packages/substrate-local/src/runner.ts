@@ -9,7 +9,7 @@ import { ProviderClient, providerRefFromUrl } from 'termfleet';
 import { resolveDefaultProvider } from '@termfleet/core/local-providers.js';
 import { RUNNER_DEFAULTS } from './runner-config';
 
-type Harness = 'claude' | 'codex' | 'gemini';
+type Harness = 'claude' | 'codex';
 // Derived from the SDK so we never re-declare termfleet's shapes: a lifecycle session and a window.
 type LifeSession = Awaited<ReturnType<ProviderClient['lifecycle']>>['sessions'][number];
 type Win = Awaited<ReturnType<ProviderClient['snapshot']>>['windows'][number];
@@ -31,7 +31,7 @@ function sessionOf(w: Win, byId: Map<string, LifeSession>): Session {
 }
 
 export class TermfleetRunner implements Runner {
-  private harness = (process.env.TERMFLEET_AGENT || RUNNER_DEFAULTS.harness) as Harness; // which coding CLI termfleet runs
+  private harness = resolveHarness(process.env.TERMFLEET_AGENT); // which coding CLI termfleet runs
   // The provider client, resolved once. Discovery mirrors the CLI's: an explicit TERMFLEET_PROVIDER_URL,
   // else the current-context provider, else live local auto-discovery — done by termfleet's own SDK.
   private clientPromise?: Promise<ProviderClient>;
@@ -149,4 +149,17 @@ export class TermfleetRunner implements Runner {
     const ack = await client.closeWindow(window.id);
     return ack.ok !== false;
   }
+}
+
+/** The local compiler emits prompts, skills, and completion gates for exactly these two harnesses.
+ *  Refuse every other Termfleet agent kind before provider discovery or model execution instead of
+ *  silently treating it as Claude while leaving its lifecycle gate absent. */
+export function resolveHarness(value: string | undefined): Harness {
+  const harness = value || RUNNER_DEFAULTS.harness;
+  if (harness === 'claude' || harness === 'codex') return harness;
+  throw new Error(
+    `[runner] unsupported TERMFLEET_AGENT=${JSON.stringify(harness)}; this local substrate declares ` +
+      'exactly "claude" and "codex" because those are the harnesses whose prompts, skills, and ' +
+      'Stop/SubagentStop gates are compiled. Refusing before model execution.',
+  );
 }

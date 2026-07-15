@@ -771,6 +771,9 @@ The ledger describes language coverage; it does not assert that a particular dep
 claim belongs in the per-organization obligation ledger and receives its own semantic disposition and assurance
 status.
 
+The completed B0–P13 evidence summary, counts, cross-cutting gate review, and proof boundary are recorded in
+[`docs/evidence/ORGANIZATION-IR-PUNCHLIST-CLOSURE.md`](./evidence/ORGANIZATION-IR-PUNCHLIST-CLOSURE.md).
+
 ## Obligation ledger
 
 The compiler should eventually emit this ledger. Until then, each implementation checkpoint records it in tests or

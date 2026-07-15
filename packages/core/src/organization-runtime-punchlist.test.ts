@@ -58,7 +58,7 @@ describe('Autonomous Organization Runtime punch-list integrity', () => {
   test('requires the exact stable formal-obligation inventory with at least three rows per checkpoint', () => {
     const ids = [...audit.matchAll(/^\| (R(\d+)-[A-Z]+-\d+) /gm)].map((match) => ({ id: match[1], item: `R${match[2]}` }));
     expect(new Set(ids.map((item) => item.id)).size).toBe(ids.length);
-    expect(ids).toHaveLength(120);
+    expect(ids).toHaveLength(121);
     for (const checkpoint of expected) expect(ids.filter((item) => item.item === checkpoint).length).toBeGreaterThanOrEqual(3);
   });
 
@@ -87,5 +87,7 @@ describe('Autonomous Organization Runtime punch-list integrity', () => {
     expect(acceptance).toContain('fresh adversarial review pair');
     expect(acceptance).toContain('not a second roadmap');
     expect(roadmap).toContain('ORGANIZATION-RUNTIME-AC.md');
+    expect(acceptance).toContain('Milestone gates are cumulative release');
+    expect(acceptance).toContain('seed the obligation ledger with every stable formal-audit ID');
   });
 });

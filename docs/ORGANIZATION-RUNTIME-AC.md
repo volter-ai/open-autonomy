@@ -90,6 +90,11 @@ R19/R23/R24 → twin R25 → planner R26 → experiments R27 → bounded improve
 Parallel work is permitted only where the dependency relation allows it. A downstream checkpoint cannot use a mock
 of an unfinished upstream guarantee as completion evidence.
 
+The DAG controls when implementation of an individual checkpoint may begin. Milestone gates are cumulative release
+claims, not additional dependency edges: work permitted by the DAG may proceed in parallel, but gate `Gn` cannot be
+declared achieved until every checkpoint in `G1` through `Gn` is complete. Completion state belongs in the evidence
+ledger, never in this planning manifest.
+
 ## Formal-lens routing summary
 
 This table is an aggregate routing aid, not a claim that every lens applies to every item in a range. The per-item
@@ -119,12 +124,16 @@ conditions. Information-theoretic language is allowed only with defined random v
 **Depends on:** Organization IR B0–P13 closure.
 
 **Engineering ACs.** Re-run the full closure gate on a clean checkout; freeze public semantic digests and fixture
-corpus; inventory all experimental APIs, trust boundaries, credentials, tenants, external effects, personal data,
-and live-provider assumptions; produce STRIDE-style threats plus distributed failure and economic-abuse models;
-assign every finding to R1–R28 or explicitly reject it with rationale; prohibit unowned residuals.
+corpus; initialize versioned machine-readable runtime obligation, semantic-coverage, residual, checkpoint-state, and
+evidence-ledger schemas and files; seed the obligation ledger with every stable formal-audit ID at assurance `unknown`;
+inventory all experimental APIs, trust boundaries, credentials, tenants, external effects, personal data, and
+live-provider assumptions; produce STRIDE-style threats plus distributed failure and economic-abuse models; assign
+every finding to R1–R28 or explicitly reject it with rationale; prohibit unowned residuals. Ledger validation must
+reject unknown/duplicate obligation IDs, illegal status transitions, evidence without provenance, completion with an
+open dependency, and checkpoint closure with an unresolved required obligation or untriaged residual.
 
-**Evidence.** Reproducible baseline manifest, API/fixture hashes, threat model, residual-owner ledger, two independent
-skeptical reviews.
+**Evidence.** Reproducible baseline manifest, API/fixture hashes, validated ledger corpus seeded from all formal rows,
+negative ledger fixtures, threat model, residual-owner ledger, two independent skeptical reviews.
 
 **Falsifier.** A later item relies on an unrecorded credential, authority, daemon, data store, or human operation.
 

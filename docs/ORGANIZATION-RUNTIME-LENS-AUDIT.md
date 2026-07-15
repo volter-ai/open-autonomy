@@ -17,6 +17,7 @@ units, uncertainty, missing-data policy, and conditions under which comparison i
 | R0-SEC-1 Security | Enumerate every principal, credential, trust transition, tenant boundary, and privileged effect. | A live operation uses an unlisted credential or principal. |
 | R0-DIST-1 Distributed | Enumerate crash, retry, concurrency, delay, partition, and recovery assumptions. | A recovery claim relies on a failure excluded without disclosure. |
 | R0-ADV-1 Adversarial | Every finding receives an owner or explicit rejection rationale. | A parking-lot fact has no R-item owner. |
+| R0-ACC-1 Proof accounting | Instantiate every runtime obligation and checkpoint in validated machine ledgers before implementation claims begin. | A checkpoint is called complete without ledger-backed evidence for one required row. |
 
 ## R1 — normative specification
 

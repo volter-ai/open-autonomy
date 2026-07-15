@@ -1,0 +1,3 @@
+import { readFileSync,writeFileSync } from "node:fs";
+import { completeR22Study,registerR22Study,type R22RealRating,type R22StudyRegistration } from "./organization-r22-external-evidence-live";
+if(import.meta.main){const [command,input,output]=process.argv.slice(2);if(!command||!input||!output)throw new Error("usage: <init|complete> input.json output.json");const value=JSON.parse(readFileSync(input,"utf8"));if(command==="init")writeFileSync(output,JSON.stringify(registerR22Study(value),null,2));else if(command==="complete")writeFileSync(output,JSON.stringify(completeR22Study(value.registration as R22StudyRegistration,value.ratings as R22RealRating[]),null,2));else throw new Error("unknown calibration command")}

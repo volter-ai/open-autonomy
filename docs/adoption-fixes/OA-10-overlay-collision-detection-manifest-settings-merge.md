@@ -52,9 +52,10 @@ All paths relative to the repo root; all lines verified by reading on branch `ad
 - `profiles/simple-sdlc/ir.yml:80-84` — `resources:` lists `.claude/settings.json` first;
   `profiles/simple-gh-sdlc/ir.yml:129-131` likewise. The actual hook payload is
   `profiles/simple-sdlc/.claude/settings.json:1-14`: a `hooks.Stop` command entry running
-  `node_modules/ztrack/plugins/ztrack-gate/hooks/stop-loop.sh` when present. Because it ships as a
-  **whole-file resource copy**, materialize/upgrade can only replace the entire file — there is no
-  structured merge anywhere.
+  the profile-pinned ztrack `stop-loop.sh`. The current mandatory contract fails closed when that target
+  is missing and exits normally only when no task loop is armed. Because it ships as a **whole-file
+  resource copy**, materialize/upgrade can only replace the entire file — there is no structured merge
+  anywhere.
 - `packages/substrate-local/src/emit.ts:244-247` — the design note placing settings.json ownership with
   the *profile* ("installed on every runner"); nothing in that note or elsewhere addresses coexistence
   with an adopter's pre-existing settings.
@@ -151,9 +152,10 @@ All paths relative to the repo root; all lines verified by reading on branch `ad
      scheduler/          2 files
      standards/          3 files
      .open-autonomy/     3 files
-   NOTE: .claude/settings.json wires a Claude Code Stop hook that runs in EVERY Claude Code
-   session in this repo, including your own interactive ones (it no-ops unless
-   node_modules/ztrack/... exists). Details: docs/OPERATIONS.md#claude-settings
+   NOTE: .claude/settings.json wires a mandatory Claude Code Stop hook that runs in EVERY
+   Claude Code session in this repo, including your own interactive ones. A missing pinned
+   ztrack hook target fails closed; only the no-armed-loop state exits normally.
+   Details: docs/OPERATIONS.md#claude-settings
    ```
 
    Print the same summary for a `--force` run, marking which paths were overwritten/resurrected.

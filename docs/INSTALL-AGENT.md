@@ -213,9 +213,9 @@ it gates everything.**
    If they refuse, stop.
    - **`.claude/settings.json` and `.codex/hooks.json` wire the same mandatory Stop + SubagentStop gate.**
      The gate covers root and delegated turns, fails closed if the profile-pinned ztrack hook is missing,
-     and otherwise no-ops until `ztrack loop start` arms a task. Compile merges either existing JSON file
-     without dropping adopter hooks; malformed JSON refuses by name. The gates are install-managed and
-     have no substrate-specific bypass. Full detail: `docs/OPERATIONS.md#agent-gates`.
+     and exits normally only while no task loop is armed. Compile merges either existing JSON file without
+     dropping adopter hooks; malformed JSON refuses by name. The gates are install-managed and have no
+     substrate-specific bypass. Full detail: `docs/OPERATIONS.md#agent-gates`.
 4. **OA's Dependabot + Security workflows (net-new CI surface).** "OA also ships `.github/dependabot.yml`
    (weekly Actions-bumps → PRs the PM triages) and `.github/workflows/security.yml` (a **bun**-based
    supply-chain + workflow scan that runs on your PRs and `<default-branch>`). On a non-bun repo the

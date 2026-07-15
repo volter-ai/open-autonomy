@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { parse as parseYaml } from 'yaml';
 import { parseIr } from '@open-autonomy/core';
@@ -11,6 +11,22 @@ const PROFILE = join(ROOT, 'profiles', 'simple-gh');
 const ZTRACK_GATE = 'node_modules/ztrack/plugins/ztrack/hooks/stop-loop.sh';
 const WISHY_WASHY_AGENT_LANGUAGE =
   /\b(?:when|where|if)\s+(?:supported|possible)\b|\bbest[- ]effort\b|\bsingle-model degradation\b|\bdegrades honestly\b/i;
+const STALE_GATE_SEMANTICS = [
+  /_openAutonomyStopHookOptOut/i,
+  /(?:Stop|SubagentStop|validation|completion|lifecycle|ztrack)[\s\S]{0,100}(?:hook|gate)[\s\S]{0,100}self[- ]guards?/i,
+  /\bno[- ]?ops?\s+unless[\s\S]{0,100}(?:node_modules\/ztrack|ztrack[\s\S]{0,40}(?:hook|target))/i,
+  /(?:Stop|SubagentStop|ztrack)[\s\S]{0,80}(?:hook|gate|stop-loop\.sh)[\s\S]{0,40}\bwhen present\b/i,
+  /(?:Stop|SubagentStop)[\s\S]{0,80}(?:hook|gate)[\s\S]{0,80}opt[- ]out/i,
+  /opt[- ]out[\s\S]{0,80}(?:Stop|SubagentStop)[\s\S]{0,80}(?:hook|gate)/i,
+];
+
+function markdownFilesUnder(dir: string): string[] {
+  return readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
+    const path = join(dir, entry.name);
+    if (entry.isDirectory()) return markdownFilesUnder(path);
+    return entry.isFile() && entry.name.endsWith('.md') ? [path] : [];
+  });
+}
 
 function installedCopy(out: ReturnType<typeof compileLocal>, path: string): string {
   const copy = out.copies.find(({ to }) => to === path);
@@ -126,6 +142,37 @@ describe('simple-gh — clean compiled role system', () => {
     expect(artifacts.length).toBeGreaterThan(0);
     for (const artifact of artifacts) {
       expect(artifact.text, artifact.path).not.toMatch(WISHY_WASHY_AGENT_LANGUAGE);
+    }
+  });
+
+  test('operator-facing current and historical copy never weakens missing-target gate behavior', () => {
+    const staleExamples = [
+      'The Stop hook self-guards when the dependency is absent.',
+      'The Stop hook has an operator opt-out.',
+      'The hook no-ops unless node_modules/ztrack exists.',
+      'The ztrack stop-loop.sh hook runs when present.',
+      '_openAutonomyStopHookOptOut',
+    ];
+    for (const stale of staleExamples) {
+      expect(STALE_GATE_SEMANTICS.some((pattern) => pattern.test(stale)), stale).toBe(true);
+    }
+    expect(
+      STALE_GATE_SEMANTICS.some((pattern) =>
+        pattern.test('A missing pinned ztrack hook target fails closed; only the no-armed-loop state exits normally.'),
+      ),
+    ).toBe(false);
+
+    const sources = [
+      join(ROOT, 'README.md'),
+      join(ROOT, 'bin', 'install-authorize.ts'),
+      ...markdownFilesUnder(join(ROOT, 'docs')),
+      ...markdownFilesUnder(join(ROOT, '.volter', 'tracker', 'markdown')),
+    ];
+
+    expect(sources.length).toBeGreaterThan(2);
+    for (const path of sources) {
+      const text = readFileSync(path, 'utf8');
+      for (const stale of STALE_GATE_SEMANTICS) expect(text, path).not.toMatch(stale);
     }
   });
 

@@ -162,6 +162,10 @@ describe('public agent production readiness', () => {
     expect(wf).toContain('github.event.issue.pull_request');
     expect(wf).toContain('github.event.issue.number');
     expect(wf).toContain('group: human-approval-${{ github.event.pull_request.number || github.event.issue.number || github.event.inputs.pr }}');
+    // Re-evaluations queue instead of cancelling the current required check. The later run reads current
+    // durable comments/reviews after the earlier run completes, so approval and revocation remain ordered.
+    expect(wf).toContain('cancel-in-progress: false');
+    expect(wf).not.toContain('cancel-in-progress: true');
     expect(wf).toContain('synchronize');
     // Least privilege: can post the status + comment, but CANNOT merge (no contents:write).
     expect(wf).toContain('statuses: write');

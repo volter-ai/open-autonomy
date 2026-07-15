@@ -39,7 +39,10 @@ env:
 
 concurrency:
   group: human-approval-${{ github.event.pull_request.number || github.event.issue.number || github.event.inputs.pr }}
-  cancel-in-progress: true
+  # Serialize re-evaluations so a newer approval/revocation cannot cancel a required check-run and leave its
+  # cancelled conclusion blocking merge. Each queued run reads the current durable state when it executes,
+  # so the final event still wins without a stale-green race.
+  cancel-in-progress: false
 
 jobs:
   human-approval:

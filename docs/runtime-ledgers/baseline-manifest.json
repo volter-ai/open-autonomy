@@ -106,7 +106,7 @@
     },
     {
       "path": "packages/core/src/organization-runtime-ledger.test.ts",
-      "digest": "2d8932d2643efc2562aed3b3a405043b3b3a81956dc0b7f4e4c1705bdffe9718"
+      "digest": "5e078470b5bbaf4bb460803968f18a3ef34af9c69b573fdccbc6a21ffcc68f78"
     },
     {
       "path": "packages/core/src/organization-runtime-punchlist.test.ts",

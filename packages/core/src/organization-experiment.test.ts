@@ -9,14 +9,14 @@ import {
   verifyRegistration,
   type ExperimentTrust,
   type Analysis,
-  type Provenance,
+  type ExperimentProvenance,
   type RegistrationBody,
   type SignedOutcome,
 } from "./organization-experiment";
 
 const hash = (v: unknown) =>
     createHash("sha256").update(canonicalSemanticJson(v)).digest("hex"),
-  provenance = (id: string): Provenance => ({
+  provenance = (id: string): ExperimentProvenance => ({
     source: id,
     evidenceUri: `evidence://${id}`,
     observedAt: "2026-07-15T12:00:00Z",

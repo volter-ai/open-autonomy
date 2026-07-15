@@ -8,7 +8,7 @@ export type ExperimentMode =
   | "randomized"
   | "switchback"
   | "stepped-wedge";
-export type Provenance = {
+export type ExperimentProvenance = {
   source: string;
   evidenceUri: string;
   observedAt: string;
@@ -20,14 +20,14 @@ export type MetricSpec = {
   direction: "increase" | "decrease";
   primary: boolean;
   alpha: number;
-  provenance: Provenance;
+  provenance: ExperimentProvenance;
 };
 export type GuardrailSpec = {
   metric: string;
   operator: "gt" | "gte" | "lt" | "lte";
   threshold: number;
   action: "rollback";
-  provenance: Provenance;
+  provenance: ExperimentProvenance;
 };
 export type StoppingRule =
   | { kind: "fixed"; sampleSize: number }
@@ -81,7 +81,7 @@ export type RegistrationBody = {
   rollback: { maximumTreatedUnits: number; safeArm: string };
   codeDigest: string;
   createdAt: string;
-  provenance: Provenance[];
+  provenance: ExperimentProvenance[];
 };
 export type SignedRegistration = RegistrationBody & {
   digest: string;
@@ -105,7 +105,7 @@ export type SignedOutcome = {
   metric: string;
   value: number;
   at: string;
-  provenance: Provenance;
+  provenance: ExperimentProvenance;
   signature: string;
 };
 export interface ExperimentTrust {
@@ -129,7 +129,7 @@ export type Analysis = {
   significant: boolean;
   estimand: RegistrationBody["causal"]["estimand"];
   assumptions: string[];
-  provenance: Provenance[];
+  provenance: ExperimentProvenance[];
   registrationDigest: string;
   outcomeDigests: string[];
   diagnostics: { missingFraction:number; noveltyDifference:number|null; carryoverTransitions:number; selectionCoverage:number; interferenceCells:number };
@@ -278,7 +278,7 @@ export function validateRegistration(r: RegistrationBody): void {
   )
     throw new Error("interference requires cluster assignment");
   for (const x of [...r.metrics, ...r.guardrails, ...r.provenance])
-    validateProvenance("provenance" in x ? x.provenance : (x as Provenance));
+    validateProvenance("provenance" in x ? x.provenance : (x as ExperimentProvenance));
 }
 export function requiredTwoArmSample(
   alpha: number,
@@ -562,7 +562,7 @@ function unique(label: string, xs: string[]) {
   if (xs.some((x) => !x) || new Set(xs).size !== xs.length)
     throw new Error(`${label} duplicate or empty`);
 }
-function validateProvenance(p: Provenance) {
+function validateProvenance(p: ExperimentProvenance) {
   if (
     !p?.source ||
     !p.evidenceUri ||

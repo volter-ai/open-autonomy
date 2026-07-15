@@ -35,7 +35,7 @@ const percentile = (v: number[]) => [...v].sort((a,b)=>a-b)[Math.max(0,Math.ceil
 
 export async function runR21LiveCampaign(probe: R21LiveProbe, signingKey: string, now = new Date().toISOString()): Promise<R21LiveArtifact> {
   if (!signingKey) throw new Error("R21 evidence signing key required");
-  const samples = Object.fromEntries(RUNTIME_SERVICES.map((s) => [s, []])) as Record<RuntimeService,SliSample[]>;
+  const samples = Object.fromEntries(RUNTIME_SERVICES.map((s) => [s, [] as SliSample[]])) as Record<RuntimeService,SliSample[]>;
   let rampRequests = 0, soakRequests = 0;
   for (const count of [1,2,4]) for (let i=0;i<count;i++) { const p=await probe.paperclip(); samples.api.push({atMs:Date.now(),successful:p.ok,latencyMs:p.latencyMs,cost:0}); rampRequests++; }
   for (let i=0;i<12;i++) { const p=await probe.paperclip(); samples.api.push({atMs:Date.now(),successful:p.ok,latencyMs:p.latencyMs,cost:0}); soakRequests++; }

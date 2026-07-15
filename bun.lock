@@ -9,7 +9,7 @@
         "@types/node": "^24.13.2",
         "typescript": "^5.9.3",
         "yaml": "^2.9.0",
-        "ztrack": "1.0.0",
+        "ztrack": "1.3.1",
       },
     },
     "packages/core": {
@@ -632,7 +632,7 @@
 
     "zod-to-json-schema": ["zod-to-json-schema@3.25.2", "", { "peerDependencies": { "zod": "^3.25.28 || ^4" } }, "sha512-O/PgfnpT1xKSDeQYSCfRI5Gy3hPf91mKVDuYLUHZJMiDFptvP41MSnWofm8dnCm0256ZNfZIM7DSzuSMAFnjHA=="],
 
-    "ztrack": ["ztrack@1.0.0", "", { "dependencies": { "mdast-util-from-markdown": "2.0.3", "mdast-util-gfm": "3.1.0", "mdast-util-to-markdown": "2.1.2", "micromark-extension-gfm": "3.0.0", "zod": "4.4.2" }, "peerDependencies": { "@volter-ai-dev/twin": "^0.1.0", "@volter-ai-dev/twin-github": "^0.1.0" }, "optionalPeers": ["@volter-ai-dev/twin", "@volter-ai-dev/twin-github"], "bin": { "ztrack": "dist/cli.js" } }, "sha512-S/DROGBJd3qIofb/t+AGKCoAuBHgtw7PpyNnLGX3pkOQ15zLk3lwjbOO0+1HIQ70xFvn8v12nCfYgR9ttlS3ng=="],
+    "ztrack": ["ztrack@1.3.1", "", { "dependencies": { "mdast-util-from-markdown": "2.0.3", "mdast-util-gfm": "3.1.0", "mdast-util-to-markdown": "2.1.2", "micromark-extension-gfm": "3.0.0", "zod": "4.4.2" }, "peerDependencies": { "@volter-ai-dev/twin": "^0.1.0", "@volter-ai-dev/twin-github": "^0.1.0", "react": "^18.3.1" }, "optionalPeers": ["@volter-ai-dev/twin", "@volter-ai-dev/twin-github", "react"], "bin": { "ztrack": "dist/cli.js" } }, "sha512-CWZR6jAeBdV9HGTECu8/XmgFyrERsX8WqijdoRfcgHv2bBcq1bMLM1tv6kM8ecICEI0/hiDV6vcveahNAA65/A=="],
 
     "zustand": ["zustand@4.5.7", "", { "dependencies": { "use-sync-external-store": "^1.2.2" }, "peerDependencies": { "@types/react": ">=16.8", "immer": ">=9.0.6", "react": ">=16.8" }, "optionalPeers": ["@types/react", "immer", "react"] }, "sha512-CHOUy7mu3lbD6o6LJLfllpjkzhHXSBlX8B9+qPddUsIfeF5S/UZ5q0kmCsnRqT1UHFQZchNFDDzMbQsuesHWlw=="],
 

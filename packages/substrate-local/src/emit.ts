@@ -896,10 +896,10 @@ export function compileLocal(ir: AutonomyIR, opts: { runner?: RunnerName; destDi
   // runtime imports this instead of re-hardcoding literals; TERMFLEET_* env vars override at runtime.
   generated['scripts/runner-defaults.mjs'] = runnerDefaultsModule();
 
-  // NOTE: the ztrack loop Stop hook (.claude/settings.json) is NOT emitted here. It is Claude Code harness
-  // config — what the AGENT does (drive-to-green), identical wherever Claude Code runs — so it belongs to the
-  // PROFILE, carried as a resource by the ztrack-using profiles (simple-sdlc, simple-gh-sdlc), and installed
-  // on every runner. The runner is launch + isolate + schedule + lifecycle; it does not inject methodology.
+  // NOTE: ztrack Stop/SubagentStop hooks are NOT invented here. The ztrack-backed profiles carry the
+  // byte-identical `.claude/settings.json` and `.codex/hooks.json` resources, so the completion gate is
+  // profile-owned and enforced under both declared harnesses. The runner remains launch + isolate +
+  // schedule + lifecycle; it does not branch methodology by harness.
 
   // The local driver: a loop that fires each cron agent on an interval (github used `on: schedule`).
   // Each runs its own behavior via bun, exactly as its github job runs `bun <behavior>`.

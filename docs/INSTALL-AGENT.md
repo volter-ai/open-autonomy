@@ -211,15 +211,11 @@ it gates everything.**
    `<default-branch>`** — the agents run in git worktrees, which only see committed files (this is how OA
    maintains itself). OK?" *Default:* yes (the only supported model; a clean/symlinked mode is not built).
    If they refuse, stop.
-   - **`.claude/settings.json` specifically wires a Claude Code Stop hook that fires at the end of EVERY
-     Claude Code session in this repo — including the human's own interactive sessions**, not just the
-     loop's (it self-guards, no-op unless `node_modules/ztrack/...` exists). If an existing
-     `.claude/settings.json` is present, `compile` merges the hook into it rather than overwriting (keeps
-     the human's own `permissions`/hooks); if it isn't valid JSON, `compile` refuses by name instead —
-     hand-merge it. The hook is **install-managed**: deleting the entry is re-added by the next
-     compile/upgrade, so a human who wants it gone must set the durable sentinel
-     `"_openAutonomyStopHookOptOut": true` in their settings.json (compile AND upgrade honor it). Full
-     detail: `docs/OPERATIONS.md#claude-settings`.
+   - **`.claude/settings.json` and `.codex/hooks.json` wire the same mandatory Stop + SubagentStop gate.**
+     The gate covers root and delegated turns, fails closed if the profile-pinned ztrack hook is missing,
+     and otherwise no-ops until `ztrack loop start` arms a task. Compile merges either existing JSON file
+     without dropping adopter hooks; malformed JSON refuses by name. The gates are install-managed and
+     have no substrate-specific bypass. Full detail: `docs/OPERATIONS.md#agent-gates`.
 4. **OA's Dependabot + Security workflows (net-new CI surface).** "OA also ships `.github/dependabot.yml`
    (weekly Actions-bumps → PRs the PM triages) and `.github/workflows/security.yml` (a **bun**-based
    supply-chain + workflow scan that runs on your PRs and `<default-branch>`). On a non-bun repo the
@@ -507,9 +503,9 @@ Phase 4 proves *one* merge. For the loop to actually run a backlog over days, se
   `ztrack init` line) — read it there; if the GitHub link is missing, fix `.volter/tracker-config.json`
   directly rather than re-running init.
 - **Re-running `compile` regenerates the harness files** (scripts/, .claude/skills/, .open-autonomy/, …) —
-  but two collision classes are now GUARDED, not silent (OA-10): (1) `.claude/settings.json` is
-  **merged**, not overwritten (your `permissions` and other keys survive; only the Stop hook entry is
-  appended if missing) — no `--force` needed for it specifically; (2) re-compiling **refuses** to
+  but two collision classes are now GUARDED, not silent (OA-10): (1) `.claude/settings.json` and
+  `.codex/hooks.json` are **merged**, not overwritten (adopter keys survive; both mandatory gate events
+  are installed exactly once) — no `--force` needed for them specifically; (2) re-compiling **refuses** to
   re-create any OA-generated file you deliberately deleted (e.g. the `dependabot.yml`/`security.yml` from
   step 4) — it names the path and explains it was in a prior `.open-autonomy/generated.json` but is now
   gone from disk; `--force` re-creates it if you actually want that (reported as `resurrected:`). State
@@ -517,10 +513,9 @@ Phase 4 proves *one* merge. For the loop to actually run a backlog over days, se
   a "deletion to undo". Stage only the harness files you actually changed (don't sweep in the `.volter/`
   sync-state churn a re-compile leaves behind).
 - **`upgrade` does NOT have guard (2)** — it is a re-compile of the derived set and **re-creates** any
-  derived file you deleted (no refusal, no `--force`), so a deletion you want to persist (e.g. removing
-  `security.yml`, or the raw Stop hook) must be **re-applied after every `upgrade`** or dropped at the
-  source (fork the profile). The Stop hook is the exception: its durable sentinel opt-out
-  (`"_openAutonomyStopHookOptOut": true` in `.claude/settings.json`) is honored by `upgrade` too.
+  derived file you deleted (no refusal, no `--force`). Validation gates are mandatory profile invariants;
+  upgrades restore missing Stop/SubagentStop events and replace retired OA gate commands. Use the schedule
+  pause fence to stop execution rather than deleting a completion gate.
 - **Updating the committed harness AFTER the gate is wired:** `enforce_admins:true` (correctly) blocks even
   an admin's direct push to the default branch (`GH006: N of N required status checks are expected`), so an
   operator pushing a harness/skill update can't `git push` to `main`. Use **`npx open-autonomy harness-push`**

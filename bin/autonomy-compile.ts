@@ -7,9 +7,9 @@
 // with this package) or a path to a profile dir of your own. With no outDir, prints the installation's file
 // list (a dry run). With outDir, materializes it — refusing if that would overwrite an existing file with
 // DIFFERENT bytes (BL-14, see findClobbers below), or re-create a file the operator deliberately deleted
-// (OA-10, see findResurrections below); --force overrides both. `.claude/settings.json` gets a structured
-// MERGE instead of a refusal (settings-merge.ts). These guards are fresh-compile only — `autonomy-upgrade.ts`
-// legitimately overwrites derived files in place (and applies the same settings.json merge strategy there).
+// (OA-10, see findResurrections below); --force overrides both. Claude and Codex project hook files get a
+// structured MERGE instead of a refusal (settings-merge.ts). These guards are fresh-compile only —
+// `autonomy-upgrade.ts` legitimately overwrites derived files in place and applies the same hook merge.
 // --provider-url <url> (local substrate only, OA-09): emits a DURABLE TERMFLEET_PROVIDER_URL pin into
 // scheduler/schedule.json's env, so it survives new shells/supervisors/re-runs instead of depending on the
 // operator remembering to export it (docs/adoption-fixes/OA-09-termfleet-coexistence-provider-pinning.md).
@@ -34,12 +34,12 @@ import type { CompileOutput } from '@open-autonomy/core';
 import type { LocalScheduleConfig } from '@open-autonomy/substrate-local';
 import { KNOWN_GOOD_ZTRACK, resolveZtrackPreset } from './ztrack-preset.ts';
 import { checkNamespaceCollisions } from './collision-check.ts';
-import { settingsMergeStrategies, CLAUDE_SETTINGS_PATH } from './settings-merge.ts';
+import { settingsMergeStrategies, GATE_CONFIG_PATHS } from './settings-merge.ts';
 
 // Repo-shell files ONLY a whole-repo SCAFFOLD profile (self-driving) carries as resources. The clobber
 // guard's message adds scaffold-specific advice iff a collision actually names one of THESE — never keyed
 // to the profile's own name (an additive profile like simple-sdlc can trip the guard on, say,
-// `.claude/settings.json` or `scripts/agent.ts`, and telling the adopter "this is a whole-repo scaffold,
+// a project hook file or `scripts/agent.ts`, and telling the adopter "this is a whole-repo scaffold,
 // compile simple-sdlc instead" while they're compiling simple-sdlc is exactly the false claim this fixes).
 const REPO_SHELL_FILES = new Set(['README.md', 'package.json', '.gitignore', 'CHANGELOG.md']);
 
@@ -256,10 +256,10 @@ if (outDir) {
 
   // The fresh-compile clobber guard (BL-14): refuse if this would silently overwrite existing files that
   // differ. NOT scoped to scaffold profiles only — an additive profile (simple-sdlc/simple-gh-sdlc) carries
-  // `.claude/settings.json`, the single most likely path to pre-exist in a Claude-using repo, and any
-  // same-named file under scripts/, standards/, scheduler/, .claude/skills/ also trips it. `.claude/
-  // settings.json` gets a structured MERGE instead (settingsMergeStrategies, ./settings-merge.ts) whenever
-  // the existing file parses as JSON — this only refuses for it when the existing file is NOT valid JSON.
+  // project harness hook configuration, which is likely to pre-exist in an agent-using repo, and any
+  // same-named file under scripts/, standards/, scheduler/, or harness skill roots also trips it. The
+  // Claude and Codex hook files get the same structured merge (settingsMergeStrategies) whenever the
+  // existing file parses as JSON; malformed JSON still refuses by name.
   const clobbers = findClobbers(out, outDir, readSource, settingsMergeStrategies);
   if (clobbers.length && !force) {
     const disposition = (path: string) =>
@@ -294,11 +294,11 @@ if (outDir) {
   for (const m of merges) console.log(`  merged: ${m.path} (${m.note})`);
   if (overwritten.length) console.log(`  overwritten (--force): ${overwritten.join(', ')}`);
   if (resurrected.length) console.log(`  resurrected (--force): ${resurrected.join(', ')}`);
-  if (written.includes(CLAUDE_SETTINGS_PATH)) {
+  if (GATE_CONFIG_PATHS.some((path) => written.includes(path))) {
     console.log(
-      `NOTE: ${CLAUDE_SETTINGS_PATH} wires a Claude Code Stop hook that runs at the end of EVERY Claude Code\n` +
-        `session in this repo, including your OWN interactive ones (it no-ops unless\n` +
-        `node_modules/ztrack/... exists). Details: docs/OPERATIONS.md#claude-settings`,
+      `NOTE: ${GATE_CONFIG_PATHS.join(' and ')} wire mandatory Stop + SubagentStop validation gates for\n` +
+        `Claude Code and Codex sessions in this repo. The gates fail closed if the profile-pinned ztrack\n` +
+        `hook is unavailable. Details: docs/OPERATIONS.md#agent-gates`,
     );
   }
   if (substrate === 'local') {

@@ -31,12 +31,17 @@ standards. Use:
 - `policy.risk.human_required_paths` for mechanically matchable protected paths.
 
 Role procedure, retry judgment, and semantic risk classification live in this skill and the standards,
-not in decorative manifest fields. Model values are tier labels. Resolve them through the running
-harness when possible; otherwise record an honest single-model degradation.
+not in decorative manifest fields. Model values are mandatory tier labels. Before any implementation or
+review dispatch, resolve both labels to the running harness's concrete model-routing controls. If either
+tier cannot be realized exactly, do not dispatch, substitute another tier, or reuse one model for both
+roles. Move the task to the mapped `inputRequired` state, engage the Maintainer with the missing routing
+capability, and stop.
 
 ## One tick = one execution wave
 
-1. Respect the execution fence supplied by the scheduler and `.open-autonomy/paused` as a fail-safe.
+1. Before every wave, directly check both the execution fence supplied by the scheduler and
+   `.open-autonomy/paused`. If either fence exists, stop without dispatch even if the scheduler launched
+   this tick; the direct `.open-autonomy/paused` check is the mandatory fail-safe.
 2. Reconcile one open Planner/Kaizen publication, task-state proposal, or compact audit receipt before
    new implementation work.
 3. Otherwise reconcile one already-working task or its open implementation PR.
@@ -72,19 +77,59 @@ subagent with the normalized task, current repository context, relevant directio
 implementation tier, and an isolated worktree.
 
 One mutating agent owns one worktree. Never share a mutating worktree and never use the repository-wide
-stash for worktree handoff. Use the task service's task-local validation loop when supported.
+stash for worktree handoff. The implementation worktree may be created by the dispatch itself, so the
+implementation prompt must make these commands the subagent's first actions inside that worktree, before
+reading or mutating repository files:
+
+```bash
+npx ztrack loop start "<task-id>" --until "<mapped-review-state>"
+npx ztrack loop status
+```
+
+Resolve `<mapped-review-state>` from `policy.taskStates.review`; this profile maps it to `in-review`.
+Never use `--until done` for an implementation worker: Manager owns the later review/merge/done transition.
+Both commands must exit zero and `loop status` must report `<task-id>` armed for the mapped review state
+before any implementation action. On any failure, the subagent must make no repository mutation and
+return the command output to Manager. Treat that return as a failed-closed dispatch: move the task to the
+mapped `inputRequired` state, engage the Maintainer, and stop.
+
+The same implementation subagent owns the complete implementation-stage transition in its isolated
+worktree: implement the acceptance criteria, run the relevant tests, commit, push, open or update the PR,
+record AC evidence through the task tool, and move the task to the mapped `review` state. It may not disarm
+or bypass the loop to claim completion. The loop releases only after the mapped review state is reached and
+`ztrack check` is green. The installed project hooks enforce the same gate for the root turn and subagent
+turns under every declared harness.
 
 ## Review and land
 
-1. Push the implementation branch and open or update its PR.
-2. Wait for every required repository check on the current head SHA.
+1. Reconcile the implementation PR that the implementation subagent opened or updated. Set `PR_NUMBER` to
+   that PR number and resolve `HEAD_SHA` from the code host immediately before each checks/review/merge
+   decision. If no PR exists, the implementation wave did not reach its mapped review state; treat it as a
+   failed wave, never manufacture the missing transition in Manager.
+2. Wait for every required repository check on exactly `HEAD_SHA`. A pending check means wait. A failed
+   required check is a failed wave and may not be reasoned around.
 3. Dispatch a fresh read-only review subagent on the research tier against the task acceptance criteria,
-   actual diff, evidence, required checks, risk boundary, and task validation result.
-4. Record `oa-review: pass|fail sha=<head-sha> — <findings>` on the PR.
-5. Merge only when required checks are green and the latest review is `pass` for exactly the current
-   head SHA. Never use an admin override or push directly to the default branch.
-6. On failure, perform at most two rework waves; then move the task to mapped `inputRequired` with the
-   evidence and the maintainer decision needed.
+   actual diff at exactly `HEAD_SHA`, evidence, every required check, risk boundary, and task validation
+   result. If the research tier cannot be realized exactly, fail closed under Configuration rather than
+   substituting another model.
+4. Record `oa-review: pass|fail sha=<HEAD_SHA> — <findings>` on the PR. Before using the result, resolve the
+   PR head again and discard the review if its SHA is no longer exactly `HEAD_SHA`.
+5. Read the PR discussion before rework. Durable rework accounting is the Manager-authored marker
+   `oa-rework:<k> sha=<failed-head-sha>`, where `k` is monotonically increasing. Count the highest prior
+   valid marker and never infer attempts from sessions or local state. For a failed required check or
+   failed current-SHA review, if `k < 2`, comment `oa-rework:<k+1> sha=<HEAD_SHA>` with the exact failures
+   and dispatch that rework on the implementation tier into the same isolated worktree. There are at most
+   two rework waves total. At `k = 2`, move the task to mapped `inputRequired` with the accumulated evidence
+   and the maintainer decision needed; do not dispatch a third wave.
+6. Merge only when every required check is green on the currently resolved PR head and the latest review
+   is `pass` for exactly that same SHA. Re-resolve the head immediately before merging; any change restarts
+   checks and review. Land with the explicit squash command:
+
+   ```bash
+   gh pr merge "$PR_NUMBER" --squash
+   ```
+
+   Never use an admin override, another merge strategy, or a direct push to the default branch.
 
 A later push invalidates an earlier review. A pending check means wait, not retry.
 

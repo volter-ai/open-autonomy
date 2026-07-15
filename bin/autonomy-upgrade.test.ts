@@ -19,8 +19,8 @@ const compile = (args: string[]) => run('bun', [join(REPO_ROOT, 'bin', 'autonomy
 const upgrade = (dir: string, extra: string[] = []) =>
   run('bun', [join(REPO_ROOT, 'bin', 'autonomy-upgrade.ts'), '--profile', join(REPO_ROOT, 'profiles', 'simple-gh-sdlc'), '--target', dir, ...extra]);
 
-describe('autonomy-upgrade CLI — settings.json merge wiring (AC-7, Finding 1)', () => {
-  test('upgrade --apply PRESERVES a merged .claude/settings.json: permissions survive, Stop hook stays length 1', () => {
+describe('autonomy-upgrade CLI — harness gate merge wiring', () => {
+  test('upgrade --apply preserves adopter config and both mandatory Claude gate events', () => {
     const dir = mkdtempSync(join(tmpdir(), 'oa10-upg-'));
     try {
       // Seed an adopter's own settings.json, then merge the OA hook in via a fresh compile.
@@ -31,6 +31,7 @@ describe('autonomy-upgrade CLI — settings.json merge wiring (AC-7, Finding 1)'
       const merged = JSON.parse(readFileSync(join(dir, '.claude', 'settings.json'), 'utf8'));
       expect(merged.permissions.allow).toEqual(['Bash(npm test)']);
       expect(merged.hooks.Stop).toHaveLength(1);
+      expect(merged.hooks.SubagentStop).toHaveLength(1);
 
       // Now the LONG-TERM maintenance path: upgrade --apply. Without the CLI's merge wiring this reverts the
       // file to the profile's whole-file copy (permissions lost). With it, the adopter's file is preserved.
@@ -39,30 +40,33 @@ describe('autonomy-upgrade CLI — settings.json merge wiring (AC-7, Finding 1)'
       const after = JSON.parse(readFileSync(join(dir, '.claude', 'settings.json'), 'utf8'));
       expect(after.permissions.allow).toEqual(['Bash(npm test)']); // NOT reverted
       expect(after.hooks.Stop).toHaveLength(1); // still exactly one — not duplicated, not dropped
+      expect(after.hooks.SubagentStop).toHaveLength(1);
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
   }, 60_000);
 
-  test('the durable Stop-hook opt-out sentinel SURVIVES upgrade --apply (hook not re-added)', () => {
-    const dir = mkdtempSync(join(tmpdir(), 'oa10-upg-optout-'));
+  test('upgrade --apply preserves adopter Codex hooks and both mandatory gate events', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'oa-gate-upg-codex-'));
     try {
-      mkdirSync(join(dir, '.claude'), { recursive: true });
-      // The durable opt-out state: sentinel set, no Stop hook.
+      mkdirSync(join(dir, '.codex'), { recursive: true });
       writeFileSync(
-        join(dir, '.claude', 'settings.json'),
-        JSON.stringify({ _openAutonomyStopHookOptOut: true, permissions: { allow: [] } }, null, 2),
+        join(dir, '.codex', 'hooks.json'),
+        JSON.stringify({ hooks: { PostToolUse: [{ hooks: [{ command: 'echo adopter' }] }] } }, null, 2),
       );
-      // A fresh compile must honor it (no hook added) — establishes the manifest so upgrade has prior state.
       const c = compile(['simple-gh-sdlc', 'local', dir]);
       expect(c.exitCode).toBe(0);
-      expect(JSON.parse(readFileSync(join(dir, '.claude', 'settings.json'), 'utf8')).hooks).toBeUndefined();
+      const merged = JSON.parse(readFileSync(join(dir, '.codex', 'hooks.json'), 'utf8'));
+      expect(merged.hooks.PostToolUse).toHaveLength(1);
+      expect(merged.hooks.Stop).toHaveLength(1);
+      expect(merged.hooks.SubagentStop).toHaveLength(1);
 
       const u = upgrade(dir, ['--apply']);
       expect(u.exitCode).toBe(0);
-      const after = JSON.parse(readFileSync(join(dir, '.claude', 'settings.json'), 'utf8'));
-      expect(after.hooks).toBeUndefined(); // STILL no Stop hook — the opt-out held across upgrade
-      expect(after._openAutonomyStopHookOptOut).toBe(true); // sentinel untouched
+      const after = JSON.parse(readFileSync(join(dir, '.codex', 'hooks.json'), 'utf8'));
+      expect(after.hooks.PostToolUse).toHaveLength(1);
+      expect(after.hooks.Stop).toHaveLength(1);
+      expect(after.hooks.SubagentStop).toHaveLength(1);
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }

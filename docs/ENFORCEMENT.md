@@ -32,7 +32,8 @@ and a denial test.
   gates, reporting degraded state when repository permissions prevent installation.
 - [ ] Move merge policy and state-only paths into typed code-host controls with a verified GitHub
   consumer; prose consumption by a role skill does not make them hard gates.
-- [ ] Demonstrate distinct model-tier routing per supported harness or report single-model degradation.
+- [ ] Demonstrate distinct model-tier routing per declared harness; until demonstrated, model-tiered
+  profiles must fail closed before dispatch and must never substitute a single model.
 
 ### Potential support to implement
 

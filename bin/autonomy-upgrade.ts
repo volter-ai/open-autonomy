@@ -13,9 +13,8 @@ import { readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { parseIr, planUpgrade, applyUpgrade } from '@open-autonomy/core';
 import { compileGithub } from '@open-autonomy/substrate-github';
-// OA-10: the SAME `.claude/settings.json` merge policy the fresh-compile CLI applies
-// (bin/autonomy-compile.ts) — without it, every upgrade would silently revert an adopter's merged settings
-// file back to the profile's whole-file copy (planUpgrade's `update` on a byte-differing derived file).
+// The SAME Claude/Codex project-hook merge policy the fresh-compile CLI applies. Without it, every upgrade
+// would silently revert adopter-owned hook configuration to the profile's whole-file copy.
 import { settingsMergeStrategies } from './settings-merge.ts';
 
 function arg(name: string): string | undefined {

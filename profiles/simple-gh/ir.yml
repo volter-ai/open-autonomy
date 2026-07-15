@@ -84,6 +84,7 @@ policy:
 
 resources:
   - .claude/settings.json
+  - .codex/hooks.json
   - standards/workflow.md
   - standards/issue-and-evidence.md
   - standards/risk-and-review.md

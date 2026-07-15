@@ -433,9 +433,9 @@ describe('autonomy-compile — OA-10a: collision message is scope-correct (AC-1)
   });
 });
 
-// OA-10 (c): `.claude/settings.json` gets a structured MERGE on collision, not a refusal or a clobber.
-describe('autonomy-compile — OA-10c: .claude/settings.json merge (AC-2, AC-3)', () => {
-  test('AC-2: an existing settings.json with permissions is MERGED — permissions survive, the Stop hook is added, and it is idempotent', () => {
+// Harness hook files get the same structured merge on collision, never a silent clobber.
+describe('autonomy-compile — mandatory harness gate merge', () => {
+  test('an existing Claude settings file is merged with both gate events and is idempotent', () => {
     const dir = mkdtempSync(join(tmpdir(), 'oa10-ac2-'));
     try {
       mkdirSync(join(dir, '.claude'), { recursive: true });
@@ -445,8 +445,10 @@ describe('autonomy-compile — OA-10c: .claude/settings.json merge (AC-2, AC-3)'
       expect(r1.stdout).toContain('merged: .claude/settings.json');
       const settings1 = JSON.parse(readFileSync(join(dir, '.claude', 'settings.json'), 'utf8'));
       expect(settings1.permissions.allow).toEqual(['Bash(npm test)']); // preserved
-      expect(typeof settings1.hooks.Stop[0].hooks[0].command).toBe('string'); // the OA Stop hook landed
+      expect(typeof settings1.hooks.Stop[0].hooks[0].command).toBe('string');
+      expect(typeof settings1.hooks.SubagentStop[0].hooks[0].command).toBe('string');
       const stopLenAfterFirst = settings1.hooks.Stop.length;
+      const subagentStopLenAfterFirst = settings1.hooks.SubagentStop.length;
 
       // Idempotent: re-running must not duplicate the hook entry — and (nit a) must NOT print a spurious
       // "merged" receipt line when nothing actually changed.
@@ -455,37 +457,34 @@ describe('autonomy-compile — OA-10c: .claude/settings.json merge (AC-2, AC-3)'
       expect(r2.stdout).not.toContain('merged: .claude/settings.json'); // no-op merge prints no receipt line
       const settings2 = JSON.parse(readFileSync(join(dir, '.claude', 'settings.json'), 'utf8'));
       expect(settings2.hooks.Stop.length).toBe(stopLenAfterFirst);
+      expect(settings2.hooks.SubagentStop.length).toBe(subagentStopLenAfterFirst);
       expect(settings2.permissions.allow).toEqual(['Bash(npm test)']); // still preserved
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
   }, 30_000);
 
-  test('the durable opt-out sentinel is honored by compile: the Stop hook is NEVER added, across re-compiles', () => {
-    const dir = mkdtempSync(join(tmpdir(), 'oa10-optout-'));
+  test('an existing Codex hook file is merged with both gate events and preserves unrelated hooks', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'oa-gate-codex-'));
     try {
-      mkdirSync(join(dir, '.claude'), { recursive: true });
+      mkdirSync(join(dir, '.codex'), { recursive: true });
       writeFileSync(
-        join(dir, '.claude', 'settings.json'),
-        JSON.stringify({ _openAutonomyStopHookOptOut: true, permissions: { allow: ['Bash(npm test)'] } }, null, 2),
+        join(dir, '.codex', 'hooks.json'),
+        JSON.stringify({ hooks: { PostToolUse: [{ hooks: [{ command: 'echo adopter-hook' }] }] } }, null, 2),
       );
       const r1 = compile(['simple-sdlc', 'local', dir]);
-      expect(r1.exitCode).toBe(0); // not a clobber refusal — the merge succeeds as a no-op
-      expect(r1.stdout).not.toContain('merged: .claude/settings.json'); // nothing changed -> no receipt line
-      const s1 = JSON.parse(readFileSync(join(dir, '.claude', 'settings.json'), 'utf8'));
-      expect(s1.hooks).toBeUndefined(); // NO Stop hook added
-      expect(s1.permissions.allow).toEqual(['Bash(npm test)']); // untouched
-
-      // Re-compile: still honored (the whole point of "durable").
-      const r2 = compile(['simple-sdlc', 'local', dir]);
-      expect(r2.exitCode).toBe(0);
-      expect(JSON.parse(readFileSync(join(dir, '.claude', 'settings.json'), 'utf8')).hooks).toBeUndefined();
+      expect(r1.exitCode).toBe(0);
+      expect(r1.stdout).toContain('merged: .codex/hooks.json');
+      const hooks = JSON.parse(readFileSync(join(dir, '.codex', 'hooks.json'), 'utf8')).hooks;
+      expect(hooks.PostToolUse).toHaveLength(1);
+      expect(hooks.Stop).toHaveLength(1);
+      expect(hooks.SubagentStop).toHaveLength(1);
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
   }, 30_000);
 
-  test('AC-3: an UNPARSEABLE existing settings.json refuses by name and explains the manual merge', () => {
+  test('an unparseable existing hook file refuses by name', () => {
     const dir = mkdtempSync(join(tmpdir(), 'oa10-ac3-'));
     try {
       mkdirSync(join(dir, '.claude'), { recursive: true });
@@ -563,8 +562,8 @@ describe('autonomy-compile — OA-10a/b: deletion-resurrection guard + printed r
       expect(r.exitCode).toBe(0);
       const generatedJsonHits = (r.stdout.match(/generated\.json/g) ?? []).length;
       expect(generatedJsonHits).toBeGreaterThanOrEqual(1);
-      const stopHookHits = (r.stdout.match(/stop hook/gi) ?? []).length;
-      expect(stopHookHits).toBeGreaterThanOrEqual(1);
+      const gateNoteHits = (r.stdout.match(/Stop \+ SubagentStop validation gates/gi) ?? []).length;
+      expect(gateNoteHits).toBeGreaterThanOrEqual(1);
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }

@@ -69,8 +69,9 @@ That single-credential reality means the recorded review is a fresh context, not
 principal. Branch protection with the adopter's real required CI and `enforce_admins: true` is the
 mechanical merge gate.
 
-Model values are abstract `research` and `implement` tiers. A harness with per-dispatch routing realizes
-them; other harnesses degrade honestly to one model.
+Model values are mandatory `research` and `implement` tiers. The active harness must realize both tiers
+through its per-dispatch model routing; Manager fails closed before dispatch if either tier is unavailable.
+It never substitutes a single model or silently changes the configured tier.
 
 ## Compile
 

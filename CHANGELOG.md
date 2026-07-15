@@ -4,6 +4,9 @@
 
 ### Fixed
 
+- Local ztrack profiles now enforce the same fail-closed Stop/SubagentStop validation loop under Claude
+  Code and Codex, while Manager restores mandatory model-tier routing, durable rework accounting,
+  exact-head review, required-check, pause-fence, and squash-merge rails.
 - Reviewer runs now wait for live required checks before model judgment, route mechanical failures back
   to rework instead of parking them on a person, allocate no bounded model run when those checks fail, and
   require a durable typed ask for genuine human decisions.

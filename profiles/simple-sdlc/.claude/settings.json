@@ -5,7 +5,17 @@
         "hooks": [
           {
             "type": "command",
-            "command": "if [ -f node_modules/ztrack/plugins/ztrack-gate/hooks/stop-loop.sh ]; then bash node_modules/ztrack/plugins/ztrack-gate/hooks/stop-loop.sh; fi"
+            "command": "if [ ! -f node_modules/ztrack/plugins/ztrack/hooks/stop-loop.sh ]; then echo 'open-autonomy: required ztrack stop-loop gate is missing; install the profile-pinned ztrack dependency' >&2; exit 2; fi; bash node_modules/ztrack/plugins/ztrack/hooks/stop-loop.sh"
+          }
+        ]
+      }
+    ],
+    "SubagentStop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "if [ ! -f node_modules/ztrack/plugins/ztrack/hooks/stop-loop.sh ]; then echo 'open-autonomy: required ztrack stop-loop gate is missing; install the profile-pinned ztrack dependency' >&2; exit 2; fi; bash node_modules/ztrack/plugins/ztrack/hooks/stop-loop.sh"
           }
         ]
       }

@@ -1,0 +1,8 @@
+schema: autonomy.organization.v2
+name: wrong-sort-reference
+tools:
+  implement: { protocol: local }
+actors:
+  coder:
+    kind: agent
+    behaviors: [implement]

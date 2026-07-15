@@ -484,6 +484,7 @@ via the runner seam.
 
 ### Added
 
+- Published the normative experimental Organization IR v2 specification with a generated field-level semantic appendix and executable examples.
 - Added fail-closed runtime proof ledgers and a reproducible threat-model baseline for the autonomous-organization implementation phase.
 
 ### Fixed

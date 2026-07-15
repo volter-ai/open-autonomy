@@ -182,6 +182,7 @@ github and local are the **same recipe**; only `provision` differs. "Adopt into 
 | `docs/ARCHITECTURE.md` | Master map of the system | humans, agents needing orientation |
 | `docs/SPEC.md` | The standard (`autonomy.ir.v1`): actor model + the four catalogs + Runner + handoffs | humans, agents, substrate authors |
 | `docs/ORGANIZATION-IR.md` | Exploratory v2 organization/state IR: complete semantic planes, invariants, and lowering contract | IR and substrate authors |
+| `docs/ORGANIZATION-IR-SPEC.md` | Normative experimental Organization IR v2 language specification and generated field semantics | independent implementers, compiler and conformance authors |
 | `docs/ORGANIZATION-RUNTIME-AC.md` | Post-IR dependency-ordered implementation punch list, proof gates, and falsifiers | runtime, substrate, compiler, and bench authors |
 | `docs/ORGANIZATION-RUNTIME-LENS-AUDIT.md` | Stable formal obligations for every runtime punch-list checkpoint | implementers and reviewers |
 | `docs/organization-runtime-punchlist.json` | Authoritative checked dependency DAG and milestone membership for the runtime punch list | planner, CI, implementers |

@@ -41,6 +41,8 @@ const DEV_ONLY = new Set([
   'build-local-runner-cli.ts',
   // Runtime-phase proof-accounting initializer; produces repository evidence, not install machinery.
   'initialize-runtime-ledgers.ts',
+  // Normative-spec appendix generator; repository documentation tooling, not install machinery.
+  'generate-organization-field-semantics.ts',
   // Packaging tooling (OA-18): the single declaration of the bundle's sibling DATA files, shared by
   // build-cli.ts (copies them into dist/) and bin/doctor-checks.ts (check 1 asserts they shipped). A
   // build-time manifest, never runtime — like build-cli.ts, excluded from the install runtime mirror.

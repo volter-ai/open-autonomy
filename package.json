@@ -79,6 +79,7 @@
     "check:supply-chain": "bun scripts/check-supply-chain.ts"
   },
   "devDependencies": {
+    "@modelcontextprotocol/sdk": "1.17.5",
     "@types/bun": "^1.3.14",
     "@types/node": "^24.13.2",
     "typescript": "^5.9.3",

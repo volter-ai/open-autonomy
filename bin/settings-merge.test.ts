@@ -139,9 +139,10 @@ describe('profile Stop-hook path resolves in the installed ztrack (loop must not
     .filter((name) => existsSync(join(profilesDir, name, '.claude', 'settings.json')));
   for (const profile of profiles) {
     const raw = readFileSync(join(profilesDir, profile, '.claude', 'settings.json'), 'utf8');
-    const commands: string[] = Object.values(JSON.parse(raw).hooks ?? {})
+    const parsed = JSON.parse(raw) as { hooks?: Record<string, Array<{ hooks?: Array<{ command?: string }> }>> };
+    const commands: string[] = Object.values(parsed.hooks ?? {})
       .flat()
-      .flatMap((e: { hooks?: Array<{ command?: string }> }) => e.hooks ?? [])
+      .flatMap((e) => e.hooks ?? [])
       .map((h) => h.command ?? '');
     const paths = [...new Set(commands.flatMap((c) => [...c.matchAll(/node_modules\/\S*stop-loop\.sh/g)].map((m) => m[0])))];
     if (paths.length === 0) continue; // this profile ships no loop hook — nothing to resolve

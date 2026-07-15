@@ -25,7 +25,6 @@ export interface ProvisionManifest {
     enforce_admins?: boolean; // default false (only human admins direct-push); soc2-baseline sets true
     required_reviews?: number; // required_approving_review_count; default 0; soc2-baseline sets >=1
     require_code_owner_reviews?: boolean; // default false
-    dismiss_stale_reviews?: boolean; // re-earn native approval after every push; required for automated adapters
     required_signatures?: boolean; // require signed commits; default false (see G3/C6 note in profile README)
   };
   // Repo security settings applied via the repo API (GitHub Advanced Security; free on public repos, a
@@ -353,7 +352,6 @@ export async function provisionTargetRepo(options: Options, proc: ProcFn = defau
         required_pull_request_reviews: {
           required_approving_review_count: bp.required_reviews ?? 0,
           require_code_owner_reviews: bp.require_code_owner_reviews ?? false,
-          dismiss_stale_reviews: bp.dismiss_stale_reviews ?? false,
         },
         restrictions: null,
       });

@@ -59,7 +59,6 @@ const CODE_HOST_RESOURCE = new Set([
   // never via the mirror. scripts/ stays where they are developed + unit-tested (check:public-agent);
   // the per-profile copies must match byte-for-byte (check:profiles' shared-standard guard).
   'rearm-auto-merge.ts', 'reconcile-merged-issues.ts', 'human-approval-gate.ts', 'check-supply-chain.ts',
-  'native-approval-adapter.ts',
 ]);
 // Unit tests are dev artifacts, NOT install content — they never run in an installation and would carry
 // dangling deps if vendored. They stay in scripts/ (run by check:public-agent) and ship to no profile.

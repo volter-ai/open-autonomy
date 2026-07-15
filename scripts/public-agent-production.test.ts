@@ -204,30 +204,6 @@ describe('public agent production readiness', () => {
     expect(reviewer).toContain('human-approval-required');
   });
 
-  test('native approval is an optional default-branch adapter, not another agent or status publisher', () => {
-    const wf = workflow('native-approval.yml');
-    expect(wf).toContain('workflow_run:');
-    expect(wf).toContain('workflows: [reviewer]');
-    expect(wf).not.toContain('pull_request:');
-    expect(wf).not.toContain('pull_request_target:');
-    expect(wf).toContain('ref: ${{ github.event.repository.default_branch }}');
-    expect(wf).toContain('persist-credentials: false');
-    expect(wf).toContain('run-id: ${{ github.event.workflow_run.id }}');
-    expect(wf).toContain('name: agent-run-reviewer');
-    expect(wf).toContain('bun scripts/native-approval-adapter.ts');
-    expect(wf).toContain('OPEN_AUTONOMY_NATIVE_APPROVAL_TOKEN');
-    expect(wf).toContain('Native approval not configured');
-    expect(wf).toContain('EXPECTED_PR: ${{ github.event.inputs.pr }}');
-    expect(wf).toContain('EXPECTED_SHA: ${{ github.event.inputs.sha }}');
-    expect(wf).toContain('statuses: read');
-    expect(wf).not.toContain('statuses: write');
-    expect(wf).not.toContain('contents: write');
-    const adapter = script('native-approval-adapter.ts');
-    expect(adapter).toContain("context === 'agent-review'");
-    expect(adapter).not.toContain('context=agent-review');
-    expect(adapter).not.toContain('context=human-approval');
-  });
-
   test('merge reviewer judges read-only; trusted effect alone publishes agent-review and cannot merge', () => {
     const text = workflow('reviewer.yml');
     const agentJob = text.slice(text.indexOf('  reviewer:'), text.indexOf('  review_effect:'));

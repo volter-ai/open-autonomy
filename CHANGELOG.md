@@ -57,11 +57,6 @@ hardening, and a new bundled profile for locally-run agents landing PRs on GitHu
   mergeable with the check red.
 
 ### Added
-- **Optional identity-aware native GitHub approval adapter** (#203): GitHub profiles now carry a dormant
-  default-branch workflow that can turn an authoritative exact-head `agent-review=success` into a native
-  APPROVE review through a distinct write-capable installation identity. It rejects self/weak/stale
-  identities, never fans out by SHA, is retry-idempotent, and stays separate from `human-approval`.
-  Provisioning now supports `dismiss_stale_reviews` for installations that opt into required native reviews.
 - **`profiles/simple-gh`** (#129): a bundled profile for running agents on your own machine (local
   runner) while landing changes as **manually-merged PRs on GitHub** (code host) — one declared `manager`
   agent (`code:propose` + `tasks:author` + `tasks:converse`) that dispatches model-tiered in-session

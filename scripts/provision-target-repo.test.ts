@@ -87,7 +87,7 @@ const BP_MANIFEST = {
   required_secrets: [],
   variables: [],
   labels: [],
-  branch_protection: { branch: 'main', required_checks: ['ci', 'agent-review'], required_reviews: 1, dismiss_stale_reviews: true },
+  branch_protection: { branch: 'main', required_checks: ['ci', 'agent-review'] },
 };
 
 const tmps: string[] = [];
@@ -109,9 +109,8 @@ function writeManifestFile(manifest: unknown): string {
 // A repo that already EXISTS with commits (hasCommits=true, shouldPush=false) — keeps every test below
 // clear of pushInitialContent's real `git init/add/commit/push` calls (irrelevant to the auto-merge gate
 // under test, and no business touching a real remote in a unit test).
-function makeCallLoggingProc(): { proc: ProcFn; calls: string[][]; putBodies: string[] } {
+function makeCallLoggingProc(): { proc: ProcFn; calls: string[][] } {
   const calls: string[][] = [];
-  const putBodies: string[] = [];
   const proc: ProcFn = (cmd, args, opts) => {
     calls.push([cmd, ...args]);
     if (cmd === 'gh' && args[0] === 'repo' && args[1] === 'view') return { status: 0, stdout: '{"name":"te10-scratch"}', stderr: '' };
@@ -122,20 +121,19 @@ function makeCallLoggingProc(): { proc: ProcFn; calls: string[][]; putBodies: st
       return { status: 0, stdout: '', stderr: '' }; // allow_auto_merge PATCH (only reached when armed)
     }
     if (cmd === 'gh' && args[0] === 'api' && args[1] === '-X' && args[2] === 'PUT' && args[3]?.includes('/protection')) {
-      putBodies.push(String(opts?.input ?? ''));
       return { status: 0, stdout: '', stderr: '' };
     }
     if (cmd === 'gh' && args[0] === 'secret' && args[1] === 'list') return { status: 0, stdout: '[]', stderr: '' };
     void opts;
     return { status: 1, stdout: '', stderr: `unexpected call in TE.10 test: ${cmd} ${args.join(' ')}` };
   };
-  return { proc, calls, putBodies };
+  return { proc, calls };
 }
 
 describe('provisionTargetRepo — armAutoMerge (TE.10)', () => {
   test('default (armAutoMerge omitted/false, the real oa-install shape) never issues the allow_auto_merge PATCH', async () => {
     const manifestPath = writeManifestFile(BP_MANIFEST);
-    const { proc, calls, putBodies } = makeCallLoggingProc();
+    const { proc, calls } = makeCallLoggingProc();
     const report = await provisionTargetRepo(
       { repo: REPO, source: '/nonexistent-unused', manifest: manifestPath, forceContent: false, dryRun: false, armAutoMerge: false },
       proc,
@@ -145,11 +143,6 @@ describe('provisionTargetRepo — armAutoMerge (TE.10)', () => {
     // hardening: required checks land on the real PUT call.
     const putCall = calls.find((c) => c[0] === 'gh' && c[3] === 'PUT' && c[4]?.includes('/protection'));
     expect(putCall).toBeDefined();
-    expect(JSON.parse(putBodies[0]).required_pull_request_reviews).toEqual({
-      required_approving_review_count: 1,
-      require_code_owner_reviews: false,
-      dismiss_stale_reviews: true,
-    });
     expect(report).toContain('branch protection: configured');
     cleanupTmps();
   });

@@ -378,6 +378,10 @@ function wrapperYml(
   // scripting an agent's work just because "a model might skip it" is the wrong instinct. See AGENTS.md.)
   const skillPath = `.codex/skills/${agent.behavior}/SKILL.md`;
   const RID = `ir-${name}-\${{ github.run_id }}`;
+  // A GitHub rerun keeps github.run_id but increments github.run_attempt. The logical run/branch identity
+  // remains stable, while every proxy budget/token lifecycle gets a fresh identity so a rerun cannot
+  // collide with the immutable prior proxy ledger entry.
+  const PROXY_RID = `${RID}-\${{ github.run_attempt }}`;
   // The work item comes from the trigger's declared `subject.ref` param (resolved into job env). An agent
   // with no subject.ref is autonomous (cron): it gets a minimal synthetic payload. The skill fetches any
   // deeper context itself (it is credentialed — it has gh + read).
@@ -433,7 +437,7 @@ function wrapperYml(
   const mintModelToken = (condition?: string): string[] => [
     `      - name: Mint bounded model token`,
     ...(condition ? [`        if: ${condition}`] : []),
-    `        run: bun scripts/model-proxy-mint.ts --run-id "${RID}" --models "${varOr('PUBLIC_AGENT_MODEL', gh.model)}" --max-usd-cents "\${{ vars.PUBLIC_AGENT_MAX_USD_CENTS || '200' }}" --max-requests "\${{ vars.PUBLIC_AGENT_MAX_REQUESTS || '250' }}" --issue .agent-run/issue.json`,
+    `        run: bun scripts/model-proxy-mint.ts --run-id "${PROXY_RID}" --models "${varOr('PUBLIC_AGENT_MODEL', gh.model)}" --max-usd-cents "\${{ vars.PUBLIC_AGENT_MAX_USD_CENTS || '200' }}" --max-requests "\${{ vars.PUBLIC_AGENT_MAX_REQUESTS || '250' }}" --issue .agent-run/issue.json`,
   ];
   const reviewTarget = finalizesMergeReview && refParam ? [
     `      - name: Bind review target`,
@@ -559,7 +563,7 @@ function wrapperYml(
     ] : []),
     `      - name: Exchange OIDC for the bounded token`,
     ...(finalizesMergeReview ? [`        if: steps.review_prerequisites.outputs.run_model == 'true'`] : []),
-    `        run: bun scripts/model-proxy-exchange.ts --run-id "${RID}" --audience "$MODEL_PROXY_OIDC_AUDIENCE"`,
+    `        run: bun scripts/model-proxy-exchange.ts --run-id "${PROXY_RID}" --audience "$MODEL_PROXY_OIDC_AUDIENCE"`,
     `      - name: Run agent (Claude Code + skill)`,
     ...(finalizesMergeReview ? [`        if: steps.review_prerequisites.outputs.run_model == 'true'`] : []),
     `        env:`,
@@ -575,7 +579,7 @@ function wrapperYml(
       `          ${JSON.stringify(declaredResultSchema)}`,
       `          OPEN_AUTONOMY_RESULT_SCHEMA`,
     ] : []),
-    `          bun scripts/claude-agent-run.ts --skill ${skillPath} --run-id "${RID}"; rc=$?; bun scripts/agent-visual-verify.ts || true; echo "::group::agent transcript (${RID})"; cat .agent-run/artifacts/transcript.md 2>/dev/null || true; echo "::endgroup::"; exit $rc`,
+    `          bun scripts/claude-agent-run.ts --skill ${skillPath} --run-id "${PROXY_RID}"; rc=$?; bun scripts/agent-visual-verify.ts || true; echo "::group::agent transcript (${PROXY_RID})"; cat .agent-run/artifacts/transcript.md 2>/dev/null || true; echo "::endgroup::"; exit $rc`,
     ...(proposes ? effect : []),
     // Persist the call result as a durable per-run artifact: claude-agent-run writes .agent-run/artifacts/
     // transcript.md (the model's final message + stderr, secret-redacted) plus pr.md and the subject it
@@ -600,8 +604,8 @@ function wrapperYml(
     `      - name: Release the run slot (revoke minted token)`,
     `        if: ${finalizesMergeReview ? "always() && steps.review_prerequisites.outputs.run_model == 'true'" : 'always()'}`,
     `        run: |`,
-    `          for i in 1 2 3 4 5; do bun scripts/model-proxy-revoke.ts --run-id "${RID}" && exit 0 || sleep 3; done`,
-    `          echo "::warning::run-slot revoke failed after retries for ${RID}; slot will auto-reap at token TTL"`,
+    `          for i in 1 2 3 4 5; do bun scripts/model-proxy-revoke.ts --run-id "${PROXY_RID}" && exit 0 || sleep 3; done`,
+    `          echo "::warning::run-slot revoke failed after retries for ${PROXY_RID}; slot will auto-reap at token TTL"`,
     ...(finalizesMergeReview ? [
       `  review_effect:`,
       `    needs: [setup, ${name}]`,

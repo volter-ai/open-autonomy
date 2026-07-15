@@ -57,7 +57,7 @@ jobs:
           mkdir -p .agent-run
           printf '{"number":0,"title":"planner","body":""}\n' > .agent-run/issue.json
       - name: Mint bounded model token
-        run: bun scripts/model-proxy-mint.ts --run-id "ir-planner-${{ github.run_id }}" --models "${{ vars.PUBLIC_AGENT_MODEL || 'deepseek/deepseek-v4-flash' }}" --max-usd-cents "${{ vars.PUBLIC_AGENT_MAX_USD_CENTS || '200' }}" --max-requests "${{ vars.PUBLIC_AGENT_MAX_REQUESTS || '250' }}" --issue .agent-run/issue.json
+        run: bun scripts/model-proxy-mint.ts --run-id "ir-planner-${{ github.run_id }}-${{ github.run_attempt }}" --models "${{ vars.PUBLIC_AGENT_MODEL || 'deepseek/deepseek-v4-flash' }}" --max-usd-cents "${{ vars.PUBLIC_AGENT_MAX_USD_CENTS || '200' }}" --max-requests "${{ vars.PUBLIC_AGENT_MAX_REQUESTS || '250' }}" --issue .agent-run/issue.json
   planner:
     needs: setup
     runs-on: ubuntu-latest
@@ -95,13 +95,13 @@ jobs:
           mkdir -p .agent-run
           printf '{"number":0,"title":"planner","body":""}\n' > .agent-run/issue.json
       - name: Exchange OIDC for the bounded token
-        run: bun scripts/model-proxy-exchange.ts --run-id "ir-planner-${{ github.run_id }}" --audience "$MODEL_PROXY_OIDC_AUDIENCE"
+        run: bun scripts/model-proxy-exchange.ts --run-id "ir-planner-${{ github.run_id }}-${{ github.run_attempt }}" --audience "$MODEL_PROXY_OIDC_AUDIENCE"
       - name: Run agent (Claude Code + skill)
         env:
           OSS_AGENT_TASK_DIR: .agent-run
           OSS_AGENT_ISSUE_PATH: .agent-run/issue.json
         run: |
-          bun scripts/claude-agent-run.ts --skill .codex/skills/planner/SKILL.md --run-id "ir-planner-${{ github.run_id }}"; rc=$?; bun scripts/agent-visual-verify.ts || true; echo "::group::agent transcript (ir-planner-${{ github.run_id }})"; cat .agent-run/artifacts/transcript.md 2>/dev/null || true; echo "::endgroup::"; exit $rc
+          bun scripts/claude-agent-run.ts --skill .codex/skills/planner/SKILL.md --run-id "ir-planner-${{ github.run_id }}-${{ github.run_attempt }}"; rc=$?; bun scripts/agent-visual-verify.ts || true; echo "::group::agent transcript (ir-planner-${{ github.run_id }}-${{ github.run_attempt }})"; cat .agent-run/artifacts/transcript.md 2>/dev/null || true; echo "::endgroup::"; exit $rc
       - name: Effect — propose the change as an auto-merging PR (if the tree changed)
         env:
           GH_TOKEN: ${{ github.token }}
@@ -123,5 +123,5 @@ jobs:
       - name: Release the run slot (revoke minted token)
         if: always()
         run: |
-          for i in 1 2 3 4 5; do bun scripts/model-proxy-revoke.ts --run-id "ir-planner-${{ github.run_id }}" && exit 0 || sleep 3; done
-          echo "::warning::run-slot revoke failed after retries for ir-planner-${{ github.run_id }}; slot will auto-reap at token TTL"
+          for i in 1 2 3 4 5; do bun scripts/model-proxy-revoke.ts --run-id "ir-planner-${{ github.run_id }}-${{ github.run_attempt }}" && exit 0 || sleep 3; done
+          echo "::warning::run-slot revoke failed after retries for ir-planner-${{ github.run_id }}-${{ github.run_attempt }}; slot will auto-reap at token TTL"

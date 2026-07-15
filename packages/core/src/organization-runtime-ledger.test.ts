@@ -225,4 +225,13 @@ describe('runtime proof-accounting ledger', () => {
     expect(corpus.obligationLedger.filter((entry) => entry.checkpoint === 'R18').every((entry) => entry.assurance === 'property-tested' && entry.evidence.includes('ev-r18-review'))).toBe(true);
   });
 
+  test('closes R19 only after fenced reconciliation and both live substrate drift gates', () => {
+    const corpus = JSON.parse(readFileSync('docs/runtime-ledgers/r19-closure.json','utf8')) as RuntimeLedgerCorpus;
+    expect(validateRuntimeLedger(corpus, expected, manifest.items)).toEqual([]);
+    expect(corpus.checkpointStateLedger.find((entry) => entry.id === 'R19')?.status).toBe('complete');
+    expect(corpus.residualLedger.filter((entry) => entry.checkpoint === 'R19' && entry.disposition === 'open')).toEqual([]);
+    expect(corpus.residualLedger).toContainEqual(expect.objectContaining({id:'r19-paperclip-archive-teardown',disposition:'accepted'}));
+    expect(corpus.obligationLedger.filter((entry) => entry.checkpoint === 'R19').every((entry) => entry.assurance === 'property-tested' && entry.evidence.includes('ev-r19-live') && entry.evidence.includes('ev-r19-review'))).toBe(true);
+  });
+
 });

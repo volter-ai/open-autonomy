@@ -35,7 +35,7 @@ describe('P7 atomic obligation derivation and assurance', () => {
     expect(rejected.ledger.unresolved.length).toBeGreaterThan(0);
     const accepted = validateDeploymentCandidate(deriveAtomicObligations(organization()), composition, INITIAL_COMPONENT_CATALOG, {}, acceptingPolicy(INITIAL_COMPONENT_CATALOG));
     expect(accepted.ledger.unresolved).toEqual([]);
-    expect(accepted.ledger.witnesses.some((witness) => witness.assumptions[0]?.startsWith('trust:'))).toBe(true);
+    expect(accepted.ledger.witnesses.some((witness) => witness.assumptions[0]?.includes('trust:'))).toBe(true);
   });
 });
 

@@ -29,6 +29,7 @@ export interface AssurancePolicy {
   allowApproximation: boolean;
   acceptedAssumptions: AssumptionAcceptance[];
   asOf?: string;
+  maxEvidenceAgeMs?: number;
 }
 
 export interface ObligationWitness {
@@ -163,11 +164,15 @@ function witnessObligation(obligation: AtomicObligation, composition: ComponentC
       if (!trust || assuranceRank(trust.evidence.assurance) < assuranceRank(minimum)) continue;
     }
     const assumption = candidate.provision.evidence.assurance === 'asserted' ? `trust:${manifests[composition.instances[candidate.instance].manifest].id}:${candidate.facet}:asserted` : undefined;
-    if (assumption && !accepted(assumption, obligation.id, policy)) continue;
-    return { obligation: obligation.id, disposition: 'preserved', provider: candidate.instance, facet: candidate.facet, evidence: candidate.provision.evidence, assumptions: assumption ? [assumption] : [], losses: [], errors: [] };
+    const version=manifests[composition.instances[candidate.instance].manifest].version,trustAcceptance=assumption?acceptanceRecord(assumption,obligation.id,policy,version):undefined;
+    if (assumption && !trustAcceptance) continue;
+    const freshness=evidenceFresh(candidate.provision.evidence,obligation.id,policy,version);if(!freshness)continue;
+    return { obligation: obligation.id, disposition: 'preserved', provider: candidate.instance, facet: candidate.facet, evidence: candidate.provision.evidence, assumptions: [...(trustAcceptance?[trustAcceptance]:[]),...freshness], losses: [], errors: [] };
   }
-  const adapter = Object.entries(adapters).find(([, value]) => (composition.adapters ?? []).includes(value.id) && !validateAdapterContract(value, adapters).errors.length);
-  if (adapter && policy.allowApproximation) return { obligation: obligation.id, disposition: adapter[1].losses.length ? 'approximated' : 'adapter-realized', adapter: adapter[0], evidence: adapter[1].evidence, assumptions: [], losses: adapter[1].losses, errors: [] };
+  const adapter = Object.entries(adapters).find(([, value]) => (composition.adapters ?? []).includes(value.id) && !validateAdapterContract(value, adapters).errors.length
+    && value.interfaceMappings.some(mapping => mapping.to === obligation.facet || mapping.to === `${obligation.facet}.${obligation.operation}`));
+  const adapterFreshness=adapter?evidenceFresh(adapter[1].evidence,obligation.id,policy,adapter[1].version):undefined;
+  if (adapter && (!adapter[1].losses.length || policy.allowApproximation) && adapterFreshness) return { obligation: obligation.id, disposition: adapter[1].losses.length ? 'approximated' : 'adapter-realized', adapter: adapter[0], evidence: adapter[1].evidence, assumptions: adapterFreshness, losses: adapter[1].losses, errors: [] };
   return { obligation: obligation.id, disposition: 'unresolved', assumptions: [], losses: [], errors: [`available ${obligation.facet} claims do not meet ${obligation.risk} assurance policy`] };
 }
 
@@ -181,10 +186,12 @@ function semanticLeaves(value: unknown, path: string): string[] {
   return entries.length ? entries.flatMap(([key, child]) => semanticLeaves(child, `${path}.${key}`)) : [path];
 }
 function assuranceRank(value: ClaimAssurance): number { return { unknown: 0, asserted: 1, 'conformance-tested': 2, 'live-observed': 3 }[value]; }
-function accepted(assumption: string, obligation: string, policy: AssurancePolicy): boolean {
+function accepted(assumption: string, obligation: string, policy: AssurancePolicy,version:string): boolean {
   return policy.acceptedAssumptions.some((item) => item.assumption === assumption && (item.scope === '*' || item.scope === obligation)
-    && (!item.expires || !policy.asOf || item.expires >= policy.asOf));
+    && Boolean(item.acceptedBy) && Boolean(policy.asOf) && (!item.expires || Date.parse(item.expires)>=Date.parse(policy.asOf!)) && (!item.untilVersion||item.untilVersion===version));
 }
+function acceptanceRecord(assumption:string,scope:string,policy:AssurancePolicy,version:string):string|undefined{const item=policy.acceptedAssumptions.find(x=>x.assumption===assumption&&(x.scope==='*'||x.scope===scope)&&accepted(assumption,scope,{...policy,acceptedAssumptions:[x]},version));return item?`${item.acceptedBy}:${assumption}`:undefined;}
+function evidenceFresh(evidence:ManifestEvidence,scope:string,policy:AssurancePolicy,version:string):string[]|undefined{if(policy.maxEvidenceAgeMs===undefined)return[];if(!policy.asOf||!evidence.observedAt)return;const age=Date.parse(policy.asOf)-Date.parse(evidence.observedAt);if(Number.isFinite(age)&&age>=0&&age<=policy.maxEvidenceAgeMs)return[];const record=acceptanceRecord(`evidence:${scope}:stale`,scope,policy,version);return record?[record]:undefined;}
 function dedupe(values: AtomicObligation[]): AtomicObligation[] { return [...new Map(values.map((value) => [value.id, value])).values()]; }
 function compare(left: string, right: string): number { return left < right ? -1 : left > right ? 1 : 0; }
 function compareObjective(left: DeploymentCandidateV2['objective'], right: DeploymentCandidateV2['objective']): number {

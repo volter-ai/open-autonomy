@@ -35,6 +35,8 @@ const publicSurfaceFiles = [
   'organization-behavior.ts',
   'organization-component.ts',
   'organization-solver.ts',
+  'organization-deployment-solver.ts',
+  'organization-deployment-certificate.ts',
   'organization-lowering.ts',
   'organization-hermes-controller.ts',
   'organization-causal-state.ts',

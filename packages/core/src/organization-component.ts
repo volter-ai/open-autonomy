@@ -232,7 +232,7 @@ export function validateComponentComposition(
     for (const conflict of manifest.conflictsWith ?? [])
       if (instances.some(([, other]) => other.manifest === conflict)) errors.push(`instances.${instance}: manifest conflicts with '${conflict}'`);
     for (const required of manifest.requires ?? [])
-      if (!instances.some(([, other]) => Object.values(manifests[other.manifest]?.facets ?? {}).some((facet) => `${facet.facet}.${facet.operations[0]}` === required || facet.facet === required)))
+      if (!instances.some(([, other]) => other.manifest === required || Object.values(manifests[other.manifest]?.facets ?? {}).some((facet) => facet.facet === required)))
         errors.push(`instances.${instance}: unsatisfied required facet '${required}'`);
   }
   for (const adapter of composition.adapters ?? []) if (!adapters[adapter]) errors.push(`unknown adapter '${adapter}'`);

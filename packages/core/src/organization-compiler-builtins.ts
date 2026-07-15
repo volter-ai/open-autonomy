@@ -5,6 +5,7 @@ import {resolveOrganizationModules,type LoadedOrganizationModule,type Organizati
 import {normalizeOrganization} from './organization-normalize';
 import {analyzeOrganization,type AnalysisEnvironment} from './organization-analysis';
 import {solveDeploymentV2,type AssurancePolicy,type SearchDomain} from './organization-solver';
+import {solveCertifiedDeployment,type DeploymentFiniteDomain} from './organization-deployment-solver';
 import type {AdapterContract,ComponentManifestV2} from './organization-component';
 import {emitExecutableArtifact,lowerControlToExecution,lowerExecutionToV1,lowerOrganizationToControl,type ExecutionLoweringOptions,type FixedPointLoweringResult,type V1ExecutionLoweringOptions} from './organization-lowering';
 import {acceptCausalHistory,liftNativeObservation,materializeCausalHistory,type CausalAcceptancePolicy,type NativeLiftAdapter,type NativeObservation,type PortableEventV2} from './organization-causal-state';
@@ -22,7 +23,7 @@ export async function executeOrganizationBuiltin(id:OrganizationBuiltinId,input:
     }
     if(id==='organization.normalize'){const result=normalizeOrganization(input.content as ResolvedModuleGraph);return result.normalized?{output:result.normalized,sourceMap:result.normalized.sourceMap.map(x=>({output:x.output,sources:x.sources}))}:{diagnostics:errors(id,result.errors)};}
     if(id==='organization.analyze')return{output:analyzeOrganization(organization(input.content),config.environment as AnalysisEnvironment)};
-    if(id==='organization.solve'){const definition=organization(input.content);return{output:{organization:definition,search:solveDeploymentV2(definition,(config.manifests??{}) as Record<string,ComponentManifestV2>,(config.adapters??{}) as Record<string,AdapterContract>,config.policy as AssurancePolicy,config.domain as SearchDomain)}};}
+    if(id==='organization.solve'){const definition=organization(input.content),manifests=(config.manifests??{}) as Record<string,ComponentManifestV2>,adapters=(config.adapters??{}) as Record<string,AdapterContract>;const domain=config.domain as SearchDomain|DeploymentFiniteDomain;const search='maxAssignments' in (domain??{})?solveCertifiedDeployment(definition,manifests,adapters,config.policy as AssurancePolicy,domain as DeploymentFiniteDomain):solveDeploymentV2(definition,manifests,adapters,config.policy as AssurancePolicy,domain as SearchDomain);return{output:{organization:definition,search:'frontier' in search?{...search,candidates:search.frontier}:search}};}
     if(id==='organization.lower'){
       const phase=String(config.phase);const value=input.content as any;
       if(phase==='organization-to-control'){const candidate=value.search?.candidates?.[Number(config.candidateIndex??0)];if(!candidate)return{diagnostics:errors(id,['deployment search has no selected compatible candidate'])};const result=lowerOrganizationToControl(value.organization,candidate);return result.output?{output:{organization:value.organization,candidate,control:result.output}}:{diagnostics:errors(id,result.errors)};}

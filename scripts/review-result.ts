@@ -4,8 +4,6 @@ import { readFileSync, statSync } from 'node:fs';
 
 export const REVIEW_RESULT_SCHEMA = 'open-autonomy.review.v1';
 export const MAX_RESULT_BYTES = 64 * 1024;
-export const MAX_REVIEW_SUMMARY_LENGTH = 1000;
-const TRUNCATED_SUMMARY_SUFFIX = '…';
 
 // A blocking review escalation is a verified HumanTask (packages/core/src/job.ts), narrowed so every
 // trusted `human-required` effect has a named recipient and an explicit completion channel.
@@ -33,13 +31,7 @@ export type ReviewResult = {
 
 const isSha = (value: unknown): value is string => typeof value === 'string' && /^[0-9a-f]{40}$/i.test(value);
 
-/** Normalize the one bounded prose field without altering any authority-bearing result field. */
-export function normalizeReviewSummary(summary: string): string {
-  if (summary.length <= MAX_REVIEW_SUMMARY_LENGTH) return summary;
-  return `${summary.slice(0, MAX_REVIEW_SUMMARY_LENGTH - TRUNCATED_SUMMARY_SUFFIX.length)}${TRUNCATED_SUMMARY_SUFFIX}`;
-}
-
-/** Strictly parse the model-owned artifact. Only an oversized, otherwise-valid summary is normalized. */
+/** Strictly parse the model-owned artifact. Unknown/missing/oversized output is never publishable. */
 export function parseReviewResult(path: string): ReviewResult {
   if (statSync(path).size > MAX_RESULT_BYTES) throw new Error(`review result exceeds ${MAX_RESULT_BYTES} bytes`);
   const value = JSON.parse(readFileSync(path, 'utf8')) as Partial<ReviewResult>;
@@ -53,10 +45,9 @@ export function parseReviewResult(path: string): ReviewResult {
   if (!['approved', 'changes-requested', 'human-required', 'not-applicable'].includes(value.outcome ?? '')) {
     throw new Error('review result.outcome is invalid');
   }
-  if (typeof value.summary !== 'string' || !value.summary.trim()) {
+  if (typeof value.summary !== 'string' || !value.summary.trim() || value.summary.length > 1000) {
     throw new Error('review result.summary must be 1..1000 characters');
   }
-  value.summary = normalizeReviewSummary(value.summary);
   if (!Array.isArray(value.findings) || value.findings.some((v) => typeof v !== 'string' || v.length > 2000)) {
     throw new Error('review result.findings must be an array of strings up to 2000 characters each');
   }

@@ -1,0 +1,373 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://open-autonomy.dev/schema/DeploymentPlanningCertificate.json",
+  "title": "Open Autonomy DeploymentPlanningCertificate",
+  "$ref": "#/$defs/DeploymentPlanningCertificate",
+  "$defs": {
+    "DeploymentPlanningCertificate": {
+      "type": "object",
+      "properties": {
+        "schema": {
+          "const": "autonomy.deployment-planning-certificate.v1"
+        },
+        "generatedAt": {
+          "type": "string"
+        },
+        "search": {
+          "type": "object",
+          "properties": {
+            "completeness": {
+              "anyOf": [
+                {
+                  "const": "finite-exhaustive"
+                },
+                {
+                  "const": "bounded"
+                }
+              ]
+            },
+            "domainCardinality": {
+              "type": "number"
+            },
+            "explored": {
+              "type": "number"
+            }
+          },
+          "required": [
+            "completeness",
+            "domainCardinality",
+            "explored"
+          ],
+          "additionalProperties": false
+        },
+        "hardConstraints": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "sourceObligations": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "objectiveDimensions": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/DeploymentObjectiveDimension"
+          }
+        },
+        "knownAdapters": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "knownMigrations": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "evidence": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/DeploymentCertificateEvidence"
+          }
+        },
+        "frontier": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/PlanningCertificateCandidate"
+          }
+        }
+      },
+      "required": [
+        "schema",
+        "generatedAt",
+        "search",
+        "hardConstraints",
+        "sourceObligations",
+        "objectiveDimensions",
+        "knownAdapters",
+        "knownMigrations",
+        "evidence",
+        "frontier"
+      ],
+      "additionalProperties": false
+    },
+    "DeploymentObjectiveDimension": {
+      "type": "object",
+      "properties": {
+        "key": {
+          "type": "string"
+        },
+        "direction": {
+          "$ref": "#/$defs/ObjectiveDirection"
+        },
+        "unit": {
+          "type": "string"
+        },
+        "horizon": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "key",
+        "direction",
+        "unit",
+        "horizon"
+      ],
+      "additionalProperties": false
+    },
+    "ObjectiveDirection": {
+      "anyOf": [
+        {
+          "const": "minimize"
+        },
+        {
+          "const": "maximize"
+        }
+      ]
+    },
+    "DeploymentCertificateEvidence": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "assurance": {
+          "$ref": "#/$defs/DeploymentEvidenceAssurance"
+        },
+        "observedAt": {
+          "type": "string"
+        },
+        "expiresAt": {
+          "type": "string"
+        },
+        "acceptance": {
+          "type": "object",
+          "properties": {
+            "acceptedBy": {
+              "type": "string"
+            },
+            "scope": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "expiresAt": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "acceptedBy",
+            "scope"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "id",
+        "assurance",
+        "observedAt"
+      ],
+      "additionalProperties": false
+    },
+    "DeploymentEvidenceAssurance": {
+      "anyOf": [
+        {
+          "const": "asserted"
+        },
+        {
+          "const": "conformance-tested"
+        },
+        {
+          "const": "live-observed"
+        }
+      ]
+    },
+    "PlanningCertificateCandidate": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "hardConstraints": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/DeploymentConstraintWitness"
+          }
+        },
+        "objectives": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/DeploymentObjectiveValue"
+          }
+        },
+        "adapters": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "migrations": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "adapterWitnesses": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/DeploymentArtifactWitness"
+          }
+        },
+        "migrationWitnesses": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/DeploymentArtifactWitness"
+          }
+        }
+      },
+      "required": [
+        "id",
+        "hardConstraints",
+        "objectives",
+        "adapters",
+        "migrations",
+        "adapterWitnesses",
+        "migrationWitnesses"
+      ],
+      "additionalProperties": false
+    },
+    "DeploymentConstraintWitness": {
+      "type": "object",
+      "properties": {
+        "constraint": {
+          "type": "string"
+        },
+        "satisfied": {
+          "type": "boolean"
+        },
+        "evidence": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "constraint",
+        "satisfied",
+        "evidence"
+      ],
+      "additionalProperties": false
+    },
+    "DeploymentObjectiveValue": {
+      "type": "object",
+      "properties": {
+        "value": {
+          "type": "number"
+        },
+        "unit": {
+          "type": "string"
+        },
+        "horizon": {
+          "type": "string"
+        },
+        "uncertainty": {
+          "anyOf": [
+            {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "const": "exact"
+                }
+              },
+              "required": [
+                "kind"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "const": "bounded"
+                },
+                "lower": {
+                  "type": "number"
+                },
+                "upper": {
+                  "type": "number"
+                }
+              },
+              "required": [
+                "kind",
+                "lower",
+                "upper"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "const": "estimated"
+                },
+                "method": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "kind",
+                "method"
+              ],
+              "additionalProperties": false
+            }
+          ]
+        },
+        "evidence": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "value",
+        "unit",
+        "horizon",
+        "uncertainty",
+        "evidence"
+      ],
+      "additionalProperties": false
+    },
+    "DeploymentArtifactWitness": {
+      "type": "object",
+      "properties": {
+        "artifact": {
+          "type": "string"
+        },
+        "obligations": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "evidence": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "artifact",
+        "obligations",
+        "evidence"
+      ],
+      "additionalProperties": false
+    }
+  }
+}

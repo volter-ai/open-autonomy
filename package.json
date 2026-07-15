@@ -40,7 +40,7 @@
     "build:local-cli": "bun scripts/build-local-runner-cli.ts",
     "prepublishOnly": "bun run build && bun run check:release-consistency && bun run check:pack-smoke",
     "check:autonomy": "bunx tsc -p tsconfig.json",
-    "check:core": "bun test packages/*/src/*.test.ts",
+    "check:core": "bun test packages/*/src/*.test.ts && bun scripts/generate-runtime-r9-evidence.ts --check",
     "runtime-ledgers:init": "bun scripts/initialize-runtime-ledgers.ts",
     "organization-spec:fields": "bun scripts/generate-organization-field-semantics.ts",
     "organization-spec:schema": "bun scripts/generate-artifact-schema-corpus.ts",

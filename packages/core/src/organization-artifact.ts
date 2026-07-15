@@ -10,6 +10,11 @@ import conformanceMutations from './generated/conformance-mutations-v1.schema.js
 import control from './generated/control-v1.schema.json' with { type: 'json' };
 import compilerArtifact from './generated/compiler-artifact-v1.schema.json' with { type: 'json' };
 import deployment from './generated/deployment-v1.schema.json' with { type: 'json' };
+import deploymentPlanningCertificate from './generated/deployment-planning-certificate-v1.schema.json' with { type: 'json' };
+import deploymentBundleInput from './generated/deployment-bundle-input-v1.schema.json' with { type: 'json' };
+import deploymentBundle from './generated/deployment-bundle-v1.schema.json' with { type: 'json' };
+import deploymentRelease from './generated/deployment-release-v1.schema.json' with { type: 'json' };
+import liveDeploymentInstance from './generated/live-deployment-instance-v1.schema.json' with { type: 'json' };
 import event from './generated/event-v2.schema.json' with { type: 'json' };
 import execution from './generated/execution-v1.schema.json' with { type: 'json' };
 import generatedManifest from './generated/generated-manifest-v1.schema.json' with { type: 'json' };
@@ -38,6 +43,11 @@ const schemas: Record<string, object> = {
   'autonomy.control.v1': control,
   'autonomy.compiler-artifact.v1': compilerArtifact,
   'autonomy.deployment.v1': deployment,
+  'autonomy.deployment-planning-certificate.v1': deploymentPlanningCertificate,
+  'autonomy.deployment-bundle-input.v1': deploymentBundleInput,
+  'autonomy.deployment-bundle.v1': deploymentBundle,
+  'autonomy.deployment-release.v1': deploymentRelease,
+  'autonomy.live-deployment-instance.v1': liveDeploymentInstance,
   'autonomy.event.v2': event,
   'autonomy.execution.v1': execution,
   'autonomy.hermes-controller.v1': hermesController,

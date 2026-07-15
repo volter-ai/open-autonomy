@@ -130,6 +130,31 @@
       "schema": "autonomy.compiler-artifact.v1",
       "root": "CompilerArtifactProtocol",
       "filename": "compiler-artifact-v1.schema.json"
+    },
+    {
+      "schema": "autonomy.deployment-planning-certificate.v1",
+      "root": "DeploymentPlanningCertificate",
+      "filename": "deployment-planning-certificate-v1.schema.json"
+    },
+    {
+      "schema": "autonomy.deployment-bundle-input.v1",
+      "root": "DeploymentBundleInput",
+      "filename": "deployment-bundle-input-v1.schema.json"
+    },
+    {
+      "schema": "autonomy.deployment-bundle.v1",
+      "root": "DeploymentBundleManifest",
+      "filename": "deployment-bundle-v1.schema.json"
+    },
+    {
+      "schema": "autonomy.deployment-release.v1",
+      "root": "DeploymentRelease",
+      "filename": "deployment-release-v1.schema.json"
+    },
+    {
+      "schema": "autonomy.live-deployment-instance.v1",
+      "root": "LiveDeploymentInstance",
+      "filename": "live-deployment-instance-v1.schema.json"
     }
   ]
 }

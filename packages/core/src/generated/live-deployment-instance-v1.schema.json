@@ -1,0 +1,97 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://open-autonomy.dev/schema/LiveDeploymentInstance.json",
+  "title": "Open Autonomy LiveDeploymentInstance",
+  "$ref": "#/$defs/LiveDeploymentInstance",
+  "$defs": {
+    "LiveDeploymentInstance": {
+      "type": "object",
+      "properties": {
+        "schema": {
+          "const": "autonomy.live-deployment-instance.v1"
+        },
+        "instanceId": {
+          "type": "string"
+        },
+        "tenant": {
+          "type": "string"
+        },
+        "observedAt": {
+          "type": "string"
+        },
+        "bundleDigest": {
+          "$ref": "#/$defs/Digest"
+        },
+        "semanticDigest": {
+          "$ref": "#/$defs/Digest"
+        },
+        "organizationDigest": {
+          "$ref": "#/$defs/Digest"
+        },
+        "compilerDigest": {
+          "$ref": "#/$defs/Digest"
+        },
+        "componentDigests": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Digest"
+          }
+        },
+        "releaseDigest": {
+          "$ref": "#/$defs/Digest"
+        },
+        "environment": {
+          "type": "string"
+        },
+        "attestationDigest": {
+          "$ref": "#/$defs/Digest"
+        },
+        "signatures": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/AttestationSignature"
+          }
+        }
+      },
+      "required": [
+        "schema",
+        "instanceId",
+        "tenant",
+        "observedAt",
+        "bundleDigest",
+        "semanticDigest",
+        "organizationDigest",
+        "compilerDigest",
+        "componentDigests",
+        "releaseDigest",
+        "environment",
+        "attestationDigest",
+        "signatures"
+      ],
+      "additionalProperties": false
+    },
+    "Digest": {
+      "type": "string"
+    },
+    "AttestationSignature": {
+      "type": "object",
+      "properties": {
+        "signer": {
+          "type": "string"
+        },
+        "algorithm": {
+          "type": "string"
+        },
+        "signature": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "signer",
+        "algorithm",
+        "signature"
+      ],
+      "additionalProperties": false
+    }
+  }
+}

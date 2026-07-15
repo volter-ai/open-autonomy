@@ -1,0 +1,59 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://open-autonomy.dev/schema/DeploymentBundleManifest.json",
+  "title": "Open Autonomy DeploymentBundleManifest",
+  "$ref": "#/$defs/DeploymentBundleManifest",
+  "$defs": {
+    "DeploymentBundleManifest": {
+      "type": "object",
+      "properties": {
+        "schema": {
+          "const": "autonomy.deployment-bundle.v1"
+        },
+        "organizationDigest": {
+          "$ref": "#/$defs/Digest"
+        },
+        "compilerDigest": {
+          "$ref": "#/$defs/Digest"
+        },
+        "semanticDigest": {
+          "$ref": "#/$defs/Digest"
+        },
+        "inventory": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "type": "string"
+              },
+              "path": {
+                "type": "string"
+              },
+              "digest": {
+                "$ref": "#/$defs/Digest"
+              }
+            },
+            "required": [
+              "kind",
+              "path",
+              "digest"
+            ],
+            "additionalProperties": false
+          }
+        }
+      },
+      "required": [
+        "schema",
+        "organizationDigest",
+        "compilerDigest",
+        "semanticDigest",
+        "inventory"
+      ],
+      "additionalProperties": false
+    },
+    "Digest": {
+      "type": "string"
+    }
+  }
+}

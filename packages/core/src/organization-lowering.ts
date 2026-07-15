@@ -2,7 +2,7 @@ import type { OrganizationIR } from './organization-ir';
 import type { DeploymentCandidateV2, AtomicObligation, AssurancePolicy } from './organization-solver';
 import { deriveAtomicObligations, validateDeploymentCandidate } from './organization-solver';
 import type { AdapterContract, ComponentManifestV2 } from './organization-component';
-import type { AutonomyIR, IRAgent, Trigger } from './ir';
+import type { AutonomyIR, DocumentRoles, IRAgent, Trigger } from './ir';
 import { validateIR } from './ir';
 
 export type LoweringLevel = 'organization' | 'control' | 'execution' | 'invocation' | 'native';
@@ -125,6 +125,9 @@ export interface V1ExecutionLoweringOptions {
   codeHost?: 'github' | 'local-git';
   policy: { maxConcurrent?: number; box: Record<string, unknown> };
   resources?: string[];
+  documents?: { roles: DocumentRoles };
+  /** Fields which v2 represents but whose v1 spelling cannot be inferred from an execution plan. */
+  actorProjection?: Record<string, Pick<IRAgent, 'capabilities' | 'triggers' | 'kind' | 'timeout' | 'review' | 'result' | 'prelaunch'>>;
 }
 
 export interface V1ExecutionLoweringResult {
@@ -228,7 +231,8 @@ export function lowerExecutionToV1(organization: OrganizationIR, execution: Exec
     if (!behavior) { errors.push(`actor '${actorId}' names unknown behavior '${actor.behaviors[0]}'`); continue; }
     const behaviorTarget = behavior.source?.uri ?? (typeof behavior.inline === 'string' ? behavior.inline : undefined);
     if (!behaviorTarget) { errors.push(`v1 behavior '${actor.behaviors[0]}' requires a source URI or inline string`); continue; }
-    const triggers = (actor.activation ?? []).flatMap((activation): Trigger[] => {
+    const projected = options.actorProjection?.[actorId];
+    const triggers = projected?.triggers?.length ? structuredClone(projected.triggers) : (actor.activation ?? []).flatMap((activation): Trigger[] => {
       if (activation.kind === 'schedule') {
         if (typeof activation.expression !== 'string') { errors.push(`v1 cron activation for '${actorId}' must use an opaque cron string`); return []; }
         return [{ cron: activation.expression }];
@@ -238,11 +242,18 @@ export function lowerExecutionToV1(organization: OrganizationIR, execution: Exec
       errors.push(`v1 cannot represent ${activation.kind} activation for '${actorId}'`); return [];
     });
     if (!triggers.length) errors.push(`v1 actor '${actorId}' requires at least one representable activation`);
-    agents[actorId] = { behavior: behaviorTarget, capabilities: (actor.capabilities ?? []).map((grant) => grant.capability), triggers, kind: actor.kind === 'human' ? 'human' : 'agent' };
-    sourceMap.push({ output: `agents.${actorId}`, sources: [`actors.${actorId}`, `behaviors.${actor.behaviors[0]}`, ...steps.flatMap((step) => step.sourceObligations) ] });
+    agents[actorId] = { behavior: behaviorTarget, capabilities: structuredClone(projected?.capabilities ?? (actor.capabilities ?? []).map((grant) => grant.capability)), triggers, kind: projected ? projected.kind : actor.kind === 'human' ? 'human' : 'agent', timeout: projected?.timeout, review: projected?.review, result: structuredClone(projected?.result), prelaunch: projected?.prelaunch };
+    const capabilitySources = (actor.capabilities ?? []).flatMap((grant) => execution.contract.guarantees.filter((id) => id.startsWith(`obl:capabilities.${grant.capability}.`)));
+    const relationSources = Object.entries(organization.relations ?? {}).filter(([, relation]) => relation.from === actorId || relation.to === actorId).flatMap(([relation]) => execution.contract.guarantees.filter((id) => id === 'obl:relations' || id.startsWith(`obl:relations.${relation}.`)));
+    sourceMap.push({ output: `agents.${actorId}`, sources: [`actors.${actorId}`, `behaviors.${actor.behaviors[0]}`, ...steps.flatMap((step) => step.sourceObligations), ...capabilitySources, ...relationSources ] });
   }
   if (errors.length) return { sourceMap, losses: [], errors };
-  const output: AutonomyIR = { schema: 'autonomy.ir.v1', targets: [...options.targets], codeHost: options.codeHost, agents, policy: structuredClone(options.policy), resources: [...(options.resources ?? [])] };
+  const output: AutonomyIR = { schema: 'autonomy.ir.v1', targets: [...options.targets], codeHost: options.codeHost, agents, policy: structuredClone(options.policy), resources: [...(options.resources ?? [])], documents: structuredClone(options.documents) };
+  sourceMap.push({ output: 'policy', sources: execution.contract.guarantees.filter((id) => id.startsWith('obl:policies.v1-profile.')) });
+  sourceMap.push({ output: 'targets', sources: execution.contract.guarantees.filter((id) => id.startsWith('obl:types.v1-installation.')) });
+  sourceMap.push({ output: 'codeHost', sources: execution.contract.guarantees.filter((id) => id.startsWith('obl:types.v1-installation.')) });
+  sourceMap.push({ output: 'resources', sources: execution.contract.guarantees.filter((id) => id.startsWith('obl:types.v1-installation.')) });
+  if (options.documents) sourceMap.push({ output: 'documents', sources: execution.contract.guarantees.filter((id) => id.startsWith('obl:types.v1-installation.')) });
   errors.push(...validateIR(output));
   if (errors.length) return { sourceMap, losses: [], errors };
   const dispositions = execution.contract.guarantees.map((obligation): LoweringDisposition => {

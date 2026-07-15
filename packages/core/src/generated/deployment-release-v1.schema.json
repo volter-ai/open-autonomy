@@ -1,0 +1,70 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://open-autonomy.dev/schema/DeploymentRelease.json",
+  "title": "Open Autonomy DeploymentRelease",
+  "$ref": "#/$defs/DeploymentRelease",
+  "$defs": {
+    "DeploymentRelease": {
+      "type": "object",
+      "properties": {
+        "schema": {
+          "const": "autonomy.deployment-release.v1"
+        },
+        "bundleDigest": {
+          "$ref": "#/$defs/Digest"
+        },
+        "semanticDigest": {
+          "$ref": "#/$defs/Digest"
+        },
+        "environment": {
+          "type": "string"
+        },
+        "bindingsDigest": {
+          "$ref": "#/$defs/Digest"
+        },
+        "releaseDigest": {
+          "$ref": "#/$defs/Digest"
+        },
+        "signatures": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/AttestationSignature"
+          }
+        }
+      },
+      "required": [
+        "schema",
+        "bundleDigest",
+        "semanticDigest",
+        "environment",
+        "bindingsDigest",
+        "releaseDigest",
+        "signatures"
+      ],
+      "additionalProperties": false
+    },
+    "Digest": {
+      "type": "string"
+    },
+    "AttestationSignature": {
+      "type": "object",
+      "properties": {
+        "signer": {
+          "type": "string"
+        },
+        "algorithm": {
+          "type": "string"
+        },
+        "signature": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "signer",
+        "algorithm",
+        "signature"
+      ],
+      "additionalProperties": false
+    }
+  }
+}

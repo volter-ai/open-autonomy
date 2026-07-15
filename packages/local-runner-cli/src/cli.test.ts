@@ -1,15 +1,20 @@
-// End-to-end: spawn the REAL `oa` executable (bin/oa.ts) as a real `node` child process — proves the
-// package is actually consumable via plain `node` (no bundler/build step), matching the portability claim
-// in bin/oa.ts's own header comment, and exercises argv wiring `runCli` alone can't catch (process.exit
+// End-to-end: spawn the REAL compiled `oa` executable as a real `node` child process — proves the
+// package artifact is consumable even by a Node build without TypeScript stripping, and exercises argv wiring `runCli` alone can't catch (process.exit
 // codes, --help formatting, unknown-command handling).
-import { describe, expect, test } from 'bun:test';
+import { beforeAll, describe, expect, test } from 'bun:test';
 import { spawnSync } from 'node:child_process';
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-const BIN = join(dirname(fileURLToPath(import.meta.url)), 'bin', 'oa.ts');
+const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..');
+const BIN = join(dirname(fileURLToPath(import.meta.url)), '..', 'dist', 'oa.js');
+
+beforeAll(() => {
+  const built = spawnSync('bun', ['scripts/build-local-runner-cli.ts'], { cwd: ROOT, encoding: 'utf8' });
+  if (built.status !== 0) throw new Error(`local CLI build failed:\n${built.stdout}\n${built.stderr}`);
+});
 
 function tmpRepo(schedule: object): string {
   const dir = mkdtempSync(join(tmpdir(), 'oa-cli-'));

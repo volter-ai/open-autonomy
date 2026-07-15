@@ -37,6 +37,7 @@
   "scripts": {
     "autonomy": "bun bin/open-autonomy.ts",
     "build": "bun scripts/build-cli.ts",
+    "build:local-cli": "bun scripts/build-local-runner-cli.ts",
     "prepublishOnly": "bun run build && bun run check:release-consistency && bun run check:pack-smoke",
     "check:autonomy": "bunx tsc -p tsconfig.json",
     "check:core": "bun test packages/*/src/*.test.ts",

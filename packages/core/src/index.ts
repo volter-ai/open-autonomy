@@ -36,6 +36,7 @@ export * from './organization-deployment-solver';
 export * from './organization-deployment-certificate';
 export * from './organization-deployment-bundle';
 export * from './organization-migration-cutover';
+export * from './organization-identity-authority';
 export * from './organization-lowering';
 export * from './organization-hermes-controller';
 export * from './organization-causal-state';

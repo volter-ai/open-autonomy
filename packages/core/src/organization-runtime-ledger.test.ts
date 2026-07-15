@@ -148,4 +148,13 @@ describe('runtime proof-accounting ledger', () => {
     expect(corpus.residualLedger).toEqual([]);
     expect(corpus.obligationLedger.filter((entry) => entry.checkpoint === 'R9').every((entry) => entry.assurance === 'property-tested' && entry.evidence.includes('ev-r9-review'))).toBe(true);
   });
+
+  test('closes R10 only after authority, distribution, custody, and skeptical-review evidence and opens every dependency-ready successor', () => {
+    const corpus = JSON.parse(readFileSync('docs/runtime-ledgers/r10-closure.json','utf8')) as RuntimeLedgerCorpus;
+    expect(validateRuntimeLedger(corpus, expected, manifest.items)).toEqual([]);
+    expect(corpus.checkpointStateLedger.find((entry) => entry.id === 'R10')?.status).toBe('complete');
+    expect(['R11','R12','R13','R14'].every(id => corpus.checkpointStateLedger.find(entry => entry.id === id)?.status === 'ready')).toBe(true);
+    expect(corpus.residualLedger).toEqual([]);
+    expect(corpus.obligationLedger.filter((entry) => entry.checkpoint === 'R10').every((entry) => entry.assurance === 'property-tested' && entry.evidence.includes('ev-r10-review'))).toBe(true);
+  });
 });

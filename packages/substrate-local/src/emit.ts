@@ -399,12 +399,18 @@ if (needsRunner) {
     // here carries no structured output of its own, but keeping ALL of the loop's own log noise off stdout
     // is what lets a future consumer safely pipe/parse this process's stdout.
     console.error(\`[loop] provider \${providerUrl} (\${providerSource})\`);
-    // Re-export the ORIGIN as a hint (AUTONOMY_PROVIDER_URL_SOURCE) so a NESTED resolve — this tick's
-    // run-agent.mjs -> autonomy-runner.mjs, or any nested \`runner.ts launch ...\` — can
-    // report the same schedule-vs-env distinction. By the time those processes run, schedule.env and
-    // process.env are already merged (fireTick below / runner-frontend.ts's own env spread), so this is the
-    // only point that still knows which side the pin came from. Matched by the AUTONOMY.* export filter in
-    // backend.mjs/runner.ts's launch(), so it also propagates transitively into launched agent sessions.
+    // Pin the scheduler process itself to the same resolved provider before constructing its in-process
+    // lifecycle runner below. Child launches already receive buildTickEnv(), but the reaper/effect/workspace
+    // reconciler is not a child: without this assignment it can resolve a current context or auto-local
+    // provider independently while launches use the schedule pin.
+    process.env.TERMFLEET_PROVIDER_URL = providerUrl;
+    // Re-export the ORIGIN as a hint (AUTONOMY_PROVIDER_URL_SOURCE) so both the in-process lifecycle runner
+    // and a NESTED resolve — this tick's run-agent.mjs -> autonomy-runner.mjs, or any nested
+    // \`runner.ts launch ...\` — report the same schedule-vs-env distinction. By the time those processes
+    // run, schedule.env and process.env are already merged (fireTick below / runner-frontend.ts's own env
+    // spread), so this is the only point that still knows which side the pin came from. Matched by the
+    // AUTONOMY.* export filter in backend.mjs/runner.ts's launch(), so it also propagates transitively into
+    // launched agent sessions.
     process.env.AUTONOMY_PROVIDER_URL_SOURCE = providerSource;
   }
 }

@@ -29,7 +29,7 @@
 // stub-termfleet.ts, so every existing importer — OA-08's launch-verification.test.ts, OA-18's
 // bin/doctor.test.ts / bin/doctor-checks.test.ts — stays exactly as it was).
 import { describe, expect, test } from 'bun:test';
-import { spawnSync } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -229,6 +229,40 @@ describe('AC-7: a REAL tick lands a REAL (stub) session on the PINNED provider �
       // proving the pin held all the way down the real dispatch chain, not just at the loop driver's guess.
       expect(r.stderr).toMatch(/\[runner\] provider http:\/\/127\.0\.0\.1:7602 \(schedule\)/);
     } finally {
+      cleanup();
+    }
+  }, 30_000);
+
+  test('continuous lifecycle reconciliation resolves the same pin, never the foreign current context', async () => {
+    const dir = track(scaffoldHello(PINNED_URL));
+    const home = track(stageForeignCurrentContext());
+    installProviderLandingStub(dir);
+    const sink = join(dir, 'oa09-provider-sink.log');
+    const sessions = join(dir, 'oa09-sessions.log');
+    const env: Record<string, string | undefined> = { ...process.env };
+    delete env.TERMFLEET_PROVIDER_URL;
+    delete env.AUTONOMY_PROVIDER_URL_SOURCE;
+    env.TERMFLEET_HOME = home;
+    env.OA_STUB_TF_PROVIDER_SINK = sink;
+    env.OA_STUB_TF_SESSIONS_FILE = sessions;
+    const child = spawn('node', ['scheduler/run.mjs'], { cwd: dir, env, stdio: ['ignore', 'pipe', 'pipe'] });
+    let stderr = '';
+    child.stderr?.on('data', (chunk) => { stderr += chunk.toString(); });
+    try {
+      const deadline = Date.now() + 10_000;
+      while (Date.now() < deadline) {
+        if (readLines(sessions).length >= 1 && readLines(sink).length >= 2) break;
+        await new Promise((resolve) => setTimeout(resolve, 50));
+      }
+      expect(readLines(sessions).length).toBeGreaterThanOrEqual(1);
+      const resolved = readLines(sink);
+      expect(resolved.length).toBeGreaterThanOrEqual(2);
+      expect(resolved.every((url) => url === PINNED_URL)).toBe(true);
+      expect(resolved).not.toContain(FOREIGN_URL);
+      expect(stderr).toMatch(/\[runner\] provider http:\/\/127\.0\.0\.1:7602 \(schedule\)/);
+    } finally {
+      child.kill('SIGTERM');
+      if (child.exitCode === null) await new Promise((resolve) => child.once('exit', resolve));
       cleanup();
     }
   }, 30_000);

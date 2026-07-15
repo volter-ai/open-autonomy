@@ -80,7 +80,11 @@ if (import.meta.main) {
 
   const marker = `<!-- open-autonomy-agent-review:${expectedSha}:${final.state} -->`;
   const findings = final.result?.findings?.length ? `\n\n${final.result.findings.map((f) => `- ${f}`).join('\n')}` : '';
-  const body = `${marker}\n**Agent review: ${final.state === 'success' ? 'pass' : 'fail'}.** ${final.reason}${findings}`;
+  const task = final.result?.outcome === 'human-required' ? final.result.humanTask! : undefined;
+  const taskDetails = task ? `\n\n### Human task\n\n**Assigned to:** ${task.assignTo}\n\n` +
+    `**Ask:** ${task.ask}\n\n**Completion:** ${task.completion.ac}\n\n` +
+    `Response channel: \`${task.completion.via}\`; verification: \`${task.completion.check}\`.` : '';
+  const body = `${marker}\n**Agent review: ${final.state === 'success' ? 'pass' : 'fail'}.** ${final.reason}${findings}${taskDetails}`;
   const ensureComment = (): void => {
     const comments = gh(['pr', 'view', String(expectedPr), '-R', repo, '--json', 'comments', '--jq', '[.comments[].body]']);
     if (!(JSON.parse(comments) as string[]).some((comment) => comment.includes(marker))) {
@@ -95,8 +99,20 @@ if (import.meta.main) {
     stopIfTargetChanged('failure routing', 1);
     ensureComment();
     if (final.result?.outcome === 'human-required') {
+      const task = final.result.humanTask!; // parseReviewResult requires a complete verified task here.
       for (const issue of JSON.parse(gh(['pr', 'view', String(expectedPr), '-R', repo, '--json', 'closingIssuesReferences',
         '--jq', '[.closingIssuesReferences[].number]'])) as number[]) {
+        const taskMarker = `<!-- open-autonomy-human-task:${expectedSha}:${issue} -->`;
+        const comments = JSON.parse(gh(['issue', 'view', String(issue), '-R', repo, '--json', 'comments',
+          '--jq', '[.comments[].body]'])) as string[];
+        if (!comments.some((comment) => comment.includes(taskMarker))) {
+          gh(['issue', 'comment', String(issue), '-R', repo, '--body', `${taskMarker}\n### Human task\n\n` +
+            `**Assigned to:** ${task.assignTo}\n\n**Ask:** ${task.ask}\n\n` +
+            `**Completion:** ${task.completion.ac}\n\n` +
+            `Response channel: \`${task.completion.via}\`; verification: \`${task.completion.check}\`.`]);
+        }
+        // The durable typed ask must exist before the issue is parked. A comment failure throws, so an
+        // unrecorded or malformed escalation can never become a bare human-required label.
         gh(['issue', 'edit', String(issue), '-R', repo, '--add-label', 'human-required']);
       }
     }

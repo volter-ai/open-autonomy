@@ -22,20 +22,17 @@ The PR number arrives as `TARGET_REF`. Do not wait for the developer to finish �
 
 1. Fetch the PR + its checks and diff: `gh pr view "$TARGET_REF" --json number,headRefName,body,statusCheckRollup`
    and `gh pr diff "$TARGET_REF"`.
-2. **Required-check gate — check this FIRST, before anything else.** Read `statusCheckRollup` for every
-   OTHER required status check (`ci`, `security`, and any other profile-declared required check — NOT your
-   own `agent-review`, which you are about to post). A red/failing required check (e.g. `security` — a
-   zizmor or supply-chain finding from `security-gate.yml`) is a HARD BLOCKER: return failure /
-   human-required naming the failing check + its description. Never reason your way past it with "that's not the
-   gating check" or "not mine to judge" — a red required check blocks the merge regardless of which agent
-   posted it, and you must never approve while one is red. If the check is still pending, wait/re-check
-   rather than approving around it.
+2. **Required-check gate — verify the runner's result FIRST.** The trusted runner waits on every live
+   branch-protection context except your own `agent-review` and an independent `human-approval` gate before
+   spending a model call. Red checks produce a bound `changes-requested` result without launching you;
+   pending checks are waited on. In local compatibility mode, apply the same rule yourself: wait/re-check
+   pending checks and use changes-requested for red mechanical CI state, never human-required.
 3. Resolve the GitHub **issue number** the PR implements (the `Closes #<n>` line in the PR body, or the
    `agent/issue-<n>` branch name). Fetch that issue's body into a **temp file** (never write it into the
    repo) — it carries the ACs + the developer's evidence:
    `ISSUE_MD="$(mktemp)"; gh issue view <n> --json body --jq .body > "$ISSUE_MD"`.
 4. Gate the change on `ztrack check "$ISSUE_MD" --json`. Approve **only** when:
-   - every required status check other than `agent-review` is green (step 2);
+   - every serial mechanical prerequisite is green (step 2); any independent human-approval gate remains parallel;
    - ztrack is green — every passed AC is backed by a cited commit + a proof (the cited commits are the
      PR's head/commits; use `--no-verify-commits` only if this CI checkout is shallow and lacks them);
    - the PR **diff** actually implements the claimed ACs (no unrelated scope). **Deterministic reject:** the
@@ -58,10 +55,12 @@ The PR number arrives as `TARGET_REF`. Do not wait for the developer to finish �
 5. Publish in the mode the runner mechanically exposes:
    - **Trusted-effect mode** (`OSS_AGENT_RESULT_PATH` is non-empty): write the required
      `open-autonomy.review.v1` JSON result there, bound to this PR and its exact 40-character head SHA. The
-     runner-provided prompt defines the schema. Use success / approved for a pass; failure /
-     changes-requested or human-required for a rejection or escalation; and skip / not-applicable only
-     outside your lane. Do not post statuses, comments, or labels—the separate trusted effect does so and
-     posts `agent-review` last.
+     runner-provided prompt defines the schema. Use success / approved for a pass and failure /
+     changes-requested for fixable defects. Use failure / human-required only for a specific missing human
+     judgment, with the required typed `humanTask` (`ask`, `assignTo`, and completion AC / response channel /
+     check); mechanical failures never create human work. Use skip / not-applicable only outside your lane.
+     Do not post statuses, comments, or labels—the separate trusted effect does so and posts `agent-review`
+     last.
    - **Local compatibility mode** (the variable is absent): the local runner has not yet implemented the
      trusted result effect and gives `code:review` the shared operator credential. Post the verdict comment
      first, apply any required routing state, and post the current-head `agent-review` status **last**. If a

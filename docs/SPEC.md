@@ -124,6 +124,12 @@ is preserved in the substrate-neutral manifest. A proposer review edge requires 
 `open-autonomy.review.v1`; substrates may realize that same result differently and must report unsupported
 realizations honestly.
 
+The standard review result separates three different effects: `changes-requested` is an agent-fixable
+rejection; `approved` with `humanApprovalRequired: true` is sound code waiting on an independent approval
+gate; and `human-required` is a parked task that MUST include a verified `humanTask` (`ask`, `assignTo`, and
+`completion: { ac, via, check }`). A bare human-required flag is invalid because it names no work a person
+can actually complete.
+
 An actor also carries a **kind** (`agent` | `human`, default `agent`) — a discriminator, not a fifth slot.
 `kind` (the role) is the profile's; *realization* (how the role is filled — model/person/simulator) is the
 substrate's (see Kind/realization below). `policy`
@@ -560,9 +566,12 @@ on the result" is the agent using its own capabilities.
 
 The github substrate computes permissions from capabilities. Ordinary effects remain direct. For the
 reviewer named by a proposer's `review:` edge, setup binds the PR/current SHA and invalidates stale green;
-the read-only model writes `open-autonomy.review.v1`; a separate base-branch job validates and persists the
-effects, posting green last. Missing output, model failure, stale binding, or partial effects never produces
-a current-head green. Landing remains native auto-merge gated by required checks.
+the runner waits for live required mechanical checks (excluding its own review context and any independent
+human-approval gate), then the read-only model writes `open-autonomy.review.v1`. A failed prerequisite emits
+a bound `changes-requested` result without model judgment. A separate base-branch job validates and persists
+the effects, posting green last; a valid human task is recorded before its parked label. Missing output,
+model failure, stale binding, or partial effects never produces a current-head green. Landing remains native
+auto-merge gated by required checks.
 
 `config.permissions` does not exist; gh permission blocks are *computed*, never written in the IR.
 

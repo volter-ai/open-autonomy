@@ -40,4 +40,6 @@ verdicts:
       findings; the PM decides from the issue/PR history whether to re-dispatch the developer with that
       context or escalate. You do NOT trigger a retry yourself — there is no auto-retry loop.
   human_required:
-    use_when: Risk is high, policy says so, or intent is ambiguous.
+    use_when: A specific missing human judgment or authority genuinely parks the issue. The result must carry
+      a verified humanTask with the exact ask, assignee, response channel, and completion check. Mechanical
+      CI/routing/test failures use changes-requested; sound sensitive code passes with humanApprovalRequired.

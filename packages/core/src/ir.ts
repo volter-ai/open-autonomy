@@ -46,6 +46,25 @@ export const REVIEW_RESULT_JSON_SCHEMA: Record<string, unknown> = {
     summary: { type: 'string', minLength: 1, maxLength: 1000 },
     findings: { type: 'array', maxItems: 50, items: { type: 'string', maxLength: 2000 } },
     humanApprovalRequired: { type: 'boolean' },
+    humanTask: {
+      type: 'object',
+      additionalProperties: false,
+      required: ['ask', 'assignTo', 'completion'],
+      properties: {
+        ask: { type: 'string', minLength: 1, maxLength: 2000 },
+        assignTo: { type: 'string', minLength: 1, maxLength: 200 },
+        completion: {
+          type: 'object',
+          additionalProperties: false,
+          required: ['ac', 'via', 'check'],
+          properties: {
+            ac: { type: 'string', minLength: 1, maxLength: 2000 },
+            via: { enum: ['review', 'label', 'artifact', 'command'] },
+            check: { enum: ['deterministic', 'judge', 'both'] },
+          },
+        },
+      },
+    },
   },
   allOf: [
     {
@@ -54,11 +73,21 @@ export const REVIEW_RESULT_JSON_SCHEMA: Record<string, unknown> = {
     },
     {
       if: { properties: { verdict: { const: 'failure' } }, required: ['verdict'] },
-      then: { properties: { outcome: { enum: ['changes-requested', 'human-required'] } } },
+      then: {
+        properties: {
+          outcome: { enum: ['changes-requested', 'human-required'] },
+          humanApprovalRequired: { const: false },
+        },
+      },
     },
     {
       if: { properties: { verdict: { const: 'skip' } }, required: ['verdict'] },
-      then: { properties: { outcome: { const: 'not-applicable' } } },
+      then: { properties: { outcome: { const: 'not-applicable' }, humanApprovalRequired: { const: false } } },
+    },
+    {
+      if: { properties: { outcome: { const: 'human-required' } }, required: ['outcome'] },
+      then: { required: ['humanTask'] },
+      else: { not: { required: ['humanTask'] } },
     },
   ],
 };

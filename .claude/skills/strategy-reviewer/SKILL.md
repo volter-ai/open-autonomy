@@ -36,21 +36,25 @@ The PR number is in the `TARGET_REF` environment variable.
    - `gh pr diff "$TARGET_REF"` — the roadmap change. **Classify by the diff:** if it adds any item with
      `proposed: true`, treat it as a strategist proposal; otherwise it is a planner operational edit.
    - Read `docs/CONSTITUTION.md` and `.open-autonomy/strategy-rubric.yml` from the checkout.
-2. **Governance check (hard, both kinds):** the change may only touch `.open-autonomy/roadmap.yml` (+ for a
+2. **Verify prerequisites first.** The trusted runner waits on live required checks before spending a model
+   call. A red mechanical check produces changes-requested; pending checks wait. Neither is human-required.
+3. **Governance check (hard, both kinds):** the change may only touch `.open-autonomy/roadmap.yml` (+ for a
    strategist proposal, the idea archive). If it touches the constitution, merit criteria, proof gates,
-   workflows, or skills → return failure / human-required; never ratify.
-3. Judge by kind:
+   workflows, or skills → return failure / changes-requested; never ratify.
+4. Judge by kind:
    - **Strategist proposal:** for each new item check north-star alignment, merit, cited evidence,
      falsifiability, and non-redundancy. Pass / fail / human-required.
    - **Planner operational edit:** confirm it is layer-2 maintenance of existing items — no new `proposed:`
      item, no hand-written execution status, ids stay coherent, edits (decomposition/`planned`/ordering/
      wording) are consistent with the constitution and the items already ratified. Pass if consistent; fail
      with a specific reason otherwise. Do not apply the merit rubric to an operational edit.
-4. Publish in the mode the runner mechanically exposes:
+5. Publish in the mode the runner mechanically exposes:
    - **Trusted-effect mode** (`OSS_AGENT_RESULT_PATH` is non-empty): write the required
      `open-autonomy.review.v1` JSON result there, using the runner-provided schema and binding it to this PR +
-     exact 40-character head SHA. Use success / approved for a pass, failure / changes-requested or
-     human-required for a rejection or escalation, and skip / not-applicable only outside this lane. Do not
+     exact 40-character head SHA. Use success / approved for a pass and failure / changes-requested for a
+     fixable rejection. Use human-required only for a specific missing human judgment, with the schema's
+     typed `humanTask` (`ask`, `assignTo`, and completion AC / response channel / check). Use skip /
+     not-applicable only outside this lane. Do not
      post statuses, comments, or labels—the separate trusted effect does so and posts `agent-review` last.
    - **Local compatibility mode** (the variable is absent): the local runner has not yet implemented the
      trusted result effect and gives `code:review` the shared operator credential. Post any routing state and

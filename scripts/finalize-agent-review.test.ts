@@ -32,6 +32,7 @@ case "$*" in
     fi ;;
   *"--json comments"*) printf '[]\\n' ;;
   *"--json labels"*) printf '[]\\n' ;;
+  *"--json closingIssuesReferences"*) printf '[7]\\n' ;;
   *) printf '\\n' ;;
 esac
 `);
@@ -70,6 +71,15 @@ const success: ReviewResult = {
   findings: [],
   humanApprovalRequired: false,
 };
+const humanTask = {
+  ask: 'Decide whether this architecture amendment is intended. Reply with /agent decide <decision>.',
+  assignTo: 'maintainer',
+  completion: {
+    ac: 'An authorized maintainer records the architecture decision on the issue.',
+    via: 'command' as const,
+    check: 'deterministic' as const,
+  },
+};
 
 describe('finalize-agent-review effects', () => {
   test('an early success artifact followed by model-job failure publishes failure first and never success', () => {
@@ -101,10 +111,21 @@ describe('finalize-agent-review effects', () => {
   });
 
   test('a head change after failure status prevents stale PR-scoped routing', () => {
-    const run = runFinalizer('failure', { ...success, verdict: 'failure', outcome: 'human-required' }, '', 2);
+    const run = runFinalizer('failure', { ...success, verdict: 'failure', outcome: 'human-required', humanTask }, '', 2);
     expect(run.status).toBe(1);
     expect(run.log).toContain('state=failure');
     expect(run.log).not.toContain('pr comment 42');
     expect(run.log).not.toContain('issue edit');
+  });
+
+  test('a valid human escalation persists its typed ask before parking the issue', () => {
+    const run = runFinalizer('success', { ...success, verdict: 'failure', outcome: 'human-required', humanTask });
+    expect(run.status).toBe(1);
+    expect(run.log).toContain('pr comment 42');
+    expect(run.log).toContain('Assigned to');
+    expect(run.log).toContain('issue comment 7');
+    expect(run.log).toContain('open-autonomy-human-task');
+    expect(run.log).toContain('issue edit 7');
+    expect(run.log.indexOf('issue comment 7')).toBeLessThan(run.log.indexOf('issue edit 7'));
   });
 });

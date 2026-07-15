@@ -82,6 +82,7 @@
     "scripts/open-autonomy-upgrade-cli.ts",
     "scripts/rearm-auto-merge.ts",
     "scripts/reconcile-merged-issues.ts",
+    "scripts/review-prerequisites.ts",
     "scripts/review-result.ts",
     "scripts/runner.ts",
     "scripts/transcript.ts"

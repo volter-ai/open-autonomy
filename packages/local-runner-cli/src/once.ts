@@ -1,11 +1,12 @@
-// `oa once` — fires every currently unfenced job once, with no cadence or backoff state.
-import type { ProcRunner } from './types.ts';
+// `oa once` — makes one pass over unfenced jobs, bypassing cadence/backoff while retaining capacity.
+import type { ProcResult, ProcRunner } from './types.ts';
 import { defaultProc } from './proc.ts';
 import { loadSchedule } from './config.ts';
-import { buildTickEnv, fireCommands } from './env.ts';
+import { buildTickEnv } from './env.ts';
 import { runPreflight } from './preflight.ts';
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
+import { activeScheduledSessionCount } from './capacity.ts';
 
 export interface OnceResult {
   ok: boolean;
@@ -22,8 +23,7 @@ export async function once(
 
   const schedule = loadSchedule(cwd);
   const activeJobs = schedule.jobs.filter((job) => !job.fence || !existsSync(join(cwd, job.fence)));
-  const cmds = activeJobs.map((job) => job.cmd);
-  if (!cmds.length) return { ok: true, fired: 0 };
+  if (!activeJobs.length) return { ok: true, fired: 0 };
 
   // The full run.mjs guard chain (termfleet / OA-04 / OA-09 origin log + AUTONOMY_PROVIDER_URL_SOURCE
   // export / OA-03) — SHARED with `oa start` via runPreflight so the two modes can never drift apart on
@@ -40,8 +40,25 @@ export async function once(
     return result;
   }
 
-  const results = fireCommands(cmds, buildTickEnv(schedule.env, ambient, 'cron'), proc);
+  const env = buildTickEnv(schedule.env, ambient, 'cron');
+  let active = Number.isFinite(schedule.maxConcurrent) && activeJobs.some((job) => job.agent)
+    ? activeScheduledSessionCount(cwd, schedule, env, proc)
+    : 0;
+  if (active === null && activeJobs.some((job) => job.agent)) {
+    return { ok: false, fired: 0, reason: `runner liveness is unavailable while maxConcurrent=${schedule.maxConcurrent} is enforced` };
+  }
+  const results: ProcResult[] = [];
+  let skipped = 0;
+  for (const job of activeJobs) {
+    if (job.agent && active! >= schedule.maxConcurrent) {
+      skipped += 1;
+      continue;
+    }
+    const result = proc(job.cmd, [], { shell: true, stdio: 'inherit', env });
+    results.push(result);
+    if (job.agent && result.status === 0 && !result.error) active = (active ?? 0) + 1;
+  }
   const failed = results.filter((result) => result.status !== 0 || result.error);
-  if (failed.length) return { ok: false, fired: cmds.length, reason: `${failed.length} of ${cmds.length} job(s) failed` };
-  return { ok: true, fired: cmds.length };
+  if (failed.length) return { ok: false, fired: results.length, reason: `${failed.length} of ${results.length} fired job(s) failed` };
+  return { ok: true, fired: results.length, ...(skipped ? { reason: `${skipped} job(s) deferred by maxConcurrent=${schedule.maxConcurrent}` } : {}) };
 }

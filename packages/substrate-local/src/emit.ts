@@ -204,6 +204,12 @@ const jobs = Array.isArray(schedule.jobs)
       fence: '.open-autonomy/paused',
     }));
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+const once = args.includes('--once');
+const dispatchIndex = args.indexOf('--dispatch');
+if (once && dispatchIndex !== -1) {
+  console.error('[loop] choose either --once or --dispatch <job>, not both.');
+  process.exit(2);
+}
 
 // PAUSE GATE (OA-07): fences belong to jobs, not to the loop as a whole. The default schedule still uses
 // .open-autonomy/paused for every job, while adopter target config may give groups independent markers.
@@ -217,9 +223,31 @@ const pausedMessage = (fences) =>
   '[loop] PAUSED — scheduled jobs are blocked by ' + [...fences].join(', ') + '.\\n' +
   '[loop] remove only the fence(s) whose jobs you intend to run:  ' + [...fences].map((f) => 'rm ' + f).join('   ');
 
+let dispatchJob = null;
+if (dispatchIndex !== -1) {
+  const target = (args[dispatchIndex + 1] || '').trim();
+  if (!target || target.startsWith('--')) {
+    console.error('[loop] usage: scheduler/run.mjs --dispatch <job-name-or-agent>');
+    process.exit(2);
+  }
+  const byName = jobs.filter((job) => job.name === target);
+  const matches = byName.length ? byName : jobs.filter((job) => job.agent === target);
+  if (matches.length !== 1) {
+    const detail = matches.length ? 'matched ' + matches.length + ' jobs' : 'matched no declared job';
+    console.error('[loop] cannot dispatch "' + target + '": ' + detail + '.');
+    process.exit(2);
+  }
+  [dispatchJob] = matches;
+  const path = fencePath(dispatchJob);
+  if (path && existsSync(path)) {
+    console.error(pausedMessage(new Set([dispatchJob.fence])));
+    process.exit(1);
+  }
+}
+
 // In --once mode an entirely fenced schedule is a deterministic no-op and reports that before optional
 // runner dependency checks. A partially fenced schedule continues: only its unfenced jobs are eligible.
-if (args.includes('--once')) {
+if (once) {
   const fences = blockedFences();
   if (jobs.length > 0 && jobs.every((job) => {
     const path = fencePath(job);
@@ -236,12 +264,13 @@ if (args.includes('--once')) {
 // (the FIRST command an adopter runs, per docs/OPERATIONS.md: \`node scheduler/run.mjs --once\`). A
 // script-only schedule (every agent a deterministic scripts/*.ts behavior) never touches the runner, so
 // the check is scoped to schedules that actually need it — never a false alarm on one that doesn't.
-const needsRunner = jobs.some((job) => {
+const eligibleJobs = dispatchJob ? [dispatchJob] : jobs;
+const needsRunner = eligibleJobs.some((job) => {
   if (!/scripts\\/(?:run-agent\\.mjs|runner\\.ts)/.test(job.command)) return false;
   // A one-shot run never reaches a fenced job, so don't mask useful partial-fence behavior with a
   // dependency that only the blocked group would need. Continuous mode may later be unfenced in place.
   const path = fencePath(job);
-  return !args.includes('--once') || !path || !existsSync(path);
+  return !once || !path || !existsSync(path);
 });
 if (needsRunner) {
   const repoRoot = join(here, '..');
@@ -471,12 +500,10 @@ const buildTickEnv = () => {
   return env;
 };
 
-// D2 fix (post-review, TC.3): fireTick is the loop's OWN automatic tick — its only caller is the scheduler
-// itself (--once and continuous mode below), never a human. Tag every command it fires with
-// AUTONOMY_TRIGGER_KIND=cron so a launched agent can tell "the scheduler fired me on its own cadence" apart
-// from "an operator explicitly typed a launch command" (e.g. \`AUTONOMY_AGENT=audit node
-// scripts/run-agent.mjs\`, or \`oa dispatch <agent>\`/\`oa launch <agent>\` — neither of which goes through
-// fireTick, so neither ever carries this value). AUTONOMY_SINGLETON alone is NOT that signal: it is baked
+// D2 fix (post-review, TC.3): automatic --once/continuous fires use AUTONOMY_TRIGGER_KIND=cron, while the
+// explicit --dispatch path below passes \`dispatch\`. A launched agent can therefore distinguish scheduler
+// cadence from an operator request even though both enter through the same declared-job executor.
+// AUTONOMY_SINGLETON alone is NOT that signal: it is baked
 // into schedule.json's own command STRING (see scheduleScripts below), so it is present on every re-fire of
 // that exact command line regardless of who fires it — including \`oa dispatch <agent>\`, which fires the
 // identical schedule-line string on purpose. An agent whose own cadence must differ from "every shared tick"
@@ -493,25 +520,46 @@ const activeSessionCount = (env) => {
       (session.status === 'running' || session.status === 'paused' || session.status === 'awaiting-human')).length;
   } catch { return null; }
 };
-const fireJobs = (dueJobs) => {
-  const env = Object.assign({}, buildTickEnv(), { AUTONOMY_TRIGGER_KIND: 'cron' });
+const fireJobs = (dueJobs, { triggerKind = 'cron', reportSkips = false } = {}) => {
+  const env = Object.assign({}, buildTickEnv(), { AUTONOMY_TRIGGER_KIND: triggerKind });
   const maxConcurrent = Number(schedule.maxConcurrent || Number.POSITIVE_INFINITY);
   let active = Number.isFinite(maxConcurrent) ? activeSessionCount(env) : 0;
   const results = [];
+  const skipped = [];
   for (const job of dueJobs) {
-    if (job.fence && existsSync(join(here, '..', job.fence))) continue;
+    if (job.fence && existsSync(join(here, '..', job.fence))) {
+      skipped.push({ job, reason: 'fenced by ' + job.fence });
+      continue;
+    }
     // A declared cap is a hard control. If liveness cannot be established, fail closed for
     // agent launches rather than treating an unavailable provider as an empty provider.
-    if (job.agent && active === null) continue;
-    if (job.agent && active >= maxConcurrent) continue;
+    if (job.agent && active === null) {
+      skipped.push({ job, reason: 'runner liveness is unavailable while maxConcurrent is enforced' });
+      continue;
+    }
+    if (job.agent && active >= maxConcurrent) {
+      skipped.push({ job, reason: 'maxConcurrent ' + maxConcurrent + ' is already reached' });
+      continue;
+    }
     const result = spawnSync(job.command, { shell: true, stdio: 'inherit', env });
     if (job.agent && result.status === 0 && !result.error) active += 1;
     results.push({ job, result });
   }
-  return results;
+  if (reportSkips) {
+    for (const skippedJob of skipped)
+      console.error('[loop] dispatch refused for "' + skippedJob.job.name + '": ' + skippedJob.reason + '.');
+  }
+  return { results, skipped };
 };
 
-if (args.includes('--once')) {
+if (dispatchJob) {
+  const { results } = fireJobs([dispatchJob], { triggerKind: 'dispatch', reportSkips: true });
+  if (!results.length) process.exit(1);
+  const [{ result }] = results;
+  process.exit(result.error ? 1 : (result.status ?? 1));
+}
+
+if (once) {
   fireJobs(jobs);
   process.exit(0);
 }
@@ -547,6 +595,28 @@ try {
 const EFFECTS_DIR = join(here, '..', '.open-autonomy', 'runner-state', 'effects');
 const WORKSPACES_DIR = join(here, '..', '.open-autonomy', 'runner-state', 'workspaces');
 const WORKSPACE_QUARANTINE_DIR = join(here, '..', '.open-autonomy', 'runner-state', 'workspace-quarantine');
+// A provider may return a terminal ID before that terminal appears in list(). A fresh, never-observed lease
+// is therefore not evidence of a finished session. Keep it through a bounded bootstrap window; once list()
+// has observed the ID, disappearance is authoritative and normal cleanup can happen without waiting.
+const configuredWorkspaceLeaseGraceMs = Number(process.env.AUTONOMY_WORKSPACE_LEASE_GRACE_MS ?? 120000);
+const WORKSPACE_LEASE_BOOTSTRAP_GRACE_MS = Number.isFinite(configuredWorkspaceLeaseGraceMs) && configuredWorkspaceLeaseGraceMs >= 0
+  ? configuredWorkspaceLeaseGraceMs
+  : 120000;
+function markWorkspaceLeasesObserved(ids) {
+  if (!ids.length) return;
+  const wanted = new Set(ids);
+  let files = [];
+  try { files = readdirSync(WORKSPACES_DIR).filter((file) => file.endsWith('.json')); } catch { return; }
+  const observedLiveAt = new Date().toISOString();
+  for (const file of files) {
+    const path = join(WORKSPACES_DIR, file);
+    try {
+      const lease = JSON.parse(readFileSync(path, 'utf8'));
+      if (!wanted.has(lease.id) || lease.observedLiveAt) continue;
+      writeFileSync(path, JSON.stringify(Object.assign({}, lease, { observedLiveAt }), null, 2) + '\\n');
+    } catch {}
+  }
+}
 async function reconcilePendingEffects(runner) {
   let files = [];
   try { files = readdirSync(EFFECTS_DIR).filter((f) => f.endsWith('.json')); } catch { return; } // no markers dir yet
@@ -558,6 +628,13 @@ async function reconcilePendingEffects(runner) {
     let marker;
     try { marker = JSON.parse(readFileSync(path, 'utf8')); } catch { try { unlinkSync(path); } catch {} continue; }
     if (live.has(marker.id)) continue; // session still running -> its effect runs after it finishes
+    // A fresh co-located workspace lease means the provider may simply not list the new terminal yet.
+    // Old effect markers without leases retain their historical immediate reconciliation behavior.
+    try {
+      const lease = JSON.parse(readFileSync(join(WORKSPACES_DIR, file), 'utf8'));
+      const createdAt = Date.parse(lease.createdAt);
+      if (!lease.observedLiveAt && Number.isFinite(createdAt) && Date.now() - createdAt < WORKSPACE_LEASE_BOOTSTRAP_GRACE_MS) continue;
+    } catch {}
     console.log(\`[loop] post-session effect: \${marker.agent} (\${marker.id}) -> \${marker.effect} in \${marker.worktree}\`);
     const result = spawnSync('bun', [marker.effect], { cwd: marker.worktree, stdio: 'inherit', env: Object.assign({}, process.env, marker.env) });
     if (result.status === 0 && !result.error) {
@@ -582,7 +659,20 @@ async function reconcileWorkspaceLeases(runner) {
     if (handled.has(lease.worktree)) continue;
     handled.add(lease.worktree);
     const peers = records.filter((candidate) => candidate.lease.worktree === lease.worktree);
-    if (peers.some((peer) => live.has(peer.lease.id) || existsSync(join(EFFECTS_DIR, peer.file)))) continue;
+    const livePeers = peers.filter((peer) => live.has(peer.lease.id));
+    for (const peer of livePeers) {
+      if (peer.lease.observedLiveAt) continue;
+      peer.lease.observedLiveAt = new Date().toISOString();
+      try { writeFileSync(peer.path, JSON.stringify(peer.lease, null, 2) + '\\n'); } catch {}
+    }
+    if (livePeers.length || peers.some((peer) => existsSync(join(EFFECTS_DIR, peer.file)))) continue;
+    const now = Date.now();
+    const bootstrapping = peers.some((peer) => {
+      if (peer.lease.observedLiveAt) return false;
+      const createdAt = Date.parse(peer.lease.createdAt);
+      return Number.isFinite(createdAt) && now - createdAt < WORKSPACE_LEASE_BOOTSTRAP_GRACE_MS;
+    });
+    if (bootstrapping) continue;
     if (!existsSync(lease.worktree)) { for (const peer of peers) try { unlinkSync(peer.path); } catch {} continue; }
     const status = spawnSync('git', ['status', '--porcelain'], { cwd: lease.worktree, encoding: 'utf8' });
     if (status.status !== 0 || status.error || (status.stdout || '').trim()) {
@@ -618,7 +708,7 @@ while (true) {
   if (removedFences.length) console.error('[loop] unpaused jobs fenced by: ' + removedFences.join(', '));
   lastBlockedFences = currentBlockedFences;
   const due = jobs.filter((job) => now >= (nextFireAt.get(job.name) || 0));
-  for (const { job, result } of fireJobs(due)) {
+  for (const { job, result } of fireJobs(due).results) {
     const seconds = result.status === 0 && !result.error
       ? Number(job.intervalSeconds || schedule.intervalSeconds || 900)
       : Number(job.retrySeconds || job.intervalSeconds || schedule.intervalSeconds || 900);
@@ -628,6 +718,7 @@ while (true) {
     try {
       const reaped = await runner.reapIdle({ idleMs: IDLE_REAP_MS, agents, since: idleSince });
       for (const r of reaped) console.log(\`[loop] reaped idle \${r.agent} (\${r.id})\`);
+      markWorkspaceLeasesObserved(reaped.map((result) => result.id));
       await reconcilePendingEffects(runner); // run finished proposers' effects (the post-skill step's local twin)
       await reconcileWorkspaceLeases(runner);
     } catch (e) {

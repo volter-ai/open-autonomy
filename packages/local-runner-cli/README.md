@@ -30,11 +30,11 @@ Once it is published, adopting the CLI is a packaging/release change—not a new
 | Verb | What | Was |
 |---|---|---|
 | `oa start` | continuous generic job scheduler with fences, session singleton, concurrency, retry/backoff, reaping, and opaque effects | `node scheduler/run.mjs` |
-| `oa once` | fire every currently unfenced job once | `node scheduler/run.mjs --once` |
+| `oa once` | make one pass over jobs, respecting fences and `maxConcurrent` | `node scheduler/run.mjs --once` |
 | `oa pause [reason]` | touch the conventional `.open-autonomy/paused` fence; jobs assigned that fence drain and stop | `touch .open-autonomy/paused` |
 | `oa resume` | remove `.open-autonomy/paused`; jobs assigned that fence are re-armed within one heartbeat | `rm .open-autonomy/paused` |
 | `oa status` | fence state + rationale, live sessions (via the runner SDK), and last-fire info per job | — (new) |
-| `oa dispatch <agent>` | fire exactly the one schedule line for `<agent>` now, bypassing the fence (the documented first-run-while-paused workaround) | `AUTONOMY_AGENT=<agent> node scripts/run-agent.mjs` |
+| `oa dispatch <agent>` | fire one declared agent job now, bypassing cadence only; fence, environment, singleton, and `maxConcurrent` remain enforced | `node scheduler/run.mjs --dispatch <agent>` |
 | `oa doctor [--live] [--json]` | offline: OA-04 dep-integrity probe + fence state + `schedule.json` parse + prompts/skills existence per declared agent; `--live` additionally probes the provider `/healthz` over the network | — (new; folds in checks that used to live only in `bin/doctor.ts`/`bin/collision-check.ts`) |
 | `oa provider up` | (TG.1) bring up a termfleet console+provider on a repo-unique, genuinely-free port pair (never the box defaults 7373/7402/7620/7621); verify the thing that answered is REALLY termfleet (never a foreign occupant); pin `TERMFLEET_PROVIDER_URL` durably into `scheduler/schedule.json`'s `env`. Idempotent: no-ops on a healthy pin, restarts a dead one on the SAME pinned ports. | — (new) |
 | `oa provider status` | report whether the pinned provider (and console) are up and really answering as termfleet | — (new) |

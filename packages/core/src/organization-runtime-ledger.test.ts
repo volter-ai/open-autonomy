@@ -207,4 +207,14 @@ describe('runtime proof-accounting ledger', () => {
     expect(corpus.residualLedger).toEqual([]);
     expect(corpus.obligationLedger.filter((entry) => entry.checkpoint === 'R15').every((entry) => entry.assurance === 'property-tested' && entry.evidence.includes('ev-r15-review'))).toBe(true);
   });
+
+  test('closes R16 only after independent pinned Paperclip lifecycle and skeptical-review evidence', () => {
+    const corpus = JSON.parse(readFileSync('docs/runtime-ledgers/r16-closure.json','utf8')) as RuntimeLedgerCorpus;
+    expect(validateRuntimeLedger(corpus, expected, manifest.items)).toEqual([]);
+    expect(corpus.checkpointStateLedger.find((entry) => entry.id === 'R16')?.status).toBe('complete');
+    expect(corpus.residualLedger.filter((entry) => entry.disposition === 'open')).toEqual([]);
+    expect(corpus.residualLedger.filter((entry) => entry.checkpoint === 'R16')).toHaveLength(3);
+    expect(corpus.obligationLedger.filter((entry) => entry.checkpoint === 'R16').every((entry) => entry.assurance === 'property-tested' && entry.evidence.includes('ev-r16-review'))).toBe(true);
+  });
+
 });

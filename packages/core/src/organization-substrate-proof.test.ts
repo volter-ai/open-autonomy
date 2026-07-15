@@ -7,6 +7,7 @@ import {
   type CausalAcceptancePolicy, type PortableEventV2,
 } from './organization-causal-state';
 import { compareSubstrateRealizations, type SubstrateRealizationProof } from './organization-substrate-proof';
+import { readFileSync } from 'node:fs';
 
 const definition: OrganizationIR = {
   schema: 'autonomy.organization.v2', name: 'portable-control',
@@ -97,5 +98,20 @@ describe('P11 dissimilar-substrate portability proof', () => {
     expect(compareSubstrateRealizations(definition, proof('a'), right).status).toBe('undetermined');
     right.conformance.status = 'nonconformant';
     expect(compareSubstrateRealizations(definition, proof('a'), right).status).toBe('not-independent');
+  });
+
+  test('never interprets an unobserved economic quantity as zero or a ranking', () => {
+    const left=proof('a'),right=proof('b');left.measurements.cost={value:null,unit:'USD',uncertainty:'unknown',observedAt:'2026-07-15T00:00:00Z'};right.measurements.cost={value:null,unit:'USD',uncertainty:'unknown',observedAt:'2026-07-15T00:00:00Z'};
+    const result=compareSubstrateRealizations(definition,left,right);
+    expect(result.status).toBe('undetermined');
+    expect(result.residuals).toContainEqual(expect.objectContaining({category:'economic',property:'cost',semanticImpact:'unknown'}));
+  });
+
+  test('R16 matched economics classifies every dimension and failure without a missing-data ranking', () => {
+    const report=JSON.parse(readFileSync('docs/evidence/R16-MATCHED-ECONOMICS.json','utf8')) as any;
+    expect(Object.keys(report.measurements).sort()).toEqual(['capacity','cost','humanLoad','latency']);
+    expect(Object.values(report.measurements).every((value:any)=>value.hermes===null&&value.paperclip===null&&value.uncertainty==='unknown')).toBe(true);
+    expect(report.failures.every((value:any)=>typeof value.hermes==='string'&&typeof value.paperclip==='string')).toBe(true);
+    expect(report).toMatchObject({disposition:'undetermined-no-ranking',ranking:null});
   });
 });

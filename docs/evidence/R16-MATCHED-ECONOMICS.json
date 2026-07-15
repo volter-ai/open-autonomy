@@ -1,0 +1,21 @@
+{
+  "schema": "open-autonomy.matched-substrate-economics.v1",
+  "observationWindow": { "hermes": "R15 isolated live gate, 2026-07-15", "paperclip": "R16 isolated live gate, 2026-07-15" },
+  "sources": { "hermes": "hermes@0.18.2+local.226e8de8", "paperclip": "paperclip@90f85a7d11c517b1d09db90dbec97f4de7d96b83" },
+  "measurements": {
+    "cost": { "unit": "USD", "hermes": null, "paperclip": null, "uncertainty": "unknown", "reason": "The isolated gates did not execute matched billable model workloads." },
+    "latency": { "unit": "ms", "hermes": null, "paperclip": null, "uncertainty": "unknown", "reason": "The gates were not run under a shared calibrated latency harness." },
+    "capacity": { "unit": "concurrent-attempts", "hermes": null, "paperclip": null, "uncertainty": "unknown", "reason": "No matched saturation experiment was performed." },
+    "humanLoad": { "unit": "human-minutes", "hermes": null, "paperclip": null, "uncertainty": "unknown", "reason": "Operator setup and recovery effort was not instrumented identically." }
+  },
+  "failures": [
+    { "scenario": "restart", "hermes": "recovered", "paperclip": "recovered" },
+    { "scenario": "duplicate-delivery", "hermes": "recovered", "paperclip": "recovered" },
+    { "scenario": "stale-controller", "hermes": "recovered", "paperclip": "recovered" },
+    { "scenario": "budget-exhaustion", "hermes": "unknown", "paperclip": "unknown" },
+    { "scenario": "matched-load-saturation", "hermes": "unknown", "paperclip": "unknown" }
+  ],
+  "disposition": "undetermined-no-ranking",
+  "ranking": null,
+  "rule": "Null is missing evidence, never zero. Unknown or unmatched measurements prohibit an economic ranking."
+}

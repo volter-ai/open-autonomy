@@ -6,7 +6,8 @@ import { materializeCausalHistory } from './organization-causal-state';
 import type { OrganizationIR } from './organization-ir';
 
 export interface ComparableMeasurement {
-  value: number;
+  /** Null means the quantity was not observed; it must never be interpreted as zero. */
+  value: number | null;
   unit: string;
   uncertainty: 'exact' | 'bounded' | 'estimated' | 'volatile' | 'unknown';
   observedAt: string;
@@ -97,7 +98,8 @@ function compareResiduals(left: SubstrateRealizationProof, right: SubstrateReali
   }
   for (const property of ['cost', 'latency', 'capacity', 'humanLoad'] as const) {
     const a = left.measurements[property]; const b = right.measurements[property];
-    if (a.unit !== b.unit) residuals.push({ category: 'economic', property, left: a, right: b, semanticImpact: 'incomparable' });
+    if (a.value === null || b.value === null || a.uncertainty === 'unknown' || b.uncertainty === 'unknown') residuals.push({ category: 'economic', property, left: a, right: b, semanticImpact: 'unknown' });
+    else if (a.unit !== b.unit) residuals.push({ category: 'economic', property, left: a, right: b, semanticImpact: 'incomparable' });
     else if (JSON.stringify(a) !== JSON.stringify(b)) residuals.push({ category: 'economic', property, left: a, right: b, semanticImpact: 'none' });
   }
   if (left.sourceRevision !== right.sourceRevision) residuals.push({ category: 'operation', property: 'provider implementation revision', left: left.sourceRevision, right: right.sourceRevision, semanticImpact: 'none' });

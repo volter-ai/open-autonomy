@@ -62,3 +62,4 @@ export * from './organization-twin';
 export * from './organization-command-plane';
 export * from './organization-command-transports';
 export * from './organization-runtime-reliability';
+export * from './organization-counterfactual-planner';

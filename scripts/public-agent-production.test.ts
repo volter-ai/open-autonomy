@@ -168,7 +168,6 @@ describe('public agent production readiness', () => {
     expect(wf).not.toContain('contents: write');
     // It checks out the BASE (default branch), never the PR head — no untrusted code execution.
     expect(wf).toContain('ref: ${{ github.event.repository.default_branch }}');
-    expect(wf).toContain('persist-credentials: false');
     // The gate script exists and scopes by sensitive paths + the human-required label.
     const gate = readFileSync(new URL('../scripts/human-approval-gate.ts', import.meta.url), 'utf8');
     expect(gate).toContain("context=human-approval");
@@ -208,6 +207,7 @@ describe('public agent production readiness', () => {
     expect(wf).not.toContain('pull_request:');
     expect(wf).not.toContain('pull_request_target:');
     expect(wf).toContain('ref: ${{ github.event.repository.default_branch }}');
+    expect(wf).toContain('persist-credentials: false');
     expect(wf).toContain('run-id: ${{ github.event.workflow_run.id }}');
     expect(wf).toContain('name: agent-run-reviewer');
     expect(wf).toContain('bun scripts/native-approval-adapter.ts');

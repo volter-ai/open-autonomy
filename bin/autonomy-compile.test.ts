@@ -446,7 +446,9 @@ describe('autonomy-compile — OA-10c: .claude/settings.json merge (AC-2, AC-3)'
       const settings1 = JSON.parse(readFileSync(join(dir, '.claude', 'settings.json'), 'utf8'));
       expect(settings1.permissions.allow).toEqual(['Bash(npm test)']); // preserved
       expect(typeof settings1.hooks.Stop[0].hooks[0].command).toBe('string'); // the OA Stop hook landed
+      expect(typeof settings1.hooks.SubagentStop[0].hooks[0].command).toBe('string');
       const stopLenAfterFirst = settings1.hooks.Stop.length;
+      const subagentStopLenAfterFirst = settings1.hooks.SubagentStop.length;
 
       // Idempotent: re-running must not duplicate the hook entry — and (nit a) must NOT print a spurious
       // "merged" receipt line when nothing actually changed.
@@ -455,7 +457,32 @@ describe('autonomy-compile — OA-10c: .claude/settings.json merge (AC-2, AC-3)'
       expect(r2.stdout).not.toContain('merged: .claude/settings.json'); // no-op merge prints no receipt line
       const settings2 = JSON.parse(readFileSync(join(dir, '.claude', 'settings.json'), 'utf8'));
       expect(settings2.hooks.Stop.length).toBe(stopLenAfterFirst);
+      expect(settings2.hooks.SubagentStop.length).toBe(subagentStopLenAfterFirst);
       expect(settings2.permissions.allow).toEqual(['Bash(npm test)']); // still preserved
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  }, 30_000);
+
+  test('an existing .codex/hooks.json is merged with the same two gates and remains idempotent', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'oa10-codex-'));
+    try {
+      mkdirSync(join(dir, '.codex'), { recursive: true });
+      writeFileSync(join(dir, '.codex', 'hooks.json'), JSON.stringify({ adopter: { keep: true } }));
+      const first = compile(['simple-sdlc', 'local', dir]);
+      expect(first.exitCode).toBe(0);
+      expect(first.stdout).toContain('merged: .codex/hooks.json');
+      const once = JSON.parse(readFileSync(join(dir, '.codex', 'hooks.json'), 'utf8'));
+      expect(once.adopter.keep).toBe(true);
+      expect(once.hooks.Stop).toHaveLength(1);
+      expect(once.hooks.SubagentStop).toHaveLength(1);
+
+      const second = compile(['simple-sdlc', 'local', dir]);
+      expect(second.exitCode).toBe(0);
+      expect(second.stdout).not.toContain('merged: .codex/hooks.json');
+      const twice = JSON.parse(readFileSync(join(dir, '.codex', 'hooks.json'), 'utf8'));
+      expect(twice.hooks.Stop).toHaveLength(1);
+      expect(twice.hooks.SubagentStop).toHaveLength(1);
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
@@ -563,8 +590,8 @@ describe('autonomy-compile — OA-10a/b: deletion-resurrection guard + printed r
       expect(r.exitCode).toBe(0);
       const generatedJsonHits = (r.stdout.match(/generated\.json/g) ?? []).length;
       expect(generatedJsonHits).toBeGreaterThanOrEqual(1);
-      const stopHookHits = (r.stdout.match(/stop hook/gi) ?? []).length;
-      expect(stopHookHits).toBeGreaterThanOrEqual(1);
+      const gateNoteHits = (r.stdout.match(/validation gates/gi) ?? []).length;
+      expect(gateNoteHits).toBeGreaterThanOrEqual(1);
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }

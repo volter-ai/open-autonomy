@@ -31,8 +31,9 @@ standards. Use:
 - `policy.risk.human_required_paths` for mechanically matchable protected paths.
 
 Role procedure, retry judgment, and semantic risk classification live in this skill and the standards,
-not in decorative manifest fields. Model values are tier labels. Resolve them through the running
-harness when possible; otherwise record an honest single-model degradation.
+not in decorative manifest fields. Model values are declared tier labels. A dispatch must use the declared
+tier or fail closed with a maintainer request; it may not silently substitute a model or weaken the agent
+contract based on the execution substrate.
 
 ## One tick = one execution wave
 
@@ -72,7 +73,23 @@ subagent with the normalized task, current repository context, relevant directio
 implementation tier, and an isolated worktree.
 
 One mutating agent owns one worktree. Never share a mutating worktree and never use the repository-wide
-stash for worktree handoff. Use the task service's task-local validation loop when supported.
+stash for worktree handoff. The implementation prompt must make these its first actions inside the isolated
+worktree, before reading or mutating repository files:
+
+```bash
+npx ztrack loop start "<task-id>" --until "<mapped-review-state>"
+npx ztrack loop status
+```
+
+Resolve `<mapped-review-state>` from `policy.taskStates.review`; this profile maps it to `in-review`.
+Never use `--until done`: Manager owns review, landing, and the later done transition. Both commands must
+exit zero and status must show the task armed for the mapped review state. If either command fails, the
+worker must make no repository mutation and return the exact output; Manager moves the task to mapped
+`inputRequired`, engages the Maintainer, and stops.
+
+The implementation worker owns the complete implementation-stage transition: implement the acceptance
+criteria, run relevant tests, commit, push, open or update the PR, record AC evidence through the task
+tool, and move the task to mapped `review`. It may not disarm or bypass the loop to claim completion.
 
 ## Review and land
 

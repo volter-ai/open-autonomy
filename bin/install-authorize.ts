@@ -190,9 +190,9 @@ export async function buildAuthorizeBatch(sel: SelectionRecordRef, profileDir: s
       `OA adds ${harness.fileCount} file(s) to this repo (scripts/, .claude/, .codex/, scheduler/, standards/, ` +
       `.open-autonomy/, .github/workflows/…, per the ${sel.profile}@${sel.substrate} compile — counted from ` +
       `the real compiled manifest, not a fixed figure) and COMMITS them to the default branch — the agents ` +
-      `run in git worktrees, which only see committed files. This includes a Claude Code Stop hook that ` +
-      `fires at the end of EVERY session in this repo, including your own interactive ones (self-guards, ` +
-      `no-op unless the harness is present). OK?`,
+      `run in git worktrees, which only see committed files. This includes Claude Code and Codex ` +
+      `Stop/SubagentStop gates that fire in repository sessions, including your own interactive ones, and ` +
+      `fail closed if the pinned ztrack target is missing. OK?`,
     default: 'yes (the only supported model)',
   });
 

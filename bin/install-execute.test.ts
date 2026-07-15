@@ -139,8 +139,8 @@ describe('stepInstallDeps', () => {
     };
     const r = stepInstallDeps(sel, { proc, detectFile });
     expect(r.status).toBe('blocked');
-    expect(r.detail).toMatch(/ztrack@1\.0\.0 failed/);
-    expect(calls[0]).toEqual(['npm', 'install', '-D', 'ztrack@1.0.0']);
+    expect(r.detail).toMatch(/ztrack@1\.3\.1 failed/);
+    expect(calls[0]).toEqual(['npm', 'install', '-D', 'ztrack@1.3.1']);
     cleanupAll();
   });
 
@@ -177,7 +177,7 @@ describe('stepInstallDeps', () => {
     const sel = selectionRecord('simple-sdlc', dir);
     const r = stepInstallDeps(sel, { proc: unexpectedProc, detectFile, dryRun: true });
     expect(r.status).toBe('ok');
-    expect(r.wouldInstall).toEqual(['npm install -D ztrack@1.0.0', 'npm install termfleet']);
+    expect(r.wouldInstall).toEqual(['npm install -D ztrack@1.3.1', 'npm install termfleet']);
     expect(r.detail).toMatch(/\[DRY-RUN\]/);
     expect(existsSync(join(dir, 'node_modules'))).toBe(false);
     cleanupAll();
@@ -282,7 +282,7 @@ describe('D1 regression — compile-before-install-deps never self-clobbers a fr
         const pkg = existsSync(pkgPath) ? JSON.parse(readFileSync(pkgPath, 'utf8')) : {};
         pkg.devDependencies = { ...(pkg.devDependencies ?? {}), ztrack: '1.0.0' };
         writeFileSync(pkgPath, JSON.stringify(pkg, null, 2));
-        return okResult('added ztrack@1.0.0');
+        return okResult('added ztrack@1.3.1');
       }
       return failResult(`unexpected call in D1 regression test: ${cmd} ${args.join(' ')}`);
     };
@@ -313,7 +313,7 @@ describe('D1 regression — compile-before-install-deps never self-clobbers a fr
         const cwd = opts?.cwd ?? dir;
         const pkgPath = join(cwd, 'package.json');
         if (!existsSync(pkgPath)) writeFileSync(pkgPath, JSON.stringify({ devDependencies: { ztrack: '1.0.0' } }, null, 2));
-        return okResult('added ztrack@1.0.0');
+        return okResult('added ztrack@1.3.1');
       }
       return failResult(`unexpected call: ${cmd} ${args.join(' ')}`);
     };
@@ -1195,7 +1195,7 @@ describe('runExecute — step ordering + fail-closed halt', () => {
     const proc: ProcRunner = (cmd, args) => {
       calls.push(cmd);
       if (cmd === 'bun' && args[0]?.includes('autonomy-compile.ts')) return okResult('installed 1 file'); // step 1 (compile) ok
-      if (cmd === 'npm') return failResult('npm install -D ztrack@1.0.0 failed: ENOSPC'); // step 2 (install-deps) blocks
+      if (cmd === 'npm') return failResult('npm install -D ztrack@1.3.1 failed: ENOSPC'); // step 2 (install-deps) blocks
       return failResult('should never reach here');
     };
     const report = await runExecute({ record: recordFile, proc });
@@ -1443,7 +1443,7 @@ describe('META — every risky call site in install-execute.ts checks dryRun fir
   }
 
   test('stepInstallDeps: both real `npm install` call sites are dryRun-guarded', () => {
-    assertGuardedByDryRun("opts.proc('npm', ['install', '-D', 'ztrack@1.0.0']");
+    assertGuardedByDryRun("opts.proc('npm', ['install', '-D', 'ztrack@1.3.1']");
     assertGuardedByDryRun("opts.proc('npm', ['install', 'termfleet']");
   });
   test('stepCompile: the REAL (outDir-writing) compile call site is dryRun-guarded', () => {

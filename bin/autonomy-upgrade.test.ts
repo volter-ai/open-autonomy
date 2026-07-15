@@ -25,12 +25,19 @@ describe('autonomy-upgrade CLI — settings.json merge wiring (AC-7, Finding 1)'
     try {
       // Seed an adopter's own settings.json, then merge the OA hook in via a fresh compile.
       mkdirSync(join(dir, '.claude'), { recursive: true });
+      mkdirSync(join(dir, '.codex'), { recursive: true });
       writeFileSync(join(dir, '.claude', 'settings.json'), JSON.stringify({ permissions: { allow: ['Bash(npm test)'] } }));
+      writeFileSync(join(dir, '.codex', 'hooks.json'), JSON.stringify({ adopter: { keep: true } }));
       const c = compile(['simple-gh-sdlc', 'local', dir]);
       expect(c.exitCode).toBe(0);
       const merged = JSON.parse(readFileSync(join(dir, '.claude', 'settings.json'), 'utf8'));
       expect(merged.permissions.allow).toEqual(['Bash(npm test)']);
       expect(merged.hooks.Stop).toHaveLength(1);
+      expect(merged.hooks.SubagentStop).toHaveLength(1);
+      const mergedCodex = JSON.parse(readFileSync(join(dir, '.codex', 'hooks.json'), 'utf8'));
+      expect(mergedCodex.adopter.keep).toBe(true);
+      expect(mergedCodex.hooks.Stop).toHaveLength(1);
+      expect(mergedCodex.hooks.SubagentStop).toHaveLength(1);
 
       // Now the LONG-TERM maintenance path: upgrade --apply. Without the CLI's merge wiring this reverts the
       // file to the profile's whole-file copy (permissions lost). With it, the adopter's file is preserved.
@@ -39,6 +46,11 @@ describe('autonomy-upgrade CLI — settings.json merge wiring (AC-7, Finding 1)'
       const after = JSON.parse(readFileSync(join(dir, '.claude', 'settings.json'), 'utf8'));
       expect(after.permissions.allow).toEqual(['Bash(npm test)']); // NOT reverted
       expect(after.hooks.Stop).toHaveLength(1); // still exactly one — not duplicated, not dropped
+      expect(after.hooks.SubagentStop).toHaveLength(1);
+      const afterCodex = JSON.parse(readFileSync(join(dir, '.codex', 'hooks.json'), 'utf8'));
+      expect(afterCodex.adopter.keep).toBe(true);
+      expect(afterCodex.hooks.Stop).toHaveLength(1);
+      expect(afterCodex.hooks.SubagentStop).toHaveLength(1);
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }

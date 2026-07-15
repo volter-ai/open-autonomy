@@ -1,0 +1,7 @@
+{
+  "schema": "autonomy.organization.v99",
+  "name": "invalid-version",
+  "actors": {
+    "worker": { "kind": "agent", "behaviors": [] }
+  }
+}

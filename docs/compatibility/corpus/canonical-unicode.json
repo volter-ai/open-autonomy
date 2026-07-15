@@ -1,0 +1,6 @@
+{
+  "😀": "astral",
+  "": "private-use",
+  "nested": { "z": 1, "a": true },
+  "array": [3, 2, 1]
+}

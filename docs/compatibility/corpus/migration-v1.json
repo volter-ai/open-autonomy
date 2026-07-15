@@ -1,0 +1,14 @@
+{
+  "schema": "autonomy.ir.v1",
+  "name": "legacy-coding-team",
+  "targets": ["local"],
+  "agents": {
+    "worker": {
+      "kind": "agent",
+      "behavior": "Implement the assigned task.",
+      "capabilities": ["repository"]
+    }
+  },
+  "policy": {},
+  "resources": []
+}

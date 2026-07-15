@@ -1,0 +1,10 @@
+{
+  "schema": "autonomy.organization.v2",
+  "name": "clean-room-example",
+  "behaviors": {
+    "work": { "kind": "skill", "inline": {} }
+  },
+  "actors": {
+    "worker": { "kind": "agent", "behaviors": ["work"] }
+  }
+}

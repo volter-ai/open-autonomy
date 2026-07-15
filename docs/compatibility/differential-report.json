@@ -1,0 +1,67 @@
+{
+  "schema": "autonomy.compatibility-report.v1",
+  "languageVersion": "2.0.0",
+  "corpusLockSha256": "2da2d35b0c4b34ee4f5964ed7ddc74a514deb73cf92085e4285b1c451a35ebe1",
+  "toolchains": {
+    "primary": {
+      "language": "TypeScript",
+      "runtime": "1.3.14"
+    },
+    "cleanroom": {
+      "language": "Python",
+      "runtime": "python3 stdlib"
+    }
+  },
+  "supportedSubset": "closed single-module structural check, canonicalization, authored-default normalization, registered experimental v1 migration",
+  "cases": [
+    {
+      "path": "docs/compatibility/corpus/canonical-numbers.json",
+      "operation": "canonical",
+      "status": "match",
+      "differences": []
+    },
+    {
+      "path": "docs/compatibility/corpus/canonical-unicode.json",
+      "operation": "canonical",
+      "status": "match",
+      "differences": []
+    },
+    {
+      "path": "docs/compatibility/corpus/invalid-unknown-member.json",
+      "operation": "check",
+      "status": "match",
+      "differences": []
+    },
+    {
+      "path": "docs/compatibility/corpus/invalid-wrong-schema.json",
+      "operation": "check",
+      "status": "match",
+      "differences": []
+    },
+    {
+      "path": "docs/compatibility/corpus/migration-v1.json",
+      "operation": "migrate-v1-v2",
+      "status": "match",
+      "differences": []
+    },
+    {
+      "path": "docs/compatibility/corpus/valid-organization.json",
+      "operation": "check",
+      "status": "match",
+      "differences": []
+    },
+    {
+      "path": "docs/compatibility/corpus/valid-organization.json",
+      "operation": "canonical",
+      "status": "match",
+      "differences": []
+    },
+    {
+      "path": "docs/compatibility/corpus/valid-organization.json",
+      "operation": "normalize",
+      "status": "match",
+      "differences": []
+    }
+  ],
+  "untriaged": []
+}

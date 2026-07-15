@@ -1,0 +1,8 @@
+{
+  "schema": "autonomy.organization.v2",
+  "name": "invalid-unknown",
+  "actors": {
+    "worker": { "kind": "agent", "behaviors": [] }
+  },
+  "surprise": true
+}

@@ -1,0 +1,13 @@
+{
+  "schema": "autonomy.compatibility-corpus-lock.v1",
+  "languageVersion": "2.0.0",
+  "canonicalization": "oa-c14n-v1",
+  "files": [
+    { "path": "docs/compatibility/corpus/canonical-numbers.json", "sha256": "da1a3dd57076766f6fdcc0b3c8a75eddabb0729cc9c1025cfd75c955adb0d7a9", "operations": ["canonical"] },
+    { "path": "docs/compatibility/corpus/canonical-unicode.json", "sha256": "e2d5031240899468f2339887189a4f5f75e0f5a42ad1a68a7ba5c4d3ae193381", "operations": ["canonical"] },
+    { "path": "docs/compatibility/corpus/invalid-unknown-member.json", "sha256": "8e3c8ed9d0714cacfcdb8e77b966672092d7e278cfb41be979eb6ed4fde14027", "operations": ["check"] },
+    { "path": "docs/compatibility/corpus/invalid-wrong-schema.json", "sha256": "de3e4718dcd0307d0cfb0c04e3610b80b9c421b643a5aea9518d155ea7581348", "operations": ["check"] },
+    { "path": "docs/compatibility/corpus/migration-v1.json", "sha256": "7ffd8646a44885deb9cc235480bf1a7475a3c59a1758f4fdaeeded94e4acd0a7", "operations": ["migrate-v1-v2"] },
+    { "path": "docs/compatibility/corpus/valid-organization.json", "sha256": "80305062ab30c2b9724d176a6de5e120f7d098ae84c5dd63c5ae00a67a9036f0", "operations": ["check", "canonical", "normalize"] }
+  ]
+}

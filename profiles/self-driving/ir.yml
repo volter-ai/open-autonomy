@@ -276,19 +276,17 @@ policy:
         # BOTH layers: the installed copies and their profile sources. check:dogfood + check:profiles keep
         # every copy (incl. other profiles') in lockstep with these two, so gating this pair gates them all.
         # finalize-agent-review is runner-owned security machinery and IS mirrored; review-result is the
-        # substrate-neutral protocol parser it shares with trusted consumers. The five code-host gate
+        # substrate-neutral protocol parser it shares with trusted consumers. The four code-host gate
         # resources below are not mirrored. Both sides of this boundary must be human-gated.
         - scripts/finalize-agent-review.ts
         - packages/substrate-github/src/runtime/finalize-agent-review.ts
         - scripts/review-result.ts
         - packages/substrate-github/src/runtime/review-result.ts
         - scripts/human-approval-gate.ts
-        - scripts/native-approval-adapter.ts
         - scripts/rearm-auto-merge.ts
         - scripts/reconcile-merged-issues.ts
         - scripts/check-supply-chain.ts
         - profiles/self-driving/scripts/human-approval-gate.ts
-        - profiles/self-driving/scripts/native-approval-adapter.ts
         - profiles/self-driving/scripts/rearm-auto-merge.ts
         - profiles/self-driving/scripts/reconcile-merged-issues.ts
         - profiles/self-driving/scripts/check-supply-chain.ts
@@ -334,7 +332,6 @@ resources:
   - .github/ISSUE_TEMPLATE/public_agent_session.yml
   - .github/workflows/merge.yml
   - .github/workflows/human-approval.yml
-  - .github/workflows/native-approval.yml
   - .github/workflows/security.yml
   - .github/workflows/security-gate.yml   # row 5: sdlc's dispatched, blocking realization of security.yml
   - .github/workflows/open-autonomy-preflight.yml
@@ -370,7 +367,6 @@ resources:
   - docs/standards/docs.md
   - docs/standards/security.md
   - docs/standards/tests.md
-  - docs/NATIVE-APPROVAL.md
   # Row 3/4: the ztrack AC + evidence grammar (converged from simple-gh-sdlc's `standards/issue-and-
   # evidence.md`). Kept at a self-driving-specific path (docs/standards/, not the bare `standards/` sdlc
   # uses) so it does NOT collide on install path with simple-gh-sdlc's copy — the two doctrines legitimately
@@ -394,5 +390,4 @@ resources:
   - scripts/rearm-auto-merge.ts
   - scripts/reconcile-merged-issues.ts
   - scripts/human-approval-gate.ts
-  - scripts/native-approval-adapter.ts
   - scripts/check-supply-chain.ts

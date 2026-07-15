@@ -21,7 +21,7 @@
     the IR projected into a runtime-readable form.
 - **Resource** — every github **CI *workflow***, carried verbatim by the profile, **exactly like
   `docs/standards/*.md`**: `ci`, `merge`, `human-approval`, `security`, `dependabot`, `codeql`, `deploy`,
-  `preflight`, `native-approval`. Resources are an essential part of the IR; a github-CI workflow is one.
+  `preflight`. Resources are an essential part of the IR; a github-CI workflow is one.
 
 The earlier mistake (twice): treating "shared" as "engine-owned." Shared resources are still **resources**
 (IR layer). Sharing across profiles is a future concern (a base/standard resource set) — with only a
@@ -68,13 +68,12 @@ leaking into the agent runners; it's now a resource, decoupled from any agent ru
 - `.github/zizmor.yml`, `.open-autonomy/human-required-paths.json` (derived data)
 
 **Profile resources (carried, IR layer):**
-- `ci.yml`, `merge.yml`, `human-approval.yml`, `native-approval.yml`, `security.yml`, `dependabot.yml`, `codeql.yml`, `deploy.yml`,
+- `ci.yml`, `merge.yml`, `human-approval.yml`, `security.yml`, `dependabot.yml`, `codeql.yml`, `deploy.yml`,
   `open-autonomy-preflight.yml` — the github CI scaffolding, per github-targeting profile
 - the gate **scripts** those workflows call: `rearm-auto-merge.ts` + `reconcile-merged-issues.ts`
-  (merge.yml), `human-approval-gate.ts` (human-approval.yml), `native-approval-adapter.ts`
-  (native-approval.yml), `check-supply-chain.ts` (security.yml) —
-  carried by every profile whose workflows invoke them (self-driving and soc2-baseline: all five;
-  simple-gh-sdlc: merge pair + supply-chain + native approval; hello: supply-chain only). Shared standards: the copies must
+  (merge.yml), `human-approval-gate.ts` (human-approval.yml), `check-supply-chain.ts` (security.yml) —
+  carried by every profile whose workflows invoke them (self-driving and soc2-baseline: all four;
+  simple-gh-sdlc: merge pair + supply-chain; hello: supply-chain only). Shared standards: the copies must
   be byte-identical across carrying profiles (`check:profiles` enforces); they are developed + unit-tested
   in `scripts/` and excluded from the runtime mirror (`bin/sync-runtime.ts` CODE_HOST_RESOURCE set).
 
@@ -109,11 +108,6 @@ dispatch checks), identical for every profile and carrying **no policy vocabular
 no thresholds). Engine-emitted workflows may depend only on engine-shipped runtime, so it rides the mirror
 with the skill runner. If it ever grows a policy parameter, that parameter moves to `policy.box` with a
 reader — the script still doesn't move.
-
-**Done (2026-07-15):** the optional native GitHub approval adapter landed as another code-host resource,
-not an IR actor or substrate feature. It consumes the trusted reviewer's standard result plus the
-authoritative exact-SHA `agent-review` status, and uses an installation-supplied, distinct GitHub identity to
-post only a native APPROVE review. See `docs/NATIVE-APPROVAL.md` for opt-in and degraded behavior.
 
 ## Open / deferred
 

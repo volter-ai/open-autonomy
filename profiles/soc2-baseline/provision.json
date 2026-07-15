@@ -1,5 +1,5 @@
 {
-  "$comment": "SOC 2 provisioning manifest for a soc2-baseline install (scripts/provision-target-repo.ts). PROFILE-DERIVED branch-protection control (gap G1): branch protection, required checks, and repo security settings ship as a committed, change-managed file. enforce_admins:true + required_reviews:1 + dismiss_stale_reviews:true harden over simple-gh-sdlc's permissive defaults. ALL required_checks are dispatched on bot-authored PRs by the proposer effect (a bot PR fires no pull_request): ci=adopter product CI, agent-review=reviewer, human-approval=gate, and supply-chain + code-scan (Semgrep OSS) + secret-scan (gitleaks) = the dispatched no-signup gate workflows wired via policy.box.gh-actions.propose_dispatch_checks. required_signatures is ON: the propose effect re-creates the agent commit through GitHub's git/commits API so the job's GITHUB_TOKEN (github-actions[bot]) signs it 'Verified' (keyless, policy.box.gh-actions.commit_signing=verified-api), agent commits are GitHub-Verified and the squash-merge commit is also GitHub-signed; NOTE a required_signatures ruleset blocks native auto-merge, so the merge is operator-performed (see README C6 'Documented constraint').",
+  "$comment": "SOC 2 provisioning manifest for a soc2-baseline install (scripts/provision-target-repo.ts). PROFILE-DERIVED branch-protection control (gap G1): branch protection, required checks, and repo security settings ship as a committed, change-managed file. enforce_admins:true + required_reviews:1 harden over simple-gh-sdlc's permissive defaults. ALL required_checks are dispatched on bot-authored PRs by the proposer effect (a bot PR fires no pull_request): ci=adopter product CI, agent-review=reviewer, human-approval=gate, and supply-chain + code-scan (Semgrep OSS) + secret-scan (gitleaks) = the dispatched no-signup gate workflows wired via policy.box.gh-actions.propose_dispatch_checks. required_signatures is ON: the propose effect re-creates the agent commit through GitHub's git/commits API so the job's GITHUB_TOKEN (github-actions[bot]) signs it 'Verified' (keyless, policy.box.gh-actions.commit_signing=verified-api), agent commits are GitHub-Verified and the squash-merge commit is also GitHub-signed; NOTE a required_signatures ruleset blocks native auto-merge, so the merge is operator-performed (see README C6 'Documented constraint').",
   "description": "open-autonomy soc2-baseline install",
   "private": true,
   "required_secrets": [],
@@ -87,7 +87,6 @@
     "enforce_admins": true,
     "required_reviews": 1,
     "require_code_owner_reviews": false,
-    "dismiss_stale_reviews": true,
     "required_signatures": true
   },
   "security": {

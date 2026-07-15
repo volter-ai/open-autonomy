@@ -220,6 +220,9 @@ else is ignored. To launch an agent by comment, name it: `/agent <agent>` (the w
   fresh run, fresh model spend); reports when there is nothing to retry.
 - `/agent cancel` — cancel active workflow runs (proxy run slots are not revoked; they expire at
   token TTL, ~2h).
+- `/agent approve <full-head-sha>` — authorize that exact PR head for the `human-approval` gate. This is
+  equivalent for that status to a native maintainer Approve and works when GitHub forbids approving your
+  own PR. A profile may separately require native GitHub reviews (for example, SOC 2 separation of duties).
 - `/agent decide <decision>` / `/agent answer <answer>` — resolve a `human-required` / `needs-info` item:
   records your decision/answer and clears the block so the PM re-triages and resumes (the human seam's `out`).
 

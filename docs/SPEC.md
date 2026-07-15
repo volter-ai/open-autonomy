@@ -512,6 +512,9 @@ rename the thing every component must agree on).
   realization; renaming one is a **spec change** coordinated across components, never a per-org knob.
   - status contexts: `ci`, `agent-review` (the merge boundary above), and `human-approval` — the
     additional required check shipped by gate-carrying profiles, re-earned **per head SHA**;
+  - human approval result: a native current-head maintainer review or the exact-SHA
+    `/agent approve <full-head-sha>` command; these are two GitHub realizations of the same declared human
+    actor result, not two independent-human requirements;
   - labels: `human-required` and `agent-develop-only` (the human-approval gate's scope triggers),
     `agent-paused` (the control plane's pause-verb marker), `needs-info` and `agent-blocked` (the
     human-block labels the control plane's `decide`/`answer` resolutions clear);

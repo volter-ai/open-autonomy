@@ -90,8 +90,9 @@ The PR number arrives as `TARGET_REF`. Do not wait for the developer to finish â
    a maintainer clears it).
    **Sensitive scope is not automatically a rejection; it has a separate approval gate.** A PR touching
    declared `policy.risk.human_required_paths`, carrying `human-approval-required`, or linked to an
-   `agent-develop-only` issue is gated by the deterministic **`human-approval`** required check (a maintainer
-   Approve on the current head). Review it on the merits and pass sound code with
+   `agent-develop-only` issue is gated by the deterministic **`human-approval`** required check (a native
+   maintainer Approve or exact-SHA `/agent approve` on the current head). Review it on the merits and pass
+   sound code with
    `humanApprovalRequired: true`; it still cannot merge without the maintainer approval. By contrast,
    `human-required` is a real parked/hold state from the policy above: fail while it remains present. Also
    fail for genuine quality/security/regression problems or anything you cannot confidently review.

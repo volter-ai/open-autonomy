@@ -1,8 +1,8 @@
 name: human-approval
 # The ADDITIONAL human-review gate. Posts a `human-approval` commit status: auto-success for routine agent PRs,
-# success only on a maintainer Approve (current head SHA) for PRs in human-required scope. AI review
+# success only on exact-head maintainer authorization for PRs in human-required scope. AI review
 # (agent-review) is always required separately; this adds the human sign-off for sensitive changes. Deterministic
-# (a security boundary), not a model decision. Re-evaluated on PR changes and on review submit/dismiss.
+# (a security boundary), not a model decision. Re-evaluated on PR changes, reviews, and approval comments.
 on:
   # zizmor: ignore[dangerous-triggers] — pull_request_target is required for the write token; the gate
   # reads PR metadata via the API and checks out BASE (trusted main), never PR head. Documented + reviewed.
@@ -10,6 +10,11 @@ on:
     types: [opened, synchronize, reopened, ready_for_review, labeled, unlabeled]
   pull_request_review:
     types: [submitted, dismissed, edited]
+  # A maintainer may authorize an exact head even when GitHub refuses a native self-review because the
+  # agent proposed through that maintainer's identity. Created/edited/deleted all re-evaluate the durable
+  # comment set, so changing or removing the command revokes it.
+  issue_comment:
+    types: [created, edited, deleted]
   # Bot-opened PRs don't fire pull_request_target (GITHUB_TOKEN anti-recursion), so the proposer effect
   # dispatches this explicitly — same as it dispatches ci + agent-review — to post the initial status.
   workflow_dispatch:
@@ -33,11 +38,17 @@ env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
 
 concurrency:
-  group: human-approval-${{ github.event.pull_request.number }}
+  group: human-approval-${{ github.event.pull_request.number || github.event.issue.number || github.event.inputs.pr }}
   cancel-in-progress: true
 
 jobs:
   human-approval:
+    # Ignore ordinary new comments and all issue-only comments. Edits/deletes must re-evaluate even when the
+    # new body is no longer an approval command, otherwise an edited-away authorization would stay green.
+    if: >-
+      github.event_name != 'issue_comment' ||
+      (github.event.issue.pull_request &&
+       (github.event.action != 'created' || startsWith(github.event.comment.body, '/agent approve ')))
     runs-on: ubuntu-latest
     steps:
       # Check out the BASE (trusted main) for the gate script — NEVER the PR head. The gate reads PR metadata
@@ -52,7 +63,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           GITHUB_REPOSITORY: ${{ github.repository }}
-          PR_NUMBER: ${{ github.event.pull_request.number || github.event.inputs.pr }}
+          PR_NUMBER: ${{ github.event.pull_request.number || github.event.issue.number || github.event.inputs.pr }}
           # Who to engage when a PR parks in human-required scope (assign + request-review → GitHub notifies
           # them). Comma/space-separated GitHub logins; falls back to the repo owner when unset.
           MAINTAINERS: ${{ vars.PUBLIC_AGENT_MAINTAINERS }}

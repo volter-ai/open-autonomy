@@ -62,7 +62,7 @@ direction, constitution, roadmap, standards, labels, secrets, and risk policy.
 | Developer | Edits code and opens its own auto-merging PR | issue, acceptance criteria, repo guidance, control files | a pull request (its own scoped token) |
 | Reviewer | Judges PR quality and risk; emits a bound verdict | PR diff, CI, issue, rubric, standards | typed review result; trusted effect posts `agent-review` (cannot merge) |
 | Merge | Native auto-merge once `ci` + `agent-review` are green | the two required status checks + branch protection | merged PR (no agent performs the merge) |
-| Operator | Lets maintainers control the system | issue comments, labels, run/proxy state | pause/resume/status/cancel/retry effects |
+| Operator | Lets maintainers control the system | issue/PR comments, labels, run/proxy state | pause/resume/status/cancel/retry and exact-head approval effects |
 
 Planner is directional. PM is operational. Every agent uses model judgment (each is a skill). The
 enforcement is structural: the capability/permission split + branch protection + native auto-merge.

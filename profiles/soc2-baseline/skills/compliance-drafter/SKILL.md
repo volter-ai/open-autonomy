@@ -100,7 +100,7 @@ into the tree:
   last-evidence/state, so an un-rendered ledger change trips the `soc2-register-check` drift gate.
 
 Then `git checkout -b agent/issue-<N>`, commit the tree, push, and `gh pr create` with the **decision brief**
-(§4) as the PR body (`--body-file`). `compliance/**` is human-required, so the PR forces a maintainer Approve —
+(§4) as the PR body (`--body-file`). `compliance/**` is human-required, so the PR forces exact-head maintainer authorization —
 that Approve is the executive's signature. (When the GH013 follow-up lands, drop the manual branch/commit/PR and
 just leave the tree for the effect — see the §3 note.)
 

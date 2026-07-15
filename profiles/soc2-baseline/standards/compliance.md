@@ -8,7 +8,7 @@ invariants — a PR that weakens a control is human-required, never auto-merged.
    and native auto-merge lands the PR.
 2. **Don't weaken branch protection or the gates.** `provision.json` (required checks, `enforce_admins`,
    required reviews), the control workflows under `.github/workflows/`, and the `human-approval` gate are
-   change-managed (human-required paths). Edits need a maintainer Approve.
+   change-managed (human-required paths). Edits need exact-head maintainer authorization.
 3. **Don't bypass the controls' evidence.** `evidence-collect.yml` snapshots control state to the
    `compliance-evidence` branch; don't disable it or write to that branch by hand.
 4. **Respect data handling.** Don't commit secrets; the transcript redactor strips token shapes but not all

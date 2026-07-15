@@ -32,8 +32,9 @@ export type LandingMode = 'auto-merge' | 'manual-after-review' | 'pr-free';
 //  - 'authored-workflow' — a real, standing workflow file the repo must carry for the name to ever post at
 //     all (e.g. `ci`, `human-approval` — TA.3's "a required check with no workflow behind it wedges every
 //     PR forever").
-//  - 'native' — posted directly by the actor's own job when it runs (e.g. `agent-review`, posted by the
-//     `reviewer` agent's own credentialed run — no separate dispatched workflow involved).
+//  - 'native' — realized by the substrate's own actor-run path, with no separately authored/dispatched
+//     workflow (e.g. hosted `agent-review`: the reviewer returns a bound judgment and the substrate-injected
+//     trusted effect posts it; a weaker local substrate may publish directly from the shared-credential run).
 export type CheckRealizationVia = 'propose_dispatch_checks' | 'authored-workflow' | 'native';
 export interface CheckRealization {
   check: string;

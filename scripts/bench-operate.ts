@@ -276,8 +276,8 @@ async function verifyPmDecidedFromHistory(repo: string, n: number, pr: number, s
 }
 
 async function opMaintainerHold(repo: string, n: number): Promise<OpResult> {
-  // Develop → PR → add the do-not-merge maintainer block → dispatch the reviewer; it must post agent-review
-  // = FAILURE (the reviewer honors block labels so the hold stops the merge), not bless it.
+  // Develop → PR → add the do-not-merge maintainer block → dispatch the reviewer; its review path must
+  // publish agent-review = FAILURE (the reviewer honors block labels so the hold stops the merge), not bless it.
   const pr = await developAndWaitForPr(repo, n);
   if (!pr) return { scenario: 'governance-maintainer-hold', issue: n, status: 'fail', note: 'no agent PR was produced to hold' };
   ghOk(['pr', 'edit', String(pr), '-R', repo, '--add-label', 'do-not-merge']);

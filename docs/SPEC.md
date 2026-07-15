@@ -87,6 +87,12 @@ agents:
       - { event: issue_comment }                            # substrate-native escape hatch
     timeout: 30                        # a run-time bound (minutes) — the only non-capability field
 
+  reviewer:
+    behavior: reviewer
+    capabilities: [code:review]
+    result: { schema: open-autonomy.review.v1 }     # named standard result contract; inline JSON Schema is also valid
+    triggers: [{ dispatch: true, params: { PR: subject.ref } }]
+
   maintainer:                          # kind: human — a person; intrinsic, not a substrate choice
     kind: human
     behavior: maintainer-review        # the task spec the person is handed (situation / decision /
@@ -110,6 +116,12 @@ resources: [docs/standards/code.md]    # verbatim files; the standard never inte
 | **capabilities** | the actor's authority — from the capability catalog ([§Capabilities](#capabilities)); realized as the agent's own scoped token | the substrate realizes each as a permission on that token |
 | **triggers** | when it fires + the **params** it forwards. Three forms: `cron` (time), the portable `dispatch` (on-demand via the Runner — [§The Runner](#the-runner)), and the substrate-native `event` | the substrate's trigger executor; `cron` and `dispatch` are portable, `event` is carried |
 | **timeout** | optional run-time bound (minutes) — the only non-capability field | the substrate's job timeout |
+
+Within its behavior contract, an actor may declare `result.schema`: either a named standard result contract
+or an inline JSON Schema. This is the typed output of its behavior, not authority or runner configuration. The declaration
+is preserved in the substrate-neutral manifest. A proposer review edge requires its reviewer to declare
+`open-autonomy.review.v1`; substrates may realize that same result differently and must report unsupported
+realizations honestly.
 
 An actor also carries a **kind** (`agent` | `human`, default `agent`) — a discriminator, not a fifth slot.
 `kind` (the role) is the profile's; *realization* (how the role is filled — model/person/simulator) is the
@@ -176,11 +188,12 @@ This is the distinction that took the longest to get right, so it is stated expl
   `kind: agent`: a credentialed job runs the skill via a model. For `kind: human`: a **real person** in
   production, or a **simulator** in a testbed — *same profile, different environment*. Filling the same
   role differently per environment is what makes an org with human actors **testable** ([§Handoffs](#handoffs)).
-- **Safety** (can a hijacked agent do harm?) — the **capability/permission split**, not mediation. The
-  agent acts directly with a token scoped to its capabilities; the one irreversible power — merge — is
-  withheld from every agent (`code:review` = bless via status, `code:propose` = push, never both), so no
-  agent can land unreviewed code ([§Capabilities](#capabilities)). There is no credential-less job, no bundle, no
-  trusted publisher. Safety is capabilities + budget — not an IR trust field.
+- **Safety** (can a hijacked agent do harm?) — the **capability/permission split**. The agent acts with a
+  token scoped to its capabilities; the one irreversible power — merge — is withheld from every agent
+  (`code:review` = judge/bless, `code:propose` = push, never both), so no agent can land unreviewed code
+  ([§Capabilities](#capabilities)). A substrate may realize a security-sensitive capability effect with a
+  separate trusted finalizer, provided the agent still owns the judgment and the finalizer only validates
+  binding/schema and publishes that result. Safety is capabilities + budget — not an IR trust field.
 - **Change review** (does the resulting change get reviewed before merge?) — the `code:review` status +
   branch protection (`ci` + `agent-review` required); native auto-merge lands it.
 
@@ -400,7 +413,7 @@ github leak.)
 | capability | meaning | github realization |
 |---|---|---|
 | `code:propose` | propose a change (write a feature branch, open a PR, queue auto-merge, dispatch CI) | `contents: write` + `pull-requests: write` + `actions: write` |
-| `code:review` | **bless** a change for merge (post the verdict that gates landing) | `statuses: write` (posts the `agent-review` status) |
+| `code:review` | **bless** a change for merge (produce the verdict that gates landing) | merge reviewer emits a bound result; trusted runner effect posts `agent-review` |
 | `code:merge` | **land** a reviewed change onto the default branch | **never granted to anyone** — landing is native auto-merge (see the merge boundary) |
 | `tasks:author` | create / update / label / set state of work | `issues: write` |
 | `tasks:converse` | post comments / verdicts on work and changes | `issues: write` (comment scope) |
@@ -420,12 +433,13 @@ to roadmap files only" (the strategist's governance constraint, expressed as a s
 deterministic guard script). The constitution's `human_required_paths` / `topics` are the global
 complement — the region **no** capability may ever reach.
 
-### The trust model: agents are credentialed; only merge is gated
+### The trust model: agents are capability-scoped; merge is gated
 
-The agent runs with a credential **scoped to its capabilities** and acts directly. There is no
-credential-less job, no bundle, no trusted publisher mediating its output. The one threat that justifies a
-boundary is **prompt injection** via untrusted input (issue bodies, fetched pages, fork diffs) — and that
-justifies a boundary only for the **irreversible, default-branch-affecting** power:
+The agent runs with authority **scoped to its capabilities**. Most effects are direct; a substrate may split
+judgment from publication where atomicity is itself a security boundary. GitHub does this for a merge
+review: the read-only model judges, and a trusted base-branch effect publishes only its schema-valid,
+PR/SHA-bound result. The one threat that justifies the hard boundary is **prompt injection** via untrusted
+input (issue bodies, fetched pages, fork diffs) reaching default-branch-affecting power:
 
 > **The single hard boundary: an agent can never merge.** `code:merge` is never grantable to an agent.
 
@@ -442,13 +456,14 @@ or post a bad comment — both reverted in seconds, neither touching `main`. (Th
 relaxation of the old "agent holds nothing" model; the cost is recoverable feature-branch/comment noise,
 the gain is that agents are real agents instead of envelopes passed to a mediator.)
 
-#### The merge boundary — a permission split, no app, no merge job
+#### The merge boundary — a permission split, no merge job
 
 Landing on the default branch is gated by **two non-overlapping permission sets**, so no single agent can
 land unreviewed code — and the merge itself is **GitHub native auto-merge**, not a token or an app:
 
-- **`code:review` = `statuses: write`** — the authority to *bless* a merge (post the `agent-review` verdict
-  status). The reviewer holds this and **not** `contents: write`, so it can certify but cannot merge.
+- **`code:review`** — the authority to *bless* a merge. The reviewer judges a bound PR/head and emits the
+  verdict; on GitHub, a separate base-branch effect validates that binding and posts `agent-review` last.
+  The model job holds neither `statuses: write` nor `contents: write`, so it cannot publish early or merge.
 - **`code:propose` = `contents: write`** — the authority to push a branch / open a PR / queue auto-merge.
   Proposers hold this and **not** `statuses: write`, so they can push but cannot self-certify a review.
 
@@ -457,11 +472,13 @@ app is needed). The proposer enables auto-merge when it opens the PR; **GitHub**
 statuses are green. Consequences:
 
 - a hijacked **proposer** can't post `agent-review` → can never land anything the reviewer didn't bless;
-- a hijacked **reviewer** has no `contents: write` → can't merge or push at all;
+- a hijacked **reviewer** has no status or content write token → can only return a review judgment for the
+  PR/head the trusted setup bound before it ran;
 - **no agent holds `code:merge`** — it isn't a token capability; the platform performs the merge.
 
-`code:review` (bless) and the merge (perform) are deliberately separated; no agent holds both. That split —
-not a dedicated app or a trusted gate job — *is* the merge boundary.
+`code:review` (bless) and the merge (perform) are deliberately separated; no agent holds both. The trusted
+review effect is not another reviewer: it cannot invent merit, and only publishes a schema-valid result for
+the bound current head. Its purpose is fail-closed atomicity, not model mediation.
 
 #### The deploy boundary — the merge boundary's sibling, at the production edge
 
@@ -516,26 +533,27 @@ both misfilings are bugs.
 
 ```
 provide            →     skill                    →     effect
-(substrate hands the     (judges; emits result =        (the agent's own scoped
- trigger's subject in)    intent in capability terms)    actions — direct, in-process)
+(substrate hands the     (judges; emits result =        (capability realization;
+ trigger's subject in)    intent in capability terms)    trusted only at security boundaries)
 ```
 
 - **provide** — the substrate materializes the trigger's *subject* (a PR's diff+checks, an issue, …) into
   the sandbox. Generic; the only variable is which subject, declared by the trigger.
 - **skill** — does the work and emits its typed `result`.
-- **effect** — the agent invokes its own capabilities directly. There is no merge step to route to: the
-  reviewer posts `agent-review` (`code:review`), the proposer queued auto-merge, and GitHub lands it.
+- **effect** — the substrate realizes the capability. Most actions are direct. Security-boundary effects may
+  be finalized separately: GitHub validates/publishes the merge reviewer's bound result, the proposer queues
+  auto-merge, and GitHub lands it.
 
 There are no `prepare` / `interpret` scripts and no `config` hooks: "input gathering" is `provide`; "acting
 on the result" is the agent using its own capabilities.
 
-### github realization — the mapping is the whole story
+### github realization
 
-The github substrate computes the agent job's `permissions:` block straight from its capabilities (the table
-above). That is the entire realization: a normally-credentialed job, scoped. No wrapper of trusted jobs
-around a credential-less core — the agent IS the job. There is no merge gate job and no app: landing is
-native auto-merge gated by the `ci` + `agent-review` required checks, and the permission split keeps any one
-agent from satisfying both.
+The github substrate computes permissions from capabilities. Ordinary effects remain direct. For the
+reviewer named by a proposer's `review:` edge, setup binds the PR/current SHA and invalidates stale green;
+the read-only model writes `open-autonomy.review.v1`; a separate base-branch job validates and persists the
+effects, posting green last. Missing output, model failure, stale binding, or partial effects never produces
+a current-head green. Landing remains native auto-merge gated by required checks.
 
 `config.permissions` does not exist; gh permission blocks are *computed*, never written in the IR.
 
@@ -545,7 +563,7 @@ agent from satisfying both.
 |---|---|
 | pm | `tasks:author`, `tasks:converse`, `agent:launch` |
 | developer | `code:propose`, `tasks:converse` |
-| reviewer | `code:review`, `tasks:converse` (posts `agent-review`; no `contents` → cannot merge) |
+| reviewer | `code:review`, `tasks:converse` (returns the bound merge verdict; cannot merge) |
 | strategy_reviewer | `code:review`, `tasks:converse` (blesses a roadmap proposal; cannot merge) |
 | planner | `tasks:author`, `tasks:converse` |
 | strategist | `code:propose@roadmap`, `agent:launch` |
@@ -557,9 +575,8 @@ No agent holds `code:merge`.
 - **Observation** — baseline; reads are bounded by the sandbox + budget, not a permission.
 - **Model access / budget** — the bounded model token (the budget guard), provisioned by the substrate; the
   IR declares the `budget`, not the credential.
-- **Trust mediation** — no longer a concept. The old "untrusted agent → bundle → trusted publisher" design
-  is replaced by scoped credentials + the merge boundary (the `code:review` / `code:propose` permission
-  split + native auto-merge). There is no trusted mediator, no merge gate job, and no app.
+- **Trust level** — not an IR capability. A trusted effect is a substrate implementation detail reserved for
+  deterministic security boundaries; it cannot replace or reinterpret the agent's judgment.
 
 ---
 

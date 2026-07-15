@@ -56,7 +56,12 @@
     {
       "name": "human-required",
       "color": "b60205",
-      "description": "A maintainer decision is required"
+      "description": "A maintainer decision is required; autonomy is held"
+    },
+    {
+      "name": "human-approval-required",
+      "color": "fbca04",
+      "description": "Code review passed; current head still needs maintainer approval"
     },
     {
       "name": "needs-info",

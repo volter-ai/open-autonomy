@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { compileGithub } from './emit';
-import type { AutonomyIR, Trigger } from '@open-autonomy/core';
+import { REVIEW_RESULT_SCHEMA_ID, type AutonomyIR, type Trigger } from '@open-autonomy/core';
 
 function irWith(triggers: Trigger[], kind?: 'agent' | 'human'): AutonomyIR {
   return {
@@ -120,7 +120,12 @@ describe('compileGithub — merge is a code-host resource, not engine output', (
     targets: ['gh-actions'],
     agents: {
       developer: { behavior: 'develop', capabilities: ['code:propose'], triggers: [{ dispatch: true }], review: 'reviewer' },
-      reviewer: { behavior: 'review', capabilities: ['code:review'], triggers: [{ dispatch: true }] },
+      reviewer: {
+        behavior: 'review',
+        capabilities: ['code:review'],
+        result: { schema: REVIEW_RESULT_SCHEMA_ID },
+        triggers: [{ dispatch: true, params: { TARGET_REF: 'subject.ref' } }],
+      },
       pm: { behavior: 'pm', capabilities: ['tasks:author'], triggers: [{ cron: '0 * * * *' }] },
     },
     policy: { box: {} },
@@ -144,6 +149,47 @@ describe('compileGithub — merge is a code-host resource, not engine output', (
     const wf = compileGithub(propIR).generated['.github/workflows/pm.yml'] ?? '';
     expect(wf).not.toContain('reconcile-merged-issues.ts');
     expect(wf).not.toContain('rearm-auto-merge.ts');
+  });
+
+  test('a merge reviewer is read-only; a separate base-branch effect posts the bound verdict', () => {
+    const out = compileGithub(propIR);
+    const wf = out.generated['.github/workflows/reviewer.yml'] ?? '';
+    const modelJob = wf.slice(wf.indexOf('  reviewer:'), wf.indexOf('  review_effect:'));
+    const effectJob = wf.slice(wf.indexOf('  review_effect:'));
+    expect(modelJob).not.toContain('statuses: write');
+    expect(modelJob).not.toContain('issues: write');
+    expect(modelJob).toContain('OSS_AGENT_RESULT_PATH: .agent-run/artifacts/result.json');
+    expect(modelJob).toContain('OSS_AGENT_RESULT_SCHEMA_PATH: .agent-run/result-schema.json');
+    expect(modelJob).toContain(`"$id":"${REVIEW_RESULT_SCHEMA_ID}"`);
+    const setupJob = wf.slice(wf.indexOf('  setup:'), wf.indexOf('  reviewer:'));
+    expect(setupJob).not.toContain('statuses: write');
+    expect(setupJob).toContain('Bind review target');
+    expect(effectJob).toContain("if: always() && needs.setup.result == 'success'");
+    expect(effectJob).toContain('statuses: write');
+    expect(effectJob).toContain('ref: ${{ github.event.repository.default_branch }}');
+    expect(effectJob).toContain('bun scripts/finalize-agent-review.ts');
+    expect(out.generated['scripts/finalize-agent-review.ts']).toContain('A non-successful model job always wins');
+  });
+
+  test('an advisory code:review agent not named by a review edge retains its direct status capability', () => {
+    const advisory: AutonomyIR = {
+      ...propIR,
+      agents: {
+        ...propIR.agents,
+        verifier: { behavior: 'verify', capabilities: ['code:review'], triggers: [{ dispatch: true }] },
+      },
+    };
+    const wf = compileGithub(advisory).generated['.github/workflows/verifier.yml'] ?? '';
+    expect(wf).toContain('statuses: write');
+    expect(wf).not.toContain('review_effect:');
+  });
+
+  test('a merge reviewer without a subject.ref binding is rejected instead of emitting a decorative finalizer', () => {
+    const invalid: AutonomyIR = {
+      ...propIR,
+      agents: { ...propIR.agents, reviewer: { ...propIR.agents.reviewer!, triggers: [{ dispatch: true }] } },
+    };
+    expect(() => compileGithub(invalid)).toThrow('must declare a trigger param sourced from subject.ref');
   });
 });
 

@@ -1,12 +1,14 @@
 import { describe, expect, test } from 'bun:test';
 import {
   DEVELOP_ONLY_LABEL,
+  HUMAN_APPROVAL_REQUIRED_LABEL,
   developOnlyFromLookup,
   isMaintainerPermission,
   isSensitivePath,
   linkedIssueNumbers,
   loadHumanRequiredGlobs,
   qualifies,
+  requiresHumanApproval,
   type Review,
 } from './human-approval-gate';
 
@@ -88,6 +90,16 @@ describe('linkedIssueNumbers — the PR→issue link the gate scopes agent-devel
   });
 });
 
+describe('approval routing labels', () => {
+  test('the non-hold review-routing label scopes the human gate', () => {
+    expect(requiresHumanApproval([HUMAN_APPROVAL_REQUIRED_LABEL], false, [], [])).toBe(true);
+  });
+
+  test('ordinary labels do not scope the human gate', () => {
+    expect(requiresHumanApproval(['ready'], false, [], [])).toBe(false);
+  });
+});
+
 describe('isSensitivePath — the boundary scripts are inside the gated scope', () => {
   // NOT a fixture: these globs are the repo's REAL compiled .open-autonomy/human-required-paths.json
   // (self-driving's declared policy.risk.human_required_paths, projected at compile). The gate's own
@@ -100,6 +112,8 @@ describe('isSensitivePath — the boundary scripts are inside the gated scope', 
       expect(isSensitivePath(`scripts/${name}.ts`, globs)).toBe(true);
       expect(isSensitivePath(`profiles/self-driving/scripts/${name}.ts`, globs)).toBe(true);
     }
+    expect(isSensitivePath('scripts/finalize-agent-review.ts', globs)).toBe(true);
+    expect(isSensitivePath('packages/substrate-github/src/runtime/finalize-agent-review.ts', globs)).toBe(true);
   });
 
   test('non-boundary dev tooling in scripts/ is NOT scoped (enumerated by name, not a broad glob)', () => {

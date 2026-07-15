@@ -2,7 +2,7 @@
 // every substrate emits the identical manifest and the runner reads it. So the (de)serialization is the
 // standard's, not any one substrate's emit — it lives here in core, and each substrate's emit imports it
 // rather than one substrate housing it for the others.
-import { isScript, type AutonomyIR, type DocumentRoles } from './ir.js';
+import { isScript, type AutonomyIR, type DocumentRoles, type ResultSchema } from './ir.js';
 
 export interface OAManifest {
   schema?: string;
@@ -33,6 +33,7 @@ export interface OAManifest {
       capabilities?: string[];
       timeout?: number;
       review?: string; // the reviewer agent that judges this proposer's PRs (the merge-boundary review edge)
+      result?: { schema: ResultSchema }; // the actor's declared typed-result contract, carried verbatim
       // Opaque shell-command DATA the LOCAL runner executes in the session's own cwd before it spawns (see
       // IRAgent.prelaunch, ir.ts). Carried verbatim like `review`/`timeout` — never interpreted here.
       prelaunch?: string;
@@ -78,6 +79,7 @@ export function emitAutonomy(ir: AutonomyIR): OAManifest {
       ...(typeof agent.timeout === 'number' ? { timeout: agent.timeout } : {}),
       ...(agent.capabilities?.length ? { capabilities: agent.capabilities } : {}),
       ...(agent.review ? { review: agent.review } : {}),
+      ...(agent.result ? { result: agent.result } : {}),
       ...(agent.prelaunch ? { prelaunch: agent.prelaunch } : {}),
     };
   }

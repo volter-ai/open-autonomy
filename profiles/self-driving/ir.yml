@@ -1,9 +1,9 @@
 # Open Autonomy, expressed in its own IR — the profile that compiles to OA's live installation.
 # One unit (substrate-free): an agent = behavior(skill) + capabilities + triggers(+params) + timeout?.
 # See docs/SPEC.md#the-ir + docs/SPEC.md#capabilities. Every agent is a SKILL (prose) run as a single
-# CREDENTIALED job whose token is scoped to its capabilities; the agent acts directly. Guards =
-# capabilities + budget. The merge boundary is the code:review (statuses:write) / code:propose
-# (contents:write) permission split + native auto-merge — no agent holds both, none can land unreviewed code.
+# bounded job whose token is scoped to its capabilities. Guards = capabilities + budget. The merge boundary
+# is code:review (bound verdict finalized by the runner) / code:propose (contents:write) + native auto-merge —
+# no agent holds both, none can land unreviewed code.
 #
 # THIS PROFILE = the sdlc core (board = GitHub issues, ztrack as grammar/validation, draft+develop+reviewer
 # doctrine) PLUS the roadmap trio (strategist/planner/strategy_reviewer) PLUS the human seam (maintainer).
@@ -81,15 +81,17 @@ agents:
       - cron: "*/30 * * * *"
     timeout: 30
 
-  # Reviewer: a skill agent that reviews an agent PR and posts its verdict as the `agent-review` status
-  # (code:review = statuses:write). It holds NO contents:write, so it cannot merge; GitHub auto-merge lands
+  # Reviewer: a skill agent that reviews an agent PR and returns a PR/SHA-bound verdict. The runner's trusted
+  # effect posts `agent-review` last. The model holds no status/content write, so it cannot publish early or merge.
+  # GitHub auto-merge lands
   # the PR once `ci` + `security` + `agent-review` are all green (docs/SPEC.md#capabilities, the merge
-  # boundary). The PR number arrives as TARGET_REF; the skill fetches the diff + CI itself via gh. Exits
-  # without posting a status on a roadmap-only PR (that's strategy_reviewer's job — the scope guard in the
+  # boundary). The PR number arrives as TARGET_REF; the skill fetches the diff + CI itself via gh. Returns
+  # skip on a roadmap-only PR (that's strategy_reviewer's job — the scope guard in the
   # skill keeps the two review lanes from colliding on the same `agent-review` context).
   reviewer:
     behavior: reviewer
     capabilities: [code:review, tasks:converse]
+    result: { schema: open-autonomy.review.v1 }
     triggers:
       - event: issue_comment
         config: { types: [created] }
@@ -132,7 +134,7 @@ agents:
     timeout: 25
 
   # Strategy reviewer: a skill agent that reviews a strategist roadmap proposal against the constitution +
-  # merit rubric and posts its verdict as the `agent-review` status (code:review). No contents:write, so it
+  # merit rubric and returns the bound verdict finalized as `agent-review`. No contents:write, so it
   # cannot merge; auto-merge lands the proposal once ci + agent-review are green. A maintainer "/agent
   # ratify" is the human override (a native approval), outside the agent's authority. Triggers on the
   # strategist's PR (pull_request_target) and on an explicit comment; its skill reviews only roadmap-only
@@ -140,6 +142,7 @@ agents:
   strategy_reviewer:
     behavior: strategy-reviewer
     capabilities: [code:review, tasks:converse]
+    result: { schema: open-autonomy.review.v1 }
     triggers:
       - event: issue_comment
         config: { types: [created] }
@@ -272,8 +275,10 @@ policy:
         # siblings' pattern (scripts/ here also holds dev tooling; a broad glob would gate the product), at
         # BOTH layers: the installed copies and their profile sources. check:dogfood + check:profiles keep
         # every copy (incl. other profiles') in lockstep with these two, so gating this pair gates them all.
-        # bin/sync-runtime.ts is deliberately NOT listed: since BL-8 the four are code-host resources, never
-        # mirrored — sync-runtime no longer carries them.
+        # finalize-agent-review is runner-owned security machinery and IS mirrored; the four code-host gate
+        # resources below are not. Both sides of this boundary must be human-gated.
+        - scripts/finalize-agent-review.ts
+        - packages/substrate-github/src/runtime/finalize-agent-review.ts
         - scripts/human-approval-gate.ts
         - scripts/rearm-auto-merge.ts
         - scripts/reconcile-merged-issues.ts

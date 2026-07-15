@@ -31,7 +31,7 @@ describe('docs/SPEC.md#the-ir — the canonical profile example', () => {
   test('parses and validates clean (agents:, not actors:)', () => {
     const ir = parseIr(yamlText); // throws on any validateIR error — this IS the "compiles" assertion
     expect(validateIR(ir)).toEqual([]);
-    expect(Object.keys(ir.agents).sort()).toEqual(['developer', 'maintainer', 'planner']);
+    expect(Object.keys(ir.agents).sort()).toEqual(['developer', 'maintainer', 'planner', 'reviewer']);
   });
 
   test('compiles on both substrates with every copy source present (bare behavior names, no skills/ prefix)', () => {

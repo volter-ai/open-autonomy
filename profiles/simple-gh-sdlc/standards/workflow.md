@@ -25,8 +25,9 @@ durable across stateless runs — not a local ztrack store. ztrack is the accept
   NOT dispatch review.
 - The developer handles one issue, commits on `agent/issue-<n>`, and stops; the substrate opens the
   auto-merging PR (`Closes #<n>`) and triggers the independent `reviewer`.
-- **Review is on the PR**: the `reviewer` posts the `agent-review` status. `ci` + `agent-review` green →
-  native auto-merge lands it (done = merged PR). Never an agent merge.
+- **Review is on the PR**: the `reviewer` judges; the substrate-native review path publishes the bound
+  `agent-review` status. `ci` + `agent-review` green → native auto-merge lands it (done = merged PR). Never
+  an agent merge.
 - **Rework**: a `changes-requested` review leaves the PR open with the failure noted; the PM re-launches
   develop for that issue's number. The PM **caps rework at `max_develop_attempts`** (`.open-autonomy/autonomy.yml`,
   default **2**) by counting its own prior `oa-rework:` marker comments on the issue, and **escalates to `human-required`

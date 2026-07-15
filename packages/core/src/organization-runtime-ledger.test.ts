@@ -10,6 +10,7 @@ const baseline = JSON.parse(readFileSync('docs/runtime-ledgers/baseline-manifest
 const closure = JSON.parse(readFileSync('docs/runtime-ledgers/r0-closure.json', 'utf8')) as RuntimeLedgerCorpus;
 const r1Closure = JSON.parse(readFileSync('docs/runtime-ledgers/r1-closure.json', 'utf8')) as RuntimeLedgerCorpus;
 const r2Closure = JSON.parse(readFileSync('docs/runtime-ledgers/r2-closure.json', 'utf8')) as RuntimeLedgerCorpus;
+const r3Closure = JSON.parse(readFileSync('docs/runtime-ledgers/r3-closure.json', 'utf8')) as RuntimeLedgerCorpus;
 
 describe('runtime proof-accounting ledger', () => {
   test('seeds every formal runtime obligation exactly once at unknown', () => {
@@ -86,5 +87,13 @@ describe('runtime proof-accounting ledger', () => {
     expect(r2Closure.checkpointStateLedger.find((entry) => entry.id === 'R3')?.status).toBe('ready');
     expect(r2Closure.obligationLedger.filter((entry) => entry.checkpoint === 'R2')
       .every((entry) => entry.evidence.includes('ev-r2-external-review') && entry.assurance === 'property-tested')).toBe(true);
+  });
+
+  test('closes R3 only after independently reviewed TCK evidence and opens R4', () => {
+    expect(validateRuntimeLedger(r3Closure, expected, manifest.items)).toEqual([]);
+    expect(r3Closure.checkpointStateLedger.find((entry) => entry.id === 'R3')?.status).toBe('complete');
+    expect(r3Closure.checkpointStateLedger.find((entry) => entry.id === 'R4')?.status).toBe('ready');
+    expect(r3Closure.obligationLedger.filter((entry) => entry.checkpoint === 'R3')
+      .every((entry) => entry.evidence.includes('ev-r3-review') && entry.assurance === 'property-tested')).toBe(true);
   });
 });

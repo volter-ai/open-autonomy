@@ -1,0 +1,51 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://open-autonomy.dev/schema/ConformanceMutationManifest.json",
+  "title": "Open Autonomy ConformanceMutationManifest",
+  "$ref": "#/$defs/ConformanceMutationManifest",
+  "$defs": {
+    "ConformanceMutationManifest": {
+      "type": "object",
+      "properties": {
+        "schema": {
+          "const": "autonomy.conformance-mutations.v1"
+        },
+        "suiteVersion": {
+          "type": "string"
+        },
+        "mutants": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ConformanceMutationRule"
+          }
+        }
+      },
+      "required": [
+        "schema",
+        "suiteVersion",
+        "mutants"
+      ],
+      "additionalProperties": false
+    },
+    "ConformanceMutationRule": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "test": {
+          "type": "string"
+        },
+        "defect": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "test",
+        "defect"
+      ],
+      "additionalProperties": false
+    }
+  }
+}

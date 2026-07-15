@@ -42,6 +42,7 @@ const publicSurfaceFiles = [
   'organization-analysis.ts',
   'organization-ecosystem.ts',
   'organization-package.ts',
+  'organization-conformance.ts',
 ];
 
 function declaredInterfaceFields(): Map<string, string[]> {

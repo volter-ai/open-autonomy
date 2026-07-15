@@ -1,0 +1,21 @@
+{
+  "schema": "autonomy.conformance-manifest.v1",
+  "suiteVersion": "1.0.0",
+  "languageRange": ">=2.0.0 <3.0.0",
+  "maximumResponseBytes": 65536,
+  "maximumTestMs": 1000,
+  "tests": [
+    { "id": "adapter.translate", "level": "adapter", "operation": "adapter.translate", "requirement": "mandatory", "request": { "value": "native" }, "expected": { "value": "portable" }, "evidence": ["request-response-transcript"] },
+    { "id": "compiler.normalize", "level": "compiler", "operation": "compiler.normalize", "requirement": "mandatory", "request": { "name": "org" }, "expected": { "name": "org", "normalized": true }, "evidence": ["canonical-output"] },
+    { "id": "component.describe", "level": "component", "operation": "component.describe", "requirement": "mandatory", "request": { "id": "worker" }, "expected": { "id": "worker", "facets": ["execution"] }, "evidence": ["component-manifest"] },
+    { "id": "event.lift", "level": "event-lifting", "operation": "event.lift", "requirement": "mandatory", "request": { "native": "started" }, "expected": { "type": "work.started" }, "evidence": ["native-portable-pair"] },
+    { "id": "language.parse", "level": "language", "operation": "language.parse", "requirement": "mandatory", "request": { "schema": "autonomy.organization.v2" }, "expected": { "accepted": true }, "evidence": ["diagnostic"] },
+    { "id": "replay.materialize", "level": "replay", "operation": "replay.materialize", "requirement": "mandatory", "request": { "events": [1, 2] }, "expected": { "count": 2 }, "evidence": ["ordered-history"] },
+    { "id": "runtime.health", "level": "live-runtime", "operation": "runtime.health", "requirement": "mandatory", "request": { "probe": true }, "expected": { "healthy": true }, "evidence": ["live-observation"] },
+    { "id": "substrate.roundtrip", "level": "substrate", "operation": "substrate.roundtrip", "requirement": "mandatory", "request": { "launch": "probe" }, "expected": { "launched": true, "observed": true, "cancelled": true }, "evidence": ["lifecycle-transcript"] },
+    { "id": "optional.audit", "level": "live-runtime", "operation": "runtime.audit", "requirement": "optional", "request": {}, "expected": { "audit": true }, "evidence": ["audit-record"] },
+    { "id": "conditional.pause", "level": "substrate", "operation": "substrate.pause", "requirement": "conditional", "conditionOperation": "substrate.pause", "request": {}, "expected": { "paused": true }, "evidence": ["state-observation"] },
+    { "id": "unsupported.legacy", "level": "language", "operation": "language.v0", "requirement": "unsupported", "request": {}, "expected": null, "evidence": ["advertisement"] },
+    { "id": "unobserved.private", "level": "live-runtime", "operation": "runtime.private-metric", "requirement": "unobserved", "request": {}, "expected": null, "evidence": ["observability-gap"] }
+  ]
+}

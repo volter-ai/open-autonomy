@@ -110,6 +110,21 @@
       "schema": "open-autonomy.generated.v1",
       "root": "GeneratedManifest",
       "filename": "generated-manifest-v1.schema.json"
+    },
+    {
+      "schema": "autonomy.conformance-manifest.v1",
+      "root": "ConformanceTestManifest",
+      "filename": "conformance-manifest-v1.schema.json"
+    },
+    {
+      "schema": "autonomy.conformance-result.v1",
+      "root": "ConformanceResultBundle",
+      "filename": "conformance-result-v1.schema.json"
+    },
+    {
+      "schema": "autonomy.conformance-mutations.v1",
+      "root": "ConformanceMutationManifest",
+      "filename": "conformance-mutations-v1.schema.json"
     }
   ]
 }

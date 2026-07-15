@@ -1,0 +1,8 @@
+{
+  "suiteVersion": "1.0.0",
+  "total": 12,
+  "killed": 12,
+  "survived": [],
+  "score": 1,
+  "classes": ["wrong-oracle-per-mandatory-rule", "omitted-operation", "swallowed-correlation", "fabricated-oracle", "missing-evidence"]
+}

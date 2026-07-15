@@ -1,0 +1,7 @@
+{
+  "id": "open-autonomy-reference",
+  "implementationVersion": "0.4.2",
+  "languageVersion": "2.0.0",
+  "levels": ["language", "compiler", "component", "adapter", "substrate", "event-lifting", "replay", "live-runtime"],
+  "operations": ["language.parse", "compiler.normalize", "component.describe", "adapter.translate", "substrate.roundtrip", "event.lift", "replay.materialize", "runtime.health"]
+}

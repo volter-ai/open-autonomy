@@ -236,6 +236,19 @@ export const ORGANIZATION_SEMANTIC_COVERAGE: readonly SemanticCoverageEntry[] = 
   entry('PackageDeclarationOrigin', 'declaration package digest signerKeys sourcePath', 'compiler', 'implemented', 'declaration-level package, signer, and source provenance', 'P1'),
   entry('ArtifactSchemaIndexEntry', 'schema root filename', 'portable', 'implemented', 'one canonical artifact-family schema registration', 'P1'),
   entry('ArtifactSchemaIndex', 'schema artifacts', 'portable', 'implemented', 'exhaustive authored and exchanged artifact schema registry', 'P1'),
+  entry('ConformanceTestCase', 'id level operation requirement conditionOperation request expected evidence', 'portable', 'implemented', 'one versioned black-box rule with applicability, oracle, and evidence requirements', 'P1'),
+  entry('ConformanceTestManifest', 'schema suiteVersion languageRange maximumResponseBytes maximumTestMs tests', 'portable', 'implemented', 'suite-versioned bounded technology compatibility manifest', 'P1'),
+  entry('BlackBoxConformanceProvider', 'id implementationVersion languageVersion levels operations invoke', 'dialect-bound', 'implemented', 'black-box operation advertisement and invocation seam without oracle authority', 'P1'),
+  entry('ConformanceInvocation', 'test operation correlation input', 'compiler', 'implemented', 'runner-issued correlated black-box request', 'P1'),
+  entry('ConformanceObservation', 'correlation output evidence', 'observation', 'implemented', 'untrusted provider observation without a verdict', 'P1'),
+  entry('ConformanceCaseResult', 'test level requirement status observationClass requestDigest responseDigest runnerEvidence error', 'compiler', 'implemented', 'trusted runner classification and oracle evidence for one test', 'P1'),
+  entry('ConformanceSignature', 'role keyId algorithm value', 'portable', 'implemented', 'role-separated Ed25519 signature over a result payload', 'P1'),
+  entry('ConformanceResultBundle', 'schema suiteVersion languageVersion provider implementationVersion levels operations certification results summary signatures', 'portable', 'implemented', 'signed complete TCK result with non-self-certification semantics', 'P1'),
+  entry('ConformanceMutationScore', 'total killed survived score', 'compiler', 'implemented', 'defective-provider kill fraction and surviving falsifiers', 'P1'),
+  entry('ConformanceMutationRule', 'id test defect', 'portable', 'implemented', 'one required named defective provider tied to a TCK rule', 'P1'),
+  entry('ConformanceMutationManifest', 'schema suiteVersion mutants', 'portable', 'implemented', 'nonempty exact mutation inventory covering every mandatory rule', 'P1'),
+  entry('ConformanceTrustEntry', 'key roles', 'compiler', 'implemented', 'trusted public key and externally assigned conformance signing roles', 'P1'),
+  entry('ConformanceImplementationMatrixEntry', 'provider implementationVersion suiteVersion certification levels', 'observation', 'implemented', 'per-level implementation status without certification collapse', 'P1'),
 ] as const;
 
 export interface AuditResidual {

@@ -1,0 +1,18 @@
+{
+  "schema": "autonomy.conformance-mutations.v1",
+  "suiteVersion": "1.0.0",
+  "mutants": [
+    { "id": "wrong-oracle:adapter.translate", "test": "adapter.translate", "defect": "wrong oracle output" },
+    { "id": "wrong-oracle:compiler.normalize", "test": "compiler.normalize", "defect": "wrong oracle output" },
+    { "id": "wrong-oracle:component.describe", "test": "component.describe", "defect": "wrong oracle output" },
+    { "id": "wrong-oracle:event.lift", "test": "event.lift", "defect": "wrong oracle output" },
+    { "id": "wrong-oracle:language.parse", "test": "language.parse", "defect": "wrong oracle output" },
+    { "id": "wrong-oracle:replay.materialize", "test": "replay.materialize", "defect": "wrong oracle output" },
+    { "id": "wrong-oracle:runtime.health", "test": "runtime.health", "defect": "wrong oracle output" },
+    { "id": "wrong-oracle:substrate.roundtrip", "test": "substrate.roundtrip", "defect": "wrong oracle output" },
+    { "id": "omitted-advertised-operation", "test": "adapter.translate", "defect": "omitted mandatory operation" },
+    { "id": "swallowed-test-correlation", "test": "language.parse", "defect": "wrong invocation correlation" },
+    { "id": "fabricated-provider-oracle", "test": "language.parse", "defect": "provider-authored verdict" },
+    { "id": "missing-expected-evidence", "test": "language.parse", "defect": "missing required evidence" }
+  ]
+}

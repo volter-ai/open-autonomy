@@ -47,6 +47,8 @@ const DEV_ONLY = new Set([
   'generate-artifact-schema-corpus.ts',
   'close-runtime-r1.ts',
   'close-runtime-r2.ts',
+  'organization-conformance-tck.ts',
+  'close-runtime-r3.ts',
   // Packaging tooling (OA-18): the single declaration of the bundle's sibling DATA files, shared by
   // build-cli.ts (copies them into dist/) and bin/doctor-checks.ts (check 1 asserts they shipped). A
   // build-time manifest, never runtime — like build-cli.ts, excluded from the install runtime mirror.

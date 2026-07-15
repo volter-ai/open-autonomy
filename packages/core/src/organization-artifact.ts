@@ -4,6 +4,9 @@ import adapter from './generated/adapter-v1.schema.json' with { type: 'json' };
 import artifactSchemaIndex from './generated/artifact-schema-index-v1.schema.json' with { type: 'json' };
 import autonomy from './generated/autonomy-ir-v1.schema.json' with { type: 'json' };
 import component from './generated/component-v2.schema.json' with { type: 'json' };
+import conformanceManifest from './generated/conformance-manifest-v1.schema.json' with { type: 'json' };
+import conformanceResult from './generated/conformance-result-v1.schema.json' with { type: 'json' };
+import conformanceMutations from './generated/conformance-mutations-v1.schema.json' with { type: 'json' };
 import control from './generated/control-v1.schema.json' with { type: 'json' };
 import deployment from './generated/deployment-v1.schema.json' with { type: 'json' };
 import event from './generated/event-v2.schema.json' with { type: 'json' };
@@ -28,6 +31,9 @@ const schemas: Record<string, object> = {
   'autonomy.adapter.v1': adapter,
   'autonomy.artifact-schema-index.v1': artifactSchemaIndex,
   'autonomy.component.v2': component,
+  'autonomy.conformance-manifest.v1': conformanceManifest,
+  'autonomy.conformance-result.v1': conformanceResult,
+  'autonomy.conformance-mutations.v1': conformanceMutations,
   'autonomy.control.v1': control,
   'autonomy.deployment.v1': deployment,
   'autonomy.event.v2': event,

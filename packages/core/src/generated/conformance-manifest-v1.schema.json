@@ -1,0 +1,128 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://open-autonomy.dev/schema/ConformanceTestManifest.json",
+  "title": "Open Autonomy ConformanceTestManifest",
+  "$ref": "#/$defs/ConformanceTestManifest",
+  "$defs": {
+    "ConformanceTestManifest": {
+      "type": "object",
+      "properties": {
+        "schema": {
+          "const": "autonomy.conformance-manifest.v1"
+        },
+        "suiteVersion": {
+          "type": "string"
+        },
+        "languageRange": {
+          "type": "string"
+        },
+        "maximumResponseBytes": {
+          "type": "number"
+        },
+        "maximumTestMs": {
+          "type": "number"
+        },
+        "tests": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ConformanceTestCase"
+          }
+        }
+      },
+      "required": [
+        "schema",
+        "suiteVersion",
+        "languageRange",
+        "maximumResponseBytes",
+        "maximumTestMs",
+        "tests"
+      ],
+      "additionalProperties": false
+    },
+    "ConformanceTestCase": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "level": {
+          "$ref": "#/$defs/ConformanceLevel"
+        },
+        "operation": {
+          "type": "string"
+        },
+        "requirement": {
+          "$ref": "#/$defs/ConformanceRequirement"
+        },
+        "conditionOperation": {
+          "type": "string"
+        },
+        "request": {},
+        "expected": {},
+        "evidence": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "id",
+        "level",
+        "operation",
+        "requirement",
+        "request",
+        "expected",
+        "evidence"
+      ],
+      "additionalProperties": false
+    },
+    "ConformanceLevel": {
+      "anyOf": [
+        {
+          "const": "language"
+        },
+        {
+          "const": "compiler"
+        },
+        {
+          "const": "component"
+        },
+        {
+          "const": "adapter"
+        },
+        {
+          "const": "substrate"
+        },
+        {
+          "const": "event-lifting"
+        },
+        {
+          "const": "replay"
+        },
+        {
+          "const": "live-runtime"
+        }
+      ]
+    },
+    "ConformanceRequirement": {
+      "anyOf": [
+        {
+          "const": "mandatory"
+        },
+        {
+          "const": "optional"
+        },
+        {
+          "const": "conditional"
+        },
+        {
+          "const": "unsupported"
+        },
+        {
+          "const": "unobserved"
+        }
+      ]
+    }
+  }
+}

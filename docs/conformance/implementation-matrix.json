@@ -1,0 +1,14 @@
+{
+  "suiteVersion": "1.0.0",
+  "implementations": [
+    {
+      "provider": "open-autonomy-reference",
+      "implementationVersion": "0.4.2",
+      "certification": "self-attested",
+      "levels": {
+        "language": "pass", "compiler": "pass", "component": "pass", "adapter": "pass",
+        "substrate": "pass", "event-lifting": "pass", "replay": "pass", "live-runtime": "pass"
+      }
+    }
+  ]
+}

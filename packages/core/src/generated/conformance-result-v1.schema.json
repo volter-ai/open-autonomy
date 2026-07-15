@@ -1,0 +1,256 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://open-autonomy.dev/schema/ConformanceResultBundle.json",
+  "title": "Open Autonomy ConformanceResultBundle",
+  "$ref": "#/$defs/ConformanceResultBundle",
+  "$defs": {
+    "ConformanceResultBundle": {
+      "type": "object",
+      "properties": {
+        "schema": {
+          "const": "autonomy.conformance-result.v1"
+        },
+        "suiteVersion": {
+          "type": "string"
+        },
+        "languageVersion": {
+          "type": "string"
+        },
+        "provider": {
+          "type": "string"
+        },
+        "implementationVersion": {
+          "type": "string"
+        },
+        "levels": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ConformanceLevel"
+          }
+        },
+        "operations": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "certification": {
+          "anyOf": [
+            {
+              "const": "self-attested"
+            },
+            {
+              "const": "independently-observed"
+            }
+          ]
+        },
+        "results": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ConformanceCaseResult"
+          }
+        },
+        "summary": {
+          "type": "object",
+          "properties": {
+            "passed": {
+              "type": "number"
+            },
+            "failed": {
+              "type": "number"
+            },
+            "unsupported": {
+              "type": "number"
+            },
+            "unobserved": {
+              "type": "number"
+            },
+            "notApplicable": {
+              "type": "number"
+            }
+          },
+          "required": [
+            "passed",
+            "failed",
+            "unsupported",
+            "unobserved",
+            "notApplicable"
+          ],
+          "additionalProperties": false
+        },
+        "signatures": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ConformanceSignature"
+          }
+        }
+      },
+      "required": [
+        "schema",
+        "suiteVersion",
+        "languageVersion",
+        "provider",
+        "implementationVersion",
+        "levels",
+        "operations",
+        "certification",
+        "results",
+        "summary",
+        "signatures"
+      ],
+      "additionalProperties": false
+    },
+    "ConformanceLevel": {
+      "anyOf": [
+        {
+          "const": "language"
+        },
+        {
+          "const": "compiler"
+        },
+        {
+          "const": "component"
+        },
+        {
+          "const": "adapter"
+        },
+        {
+          "const": "substrate"
+        },
+        {
+          "const": "event-lifting"
+        },
+        {
+          "const": "replay"
+        },
+        {
+          "const": "live-runtime"
+        }
+      ]
+    },
+    "ConformanceCaseResult": {
+      "type": "object",
+      "properties": {
+        "test": {
+          "type": "string"
+        },
+        "level": {
+          "$ref": "#/$defs/ConformanceLevel"
+        },
+        "requirement": {
+          "$ref": "#/$defs/ConformanceRequirement"
+        },
+        "status": {
+          "$ref": "#/$defs/ConformanceStatus"
+        },
+        "observationClass": {
+          "anyOf": [
+            {
+              "const": "test-observed"
+            },
+            {
+              "const": "live-observed"
+            }
+          ]
+        },
+        "requestDigest": {
+          "type": "string"
+        },
+        "responseDigest": {
+          "type": "string"
+        },
+        "runnerEvidence": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        },
+        "error": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "test",
+        "level",
+        "requirement",
+        "status",
+        "observationClass",
+        "requestDigest",
+        "runnerEvidence"
+      ],
+      "additionalProperties": false
+    },
+    "ConformanceRequirement": {
+      "anyOf": [
+        {
+          "const": "mandatory"
+        },
+        {
+          "const": "optional"
+        },
+        {
+          "const": "conditional"
+        },
+        {
+          "const": "unsupported"
+        },
+        {
+          "const": "unobserved"
+        }
+      ]
+    },
+    "ConformanceStatus": {
+      "anyOf": [
+        {
+          "const": "pass"
+        },
+        {
+          "const": "fail"
+        },
+        {
+          "const": "unsupported"
+        },
+        {
+          "const": "unobserved"
+        },
+        {
+          "const": "not-applicable"
+        }
+      ]
+    },
+    "ConformanceSignature": {
+      "type": "object",
+      "properties": {
+        "role": {
+          "anyOf": [
+            {
+              "const": "implementation"
+            },
+            {
+              "const": "runner"
+            },
+            {
+              "const": "observer"
+            }
+          ]
+        },
+        "keyId": {
+          "type": "string"
+        },
+        "algorithm": {
+          "const": "ed25519"
+        },
+        "value": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "role",
+        "keyId",
+        "algorithm",
+        "value"
+      ],
+      "additionalProperties": false
+    }
+  }
+}

@@ -168,7 +168,9 @@ describe('D2 — the REAL emitted scheduler/run.mjs (LOOP_DRIVER) tags every fir
     // — run directly, bypassing scheduler/run.mjs entirely (no fireTick in this call path at all).
     const { dir, envDump } = scaffold();
     try {
-      const r = Bun.spawnSync(['node', 'scripts/sweep.ts'], { cwd: dir });
+      // Profile behavior resources are TypeScript and the documented local command uses Bun; plain
+      // Node is reserved for the compiled `oa` artifact and generated .mjs control-plane files.
+      const r = Bun.spawnSync(['bun', 'scripts/sweep.ts'], { cwd: dir });
       expect(r.exitCode).toBe(0);
       expect(JSON.parse(readFileSync(envDump, 'utf8'))).toEqual({ AUTONOMY_TRIGGER_KIND: null });
     } finally {

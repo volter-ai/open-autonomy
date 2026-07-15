@@ -303,3 +303,5 @@ In the spirit of the merit criterion **proof** — demonstrated, not asserted:
 7. **Humans are simulatable.** An org with human actors can be benched without real humans — calibrated
    simulators fill each `kind: human` role through the same seam, and a real-human dogfood run is the
    ground truth that calibrates them.
+
+<!-- Disposable live probe for serialized human-approval evaluation. This branch will not be merged. -->

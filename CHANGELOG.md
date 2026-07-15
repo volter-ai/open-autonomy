@@ -482,6 +482,10 @@ via the runner seam.
 
 ## Unreleased
 
+### Added
+
+- Added fail-closed runtime proof ledgers and a reproducible threat-model baseline for the autonomous-organization implementation phase.
+
 ### Fixed
 
 - Fixed a dangling sentence in `docs/OSS_AGENT_RUNBOOK.md` — the incomplete "is in" fragment now correctly references `docs/ARCHITECTURE.md`.

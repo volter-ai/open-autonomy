@@ -36,3 +36,4 @@ export * from './organization-causal-state';
 export * from './organization-substrate-proof';
 export * from './organization-analysis';
 export * from './organization-ecosystem';
+export * from './organization-runtime-ledger';

@@ -1,0 +1,128 @@
+{
+  "schema": "open-autonomy.runtime-baseline.v1",
+  "digestAlgorithm": "sha256",
+  "semanticInputs": [
+    {
+      "path": "docs/ORGANIZATION-IR.md",
+      "digest": "2003d52573533f7131c71c3595c71826f4ffab572fca8d536f7a71fcf632b5d4"
+    },
+    {
+      "path": "docs/ORGANIZATION-IR-AC.md",
+      "digest": "c5aa39795713e9fcdb50783441bcb7f9a44f3b547943061a3ebb2a13fc804702"
+    },
+    {
+      "path": "docs/ORGANIZATION-IR-LENS-AUDIT.md",
+      "digest": "edaab171d82eacb9ceea29b6403fefc4f7dbbf11eb04d548ac569bc69f504742"
+    },
+    {
+      "path": "docs/ORGANIZATION-RUNTIME-AC.md",
+      "digest": "b8c87e6d707d0d4cc76bb36c31848603e0b2aec448763d9324129dd66d8bf12b"
+    },
+    {
+      "path": "docs/ORGANIZATION-RUNTIME-LENS-AUDIT.md",
+      "digest": "538670924ea4a43ec09b14d8eb09e2afc41d00020df5ce0cd43f7de236ce99e7"
+    },
+    {
+      "path": "docs/organization-runtime-punchlist.json",
+      "digest": "162a0b6aebaa38b85c3d774668865d31a46493aa34f880d9b2ca4296e6fa948c"
+    }
+  ],
+  "fixtureCorpus": [
+    {
+      "path": "packages/core/src/organization-analysis.test.ts",
+      "digest": "62c974f6a64a30c8aae074cd9a522493a730ef0ba9d3cc66ae0a23281f61e07c"
+    },
+    {
+      "path": "packages/core/src/organization-behavior.test.ts",
+      "digest": "6f8046ccfac94a709ed0c50ba4c22bd40d65dfb6f377d48636b8f9518078cd46"
+    },
+    {
+      "path": "packages/core/src/organization-canonical.test.ts",
+      "digest": "1932ee3f92b76bff49cba746489ba84da362691d0cad0b4777132d71e98bed4e"
+    },
+    {
+      "path": "packages/core/src/organization-causal-state.test.ts",
+      "digest": "55302c9a2628ad8dcc64bd58ffaea4ac2bd35fad934224d718e0a1fc64d1d000"
+    },
+    {
+      "path": "packages/core/src/organization-compile.test.ts",
+      "digest": "993e138be7fa5715099db7f957c37ade7bc49911168b5595ffb23c5fbfbbb6a0"
+    },
+    {
+      "path": "packages/core/src/organization-compiler-passes.test.ts",
+      "digest": "98104e7e98a8551dc6348ec80cd25e507b4e6a3f6ad0a423cb8889887c8c3ed4"
+    },
+    {
+      "path": "packages/core/src/organization-compiler.test.ts",
+      "digest": "b84a56073e69f53ceafb6bf2f69ed18a94c81e48043a7bbca5f7a2302c1131d0"
+    },
+    {
+      "path": "packages/core/src/organization-component.test.ts",
+      "digest": "2ec58053bbfe5f5a7a6276cf6b61733ac91e77850714e0e358f11d0fa438676a"
+    },
+    {
+      "path": "packages/core/src/organization-coverage.test.ts",
+      "digest": "360433c4854a9faaf14d1a061f19419faf20b9546a14946b94b6b524e193b462"
+    },
+    {
+      "path": "packages/core/src/organization-ecosystem.test.ts",
+      "digest": "2a34ca6eb67c9bcdb58fd415886d6bc7baefc760ba1891b8b642fe1681075aa5"
+    },
+    {
+      "path": "packages/core/src/organization-expression.test.ts",
+      "digest": "d8dda6a8a57976276afce6b3abf69d0f0b89f8928348eddb84d8c027064d515b"
+    },
+    {
+      "path": "packages/core/src/organization-foundation.test.ts",
+      "digest": "fbb21497dcec06fa1f754d82edffe8d034ded7ed61100906de04a810a5a88775"
+    },
+    {
+      "path": "packages/core/src/organization-hermes-controller.test.ts",
+      "digest": "4c4b7e945c7d2e93760d8e300b0ea1594b6bfc056d39b5d7a56f6631c50fe947"
+    },
+    {
+      "path": "packages/core/src/organization-ir.test.ts",
+      "digest": "85172c21da826e245eb68d00883ac9e1ee47758ab0c0687fa89cc9825297d579"
+    },
+    {
+      "path": "packages/core/src/organization-lowering.test.ts",
+      "digest": "fd2b88215064e57888f88a7b009816628c09cc0ef16d8240bc1ae35a77ed6d2f"
+    },
+    {
+      "path": "packages/core/src/organization-migrate.test.ts",
+      "digest": "43eb3b2b2b2d5b2bb4d3124f80c9ebde9afd648d502004d989b7a6b189dbd08a"
+    },
+    {
+      "path": "packages/core/src/organization-modules.test.ts",
+      "digest": "c9bc3669afd26959e80ea4b9c175e63a220ba425cfd818c36cd7058765c58376"
+    },
+    {
+      "path": "packages/core/src/organization-normalize.test.ts",
+      "digest": "7c448b26198379e8ef3285032189cf91537fa7869b71b82a5c35aecaadadf352"
+    },
+    {
+      "path": "packages/core/src/organization-profile.test.ts",
+      "digest": "a1b06946d383f0a30baa34596ff36c24086f70557c3fefb9064335116ee155dc"
+    },
+    {
+      "path": "packages/core/src/organization-runtime-ledger.test.ts",
+      "digest": "2d8932d2643efc2562aed3b3a405043b3b3a81956dc0b7f4e4c1705bdffe9718"
+    },
+    {
+      "path": "packages/core/src/organization-runtime-punchlist.test.ts",
+      "digest": "385d0a46a7f76091618acab454b3095ccc5f4a719345241b3fa2aa2fe4f4d465"
+    },
+    {
+      "path": "packages/core/src/organization-solver.test.ts",
+      "digest": "ae19c7cd42533fe838882c6ec3888a9fea1d43d28a1b79796d980cd719ee1e46"
+    },
+    {
+      "path": "packages/core/src/organization-state.test.ts",
+      "digest": "654003c423c2b18de70c05479dc7bf1cf1e4f6dda30fc83808c51ea027e87339"
+    },
+    {
+      "path": "packages/core/src/organization-substrate-proof.test.ts",
+      "digest": "555021382033a7215d737f70d008f9fd96d5a5fe11698921c0d7918f5dcff9a8"
+    }
+  ]
+}

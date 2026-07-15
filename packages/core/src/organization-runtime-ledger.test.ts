@@ -1,0 +1,64 @@
+import { describe, expect, test } from 'bun:test';
+import { readFileSync } from 'node:fs';
+import { validateCheckpointTransition, validateRuntimeLedger, type RuntimeLedgerCorpus } from './organization-runtime-ledger';
+
+const audit = readFileSync('docs/ORGANIZATION-RUNTIME-LENS-AUDIT.md', 'utf8');
+const expected = [...audit.matchAll(/^\| (R\d+-[A-Z]+-\d+) /gm)].map((match) => match[1]!);
+const corpus = JSON.parse(readFileSync('docs/runtime-ledgers/baseline.json', 'utf8')) as RuntimeLedgerCorpus;
+const manifest = JSON.parse(readFileSync('docs/organization-runtime-punchlist.json', 'utf8')) as { items: Array<{ id: string; dependsOn: string[] }> };
+const baseline = JSON.parse(readFileSync('docs/runtime-ledgers/baseline-manifest.json', 'utf8')) as { semanticInputs: Array<{ path: string; digest: string }>; fixtureCorpus: Array<{ path: string; digest: string }> };
+
+describe('runtime proof-accounting ledger', () => {
+  test('seeds every formal runtime obligation exactly once at unknown', () => {
+    expect(validateRuntimeLedger(corpus, expected, manifest.items)).toEqual([]);
+    expect(corpus.obligationLedger).toHaveLength(121);
+    expect(corpus.obligationLedger.every((entry) => entry.assurance === 'unknown' && entry.disposition === 'unresolved')).toBe(true);
+  });
+
+  test('rejects unknown and duplicate obligations, missing provenance, and premature closure', () => {
+    const broken = structuredClone(corpus);
+    broken.obligationLedger[0]!.id = 'R0-FAKE-1';
+    broken.obligationLedger[1]!.id = broken.obligationLedger[2]!.id;
+    broken.evidenceLedger.push({ id: 'bad', kind: 'artifact', uri: '', producer: '' });
+    broken.checkpointStateLedger[0]!.status = 'complete';
+    const codes = validateRuntimeLedger(broken, expected, manifest.items).map((error) => error.code);
+    expect(codes).toContain('obligation.unknown');
+    expect(codes).toContain('obligation.duplicate');
+    expect(codes).toContain('obligation.missing');
+    expect(codes).toContain('evidence.provenance');
+    expect(codes).toContain('checkpoint.unresolved-obligation');
+  });
+
+  test('rejects the minimal no-evidence, invalid-enum, and dependency-deletion closure exploits', () => {
+    const broken = structuredClone(corpus);
+    for (const entry of broken.obligationLedger.filter((entry) => entry.checkpoint === 'R0')) {
+      entry.disposition = 'preserved'; entry.assurance = 'assumed';
+    }
+    broken.checkpointStateLedger[0]!.status = 'complete';
+    broken.checkpointStateLedger[0]!.dependsOn = [];
+    (broken.obligationLedger[0] as { assurance: string }).assurance = 'bogus';
+    const codes = validateRuntimeLedger(broken, expected, manifest.items).map((error) => error.code);
+    expect(codes).toContain('obligation.invalid-assurance');
+    expect(codes).toContain('checkpoint.unresolved-obligation');
+    expect(codes).toContain('checkpoint.missing-coverage');
+
+    const downstream = structuredClone(corpus);
+    downstream.checkpointStateLedger[1]!.dependsOn = [];
+    expect(validateRuntimeLedger(downstream, expected, manifest.items).map((error) => error.code)).toContain('checkpoint.dependencies');
+  });
+
+  test('permits only the declared checkpoint lifecycle', () => {
+    expect(validateCheckpointTransition('blocked', 'ready')).toBe(true);
+    expect(validateCheckpointTransition('ready', 'complete')).toBe(false);
+    expect(validateCheckpointTransition('complete', 'in-progress')).toBe(false);
+  });
+
+  test('freezes resolvable semantic inputs and the executable fixture corpus', () => {
+    expect(baseline.semanticInputs.length).toBeGreaterThanOrEqual(6);
+    expect(baseline.fixtureCorpus.length).toBeGreaterThanOrEqual(20);
+    for (const input of [...baseline.semanticInputs, ...baseline.fixtureCorpus]) {
+      expect(input.digest).toMatch(/^[a-f0-9]{64}$/);
+      expect(readFileSync(input.path).byteLength).toBeGreaterThan(0);
+    }
+  });
+});

@@ -169,7 +169,9 @@ policy:
         - scripts/check-supply-chain.ts
         - scripts/claude-agent-run.ts
         - scripts/finalize-agent-review.ts
+        - scripts/review-result.ts
         - scripts/human-approval-gate.ts
+        - scripts/native-approval-adapter.ts
         - scripts/model-proxy-exchange.ts
         - scripts/model-proxy-mint.ts
         - scripts/model-proxy-revoke.ts
@@ -189,12 +191,15 @@ resources:
   - .github/workflows/merge.yml
   - .github/workflows/security.yml
   - .github/workflows/security-gate.yml   # dispatched, blocking realization of security.yml on bot PRs — posts `security`
+  - .github/workflows/native-approval.yml # optional exact-head native APPROVE adapter; dormant without its identity secret
   - .github/dependabot.yml
   # the gate scripts those carried workflows call — shared standards, byte-identical across carrying
   # profiles (docs/CODE_HOST_RESOURCES.md)
   - scripts/rearm-auto-merge.ts
   - scripts/reconcile-merged-issues.ts
   - scripts/check-supply-chain.ts
+  - scripts/native-approval-adapter.ts
+  - docs/NATIVE-APPROVAL.md
   - standards/workflow.md
   - standards/issue-and-evidence.md
   - standards/risk-and-review.md

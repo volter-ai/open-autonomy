@@ -16,6 +16,12 @@ Copy this directory into a GitHub repository to enable open-autonomy.
 7. Smoke `/agent pause`, paused `/agent develop`, `/agent status`, and
    `/agent resume`.
 
+Native GitHub approving reviews are optional and disabled unless the
+`OPEN_AUTONOMY_NATIVE_APPROVAL_TOKEN` secret is set. If branch protection also requires native reviews, use
+a distinct write-capable identity and enable stale-review dismissal as documented in
+[`docs/NATIVE-APPROVAL.md`](docs/NATIVE-APPROVAL.md). This never replaces `agent-review` or the
+sensitive-scope `human-approval` gate.
+
 ## First Issue Flow
 
 Use the first low-risk issue to prove the template works in the new repository:

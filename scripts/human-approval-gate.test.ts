@@ -209,12 +209,17 @@ describe('isSensitivePath — the boundary scripts are inside the gated scope', 
   const globs = loadHumanRequiredGlobs('.');
 
   test('every boundary script is in scope, at installed AND profile-source paths', () => {
-    for (const name of ['human-approval-gate', 'rearm-auto-merge', 'reconcile-merged-issues', 'check-supply-chain']) {
+    for (const name of [
+      'human-approval-gate', 'native-approval-adapter', 'rearm-auto-merge', 'reconcile-merged-issues',
+      'check-supply-chain',
+    ]) {
       expect(isSensitivePath(`scripts/${name}.ts`, globs)).toBe(true);
       expect(isSensitivePath(`profiles/self-driving/scripts/${name}.ts`, globs)).toBe(true);
     }
     expect(isSensitivePath('scripts/finalize-agent-review.ts', globs)).toBe(true);
     expect(isSensitivePath('packages/substrate-github/src/runtime/finalize-agent-review.ts', globs)).toBe(true);
+    expect(isSensitivePath('scripts/review-result.ts', globs)).toBe(true);
+    expect(isSensitivePath('packages/substrate-github/src/runtime/review-result.ts', globs)).toBe(true);
   });
 
   test('non-boundary dev tooling in scripts/ is NOT scoped (enumerated by name, not a broad glob)', () => {

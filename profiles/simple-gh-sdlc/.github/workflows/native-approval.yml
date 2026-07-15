@@ -1,0 +1,91 @@
+name: native-approval
+# Optional GitHub code-host adapter. When a distinct write-capable identity is configured, turn the trusted
+# reviewer's exact-head `agent-review=success` result into a native APPROVE review. This workflow executes
+# only default-branch code and never checks out PR code. Without the secret it records an actionable notice
+# and produces no approval; a repository that requires native reviews therefore remains blocked (fail closed).
+on:
+  # zizmor: ignore[dangerous-triggers] — deliberate privilege boundary: default-branch checkout, artifact
+  # outside the workspace, strict typed JSON, and independent exact PR/head/status verification.
+  workflow_run:
+    workflows: [reviewer]
+    types: [completed]
+  workflow_dispatch:
+    inputs:
+      pr:
+        description: "Exact PR number to retry"
+        required: true
+        type: string
+      sha:
+        description: "Exact full current head SHA to retry"
+        required: true
+        type: string
+
+permissions:
+  actions: read
+  contents: read
+  pull-requests: read
+  statuses: read
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+
+concurrency:
+  group: native-approval-${{ github.event.workflow_run.id || github.event.inputs.pr }}
+  cancel-in-progress: false
+
+jobs:
+  approve:
+    # `review_effect` is the final job in reviewer.yml, so a successful workflow conclusion means the typed
+    # result was validated and the authoritative status was posted. The script independently re-verifies it.
+    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check optional approval identity
+        id: configured
+        env:
+          APPROVAL_TOKEN: ${{ secrets.OPEN_AUTONOMY_NATIVE_APPROVAL_TOKEN }}
+        run: |
+          if [ -n "$APPROVAL_TOKEN" ]; then
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::Native approval not configured. Set OPEN_AUTONOMY_NATIVE_APPROVAL_TOKEN to a distinct write-capable GitHub identity before requiring native reviews."
+          fi
+      - if: steps.configured.outputs.enabled == 'true'
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          persist-credentials: false
+      - name: Download the bound reviewer result
+        id: reviewer_result
+        if: steps.configured.outputs.enabled == 'true' && github.event_name == 'workflow_run'
+        continue-on-error: true
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: agent-run-reviewer
+          # Keep untrusted artifact bytes outside the checked-out workspace; only the strict JSON parser reads
+          # the one expected result file.
+          path: ${{ runner.temp }}/native-approval
+          run-id: ${{ github.event.workflow_run.id }}
+          github-token: ${{ github.token }}
+      - name: Explain a non-review reviewer run
+        if: >-
+          steps.configured.outputs.enabled == 'true' && github.event_name == 'workflow_run' &&
+          steps.reviewer_result.outcome != 'success'
+        run: echo "::notice::The completed reviewer workflow had no bound review result; no native approval was attempted."
+      - if: steps.configured.outputs.enabled == 'true'
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: 1.3.10
+      - name: Materialize exact-head native approval
+        if: >-
+          steps.configured.outputs.enabled == 'true' &&
+          (github.event_name == 'workflow_dispatch' || steps.reviewer_result.outcome == 'success')
+        env:
+          GH_TOKEN: ${{ github.token }}
+          OPEN_AUTONOMY_NATIVE_APPROVAL_TOKEN: ${{ secrets.OPEN_AUTONOMY_NATIVE_APPROVAL_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          REVIEW_RESULT_PATH: ${{ github.event_name == 'workflow_run' && format('{0}/native-approval/artifacts/result.json', runner.temp) || '' }}
+          EXPECTED_PR: ${{ github.event.inputs.pr }}
+          EXPECTED_SHA: ${{ github.event.inputs.sha }}
+        run: bun scripts/native-approval-adapter.ts

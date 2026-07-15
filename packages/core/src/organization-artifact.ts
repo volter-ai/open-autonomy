@@ -8,6 +8,7 @@ import conformanceManifest from './generated/conformance-manifest-v1.schema.json
 import conformanceResult from './generated/conformance-result-v1.schema.json' with { type: 'json' };
 import conformanceMutations from './generated/conformance-mutations-v1.schema.json' with { type: 'json' };
 import control from './generated/control-v1.schema.json' with { type: 'json' };
+import compilerArtifact from './generated/compiler-artifact-v1.schema.json' with { type: 'json' };
 import deployment from './generated/deployment-v1.schema.json' with { type: 'json' };
 import event from './generated/event-v2.schema.json' with { type: 'json' };
 import execution from './generated/execution-v1.schema.json' with { type: 'json' };
@@ -35,6 +36,7 @@ const schemas: Record<string, object> = {
   'autonomy.conformance-result.v1': conformanceResult,
   'autonomy.conformance-mutations.v1': conformanceMutations,
   'autonomy.control.v1': control,
+  'autonomy.compiler-artifact.v1': compilerArtifact,
   'autonomy.deployment.v1': deployment,
   'autonomy.event.v2': event,
   'autonomy.execution.v1': execution,

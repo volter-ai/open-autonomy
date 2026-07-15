@@ -23,6 +23,8 @@ export * from './organization-modules';
 export * from './organization-canonical';
 export * from './organization-normalize';
 export * from './organization-compiler';
+export * from './organization-compiler-api';
+export * from './organization-compiler-builtins';
 export * from './organization-compiler-passes';
 export * from './organization-migrate';
 export * from './organization-expression';

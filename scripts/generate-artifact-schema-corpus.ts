@@ -28,6 +28,7 @@ const artifacts = [
   ['autonomy.conformance-manifest.v1', 'ConformanceTestManifest', ['packages/core/src/organization-conformance.ts'], 'conformance-manifest-v1.schema.json'],
   ['autonomy.conformance-result.v1', 'ConformanceResultBundle', ['packages/core/src/organization-conformance.ts'], 'conformance-result-v1.schema.json'],
   ['autonomy.conformance-mutations.v1', 'ConformanceMutationManifest', ['packages/core/src/organization-conformance.ts'], 'conformance-mutations-v1.schema.json'],
+  ['autonomy.compiler-artifact.v1', 'CompilerArtifactProtocol', ['packages/core/src/organization-canonical.ts', 'packages/core/src/organization-compiler.ts', 'packages/core/src/organization-compiler-api.ts'], 'compiler-artifact-v1.schema.json'],
 ] as const;
 
 for (const [, root, sources, filename] of artifacts) {

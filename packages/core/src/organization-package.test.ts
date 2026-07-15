@@ -75,7 +75,7 @@ describe('R2 hermetic organization packages', () => {
     expect(() => parseOrganizationPackageManifest(readFileSync('docs/examples/package/package.v1.yml', 'utf8') + '\nunknown: true\n')).toThrow("unknown member 'unknown'");
     expect(() => parseOrganizationPackageManifest(readFileSync('docs/examples/package/package.v1.yml', 'utf8').replace('dev.open-autonomy/example', 'UnscopedName'))).toThrow('must match pattern');
     const index = JSON.parse(readFileSync('packages/core/src/generated/artifact-schema-index.json', 'utf8')) as { artifacts: Array<{ schema: string; filename: string }> };
-    expect(index.artifacts).toHaveLength(25);
+    expect(index.artifacts).toHaveLength(26);
     const discriminated = new Set<string>();
     for (const path of new Bun.Glob('packages/core/src/*.ts').scanSync('.')) {
       if (path.endsWith('.test.ts')) continue;

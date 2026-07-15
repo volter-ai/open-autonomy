@@ -1,0 +1,17 @@
+{
+  "schema": "autonomy.compiler-artifact.v1",
+  "apiVersion": "1.0.0",
+  "operation": "parse",
+  "kind": "generic",
+  "level": "source",
+  "mediaType": "application/json",
+  "producer": { "id": "open-autonomy", "version": "1.0.0" },
+  "inputs": [],
+  "content": { "hello": "world" },
+  "digest": {
+    "algorithm": "sha256",
+    "canonicalization": "oa-c14n-v1",
+    "domain": "compiler-artifact-v1",
+    "value": "49f0563039aaa356b29d6c43786c8709edd81c2e2010a1fcb04cee255df93919"
+  }
+}

@@ -1,0 +1,401 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://open-autonomy.dev/schema/CompilerArtifactProtocol.json",
+  "title": "Open Autonomy CompilerArtifactProtocol",
+  "$ref": "#/$defs/CompilerArtifactProtocol",
+  "$defs": {
+    "CompilerArtifactProtocol": {
+      "type": "object",
+      "properties": {
+        "schema": {
+          "const": "autonomy.compiler-artifact.v1"
+        },
+        "apiVersion": {
+          "const": "1.0.0"
+        },
+        "operation": {
+          "$ref": "#/$defs/CompilerOperation"
+        },
+        "kind": {
+          "$ref": "#/$defs/CompilerArtifactKind"
+        },
+        "level": {
+          "$ref": "#/$defs/CompilerLevel"
+        },
+        "mediaType": {
+          "type": "string"
+        },
+        "producer": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "version": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "id",
+            "version"
+          ],
+          "additionalProperties": false
+        },
+        "inputs": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/SemanticDigest"
+          }
+        },
+        "content": {},
+        "observations": {
+          "type": "object",
+          "properties": {
+            "diagnostics": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/CompilerDiagnostic"
+              }
+            },
+            "sourceMap": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/PassSourceRelation"
+              }
+            },
+            "obligations": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/PassObligation"
+              }
+            }
+          },
+          "required": [
+            "diagnostics",
+            "sourceMap",
+            "obligations"
+          ],
+          "additionalProperties": false
+        },
+        "digest": {
+          "$ref": "#/$defs/SemanticDigest"
+        }
+      },
+      "required": [
+        "schema",
+        "apiVersion",
+        "operation",
+        "kind",
+        "level",
+        "mediaType",
+        "producer",
+        "inputs",
+        "content",
+        "digest"
+      ],
+      "additionalProperties": false
+    },
+    "CompilerOperation": {
+      "anyOf": [
+        {
+          "const": "parse"
+        },
+        {
+          "const": "link"
+        },
+        {
+          "const": "normalize"
+        },
+        {
+          "const": "analyze"
+        },
+        {
+          "const": "solve"
+        },
+        {
+          "const": "lower"
+        },
+        {
+          "const": "emit"
+        },
+        {
+          "const": "lift"
+        },
+        {
+          "const": "replay"
+        }
+      ]
+    },
+    "CompilerArtifactKind": {
+      "anyOf": [
+        {
+          "const": "source-text"
+        },
+        {
+          "const": "organization"
+        },
+        {
+          "const": "module-bundle"
+        },
+        {
+          "const": "resolved-organization"
+        },
+        {
+          "const": "normalized-organization"
+        },
+        {
+          "const": "analysis-report"
+        },
+        {
+          "const": "deployment-search"
+        },
+        {
+          "const": "control-plan"
+        },
+        {
+          "const": "execution-plan"
+        },
+        {
+          "const": "native-plan"
+        },
+        {
+          "const": "native-observation"
+        },
+        {
+          "const": "portable-event-batch"
+        },
+        {
+          "const": "causal-history"
+        },
+        {
+          "const": "generic"
+        }
+      ]
+    },
+    "CompilerLevel": {
+      "anyOf": [
+        {
+          "const": "source"
+        },
+        {
+          "const": "resolved"
+        },
+        {
+          "const": "normalized"
+        },
+        {
+          "const": "control"
+        },
+        {
+          "const": "execution"
+        },
+        {
+          "const": "native"
+        }
+      ]
+    },
+    "SemanticDigest": {
+      "type": "object",
+      "properties": {
+        "algorithm": {
+          "const": "sha256"
+        },
+        "canonicalization": {
+          "const": "oa-c14n-v1"
+        },
+        "domain": {
+          "type": "string"
+        },
+        "value": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "algorithm",
+        "canonicalization",
+        "domain",
+        "value"
+      ],
+      "additionalProperties": false
+    },
+    "CompilerDiagnostic": {
+      "type": "object",
+      "properties": {
+        "code": {
+          "type": "string"
+        },
+        "severity": {
+          "$ref": "#/$defs/DiagnosticSeverity"
+        },
+        "message": {
+          "type": "string"
+        },
+        "phase": {
+          "type": "string"
+        },
+        "source": {
+          "$ref": "#/$defs/SourceSpan"
+        },
+        "related": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/RelatedDiagnostic"
+          }
+        },
+        "suggestion": {
+          "$ref": "#/$defs/FixSuggestion"
+        }
+      },
+      "required": [
+        "code",
+        "severity",
+        "message",
+        "phase"
+      ],
+      "additionalProperties": false
+    },
+    "DiagnosticSeverity": {
+      "anyOf": [
+        {
+          "const": "error"
+        },
+        {
+          "const": "warning"
+        },
+        {
+          "const": "information"
+        }
+      ]
+    },
+    "SourceSpan": {
+      "type": "object",
+      "properties": {
+        "location": {
+          "type": "string"
+        },
+        "path": {
+          "type": "string"
+        },
+        "start": {
+          "type": "object",
+          "properties": {
+            "line": {
+              "type": "number"
+            },
+            "column": {
+              "type": "number"
+            }
+          },
+          "required": [
+            "line",
+            "column"
+          ],
+          "additionalProperties": false
+        },
+        "end": {
+          "type": "object",
+          "properties": {
+            "line": {
+              "type": "number"
+            },
+            "column": {
+              "type": "number"
+            }
+          },
+          "required": [
+            "line",
+            "column"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "location"
+      ],
+      "additionalProperties": false
+    },
+    "RelatedDiagnostic": {
+      "type": "object",
+      "properties": {
+        "message": {
+          "type": "string"
+        },
+        "source": {
+          "$ref": "#/$defs/SourceSpan"
+        }
+      },
+      "required": [
+        "message"
+      ],
+      "additionalProperties": false
+    },
+    "FixSuggestion": {
+      "type": "object",
+      "properties": {
+        "message": {
+          "type": "string"
+        },
+        "replacement": {}
+      },
+      "required": [
+        "message"
+      ],
+      "additionalProperties": false
+    },
+    "PassSourceRelation": {
+      "type": "object",
+      "properties": {
+        "output": {
+          "type": "string"
+        },
+        "sources": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/SourceSpan"
+          }
+        }
+      },
+      "required": [
+        "output",
+        "sources"
+      ],
+      "additionalProperties": false
+    },
+    "PassObligation": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "claim": {
+          "type": "string"
+        },
+        "status": {
+          "anyOf": [
+            {
+              "const": "discharged"
+            },
+            {
+              "const": "created"
+            },
+            {
+              "const": "rejected"
+            },
+            {
+              "const": "unknown"
+            }
+          ]
+        },
+        "evidence": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "claim",
+        "status"
+      ],
+      "additionalProperties": false
+    }
+  }
+}

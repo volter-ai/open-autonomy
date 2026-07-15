@@ -125,6 +125,11 @@
       "schema": "autonomy.conformance-mutations.v1",
       "root": "ConformanceMutationManifest",
       "filename": "conformance-mutations-v1.schema.json"
+    },
+    {
+      "schema": "autonomy.compiler-artifact.v1",
+      "root": "CompilerArtifactProtocol",
+      "filename": "compiler-artifact-v1.schema.json"
     }
   ]
 }

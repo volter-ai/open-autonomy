@@ -87,6 +87,12 @@ agents:
       - { event: issue_comment }                            # substrate-native escape hatch
     timeout: 30                        # a run-time bound (minutes) — the only non-capability field
 
+  reviewer:
+    behavior: reviewer
+    capabilities: [code:review]
+    result: { schema: open-autonomy.review.v1 }     # named standard result contract; inline JSON Schema is also valid
+    triggers: [{ dispatch: true, params: { PR: subject.ref } }]
+
   maintainer:                          # kind: human — a person; intrinsic, not a substrate choice
     kind: human
     behavior: maintainer-review        # the task spec the person is handed (situation / decision /
@@ -110,6 +116,12 @@ resources: [docs/standards/code.md]    # verbatim files; the standard never inte
 | **capabilities** | the actor's authority — from the capability catalog ([§Capabilities](#capabilities)); realized as the agent's own scoped token | the substrate realizes each as a permission on that token |
 | **triggers** | when it fires + the **params** it forwards. Three forms: `cron` (time), the portable `dispatch` (on-demand via the Runner — [§The Runner](#the-runner)), and the substrate-native `event` | the substrate's trigger executor; `cron` and `dispatch` are portable, `event` is carried |
 | **timeout** | optional run-time bound (minutes) — the only non-capability field | the substrate's job timeout |
+
+Within its behavior contract, an actor may declare `result.schema`: either a named standard result contract
+or an inline JSON Schema. This is the typed output of its behavior, not authority or runner configuration. The declaration
+is preserved in the substrate-neutral manifest. A proposer review edge requires its reviewer to declare
+`open-autonomy.review.v1`; substrates may realize that same result differently and must report unsupported
+realizations honestly.
 
 An actor also carries a **kind** (`agent` | `human`, default `agent`) — a discriminator, not a fifth slot.
 `kind` (the role) is the profile's; *realization* (how the role is filled — model/person/simulator) is the

@@ -56,7 +56,7 @@ The PR number arrives as `TARGET_REF`. Do not wait for the developer to finish â
    a safe no-op. If you think a NEW invariant is warranted, include it in the result findings for a maintainer to
    ratify â€” never add it yourself.
 5. Publish in the mode the runner mechanically exposes:
-   - **Trusted-effect mode** (`OSS_AGENT_REVIEW_RESULT_PATH` is non-empty): write the required
+   - **Trusted-effect mode** (`OSS_AGENT_RESULT_PATH` is non-empty): write the required
      `open-autonomy.review.v1` JSON result there, bound to this PR and its exact 40-character head SHA. The
      runner-provided prompt defines the schema. Use success / approved for a pass; failure /
      changes-requested or human-required for a rejection or escalation; and skip / not-applicable only

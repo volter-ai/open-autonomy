@@ -25,6 +25,51 @@ export type Trigger =
 // role is *realized* (script / model / person / simulator-in-test) is the substrate's choice.
 export type ActorKind = 'agent' | 'human';
 
+// Named result schemas are standard contracts, like capability names and trigger-param sources. A profile
+// may also declare an inline JSON Schema for a profile-specific result. Substrates resolve the named
+// contracts they implement and report the rest through conformance; the IR never grows runner-specific
+// result fields.
+export const REVIEW_RESULT_SCHEMA_ID = 'open-autonomy.review.v1' as const;
+export const REVIEW_RESULT_JSON_SCHEMA: Record<string, unknown> = {
+  $id: REVIEW_RESULT_SCHEMA_ID,
+  type: 'object',
+  additionalProperties: false,
+  required: ['schema', 'pr', 'headSha', 'verdict', 'outcome', 'summary', 'findings', 'humanApprovalRequired'],
+  properties: {
+    schema: { const: REVIEW_RESULT_SCHEMA_ID },
+    pr: { type: 'integer', minimum: 1 },
+    headSha: { type: 'string', pattern: '^[0-9a-fA-F]{40}$' },
+    verdict: { enum: ['success', 'failure', 'skip'] },
+    outcome: { enum: ['approved', 'changes-requested', 'human-required', 'not-applicable'] },
+    summary: { type: 'string', minLength: 1, maxLength: 1000 },
+    findings: { type: 'array', maxItems: 50, items: { type: 'string', maxLength: 2000 } },
+    humanApprovalRequired: { type: 'boolean' },
+  },
+  allOf: [
+    {
+      if: { properties: { verdict: { const: 'success' } }, required: ['verdict'] },
+      then: { properties: { outcome: { const: 'approved' } } },
+    },
+    {
+      if: { properties: { verdict: { const: 'failure' } }, required: ['verdict'] },
+      then: { properties: { outcome: { enum: ['changes-requested', 'human-required'] } } },
+    },
+    {
+      if: { properties: { verdict: { const: 'skip' } }, required: ['verdict'] },
+      then: { properties: { outcome: { const: 'not-applicable' } } },
+    },
+  ],
+};
+
+export type ResultSchema = typeof REVIEW_RESULT_SCHEMA_ID | Record<string, unknown>;
+
+/** Resolve a standard named result schema or return an inline schema unchanged. */
+export function resolveResultSchema(schema: ResultSchema): Record<string, unknown> | undefined {
+  if (typeof schema === 'object' && schema !== null && !Array.isArray(schema)) return schema;
+  if (schema === REVIEW_RESULT_SCHEMA_ID) return REVIEW_RESULT_JSON_SCHEMA;
+  return undefined;
+}
+
 // The one unit of the IR — an actor (kind: agent|human). There is no `workflow`/`launch`/`run`/`raw`; an
 // actor carries its own triggers, and how it is realized + how its output is trusted are the substrate's
 // realization, not IR fields. (The map key is still `agents` while the rename to `actors` is mid-migration.)
@@ -41,9 +86,9 @@ export interface IRAgent {
   // judgment as its merge gate. Required-ish for a proposer; absent ⇒ no auto-review wiring (e.g. a profile
   // that gates merges only on ci, or reviews out-of-band).
   review?: string; // the name of the reviewer agent (must hold code:review and not be this agent)
-  // Optional formal result of a skill agent's run: a value that validates against `result.schema` (a JSON
-  // Schema object). A declarative seam for a typed result; absent ⇒ the agent just runs and acts directly.
-  result?: { schema: Record<string, unknown> };
+  // Optional formal result of a skill agent's run: a value that validates against a named standard schema
+  // or an inline JSON Schema. A declarative seam for a typed result; absent ⇒ the agent acts directly.
+  result?: { schema: ResultSchema };
   // An opaque shell command the runner executes in the session's OWN cwd (the worktree it is about to be
   // launched into, or process.cwd() for a trunk launch) — BEFORE the session spawns, with the same env the
   // session itself will see. Methodology-free: this is DATA the profile supplies, never a hardcoded
@@ -208,6 +253,8 @@ export function validateIR(ir: AutonomyIR): string[] {
         if (!reviewer) errors.push(`agent ${name}: review names unknown agent '${a.review}'`);
         else if (!(reviewer.capabilities ?? []).some((c) => typeof c === 'string' && c.split('@')[0] === 'code:review'))
           errors.push(`agent ${name}: review target '${a.review}' must hold code:review`);
+        else if (reviewer.result?.schema !== REVIEW_RESULT_SCHEMA_ID)
+          errors.push(`agent ${name}: review target '${a.review}' must declare result.schema: ${REVIEW_RESULT_SCHEMA_ID}`);
         else if (!(reviewer.triggers ?? []).some((trigger) =>
           Object.values((trigger as { params?: Record<string, string> }).params ?? {}).includes('subject.ref'))) {
           errors.push(`agent ${name}: review target '${a.review}' must declare a trigger param sourced from subject.ref`);
@@ -219,8 +266,8 @@ export function validateIR(ir: AutonomyIR): string[] {
     if (a.prelaunch !== undefined && (typeof a.prelaunch !== 'string' || a.prelaunch.length === 0))
       errors.push(`agent ${name}: prelaunch must be a non-empty shell-command string`);
     if (a.result !== undefined) {
-      if (!a.result.schema || typeof a.result.schema !== 'object')
-        errors.push(`agent ${name}: result must be { schema: <object> }`);
+      if (!a.result.schema || !resolveResultSchema(a.result.schema))
+        errors.push(`agent ${name}: result must contain a known schema id or an inline JSON Schema object`);
       else if (a.behavior && isScript(a.behavior))
         errors.push(`agent ${name}: result is for skill agents only — a script behavior returns its result directly`);
     }

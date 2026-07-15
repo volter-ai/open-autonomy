@@ -199,7 +199,8 @@ describe('public agent production readiness', () => {
     expect(agentJob).not.toContain('statuses: write');
     expect(agentJob).not.toContain('issues: write');
     expect(agentJob).not.toContain('contents: write');
-    expect(agentJob).toContain('OSS_AGENT_REVIEW_RESULT_PATH');
+    expect(agentJob).toContain('OSS_AGENT_RESULT_PATH');
+    expect(agentJob).toContain('OSS_AGENT_RESULT_SCHEMA_PATH');
     expect(effectJob).toContain('statuses: write');
     expect(effectJob).not.toContain('contents: write');
     expect(effectJob).toContain('github.event.repository.default_branch');

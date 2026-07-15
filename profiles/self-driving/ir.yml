@@ -91,6 +91,7 @@ agents:
   reviewer:
     behavior: reviewer
     capabilities: [code:review, tasks:converse]
+    result: { schema: open-autonomy.review.v1 }
     triggers:
       - event: issue_comment
         config: { types: [created] }
@@ -141,6 +142,7 @@ agents:
   strategy_reviewer:
     behavior: strategy-reviewer
     capabilities: [code:review, tasks:converse]
+    result: { schema: open-autonomy.review.v1 }
     triggers:
       - event: issue_comment
         config: { types: [created] }

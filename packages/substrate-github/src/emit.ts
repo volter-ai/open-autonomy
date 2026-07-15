@@ -6,7 +6,13 @@ import { readFileSync, readdirSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { stringify as stringifyYaml } from 'yaml';
-import { cronOf, emitAutonomy, withGeneratedManifest } from '@open-autonomy/core';
+import {
+  REVIEW_RESULT_SCHEMA_ID,
+  cronOf,
+  emitAutonomy,
+  resolveResultSchema,
+  withGeneratedManifest,
+} from '@open-autonomy/core';
 import type { AutonomyIR, CompileOutput, IRAgent } from '@open-autonomy/core';
 
 // Lazy sibling-data reads (OA-01): these used to be module-scope `readFileSync`s, which meant merely
@@ -355,6 +361,10 @@ function wrapperYml(
   humanApprovalWorkflow = false,
 ): string {
   const caps = agent.capabilities ?? [];
+  if (finalizesMergeReview && agent.result?.schema !== REVIEW_RESULT_SCHEMA_ID) {
+    throw new Error(`merge reviewer '${name}' must declare result.schema: ${REVIEW_RESULT_SCHEMA_ID}`);
+  }
+  const declaredResultSchema = agent.result ? resolveResultSchema(agent.result.schema) : undefined;
   // Only a code:propose agent gets the effect step (push branch + open auto-merging PR). A non-proposer
   // (reviewer/pm/planner) has contents:read, so a stray tracked-file write would make the effect's
   // `git push` 403 and fail the job after the verdict was posted — tie the step to the capability.
@@ -533,8 +543,16 @@ function wrapperYml(
     `        env:`,
     `          OSS_AGENT_TASK_DIR: .agent-run`,
     `          OSS_AGENT_ISSUE_PATH: .agent-run/issue.json`,
-    ...(finalizesMergeReview ? [`          OSS_AGENT_REVIEW_RESULT_PATH: .agent-run/artifacts/review.json`] : []),
+    ...(declaredResultSchema ? [
+      `          OSS_AGENT_RESULT_PATH: .agent-run/artifacts/result.json`,
+      `          OSS_AGENT_RESULT_SCHEMA_PATH: .agent-run/result-schema.json`,
+    ] : []),
     `        run: |`,
+    ...(declaredResultSchema ? [
+      `          cat > .agent-run/result-schema.json <<'OPEN_AUTONOMY_RESULT_SCHEMA'`,
+      `          ${JSON.stringify(declaredResultSchema)}`,
+      `          OPEN_AUTONOMY_RESULT_SCHEMA`,
+    ] : []),
     `          bun scripts/claude-agent-run.ts --skill ${skillPath} --run-id "${RID}"; rc=$?; bun scripts/agent-visual-verify.ts || true; echo "::group::agent transcript (${RID})"; cat .agent-run/artifacts/transcript.md 2>/dev/null || true; echo "::endgroup::"; exit $rc`,
     ...(proposes ? effect : []),
     // Persist the call result as a durable per-run artifact: claude-agent-run writes .agent-run/artifacts/
@@ -587,7 +605,7 @@ function wrapperYml(
       `          EXPECTED_PR: \${{ needs.setup.outputs.review_pr }}`,
       `          EXPECTED_SHA: \${{ needs.setup.outputs.review_sha }}`,
       `          REVIEWER_JOB_RESULT: \${{ needs['${name}'].result }}`,
-      `          REVIEW_RESULT_PATH: .agent-finalize/artifacts/review.json`,
+      `          REVIEW_RESULT_PATH: .agent-finalize/artifacts/result.json`,
       ...(humanApprovalWorkflow ? [`          HUMAN_APPROVAL_WORKFLOW: human-approval.yml`] : []),
       `        run: bun scripts/finalize-agent-review.ts`,
     ] : []),

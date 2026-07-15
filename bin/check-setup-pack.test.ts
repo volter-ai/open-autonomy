@@ -30,6 +30,7 @@ const IR_WITH_REVIEWER = [
   '  reviewer:',
   '    behavior: reviewer',
   '    capabilities: [code:review, tasks:converse]',
+  '    result: { schema: open-autonomy.review.v1 }',
   '    triggers: [{ dispatch: true, params: { TARGET_REF: subject.ref } }]',
   'policy:',
   '  box: {}',

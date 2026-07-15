@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { validateIR, irShape, type AutonomyIR, type IRAgent } from './ir';
+import { REVIEW_RESULT_SCHEMA_ID, validateIR, irShape, type AutonomyIR, type IRAgent } from './ir';
 import { parseIr, applyDocumentAutoGate } from './ir-yaml';
 
 describe('parseIr — runner alias normalization (github → gh-actions)', () => {
@@ -104,13 +104,23 @@ describe('validateIR — code:merge is gate-only (the merge boundary)', () => {
 describe('validateIR — the review edge (deterministic routing target)', () => {
   test('accepts a proposer whose review names an independent code:review agent', () => {
     const dev = agent({ capabilities: ['code:propose'], review: 'rev' });
-    const rev = agent({ capabilities: ['code:review'], triggers: [{ dispatch: true, params: { TARGET_REF: 'subject.ref' } }] });
+    const rev = agent({
+      capabilities: ['code:review'],
+      result: { schema: REVIEW_RESULT_SCHEMA_ID },
+      triggers: [{ dispatch: true, params: { TARGET_REF: 'subject.ref' } }],
+    });
     expect(validateIR(ir({ dev, rev }))).toEqual([]);
+  });
+
+  test('rejects a merge reviewer with no declared standard review result', () => {
+    const dev = agent({ capabilities: ['code:propose'], review: 'rev' });
+    const rev = agent({ capabilities: ['code:review'], triggers: [{ dispatch: true, params: { TARGET_REF: 'subject.ref' } }] });
+    expect(validateIR(ir({ dev, rev })).some((e) => e.includes(`result.schema: ${REVIEW_RESULT_SCHEMA_ID}`))).toBe(true);
   });
 
   test('rejects a merge reviewer that cannot receive the proposal subject', () => {
     const dev = agent({ capabilities: ['code:propose'], review: 'rev' });
-    const rev = agent({ capabilities: ['code:review'] });
+    const rev = agent({ capabilities: ['code:review'], result: { schema: REVIEW_RESULT_SCHEMA_ID } });
     expect(validateIR(ir({ dev, rev })).some((e) => e.includes('must declare a trigger param sourced from subject.ref'))).toBe(true);
   });
 
@@ -167,7 +177,12 @@ describe('validateIR — result schema (optional, skill agents)', () => {
 
   test('rejects a malformed result (no schema object)', () => {
     const a = agent({ result: {} as never });
-    expect(validateIR(ir({ a })).some((e) => e.includes('result must be { schema'))).toBe(true);
+    expect(validateIR(ir({ a })).some((e) => e.includes('known schema id or an inline JSON Schema'))).toBe(true);
+  });
+
+  test('accepts the named standard review-result schema and rejects an unknown named schema', () => {
+    expect(validateIR(ir({ a: agent({ result: { schema: REVIEW_RESULT_SCHEMA_ID } }) }))).toEqual([]);
+    expect(validateIR(ir({ a: agent({ result: { schema: 'example.unknown.v1' as never } }) })).some((e) => e.includes('known schema id'))).toBe(true);
   });
 });
 

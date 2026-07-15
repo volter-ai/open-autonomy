@@ -112,6 +112,8 @@ agents:
     capabilities:
       - code:review
       - tasks:converse
+    result:
+      schema: open-autonomy.review.v1
   planner:
     skill: planner
     workflowFile: planner.yml
@@ -152,6 +154,8 @@ agents:
     capabilities:
       - code:review
       - tasks:converse
+    result:
+      schema: open-autonomy.review.v1
   maintainer:
     kind: human
     skill: maintainer

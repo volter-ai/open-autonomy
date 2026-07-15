@@ -7,17 +7,29 @@ import { REVIEW_RESULT_SCHEMA, type ReviewResult } from './finalize-agent-review
 
 const SHA = 'c'.repeat(40);
 
-function runFinalizer(jobResult: string, result: ReviewResult, humanApprovalWorkflow = ''): { status: number | null; log: string } {
+function runFinalizer(
+  jobResult: string,
+  result: ReviewResult,
+  humanApprovalWorkflow = '',
+  staleOnHeadCheck = 0,
+): { status: number | null; log: string } {
   const dir = mkdtempSync(join(tmpdir(), 'oa-finalize-live-'));
   const gh = join(dir, 'gh');
   const artifact = join(dir, 'review.json');
   const log = join(dir, 'gh.log');
+  const count = join(dir, 'head-check-count');
   writeFileSync(artifact, JSON.stringify(result));
   writeFileSync(gh, `#!/usr/bin/env bash
 set -eu
 printf '%s\\n' "$*" >> "$GH_LOG"
 case "$*" in
-  *"--json headRefOid,state"*) printf '{"headRefOid":"${SHA}","state":"OPEN"}\\n' ;;
+  *"--json headRefOid,state"*)
+    n=0; test ! -f "$GH_COUNT" || n="$(cat "$GH_COUNT")"; n=$((n + 1)); printf '%s' "$n" > "$GH_COUNT"
+    if test "$STALE_ON_HEAD_CHECK" -gt 0 && test "$n" -ge "$STALE_ON_HEAD_CHECK"; then
+      printf '{"headRefOid":"dddddddddddddddddddddddddddddddddddddddd","state":"OPEN"}\\n'
+    else
+      printf '{"headRefOid":"${SHA}","state":"OPEN"}\\n'
+    fi ;;
   *"--json comments"*) printf '[]\\n' ;;
   *"--json labels"*) printf '[]\\n' ;;
   *) printf '\\n' ;;
@@ -32,6 +44,8 @@ esac
         ...process.env,
         PATH: `${dir}:${process.env.PATH}`,
         GH_LOG: log,
+        GH_COUNT: count,
+        STALE_ON_HEAD_CHECK: String(staleOnHeadCheck),
         GITHUB_REPOSITORY: 'acme/repo',
         EXPECTED_PR: '42',
         EXPECTED_SHA: SHA,
@@ -77,5 +91,20 @@ describe('finalize-agent-review effects', () => {
     expect(label).toBeLessThan(gate);
     expect(gate).toBeLessThan(comment);
     expect(comment).toBeLessThan(green);
+  });
+
+  test('a head change after durable routing never publishes green for the stale review', () => {
+    const run = runFinalizer('success', { ...success, humanApprovalRequired: true }, 'human-approval.yml', 3);
+    expect(run.status).toBe(0);
+    expect(run.log).toContain('pr comment 42');
+    expect(run.log).not.toContain('state=success');
+  });
+
+  test('a head change after failure status prevents stale PR-scoped routing', () => {
+    const run = runFinalizer('failure', { ...success, verdict: 'failure', outcome: 'human-required' }, '', 2);
+    expect(run.status).toBe(1);
+    expect(run.log).toContain('state=failure');
+    expect(run.log).not.toContain('pr comment 42');
+    expect(run.log).not.toContain('issue edit');
   });
 });

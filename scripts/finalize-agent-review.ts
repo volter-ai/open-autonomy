@@ -27,6 +27,9 @@ const isSha = (value: unknown): value is string => typeof value === 'string' && 
 export function parseReviewResult(path: string): ReviewResult {
   if (statSync(path).size > MAX_RESULT_BYTES) throw new Error(`review result exceeds ${MAX_RESULT_BYTES} bytes`);
   const value = JSON.parse(readFileSync(path, 'utf8')) as Partial<ReviewResult>;
+  const allowed = new Set(['schema', 'pr', 'headSha', 'verdict', 'outcome', 'summary', 'findings', 'humanApprovalRequired']);
+  const unknown = Object.keys(value).filter((key) => !allowed.has(key));
+  if (unknown.length) throw new Error(`review result has unknown fields: ${unknown.join(', ')}`);
   if (value.schema !== REVIEW_RESULT_SCHEMA) throw new Error(`review result has unsupported schema '${value.schema ?? ''}'`);
   if (!Number.isInteger(value.pr) || Number(value.pr) <= 0) throw new Error('review result.pr must be a positive integer');
   if (!isSha(value.headSha)) throw new Error('review result.headSha must be a full commit SHA');
@@ -41,9 +44,6 @@ export function parseReviewResult(path: string): ReviewResult {
     throw new Error('review result.findings must be an array of strings up to 2000 characters each');
   }
   if (value.findings.length > 50) throw new Error('review result has too many findings');
-  if (value.findings.reduce((n, finding) => n + finding.length, 0) > 30_000) {
-    throw new Error('review result findings exceed 30000 characters');
-  }
   if (typeof value.humanApprovalRequired !== 'boolean') throw new Error('review result.humanApprovalRequired must be boolean');
   if (value.verdict === 'success' && value.outcome !== 'approved') throw new Error('a successful verdict must be approved');
   if (value.verdict === 'failure' && !['changes-requested', 'human-required'].includes(value.outcome!)) {
@@ -91,13 +91,18 @@ if (import.meta.main) {
       '-f', `description=${description.replace(/\s+/g, ' ').slice(0, 140)}`]);
   };
 
-  const current = JSON.parse(gh(['pr', 'view', String(expectedPr), '-R', repo, '--json', 'headRefOid,state'])) as {
-    headRefOid?: string; state?: string;
+  const currentTargetStillMatches = (): boolean => {
+    const current = JSON.parse(gh(['pr', 'view', String(expectedPr), '-R', repo, '--json', 'headRefOid,state'])) as {
+      headRefOid?: string; state?: string;
+    };
+    return current.state === 'OPEN' && current.headRefOid?.toLowerCase() === expectedSha.toLowerCase();
   };
-  if (current.state !== 'OPEN' || current.headRefOid?.toLowerCase() !== expectedSha.toLowerCase()) {
-    process.stdout.write(`agent-review: stale/closed target #${expectedPr}; no current-head effect\n`);
-    process.exit(0);
-  }
+  const stopIfTargetChanged = (stage: string, exitCode = 0): void => {
+    if (currentTargetStillMatches()) return;
+    process.stdout.write(`agent-review: stale/closed target #${expectedPr} before ${stage}; no further PR effect\n`);
+    process.exit(exitCode);
+  };
+  stopIfTargetChanged('finalization');
 
   let artifact: ReviewResult | undefined;
   let artifactError: string | undefined;
@@ -120,6 +125,9 @@ if (import.meta.main) {
 
   if (final.state === 'failure') {
     postStatus('failure', final.reason);
+    // Failure is bound to the reviewed SHA and is safe to publish even if the PR advances. Re-check before
+    // touching PR/issue-scoped state so an old review cannot comment on or park a newer head.
+    stopIfTargetChanged('failure routing', 1);
     ensureComment();
     if (final.result?.outcome === 'human-required') {
       for (const issue of JSON.parse(gh(['pr', 'view', String(expectedPr), '-R', repo, '--json', 'closingIssuesReferences',
@@ -132,6 +140,7 @@ if (import.meta.main) {
 
   // For success, required durable side effects land BEFORE green. Any failure leaves agent-review absent
   // (or at its prior non-current-run state), never newly green from this run.
+  stopIfTargetChanged('success routing');
   if (humanApprovalWorkflow) {
     const labels = JSON.parse(gh(['pr', 'view', String(expectedPr), '-R', repo, '--json', 'labels',
       '--jq', '[.labels[].name]'])) as string[];
@@ -145,6 +154,10 @@ if (import.meta.main) {
     throw new Error('review requested human approval but this profile has no human-approval workflow');
   }
   ensureComment();
+  // Labels/comments are PR-scoped and GitHub offers no conditional-on-head mutation API. Re-check after
+  // those durable effects and immediately before the authoritative SHA-bound green status. A concurrent
+  // push can at worst leave an old-SHA comment/routing hint; it can never bless the new head.
+  stopIfTargetChanged('green status');
   postStatus('success', final.reason);
   process.stdout.write(`agent-review: #${expectedPr} success (${expectedSha.slice(0, 7)})\n`);
 }

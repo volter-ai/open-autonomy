@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { compileGithub } from './emit';
-import type { AutonomyIR, Trigger } from '@open-autonomy/core';
+import { REVIEW_RESULT_SCHEMA_ID, type AutonomyIR, type Trigger } from '@open-autonomy/core';
 
 function irWith(triggers: Trigger[], kind?: 'agent' | 'human'): AutonomyIR {
   return {
@@ -120,7 +120,12 @@ describe('compileGithub — merge is a code-host resource, not engine output', (
     targets: ['gh-actions'],
     agents: {
       developer: { behavior: 'develop', capabilities: ['code:propose'], triggers: [{ dispatch: true }], review: 'reviewer' },
-      reviewer: { behavior: 'review', capabilities: ['code:review'], triggers: [{ dispatch: true, params: { TARGET_REF: 'subject.ref' } }] },
+      reviewer: {
+        behavior: 'review',
+        capabilities: ['code:review'],
+        result: { schema: REVIEW_RESULT_SCHEMA_ID },
+        triggers: [{ dispatch: true, params: { TARGET_REF: 'subject.ref' } }],
+      },
       pm: { behavior: 'pm', capabilities: ['tasks:author'], triggers: [{ cron: '0 * * * *' }] },
     },
     policy: { box: {} },
@@ -153,7 +158,9 @@ describe('compileGithub — merge is a code-host resource, not engine output', (
     const effectJob = wf.slice(wf.indexOf('  review_effect:'));
     expect(modelJob).not.toContain('statuses: write');
     expect(modelJob).not.toContain('issues: write');
-    expect(modelJob).toContain('OSS_AGENT_REVIEW_RESULT_PATH: .agent-run/artifacts/review.json');
+    expect(modelJob).toContain('OSS_AGENT_RESULT_PATH: .agent-run/artifacts/result.json');
+    expect(modelJob).toContain('OSS_AGENT_RESULT_SCHEMA_PATH: .agent-run/result-schema.json');
+    expect(modelJob).toContain(`"$id":"${REVIEW_RESULT_SCHEMA_ID}"`);
     const setupJob = wf.slice(wf.indexOf('  setup:'), wf.indexOf('  reviewer:'));
     expect(setupJob).not.toContain('statuses: write');
     expect(setupJob).toContain('Bind review target');

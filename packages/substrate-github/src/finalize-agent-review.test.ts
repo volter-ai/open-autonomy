@@ -2,6 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { REVIEW_RESULT_JSON_SCHEMA, REVIEW_RESULT_SCHEMA_ID } from '@open-autonomy/core';
 import {
   MAX_RESULT_BYTES,
   REVIEW_RESULT_SCHEMA,
@@ -24,6 +25,31 @@ const valid = (overrides: Partial<ReviewResult> = {}): ReviewResult => ({
 });
 
 describe('trusted agent-review finalization', () => {
+  test('the standalone trusted effect stays pinned to the core standard result contract', () => {
+    expect(REVIEW_RESULT_SCHEMA).toBe(REVIEW_RESULT_SCHEMA_ID);
+    expect(REVIEW_RESULT_JSON_SCHEMA.required).toEqual([
+      'schema', 'pr', 'headSha', 'verdict', 'outcome', 'summary', 'findings', 'humanApprovalRequired',
+    ]);
+    expect(REVIEW_RESULT_JSON_SCHEMA.additionalProperties).toBe(false);
+    const dir = mkdtempSync(join(tmpdir(), 'oa-review-contract-'));
+    const path = join(dir, 'result.json');
+    try {
+      writeFileSync(path, JSON.stringify(valid()));
+      expect(() => parseReviewResult(path)).not.toThrow();
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+  test('rejects fields outside the standard review-result contract', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'oa-review-contract-'));
+    const path = join(dir, 'result.json');
+    try {
+      writeFileSync(path, JSON.stringify({ ...valid(), undeclared: true }));
+      expect(() => parseReviewResult(path)).toThrow('unknown fields: undeclared');
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
   test('a later model-job failure overrides an already-written success artifact', () => {
     expect(decideFinalization({ jobResult: 'failure', expectedPr: 42, expectedSha: SHA, artifact: valid() }))
       .toEqual({ state: 'failure', reason: 'reviewer job concluded failure' });

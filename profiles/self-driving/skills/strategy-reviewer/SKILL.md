@@ -47,7 +47,7 @@ The PR number is in the `TARGET_REF` environment variable.
      wording) are consistent with the constitution and the items already ratified. Pass if consistent; fail
      with a specific reason otherwise. Do not apply the merit rubric to an operational edit.
 4. Publish in the mode the runner mechanically exposes:
-   - **Trusted-effect mode** (`OSS_AGENT_REVIEW_RESULT_PATH` is non-empty): write the required
+   - **Trusted-effect mode** (`OSS_AGENT_RESULT_PATH` is non-empty): write the required
      `open-autonomy.review.v1` JSON result there, using the runner-provided schema and binding it to this PR +
      exact 40-character head SHA. Use success / approved for a pass, failure / changes-requested or
      human-required for a rejection or escalation, and skip / not-applicable only outside this lane. Do not

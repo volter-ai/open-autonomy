@@ -131,8 +131,12 @@ jobs:
         env:
           OSS_AGENT_TASK_DIR: .agent-run
           OSS_AGENT_ISSUE_PATH: .agent-run/issue.json
-          OSS_AGENT_REVIEW_RESULT_PATH: .agent-run/artifacts/review.json
+          OSS_AGENT_RESULT_PATH: .agent-run/artifacts/result.json
+          OSS_AGENT_RESULT_SCHEMA_PATH: .agent-run/result-schema.json
         run: |
+          cat > .agent-run/result-schema.json <<'OPEN_AUTONOMY_RESULT_SCHEMA'
+          {"$id":"open-autonomy.review.v1","type":"object","additionalProperties":false,"required":["schema","pr","headSha","verdict","outcome","summary","findings","humanApprovalRequired"],"properties":{"schema":{"const":"open-autonomy.review.v1"},"pr":{"type":"integer","minimum":1},"headSha":{"type":"string","pattern":"^[0-9a-fA-F]{40}$"},"verdict":{"enum":["success","failure","skip"]},"outcome":{"enum":["approved","changes-requested","human-required","not-applicable"]},"summary":{"type":"string","minLength":1,"maxLength":1000},"findings":{"type":"array","maxItems":50,"items":{"type":"string","maxLength":2000}},"humanApprovalRequired":{"type":"boolean"}},"allOf":[{"if":{"properties":{"verdict":{"const":"success"}},"required":["verdict"]},"then":{"properties":{"outcome":{"const":"approved"}}}},{"if":{"properties":{"verdict":{"const":"failure"}},"required":["verdict"]},"then":{"properties":{"outcome":{"enum":["changes-requested","human-required"]}}}},{"if":{"properties":{"verdict":{"const":"skip"}},"required":["verdict"]},"then":{"properties":{"outcome":{"const":"not-applicable"}}}}]}
+          OPEN_AUTONOMY_RESULT_SCHEMA
           bun scripts/claude-agent-run.ts --skill .codex/skills/strategy-reviewer/SKILL.md --run-id "ir-strategy_reviewer-${{ github.run_id }}"; rc=$?; bun scripts/agent-visual-verify.ts || true; echo "::group::agent transcript (ir-strategy_reviewer-${{ github.run_id }})"; cat .agent-run/artifacts/transcript.md 2>/dev/null || true; echo "::endgroup::"; exit $rc
       - name: Save the agent run result (durable transcript artifact)
         if: always()
@@ -172,6 +176,6 @@ jobs:
           EXPECTED_PR: ${{ needs.setup.outputs.review_pr }}
           EXPECTED_SHA: ${{ needs.setup.outputs.review_sha }}
           REVIEWER_JOB_RESULT: ${{ needs['strategy_reviewer'].result }}
-          REVIEW_RESULT_PATH: .agent-finalize/artifacts/review.json
+          REVIEW_RESULT_PATH: .agent-finalize/artifacts/result.json
           HUMAN_APPROVAL_WORKFLOW: human-approval.yml
         run: bun scripts/finalize-agent-review.ts

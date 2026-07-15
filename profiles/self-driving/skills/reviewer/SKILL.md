@@ -96,7 +96,7 @@ The PR number arrives as `TARGET_REF`. Do not wait for the developer to finish â
    `human-required` is a real parked/hold state from the policy above: fail while it remains present. Also
    fail for genuine quality/security/regression problems or anything you cannot confidently review.
 5. Publish in the mode the runner mechanically exposes:
-   - **Trusted-effect mode** (`OSS_AGENT_REVIEW_RESULT_PATH` is non-empty): write the required
+   - **Trusted-effect mode** (`OSS_AGENT_RESULT_PATH` is non-empty): write the required
      `open-autonomy.review.v1` JSON result there, bound to the exact PR number and 40-character head SHA you
      reviewed. The runner-provided prompt defines the schema. A pass is success / approved; set
      `humanApprovalRequired: true` when the code is sound but sensitive or needs a maintainer decision. A

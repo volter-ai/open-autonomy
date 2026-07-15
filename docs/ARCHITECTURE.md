@@ -107,8 +107,8 @@ code host**: a `local`-runner org can still use a github repo (PRs, CI, deploy) 
 
 | term | definition |
 |---|---|
-| **IR** (`autonomy.ir.v1`) | the **standard** a profile is written in: `agents` + `policy` + `resources`. An **agent** = `behavior · capabilities · triggers(+params) · config`. There is no `workflow`/`launch`/`run`/`raw` — see `docs/SPEC.md#the-ir`. |
-| **agent** | the one unit: behavior (what it does) + capabilities (authority) + triggers (when + params) + config (opaque misc). |
+| **IR** (`autonomy.ir.v1`) | the **standard** a profile is written in: `agents` + `policy` + `resources`. An **agent** = `behavior · capabilities · triggers(+params) · config`, where the behavior may declare a typed-result contract. There is no `workflow`/`launch`/`run`/`raw` — see `docs/SPEC.md#the-ir`. |
+| **agent** | the one unit: behavior (what it does, optionally with a typed result) + capabilities (authority) + triggers (when + params) + config (opaque misc). |
 | **behavior** | what an agent does — instructions/spec; the substrate runs it (deterministic, or model-interpreted — its choice). |
 | **profile** | a substrate-agnostic **recipe**: a composition of agents + policy + resources. Lives in `profiles/`. |
 | **substrate** | a **partial implementation** of the IR standard = a **trigger executor** + a **runner**, over a **box** — i.e. *where/how agents run*, NOT the code host. `gh-actions` (GitHub Actions) and `local` (termfleet) are peers; each realizes the subset it supports. |

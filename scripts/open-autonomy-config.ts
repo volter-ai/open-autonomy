@@ -1,5 +1,6 @@
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
+import { parse as parseYaml } from 'yaml';
 
 // The autonomy manifest (.open-autonomy/autonomy.yml) is the single source of truth — it is generated
 // by compile from the profile. There is NO hardcoded fallback: a missing manifest is a hard error (so
@@ -46,7 +47,7 @@ export function readAutonomyConfig(root = '.'): AutonomyConfig {
 }
 
 export function parseAutonomyConfig(text: string): AutonomyConfig {
-  const manifest = (Bun.YAML.parse(text) ?? {}) as {
+  const manifest = (parseYaml(text) ?? {}) as {
     skills?: Record<string, string>;
     documents?: { roles?: Partial<Record<string, string>> };
   };

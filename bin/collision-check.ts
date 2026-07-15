@@ -309,7 +309,16 @@ export function compactResolveError(stderr: string): string {
  *  node_modules/...` and spuriously report EVERY probe as "outside node_modules". Resolving once here makes
  *  every comparison absolute-vs-absolute. */
 export function probeResolution(cwdArg: string, name: string, specifier: string, io: CollisionIO = defaultCollisionIO): ResolutionResult {
-  const cwd = resolve(cwdArg);
+  // `resolve()` only makes a path absolute; it does not canonicalize filesystem aliases. On macOS,
+  // tmpdir() commonly returns `/var/...` while Node's ESM resolver reports `/private/var/...` for the
+  // exact same file. Compare canonical paths when the directory exists, falling back to the absolute
+  // spelling for injected/virtual filesystems and broken paths.
+  let cwd = resolve(cwdArg);
+  try {
+    cwd = io.realpathSync(cwd);
+  } catch {
+    /* keep the absolute spelling */
+  }
   const nodeModulesRoot = join(cwd, 'node_modules');
   const pkgDir = join(nodeModulesRoot, name);
   if (!io.existsSync(join(pkgDir, 'package.json'))) return { ok: true }; // not installed yet — not this check's concern

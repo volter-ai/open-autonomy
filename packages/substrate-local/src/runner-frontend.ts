@@ -20,7 +20,7 @@
 import { spawnSync } from 'node:child_process';
 import { existsSync, readFileSync, readdirSync, writeFileSync, appendFileSync, mkdirSync, symlinkSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { dirname, join, resolve } from 'node:path';
+import { basename, dirname, join, resolve } from 'node:path';
 
 export interface LaunchParams {
   [key: string]: string | number;
@@ -36,6 +36,20 @@ export interface RunInfo {
 const scriptsDir = dirname(fileURLToPath(import.meta.url));
 const isScript = (behavior: string): boolean => /\.(ts|mjs|js)$/.test(behavior);
 
+/** The primary checkout that owns runtime control/state for every linked worktree. A nested agent may
+ * invoke this runner from its own worktree; resolving through git's common directory keeps fences,
+ * session state, effects, and child worktrees shared instead of silently forking them per checkout. */
+export function installRoot(cwd = process.cwd(), env: NodeJS.ProcessEnv = process.env): string {
+  const configured = (env.AUTONOMY_CONTROL_ROOT ?? '').trim();
+  if (configured) return resolve(cwd, configured);
+  const common = git(['rev-parse', '--path-format=absolute', '--git-common-dir'], cwd).stdout.trim();
+  if (common && basename(common) === '.git') return dirname(common);
+  return cwd;
+}
+
+const controlPath = (relative: string): string =>
+  resolve(installRoot(), relative);
+
 // --- the PAUSE gate (OA-07): defense in depth at the launch seam -------------------------------------
 // The scheduler (scheduler/run.mjs) is the primary fence — it never fires a tick while paused. This is the
 // SECOND, independent check: even a manually invoked `runner.ts launch`, or a tick that raced the marker
@@ -50,10 +64,10 @@ export class PausedError extends Error {
     this.name = 'PausedError';
   }
 }
-function pausedMessage(): string {
+function pausedMessage(fence = PAUSED_PATH): string {
   return (
-    '[runner] PAUSED — this install starts paused so an existing backlog is never dispatched unreviewed.\n' +
-    '[runner] review the board, then unpause:  rm .open-autonomy/paused'
+    `[runner] PAUSED — launch is fenced by ${fence}.\n` +
+    `[runner] review the relevant work, then unpause:  rm ${fence}`
   );
 }
 
@@ -61,10 +75,12 @@ function pausedMessage(): string {
 // A skill agent's launch prompt is `/behavior` (claude) or `$behavior` (codex) — emit.ts:436-437 — which the
 // coding CLI resolves against THIS session's cwd (the worktree, or the trunk checkout with no `--branch`). A
 // worktree materializes only what is committed on its base; a missing/uncommitted/renamed skill there dies
-// silently inside the model session ("Unknown command: /develop") with no signal anywhere upstream (the
-// audit's F-7: the runner reports success, the dead session later reads `done`, the PM re-dispatches
-// forever). This check is a plain existsSync, deterministic and free — it runs BEFORE any termfleet spend
-// and refuses the launch outright: no session is created, no post-session effect marker is recorded.
+// silently inside the model session ("Unknown command: /develop") with no signal anywhere upstream. A
+// same-named but STALE skill is just as dangerous: starting a feature-branch scheduler while github
+// isolation correctly bases work on origin's default branch used to execute the old doctrine silently.
+// The pre-check therefore verifies existence everywhere and exact control-checkout parity for anonymous
+// `workspace: isolated` launches. It runs BEFORE any termfleet spend and refuses outright: no session is
+// created and no post-session effect marker is recorded.
 export class SkillMissingError extends Error {
   constructor(message: string) {
     super(message);
@@ -78,6 +94,7 @@ interface ManifestAgent {
   params?: Record<string, string>;
   capabilities?: string[];
   review?: string; // the reviewer agent that judges this proposer's PRs (the merge-boundary review edge)
+  execution?: { workspace?: string }; // portable isolation request; validated by core when compiled
   // An opaque shell command declared on ONE agent's manifest entry (e.g. a loop-control arm) that the
   // runner executes in the session's own cwd BEFORE spawning it. The runner stays METHODOLOGY-FREE here:
   // this string is DATA the manifest supplies, never a hardcoded per-agent branch — the runner would run
@@ -92,11 +109,11 @@ interface ManifestAgent {
 // cannot run the effect; the loop's reaper observes the session finishing. So launch RECORDS a pending effect
 // (keyed by the session's terminalId — the join key the reaper reports back), and the loop runs it once that
 // session is gone (scheduler/run.mjs's reconcilePendingEffects). The effect is gated on two EXPLICIT, universal
-// signals — never on a capability: (1) the launch was ISOLATED (a `--branch` was named — see below), and (2)
+// signals — never on a capability: (1) the caller explicitly named a proposal branch, and (2)
 // the install targets a `github` CODE HOST (a declared IR signal; only there does a finished branch become a
 // PR — a local-git code host has the PM merge worktrees, no PR). The runner never learns what the effect DOES
 // — no issue/tracker/branch methodology re-enters it (architecture invariant `substrate-is-runner-only`).
-const EFFECTS_DIR = '.open-autonomy/runner-state/effects';
+const effectsDir = (): string => controlPath('.open-autonomy/runner-state/effects');
 
 // autonomy-runner prints the launched session as JSON ({ id: terminalId, agent, ... }) on its last output line.
 export function terminalIdFromLaunch(stdout: string): string {
@@ -118,9 +135,30 @@ interface EffectMarker {
   effect: string;
   env: Record<string, string>;
 }
+
+interface WorkspaceLease {
+  schema: 'open-autonomy.workspace-lease.v1';
+  id: string;
+  agent: string;
+  branch: string;
+  worktree: string;
+  createdAt: string;
+}
+
+function recordWorkspaceLease(lease: Omit<WorkspaceLease, 'schema' | 'createdAt'>): void {
+  const dir = controlPath('.open-autonomy/runner-state/workspaces');
+  mkdirSync(dir, { recursive: true });
+  const file = join(dir, `${lease.id.replace(/[^0-9A-Za-z._-]/g, '-')}.json`);
+  writeFileSync(file, `${JSON.stringify({
+    schema: 'open-autonomy.workspace-lease.v1',
+    ...lease,
+    createdAt: new Date().toISOString(),
+  } satisfies WorkspaceLease, null, 2)}\n`);
+}
 function recordPostSessionEffect(marker: EffectMarker): void {
-  mkdirSync(EFFECTS_DIR, { recursive: true });
-  const file = join(EFFECTS_DIR, `${marker.id.replace(/[^0-9A-Za-z._-]/g, '-')}.json`);
+  const dir = effectsDir();
+  mkdirSync(dir, { recursive: true });
+  const file = join(dir, `${marker.id.replace(/[^0-9A-Za-z._-]/g, '-')}.json`);
   writeFileSync(file, `${JSON.stringify(marker, null, 2)}\n`);
 }
 
@@ -128,12 +166,13 @@ function recordPostSessionEffect(marker: EffectMarker): void {
 // not run yet — the window between a session being reaped and its PR being opened. `list` counts these as
 // in-flight so a WIP/dedup check (the PM's) does not relaunch the proposer in that gap and double-propose.
 function pendingEffects(agent: string): EffectMarker[] {
+  const dir = effectsDir();
   try {
-    return readdirSync(EFFECTS_DIR)
+    return readdirSync(dir)
       .filter((f) => f.endsWith('.json'))
       .map((f) => {
         try {
-          return JSON.parse(readFileSync(join(EFFECTS_DIR, f), 'utf8')) as EffectMarker;
+          return JSON.parse(readFileSync(join(dir, f), 'utf8')) as EffectMarker;
         } catch {
           return null;
         }
@@ -143,21 +182,32 @@ function pendingEffects(agent: string): EffectMarker[] {
     return []; // no markers dir yet
   }
 }
+
+interface RuntimeManifest {
+  agents?: Record<string, ManifestAgent>;
+  codeHost?: string;
+  policy?: Record<string, unknown>;
+}
+
+function runtimeManifest(): RuntimeManifest {
+  const jsonPath = controlPath('.open-autonomy/autonomy.json');
+  if (existsSync(jsonPath)) return JSON.parse(readFileSync(jsonPath, 'utf8')) as RuntimeManifest;
+  const yamlPath = controlPath('.open-autonomy/autonomy.yml');
+  if (!existsSync(yamlPath)) return {};
+  const yaml = (Bun as unknown as { YAML?: { parse(input: string): unknown } }).YAML;
+  if (!yaml) throw new Error('runtime manifest JSON is missing and this Bun version cannot parse autonomy.yml');
+  return yaml.parse(readFileSync(yamlPath, 'utf8')) as RuntimeManifest;
+}
+
 function manifestAgent(agent: string): ManifestAgent {
-  const path = '.open-autonomy/autonomy.yml';
-  if (!existsSync(path)) return {};
-  const m = Bun.YAML.parse(readFileSync(path, 'utf8')) as { agents?: Record<string, ManifestAgent> };
-  return m.agents?.[agent] ?? {};
+  return runtimeManifest().agents?.[agent] ?? {};
 }
 
 // The code host this install targets (a first-class IR signal, carried in the manifest) — `github` means a
 // finished branch becomes a PR, so the runner runs the propose effect on completion; `local-git` means the PM
 // merges worktrees, so there is no propose effect. Read once per launch to gate the post-session effect.
 function manifestCodeHost(): string {
-  const path = '.open-autonomy/autonomy.yml';
-  if (!existsSync(path)) return '';
-  const m = Bun.YAML.parse(readFileSync(path, 'utf8')) as { codeHost?: string };
-  return m.codeHost ?? '';
+  return runtimeManifest().codeHost ?? '';
 }
 
 // The profile's `policy.box.gh-actions` config (emitAutonomy carries `ir.policy.box` verbatim into the
@@ -167,9 +217,7 @@ function manifestCodeHost(): string {
 // gates, or simple-gh-sdlc's `security` gate); the local runner mirrors that lookup so the SAME declared
 // policy also threads through the local propose effect, not just github's.
 function manifestGhActionsBox(): { propose_dispatch_checks?: string[]; propose_dispatch_reviews?: string[] } {
-  const path = '.open-autonomy/autonomy.yml';
-  if (!existsSync(path)) return {};
-  const m = Bun.YAML.parse(readFileSync(path, 'utf8')) as { policy?: Record<string, unknown> };
+  const m = runtimeManifest();
   const box = (m.policy?.['gh-actions'] ?? m.policy?.github ?? {}) as {
     propose_dispatch_checks?: string[];
     propose_dispatch_reviews?: string[];
@@ -192,8 +240,8 @@ function manifestGhActionsBox(): { propose_dispatch_checks?: string[]; propose_d
 // Divergence from the reference: this route adds a REAL (not no-op) `engage` — console + a well-known
 // attention file an operator can tail, plus an optional command hook — because a shipped install needs an
 // actual default delivery mechanism, not just a pluggable callback a host language wires up.
-const HUMAN_SESSIONS_PATH = '.open-autonomy/runner-state/human-sessions.json';
-const HUMAN_ATTENTION_PATH = '.open-autonomy/runner-state/human-attention.md';
+const humanSessionsPath = (): string => controlPath('.open-autonomy/runner-state/human-sessions.json');
+const humanAttentionPath = (): string => controlPath('.open-autonomy/runner-state/human-attention.md');
 
 interface HumanSession {
   id: string;
@@ -205,14 +253,15 @@ interface HumanSession {
 
 function readHumanSessions(): HumanSession[] {
   try {
-    return JSON.parse(readFileSync(HUMAN_SESSIONS_PATH, 'utf8')) as HumanSession[];
+    return JSON.parse(readFileSync(humanSessionsPath(), 'utf8')) as HumanSession[];
   } catch {
     return []; // no parked sessions yet
   }
 }
 function writeHumanSessions(sessions: HumanSession[]): void {
-  mkdirSync(dirname(HUMAN_SESSIONS_PATH), { recursive: true });
-  writeFileSync(HUMAN_SESSIONS_PATH, `${JSON.stringify(sessions, null, 2)}\n`);
+  const path = humanSessionsPath();
+  mkdirSync(dirname(path), { recursive: true });
+  writeFileSync(path, `${JSON.stringify(sessions, null, 2)}\n`);
 }
 function getHumanSession(id: string): HumanSession | undefined {
   return readHumanSessions().find((s) => s.id === id);
@@ -235,9 +284,10 @@ function engageHuman(session: HumanSession): void {
   const ask = session.params?.ask ?? '(no ask given)';
   console.log(`[runner] HUMAN ENGAGE: ${session.agent} #${session.id} — ${ask}`);
   if (session.note) console.log(`[runner]   ${session.note}`);
-  mkdirSync(dirname(HUMAN_ATTENTION_PATH), { recursive: true });
+  const attentionPath = humanAttentionPath();
+  mkdirSync(dirname(attentionPath), { recursive: true });
   appendFileSync(
-    HUMAN_ATTENTION_PATH,
+    attentionPath,
     [
       `## ${session.agent} #${session.id}`,
       '',
@@ -275,11 +325,17 @@ function launchHuman(agent: string, params: LaunchParams = {}): void {
 }
 
 // --- worktree isolation (local analogue of github's per-job fresh checkout) ---
-// The PM ASSIGNS a branch and hands the SAME `--branch` to develop and review, so they share one isolated
-// worktree; the runner just EXECUTES the branch it's given — it derives nothing and decides nothing. A
-// launch with no `--branch` (the cron PM, the drafter) runs on the trunk checkout. The PM names the branch
-// with the issue id (e.g. `agent/issue-<id>`) so ztrack check/loop auto-scope off the branch inside it.
-const worktreePathFor = (branch: string): string => resolve('.worktrees', branch.replace(/[^0-9A-Za-z._-]/g, '-'));
+// Two orthogonal requests use the same worktree primitive:
+//   - `--branch <name>`: join/create that explicit branch and retain the existing proposal lifecycle;
+//   - `--workspace isolated` (or manifest execution.workspace): create a fresh unique branch/worktree only.
+// The latter is launch fencing, not a proposal signal. With neither request, the session uses trunk.
+const worktreePathFor = (branch: string): string =>
+  join(installRoot(), '.worktrees', branch.replace(/[^0-9A-Za-z._-]/g, '-'));
+let isolationSequence = 0;
+export function isolationBranch(agent: string, now = Date.now(), pid = process.pid): string {
+  const safeAgent = agent.replace(/[^0-9A-Za-z._-]/g, '-').replace(/^-+|-+$/g, '') || 'agent';
+  return `autonomy/run-${safeAgent}-${now}-${pid}-${++isolationSequence}`;
+}
 
 function git(args: string[], cwd?: string): { status: number | null; stdout: string; stderr: string } {
   const r = spawnSync('git', args, { encoding: 'utf8', ...(cwd ? { cwd } : {}) });
@@ -326,6 +382,30 @@ export function worktreeBase(codeHost: string, originTrunkResolves: boolean, tru
   return codeHost === 'github' && originTrunkResolves ? `origin/${trunk}` : 'HEAD';
 }
 
+/** Parse the remote's symbolic HEAD without guessing from the operator's current checkout. */
+export function defaultBranchFromSymref(output: string, remote = 'origin'): string {
+  const line = output.split('\n').find((entry) => entry.startsWith('ref: refs/heads/') && entry.endsWith('\tHEAD'));
+  if (line) return line.slice('ref: refs/heads/'.length, -'\tHEAD'.length);
+  const local = output.trim().replace(new RegExp(`^${remote}/`), '');
+  return local && !local.includes('\n') ? local : '';
+}
+
+function remoteDefaultBranch(remote = 'origin'): string {
+  const local = git(['symbolic-ref', '--quiet', '--short', `refs/remotes/${remote}/HEAD`]).stdout.trim();
+  let branch = defaultBranchFromSymref(local, remote);
+  if (!branch) {
+    const remoteHead = git(['ls-remote', '--symref', remote, 'HEAD']);
+    if (remoteHead.status === 0) branch = defaultBranchFromSymref(remoteHead.stdout, remote);
+  }
+  if (!branch) {
+    throw new Error(
+      `cannot resolve ${remote}'s default branch; set refs/remotes/${remote}/HEAD ` +
+      `(git remote set-head ${remote} --auto) before launching an isolated github workspace`,
+    );
+  }
+  return branch;
+}
+
 // --- workspace-member node_modules discovery (pnpm/yarn/npm workspace layouts don't hoist everything to
 // root) ---------------------------------------------------------------------------------------------------
 // npm's classic hoisting puts (almost) every dependency under the ROOT node_modules, so linking just that
@@ -357,8 +437,12 @@ function readWorkspaceGlobs(): string[] {
     /* no root package.json, or it doesn't parse — fall through to pnpm-workspace.yaml / the conventional fallback */
   }
   try {
-    const pnpmWs = Bun.YAML.parse(readFileSync(resolve('pnpm-workspace.yaml'), 'utf8')) as { packages?: string[] };
-    if (Array.isArray(pnpmWs.packages)) globs.push(...pnpmWs.packages);
+    const source = readFileSync(resolve('pnpm-workspace.yaml'), 'utf8');
+    const packagesBlock = /^packages:\s*\n((?:[ \t]+-.*\n?)*)/m.exec(source)?.[1] ?? '';
+    globs.push(...packagesBlock
+      .split('\n')
+      .map((line) => /^\s*-\s*["']?(.+?)["']?\s*$/.exec(line)?.[1])
+      .filter((value): value is string => !!value));
   } catch {
     /* no pnpm-workspace.yaml — not a pnpm workspace, or it doesn't parse */
   }
@@ -460,9 +544,14 @@ function ensureWorktree(branch: string, worktree: string, codeHost: string): str
   // fully-local guarantee ("GitHub is not needed") even when the repo happens to have a GitHub-shaped remote.
   let base = 'HEAD';
   if (!branchExists && codeHost === 'github') {
-    const trunk = git(['symbolic-ref', '--short', 'HEAD']).stdout.trim() || 'main';
-    git(['fetch', 'origin', trunk]); // best-effort: a no-op (non-zero) without a remote
-    base = worktreeBase(codeHost, git(['rev-parse', '--verify', '--quiet', `origin/${trunk}`]).status === 0, trunk);
+    const trunk = remoteDefaultBranch('origin');
+    const fetched = git(['fetch', 'origin', trunk]);
+    if (fetched.status !== 0) {
+      throw new Error(`cannot refresh origin/${trunk}; refusing to branch from a possibly stale remote-tracking ref: ${fetched.stderr || fetched.stdout}`);
+    }
+    const resolves = git(['rev-parse', '--verify', '--quiet', `origin/${trunk}`]).status === 0;
+    if (!resolves) throw new Error(`cannot resolve origin/${trunk} after fetch; refusing to branch from a stale local checkout`);
+    base = worktreeBase(codeHost, resolves, trunk);
   }
   const add = branchExists ? ['worktree', 'add', worktree, branch] : ['worktree', 'add', '-b', branch, worktree, base];
   const r = git(add);
@@ -526,7 +615,7 @@ async function defaultHarness(): Promise<string> {
 /** Launch an agent with forwarded params (agent:launch). Resolves to the launch's exit code; the pre-check
  *  refusal (and the pause gate, OA-07) throw instead — see runCli, which maps both to a nonzero exit. */
 export async function launch(agent: string, params: LaunchParams = {}): Promise<number> {
-  const { kind, skill: behavior = '', params: declared = {}, review = '', prelaunch = '' } = manifestAgent(agent);
+  const { kind, skill: behavior = '', params: declared = {}, review = '', prelaunch = '', execution } = manifestAgent(agent);
 
   if (kind === 'human') {
     // The THIRD route: a person cannot be executed — park the ask instead (see the human route above).
@@ -535,8 +624,10 @@ export async function launch(agent: string, params: LaunchParams = {}): Promise<
     return 0;
   }
 
-  if (existsSync(PAUSED_PATH)) {
-    console.error(pausedMessage());
+  const fence = typeof params.fence === 'string' && params.fence ? params.fence : PAUSED_PATH;
+  const resolvedFence = controlPath(fence);
+  if (existsSync(resolvedFence)) {
+    console.error(pausedMessage(fence));
     throw new PausedError();
   }
 
@@ -552,13 +643,14 @@ export async function launch(agent: string, params: LaunchParams = {}): Promise<
     return r.status ?? 1;
   }
 
-  // Skill agent: a termfleet session via the launch adapter (forwards params verbatim). ISOLATION is requested
-  // EXPLICITLY: the caller names a `--branch` and the runner runs the session in that branch's worktree
-  // (created/reused here). No `--branch` => run on the trunk checkout. The caller (the PM) decides who is
-  // isolated and spells it out; the runner derives nothing and reads no capability. `--branch` is a
-  // runner-control param, never forwarded to the agent. (github's runner isolates via the job checkout and
-  // ignores `--branch`, so the same PM launch is substrate-agnostic.)
-  const branch = typeof params.branch === 'string' && params.branch ? params.branch : '';
+  // Skill agent: a termfleet session via the launch adapter. Workspace isolation and proposal lifecycle
+  // are intentionally orthogonal. An explicit branch preserves the established named-work lifecycle;
+  // `workspace: isolated` creates a unique worktree but never requests a proposal effect.
+  const explicitBranch = typeof params.branch === 'string' && params.branch ? params.branch : '';
+  const requestedWorkspace = params.workspace ?? execution?.workspace ?? 'shared';
+  if (requestedWorkspace !== 'shared' && requestedWorkspace !== 'isolated')
+    throw new Error(`[runner] invalid workspace mode "${requestedWorkspace}" (expected "shared" or "isolated")`);
+  const branch = explicitBranch || (requestedWorkspace === 'isolated' ? isolationBranch(agent) : '');
   const worktree = branch ? worktreePathFor(branch) : '';
   // Read the declared code host ONCE per launch and reuse it for both decisions it gates: the worktree base
   // (below) and the post-session propose effect (below, at the github-only branch).
@@ -570,14 +662,24 @@ export async function launch(agent: string, params: LaunchParams = {}): Promise<
   const worktreeStatus = branch ? ensureWorktree(branch, worktree, codeHost) : '';
   const createdWorktreeThisCall = !!branch && worktreeStatus !== 'existing';
 
-  // OA-08 pre-check: does this launch's skill invocation actually resolve in the session's cwd? Applies with
-  // OR without `--branch` (a trunk-checkout launch of a skill missing from the main checkout dies the exact
-  // same way). Runs AFTER the pause gate above (a paused install refuses first) and before any termfleet
-  // spend — no session is created, no post-session effect marker is recorded, on refusal.
+  // OA-08 pre-check: does this launch's skill invocation resolve to the SAME doctrine selected by the
+  // control checkout? Existence applies with or without a branch. Content parity applies to anonymous
+  // scheduled isolation only: an explicit proposal branch is allowed to carry branch-local content, but a
+  // fresh scheduled workspace must not silently execute an older same-named skill from remote trunk.
+  // Runs after the pause gate and before any termfleet spend.
   const cwd = worktree || process.cwd();
   const harness = process.env.TERMFLEET_AGENT || (await defaultHarness());
   const skillPath = skillPathFor(harness, behavior, cwd);
-  if (!existsSync(skillPath)) {
+  const controlSkillPath = skillPathFor(harness, behavior, installRoot());
+  const missing = !existsSync(skillPath);
+  const stale =
+    !missing &&
+    requestedWorkspace === 'isolated' &&
+    !explicitBranch &&
+    resolve(cwd) !== resolve(installRoot()) &&
+    existsSync(controlSkillPath) &&
+    readFileSync(skillPath, 'utf8') !== readFileSync(controlSkillPath, 'utf8');
+  if (missing || stale) {
     const baseSha = git(['rev-parse', 'HEAD'], cwd).stdout.trim() || '(unknown)';
     // Recoverability: a worktree is frozen at the base commit it was created on, and `ensureWorktree`
     // early-returns on an existing one — so a refused `--branch` launch that LEFT its just-created worktree
@@ -591,20 +693,26 @@ export async function launch(agent: string, params: LaunchParams = {}): Promise<
       git(['worktree', 'remove', '--force', worktree]);
       git(['branch', '-D', branch]);
     }
-    const message =
-      `[runner] launch refused: ${agent}'s skill "${behavior}" is missing at\n` +
-      `  ${skillPath} — the session would die at launch ("Unknown command: /${behavior}").\n` +
-      `  The worktree contains only files committed on its base; commit the harness on trunk\n` +
-      `  (docs/OPERATIONS.md#local-runner-quickstart, "Commit the harness"), or check the skill\n` +
-      `  exists for harness "${harness}".` +
-      (branch ? ` (branch ${branch}, base ${baseSha})` : '');
+    const message = missing
+      ? `[runner] launch refused: ${agent}'s skill "${behavior}" is missing at\n` +
+        `  ${skillPath} — the session would die at launch ("Unknown command: /${behavior}").\n` +
+        `  The worktree contains only files committed on its base; commit the harness on trunk\n` +
+        `  (docs/OPERATIONS.md#local-runner-quickstart, "Commit the harness"), or check the skill\n` +
+        `  exists for harness "${harness}".` +
+        (branch ? ` (branch ${branch}, base ${baseSha})` : '')
+      : `[runner] launch refused: ${agent}'s skill "${behavior}" is stale in the isolated workspace at\n` +
+        `  ${skillPath}\n` +
+        `  Its content differs from the control checkout at ${controlSkillPath}. GitHub isolation bases new\n` +
+        `  scheduled work on the remote default branch; merge and push the reviewed harness there before\n` +
+        `  starting the scheduler. (branch ${branch}, base ${baseSha})`;
     console.error(message);
     throw new SkillMissingError(message);
   }
 
-  const names = Object.keys(params).filter((k) => k !== 'branch');
+  const names = Object.keys(params).filter((k) => k !== 'branch' && k !== 'workspace' && k !== 'fence');
   const env: Record<string, string> = {
     ...(process.env as Record<string, string>),
+    AUTONOMY_CONTROL_ROOT: installRoot(),
     AUTONOMY_AGENT: agent,
     AUTONOMY_FORWARD: [process.env.AUTONOMY_FORWARD, ...names].filter(Boolean).join(','),
     ...Object.fromEntries(names.map((k) => [k, String(params[k])])),
@@ -627,54 +735,48 @@ export async function launch(agent: string, params: LaunchParams = {}): Promise<
     }
   }
 
-  // An ISOLATED session on a github CODE HOST gets a post-session effect recorded: when the session finishes,
+  // An EXPLICIT PROPOSAL-BRANCH session on a github CODE HOST gets a post-session effect recorded: when the session finishes,
   // the loop turns that worktree into a PR (agent-propose) — the local mirror of github's post-skill propose
   // step. Gated on two explicit signals, never a capability: a worktree exists (a `--branch` was named) and
   // the install's code host is `github` (where finished branches become PRs). Capture the launch output to
   // learn the session's terminalId (the join key the reaper reports back); every other launch (the PM, the
   // drafter, a local-git worker, the reviewer) stays live (stdio inherit).
-  if (worktree && codeHost === 'github') {
+  if (worktree) {
     const r = spawnSync('node', [join(scriptsDir, 'run-agent.mjs')], { encoding: 'utf8', env, cwd: worktree });
     if (r.stdout) process.stdout.write(r.stdout);
     if (r.stderr) process.stderr.write(r.stderr);
     const id = terminalIdFromLaunch(r.stdout ?? '');
     if (id) {
-      const ghBox = manifestGhActionsBox();
-      recordPostSessionEffect({
-        id,
-        agent,
-        ref: /agent\/issue-(\d+)/.exec(branch)?.[1] ?? '', // the issue this session is isolated for
-        worktree,
-        effect: 'scripts/agent-propose.ts', // the github code host's publish effect (git + gh; runner-independent)
-        env: {
-          // ISSUE_REF derives from the worktree's branch so agent-propose checks out the SAME branch the
-          // worker committed onto (`agent/issue-<n>`); the rest mirror github's propose-step env.
-          ISSUE_REF: /agent\/issue-(\d+)/.exec(branch)?.[1] ?? '',
-          AGENT_NAME: agent,
-          AGENT_BOT_NAME: process.env.AGENT_BOT_NAME ?? 'open-autonomy-agent',
-          AGENT_BOT_EMAIL: process.env.AGENT_BOT_EMAIL ?? 'open-autonomy-agent@users.noreply.github.com',
-          // the review edge, realized through the RUNNER seam: agent-propose launches this agent for the PR
-          // (local -> a termfleet reviewer session). github instead carries REVIEW_WORKFLOW; both resolve to
-          // "launch the reviewer for this PR", the substrate-correct realization of develop's `review:` edge.
-          REVIEW_AGENT: review,
-          // Profile-declared EXTRA required-check/reviewer workflows (e.g. simple-gh-sdlc's `security` gate,
-          // soc2-baseline's `supply-chain` + `codeql` gates) — agent-propose.ts dispatches each via `gh
-          // workflow run` exactly as it does on github (packages/substrate-github/src/emit.ts:363-367), since
-          // these ARE github workflows (they run on Actions regardless of which substrate launched the agent
-          // — runner ⟂ code host). Empty/absent unless the profile declares
-          // policy.box.gh-actions.propose_dispatch_checks/_reviews, so this is a no-op everywhere else.
-          ...(ghBox.propose_dispatch_checks?.length
-            ? { EXTRA_CHECK_WORKFLOWS: ghBox.propose_dispatch_checks.join(',') }
-            : {}),
-          ...(ghBox.propose_dispatch_reviews?.length
-            ? { EXTRA_REVIEW_WORKFLOWS: ghBox.propose_dispatch_reviews.join(',') }
-            : {}),
-          // The runner injects no repo identity: the effect resolves its own repo from the remote
-          // (gh `{owner}/{repo}`), keeping the runner code-host-blind.
-        },
-      });
+      // Every session using an isolated worktree owns a lease, including a reviewer joining a branch
+      // another session created. Cleanup groups leases by worktree and waits for all of them.
+      recordWorkspaceLease({ id, agent, branch, worktree });
+      if (explicitBranch && codeHost === 'github') {
+        const ghBox = manifestGhActionsBox();
+        recordPostSessionEffect({
+          id,
+          agent,
+          ref: /agent\/issue-(\d+)/.exec(branch)?.[1] ?? '', // the issue this session is isolated for
+          worktree,
+          effect: 'scripts/agent-propose.ts', // the github code host's publish effect (git + gh; runner-independent)
+          env: {
+            // ISSUE_REF derives from the worktree's branch so agent-propose checks out the SAME branch the
+            // worker committed onto (`agent/issue-<n>`); the rest mirror github's propose-step env.
+            ISSUE_REF: /agent\/issue-(\d+)/.exec(branch)?.[1] ?? '',
+            AGENT_NAME: agent,
+            AGENT_BOT_NAME: process.env.AGENT_BOT_NAME ?? 'open-autonomy-agent',
+            AGENT_BOT_EMAIL: process.env.AGENT_BOT_EMAIL ?? 'open-autonomy-agent@users.noreply.github.com',
+            REVIEW_AGENT: review,
+            ...(ghBox.propose_dispatch_checks?.length
+              ? { EXTRA_CHECK_WORKFLOWS: ghBox.propose_dispatch_checks.join(',') }
+              : {}),
+            ...(ghBox.propose_dispatch_reviews?.length
+              ? { EXTRA_REVIEW_WORKFLOWS: ghBox.propose_dispatch_reviews.join(',') }
+              : {}),
+          },
+        });
+      }
     } else {
-      console.error(`[runner] ${agent}: launched but no terminalId in output; post-session propose not recorded`);
+      console.error(`[runner] ${agent}: launched but no terminalId in output; workspace cleanup cannot be tracked`);
     }
     return r.status ?? 1;
   }
@@ -743,7 +845,7 @@ function parseFlags(args: string[]): LaunchParams {
 export async function runCli(argv: string[]): Promise<number> {
   const [cmd, agent, ...rest] = argv;
   if (!cmd || !agent || agent.startsWith('--')) {
-    console.error('usage: runner.ts <launch|list|get|update|cancel|worktree-probe> <agent|id|branch> [--ref <work-item>] [--key value ...]');
+    console.error('usage: runner.ts <launch|list|get|update|cancel|worktree-probe> <agent|id|branch> [--ref <work-item>] [--workspace <shared|isolated>] [--fence <path>] [--key value ...]');
     return 2;
   }
   if (cmd === 'worktree-probe') {
@@ -791,13 +893,16 @@ export async function runCli(argv: string[]): Promise<number> {
   }
   if (cmd === 'launch') {
     const flags = parseFlags(rest);
-    // `--ref` is the work item (`subject.ref`); locally we forward it under the target's OWN declared
-    // param name (the param whose source is `subject.ref`), so the worker reads e.g. $ZTRACK_ISSUE.
+    // `--ref` is the work item (`subject.ref`); when the target declares a source mapping, forward it
+    // under that target's OWN param name (so a worker reads e.g. $ZTRACK_ISSUE). Otherwise retain the
+    // portable `ref` key itself — human asks and generic runners surface it directly in list/get.
     if ('ref' in flags) {
       const { params: declared = {} } = manifestAgent(agent);
       const refParam = Object.entries(declared).find(([, src]) => src === 'subject.ref')?.[0];
-      if (refParam) flags[refParam] = flags.ref;
-      delete flags.ref;
+      if (refParam) {
+        flags[refParam] = flags.ref;
+        delete flags.ref;
+      }
     }
     try {
       return await launch(agent, flags);

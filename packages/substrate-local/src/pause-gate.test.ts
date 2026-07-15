@@ -87,6 +87,29 @@ describe('compileLocal — the pause marker (seed-once)', () => {
       rmSync(dir, { recursive: true, force: true });
     }
   });
+
+  test('an unchanged custom fence stays removed, while a newly introduced fence is seeded once', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'oa07-custom-recompile-'));
+    const custom = (fence: string) => ({
+      schema: 'open-autonomy.local-schedule-config.v1' as const,
+      defaults: { fence },
+    });
+    try {
+      const first = compileLocal(scriptIr, { destDir: dir, scheduleConfig: custom('.open-autonomy/analysis-paused') });
+      materializeAll(dir, first);
+      rmSync(join(dir, '.open-autonomy', 'analysis-paused'));
+
+      const unchanged = compileLocal(scriptIr, { destDir: dir, scheduleConfig: custom('.open-autonomy/analysis-paused') });
+      expect(unchanged.generated['.open-autonomy/analysis-paused']).toBeUndefined();
+      materializeAll(dir, unchanged);
+      expect(existsSync(join(dir, '.open-autonomy', 'analysis-paused'))).toBe(false);
+
+      const changed = compileLocal(scriptIr, { destDir: dir, scheduleConfig: custom('.open-autonomy/new-analysis-paused') });
+      expect(changed.generated['.open-autonomy/new-analysis-paused']).toContain('rm .open-autonomy/new-analysis-paused');
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
 });
 
 // --- B. the emitted scheduler/run.mjs — the pause gate (real subprocess) ------------------------------
@@ -187,6 +210,52 @@ describe('the emitted scheduler/run.mjs — the pause gate (AC-1, AC-2, AC-3)', 
       rmSync(dir, { recursive: true, force: true });
     }
   }, 15_000);
+
+  test('independent job fences allow one group to run while another remains paused', () => {
+    const ir: AutonomyIR = {
+      schema: 'autonomy.ir.v1',
+      targets: ['local'],
+      agents: {
+        execute: { behavior: 'scripts/execute.ts', capabilities: [], triggers: [{ cron: '*/15 * * * *' }] },
+        analyze: { behavior: 'scripts/analyze.ts', capabilities: [], triggers: [{ cron: '*/15 * * * *' }] },
+      },
+      policy: { box: {} },
+      resources: [],
+    };
+    const out = compileLocal(ir, {
+      scheduleConfig: {
+        schema: 'open-autonomy.local-schedule-config.v1',
+        defaults: { fence: '.open-autonomy/paused' },
+        agents: { analyze: { fence: '.open-autonomy/audits-paused' } },
+      },
+    });
+    const dir = mkdtempSync(join(tmpdir(), 'oa07-independent-'));
+    const executeSentinel = join(dir, 'execute.log');
+    const analyzeSentinel = join(dir, 'analyze.log');
+    try {
+      materializeAll(dir, out);
+      writeFileSync(join(dir, 'scripts', 'execute.ts'), `import { writeFileSync } from 'node:fs'; writeFileSync(${JSON.stringify(executeSentinel)}, 'ran\\n');\n`);
+      writeFileSync(join(dir, 'scripts', 'analyze.ts'), `import { writeFileSync } from 'node:fs'; writeFileSync(${JSON.stringify(analyzeSentinel)}, 'ran\\n');\n`);
+
+      expect(existsSync(join(dir, '.open-autonomy', 'paused'))).toBe(true);
+      expect(existsSync(join(dir, '.open-autonomy', 'audits-paused'))).toBe(true);
+      rmSync(join(dir, '.open-autonomy', 'audits-paused'));
+      const analysisOnly = spawnSync('node', ['scheduler/run.mjs', '--once'], { cwd: dir, encoding: 'utf8' });
+      expect(analysisOnly.status).toBe(0);
+      expect(existsSync(analyzeSentinel)).toBe(true);
+      expect(existsSync(executeSentinel)).toBe(false);
+
+      rmSync(analyzeSentinel);
+      writeFileSync(join(dir, '.open-autonomy', 'audits-paused'), 'paused\n');
+      rmSync(join(dir, '.open-autonomy', 'paused'));
+      const executionOnly = spawnSync('node', ['scheduler/run.mjs', '--once'], { cwd: dir, encoding: 'utf8' });
+      expect(executionOnly.status).toBe(0);
+      expect(existsSync(executeSentinel)).toBe(true);
+      expect(existsSync(analyzeSentinel)).toBe(false);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
 });
 
 // --- C. the emitted scripts/runner.ts — launch() defense in depth (real subprocess) --------------------
@@ -241,6 +310,31 @@ describe('the emitted scripts/runner.ts — launch() refuses while paused (AC-4)
       rmSync(dir, { recursive: true, force: true });
     }
   });
+
+  test('an explicit job fence is honored independently of the legacy global fence', () => {
+    const { dir, sentinel } = scaffoldRunner({ paused: true }); // global .open-autonomy/paused exists
+    try {
+      const custom = '.open-autonomy/audits-paused';
+      const allowed = spawnSync('bun', ['scripts/runner.ts', 'launch', 'develop', '--fence', custom], {
+        cwd: dir,
+        encoding: 'utf8',
+      });
+      expect(allowed.status).toBe(0); // the absent declared fence wins; the unrelated global marker does not
+      expect(existsSync(sentinel)).toBe(true);
+
+      rmSync(sentinel);
+      writeFileSync(join(dir, custom), 'paused\n');
+      const blocked = spawnSync('bun', ['scripts/runner.ts', 'launch', 'develop', '--fence', custom], {
+        cwd: dir,
+        encoding: 'utf8',
+      });
+      expect(blocked.status).not.toBe(0);
+      expect(blocked.stderr).toContain(`rm ${custom}`);
+      expect(existsSync(sentinel)).toBe(false);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
 });
 
 describe('the emitted scripts/runner.ts — the human route is EXEMPT from the pause gate', () => {
@@ -261,6 +355,7 @@ describe('the emitted scripts/runner.ts — the human route is EXEMPT from the p
       mkdirSync(join(dir, '.open-autonomy'), { recursive: true });
       mkdirSync(join(dir, 'scripts'), { recursive: true });
       writeFileSync(join(dir, '.open-autonomy', 'autonomy.yml'), out.generated['.open-autonomy/autonomy.yml']);
+      writeFileSync(join(dir, '.open-autonomy', 'autonomy.json'), out.generated['.open-autonomy/autonomy.json']);
       writeFileSync(join(dir, 'scripts', 'runner.ts'), out.generated['scripts/runner.ts']);
       // The marker is present (paused) — the human route must not consult it at all.
       writeFileSync(join(dir, '.open-autonomy', 'paused'), out.generated['.open-autonomy/paused'] ?? 'PAUSED\n');

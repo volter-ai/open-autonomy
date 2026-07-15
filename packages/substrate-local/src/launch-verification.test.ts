@@ -22,7 +22,7 @@
 // designed to catch.
 import { afterEach, describe, expect, test } from 'bun:test';
 import { spawnSync } from 'node:child_process';
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import type { AutonomyIR } from '@open-autonomy/core';
@@ -112,6 +112,11 @@ function scaffold(): { dir: string } {
   gitOk(dir, ['config', 'user.name', 'oa08-test']);
   gitOk(dir, ['add', '-A']);
   gitOk(dir, ['commit', '-q', '-m', 'install harness']);
+  // github-target isolation must follow the remote default branch. Point origin back at this hermetic
+  // repo so each launch's fetch sees the fixture's latest committed main without network access.
+  gitOk(dir, ['remote', 'add', 'origin', '.']);
+  gitOk(dir, ['fetch', '-q', 'origin', 'main']);
+  gitOk(dir, ['symbolic-ref', 'refs/remotes/origin/HEAD', 'refs/remotes/origin/main']);
   return { dir };
 }
 
@@ -291,6 +296,59 @@ describe('scripts/runner.ts launch — the skill pre-check (runner-frontend.ts v
     });
     const sessions = JSON.parse(list.stdout || '[]') as Array<{ status: string }>;
     expect(sessions.some((s) => s.status === 'running')).toBe(true); // `list` shows it running, as today
+  });
+
+  test('workspace-only isolation creates a fresh real worktree and never records a proposal effect', () => {
+    const { dir } = scaffold();
+    const sentinel = join(dir, 'sentinel.log');
+
+    const first = spawnSync('bun', ['scripts/runner.ts', 'launch', 'develop', '--workspace', 'isolated'], {
+      cwd: dir,
+      encoding: 'utf8',
+      env: env({ OA08_SESSION_SENTINEL: sentinel }),
+    });
+    expect(first.status).toBe(0);
+    const firstSession = JSON.parse(readFileSync(sentinel, 'utf8').trim().split('\n')[0]!) as { cwd: string };
+    expect(firstSession.cwd).toMatch(/\/\.worktrees\/autonomy-run-develop-\d+-\d+-\d+$/);
+    expect(existsSync(firstSession.cwd)).toBe(true);
+    expect(effectsCount(dir)).toBe(0); // github code host notwithstanding: no explicit --branch, no PR lifecycle
+
+    const second = spawnSync('bun', ['scripts/runner.ts', 'launch', 'develop', '--workspace', 'isolated'], {
+      cwd: dir,
+      encoding: 'utf8',
+      env: env({ OA08_SESSION_SENTINEL: sentinel }),
+    });
+    expect(second.status).toBe(0);
+    const sessions = readFileSync(sentinel, 'utf8').trim().split('\n').map((line) => JSON.parse(line) as { cwd: string });
+    expect(sessions).toHaveLength(2);
+    expect(sessions[1]!.cwd).not.toBe(sessions[0]!.cwd); // every isolated launch is fresh, even across processes
+    expect(effectsCount(dir)).toBe(0);
+  });
+
+  test('workspace-only isolation refuses a stale same-named skill before termfleet spend', () => {
+    const { dir } = scaffold();
+    gitOk(dir, ['checkout', '-q', '-b', 'feature/new-doctrine']);
+    writeFileSync(
+      join(dir, '.claude', 'skills', 'develop', 'SKILL.md'),
+      '---\nname: develop\ndescription: reviewed replacement doctrine\n---\n\n# develop v2\n',
+    );
+    gitOk(dir, ['add', '.claude/skills/develop/SKILL.md']);
+    gitOk(dir, ['commit', '-q', '-m', 'replace develop doctrine']);
+    const sentinel = join(dir, 'sentinel.log');
+
+    const r = spawnSync('bun', ['scripts/runner.ts', 'launch', 'develop', '--workspace', 'isolated'], {
+      cwd: dir,
+      encoding: 'utf8',
+      env: env({ OA08_SESSION_SENTINEL: sentinel }),
+    });
+
+    expect(r.status).not.toBe(0);
+    expect(r.stderr).toContain('skill "develop" is stale');
+    expect(r.stderr).toContain('content differs from the control checkout');
+    expect(r.stderr).toContain('remote default branch');
+    expect(existsSync(sentinel)).toBe(false);
+    expect(readdirSync(join(dir, '.worktrees'))).toEqual([]); // refused launch cleaned its fresh worktree
+    expect(gitOk(dir, ['branch', '--list', 'autonomy/run-develop-*'])).toBe('');
   });
 });
 

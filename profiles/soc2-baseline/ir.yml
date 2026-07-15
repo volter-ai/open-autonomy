@@ -179,7 +179,6 @@ policy:
         - scripts/transcript.ts
         - profiles/**/skills/**
         - .volter/tracker/validation/**
-      human_required_topics: [auth, secrets, billing, deployment, destructive data migration, dependency trust, compliance, access control, audit logging, data retention]
 
 # Code-host + governance files carried verbatim into the installation. The first block is the SHARED SDLC
 # standard set (byte-identical to simple-gh-sdlc — check-profiles enforces it). The second block is the

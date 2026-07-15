@@ -423,7 +423,7 @@ export function declaredAgentNames(cwd: string): Set<string> {
     }
   }
   try {
-    for (const s of loadSchedule(cwd).scripts) if (s.agent) names.add(s.agent);
+    for (const job of loadSchedule(cwd).jobs) if (job.agent) names.add(job.agent);
   } catch {
     /* a missing/invalid schedule is A8/A10's finding, not this helper's */
   }

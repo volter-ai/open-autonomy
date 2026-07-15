@@ -19,7 +19,7 @@ export interface GuardResult {
  *  deterministic scripts/*.ts behavior) never touches it — the check is scoped to schedules that
  *  actually need it, never a false alarm on one that doesn't. */
 export function needsRunner(cmds: string[]): boolean {
-  return cmds.some((c) => c.includes('run-agent.mjs'));
+  return cmds.some((c) => /scripts\/(?:run-agent\.mjs|runner\.ts)/.test(c));
 }
 
 /** termfleet-installed check: node_modules/termfleet must exist before a schedule that launches a skill
@@ -44,7 +44,6 @@ export function checkTermfleetInstalled(cwd: string): GuardResult {
 const RUNNER_SPECS: Array<[string, string]> = [
   ['termfleet', 'termfleet'],
   ['@termfleet/core', '@termfleet/core/local-providers.js'],
-  ['ztrack', 'ztrack/preset-kit'],
 ];
 
 function probeSpec(cwd: string, name: string, spec: string, proc: ProcRunner): string | null {
@@ -58,10 +57,6 @@ function probeSpec(cwd: string, name: string, spec: string, proc: ProcRunner): s
   } catch {
     return `could not parse the resolved specifier for "${spec}": ${(probe.stdout || '').trim()}`;
   }
-  const expectedPrefix = pkgDir + sep;
-  if (resolvedPath !== pkgDir && !resolvedPath.startsWith(expectedPrefix)) {
-    return `"${spec}" resolved OUTSIDE node_modules/${name}/ (to ${resolvedPath}) — a self-reference, not the installed package`;
-  }
   let real = pkgDir;
   try {
     real = realpathSync(pkgDir);
@@ -69,8 +64,15 @@ function probeSpec(cwd: string, name: string, spec: string, proc: ProcRunner): s
     /* leave as pkgDir */
   }
   const nodeModulesRoot = join(cwd, 'node_modules');
-  if (real !== nodeModulesRoot && !real.startsWith(expectedPrefix) && !real.startsWith(nodeModulesRoot + sep)) {
+  let realNodeModulesRoot = nodeModulesRoot;
+  try { realNodeModulesRoot = realpathSync(nodeModulesRoot); } catch { /* use lexical path */ }
+  const expectedRealPkg = join(realNodeModulesRoot, name);
+  if (real !== expectedRealPkg) {
     return `"${name}" is installed via a link that escapes node_modules into this repo (realpath ${real})`;
+  }
+  const realPrefix = real + sep;
+  if (resolvedPath !== real && !resolvedPath.startsWith(realPrefix)) {
+    return `"${spec}" resolved OUTSIDE node_modules/${name}/ (to ${resolvedPath}) — a self-reference, not the installed package`;
   }
   return null;
 }

@@ -1106,10 +1106,11 @@ export async function checkLive(cwd: string, harness: HarnessProbe, skills: Chec
     // launch (unless it emitted DOCTOR-OK — checked via a terminal capture below).
     const start = Date.now();
     let alive = true;
+    let lastSessions: Array<{ id: string }> = [];
     const pollMs = Math.max(500, Math.min(2000, surviveMs));
     while (Date.now() - start < surviveMs) {
-      const sessions = runnerCli<Array<{ id: string }>>(cwd, harness.worktree, ['list']) ?? [];
-      if (!sessions.some((s) => s.id === terminalId)) {
+      lastSessions = runnerCli<Array<{ id: string }>>(cwd, harness.worktree, ['list']) ?? [];
+      if (!lastSessions.some((s) => s.id === terminalId)) {
         alive = false;
         break;
       }
@@ -1152,7 +1153,9 @@ export async function checkLive(cwd: string, harness: HarnessProbe, skills: Chec
     if (!alive && !sawOk) {
       return FAIL(
         'live',
-        `the worker died within ~${Math.round((Date.now() - start) / 1000)}s of launch. Terminal capture:\n${capture.slice(0, 1500) || '(no capture — session already reaped)'}`,
+        `the worker died within ~${Math.round((Date.now() - start) / 1000)}s of launch. ` +
+          `Last observed session ids: [${lastSessions.map((session) => session.id).join(', ')}]. Terminal capture:\n` +
+          `${capture.slice(0, 1500) || '(no capture — session already reaped)'}`,
         LIVE_FINDINGS,
       );
     }

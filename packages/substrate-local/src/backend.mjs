@@ -11,8 +11,9 @@
 //
 // `launch` accepts arbitrary --key value params and passes them through verbatim; the system never
 // interprets them (a profile gives them meaning, e.g. a ztrack-using profile declares ZTRACK_ISSUE).
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readFileSync, realpathSync } from 'node:fs';
 import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { ProviderClient, providerRefFromUrl } from 'termfleet';
 import { resolveDefaultProvider } from '@termfleet/core/local-providers.js';
 import { RUNNER_DEFAULTS } from './runner-defaults.mjs';
@@ -257,7 +258,15 @@ export async function runCli(runner, argv) {
   return 2;
 }
 
-// Entrypoint: the local-loop substrate runner is termfleet. One concrete runner, no selection switch.
-if (import.meta.url === `file://${process.argv[1]}`) {
+// Entrypoint: compare canonical filesystem paths, not URL strings. On macOS `/var` and `/private/var`
+// name the same file; a raw string comparison silently skipped the CLI when invoked through `/var`.
+const isMain = (() => {
+  try {
+    return !!process.argv[1] && realpathSync(fileURLToPath(import.meta.url)) === realpathSync(process.argv[1]);
+  } catch {
+    return false;
+  }
+})();
+if (isMain) {
   process.exit(await runCli(new TermfleetRunner(), process.argv.slice(2)));
 }

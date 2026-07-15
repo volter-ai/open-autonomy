@@ -10,6 +10,7 @@ import {
   REVIEW_RESULT_SCHEMA_ID,
   cronOf,
   emitAutonomy,
+  enforcementReport,
   resolveResultSchema,
   withGeneratedManifest,
 } from '@open-autonomy/core';
@@ -695,5 +696,6 @@ export function compileGithub(ir: AutonomyIR): CompileOutput {
   // content as `gitignore` (no dot) and we emit it to `.gitignore` in the installation. (Standard template
   // workaround; cf. create-react-app/Next.) Every other dotfile packs fine, so this maps only `.gitignore`.
   for (const r of ir.resources) copies.push({ from: r === '.gitignore' ? 'gitignore' : r, to: r });
+  generated['.open-autonomy/enforcement.json'] = `${JSON.stringify(enforcementReport(ir, 'gh-actions'), null, 2)}\n`;
   return withGeneratedManifest({ generated, copies });
 }

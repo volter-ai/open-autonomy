@@ -26,6 +26,15 @@ describe('emitAutonomy — policy box', () => {
     expect(emitAutonomy(irWithBox({})).policy).toEqual({});
   });
 
+  test('serializes typed maxConcurrent and prevents the opaque box from overriding it', () => {
+    const ir = irWithBox({ maxConcurrent: 99, wip: { maxInProgress: 1 } });
+    ir.policy.maxConcurrent = 2;
+    expect(emitAutonomy(ir).policy).toEqual({
+      maxConcurrent: 2,
+      wip: { maxInProgress: 1 },
+    });
+  });
+
   // OA-07: the day-one dispatch fence (profiles/simple-sdlc/ir.yml's `policy.box.dispatch`) is carried
   // through the SAME opaque, verbatim channel as `risk`/`wip` — no core/substrate schema work needed for
   // a new policy key. This pins that round-trip so a future manifest refactor can't silently drop it.
@@ -40,6 +49,20 @@ describe('emitAutonomy — policy box', () => {
       dispatch: { mode: 'allowlist', allow_label: 'oa-approved' },
       risk: { human_required_topics: ['secrets'] },
     });
+  });
+});
+
+describe('emitAutonomy — execution workspace', () => {
+  test('carries an explicit portable workspace mode and omits the field when undeclared', () => {
+    const isolated = emitAutonomy({
+      ...irWithBox({}),
+      agents: {
+        isolated: { behavior: 'isolated', capabilities: ['tasks:converse'], triggers: [{ cron: '* * * * *' }], execution: { workspace: 'isolated' } },
+        legacy: { behavior: 'legacy', capabilities: ['tasks:converse'], triggers: [{ cron: '* * * * *' }] },
+      },
+    });
+    expect(isolated.agents?.isolated?.execution).toEqual({ workspace: 'isolated' });
+    expect(isolated.agents?.legacy?.execution).toBeUndefined();
   });
 });
 

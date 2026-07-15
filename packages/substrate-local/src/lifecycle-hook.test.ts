@@ -34,18 +34,23 @@ describe('the post-session effect is gated on EXPLICIT signals, never a capabili
     expect(rt).toContain('const codeHost = manifestCodeHost();'); // read once per launch (OA-02: also gates the worktree base)
     // pin the FULL propose-gate line — a bare `codeHost === 'github'` also matches the worktree-base gate
     // in ensureWorktree (OA-02), so it alone would not catch a regression ungating the propose effect
-    expect(rt).toContain("if (worktree && codeHost === 'github')"); // gated on worktree + the declared code-host signal
+    expect(rt).toContain("if (explicitBranch && codeHost === 'github')"); // proposal is explicit, not inferred from isolation
     expect(rt).toContain("'scripts/agent-propose.ts'"); // the github code host's publish effect (git + gh)
     // the capability is GONE from the runner's behavior gating (it was a fictional local permission):
     expect(rt).not.toContain('code:propose');
     expect(rt).not.toContain('holdsPropose');
-    expect(rt).not.toContain('isolationBranch');
+    expect(rt).toContain('isolationBranch'); // generic fresh-workspace naming, unrelated to issue/role doctrine
   });
 
   test('isolation is requested EXPLICITLY by the caller naming --branch (no auto-derivation from a ref)', () => {
     // a worktree is created only when params.branch is given; the runner derives no branch from the ref/capability
     expect(rt).toContain('params.branch'); // the explicit isolation signal
     expect(rt).not.toMatch(/agent\/issue-\$\{[^}]*ref/i); // no `agent/issue-${ref}` auto-derivation in the runner
+  });
+
+  test('workspace-only isolation is distinct from the explicit proposal branch', () => {
+    expect(rt).toContain("requestedWorkspace === 'isolated' ? isolationBranch(agent) : ''");
+    expect(rt).toContain("k !== 'branch' && k !== 'workspace' && k !== 'fence'"); // runner controls are never forwarded to the agent
   });
 
   test('the runner stays CODE-HOST-BLIND — it injects no GITHUB_REPOSITORY identity', () => {
@@ -61,16 +66,20 @@ describe('the post-session effect is gated on EXPLICIT signals, never a capabili
 
   test('cron agents are single-instance (AUTONOMY_SINGLETON) so PM ticks do not pile up', () => {
     const out = compileLocal(ghLocalIr);
-    expect(out.generated['scripts/run-agent.mjs']).toContain('AUTONOMY_SINGLETON'); // the skip-if-busy guard
-    const schedule = JSON.parse(out.generated['scheduler/schedule.json']) as { scripts: string[] };
-    expect(schedule.scripts.some((s) => s.includes('AUTONOMY_SINGLETON=1'))).toBe(true); // the PM tick sets it
+    const driver = out.generated['scripts/run-agent.mjs'];
+    expect(driver).toContain('AUTONOMY_SINGLETON'); // the skip-if-busy guard
+    expect(driver).toContain("s.status === 'running'");
+    expect(driver).toContain("s.status === 'paused'");
+    expect(driver).toContain("s.status === 'awaiting-human'");
+    const schedule = JSON.parse(out.generated['scheduler/schedule.json']) as { jobs: Array<{ command: string }> };
+    expect(schedule.jobs.some((job) => job.command.includes('AUTONOMY_SINGLETON=1'))).toBe(true); // the PM tick sets it
   });
 
   test('the old propose-sweep poller is GONE — no worktree-scanning reconciler is emitted or scheduled', () => {
     const out = compileLocal(ghLocalIr);
     expect(out.generated['scripts/propose-sweep.ts']).toBeUndefined(); // the leaky reconciler is not shipped
-    const schedule = JSON.parse(out.generated['scheduler/schedule.json']) as { scripts: string[] };
-    expect(schedule.scripts.some((s) => s.includes('propose-sweep'))).toBe(false); // nor scheduled
+    const schedule = JSON.parse(out.generated['scheduler/schedule.json']) as { jobs: Array<{ command: string }> };
+    expect(schedule.jobs.some((job) => job.command.includes('propose-sweep'))).toBe(false); // nor scheduled
   });
 });
 
@@ -97,17 +106,17 @@ const dualTriggerIr: AutonomyIR = {
 };
 
 describe('TC.3 — an actor with BOTH cron and dispatch triggers (audit)', () => {
-  test('the cron-bearing dispatch actor IS scheduled locally (appears in schedule.scripts)', () => {
+  test('the cron-bearing dispatch actor IS scheduled locally (appears in schedule.jobs)', () => {
     const out = compileLocal(dualTriggerIr);
-    const schedule = JSON.parse(out.generated['scheduler/schedule.json']) as { scripts: string[] };
+    const schedule = JSON.parse(out.generated['scheduler/schedule.json']) as { jobs: Array<{ command: string }> };
     // a prose (non-script) cron agent is launched through run-agent.mjs with AUTONOMY_SINGLETON=1, exactly
     // like every other cron-bearing prose agent (pm here) — dispatch:true alongside cron changes nothing
     // about how the cron half is realized.
-    expect(schedule.scripts.some((s) => s === 'AUTONOMY_AGENT=audit AUTONOMY_SINGLETON=1 node scripts/run-agent.mjs')).toBe(true);
+    expect(schedule.jobs.some((job) => job.command === 'AUTONOMY_AGENT=audit AUTONOMY_SINGLETON=1 node scripts/run-agent.mjs')).toBe(true);
     // exactly one schedule entry for audit — the dispatch trigger contributes nothing extra to the local
     // schedule (dispatch has no local realization of its own; it is fired ad hoc via the same run-agent
     // adapter, never through scheduler/schedule.json).
-    expect(schedule.scripts.filter((s) => s.includes('AUTONOMY_AGENT=audit')).length).toBe(1);
+    expect(schedule.jobs.filter((job) => job.command.includes('AUTONOMY_AGENT=audit')).length).toBe(1);
   });
 
   test("the actor's declared cron string round-trips into the compiled manifest unchanged", () => {
@@ -118,9 +127,7 @@ describe('TC.3 — an actor with BOTH cron and dispatch triggers (audit)', () =>
   });
 });
 
-// D2 (post-review, TC.3): this is the DEFAULT local runtime for every profile that doesn't opt into
-// policy.box.local.runner:"cli" (all 4 TC.3 profiles included) — the byte-copied LOOP_DRIVER template
-// (compileLocal's compiled scheduler/run.mjs), not packages/local-runner-cli's reconciler. Its OWN
+// D2 (post-review, TC.3): this is the emitted local runtime for every profile. Its OWN
 // fireTick must independently tag AUTONOMY_TRIGGER_KIND=cron, proven here against the REAL emitted
 // subprocess (not a unit-level assertion on the template string) — mirroring the house pattern
 // (pause-gate.test.ts's own header: "matching the house convention ... drives the real emitted run.mjs").
@@ -342,5 +349,16 @@ describe('reconcilePendingEffects (real emitted scheduler/run.mjs) — the compl
       expect(existsSync(markerPath)).toBe(true); // the marker waits for the session to finish
     },
     15000,
+  );
+
+  test(
+    'retains the durable marker when the effect fails so a later loop can retry it',
+    async () => {
+      const { dir, markerPath } = scaffold();
+      writeFileSync(join(dir, 'scripts', 'effect.mjs'), 'process.exit(7);\n');
+      await runLoopUntil(dir, { STUB_LIVE_IDS: '' }, () => false, 800);
+      expect(existsSync(markerPath)).toBe(true);
+    },
+    5000,
   );
 });

@@ -108,7 +108,7 @@ describe('loadSelectionRecord — malformed record file -> loud error', () => {
 // =========================================================================================================
 
 describe('computeHarnessManifest', () => {
-  test('simple-sdlc @ local — count matches compiledPaths(compileLocal(ir)) computed independently, never a fixed "40"', async () => {
+  test('simple-sdlc @ local — count matches compiledPaths(compileLocal(ir)) computed independently', async () => {
     const profileDir = join(PROFILES_ROOT, 'simple-sdlc');
     const manifest = await computeHarnessManifest(profileDir, 'local');
     expect(manifest.fileCount).toBeGreaterThan(0);
@@ -120,7 +120,7 @@ describe('computeHarnessManifest', () => {
     const out = compileLocal(ir, {});
     const independent = compiledPaths(out);
     expect(manifest.files).toEqual(independent);
-    expect(manifest.fileCount).not.toBe(40); // this profile's real count is NOT the doc's illustrative figure
+    expect(manifest.fileCount).toBe(independent.length);
   });
 
   test('self-driving @ gh-actions — a DIFFERENT real count than simple-sdlc@local (different profile/substrate)', async () => {

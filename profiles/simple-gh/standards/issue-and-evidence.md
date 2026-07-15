@@ -1,84 +1,86 @@
 # Issue And Evidence Standard
 
-Read this from the manager skill and by every subagent it dispatches.
+Read this from Manager, Planner, Kaizen, and implementation/review subagents.
 
-## The board is ztrack
+## Task interface
 
-Work items live in the committed ztrack store / registered document sources — not GitHub Issues. State
-(`ready`, `in progress`, `done`, `human-required`, …) is durable and visible to every stateless tick.
-`ztrack check` is the acceptance **gate** on an issue's content (the ACs + evidence), same as every other
-ztrack-tracked profile in this repo.
+The configured task tool is the only task interface. Agents list, view, transition, discuss, and
+validate tasks through it. They do not inspect or hand-edit task persistence.
 
-## Plans-as-docs recipe
+This profile uses ztrack, but role behavior depends on the portable lifecycle mapping in
+`.open-autonomy/autonomy.yml`, not identifier prefixes, labels, Markdown paths, or the selected backing.
+ztrack may use local Markdown, GitHub Issues, or synchronized storage without turning any backing into a
+second task API. GitHub remains the separate code-host interface for branches, PRs, checks, reviews, and
+merges.
 
-ztrack natively supports "one document, many issues": a markdown plan whose headings are `## <TEAM>-N —
-title` **is** a tracker source once registered. The manager's research/plan subagents use this directly
-instead of hand-authoring individual issues one at a time:
+## Publishing task documents
 
-1. A read-only research/plan subagent (dispatched on `models.research`) writes `docs/plans/<topic>.md` in
-   ztrack **document grammar**:
+Planner and Kaizen may publish one Markdown document containing multiple tasks. Manager never imports or
+parses those documents; after registration it consumes normalized tasks through the task tool.
 
-   ```markdown
-   ## SUP-14 — add rate limiting to the ingest endpoint
-
-   Status: draft
-   Assignee: manager
-
-   ### Acceptance Criteria
-
-   - [ ] SUP-14/01 requests over the configured limit return 429 with a Retry-After header
-   - [ ] SUP-14/02 the limit is configurable per route, defaulting to 100 req/min
-   ```
-
-   Each `##` heading is one issue; `Status`/`Assignee` and the `Acceptance Criteria` block follow the same
-   grammar every other bundled profile's issues use. ACs must be **observable, testable, and small enough
-   to prove with a real commit** — never subjective ("code is clean" is not an AC; "requests over the
-   limit return 429" is).
-
-2. The manager registers the doc as a tracker source:
-
-   ```
-   npx ztrack import docs/plans/<topic>.md --register
-   ```
-
-   This is idempotent — re-running it after editing the doc updates the registered issues rather than
-   duplicating them.
-
-3. The doc's issues now appear in `npx ztrack issue list` like any other issue. They join the board at
-   whatever `Status:` the doc declared — commonly `draft`, promoted to `ready` by the manager (or a
-   human) once it's this wave's priority. **Only `ready`-state issues are ever dispatched for
-   implementation** — see the manager SKILL.md §2 and `standards/workflow.md`'s dispatch-only-ready
-   doctrine; `--actionable` (any not-done, unblocked issue, `ready` or not) is advisory context, never the
-   dispatch set.
-
-## Checked AC evidence
-
-Evidence is **commit + proof** at its core (an image/artifact is optional). A checked AC carries its
-evidence as inline sub-bullets pinned to a real git commit. A checked AC with no evidence fails `ztrack
-check` (`checked_ac_no_evidence`):
+Author `docs/plans/<topic>-<YYYY-MM-DD>.md` as ordinary Markdown:
 
 ```markdown
-- [x] SUP-14/01 requests over the configured limit return 429 with a Retry-After header
-  - status: passed
-  - evidence ev1: commit=abc1234 acv=1
-  - proof: "test covers the 429 + Retry-After branch" -> ev1
+## Add a connected runtime-continuation proof
+
+Status: draft
+
+Explain the declared outcome, observed reality, impact, dependencies, and evidence.
+
+### Acceptance Criteria
+
+- [ ] dev/01 the ordinary consumer completes the declared continuation workflow
+- [ ] dev/02 the regression fails if the adapter is disconnected
 ```
 
-Commit first (the SHA is the evidence), then patch the AC's sub-bullets: `ztrack ac patch <id> <ac> ...`
-for a stored tracker issue (this profile's board IS a stored ztrack store, unlike the GitHub-synced
-`simple-gh-sdlc` flow — patch the issue directly, never hand-edit a loose file).
+Use descriptive headings without task identifiers. Register the exact file with the configured task
+tool (for ztrack, `npx ztrack import <file> --register`). The task service allocates identifiers from its
+configured team and rewrites the document into strict source grammar. Never scan persistence to choose a
+number.
 
-## PR + evidence line discipline
+Use the installed lifecycle mapping:
 
-Every PR the manager lands cites the issue it closes and carries the recorded review verdict:
+- Planner: proven proposals are `open`; Planner never sets `ready`.
+- Kaizen: every process finding is `inputRequired`.
+- Maintainer: triages `open` proposals and promotes approved work to `ready`.
+- Manager: consumes only `ready`; it does not promote plan-document content.
 
-- PR body includes `Closes: <issue id>` (or the tracker's native cross-reference) and a summary of what
-  changed.
-- The manager's own `oa-review: pass|fail sha=<head-sha> — <findings>` comment (see SKILL.md §5) is the
-  durable review record on that PR — never merge unless the latest verdict is `pass` and its `sha=`
-  equals the PR's current head SHA (a pass on an older SHA is stale).
-- After merge, the issue gets a `PR:` line pointing at the merged PR, and its state flips to `done` — the
-  manager does this itself (see SKILL.md §6); there is no reconcile sweep in this profile.
+## Audit receipts and retention
 
-Never invent commits, images, source text, or approvals. If evidence does not exist, leave the AC
-unchecked.
+Planner and Kaizen persist compact reviewed receipts under `docs/audits` so later runs have an honest
+cursor and maintainers can verify that claimed coverage occurred. A receipt retains only its time
+window, depth or review class, surfaces inspected, stable evidence references, finding keys,
+counterevidence, and conclusion. Raw transcripts, command dumps, large inventories, and working notes
+remain scratch and are not committed.
+
+A no-finding run still publishes a receipt but creates no empty task. Receipt-only PRs receive the same
+current-SHA review and required-check boundary as task-bearing proposals.
+
+## Acceptance criteria and evidence
+
+Acceptance criteria must be observable, testable, and small enough to prove with a real change. Name the
+consumer-visible result and the regression that would fail if it disappeared.
+
+Unchecked criteria describe required work. A checked criterion carries real evidence and proof:
+
+```markdown
+- [x] dev/01 requests over the configured limit return 429
+  - status: passed
+  - evidence ev1: commit=abc1234 acv=1
+  - proof: "the regression exercises the 429 response" -> ev1
+```
+
+Never invent commits, artifacts, source text, or approvals. If evidence does not exist, leave the
+criterion unchecked.
+
+## Task and PR discipline
+
+- Implementation PRs cite the task id and summarize the effect.
+- Reviews record `oa-review: pass|fail sha=<head-sha> — <findings>`.
+- A review for an older SHA is stale.
+- Done requires a merged implementation PR, passed criteria with evidence, task validation, and the
+  mapped `done` state.
+- Task state and publication changes are performed through the task tool and proposed through ordinary
+  reviewed PRs when the selected backing is committed. Never edit persistence manually.
+- Manager verifies a proposal by querying its normalized task delta in an isolated checkout; it does not
+  classify task work by filenames or provenance markers.

@@ -920,7 +920,7 @@ describe('OA-18 AC-6/AC-10 (durable, model-free): checkLive against a shared stu
     // A REAL createAgentWindow call actually happened (not vacuous) AND the survival mechanism (not a
     // DOCTOR-OK shortcut, which is unset here) is what carried the PASS.
     expect(existsSync(sessionsFile)).toBe(true);
-    expect(result.status).toBe('PASS');
+    expect(result.status, result.detail).toBe('PASS');
     expect(result.detail).toContain('survived');
     expect(result.detail).toContain('run-agent.mjs');
     expect(result.detail).toContain('scripts/autonomy-runner.mjs');

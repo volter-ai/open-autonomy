@@ -64,7 +64,7 @@ All paths relative to the repo root; all lines verified by reading on branch `ad
   a PROPERTY you READ to decide", line 53). Nothing requires reading the issue, nothing defines
   deferred/blocked-by/do-not-dispatch prose as ineligible, nothing prefers fresh work over old backlog.
 - `profiles/simple-sdlc/skills/pm/SKILL.md:13-16` — the **only** pre-dispatch ineligibility check that
-  exists today: consult `policy.risk.human_required_topics` / `policy.risk.human_required_paths` in
+  exists today: consult the semantic topics in the risk standard and `policy.risk.human_required_paths` in
   `.open-autonomy/autonomy.yml`. This proves the pattern (PM consults policy from the manifest before
   dispatch) but its scope is risk topics/paths, not backlog provenance or body markers.
 - `profiles/simple-sdlc/standards/workflow.md:30-43` — the states table: `ready` = "issue can be

@@ -574,7 +574,7 @@ describe('runInstall — FULL CHAIN dry-run, all 4 gates auto-approved (bin/inst
     });
 
     // --- reached the end, never blocked/paused ---------------------------------------------------------
-    expect(report.classification).toBe('COMPLETED');
+    expect(report.classification, report.question ?? JSON.stringify(report.execute)).toBe('COMPLETED');
 
     // --- G1: recommended+confirmed a real profile for this local, non-GitHub fixture -------------------
     expect(report.selection?.substrate).toBe('local');

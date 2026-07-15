@@ -1,14 +1,10 @@
-// TA.2 — `hasDispatchableWork`: a deterministic board-readiness predicate ("does this profile's board
-// hold >=1 actionable item right now?"), built on top of eligibility.ts (#140) rather than replacing it.
+// TA.2 — `hasDispatchableWork`: a deterministic, read-only maturity diagnostic ("does this profile's
+// configured task service hold at least one actionable item right now?"). It is not imported by the
+// scheduler and has no authority to gate job launches. Historical backing adapters remain here only so
+// older compiled installs can still be assessed.
 //
-// eligibility.ts answers a DIFFERENT question — "should the reconciler fire a new session THIS
-// heartbeat?" — which is deliberately permissive: its ready-issues legs do NOT cross-check for an
-// already-in-flight branch (see readyIssuesEligibleGhIssues's own comment: "Deliberately does NOT also
-// cross-check 'no open PR yet' — the pm SKILL's own WIP=1 step already enforces that downstream"), and its
-// PR-concluded leg treats a CONCLUDED open PR as *additional* eligible work (needs a review/merge action),
-// not board emptiness. The M4 "board readiness" rung (DESIGN §Q1 M4 row, §Q2) asks something narrower and
-// stricter: is there at least one FRESH, dispatchable item — one nothing has picked up yet? So this module
-// adds two things eligibility.ts intentionally does not do:
+// The M4 "board readiness" rung asks whether there is at least one fresh, dispatchable item. This module
+// therefore adds two diagnostic filters:
 //
 //   (a) the simple-sdlc `oa-approved` day-one allowlist fence (policy.box.dispatch.mode: allowlist,
 //       profiles/simple-sdlc/ir.yml:80-83) — a `ready` item without the allowlist label is NOT actionable,
@@ -21,14 +17,9 @@
 //       leg would still see it (by design — that leg is a "wake the reconciler" signal, not a "is there
 //       untouched work" signal).
 //
-// BOARD-TYPE DERIVATION (the second half of the task): #140's config.ts identity-defaults the eligibility
-// variant from the actor name alone (`manager` -> ztrack, `pm` -> gh-issues). That default is WRONG for
-// simple-sdlc's `pm`, whose board is ztrack, not GitHub issues (profiles/simple-sdlc/setup-pack.yml's
-// `maturity_signals.m4_predicate: ztrack`) — and it cannot be fixed by keying on `codeHost` either:
-// simple-gh's `manager` runs on `codeHost: github` (its PRs land on GitHub) but its BOARD is still ztrack
-// (profiles/simple-gh/setup-pack.yml), so codeHost and board-type are orthogonal facts. The only
-// authoritative source is each profile's hand-authored `setup-pack.yml` (TS.1, PR #142, merged to main)
-// — specifically its two leaf `maturity_signals` fields, `m4_predicate` and `m4_allowlist_label`.
+// BOARD-TYPE DERIVATION: task backing and code host are orthogonal. The portable default is the ztrack
+// task service. A legacy setup-pack may still declare its historical maturity predicate explicitly so
+// an older install can be diagnosed without teaching the scheduler about that backend.
 //
 // WHY THIS FILE DOES NOT IMPORT `@open-autonomy/core`'s `getSetupPack`: `@volter/oa` (this package) is
 // designed to be an independently-publishable, dependency-light CLI (README.md's "Why this package
@@ -54,7 +45,6 @@ import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { parse as parseYaml } from 'yaml';
 import { PARKED_LABELS, type EligibilityVariant, type NoteFn } from './eligibility.ts';
-import { DEFAULT_ELIGIBILITY_BY_AGENT } from './config.ts';
 import { defaultProc } from './proc.ts';
 import { firstLine } from './proc.ts';
 import type { ProcRunner } from './types.ts';
@@ -63,7 +53,7 @@ export type { EligibilityVariant } from './eligibility.ts';
 
 // --- board-kind resolution ------------------------------------------------------------------------------
 
-export type BoardKindSource = 'setup-pack' | 'identity-default' | 'explicit';
+export type BoardKindSource = 'setup-pack' | 'task-service-default' | 'explicit';
 
 export interface BoardKind {
   variant: EligibilityVariant;
@@ -96,13 +86,9 @@ export function readMaturitySignals(profileDir: string): { m4Predicate: Eligibil
   return out;
 }
 
-/** Resolve which board a profile actually uses + its allowlist fence (if any). Precedence: (1) the
- *  profile's OWN declared `setup-pack.yml` — authoritative, since board-type is a per-profile fact that
- *  neither `codeHost` nor the actor's name reliably implies (see file header — simple-gh's `manager` is
- *  `codeHost: github` with a ztrack board); (2) the #140 identity default keyed by `actor`, kept ONLY as
- *  the documented fallback for a profile that doesn't (yet) ship a pack. Throws when NEITHER source
- *  resolves anything — exactly #140's own "no proven default for an unrecognized identity" posture
- *  (config.ts's `normalizeSchedule`), so a misconfigured caller fails loudly instead of silently guessing. */
+/** Resolve the task service used for maturity diagnostics. A profile may declare a legacy setup-pack
+ *  predicate explicitly; otherwise the portable task-service default is ztrack. Agent identity and code
+ *  host never select a task backend. */
 export function resolveBoardKind(opts: { profileDir?: string; actor?: string }): BoardKind {
   if (opts.profileDir) {
     const signals = readMaturitySignals(opts.profileDir);
@@ -112,15 +98,7 @@ export function resolveBoardKind(opts: { profileDir?: string; actor?: string }):
       return kind;
     }
   }
-  if (opts.actor) {
-    const variant = DEFAULT_ELIGIBILITY_BY_AGENT[opts.actor];
-    if (variant) return { variant, source: 'identity-default' };
-  }
-  throw new Error(
-    '[oa] hasDispatchableWork: cannot resolve board kind — pass `profileDir` pointing at a profile with a ' +
-      "valid setup-pack.yml (maturity_signals.m4_predicate), or an `actor` carrying a proven identity " +
-      'default (manager -> ztrack, pm -> gh-issues), or pass `variant` explicitly.',
-  );
+  return { variant: 'ztrack', source: 'task-service-default' };
 }
 
 // --- ready-item listing (variant-specific; carries labels, unlike eligibility.ts's boolean-only legs) --
@@ -241,9 +219,8 @@ export interface DispatchableWorkVerdict {
   reason: string;
 }
 
-/** TA.2 — "does this profile's board hold >=1 actionable item?" A deterministic, read-only probe (never
- *  launches anything). See the file header for the full rationale vs. eligibility.ts's reconciler-facing
- *  `makeEligibilityCheck`. */
+/** TA.2 — "does this profile's task service hold >=1 actionable item?" This deterministic, read-only
+ *  diagnostic never launches or gates a job. */
 export function hasDispatchableWork(opts: DispatchableWorkOptions): DispatchableWorkVerdict {
   const proc = opts.proc ?? defaultProc;
   const notes: string[] = [];

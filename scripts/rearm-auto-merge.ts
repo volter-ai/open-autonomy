@@ -11,6 +11,7 @@
 import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { parse as parseYaml } from 'yaml';
 
 // An intentionally-held PR must not be re-armed. The label vocabulary is the PROFILE's, declared once at
 // `policy.merge.maintainer_block_labels` in .open-autonomy/autonomy.yml — this sweep owns no labels of its
@@ -21,7 +22,7 @@ import { join } from 'node:path';
 export const DEFAULT_HOLD = ['do-not-merge', 'human-required', 'agent-blocked', 'agent-paused', 'agent-maintainer-hold'];
 export function loadHoldLabels(root = '.'): Set<string> {
   try {
-    const manifest = (Bun.YAML.parse(readFileSync(join(root, '.open-autonomy', 'autonomy.yml'), 'utf8')) ?? {}) as {
+    const manifest = (parseYaml(readFileSync(join(root, '.open-autonomy', 'autonomy.yml'), 'utf8')) ?? {}) as {
       policy?: { merge?: { maintainer_block_labels?: unknown } };
     };
     const labels = manifest.policy?.merge?.maintainer_block_labels;

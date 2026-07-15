@@ -42,10 +42,10 @@ describe('compileLocal — OA3 reconcilers are emitted + scheduled for a github 
   });
 
   test('registers both in scheduler/schedule.json alongside the cron agents', () => {
-    const schedule = JSON.parse(out.generated['scheduler/schedule.json']) as { scripts: string[] };
-    expect(schedule.scripts.some((s) => s.includes('reconcile-ready-branches.mjs'))).toBe(true);
-    expect(schedule.scripts.some((s) => s.includes('reconcile-open-checks.mjs'))).toBe(true);
-    expect(schedule.scripts.some((s) => s.includes('run-agent.mjs'))).toBe(true); // pm's cron tick is still there too
+    const schedule = JSON.parse(out.generated['scheduler/schedule.json']) as { jobs: Array<{ command: string }> };
+    expect(schedule.jobs.some((job) => job.command.includes('reconcile-ready-branches.mjs'))).toBe(true);
+    expect(schedule.jobs.some((job) => job.command.includes('reconcile-open-checks.mjs'))).toBe(true);
+    expect(schedule.jobs.some((job) => job.command.includes('run-agent.mjs'))).toBe(true); // pm's cron tick is still there too
   });
 
   test('never emitted without a code:propose agent (nothing to backstop)', () => {

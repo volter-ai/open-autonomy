@@ -24,9 +24,9 @@ const githubResources = new Map<string, Map<string, string>>(); // profile -> (i
 // TC.1 sibling guard: SKILLS are NOT part of `resources:` (they resolve from the fixed convention path
 // `skills/<behavior>/SKILL.md`, see packages/substrate-*/src/emit.ts) so the `resources:`-scoped drift
 // guard above never sees them, and it only runs for a `gh-actions` target — which would silently exempt
-// `simple-gh`/`simple-sdlc` (local-only targets) from ever being checked. A handful of skills are
+// local-only profiles from ever being checked. A handful of skills are
 // nonetheless meant to be ONE canonical doctrine shipped byte-identical to every profile that carries it
-// (today: `audit`, generalized across all four profiles by TC.1 — docs/oa-setup-feasibility's
+// (today: `audit`, shared by the three profiles that declare it — docs/oa-setup-feasibility's
 // OA-INSTALL-IMPLEMENTATION-TASKS.md). This is the same "each profile carries its own copy; check:profiles'
 // byte-identity guard keeps the copies honest" precedent docs/CODE_HOST_RESOURCES.md already documents for
 // standards docs — extended here to cover skills, and to every declared target (not gh-actions only), since

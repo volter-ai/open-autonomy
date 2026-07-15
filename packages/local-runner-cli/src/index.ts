@@ -1,7 +1,6 @@
 // @volter/oa — the local substrate as a versioned CLI. Public API surface: every verb is both a callable
 // function (for programmatic use — e.g. a future fleet console) and reachable via `runCli(argv)`, which
-// `src/bin/oa.ts` (the `oa` executable) and an emitted `scheduler/run.mjs` shim (see
-// packages/substrate-local/src/emit.ts's opt-in `policy.box.local.runner === "cli"`) both call.
+// `src/bin/oa.ts` (the `oa` executable) calls.
 export { start } from './reconciler.ts';
 export type { StartOptions } from './reconciler.ts';
 export { once } from './once.ts';
@@ -18,7 +17,7 @@ export { hasDispatchableWork, resolveBoardKind, readMaturitySignals } from './bo
 export type { DispatchableWorkOptions, DispatchableWorkVerdict, BoardKind, BoardKindSource } from './board-readiness.ts';
 export { missionAdvancingSignal } from './m6-signal.ts';
 export type { Signal as MissionAdvancingSignal, MissionAdvancingContext, MissionAdvancingSignalFn } from './m6-signal.ts';
-export type { NormalizedSchedule, NormalizedScript } from './types.ts';
+export type { NormalizedJob, NormalizedSchedule, NormalizedScript } from './types.ts';
 export { bringUpProvider, providerStatus, providerDown } from './provider.ts';
 export type { BringUpOptions, BringUpResult, ProviderState, ProviderStatusResult, ProviderDownResult } from './provider.ts';
 export {
@@ -81,10 +80,10 @@ function pkgVersion(): string {
 
 const HELP = `oa <command> [args]  (@volter/oa v${pkgVersion()}) — the local open-autonomy substrate as a CLI
 
-  oa start                     continuous mode: the state-gated reconciler heartbeat (was: node scheduler/run.mjs)
-  oa once                      fire the full schedule exactly once, unconditionally (was: node scheduler/run.mjs --once)
-  oa pause [reason]             touch .open-autonomy/paused — blocks NEW waves; in-flight waves drain to completion
-  oa resume                     remove .open-autonomy/paused — the operator's act, re-arms the reconciler
+  oa start                     continuous generic job scheduler (was: node scheduler/run.mjs)
+  oa once                      fire every currently unfenced job once (was: node scheduler/run.mjs --once)
+  oa pause [reason]             touch the conventional .open-autonomy/paused job fence
+  oa resume                     remove .open-autonomy/paused and re-arm jobs assigned that fence
   oa status                     fence state + live sessions + last-fire info
   oa dispatch <agent>           fire exactly the one schedule line for <agent> now, bypassing the fence
   oa doctor [--live] [--json]   offline checks: dep-integrity + fence + schedule.json + prompts/skills;
@@ -113,14 +112,12 @@ const HELP = `oa <command> [args]  (@volter/oa v${pkgVersion()}) — the local o
                                 'oa install --help' for the full flow, or see it directly with
                                 'bun bin/install.ts --help'.
 
-The '.open-autonomy/paused' marker file is the source of truth; this CLI is ergonomics over the file, never
-a daemon holding its own state. schedule.json/autonomy.yml/prompts are read from the current working
+Fence marker files declared by scheduled jobs are the source of truth; this CLI is ergonomics over the
+conventional '.open-autonomy/paused' marker, never a daemon holding its own state. schedule.json/autonomy.yml/prompts are read from the current working
 directory (the repo root) — nothing is bundled or cached from a prior install.
 `;
 
-/** Legacy-argv-compatible entry point: an emitted `scheduler/run.mjs` shim calls this with
- *  `process.argv.slice(2)` exactly as the pre-U4 template did, so `node scheduler/run.mjs --once` /
- *  `node scheduler/run.mjs` (no args = continuous) keep working unchanged under the opt-in CLI emission. */
+/** Programmatic argv-compatible entry point used by the `oa` executable. */
 export async function runCli(argv: string[]): Promise<number> {
   const [cmd, ...rest] = argv;
   const cwd = process.cwd();

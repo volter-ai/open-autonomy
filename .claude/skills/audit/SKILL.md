@@ -12,9 +12,10 @@ install builds. Nothing you check is about the codebase's business logic; everyt
 whether this OA installation still agrees with its own governance, its own manifest, and OA's own
 invariants.
 
-**This is one shared skill, not four.** The same file (byte-identical — `bun run check:profiles` enforces
-it) ships to every profile that declares an `audit` agent: `simple-gh`, `simple-gh-sdlc`, `simple-sdlc`,
-`self-driving`. The nine checks below are the spine every install shares. What differs per install is
+**This is one shared skill, shared by three profiles.** The same file (byte-identical —
+`bun run check:profiles` enforces it) ships to every profile that declares an `audit` agent:
+`simple-gh-sdlc`, `simple-sdlc`, and `self-driving`. The nine checks below are the spine every install
+shares. What differs per install is
 **not this prose** — it's the facts you read at runtime (§ Reading this install's facts) and the
 per-check **N/A rules** that fire when a check's precondition genuinely doesn't hold for this install
 (e.g. a local-git install has no branch protection to audit). Never hardcode a profile name into a
@@ -26,9 +27,9 @@ that branches on the install's own declared facts doesn't.
 ## Identity: dispatch + a self-throttled weekly cron — and why neither breaks the single-WORK-loop model
 
 Before anything else, read `.open-autonomy/autonomy.yml`'s `agents` map fresh and find every entry that
-carries a `triggers.schedule` (a cron) — those are this install's continuously-ticking actor(s) (named
-`manager` on simple-gh, `pm` everywhere else, plus `planner`/`strategist` on profiles that declare a
-roadmap). **As of TC.3, you are one of them too** — you carry `triggers: { dispatch: true }` (unchanged
+carries a `triggers.schedule` (a cron) — those are this install's continuously-ticking actor(s)
+(normally `pm`, plus `planner`/`strategist` where the install declares one). **As of TC.3, you are one
+of them too** — you carry `triggers: { dispatch: true }` (unchanged
 since TC.1) **and** your own low-frequency `triggers: { cron }` (a fixed weekly slot, offset from every
 other declared cron on the install — § Reading this install's facts item 1 shows you the exact string).
 Fired on demand (locally: `AUTONOMY_AGENT=audit node scripts/run-agent.mjs`; on a `gh-actions` target,
@@ -46,19 +47,19 @@ cron — never by another agent. But the *shape* of the dispatch guarantee (the 
 you" half) still differs by install exactly as before, and check 1 must verify the shape that actually
 applies here, not assume the strongest one:
    - **Structural (capability-absent):** on an install whose cron dispatcher fans work out via in-session
-     subagents rather than the Runner (e.g. `simple-gh`'s `manager`), that dispatcher holds no
+     subagents rather than the Runner, that dispatcher holds no
      `agent:launch` capability at all — it is architecturally unable to reach you through the substrate,
      full stop. Confirm this by reading its `capabilities` in `autonomy.yml`.
    - **Doctrinal (capability-present, never exercised):** on an install whose cron dispatcher *is* the
      Runner-based launcher for its own declared workers (a `pm` that holds `agent:launch` to launch
-     `draft`/`develop`/`reviewer` — simple-sdlc, simple-gh-sdlc, self-driving), it structurally *could*
+     `draft`/`develop`/`reviewer`), it structurally *could*
      call the Runner against any actor, `audit` included. The guarantee here is doctrinal, not structural:
      grep that dispatcher's own `SKILL.md` and confirm `audit` never appears among the workers it names as
      something it launches. A `pm` that starts launching `audit` on its own tick — even once — is a CODE/
      GATE-tier violation to flag under check 7, not a quiet assumption to skip verifying.
 
    Either way, cite which shape this install provides and that you actually checked it — never assume the
-   simple-gh (structural) form applies to a profile whose dispatcher legitimately holds `agent:launch` for
+   capability-absent form applies to a profile whose dispatcher legitimately holds `agent:launch` for
    its own architecture. (A scheduled agent may still run this file's checklist itself as an ordinary
    in-session read-only research brief when it wants the same second opinion mid-tick; that is a subagent
    reading a doctrine file, not a dispatch of this actor.)
@@ -82,7 +83,7 @@ every run — it is check-zero, not optional housekeeping.
 
 - **Local target:** check `$AUTONOMY_TRIGGER_KIND` — **`cron` → this is the scheduler's own automatic
   fire; anything else (unset, or `dispatch`) → an operator explicitly launched you.** This is set at the
-  point of firing, not baked into the schedule-line string: the legacy loop driver's `fireTick`
+  point of firing, not baked into the schedule-line string: the emitted loop driver's `fireJobs`
   (`packages/substrate-local/src/emit.ts`'s compiled `scheduler/run.mjs`) tags every command it fires
   `AUTONOMY_TRIGGER_KIND=cron`; the `@volter/oa` reconciler's automatic heartbeat
   (`packages/local-runner-cli/src/reconciler.ts`) does the same. **`AUTONOMY_SINGLETON` is *not* this
@@ -125,18 +126,10 @@ stops you:
    `--head` (which matches an exact branch name only). Any match → throttle the same way as (1): a
    pending audit report already covers this cadence window.
 
-**Rationale, cited:** this mirrors `skills/planner/SKILL.md`'s own SELF-THROTTLE section, verbatim in
-spirit, because it exists for the identical structural reason. On the **local** target, the loop
-driver's `fireTick` runs **every** command in `schedule.scripts` on **one shared interval**
-(`packages/substrate-local/src/emit.ts`'s `LOOP_DRIVER`) — there is no per-agent cron interpretation
-locally; a "weekly" `cron:` string in `ir.yml` is only ever the *outer* bound (the same fact self-driving's
-own `strategist` cron and every profile's `planner` cron already live with). Without this throttle, a
-cron-bearing `audit` would run its full checklist and attempt to land a report on **every** manager/pm
-tick — turning "low-frequency drift auditing" into report spam and defeating the whole point of TC.3's
-cadence choice. On the **`gh-actions`** target the compiled workflow's `schedule:` block IS honored
-natively by GitHub (real weekly firing, no shared-tick problem) — the throttle there is defense-in-depth
-only (it protects against, e.g., an operator's `workflow_dispatch` immediately preceding a scheduled
-firing, or a `schedule:` misfire after a workflow edit), never the primary cadence control on that target.
+**Rationale:** both local and GitHub Actions now realize the declared per-agent cadence. This content
+throttle remains defense-in-depth against scheduler restarts, an explicit operator dispatch immediately
+before a scheduled firing, and duplicate publication while an earlier audit PR is still open. It is not
+a substitute for substrate cadence.
 
 **Everything else about a cron-fired run is unchanged:** no MODE is ever forwarded on a cron tick (cron
 carries no `params:` in `ir.yml` — only the operator-dispatch trigger can carry `TARGET_REF`, and only the
@@ -220,7 +213,7 @@ apply — never "not applicable for this profile" with no fact behind it).
      `policy.risk.human_required_paths` inside the **live** `autonomy.yml` you read this run, never a
      value you or a prior audit remembered. This is check 1 precisely because of the misread in the
      preamble above: verify the file, don't trust the claim.
-   - If it's **absent** (`direction_spec.mode` is `operator` — simple-gh, simple-gh-sdlc, simple-sdlc):
+   - If it's **absent** (`direction_spec.mode` is `operator` — simple-gh-sdlc and simple-sdlc):
      this install's direction lives in whatever positioning the operator's repo already carries (README,
      AGENTS.md, or an anchor doc authored because the repo lacked one) rather than a declared vision role.
      Check instead whether such positioning is actually **readable**: an anchor doc exists on disk (look
@@ -238,8 +231,8 @@ apply — never "not applicable for this profile" with no fact behind it).
    available) and against the profile this install was actually compiled from. Provenance for the third
    leg: this install's own doctrine references (a skill's own header, a resource path under
    `profiles/<name>/**` if the source tree is visible, or an explicit operator-recorded fact) — never
-   guess it from the preset name alone (`simple-gh` runs the `simple-gh-sdlc` ztrack *preset*, a
-   deliberately confusing but real fact — see that profile's `ir.yml` header). All three must name the
+   guess it from the preset name alone (a profile name and its selected tracker preset are independent
+   facts). All three must name the
    same preset. A mismatch between the declared preset, the installed validation preset, and the compiling
    profile's own identity (the class of defect that produced the `simple-gh-sdlc` / `simple-sdlc`
    three-name confusion elsewhere in this repo's history) is a FAIL, not a nitpick — an agent enforcing the
@@ -251,13 +244,13 @@ apply — never "not applicable for this profile" with no fact behind it).
    cite it exactly that way: "N/A — codeHost: local-git, no code-host branch protection concept exists;
    this install is `landing_mode: pr-free`, so the deterministic gate this check would otherwise verify
    doesn't exist here at all (see check 9 for the board-state discipline that substitutes for it)."
-   Otherwise (`codeHost: github` — simple-gh, simple-gh-sdlc, self-driving): read this install's
+   Otherwise (`codeHost: github` — simple-gh-sdlc and self-driving): read this install's
    `provision.json` `branch_protection` block (the *prescription* — § Reading this install's facts item 4
    for where it actually lives) and compare it against the **live** protection: `gh api
    repos/<owner>/<repo>/branches/<default-branch>/protection`. Required checks, `enforce_admins`, and "PR
    required before merge" must all match what `provision.json` promises. A prescription that isn't
    actually enforced live is exactly the class of gap a doctrinal-only merge gate creates — flag it as a
-   FAIL even if nothing has yet exploited it. This holds even on `manual-after-review` (simple-gh): a
+   FAIL even if nothing has yet exploited it. This holds on `manual-after-review` too: a
    human/manager merge still depends on branch protection as the deterministic backstop, per that
    profile's own doctrine.
 
@@ -365,8 +358,8 @@ of the nine checks above, plus an overall summary. Land it the way this install'
 anything from `code:propose` — never a bypass:
 
 - **`landing_mode: manual-after-review` or `auto-merge`** (every profile with a PR-based board:
-  `board_seed_recipe.landing_path` other than a pure direct-commit, i.e. simple-gh / simple-gh-sdlc /
-  self-driving): commit it on a fresh branch `audit/<date>` and open it as a **docs-only PR** — never a
+  `board_seed_recipe.landing_path` other than a pure direct-commit, i.e. simple-gh-sdlc / self-driving):
+  commit it on a fresh branch `audit/<date>` and open it as a **docs-only PR** — never a
   direct push to the default branch. `push`-triggered CI cannot earn a green check on a commit landed
   outside a PR on a branch-protected repo (GH006 — GitHub rejects status-less direct pushes the same way
   this install's own dispatcher doctrine already accounts for), so a PR is not optional ceremony here, it's
@@ -431,7 +424,7 @@ verb's own header records ("manual dispatch bypasses the fence by design; … th
 `packages/local-runner-cli/src/dispatch.ts:1-8`). **As of TC.3, `oa dispatch audit` DOES work for this
 actor** (corrected from an earlier, now-false claim here): that verb fires an agent's *schedule line*, and
 this actor now has one — its own weekly `cron` trigger gave it a `scheduler/schedule.json` entry (the
-compiled `scripts` list carries every cron-bearing agent, `audit` included as of TC.3). `oa dispatch audit`
+compiled `jobs` list carries every cron-bearing agent, `audit` included as of TC.3). `oa dispatch audit`
 tags its own fire `AUTONOMY_TRIGGER_KIND=dispatch` (§ CRON-TRIGGERED RUNS above), so it correctly bypasses
 the self-throttle and gets a full run — but it carries no `MODE`, so it runs **drift mode**, never
 setup-completion mode. For setup-completion mode specifically (this section's actual subject), the
@@ -512,10 +505,10 @@ uses (never silently PASS on an unprovable credential state, never silently trea
     stricter, because "direction filled" is the literal thing this rung asserts, and a WARN here means it
     demonstrably is not. Cite the warn message verbatim.
   - neither present → **PASS**, citing the preflight report you read.
-- If **absent** (`direction_spec.mode` is `operator` — simple-gh, simple-gh-sdlc, simple-sdlc): TA.1's
+- If **absent** (`direction_spec.mode` is `operator` — simple-gh-sdlc and simple-sdlc): TA.1's
   content-gate does not run here (no declared role to gate) — apply the **planner's own anchor doctrine**
-  instead (`profiles/simple-gh/skills/planner/SKILL.md:20-30`, byte-identical prose to the other operator
-  planners): "positioning exists" means an anchor is actually **readable** — `AGENTS.md`'s stated mission,
+  instead, using the installed Planner or Draft skill as the authority: "positioning exists" means an
+  anchor is actually **readable** — `AGENTS.md`'s stated mission,
   `docs/VISION.md` if one exists, or whatever anchor document(s) this install's own doctrine names. PASS if
   such a document exists on disk with non-trivial content; FAIL if you find no readable positioning
   anywhere (the same "board would starve with nothing to self-direct from" failure check 1's operator
@@ -537,8 +530,8 @@ board state **directly**, at the draft rung, never through the ready-gate:
 - Resolve which board this install uses the same fact-driven way check 9 does (its own `setup-pack.yml`
   `maturity_signals.m4_predicate`, or the identity default) — never guess.
 - **ztrack board:** `npx ztrack issue list --state draft --json identifier,state` (`draft` is a first-class
-  ztrack issue state — the planner's own doctrine files new items at exactly this state,
-  `profiles/simple-gh/skills/planner/SKILL.md:103`: "Every item lands `Status: draft` — never `ready`").
+  ztrack issue state — verify in the installed planning skill that new items remain draft and never
+  self-promote to ready).
   ≥1 row → **PASS**, citing the count and one identifier. Zero rows → **FAIL**: "board seeded with 0 draft
   items."
 - **GitHub-issues board:** a draft item is an **open issue carrying no `ready` label** (and not parked —

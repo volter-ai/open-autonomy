@@ -9,7 +9,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { stringify as stringifyYaml } from 'yaml';
-import { GENERATED_MANIFEST_PATH, cronOf, emitAutonomy, isScript, withGeneratedManifest } from '@open-autonomy/core';
+import { GENERATED_MANIFEST_PATH, cronOf, emitAutonomy, enforcementReport, isScript, withGeneratedManifest } from '@open-autonomy/core';
 import type { AutonomyIR, CompileOutput, IRAgent } from '@open-autonomy/core';
 import { SUPPORTED_RUNNERS, type RunnerName } from '@open-autonomy/core';
 // Only the shared portable runtime is borrowed from the github substrate (its neutral relocation is the
@@ -80,10 +80,103 @@ function isHuman(agent: IRAgent): boolean {
   return agent.kind === 'human';
 }
 
+// Compile a scheduled actor's declared execution contract into the generic Runner seam. Isolation is
+// launch mechanics only: it neither selects a role nor asks for a proposal/PR. Existing profiles that omit
+// execution keep the historical direct shared-checkout launch unchanged.
+function scheduledCommand(role: string, agent: IRAgent, fence = '.open-autonomy/paused'): string {
+  if (isScript(agent.behavior)) return `bun ${agent.behavior}`;
+  if (agent.execution?.workspace === 'isolated')
+    return `AUTONOMY_SINGLETON=1 bun scripts/runner.ts launch ${role} --workspace isolated --fence ${fence}`;
+  return `AUTONOMY_AGENT=${role} AUTONOMY_SINGLETON=1 node scripts/run-agent.mjs`;
+}
+
+export interface LocalScheduleJobConfig {
+  fence?: string;
+  retrySeconds?: number;
+}
+
+/** Local-substrate configuration supplied by the adopter/compiler invocation, never by profile policy.
+ * It changes only when generic jobs retry and which durable marker fences them; agent methodology stays
+ * in skills and task/code-host behavior stays out of the scheduler. */
+export interface LocalScheduleConfig {
+  schema: 'open-autonomy.local-schedule-config.v1';
+  defaults?: LocalScheduleJobConfig;
+  agents?: Record<string, LocalScheduleJobConfig>;
+  effects?: LocalScheduleJobConfig;
+}
+
+function validatedJobConfig(value: unknown, where: string): LocalScheduleJobConfig {
+  if (value === undefined) return {};
+  if (!value || typeof value !== 'object' || Array.isArray(value))
+    throw new Error(`${where} must be an object`);
+  const input = value as Record<string, unknown>;
+  for (const key of Object.keys(input))
+    if (key !== 'fence' && key !== 'retrySeconds')
+      throw new Error(`${where}.${key} is unknown (allowed: fence, retrySeconds)`);
+  if (input.fence !== undefined) {
+    if (typeof input.fence !== 'string' || !/^[A-Za-z0-9._/-]+$/.test(input.fence) || input.fence.startsWith('/') || input.fence.split('/').includes('..'))
+      throw new Error(`${where}.fence must be a safe relative path`);
+  }
+  if (input.retrySeconds !== undefined && (!Number.isInteger(input.retrySeconds) || Number(input.retrySeconds) < 0))
+    throw new Error(`${where}.retrySeconds must be a non-negative integer`);
+  return {
+    ...(input.fence !== undefined ? { fence: input.fence } : {}),
+    ...(input.retrySeconds !== undefined ? { retrySeconds: Number(input.retrySeconds) } : {}),
+  };
+}
+
+function validateScheduleConfig(ir: AutonomyIR, value: LocalScheduleConfig | undefined): LocalScheduleConfig | undefined {
+  if (value === undefined) return undefined;
+  if (!value || typeof value !== 'object' || Array.isArray(value))
+    throw new Error('local schedule config must be an object');
+  if (value.schema !== 'open-autonomy.local-schedule-config.v1')
+    throw new Error('local schedule config schema must be open-autonomy.local-schedule-config.v1');
+  for (const key of Object.keys(value))
+    if (key !== 'schema' && key !== 'defaults' && key !== 'agents' && key !== 'effects')
+      throw new Error(`local schedule config.${key} is unknown (allowed: defaults, agents, effects)`);
+  validatedJobConfig(value.defaults, 'local schedule config.defaults');
+  validatedJobConfig(value.effects, 'local schedule config.effects');
+  if (value.agents !== undefined && (!value.agents || typeof value.agents !== 'object' || Array.isArray(value.agents)))
+    throw new Error('local schedule config.agents must be an object keyed by scheduled agent name');
+  const scheduled = new Set(Object.entries(ir.agents).filter(([, agent]) => cronOf(agent) && !isHuman(agent)).map(([name]) => name));
+  for (const [name, config] of Object.entries(value.agents ?? {})) {
+    if (!scheduled.has(name))
+      throw new Error(`local schedule config.agents.${name} does not name a scheduled agent`);
+    validatedJobConfig(config, `local schedule config.agents.${name}`);
+  }
+  return value;
+}
+
+function mergedJobConfig(baseRetrySeconds: number, defaults: LocalScheduleJobConfig | undefined, specific: LocalScheduleJobConfig | undefined): Required<LocalScheduleJobConfig> {
+  return {
+    fence: specific?.fence ?? defaults?.fence ?? '.open-autonomy/paused',
+    retrySeconds: specific?.retrySeconds ?? defaults?.retrySeconds ?? baseRetrySeconds,
+  };
+}
+
+function installedScheduleFences(destDir: string | undefined): Set<string> {
+  if (!destDir) return new Set();
+  try {
+    const schedule = JSON.parse(readFileSync(join(destDir, 'scheduler', 'schedule.json'), 'utf8')) as {
+      jobs?: Array<{ fence?: unknown }>;
+    };
+    return new Set((schedule.jobs ?? []).flatMap((job) => typeof job.fence === 'string' ? [job.fence] : []));
+  } catch {
+    return new Set();
+  }
+}
+
 // Inverse of secondsToCron for the simple every-N-minutes cron form the local loop honors.
 export function cronToSeconds(cron: string): number {
-  const m = /^\*\/(\d+) \* \* \* \*$/.exec(cron.trim());
-  return m ? Number(m[1]) * 60 : 900;
+  const value = cron.trim();
+  let match = /^\*\/(\d+) \* \* \* \*$/.exec(value);
+  if (match) return Number(match[1]) * 60;
+  match = /^\d+ \*\/(\d+) \* \* \*$/.exec(value);
+  if (match) return Number(match[1]) * 3600;
+  if (/^\d+ \d+ \* \* \*$/.test(value)) return 86400;
+  if (/^\d+ \d+ \* \* [\d,-]+$/.test(value)) return 7 * 86400;
+  if (/^\d+ \d+ [\d,-]+ \* \*$/.test(value)) return 28 * 86400;
+  return 900;
 }
 
 // The loop driver: fires the schedule's commands every interval, and (continuous mode) reaps idle agent
@@ -93,33 +186,8 @@ export function cronToSeconds(cron: string): number {
 // IDLE (termfleet `session_waiting`, no attention signal) for AUTONOMY_IDLE_REAP_MS is closed. A session
 // still working (running / background-running), one a human took over, or one asking/errored is never
 // reaped — keeping the "take over at any time" guarantee. `--once` fires a single tick and exits (no reap).
-// U4 opt-in (policy.box.local.runner === "cli"): a thin shim delegating to the versioned `@volter/oa`
-// package instead of the byte-copied template below — the runner becomes a dep like termfleet/ztrack
-// already are, closing the S6/T6 fork-drift structurally (a release, not a re-copy). Argv-compatible with
-// the legacy template: `node scheduler/run.mjs --once` / `node scheduler/run.mjs` (continuous, no args)
-// keep working unchanged, because `runCli` implements the SAME argv contract this file's `LOOP_DRIVER`
-// always has. DEFAULT UNCHANGED: a profile that never sets this policy key gets LOOP_DRIVER exactly as
-// before (see compileLocal below) — this is additive, not a replacement.
-const CLI_RUNNER_SHIM = `#!/usr/bin/env node
-// Generated by @open-autonomy/substrate-local (policy.box.local.runner === "cli"). This install's local
-// driver is the versioned @volter/oa package — see node_modules/@volter/oa/README.md (or
-// packages/local-runner-cli/README.md in this source repo) for the adoption path, the S6/T6 fork-drift
-// rationale this closes, and how to fall back to the byte-copied template if needed.
-import { runCli } from '@volter/oa';
-const code = await runCli(process.argv.slice(2));
-process.exit(code);
-`;
-
-/** Is this profile opted into the versioned CLI runner (U4)? Additive policy key, opaque governance data
- *  under policy.box — never interpreted anywhere except here (emit) and the compile-time instructions
- *  printed by bin/autonomy-compile.ts. */
-export function isCliRunner(ir: AutonomyIR): boolean {
-  const local = (ir.policy.box as { local?: { runner?: string } } | undefined)?.local;
-  return local?.runner === 'cli';
-}
-
 const LOOP_DRIVER = `#!/usr/bin/env node
-import { existsSync, readFileSync, readdirSync, realpathSync, unlinkSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, readdirSync, realpathSync, unlinkSync, writeFileSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import { dirname, join, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -127,24 +195,39 @@ const here = dirname(fileURLToPath(import.meta.url));
 const SCHEDULE = process.env.AUTONOMY_SCHEDULE || 'scheduler/schedule.json';
 const args = process.argv.slice(2);
 const schedule = JSON.parse(readFileSync(SCHEDULE, 'utf8'));
+// Jobs are the only emitted schedule contract. Accept historical scripts for upgrades, but never require
+// a profile policy flag to select a scheduler implementation.
+const jobs = Array.isArray(schedule.jobs)
+  ? schedule.jobs
+  : (schedule.scripts || []).map((command, index) => ({
+      name: 'job-' + (index + 1), command, intervalSeconds: schedule.intervalSeconds || 900,
+      fence: '.open-autonomy/paused',
+    }));
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
-// PAUSE GATE (OA-07): a fresh install lands PAUSED (see compileLocal's seed-once marker) so an existing
-// backlog is never dispatched before the operator reviews it. Checked at TICK-FIRE time (not just at
-// startup) in BOTH modes, so \`touch .open-autonomy/paused\` also works as a live kill-switch and
-// \`rm .open-autonomy/paused\` un-pauses immediately on the next check — never only once at process start.
-const PAUSED = join(here, '..', '.open-autonomy', 'paused');
-const pausedMessage = () =>
-  '[loop] PAUSED — fresh installs start paused so an existing backlog is never dispatched unreviewed.\\n' +
-  '[loop] review the board, then unpause:  rm .open-autonomy/paused   (details: ' + PAUSED + ')';
+// PAUSE GATE (OA-07): fences belong to jobs, not to the loop as a whole. The default schedule still uses
+// .open-autonomy/paused for every job, while adopter target config may give groups independent markers.
+// Evaluate the markers at tick-fire time so creating/removing one takes effect without restarting the loop.
+const fencePath = (job) => job.fence ? join(here, '..', job.fence) : null;
+const blockedFences = () => new Set(jobs.flatMap((job) => {
+  const path = fencePath(job);
+  return path && existsSync(path) ? [job.fence] : [];
+}));
+const pausedMessage = (fences) =>
+  '[loop] PAUSED — scheduled jobs are blocked by ' + [...fences].join(', ') + '.\\n' +
+  '[loop] remove only the fence(s) whose jobs you intend to run:  ' + [...fences].map((f) => 'rm ' + f).join('   ');
 
-// \`--once\` checks PAUSED first — before even the termfleet dependency check below — so a paused install
-// deterministically reports PAUSED as the reason nothing ran, never masked by an unrelated "termfleet not
-// installed" exit that would also (coincidentally) prevent a launch. Continuous mode's gate lives in its
-// own heartbeat loop further down (it must re-check on every beat, not just once at startup).
-if (args.includes('--once') && existsSync(PAUSED)) {
-  console.error(pausedMessage());
-  process.exit(1); // scripted install pipelines notice a nonzero exit, not just log text
+// In --once mode an entirely fenced schedule is a deterministic no-op and reports that before optional
+// runner dependency checks. A partially fenced schedule continues: only its unfenced jobs are eligible.
+if (args.includes('--once')) {
+  const fences = blockedFences();
+  if (jobs.length > 0 && jobs.every((job) => {
+    const path = fencePath(job);
+    return path && existsSync(path);
+  })) {
+    console.error(pausedMessage(fences));
+    process.exit(1);
+  }
 }
 
 // A schedule command that launches a skill (prose) agent goes through run-agent.mjs -> the runner (the
@@ -153,7 +236,13 @@ if (args.includes('--once') && existsSync(PAUSED)) {
 // (the FIRST command an adopter runs, per docs/OPERATIONS.md: \`node scheduler/run.mjs --once\`). A
 // script-only schedule (every agent a deterministic scripts/*.ts behavior) never touches the runner, so
 // the check is scoped to schedules that actually need it — never a false alarm on one that doesn't.
-const needsRunner = schedule.scripts.some((c) => c.includes('run-agent.mjs'));
+const needsRunner = jobs.some((job) => {
+  if (!/scripts\\/(?:run-agent\\.mjs|runner\\.ts)/.test(job.command)) return false;
+  // A one-shot run never reaches a fenced job, so don't mask useful partial-fence behavior with a
+  // dependency that only the blocked group would need. Continuous mode may later be unfenced in place.
+  const path = fencePath(job);
+  return !args.includes('--once') || !path || !existsSync(path);
+});
 if (needsRunner) {
   const repoRoot = join(here, '..');
   const termfleetDir = join(repoRoot, 'node_modules', 'termfleet');
@@ -180,7 +269,6 @@ if (needsRunner) {
   const RUNNER_SPECS = [
     ['termfleet', 'termfleet'],
     ['@termfleet/core', '@termfleet/core/local-providers.js'],
-    ['ztrack', 'ztrack/preset-kit'],
   ];
   const firstErrLine = (s) => {
     const lines = (s || '').split('\\n').map((l) => l.trim()).filter(Boolean);
@@ -283,7 +371,7 @@ if (needsRunner) {
     // is what lets a future consumer safely pipe/parse this process's stdout.
     console.error(\`[loop] provider \${providerUrl} (\${providerSource})\`);
     // Re-export the ORIGIN as a hint (AUTONOMY_PROVIDER_URL_SOURCE) so a NESTED resolve — this tick's
-    // run-agent.mjs -> autonomy-runner.mjs, or the PM's own nested \`runner.ts launch developer ...\` —  can
+    // run-agent.mjs -> autonomy-runner.mjs, or any nested \`runner.ts launch ...\` — can
     // report the same schedule-vs-env distinction. By the time those processes run, schedule.env and
     // process.env are already merged (fireTick below / runner-frontend.ts's own env spread), so this is the
     // only point that still knows which side the pin came from. Matched by the AUTONOMY.* export filter in
@@ -297,8 +385,8 @@ if (needsRunner) {
 // inside its tmux session with \`Unknown command: /develop\` — and nothing upstream ever sees it (the dead
 // session reads as 'done'). Same shape as the termfleet guard just above: plain spawnSync, no-op when the
 // precondition doesn't apply, refuse-with-names otherwise. Runs once, before the first tick, in both
-// --once and continuous mode — the earliest point that can stop the PM (and therefore every downstream
-// zombie) with one message. The manifest (.open-autonomy/generated.json) is the authoritative, exact list
+// --once and continuous mode — the earliest point that can stop a scheduled agent and all of its
+// downstream launches with one message. The manifest (.open-autonomy/generated.json) is the authoritative, exact list
 // of what compile wrote — never a guess, never a scan of user files.
 const GENERATED_MANIFEST = join(here, '..', '.open-autonomy', 'generated.json');
 const isGitRepo = spawnSync('git', ['rev-parse', '--git-dir'], { stdio: 'ignore' }).status === 0;
@@ -394,16 +482,37 @@ const buildTickEnv = () => {
 // identical schedule-line string on purpose. An agent whose own cadence must differ from "every shared tick"
 // (e.g. a low-frequency cron self-throttle) needs a signal that is true ONLY on the scheduler's own
 // automatic fire, never on an explicit human dispatch of the same command — this is that signal.
-const fireTick = () => {
+const activeSessionCount = (env) => {
+  try {
+    const output = spawnSync('node', [join(here, '..', 'scripts', 'autonomy-runner.mjs'), 'list'], { encoding: 'utf8', env });
+    if (output.status !== 0 || output.error) return null;
+    const sessions = JSON.parse(output.stdout || '[]');
+    if (!Array.isArray(sessions)) return null;
+    const scheduled = new Set(jobs.map((job) => job.agent).filter(Boolean));
+    return sessions.filter((session) => scheduled.has(session.agent) &&
+      (session.status === 'running' || session.status === 'paused' || session.status === 'awaiting-human')).length;
+  } catch { return null; }
+};
+const fireJobs = (dueJobs) => {
   const env = Object.assign({}, buildTickEnv(), { AUTONOMY_TRIGGER_KIND: 'cron' });
-  for (const command of schedule.scripts) {
-    spawnSync(command, { shell: true, stdio: 'inherit', env });
+  const maxConcurrent = Number(schedule.maxConcurrent || Number.POSITIVE_INFINITY);
+  let active = Number.isFinite(maxConcurrent) ? activeSessionCount(env) : 0;
+  const results = [];
+  for (const job of dueJobs) {
+    if (job.fence && existsSync(join(here, '..', job.fence))) continue;
+    // A declared cap is a hard control. If liveness cannot be established, fail closed for
+    // agent launches rather than treating an unavailable provider as an empty provider.
+    if (job.agent && active === null) continue;
+    if (job.agent && active >= maxConcurrent) continue;
+    const result = spawnSync(job.command, { shell: true, stdio: 'inherit', env });
+    if (job.agent && result.status === 0 && !result.error) active += 1;
+    results.push({ job, result });
   }
+  return results;
 };
 
 if (args.includes('--once')) {
-  // PAUSED was already checked above (before the termfleet gate) — reaching here means it's clear.
-  fireTick();
+  fireJobs(jobs);
   process.exit(0);
 }
 
@@ -411,7 +520,7 @@ if (args.includes('--once')) {
 // between. The runner (termfleet SDK) does the reaping; we keep the persistent idle-since map here.
 const IDLE_REAP_MS = Number(process.env.AUTONOMY_IDLE_REAP_MS ?? 60000);
 const POLL_MS = Math.max(1000, Number(process.env.AUTONOMY_REAP_POLL_MS ?? 20000));
-const intervalMs = Number(schedule.intervalSeconds) * 1000;
+const nextFireAt = new Map(jobs.map((job) => [job.name, 0]));
 // This install's OWN agents = the per-harness launch prompts (one .txt per skill agent). Reaping is
 // scoped to these window names so a human's own terminal / another loop is never touched.
 const harness = process.env.TERMFLEET_AGENT || 'claude';
@@ -436,6 +545,8 @@ try {
 // SDLC state — a methodology leak). Crash-safe: a marker outlives a missed reap and is reconciled on a later
 // tick, and agent-propose is idempotent (it updates the same branch/PR); the marker is deleted once it runs.
 const EFFECTS_DIR = join(here, '..', '.open-autonomy', 'runner-state', 'effects');
+const WORKSPACES_DIR = join(here, '..', '.open-autonomy', 'runner-state', 'workspaces');
+const WORKSPACE_QUARANTINE_DIR = join(here, '..', '.open-autonomy', 'runner-state', 'workspace-quarantine');
 async function reconcilePendingEffects(runner) {
   let files = [];
   try { files = readdirSync(EFFECTS_DIR).filter((f) => f.endsWith('.json')); } catch { return; } // no markers dir yet
@@ -448,32 +559,77 @@ async function reconcilePendingEffects(runner) {
     try { marker = JSON.parse(readFileSync(path, 'utf8')); } catch { try { unlinkSync(path); } catch {} continue; }
     if (live.has(marker.id)) continue; // session still running -> its effect runs after it finishes
     console.log(\`[loop] post-session effect: \${marker.agent} (\${marker.id}) -> \${marker.effect} in \${marker.worktree}\`);
-    spawnSync('bun', [marker.effect], { cwd: marker.worktree, stdio: 'inherit', env: Object.assign({}, process.env, marker.env) });
-    try { unlinkSync(path); } catch {}
+    const result = spawnSync('bun', [marker.effect], { cwd: marker.worktree, stdio: 'inherit', env: Object.assign({}, process.env, marker.env) });
+    if (result.status === 0 && !result.error) {
+      try { unlinkSync(path); } catch {}
+    } else {
+      console.error(\`[loop] post-session effect failed; retaining \${file} for retry: \${result.error?.message ?? \`exit \${result.status ?? 'unknown'}\`}\`);
+    }
+  }
+}
+async function reconcileWorkspaceLeases(runner) {
+  let files = [];
+  try { files = readdirSync(WORKSPACES_DIR).filter((f) => f.endsWith('.json')); } catch { return; }
+  let live;
+  try { live = new Set((await runner.list()).map((s) => s.id)); } catch { return; }
+  const records = files.flatMap((file) => {
+    const path = join(WORKSPACES_DIR, file);
+    try { return [{ file, path, lease: JSON.parse(readFileSync(path, 'utf8')) }]; } catch { return []; }
+  });
+  const handled = new Set();
+  for (const record of records) {
+    const { lease } = record;
+    if (handled.has(lease.worktree)) continue;
+    handled.add(lease.worktree);
+    const peers = records.filter((candidate) => candidate.lease.worktree === lease.worktree);
+    if (peers.some((peer) => live.has(peer.lease.id) || existsSync(join(EFFECTS_DIR, peer.file)))) continue;
+    if (!existsSync(lease.worktree)) { for (const peer of peers) try { unlinkSync(peer.path); } catch {} continue; }
+    const status = spawnSync('git', ['status', '--porcelain'], { cwd: lease.worktree, encoding: 'utf8' });
+    if (status.status !== 0 || status.error || (status.stdout || '').trim()) {
+      mkdirSync(WORKSPACE_QUARANTINE_DIR, { recursive: true });
+      for (const peer of peers) {
+        writeFileSync(join(WORKSPACE_QUARANTINE_DIR, peer.file), JSON.stringify({
+          ...peer.lease,
+          quarantinedAt: new Date().toISOString(),
+          reason: status.status !== 0 || status.error ? 'git status failed' : 'worktree has uncommitted changes',
+        }, null, 2) + '\\n');
+        try { unlinkSync(peer.path); } catch {}
+      }
+      console.error(\`[loop] retained dirty workspace for \${lease.agent} (\${lease.id}): \${lease.worktree}\`);
+      continue;
+    }
+    const removed = spawnSync('git', ['worktree', 'remove', lease.worktree], { cwd: join(here, '..'), encoding: 'utf8' });
+    if (removed.status !== 0 || removed.error) continue;
+    spawnSync('git', ['branch', '-D', lease.branch], { cwd: join(here, '..'), encoding: 'utf8' });
+    for (const peer of peers) try { unlinkSync(peer.path); } catch {}
+    console.log(\`[loop] cleaned workspace for \${lease.agent} (\${lease.id})\`);
   }
 }
 const idleSince = new Map();
-let lastTick = 0;
-// PAUSE GATE, continuous mode: re-checked every heartbeat (not cached), so a marker created/removed
-// mid-run takes effect on the very next poll. Logged at most once per STATE CHANGE (not every heartbeat),
-// so a paused loop doesn't spam its own log while idling.
-let paused = false;
+// Report fence transitions once per marker state change. Job eligibility itself remains in fireJobs, so
+// one fenced group never suppresses unrelated work and a marker change takes effect on the next heartbeat.
+let lastBlockedFences = new Set();
 while (true) {
   const now = Date.now();
-  const nowPaused = existsSync(PAUSED);
-  if (nowPaused !== paused) {
-    console.error(nowPaused ? pausedMessage() : '[loop] unpaused — resuming ticks.');
-    paused = nowPaused;
-  }
-  if (now - lastTick >= intervalMs) {
-    if (!paused) fireTick();
-    lastTick = Date.now();
+  const currentBlockedFences = blockedFences();
+  const addedFences = new Set([...currentBlockedFences].filter((f) => !lastBlockedFences.has(f)));
+  const removedFences = [...lastBlockedFences].filter((f) => !currentBlockedFences.has(f));
+  if (addedFences.size) console.error(pausedMessage(addedFences));
+  if (removedFences.length) console.error('[loop] unpaused jobs fenced by: ' + removedFences.join(', '));
+  lastBlockedFences = currentBlockedFences;
+  const due = jobs.filter((job) => now >= (nextFireAt.get(job.name) || 0));
+  for (const { job, result } of fireJobs(due)) {
+    const seconds = result.status === 0 && !result.error
+      ? Number(job.intervalSeconds || schedule.intervalSeconds || 900)
+      : Number(job.retrySeconds || job.intervalSeconds || schedule.intervalSeconds || 900);
+    nextFireAt.set(job.name, Date.now() + seconds * 1000);
   }
   if (runner) {
     try {
       const reaped = await runner.reapIdle({ idleMs: IDLE_REAP_MS, agents, since: idleSince });
       for (const r of reaped) console.log(\`[loop] reaped idle \${r.agent} (\${r.id})\`);
       await reconcilePendingEffects(runner); // run finished proposers' effects (the post-skill step's local twin)
+      await reconcileWorkspaceLeases(runner);
     } catch (e) {
       console.error('[loop] reap error:', e?.message ?? e);
     }
@@ -505,7 +661,8 @@ const params = forward.flatMap((k) => (process.env[k] ? ['--' + k, process.env[k
 if (process.env.AUTONOMY_SINGLETON) {
   try {
     const all = JSON.parse(spawnSync('node', [runner, 'list'], { encoding: 'utf8' }).stdout || '[]');
-    const busy = all.filter((s) => s.agent === agent && (s.status === 'running' || s.status === 'paused'));
+    const busy = all.filter((s) => s.agent === agent
+      && (s.status === 'running' || s.status === 'paused' || s.status === 'awaiting-human'));
     if (busy.length) { console.log(\`[run-agent] \${agent} already in flight (\${busy.length}); skipping this tick\`); process.exit(0); }
   } catch { /* backend unavailable -> fall through and try the launch */ }
 }
@@ -514,16 +671,16 @@ const r = spawnSync('node', [runner, 'launch', agent, ...params], { stdio: 'inhe
 process.exit(r.error?.code === 'ETIMEDOUT' ? 0 : (r.status ?? 1));
 `;
 
-// The pause marker (OA-07). Self-describing content: an operator who stumbles on the file (not just one
-// who reads the docs) understands why it's paused and the exact unpause command. Seeded ONLY on a fresh
-// install (compileLocal's freshInstall check below) and NEVER re-added by a re-compile/upgrade — an
-// operator's `rm .open-autonomy/paused` is the intended interaction and must survive every future compile.
-const PAUSED_MARKER = `This open-autonomy install is PAUSED (fresh installs start paused so a pre-existing
+// A self-describing fence marker. Every distinct job fence is seeded ONLY on a fresh install and added
+// after the generated manifest, so deleting one is durable operator state rather than a generated-file
+// drift for compile/upgrade to resurrect. The historical default remains .open-autonomy/paused.
+function pausedMarker(path: string): string {
+  return `This open-autonomy schedule fence is PAUSED (fresh installs start fenced so a pre-existing
 backlog is never dispatched before you review it).
-Review your board first — on a populated tracker, decide which issues the loop may work
-(see policy.dispatch in .open-autonomy/autonomy.yml and docs/OPERATIONS.md step 5).
-Unpause:  rm .open-autonomy/paused
+Review the work eligible behind this fence, then unpause only this job group.
+Unpause:  rm ${path}
 `;
+}
 
 // Per-agent launch prompts for SKILL agents, split by harness: codex invokes the skill with `$name`,
 // Claude Code with `/name` — where the name is the skill's OWN id (its behavior = the SKILL.md folder +
@@ -568,17 +725,16 @@ function promptFiles(ir: AutonomyIR): Record<string, string> {
 // some OTHER agent in the profile holds `agent:launch` at all (an orchestrator that could, in principle, launch
 // it on its own schedule/logic — prose the IR can't read, but its EXISTENCE is a decidable, structural
 // fact). Only when NEITHER escape applies do we know for certain — from the IR alone, with no false
-// positives against any profile in this repo (self-driving's `develop` has no `dispatch` trigger of its
-// own, but self-driving's `pm` holds `agent:launch`, so `develop` is not flagged; only a profile with
-// genuinely NO orchestrator at all and an event-only, non-reviewed agent is flagged) — that compiling to
-// `local` would silently drop the trigger.
+// positives against a profile with an explicit orchestrator: only a profile with genuinely NO
+// `agent:launch` capability and an event-only, non-reviewed agent is flagged. In that case the IR alone
+// proves that compiling to `local` would silently drop the trigger.
 export function undeliverableEventAgents(ir: AutonomyIR): string[] {
   // ASSUMPTION worth naming: the review-target escape assumes the reviews reconciler will actually be
   // emitted to deliver it — but that reconciler is gated on `ir.codeHost === 'github'` (compileLocal below;
   // a `local-git` code host has no PRs to poll). So a `local-git` profile with a review-edge `event` agent
   // is exempted here yet gets NO delivery. Moot for every bundled profile today (every one with a `review:`
   // edge is `codeHost: github`), and a `local-git` reviewer is a contradiction in terms anyway (nothing to
-  // review — the PM merges worktrees directly), so this isn't tightened to `&& ir.codeHost === 'github'`;
+  // review — the calling role merges worktrees directly), so this isn't tightened to `&& ir.codeHost === 'github'`;
   // if a real local-git-with-review profile ever appears, add that clause and a delivery path together.
   const reviewTargets = new Set<string>();
   for (const agent of Object.values(ir.agents)) if (agent.review) reviewTargets.add(agent.review);
@@ -598,7 +754,7 @@ export function undeliverableEventAgents(ir: AutonomyIR): string[] {
     .map(([role]) => role);
 }
 
-export function compileLocal(ir: AutonomyIR, opts: { runner?: RunnerName; destDir?: string; providerUrl?: string } = {}): CompileOutput {
+export function compileLocal(ir: AutonomyIR, opts: { runner?: RunnerName; destDir?: string; providerUrl?: string; scheduleConfig?: LocalScheduleConfig } = {}): CompileOutput {
   const runner = opts.runner ?? 'termfleet';
   if (!SUPPORTED_RUNNERS.includes(runner)) {
     throw new Error(`unsupported runner "${runner}"; supported: ${SUPPORTED_RUNNERS.join(', ')}`);
@@ -624,12 +780,16 @@ export function compileLocal(ir: AutonomyIR, opts: { runner?: RunnerName; destDi
   // one upgrade's prune relies on). No destDir given (an in-memory compile: a dry-run print, a unit test,
   // lint/bench's own disposable cells) is treated as fresh, matching the common case.
   const freshInstall = !opts.destDir || !existsSync(join(opts.destDir, GENERATED_MANIFEST_PATH));
+  const priorScheduledFences = installedScheduleFences(opts.destDir);
+  const scheduleConfig = validateScheduleConfig(ir, opts.scheduleConfig);
 
   const generated: Record<string, string> = {};
 
   // Shared layer: the manifest, generated the same way for every substrate (unless carried verbatim).
   if (!ir.resources.includes('.open-autonomy/autonomy.yml')) {
-    generated['.open-autonomy/autonomy.yml'] = stringifyYaml(emitAutonomy(ir) as Record<string, unknown>);
+    const manifest = emitAutonomy(ir) as Record<string, unknown>;
+    generated['.open-autonomy/autonomy.yml'] = stringifyYaml(manifest);
+    generated['.open-autonomy/autonomy.json'] = `${JSON.stringify(manifest, null, 2)}\n`;
   }
   // Shared layer: the substrate-neutral runtime scripts, minus the github-only ones.
   for (const [path, content] of Object.entries(runtimeFiles())) {
@@ -656,20 +816,20 @@ export function compileLocal(ir: AutonomyIR, opts: { runner?: RunnerName; destDi
   // loop; it is DISPATCHED (see the runner's human route) when another actor routes work to it.
   const cronAgents = Object.entries(ir.agents).filter(([, a]) => cronOf(a) && !isHuman(a));
   const intervalSeconds = cronAgents[0] ? cronToSeconds(cronOf(cronAgents[0][1]) as string) : 900;
-  generated['scheduler/run.mjs'] = isCliRunner(ir) ? CLI_RUNNER_SHIM : LOOP_DRIVER;
+  generated['scheduler/run.mjs'] = LOOP_DRIVER;
   // A script agent runs its behavior via bun; a prose-skill agent is launched through the runner.
-  const scheduleScripts = cronAgents.map(([role, a]) =>
-    // A prose cron agent (the PM) is single-instance per tick (AUTONOMY_SINGLETON) — see run-agent.mjs. A
-    // script agent is a fast deterministic run, no guard needed.
-    isScript(a.behavior) ? `bun ${a.behavior}` : `AUTONOMY_AGENT=${role} AUTONOMY_SINGLETON=1 node scripts/run-agent.mjs`,
-  );
+  const scheduleScripts = cronAgents.map(([role, agent]) => {
+    const baseRetry = Math.min(300, cronToSeconds(cronOf(agent) as string));
+    const config = mergedJobConfig(baseRetry, scheduleConfig?.defaults, scheduleConfig?.agents?.[role]);
+    return scheduledCommand(role, agent, config.fence);
+  });
   // A github code host's propose effect is NOT scheduled here — it is a per-session lifecycle effect the loop
   // driver runs when a proposer's session finishes (see LOOP_DRIVER's reconcilePendingEffects + runner.ts's
-  // effect markers), mirroring github's post-skill job step. A local-git code host has no PRs (the PM merges).
+  // effect markers), mirroring github's post-skill job step. A local-git code host has no PRs (the calling role merges).
   //
   // OA2/OA3: the reconciler backstops (reconcilers.ts) all operate on github PRs/branch-protection — they
   // are meaningless (and would just fail every tick resolving `gh api repos/{owner}/{repo}`) on a
-  // `local-git` code host, which has no PRs at all (the PM merges worktrees directly, per the comment
+  // `local-git` code host, which has no PRs at all (the calling role merges worktrees directly, per the comment
   // above). Gated on `ir.codeHost === 'github'` AND at least one code:propose agent existing — an install
   // with neither never needed a github-PR reconciler in the first place. Wired into the same schedule the
   // cron loop already fires, right after the cron agents, so every tick both dispatches scheduled work AND
@@ -696,7 +856,35 @@ export function compileLocal(ir: AutonomyIR, opts: { runner?: RunnerName; destDi
   // `Object.assign({}, schedule.env, process.env)` — an ambient TERMFLEET_PROVIDER_URL still overrides this
   // compiled default, matching the documented TERMFLEET_* override doctrine (runner-config.ts).
   const env = opts.providerUrl ? { TERMFLEET_PROVIDER_URL: opts.providerUrl } : {};
-  generated['scheduler/schedule.json'] = `${JSON.stringify({ intervalSeconds, env, scripts: scheduleScripts }, null, 2)}\n`;
+  const cronJobs = cronAgents.map(([role, agent]) => {
+    const script = isScript(agent.behavior);
+    const baseRetry = Math.min(300, cronToSeconds(cronOf(agent) as string));
+    const config = mergedJobConfig(baseRetry, scheduleConfig?.defaults, scheduleConfig?.agents?.[role]);
+    return {
+      name: role,
+      command: scheduledCommand(role, agent, config.fence),
+      intervalSeconds: cronToSeconds(cronOf(agent) as string),
+      retrySeconds: config.retrySeconds,
+      fence: config.fence,
+      ...(!script ? { agent: role, ...(agent.execution ? { workspace: agent.execution.workspace } : {}) } : {}),
+    };
+  });
+  const effectConfig = mergedJobConfig(Math.min(300, intervalSeconds), scheduleConfig?.defaults, scheduleConfig?.effects);
+  const extraJobs = scheduleScripts.slice(cronAgents.length).map((command, index) => ({
+    name: `trigger-delivery-${index + 1}`,
+    command,
+    intervalSeconds,
+    retrySeconds: effectConfig.retrySeconds,
+    fence: effectConfig.fence,
+  }));
+  const jobs = [...cronJobs, ...extraJobs];
+  generated['scheduler/schedule.json'] = `${JSON.stringify({
+    schema: 'open-autonomy.local-schedule.v2',
+    ...(ir.policy.maxConcurrent ? { maxConcurrent: ir.policy.maxConcurrent } : {}),
+    env,
+    jobs,
+  }, null, 2)}\n`;
+  generated['.open-autonomy/enforcement.json'] = `${JSON.stringify(enforcementReport(ir, 'local'), null, 2)}\n`;
   Object.assign(generated, promptFiles(ir));
 
   // Copies: skill behaviors + the profile's resources at the repo root, so the agents' cwd-relative gh +
@@ -731,15 +919,24 @@ export function compileLocal(ir: AutonomyIR, opts: { runner?: RunnerName; destDi
     if (keepCodeHostWorkflows || !r.startsWith('.github/')) copies.push({ from: r === '.gitignore' ? 'gitignore' : r, to: r });
   }
   const compiled = withGeneratedManifest({ generated, copies });
-  // The pause marker is added AFTER withGeneratedManifest computes `.open-autonomy/generated.json`'s file
-  // list — deliberately: it must never be recorded there. Prune (packages/core/src/upgrade.ts) only ever
-  // deletes paths the manifest lists as open-autonomy-generated, so a marker that never enters the
-  // manifest can never be treated as an orphan and silently pruned (which would silently UNPAUSE a running
-  // install). It is written to disk on a fresh install only (materialize() writes whatever's in
-  // `.generated`); a re-compile/upgrade of an EXISTING install (freshInstall === false) never adds this
-  // key at all, so it neither resurrects a removed marker nor clobbers a still-present one — the file is
-  // simply outside that compile's output entirely, matching INSTALL_OWNED_PATHS's seed-once contract
-  // (packages/core/src/upgrade.ts) if it's ever routed through the generic upgrade machinery instead.
-  if (freshInstall) compiled.generated['.open-autonomy/paused'] = PAUSED_MARKER;
+  // Fence markers are added AFTER withGeneratedManifest computes `.open-autonomy/generated.json`'s file
+  // list — deliberately: prune can never treat one as a generated orphan and silently unpause a running
+  // install. Existing installs emit none, so recompiles neither resurrect removed markers nor clobber
+  // markers still present. A Set makes shared group fences (for example Planner + Kaizen) one control.
+  if (freshInstall) {
+    // Keep the default marker even when every scheduled job uses a custom fence: direct Runner launches
+    // without an explicit --fence still use this safe day-one control, and profiles with no cron jobs may
+    // still have dispatch-only machine agents. Custom job markers are additional independent controls.
+    for (const path of new Set(['.open-autonomy/paused', ...jobs.map((job) => job.fence).filter(Boolean)])) {
+      compiled.generated[path] = pausedMarker(path);
+    }
+  } else {
+    // A removed marker for an unchanged fence is deliberate operator state and stays removed. A newly
+    // introduced job fence has no such history, so seed it once rather than activating a new scheduled
+    // group merely because an existing installation changed its target configuration.
+    for (const path of new Set(jobs.map((job) => job.fence).filter(Boolean))) {
+      if (!priorScheduledFences.has(path)) compiled.generated[path] = pausedMarker(path);
+    }
+  }
   return compiled;
 }

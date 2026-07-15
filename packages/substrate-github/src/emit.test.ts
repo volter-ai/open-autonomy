@@ -50,6 +50,12 @@ describe('compileGithub — derived security data vs code-host resources', () =>
       expect(out.generated[`scripts/${gate}.ts`]).toBeUndefined();
   });
 
+  test('emits a compiler-owned target enforcement report', () => {
+    const report = JSON.parse(compileGithub(irWith([{ cron: '0 0 * * *' }])).generated['.open-autonomy/enforcement.json']);
+    expect(report).toMatchObject({ schema: 'open-autonomy.enforcement.v1', target: 'gh-actions', generated: true });
+    expect(report.controls.some((control: { control: string }) => control.control === 'agent.maintainer.capabilities')).toBe(true);
+  });
+
   test('engine bakes in NO org IDENTITY (proxy/audience/bot) — but DOES default the model (a box capability)', () => {
     const base = irWith([{ cron: '0 0 * * *' }]); // no policy.box.github
     const bare = compileGithub(base).generated['.github/workflows/maintainer.yml'];

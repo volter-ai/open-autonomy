@@ -15,6 +15,7 @@
 // comment merely naming a key can satisfy it — the gate catches dead keys, not dishonest comments.
 import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { join, basename } from 'node:path';
+import { parse as parseYaml } from 'yaml';
 
 export function walk(dir: string, out: string[] = []): string[] {
   for (const entry of readdirSync(dir)) {
@@ -44,7 +45,7 @@ export function leafParams(box: Record<string, unknown>): string[] {
 }
 
 export function deadKeys(profileDir: string, engineCorpus: string): string[] {
-  const ir = Bun.YAML.parse(readFileSync(join(profileDir, 'ir.yml'), 'utf8')) as {
+  const ir = parseYaml(readFileSync(join(profileDir, 'ir.yml'), 'utf8')) as {
     policy?: { box?: Record<string, unknown> };
   };
   const params = leafParams(ir?.policy?.box ?? {});

@@ -190,7 +190,6 @@ what's shipped today, as a starting vocabulary, not a spec:
 | `human.maintainers_var` | repo variable naming who to engage for a human-required item (falls back to the repo owner) | `scripts/human-approval-gate.ts`, `scripts/provision-deploy.ts`, the maintainer/pm skills |
 | `human.sla_minutes` | how long a human-required item waits before the PM escalates | the pm/maintainer skills |
 | `risk.human_required_paths` | glob/name list of paths that force human-approval scope | `scripts/human-approval-gate.ts`, the pm/reviewer/maintainer skills |
-| `risk.human_required_topics` | topic list (auth, secrets, …) that force human-approval scope | the pm/reviewer skills |
 | `merge.maintainer_block_labels` | the one hold-label vocabulary the auto-merge rearm sweep and the pm/reviewer skills consult | `scripts/rearm-auto-merge.ts`, `scripts/open-autonomy-preflight.ts`, the pm/reviewer skills |
 | `planner.issue_origin_label_prefix` / `phase_label_prefix` / `priority_labels` | the planner's label conventions | the planner skill, `scripts/open-autonomy-preflight.ts` |
 | `tracker.ztrackPreset` | the ztrack preset name (survives a fork renaming the profile directory) | `bin/ztrack-preset.ts` (used by `bin/autonomy-compile.ts`'s local next-steps print) |
@@ -274,44 +273,17 @@ bun bin/autonomy-compile.ts profiles/hello gh-actions /tmp/hello-gh
   originates work, only shapes/develops issues that already exist (D8: a seed-only board empties).
   Targets **`gh-actions` + `local`** (runner ⟂ code host — agents on Actions *or* your machine,
   auto-merging PRs on GitHub either way); uses the ztrack `simple-gh-sdlc` preset.
-- **`simple-gh/`** — the **single-manager** GitHub PR loop, plus a scheduled `planner` (D3). Three
-  declared agents — `manager` and `planner` scheduled (manager the only one that dispatches or lands;
-  planner file-only), plus `audit` — operator-dispatched AND (TC.3) a low-frequency weekly cron for
-  drift auditing, never a second WORK-dispatching loop. `manager` (`cron: */30 * * * *`) is still the
-  only agent that dispatches or lands anything — research/plan/review/implementation are harness-native
-  **subagents** it dispatches in-session
-  (per-dispatch `model` override + worktree isolation), not separate OA actors;
-  `policy.box.models.{research,implement}` are abstract tier labels the SKILL.md maps to concrete models.
-  Plans are **docs** registered as ztrack document sources, not hand-authored issues. `planner`
-  (`cron: 13 5 * * *`) keeps that board fed between manager ticks by reading the repo's declared vision
-  and, only when the board is starving, authoring + registering a plan doc and opening a docs-only PR on
-  its own branch — it never dispatches, never merges, never promotes anything to `ready`; the manager
-  (or the operator) lands what it files. Its `code:propose` is deliberately UNSCOPED, not
-  `@docs/plans` — `ztrack import --register` also appends to the project's tracker config file outside
-  `docs/plans/`, and a scope suffix is a doctrine-only honesty claim (`docs/SPEC.md#capabilities`; never
-  mechanically enforced), so a narrower claim than reality would be false. The merge boundary
-  drops the auto-merge/`agent-review` pair entirely: the manager itself opens and **merges** each PR
-  (`code:propose` only — no `code:review`, no `code:merge`), but only once every required repo CI check
-  is green **and** a freshly-dispatched review subagent has recorded a `pass` verdict on the current head
-  SHA — twin's owner-decided landing model (a human merges every green PR by hand), agent-executed as the
-  operator's deputy. The third declared agent, `audit`, is a read-only conformance auditor of the install
-  itself, filing a dated report PR under `docs/audits/` on an explicit operator dispatch **and**, as of
-  TC.3, its own self-throttled low-frequency weekly cron; it does not add a third WORK-dispatching
-  actor — it holds no `agent:launch` on either trigger, so only `manager` and `planner` ever launch
-  anything on their own crons (`profiles/simple-gh/skills/audit/SKILL.md`). Targets **`local`
-  only**, `codeHost: github`. Honesty (see
-  `profiles/simple-gh/README.md`): on a shared local credential there is no independent reviewer identity,
-  so the *deterministic* gate is branch protection (real CI required + `enforce_admins: true`), not agent
-  independence; and the model tiering works only on the Claude Code harness — `TERMFLEET_AGENT=codex`
-  degrades it to one model. Contrast with `simple-gh-sdlc`: that profile auto-merges behind an
-  `agent-review` check (a self-check on local, but a real independent gate on `gh-actions`); `simple-gh`
-  never auto-merges and never claims an independent review identity — it claims exactly the
-  real-CI-plus-recorded-verdict gate it enforces, nothing more. Contrast with `soc2-baseline`: that
-  profile is `simple-gh-sdlc` plus a full deterministic compliance control layer (SBOM, CodeQL, signed
-  commits, per-SHA human approval); `simple-gh` carries none of that — it is deliberately the simplicity
-  floor, not a compliance posture. `merge.yml` / `reconcile-merged-issues.ts` and the security/dependabot
-  surface are deliberately not carried by default (GitHub-Issues-only machinery and adopter opt-in,
-  respectively — see the profile README's re-add condition).
+- **`simple-gh/`** — the local, human-supervised GitHub loop. It declares three disjoint scheduled
+  roles plus a human Maintainer: `manager` executes approved `ready` work, `planner` grows the product
+  roadmap from direction versus code/reality, and `kaizen` studies run history for process failures.
+  Planner publishes `open` proposals; only an attributable Maintainer promotes them to `ready`;
+  Kaizen publishes `inputRequired` maintainer work. Every role uses the configured task service rather
+  than its persistence backing, while GitHub remains the separate PR/check/merge service. Manager is
+  the only role that dispatches implementation/review subagents or merges, and every landed PR requires
+  real CI plus a fresh SHA-pinned review verdict. Targets **`local` only**, `codeHost: github`; branch
+  protection is the mechanical gate on the shared operator credential. The local target schedule can
+  assign independent execution and analysis fences without embedding role logic in scheduler source.
+  See `profiles/simple-gh/README.md`.
 - **`soc2-baseline/`** — `simple-gh-sdlc` + a **deterministic SOC 2 control layer**. Same 4-agent PR loop,
   but every install ships the SOC 2-relevant controls baked in as CI / config / branch-protection / policy
   files (not agent behavior): the merge boundary + a per-head-SHA human-approval gate, `supply-chain` +

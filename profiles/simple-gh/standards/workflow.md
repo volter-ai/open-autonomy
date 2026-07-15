@@ -1,60 +1,78 @@
 # Workflow Standard
 
-Read this from the manager skill.
+Read this from Manager, Planner, and Kaizen.
 
-## Single-manager loop
+## Layer boundaries
 
-`manager`, on a `cron: */30 * * * *` trigger, is the only scheduled agent that **dispatches or lands**
-anything. `AUTONOMY_SINGLETON` dedups overlapping ticks, so a tick always runs to completion (or to
-"nothing eligible") before the next one starts. Every worker in the loop (research/plan, implementation,
-review) is a harness-native **subagent** the manager dispatches inside that one tick — never a separate
-scheduled actor. The profile also declares a second scheduled agent, `planner`
-(`skills/planner/SKILL.md`), whose sole output is docs-only plan-doc PRs on its own `plan/<date>`
-branches — it never dispatches, never lands, and never promotes anything to `ready`, so the
-single-manager claim above holds for everything that executes or merges work.
+The substrate schedules, fences, launches, observes, and reaps actor sessions. It does not read tasks,
+PRs, roadmap documents, task persistence, or role-specific metadata.
 
-## Tick cadence
+- **Manager** executes and lands the approved roadmap.
+- **Planner** grows and prioritizes the product roadmap from vision versus repository reality.
+- **Kaizen** studies run history and creates maintainer-facing process work.
 
-Every 30 minutes, the manager:
+No role acts as a fallback for another. Manager never replenishes the roadmap; Planner never performs
+process retrospectives; Kaizen never files product capability work.
 
-1. Checks `.open-autonomy/paused` — if present, does nothing this tick.
-2. Reads `policy.box` fresh from `.open-autonomy/autonomy.yml` (never a cached copy).
-3. Reads the board (`npx ztrack issue list --state ready`, `--blocked`) to see what's dispatchable.
-4. Takes **at most one wave** of action (see WIP below), then stops.
+## Task API versus persistence
 
-## WIP = 1 wave per tick
+Agents access the board only through the configured task service. Its backing is independent of the
+execution substrate. Markdown plan documents and committed tracker stores are persistence/import formats,
+not coordination APIs.
 
-At most one implementation subagent is in flight at a time, and at most one PR is being landed at a
-time. The manager does not fan out multiple issues in parallel within a tick — `policy.maxConcurrent: 1`
-is the enforced ceiling; this doctrine is what keeps a single tick's dispatch inside it. A tick that finds
-an issue already mid-flight (an open PR, a running worktree) works that issue's next step (land, rework,
-or wait) rather than starting a second one.
+GitHub owns branches, PRs, checks, reviews, and merges. A task service using GitHub Issues as a backing
+does not make raw GitHub Issues a parallel task interface.
 
-## The dispatch-only-ready doctrine
+Planner and Kaizen may publish task documents through the task tool. Manager consumes normalized tasks
+and never reconstructs one from a persistence path, index, or owning document. When task changes are
+committed, their proposals land through ordinary reviewed PRs. Lifecycle state is the only dispatch
+signal.
 
-**The dispatch set is issues in `ready` state ONLY** — `npx ztrack issue list --state ready`. The
-`--actionable` frontier (every not-done, unblocked issue) is **advisory context, not the dispatch set** —
-it is status-blind, so treating it as dispatchable would let the manager pick up anything unblocked
-regardless of whether a human or a prior research pass actually scoped it for this wave. Only an issue a
-human or the manager's own research-and-plan step has explicitly moved to `ready` may be picked up for
-implementation this tick.
+Portable task states are mapped in `.open-autonomy/autonomy.yml` under `policy.taskStates`:
 
-## Worktree rules
+- Planner publishes fully evidenced proposals as `open`; a Maintainer promotes approved work to `ready`.
+- Manager dispatches only `ready`.
+- Kaizen publishes process findings as `inputRequired`.
+- Ambiguous, risky, or authority-blocked work is `inputRequired`, never silently executable.
 
-- One implementation subagent per worktree, for the life of that dispatch — never two file-mutating
-  agents sharing a tree.
-- Never `git stash` inside a worktree (the stash is shared repo-wide); commit instead if work must be
-  shelved.
-- Dispatch implementation subagents with `isolation: "worktree"`; research/plan/review subagents are
-  read-only and need no worktree isolation.
+## Generic scheduling
 
-## Respect the pause fence
+The installed local schedule consists of generic jobs with a stable name, interval, retry interval,
+fence, workspace mode, and opaque command. The scheduler may launch, retry, apply concurrency limits,
+reap sessions, and invoke generic lifecycle effects. It must not contain task queries, PR queries, role
+decisions, roadmap namespaces, provenance markers, or product-audit logic.
 
-`.open-autonomy/paused` is the operator's kill switch. Its presence means: no new dispatch of any kind
-this tick, full stop — not "finish the current wave and then stop," but "do not start anything." An
-already-open PR sits untouched (no merge, no rework) until the fence is removed.
+Every scheduled actor is fenced. An installation may configure independent execution and analysis
+fences as local target data; role names and fence paths never appear in scheduler source.
 
-## Landing
+## Manager execution wave
 
-See `standards/risk-and-review.md` and the manager SKILL.md §5 for the full land/merge doctrine (green
-required checks + a recorded review verdict, both current on the PR's head SHA, before any merge).
+Each Manager tick performs at most one wave:
+
+1. reconcile one task proposal/state PR;
+2. otherwise reconcile one working task or implementation PR;
+3. otherwise query the mapped `ready` state;
+4. dispatch one implementation, perform one rework, land one eligible PR, close one task, engage a
+   Maintainer, or wait; and
+5. stop.
+
+Only `ready` is dispatchable. An empty ready queue is a successful tick. One implementation subagent
+owns one worktree; never share mutating worktrees or use the repository-wide stash for handoff.
+
+## Planner and Kaizen
+
+Planner reads direction, code, tests, public surfaces, product measurements, and the task API. It uses
+helpers as evidence but independently traces outcomes. It publishes product proposals as `open` and
+never promotes them to `ready`.
+
+Kaizen reads normalized session history and reconciles transcript claims with durable task, git, PR, CI,
+file, and test outcomes. Its findings are `inputRequired` maintainer tasks, not a special namespace or
+scheduler route.
+
+## Landing and human boundary
+
+All landed PRs require green repository checks and a fresh `oa-review: pass` for the current SHA. Never
+admin-merge or push directly to the protected default branch.
+
+Any configured protected path, semantic human-required topic, governance/measurement change, ambiguous
+decision, or missing authority moves work to `inputRequired`. Agents never weaken their own gate.

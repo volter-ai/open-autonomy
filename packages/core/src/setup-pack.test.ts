@@ -161,7 +161,7 @@ describe('getSetupPack — file-reading + composition path', () => {
 
 // --- TS.1's exact acceptance bullets, asserted against the four REAL baseline packs -------------------
 describe('TS.1 acceptance — the four real baseline packs', () => {
-  test('simple-gh: landing_mode = manual-after-review (cf ir.yml merge_policy)', () => {
+  test('simple-gh: landing_mode = manual-after-review (reviewed Manager landing boundary)', () => {
     expect(getSetupPack('profiles/simple-gh').landing_mode).toBe('manual-after-review');
   });
 
@@ -184,8 +184,8 @@ describe('TS.1 acceptance — the four real baseline packs', () => {
     expect(['auto-merge', 'manual-after-review', 'pr-free']).toContain(pack.landing_mode);
   });
 
-  test("simple-gh: board_seed_recipe.landing_path = 'board-pr-carveout'", () => {
-    expect(getSetupPack('profiles/simple-gh').board_seed_recipe.landing_path).toBe('board-pr-carveout');
+  test("simple-gh: board_seed_recipe.landing_path = 'reviewed-pr'", () => {
+    expect(getSetupPack('profiles/simple-gh').board_seed_recipe.landing_path).toBe('reviewed-pr');
   });
 
   test("self-driving: board_seed_recipe.promotion_fence = 'upstream-ratified'", () => {
@@ -293,11 +293,11 @@ describe('TP.1 acceptance — simple-gh-sdlc pack vs DESIGN §Q1 (the simple-gh-
 describe('TP.2 acceptance — simple-gh pack vs DESIGN §Q1 (the simple-gh ladder)', () => {
   const pack = getSetupPack('profiles/simple-gh');
 
-  test('landing_mode: manual-after-review (no independent agent-review status — a self-check on one shared token would be dishonest, ir.yml header)', () => {
+  test('landing_mode: manual-after-review (no independent agent-review status — a self-check on one shared token would be dishonest)', () => {
     expect(pack.landing_mode).toBe('manual-after-review');
   });
 
-  test('required_checks (provision.json view): ["ci"] — this profile\'s PRESCRIPTION, not an adopter-discovered fact (see setup-pack.yml\'s TP.2 reconciliation note + setup-pack.ts\'s required_checks field doc: TE.4 discovers/overrides the REAL name(s) at install time via a probe PR — this pack never guesses one)', () => {
+  test('required_checks (provision.json view): ["ci"] — the profile prescription; install-time probing must discover/override the adopter\'s real check names', () => {
     expect(pack.required_checks).toEqual(['ci']);
   });
 
@@ -306,12 +306,12 @@ describe('TP.2 acceptance — simple-gh pack vs DESIGN §Q1 (the simple-gh ladde
     expect(byCheck).toEqual({ ci: 'authored-workflow' });
   });
 
-  test('board_seed_recipe: planner originates via plans-as-docs (ztrack import --register, skills/planner/SKILL.md), `ready` ztrack STATE is the promotion fence (manager flips it), landing_path is the §7 board-PR carve-out (skills/manager/SKILL.md §7, the F1 carve-out) — branch protection makes a direct board push mechanically unlandable', () => {
+  test('board_seed_recipe: Planner originates through the task service, `ready` ztrack STATE is the attributable human promotion fence, and committed task changes use an ordinary reviewed PR', () => {
     expect(pack.board_seed_recipe).toEqual({
       originator_skill: 'planner',
       promotion_fence: 'state',
       import_verb: 'ztrack import --register',
-      landing_path: 'board-pr-carveout',
+      landing_path: 'reviewed-pr',
     });
   });
 
@@ -335,7 +335,7 @@ describe('TP.2 acceptance — simple-gh pack vs DESIGN §Q1 (the simple-gh ladde
     expect(pack.enforce_admins).toBe(true);
   });
 
-  test('codeHost=github, targets=[local] ONLY — no meaningful gh-actions realization of "the manager merges with the operator token" (ir.yml header)', () => {
+  test('codeHost=github, targets=[local] ONLY — Manager lands through the operator\'s local GitHub credential', () => {
     expect(pack.codeHost).toBe('github');
     expect(pack.targets).toEqual(['local']);
   });

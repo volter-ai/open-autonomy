@@ -72,6 +72,57 @@ describe('autonomy-compile — fresh-compile clobber guard (BL-14)', () => {
   }, 30_000);
 });
 
+describe('autonomy-compile — local schedule target configuration', () => {
+  test('applies independent fences through the real CLI without putting them in profile policy', () => {
+    const parent = mkdtempSync(join(tmpdir(), 'oa-schedule-config-'));
+    const dir = join(parent, 'install');
+    const config = join(parent, 'schedule.json');
+    try {
+      writeFileSync(config, JSON.stringify({
+        schema: 'open-autonomy.local-schedule-config.v1',
+        defaults: { fence: '.open-autonomy/paused', retrySeconds: 300 },
+        agents: {
+          planner: { fence: '.open-autonomy/audits-paused', retrySeconds: 3600 },
+          kaizen: { fence: '.open-autonomy/audits-paused', retrySeconds: 3600 },
+        },
+      }));
+      const r = compile(['simple-gh', 'local', dir, '--local-schedule-config', config]);
+      expect(r.exitCode).toBe(0);
+      const schedule = JSON.parse(readFileSync(join(dir, 'scheduler', 'schedule.json'), 'utf8')) as {
+        jobs: Array<{ name: string; fence: string; retrySeconds: number }>;
+      };
+      expect(schedule.jobs.find(({ name }) => name === 'manager')).toMatchObject({
+        fence: '.open-autonomy/paused', retrySeconds: 300,
+      });
+      for (const name of ['planner', 'kaizen']) {
+        expect(schedule.jobs.find((job) => job.name === name)).toMatchObject({
+          fence: '.open-autonomy/audits-paused', retrySeconds: 3600,
+        });
+      }
+      expect(readFileSync(join(dir, '.open-autonomy', 'paused'), 'utf8')).toContain('rm .open-autonomy/paused');
+      expect(readFileSync(join(dir, '.open-autonomy', 'audits-paused'), 'utf8')).toContain('rm .open-autonomy/audits-paused');
+      const manifest = JSON.parse(readFileSync(join(dir, '.open-autonomy', 'generated.json'), 'utf8')) as { files: string[] };
+      expect(manifest.files).not.toContain('.open-autonomy/paused');
+      expect(manifest.files).not.toContain('.open-autonomy/audits-paused');
+    } finally {
+      rmSync(parent, { recursive: true, force: true });
+    }
+  }, 30_000);
+
+  test('rejects local schedule config on a non-local target', () => {
+    const parent = mkdtempSync(join(tmpdir(), 'oa-schedule-config-target-'));
+    const config = join(parent, 'schedule.json');
+    try {
+      writeFileSync(config, JSON.stringify({ schema: 'open-autonomy.local-schedule-config.v1' }));
+      const r = compile(['hello', 'gh-actions', '--local-schedule-config', config]);
+      expect(r.exitCode).toBe(2);
+      expect(r.stderr).toContain('only applies to the "local" substrate');
+    } finally {
+      rmSync(parent, { recursive: true, force: true });
+    }
+  });
+});
+
 describe('autonomy-compile — printed next-steps include the commit-the-harness step (OA-03, AC-7)', () => {
   test('no-tracker profile (hello, local): "Commit the harness" is step 4, "Run the loop" is step 5', () => {
     const dir = mkdtempSync(join(tmpdir(), 'oa-nextsteps-hello-'));

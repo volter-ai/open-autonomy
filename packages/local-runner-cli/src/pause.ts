@@ -1,8 +1,9 @@
-// The `.open-autonomy/paused` marker file — DESIGN CONTRACT: it stays the source of truth. `oa pause`
+// The conventional `.open-autonomy/paused` marker file. `oa pause`
 // touches it (an agent action never deletes it); `oa resume` removes it (a human typing the CLI verb IS
 // the operator's act — same authority as the documented `rm .open-autonomy/paused`, just spelled `oa
-// resume`). `oa status`/the reconciler only ever READ it. The CLI is ergonomics over the file, never a
-// daemon holding state of its own.
+// resume`). Jobs opt into this fence by declaring it in schedule.json; a profile may assign another
+// fence to independent maintenance/audit jobs. The CLI is ergonomics over the file, never a daemon
+// holding state of its own.
 import { existsSync, mkdirSync, readFileSync, unlinkSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 
@@ -16,7 +17,7 @@ export function isPaused(cwd: string = process.cwd()): boolean {
 
 export function pausedMessage(cwd: string = process.cwd()): string {
   return (
-    '[oa] PAUSED — fresh installs start paused so an existing backlog is never dispatched unreviewed.\n' +
+    '[oa] CONVENTIONAL FENCE PRESENT — jobs assigned .open-autonomy/paused will not start.\n' +
     '[oa] review the board, then unpause:  oa resume   (or: rm .open-autonomy/paused — details: ' +
     pausedMarkerPath(cwd) +
     ')'
@@ -34,15 +35,15 @@ export function pause(opts: { cwd?: string; reason?: string } = {}): { alreadyPa
   if (!alreadyPaused || opts.reason) {
     const body =
       opts.reason ??
-      'This open-autonomy install is PAUSED (touched via `oa pause`).\nUnpause:  oa resume   (or: rm .open-autonomy/paused)\n';
+      'The conventional open-autonomy job fence is present (touched via `oa pause`).\nUnpause:  oa resume   (or: rm .open-autonomy/paused)\n';
     mkdirSync(dirname(path), { recursive: true });
     writeFileSync(path, body.endsWith('\n') ? body : `${body}\n`);
   }
   return { alreadyPaused, path };
 }
 
-/** `oa resume` — removes the marker. Prints DRAIN semantics: pausing never kills an in-flight wave (the
- *  reconciler leaves it running to completion); resuming just re-arms new fires on the next heartbeat —
+/** `oa resume` — removes the marker. Prints DRAIN semantics: fencing never kills an in-flight job (the
+ *  reconciler leaves it running to completion); resuming just re-arms matching jobs on the next heartbeat —
  *  there is no separate "drain" step to wait for on the resume side, only on the pause side. */
 export function resume(opts: { cwd?: string } = {}): { wasPaused: boolean; path: string } {
   const cwd = opts.cwd ?? process.cwd();
@@ -63,5 +64,5 @@ export function pauseReasonText(cwd: string = process.cwd()): string | null {
 }
 
 export const DRAIN_NOTE =
-  'drain semantics: pausing never kills an in-flight wave — the current session runs to completion; only ' +
-  'a NEW fire is blocked. Resuming re-arms new fires within one reconcile period (~20s heartbeat), no drain wait.';
+  'drain semantics: pausing never kills an in-flight job — jobs assigned .open-autonomy/paused drain to ' +
+  'completion and receive no new fires. Resuming re-arms those jobs within one reconcile period.';

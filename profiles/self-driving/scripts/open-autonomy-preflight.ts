@@ -1,6 +1,7 @@
 #!/usr/bin/env bun
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname } from 'node:path';
+import { parse as parseYaml } from 'yaml';
 import { readAutonomyConfig, referencedAutonomyPaths } from './open-autonomy-config.js';
 
 export interface PreflightInput {
@@ -79,7 +80,7 @@ const REQUIRED_FILES = [
 function agentWorkflowFiles(root: string): string[] {
   let candidates: string[];
   try {
-    const manifest = Bun.YAML.parse(readFileSync(`${root}/.open-autonomy/autonomy.yml`, 'utf8')) as {
+    const manifest = parseYaml(readFileSync(`${root}/.open-autonomy/autonomy.yml`, 'utf8')) as {
       agents?: Record<string, { workflowFile?: string }>;
     };
     candidates = Object.values(manifest.agents ?? {})
@@ -132,7 +133,7 @@ export function expectedLabels(root = '.'): string[] {
     planner?: { issue_origin_label_prefix?: string; priority_labels?: Record<string, string> };
   } = {};
   try {
-    const manifest = (Bun.YAML.parse(readFileSync(`${root}/.open-autonomy/autonomy.yml`, 'utf8')) ?? {}) as {
+    const manifest = (parseYaml(readFileSync(`${root}/.open-autonomy/autonomy.yml`, 'utf8')) ?? {}) as {
       policy?: typeof policy;
     };
     policy = manifest.policy ?? {};

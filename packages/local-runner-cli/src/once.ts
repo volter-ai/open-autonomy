@@ -1,15 +1,11 @@
-// `oa once` — fires the FULL schedule unconditionally, no state-gating, no eligibility probe, no
-// crash-loop backoff. The scripted entry point: "run exactly what's declared, once" is its whole
-// contract, unchanged by `oa start`'s reconciler. PAUSED is checked FIRST — before even the termfleet
-// dependency check inside the preflight chain — so a paused install deterministically reports PAUSED as
-// the reason nothing ran, never masked by an unrelated "termfleet not installed" exit that would also
-// (coincidentally) prevent a launch.
+// `oa once` — fires every currently unfenced job once, with no cadence or backoff state.
 import type { ProcRunner } from './types.ts';
 import { defaultProc } from './proc.ts';
 import { loadSchedule } from './config.ts';
-import { isPaused, pausedMessage } from './pause.ts';
 import { buildTickEnv, fireCommands } from './env.ts';
 import { runPreflight } from './preflight.ts';
+import { existsSync } from 'node:fs';
+import { join } from 'node:path';
 
 export interface OnceResult {
   ok: boolean;
@@ -24,19 +20,15 @@ export async function once(
   const proc = opts.proc ?? defaultProc;
   const ambient = opts.ambient ?? process.env;
 
-  if (isPaused(cwd)) {
-    const msg = pausedMessage(cwd);
-    console.error(msg);
-    return { ok: false, reason: msg, fired: 0 };
-  }
-
   const schedule = loadSchedule(cwd);
-  const cmds = schedule.scripts.map((s) => s.cmd);
+  const activeJobs = schedule.jobs.filter((job) => !job.fence || !existsSync(join(cwd, job.fence)));
+  const cmds = activeJobs.map((job) => job.cmd);
+  if (!cmds.length) return { ok: true, fired: 0 };
 
   // The full run.mjs guard chain (termfleet / OA-04 / OA-09 origin log + AUTONOMY_PROVIDER_URL_SOURCE
   // export / OA-03) — SHARED with `oa start` via runPreflight so the two modes can never drift apart on
-  // what they refuse (the failure mode the pre-U4 template never had, because it was one file).
-  const pre = await runPreflight(schedule, {
+  // what they refuse.
+  const pre = await runPreflight({ ...schedule, jobs: activeJobs, scripts: activeJobs }, {
     cwd,
     proc,
     ambient,
@@ -48,6 +40,8 @@ export async function once(
     return result;
   }
 
-  fireCommands(cmds, buildTickEnv(schedule.env, ambient), proc);
+  const results = fireCommands(cmds, buildTickEnv(schedule.env, ambient, 'cron'), proc);
+  const failed = results.filter((result) => result.status !== 0 || result.error);
+  if (failed.length) return { ok: false, fired: cmds.length, reason: `${failed.length} of ${cmds.length} job(s) failed` };
   return { ok: true, fired: cmds.length };
 }

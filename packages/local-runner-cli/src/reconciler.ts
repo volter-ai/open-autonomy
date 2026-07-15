@@ -1,48 +1,56 @@
-// Continuous mode (`oa start`) — the S6/T6 reconciler, ported verbatim in spirit + generalized to
-// PER-SCRIPT state (U4's per-agent-cadence closure of the shared-interval limitation both forks
-// inherited: S6/T6 tracked exactly one reconciled script — `manager`/`pm` — sharing one lastFire/backoff/
-// launchedAt; here every reconciled script gets its OWN independent {lastFire, backoff, launchedAt,
-// consecutiveFastDeaths} keyed by its parsed AUTONOMY_AGENT identity, so a future second reconciled agent
-// (a planner, per the study's II.6.1 note) doesn't have to share cadence/backoff with the first).
-//
-// A fast heartbeat (~20s, POLL_MS) that RECONCILES desired state — "a reconciled agent is running
-// whenever !paused && work is eligible" — instead of clock-firing. Each script's own `intervalSeconds`
-// (schedule.json) is a MIN-GAP FLOOR: a safety rail against back-to-back fires, never what decides when
-// it runs. Unreconciled scripts keep the OLD clock-gated cadence, now also per-script instead of shared.
-import { readFileSync, readdirSync, unlinkSync } from 'node:fs';
+// Generic local substrate loop. It realizes cadence, fences, concurrency, retries, session singleton,
+// reaping, and opaque completion effects. It does not query tasks, PRs, or role-specific state.
+import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, unlinkSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import type { NormalizedSchedule, NormalizedScript, ProcRunner, Session, SessionRunner } from './types.ts';
+import type { NormalizedJob, ProcRunner, Session, SessionRunner } from './types.ts';
 import { defaultProc } from './proc.ts';
-import { loadSchedule, otherScripts as otherScriptsOf, reconciledScripts as reconciledScriptsOf } from './config.ts';
-import { isPaused, pausedMessage } from './pause.ts';
+import { loadSchedule } from './config.ts';
 import { buildTickEnv } from './env.ts';
-import { type EligibilityVariant, makeEligibilityCheck } from './eligibility.ts';
 import { defaultSessionRunner, listSessionsBestEffort } from './sessions.ts';
 import { recordFire } from './status.ts';
 import { runPreflight } from './preflight.ts';
 
-const FAST_DEATH_MS = 60_000; // "ended within 60s of launch" (II.6.1 change 3, verbatim)
-const BACKOFF_CAP_MS = 30 * 60 * 1000; // cap 30 min (verbatim)
+const FAST_DEATH_MS = 60_000;
+const BACKOFF_CAP_MS = 30 * 60 * 1000;
 
-interface ReconcilerState {
+interface JobState {
   lastFire: number;
+  nextFireAt: number;
   launchedAt: number;
   consecutiveFastDeaths: number;
   backoffUntil: number;
-  eligible: () => boolean;
 }
 
-/** 2x per consecutive fast-death (verbatim), engaging once the 3rd consecutive fast death is observed
- *  (n=3 → 2x, n=4 → 4x, n=5 → 8x, …, capped at 30 min). Base unit is the script's OWN min-gap floor so
- *  the safety scales with whatever cadence is configured. Exported for direct unit-testing of the
- *  escalation curve (driving 4+ real fast-death cycles through the heartbeat would be slow and flaky). */
+interface DurableScheduleState {
+  schema: 'open-autonomy.local-schedule-state.v1';
+  jobs: Record<string, { attemptedAtMs: number; status: number; error?: string }>;
+}
+
+function scheduleStatePath(cwd: string): string {
+  return join(cwd, '.open-autonomy', 'runner-state', 'schedule-state.json');
+}
+
+function loadDurableState(cwd: string): DurableScheduleState {
+  const empty: DurableScheduleState = { schema: 'open-autonomy.local-schedule-state.v1', jobs: {} };
+  try {
+    const loaded = JSON.parse(readFileSync(scheduleStatePath(cwd), 'utf8')) as DurableScheduleState;
+    return loaded?.schema === empty.schema && loaded.jobs && typeof loaded.jobs === 'object' ? loaded : empty;
+  } catch {
+    return empty;
+  }
+}
+
+function saveDurableState(cwd: string, state: DurableScheduleState): void {
+  const path = scheduleStatePath(cwd);
+  mkdirSync(join(cwd, '.open-autonomy', 'runner-state'), { recursive: true });
+  const temporary = `${path}.${process.pid}.tmp`;
+  writeFileSync(temporary, `${JSON.stringify(state, null, 2)}\n`);
+  renameSync(temporary, path);
+}
+
 export function backoffMsFor(n: number, intervalMs: number): number {
   if (n < 3) return 0;
-  return Math.min(intervalMs * 2 ** (n - 2), BACKOFF_CAP_MS);
-}
-
-function keyOf(script: NormalizedScript, index: number): string {
-  return script.agent ?? `#${index}`;
+  return Math.min(Math.max(1000, intervalMs) * 2 ** (n - 2), BACKOFF_CAP_MS);
 }
 
 async function sleep(ms: number, signal?: AbortSignal): Promise<void> {
@@ -63,35 +71,25 @@ export interface StartOptions {
   pollMs?: number;
   idleReapMs?: number;
   sessionRunnerFactory?: (cwd: string) => Promise<SessionRunner | null>;
-  /** the env object OA-09's AUTONOMY_PROVIDER_URL_SOURCE export is written into and every tick env is
-   *  built from (default process.env). Tests inject their own to observe the export. */
   ambient?: NodeJS.ProcessEnv;
-  /** OA-09 auto-discovery hook forwarded to the preflight (see preflight.ts). */
   resolveDefault?: () => Promise<{ baseUrl: string; source: string }>;
-  /** test hook — the fast-death threshold (default 60s, run.mjs verbatim). Only tests shrink this: the
-   *  healthy-lifetime reset path is otherwise untestable without a real 60s session. */
   fastDeathMs?: number;
-  /** test hook — called once per heartbeat after all work is done for that iteration. */
   onHeartbeat?: (n: number) => void;
 }
+
+const active = (session: Session): boolean => session.status === 'running' || session.status === 'paused' || session.status === 'awaiting-human';
+const fenced = (cwd: string, job: NormalizedJob): boolean => !!job.fence && existsSync(join(cwd, job.fence));
 
 export async function start(opts: StartOptions = {}): Promise<void> {
   const cwd = opts.cwd ?? process.cwd();
   const proc = opts.proc ?? defaultProc;
   const ambient = opts.ambient ?? process.env;
   const signal = opts.signal;
-  const pollMs = Math.max(1000, opts.pollMs ?? Number(process.env.AUTONOMY_REAP_POLL_MS ?? 20000));
+  const pollMs = Math.max(10, opts.pollMs ?? Number(process.env.AUTONOMY_REAP_POLL_MS ?? 20000));
   const idleReapMs = opts.idleReapMs ?? Number(process.env.AUTONOMY_IDLE_REAP_MS ?? 60000);
   const fastDeathMs = opts.fastDeathMs ?? FAST_DEATH_MS;
+  const schedule = loadSchedule(cwd);
 
-  const schedule: NormalizedSchedule = loadSchedule(cwd);
-  const reconciled = reconciledScriptsOf(schedule);
-  const others = otherScriptsOf(schedule);
-
-  // The full run.mjs guard chain (termfleet-installed / OA-04 collision probe / OA-09 provider-origin
-  // log + AUTONOMY_PROVIDER_URL_SOURCE export / OA-03 uncommitted-harness) — run BEFORE the heartbeat
-  // loop, exactly like run.mjs ran it top-level before both modes. Shared with `oa once` via runPreflight
-  // so the two modes can never drift apart on what they refuse.
   const pre = await runPreflight(schedule, {
     cwd,
     proc,
@@ -109,116 +107,97 @@ export async function start(opts: StartOptions = {}): Promise<void> {
         .map((f) => f.slice(0, -4)),
     );
   } catch {
-    /* no prompts dir — script-only schedule */
+    /* script-only schedule */
   }
 
-  const sessionRunnerFactory = opts.sessionRunnerFactory ?? defaultSessionRunner;
-  const runner = await sessionRunnerFactory(cwd);
-
-  const states = new Map<string, ReconcilerState>();
-  reconciled.forEach((script, i) => {
-    states.set(keyOf(script, i), {
-      lastFire: 0,
-      launchedAt: 0,
+  const runner = await (opts.sessionRunnerFactory ?? defaultSessionRunner)(cwd);
+  const durableState = loadDurableState(cwd);
+  const states = new Map(schedule.jobs.map((job) => {
+    const prior = durableState.jobs[job.name];
+    const attemptedAtMs = Number(prior?.attemptedAtMs);
+    const hasPrior = Number.isFinite(attemptedAtMs) && attemptedAtMs > 0 && Number.isFinite(Number(prior?.status));
+    const delayMs = Number(prior?.status) === 0 ? job.intervalSeconds * 1000 : job.retrySeconds * 1000;
+    return [job.name, {
+      lastFire: hasPrior ? attemptedAtMs : 0,
+      nextFireAt: hasPrior ? attemptedAtMs + delayMs : 0,
+      launchedAt: hasPrior && prior!.status === 0 && !!job.agent ? attemptedAtMs : 0,
       consecutiveFastDeaths: 0,
       backoffUntil: 0,
-      eligible: makeEligibilityCheck(cwd, script.eligibility as EligibilityVariant, proc),
-    });
-  });
-  const otherLastFire = new Map<string, number>(others.map((s, i) => [keyOf(s, i), 0]));
+    } satisfies JobState];
+  }));
+  const scheduledAgents = new Set(schedule.jobs.map((job) => job.agent).filter((agent): agent is string => !!agent));
   const idleSince = new Map<string, number>();
-  let paused = false;
-
   let heartbeat = 0;
+
   while (!signal?.aborted) {
     heartbeat += 1;
     const now = Date.now();
-    const nowPaused = isPaused(cwd);
-    if (nowPaused !== paused) {
-      console.error(nowPaused ? pausedMessage(cwd) : '[oa] unpaused — resuming ticks.');
-      paused = nowPaused;
-    }
+    const sessions = await listSessionsBestEffort(cwd, runner);
+    const activeSessions = sessions?.filter(active) ?? [];
+    let activeCount = activeSessions.filter((session) => scheduledAgents.has(session.agent)).length;
 
-    // ---- reconciler: one independent state machine per reconciled script (II.6.1: state-gated fire) ----
-    for (const [i, script] of reconciled.entries()) {
-      const key = keyOf(script, i);
-      const st = states.get(key)!;
-      const intervalMs = script.intervalSeconds * 1000;
-      const sessions: Session[] | null = await listSessionsBestEffort(cwd, runner);
-      const label = script.agent ?? key;
-      const matching = sessions === null ? null : sessions.filter((s) => s.agent === script.agent && (s.status === 'running' || s.status === 'paused'));
-      const inFlight = matching === null ? true : matching.length > 0;
-      if (matching === null) console.error(`[oa] ${label}: session probe unavailable — assuming in flight (fail closed, never stack)`);
+    for (const job of schedule.jobs) {
+      const state = states.get(job.name)!;
+      const intervalMs = job.intervalSeconds * 1000;
+      const matching = job.agent && sessions ? activeSessions.filter((session) => session.agent === job.agent) : [];
+      const livenessUnknown = !!job.agent && sessions === null;
+      const inFlight = livenessUnknown || matching.length > 0;
 
-      if (st.launchedAt && !inFlight) {
-        const lifetimeMs = now - st.launchedAt;
-        st.launchedAt = 0;
+      if (state.launchedAt && !inFlight) {
+        const lifetimeMs = now - state.launchedAt;
+        state.launchedAt = 0;
         if (lifetimeMs < fastDeathMs) {
-          st.consecutiveFastDeaths += 1;
-          console.error(`[oa] ${label}: session ended after ${lifetimeMs}ms (< ${fastDeathMs}ms) — consecutive fast-deaths now ${st.consecutiveFastDeaths}`);
-          if (st.consecutiveFastDeaths >= 3) {
-            st.backoffUntil = now + backoffMsFor(st.consecutiveFastDeaths, intervalMs);
-            console.error(`[oa] ${label}: CRASH-LOOP BACKOFF engaged (${st.consecutiveFastDeaths} consecutive fast deaths) — next attempt not before ${new Date(st.backoffUntil).toISOString()}`);
+          state.consecutiveFastDeaths += 1;
+          state.nextFireAt = now + job.retrySeconds * 1000;
+          durableState.jobs[job.name] = { attemptedAtMs: now, status: 1, error: `session ended after ${lifetimeMs}ms` };
+          saveDurableState(cwd, durableState);
+          if (state.consecutiveFastDeaths >= 3) {
+            state.backoffUntil = now + backoffMsFor(state.consecutiveFastDeaths, job.retrySeconds * 1000);
           }
         } else {
-          if (st.consecutiveFastDeaths) console.error(`[oa] ${label}: session ran ${lifetimeMs}ms (healthy) — crash-loop count reset from ${st.consecutiveFastDeaths}`);
-          st.consecutiveFastDeaths = 0;
-          st.backoffUntil = 0;
+          state.consecutiveFastDeaths = 0;
+          state.backoffUntil = 0;
         }
       }
 
-      if (paused) {
-        // drain-not-kill: an in-flight wave is left alone; death bookkeeping above still runs. No NEW
-        // fire is ever considered while paused.
-      } else if (inFlight) {
-        // a wave is already running this heartbeat — nothing to decide, the singleton holds.
-      } else if (now < st.backoffUntil) {
-        console.error(`[oa] ${label}: backing off (${Math.ceil((st.backoffUntil - now) / 1000)}s remaining, ${st.consecutiveFastDeaths} consecutive fast deaths)`);
-      } else if (now - st.lastFire < intervalMs) {
-        // inside the min-gap floor — no log (would spam every heartbeat).
-      } else if (st.eligible()) {
-        console.error(`[oa] ${label}: firing (eligible, min-gap elapsed, not in flight, no backoff)`);
-        const env = buildTickEnv(schedule.env, ambient, 'cron'); // D2: this heartbeat is the automatic fire
-        const result = proc(script.cmd, [], { shell: true, stdio: 'inherit', env });
-        // Last ACTUAL fire — deliberately NOT advanced while paused/in-flight/backed-off/ineligible, so
-        // that unpausing (or backoff/eligibility clearing) lets it fire on the very NEXT heartbeat rather
-        // than waiting out a stale interval: the "bounded resurrection latency" II.6.3 promises.
-        st.lastFire = now;
-        recordFire(cwd, label, script.cmd);
-        if (result.status !== 0 || result.error) {
-          st.consecutiveFastDeaths += 1;
-          console.error(`[oa] ${label}: launch FAILED synchronously — consecutive fast-deaths now ${st.consecutiveFastDeaths}`);
-          if (st.consecutiveFastDeaths >= 3) {
-            st.backoffUntil = now + backoffMsFor(st.consecutiveFastDeaths, intervalMs);
-            console.error(`[oa] ${label}: CRASH-LOOP BACKOFF engaged (${st.consecutiveFastDeaths} consecutive fast deaths) — next attempt not before ${new Date(st.backoffUntil).toISOString()}`);
-          }
-          st.launchedAt = 0;
-        } else {
-          st.launchedAt = now;
-        }
-      }
-      // else: eligible() returned false — it already logged every probe it ran plus the overall verdict.
-    }
+      if (fenced(cwd, job) || inFlight || (!!job.agent && activeCount >= schedule.maxConcurrent)) continue;
+      if (now < state.backoffUntil || now < state.nextFireAt) continue;
 
-    // ---- non-reconciled script lines: unchanged clock-gated cadence, now per-script (self-throttling
-    // skills, e.g. a planner) — no state-gating, only each script's own min-gap floor. ----
-    for (const [i, script] of others.entries()) {
-      const key = keyOf(script, i);
-      const last = otherLastFire.get(key) ?? 0;
-      const intervalMs = script.intervalSeconds * 1000;
-      if (now - last >= intervalMs) {
-        if (!paused) proc(script.cmd, [], { shell: true, stdio: 'inherit', env: buildTickEnv(schedule.env, ambient, 'cron') }); // D2: automatic per-script fire
-        otherLastFire.set(key, now); // advances even while paused — matches pre-U4 behavior
+      const env = buildTickEnv(schedule.env, ambient, 'cron');
+      const result = proc(job.cmd, [], { shell: true, stdio: 'inherit', env });
+      state.lastFire = now;
+      recordFire(cwd, job.name, job.cmd);
+      durableState.jobs[job.name] = {
+        attemptedAtMs: now,
+        status: result.status ?? 1,
+        ...(result.error ? { error: result.error.message } : {}),
+      };
+      saveDurableState(cwd, durableState);
+      if (result.status !== 0 || result.error) {
+        state.consecutiveFastDeaths += 1;
+        state.nextFireAt = now + job.retrySeconds * 1000;
+        if (state.consecutiveFastDeaths >= 3) {
+          state.backoffUntil = now + backoffMsFor(state.consecutiveFastDeaths, job.retrySeconds * 1000);
+        }
+      } else if (job.agent) {
+        state.nextFireAt = now + intervalMs;
+        state.launchedAt = now;
+        activeCount += 1;
+      } else {
+        state.consecutiveFastDeaths = 0;
+        state.backoffUntil = 0;
+        state.nextFireAt = now + intervalMs;
       }
     }
 
     if (runner) {
       try {
         const reaped = await runner.reapIdle({ idleMs: idleReapMs, agents, since: idleSince });
-        for (const r of reaped) console.log(`[oa] reaped idle ${r.agent} (${r.id})`);
+        for (const result of reaped) console.log(`[oa] reaped idle ${result.agent} (${result.id})`);
         await reconcilePendingEffects(cwd, runner, proc);
-      } catch (e) {
-        console.error('[oa] reap error:', (e as Error)?.message ?? e);
+        await reconcileWorkspaceLeases(cwd, runner, proc);
+      } catch (error) {
+        console.error('[oa] reap error:', (error as Error)?.message ?? error);
       }
     }
 
@@ -227,24 +206,21 @@ export async function start(opts: StartOptions = {}): Promise<void> {
   }
 }
 
-// Post-session effects: the local mirror of github's post-skill job step. When a session recorded by
-// runner.ts's launch seam is GONE from the runner's live list (finished + reaped), run its recorded
-// effect in its worktree and retire the marker. Crash-safe: a marker outlives a missed reap and is
-// reconciled on a later tick.
+// Effects are deliberately opaque to the scheduler: it runs the recorded command after the associated
+// session disappears, without interpreting the effect, task, branch, or code host.
 async function reconcilePendingEffects(cwd: string, runner: SessionRunner, proc: ProcRunner): Promise<void> {
   const effectsDir = join(cwd, '.open-autonomy', 'runner-state', 'effects');
   let files: string[] = [];
   try {
-    files = readdirSync(effectsDir).filter((f) => f.endsWith('.json'));
+    files = readdirSync(effectsDir).filter((file) => file.endsWith('.json'));
   } catch {
-    return; // no markers dir yet
+    return;
   }
-  if (!files.length) return;
   let live: Set<string>;
   try {
-    live = new Set((await runner.list()).map((s) => s.id));
+    live = new Set((await runner.list()).map((session) => session.id));
   } catch {
-    return; // liveness unknown -> wait a tick
+    return;
   }
   for (const file of files) {
     const path = join(effectsDir, file);
@@ -252,22 +228,102 @@ async function reconcilePendingEffects(cwd: string, runner: SessionRunner, proc:
     try {
       marker = JSON.parse(readFileSync(path, 'utf8'));
     } catch {
-      try {
-        unlinkSync(path);
-      } catch {
-        /* ignore */
-      }
+      try { unlinkSync(path); } catch { /* ignore */ }
       continue;
     }
-    if (live.has(marker.id)) continue; // session still running -> its effect runs after it finishes
+    if (live.has(marker.id)) continue;
     console.log(`[oa] post-session effect: ${marker.agent} (${marker.id}) -> ${marker.effect} in ${marker.worktree}`);
-    proc('bun', [marker.effect], { cwd: marker.worktree, stdio: 'inherit', env: { ...process.env, ...marker.env } });
-    try {
-      unlinkSync(path);
-    } catch {
-      /* ignore */
+    const result = proc('bun', [marker.effect], { cwd: marker.worktree, stdio: 'inherit', env: { ...process.env, ...marker.env } });
+    if (result.status === 0 && !result.error) {
+      try { unlinkSync(path); } catch { /* ignore */ }
+    } else {
+      console.error(`[oa] post-session effect failed; retaining ${file} for retry: ${result.error?.message ?? `exit ${result.status ?? 'unknown'}`}`);
     }
   }
 }
 
 export { reconcilePendingEffects };
+
+interface WorkspaceLease {
+  schema: 'open-autonomy.workspace-lease.v1';
+  id: string;
+  agent: string;
+  branch: string;
+  worktree: string;
+  createdAt: string;
+}
+
+/** Reclaim runner-owned isolated workspaces after their session and any completion effect finish.
+ * Clean worktrees are removed immediately. Dirty or unreadable worktrees are moved to a quarantine
+ * receipt exactly once so operator evidence is retained without an infinite cleanup retry loop. */
+export async function reconcileWorkspaceLeases(
+  cwd: string,
+  runner: SessionRunner,
+  proc: ProcRunner = defaultProc,
+): Promise<void> {
+  const leasesDir = join(cwd, '.open-autonomy', 'runner-state', 'workspaces');
+  const effectsDir = join(cwd, '.open-autonomy', 'runner-state', 'effects');
+  const quarantineDir = join(cwd, '.open-autonomy', 'runner-state', 'workspace-quarantine');
+  let files: string[] = [];
+  try {
+    files = readdirSync(leasesDir).filter((file) => file.endsWith('.json'));
+  } catch {
+    return;
+  }
+  let live: Set<string>;
+  try {
+    live = new Set((await runner.list()).map((session) => session.id));
+  } catch {
+    return;
+  }
+  const records: Array<{ file: string; path: string; lease: WorkspaceLease }> = [];
+  for (const file of files) {
+    const path = join(leasesDir, file);
+    let lease: WorkspaceLease;
+    try {
+      lease = JSON.parse(readFileSync(path, 'utf8')) as WorkspaceLease;
+      if (lease.schema !== 'open-autonomy.workspace-lease.v1' || !lease.id || !lease.branch || !lease.worktree)
+        throw new Error('invalid workspace lease');
+    } catch {
+      mkdirSync(quarantineDir, { recursive: true });
+      try { renameSync(path, join(quarantineDir, file)); } catch { /* leave it for inspection */ }
+      continue;
+    }
+    records.push({ file, path, lease });
+  }
+  const handled = new Set<string>();
+  for (const record of records) {
+    const { lease } = record;
+    if (handled.has(lease.worktree)) continue;
+    handled.add(lease.worktree);
+    const peers = records.filter((candidate) => candidate.lease.worktree === lease.worktree);
+    if (peers.some((peer) => live.has(peer.lease.id) || existsSync(join(effectsDir, peer.file)))) continue;
+    if (!existsSync(lease.worktree)) {
+      for (const peer of peers) try { unlinkSync(peer.path); } catch { /* retry later */ }
+      continue;
+    }
+    const status = proc('git', ['status', '--porcelain'], { cwd: lease.worktree });
+    if (status.status !== 0 || status.error || status.stdout.trim()) {
+      mkdirSync(quarantineDir, { recursive: true });
+      for (const peer of peers) {
+        const receipt = {
+          ...peer.lease,
+          quarantinedAt: new Date().toISOString(),
+          reason: status.status !== 0 || status.error ? 'git status failed' : 'worktree has uncommitted changes',
+        };
+        writeFileSync(join(quarantineDir, peer.file), `${JSON.stringify(receipt, null, 2)}\n`);
+        try { unlinkSync(peer.path); } catch { /* quarantine receipt is already durable */ }
+      }
+      console.error(`[oa] retained dirty workspace for ${lease.agent} (${lease.id}): ${lease.worktree}`);
+      continue;
+    }
+    const removed = proc('git', ['worktree', 'remove', lease.worktree], { cwd });
+    if (removed.status !== 0 || removed.error) {
+      console.error(`[oa] workspace cleanup failed for ${lease.agent} (${lease.id}); retaining lease`);
+      continue;
+    }
+    proc('git', ['branch', '-D', lease.branch], { cwd });
+    for (const peer of peers) try { unlinkSync(peer.path); } catch { /* cleanup already succeeded */ }
+    console.log(`[oa] cleaned workspace for ${lease.agent} (${lease.id})`);
+  }
+}

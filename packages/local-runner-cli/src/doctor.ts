@@ -62,14 +62,14 @@ export async function doctor(opts: { cwd?: string; proc?: ProcRunner; fetchImpl?
   let schedule;
   try {
     schedule = loadSchedule(cwd);
-    checks.push({ name: 'schedule.json', ok: true, detail: `parsed: ${schedule.scripts.length} script line(s), ${schedule.scripts.filter((s) => s.reconciled).length} reconciled` });
+    checks.push({ name: 'schedule.json', ok: true, detail: `parsed: ${schedule.jobs.length} job(s), maxConcurrent=${schedule.maxConcurrent}` });
   } catch (e) {
     checks.push({ name: 'schedule.json', ok: false, detail: `parse failed: ${(e as Error).message}` });
     return { ok: false, checks }; // nothing downstream can be checked without a parsed schedule
   }
 
   // 3. OA-04 dep-integrity probe (only meaningful if the schedule needs the runner at all)
-  const cmds = schedule.scripts.map((s) => s.cmd);
+  const cmds = schedule.jobs.map((job) => job.cmd);
   if (needsRunner(cmds)) {
     if (!existsSync(join(cwd, 'node_modules', 'termfleet'))) {
       checks.push({ name: 'dep-integrity', ok: false, detail: 'termfleet not installed (npm install termfleet)' });
@@ -95,7 +95,7 @@ export async function doctor(opts: { cwd?: string; proc?: ProcRunner; fetchImpl?
 
   // 5. prompts/skills existence per declared agent
   const harnesses = ['claude', 'codex'];
-  const declaredAgents = [...new Set(schedule.scripts.map((s) => s.agent).filter((a): a is string => !!a))];
+  const declaredAgents = [...new Set(schedule.jobs.map((job) => job.agent).filter((agent): agent is string => !!agent))];
   if (!declaredAgents.length) {
     checks.push({ name: 'prompts', ok: true, detail: 'no prose (skill) agents declared — script-only schedule' });
   } else {

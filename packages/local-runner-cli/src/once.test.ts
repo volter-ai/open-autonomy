@@ -15,16 +15,44 @@ function tmpRepo(schedule: object): string {
   return dir;
 }
 
-describe('oa once — fires the FULL schedule unconditionally, no state-gating', () => {
-  test('PAUSED is checked FIRST — before even the termfleet dependency check — so paused reports PAUSED, never masked by an unrelated failure', async () => {
+describe('oa once — fires each currently unfenced job once, with no cadence state', () => {
+  test('a legacy pause fence skips its job before runner preflight', async () => {
     const dir = tmpRepo({ intervalSeconds: 900, scripts: ['AUTONOMY_AGENT=manager node scripts/run-agent.mjs'] });
     try {
       pause({ cwd: dir });
       const stub = new StubProc(); // no handlers registered — a termfleet-missing check would also fail, but PAUSED must win
       const r = await once({ cwd: dir, proc: stub.runner });
-      expect(r.ok).toBe(false);
-      expect(r.reason).toContain('PAUSED');
+      expect(r.ok).toBe(true);
+      expect(r.fired).toBe(0);
       expect(stub.calls).toHaveLength(0); // never even reached the termfleet/OA-04/OA-03 guards
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test('the conventional pause marker does not block a generic job that declares no such fence', async () => {
+    const dir = tmpRepo({ jobs: [{ name: 'maintenance', command: 'bun scripts/maintenance.ts', intervalSeconds: 900 }] });
+    try {
+      pause({ cwd: dir });
+      const stub = new StubProc().on(() => true, () => ok(''));
+      const r = await once({ cwd: dir, proc: stub.runner });
+      expect(r).toEqual({ ok: true, fired: 1 });
+      expect(stub.calls.some((call) => call.cmd === 'bun scripts/maintenance.ts')).toBe(true);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test('reports a nonzero scheduled command as a failed once run', async () => {
+    const dir = tmpRepo({ jobs: [{ name: 'broken', command: 'bun scripts/broken.ts', intervalSeconds: 900 }] });
+    try {
+      const stub = new StubProc().on(() => true, (cmd) => cmd === 'bun scripts/broken.ts'
+        ? { status: 7, stdout: '', stderr: 'broken' }
+        : ok(''));
+      const r = await once({ cwd: dir, proc: stub.runner });
+      expect(r.ok).toBe(false);
+      expect(r.fired).toBe(1);
+      expect(r.reason).toContain('1 of 1');
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }

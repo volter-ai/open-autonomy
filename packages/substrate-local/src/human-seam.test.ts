@@ -28,9 +28,9 @@ describe('compileLocal — kind:human is DECLARED, never EXECUTED', () => {
   const out = compileLocal(ir);
 
   test('a human is excluded from scheduler/schedule.json even though it carries a cron', () => {
-    const schedule = JSON.parse(out.generated['scheduler/schedule.json']) as { scripts: string[] };
-    expect(schedule.scripts.some((s) => s.includes('request.ts'))).toBe(true); // the script agent IS scheduled
-    expect(schedule.scripts.some((s) => s.includes('approver'))).toBe(false); // the human is NOT
+    const schedule = JSON.parse(out.generated['scheduler/schedule.json']) as { jobs: Array<{ command: string }> };
+    expect(schedule.jobs.some((job) => job.command.includes('request.ts'))).toBe(true); // the script agent IS scheduled
+    expect(schedule.jobs.some((job) => job.command.includes('approver'))).toBe(false); // the human is NOT
   });
 
   test('a human gets no launch prompt (no harness to invoke)', () => {
@@ -65,6 +65,7 @@ describe('the emitted scripts/runner.ts — the human route (a REAL subprocess a
     mkdirSync(join(dir, '.open-autonomy'), { recursive: true });
     mkdirSync(join(dir, 'scripts'), { recursive: true });
     writeFileSync(join(dir, '.open-autonomy', 'autonomy.yml'), out.generated['.open-autonomy/autonomy.yml']);
+    writeFileSync(join(dir, '.open-autonomy', 'autonomy.json'), out.generated['.open-autonomy/autonomy.json']);
     writeFileSync(join(dir, 'scripts', 'runner.ts'), out.generated['scripts/runner.ts']);
     return dir;
   }
@@ -75,24 +76,26 @@ describe('the emitted scripts/runner.ts — the human route (a REAL subprocess a
   test('launch PARKS a session (status running), engages (console + attention file), and never auto-completes', () => {
     const dir = scaffold();
     try {
-      const r = runner(dir, ['launch', 'approver', '--ask', 'approve the change', '--completion', '/agent approve']);
+      const r = runner(dir, ['launch', 'approver', '--ref', 'PR-42', '--ask', 'approve the change', '--completion', '/agent approve']);
       expect(r.status).toBe(0);
       expect(r.stdout).toContain('HUMAN ENGAGE: approver');
       expect(r.stdout).toContain('approve the change');
-      const session = lastJson<{ id: string; agent: string; status: string; note?: string }>(r.stdout);
+      const session = lastJson<{ id: string; agent: string; status: string; note?: string; params?: { ref?: string } }>(r.stdout);
       expect(session.agent).toBe('approver');
       expect(session.status).toBe('running'); // parked, not done
       expect(session.note).toContain('bookkeeping only');
       expect(session.note).toContain('/agent approve');
+      expect(session.params?.ref).toBe('PR-42');
 
       const attention = readFileSync(join(dir, '.open-autonomy', 'runner-state', 'human-attention.md'), 'utf8');
       expect(attention).toContain('approve the change');
       expect(attention).toContain(`runner.ts update ${session.id} --status done`);
 
       // re-reading (list/get) never shows it auto-completed — the only path to done is an external update.
-      const listed = lastJson<Array<{ id: string; status: string }>>(runner(dir, ['list', 'approver']).stdout);
+      const listed = lastJson<Array<{ id: string; status: string; ref?: string }>>(runner(dir, ['list', 'approver']).stdout);
       expect(listed.map((s) => s.id)).toContain(session.id);
       expect(listed.find((s) => s.id === session.id)?.status).toBe('running');
+      expect(listed.find((s) => s.id === session.id)?.ref).toBe('PR-42');
       const got = lastJson<{ status: string }>(runner(dir, ['get', session.id]).stdout);
       expect(got.status).toBe('running');
     } finally {

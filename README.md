@@ -161,7 +161,8 @@ loop with a scheduler loop + a termfleet runner instead of GitHub Actions.
 
 - `profiles/` — profiles (recipes) that compile to a runner × code host: `hello` (minimal),
   `self-driving` (open-autonomy's own dogfood; gh-actions + local), `simple-gh-sdlc` (generic
-  GitHub-code-host SDLC; gh-actions + local), and `simple-sdlc` (fully-local, PR-free).
+  GitHub-code-host SDLC; gh-actions + local), `simple-gh` (local Manager/Planner/Kaizen with human
+  roadmap triage), and `simple-sdlc` (fully-local, PR-free).
 
 Docs: [`ARCHITECTURE.md`](./docs/ARCHITECTURE.md) (the github app's design + trust boundaries + canonical vocabulary + layout),
 [`SPEC.md`](./docs/SPEC.md) (the substrate-agnostic model + the four catalogs),

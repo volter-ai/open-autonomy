@@ -10,9 +10,9 @@ Read:
 - `standards/workflow.md` (WIP + dispatch + integration rules)
 - `standards/issue-and-evidence.md`
 
-Before dispatching develop on an issue, consult `policy.risk.human_required_topics` and
-`policy.risk.human_required_paths` in `.open-autonomy/autonomy.yml` (the one source — never keep
-your own list): an issue on one of those topics, or whose change would land in a matching path,
+Before dispatching develop on an issue, consult the semantic stop topics in
+`standards/risk-and-review.md` and `policy.risk.human_required_paths` in
+`.open-autonomy/autonomy.yml`: an issue on one of those topics, or whose change would land in a matching path,
 is a human decision — do not dispatch it; note it as blocked-for-human in your tick output.
 
 Also consult `policy.dispatch` in `.open-autonomy/autonomy.yml`. Under `mode: allowlist`, a `ready`

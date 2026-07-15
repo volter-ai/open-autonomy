@@ -14,7 +14,7 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import type { AutonomyIR } from '@open-autonomy/core';
 import { compileLocal } from './emit';
-import { worktreeBase } from './runner-frontend';
+import { defaultBranchFromSymref, worktreeBase } from './runner-frontend';
 
 describe('worktreeBase — truth table (spec AC-3)', () => {
   test('local-git + resolvable origin/<trunk> -> HEAD (never the remote, even when it resolves)', () => {
@@ -31,6 +31,17 @@ describe('worktreeBase — truth table (spec AC-3)', () => {
 
   test('github + unresolved origin/<trunk> (no remote / fetch failed) -> HEAD', () => {
     expect(worktreeBase('github', false, 'main')).toBe('HEAD');
+  });
+});
+
+describe('remote default branch resolution', () => {
+  test('parses the remote symbolic HEAD returned by ls-remote', () => {
+    expect(defaultBranchFromSymref('ref: refs/heads/trunk\tHEAD\nabc123\tHEAD\n')).toBe('trunk');
+  });
+
+  test('parses a local origin/HEAD symbolic ref without consulting the current branch', () => {
+    expect(defaultBranchFromSymref('origin/main\n')).toBe('main');
+    expect(defaultBranchFromSymref('origin/release\n')).toBe('release');
   });
 });
 

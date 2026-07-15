@@ -57,6 +57,36 @@ describe('emitAutonomy → ingestAutonomy — documents.roles round-trip', () =>
   });
 });
 
+describe('emitAutonomy → ingestAutonomy — execution workspace round-trip', () => {
+  test('preserves an explicit isolated workspace instead of silently reverting it to shared', () => {
+    const ir: AutonomyIR = {
+      schema: 'autonomy.ir.v1',
+      targets: ['gh-actions'],
+      agents: {
+        planner: {
+          behavior: 'planner',
+          capabilities: ['tasks:author'],
+          triggers: [{ cron: '13 5 * * *' }],
+          execution: { workspace: 'isolated' },
+        },
+      },
+      policy: { box: {} },
+      resources: [],
+    };
+    expect(ingestAutonomy(emitAutonomy(ir)).agents.planner?.execution).toEqual({ workspace: 'isolated' });
+  });
+});
+
+describe('emitAutonomy → ingestAutonomy — typed policy round-trip', () => {
+  test('preserves maxConcurrent without leaking it into the opaque policy box', () => {
+    const ir = irWith();
+    ir.policy = { maxConcurrent: 3, box: { wip: { maxInProgress: 1 } } };
+    const back = ingestAutonomy(emitAutonomy(ir));
+    expect(back.policy.maxConcurrent).toBe(3);
+    expect(back.policy.box).toEqual({ wip: { maxInProgress: 1 } });
+  });
+});
+
 test('emitAutonomy → ingestAutonomy preserves a declared typed-result contract', () => {
   const source = irWith();
   source.agents.pm!.result = { schema: REVIEW_RESULT_SCHEMA_ID };

@@ -684,6 +684,12 @@ certificates where available.
 **Falsifier.** An analysis reports a property as proved while relying on an opaque expression or unstated fairness
 assumption.
 
+**Implementation record.** P12 supplies ten finite analyses: lifecycle reachability, dead-state/deadlock,
+capability attenuation, least authority, separation of duty, protocol compatibility, information flow, budget and
+capacity bounds, retry amplification, and control-loop progress. Every result declares its soundness domain, finite
+bounds, fairness/environment assumptions, assurance class, and counterexamples. Open-world relations and exhausted
+bounds return `unknown`. Certificates bind the complete analysis model and result and have a tamper negative test.
+
 ### P13. Ecosystem mappings
 
 **Semantic model.** External formats are frontends, backends, or embedded dialects—not replacements for

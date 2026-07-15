@@ -204,6 +204,14 @@ export const ORGANIZATION_SEMANTIC_COVERAGE: readonly SemanticCoverageEntry[] = 
   entry('SubstrateRealizationProof', 'id normalized deployment history conformance measurements failures sourceRevision', 'compiler', 'implemented', 'pinned realization evidence for one provider composition', 'P11'),
   entry('BehavioralResidual', 'category property left right semanticImpact', 'compiler', 'implemented', 'total classification of a cross-substrate behavioral difference', 'P11'),
   entry('SubstrateComparisonReport', 'status canonicalBytesEqual digest portableStateEqual obligationSetEqual residuals errors', 'compiler', 'implemented', 'checkable substrate-independence conclusion and residual report', 'P11'),
+  entry('AnalysisBounds', 'maximumStates maximumDepth horizon', 'compiler', 'implemented', 'explicit finite model and temporal search bounds', 'P12'),
+  entry('AnalysisFinding', 'property message counterexample', 'compiler', 'implemented', 'analysis conclusion with a concrete witness trace', 'P12'),
+  entry('AnalysisCertificate', 'checker modelDigest resultDigest exploredStates checkedProperties', 'compiler', 'implemented', 'tamper-evident independently checkable bounded-analysis certificate', 'P12'),
+  entry('OrganizationAnalysisResult', 'id status assurance soundnessDomain bounds assumptions findings certificate', 'compiler', 'implemented', 'proved, violated, or unknown result with explicit domain and assumptions', 'P12'),
+  entry('DelegationEdge', 'from to parent child', 'portable', 'implemented', 'explicit capability delegation relation supplied to attenuation analysis', 'P12'),
+  entry('InformationFlowEdge', 'from to sourceLabel targetClearance sanitizer', 'portable', 'implemented', 'finite security-lattice flow edge and optional trusted sanitizer', 'P12'),
+  entry('ResourceDemand', 'budget amount unit horizon arrivals serviceCapacity', 'portable', 'implemented', 'typed finite-horizon demand and burst-capacity assumptions', 'P12'),
+  entry('AnalysisEnvironment', 'bounds fairnessAssumptions delegations informationFlows resourceDemands closedWorld', 'compiler', 'implemented', 'closed-world declarations and environment assumptions for analyses', 'P12'),
 ] as const;
 
 export interface AuditResidual {
@@ -214,7 +222,6 @@ export interface AuditResidual {
 
 /** B0 residual parking is closed: every known gap has a punch-list owner. */
 export const ORGANIZATION_AUDIT_RESIDUALS: readonly AuditResidual[] = [
-  { id: 'OAIR-R013', finding: 'formal lifecycle, authority, protocol, information-flow, resource, and loop analyses are absent', owner: 'P12' },
   { id: 'OAIR-R014', finding: 'external standard mappings lack versioned semantic coverage and loss reports', owner: 'P13' },
 ] as const;
 
@@ -363,4 +370,15 @@ export const ORGANIZATION_P11_OBLIGATIONS: readonly BaselineObligation[] = [
   { id: 'P11-OPS-1', claim: 'matched faults, recovery assumptions, observations, and pinned revisions remain explicit residuals', disposition: 'preserved', assurance: 'conformance-tested', evidence: 'organization-substrate-proof.test.ts failure/assumption/operation residual corpus and docs/evidence/P11-PAPERCLIP-PROOF.md' },
   { id: 'P11-ECO-1', claim: 'cost, latency, capacity, and human load compare with explicit units, uncertainty, and observation time', disposition: 'preserved', assurance: 'property-tested', evidence: 'ComparableMeasurement and organization-substrate-proof.test.ts four-dimensional comparison' },
   { id: 'P11-FALS-1', claim: 'every observed difference receives a typed semantic-impact residual and unknown impact prevents proof', disposition: 'preserved', assurance: 'property-tested', evidence: 'compareSubstrateRealizations residual exhaustiveness and negative fixtures' },
+] as const;
+
+export const ORGANIZATION_P12_OBLIGATIONS: readonly BaselineObligation[] = [
+  { id: 'P12-TYP-1', claim: 'each check declares its soundness domain and opaque constructs remain outside proof', disposition: 'preserved', assurance: 'property-tested', evidence: 'OrganizationAnalysisResult soundnessDomain and open-world/opaque fixtures' },
+  { id: 'P12-GRA-1', claim: 'reachability, dead states, protocol deadlocks, and structural violations return witnesses', disposition: 'preserved', assurance: 'model-checked', evidence: 'organization-analysis.test.ts unreachable/orphan/stuck protocol counterexamples' },
+  { id: 'P12-TEMP-1', claim: 'temporal conclusions carry finite state/depth/horizon bounds and fairness assumptions', disposition: 'preserved', assurance: 'property-tested', evidence: 'AnalysisBounds, fairnessAssumptions, bound-exhaustion unknown fixture' },
+  { id: 'P12-LAT-1', claim: 'capability delegation is attenuating and information flows respect an explicit label lattice', disposition: 'preserved', assurance: 'model-checked', evidence: 'organization-analysis.test.ts selector escalation and high-to-low flow witnesses' },
+  { id: 'P12-CTRL-1', claim: 'retry and replan loops have finite ranking bounds or a progress counterexample', disposition: 'preserved', assurance: 'model-checked', evidence: 'retry-amplification and control-loop-progress analyses with unbounded-replan cycle fixture' },
+  { id: 'P12-RES-1', claim: 'budget and capacity use aligned units, horizons, and explicit arrival/service assumptions', disposition: 'preserved', assurance: 'model-checked', evidence: 'budget-bounds demand, unit, limit, and burst-capacity fixtures' },
+  { id: 'P12-VER-1', claim: 'results distinguish proof, violation, and unknown and certificates bind model and result', disposition: 'preserved', assurance: 'property-tested', evidence: 'verifyAnalysisCertificate positive and tampered-result fixtures' },
+  { id: 'P12-COMP-1', claim: 'open delegation, information-flow, and resource worlds yield unknown rather than compositional proof', disposition: 'preserved', assurance: 'property-tested', evidence: 'closedWorld assumptions and three open-world unknown fixtures' },
 ] as const;

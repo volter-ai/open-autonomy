@@ -15,6 +15,7 @@ import {
   dualCompileMigrationCorpus,
   migrateV1Installation,
   proveV2DogfoodAdoption,
+  R9_COMPILER_SOURCE_LOCK,
   restoreMigrationCutoverController,
   signMigrationCutoverEvidence,
   signTypedLossAuthorization,
@@ -668,6 +669,26 @@ describe('R9 adversarial review cycle 5: certified retained ABI and identity bin
     for (const required of ['packages/core/src/ir.ts', 'packages/core/src/ir-yaml.ts', 'packages/core/src/organization-ir.ts', 'packages/core/src/organization-canonical.ts', 'packages/core/src/organization-component-catalog.ts', 'packages/core/src/organization-lowering.ts', 'packages/core/src/organization-migration-cutover.ts', 'packages/core/src/organization-solver.ts', 'packages/substrate-github/src/emit.ts', 'packages/substrate-local/src/emit.ts']) expect(sources).toContain(required);
     expect(discovered.v2Compiler.catalogDigest).toMatch(/^sha256:/);
     expect(discovered.v2Compiler.digest).toMatch(/^sha256:/);
+  });
+
+  test('compiler identity is closed over the explicit R9 dependency surface, not future core modules or tests', async () => {
+    const discovered = await discoverRealProfileMigrationCorpus({ repositoryRoot: '../../..', profilesDirectory: 'profiles' });
+    const locked = Object.keys(discovered.v2Compiler.sourceDigests).sort();
+
+    expect(locked).toEqual([...R9_COMPILER_SOURCE_LOCK].sort());
+    expect(locked).toContain('packages/core/src/organization-solver.ts');
+    expect(locked).toContain('packages/core/src/organization-lowering.ts');
+    expect(locked).toContain('packages/substrate-github/src/runtime/runner.ts');
+    expect(locked).toContain('packages/substrate-local/src/runner-frontend.ts');
+    expect(locked).not.toContain('packages/core/src/organization-runtime-ledger.ts');
+    expect(locked.some((path) => path.endsWith('.test.ts'))).toBe(false);
+
+    // Adding a future module to packages/core/src cannot affect discovery: the
+    // identity is a pure function of these locked path/digest pairs plus the
+    // separately pinned catalog, rather than a directory listing.
+    const rediscovered = await discoverRealProfileMigrationCorpus({ repositoryRoot: '../../..', profilesDirectory: 'profiles' });
+    expect(rediscovered.v2Compiler.sourceDigests).toEqual(discovered.v2Compiler.sourceDigests);
+    expect(rediscovered.v2Compiler.digest).toBe(discovered.v2Compiler.digest);
   });
 
   test('shadow readiness is bound to independently pinned compiler and certificate execution evidence', async () => {

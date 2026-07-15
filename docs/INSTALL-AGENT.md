@@ -211,15 +211,11 @@ it gates everything.**
    `<default-branch>`** — the agents run in git worktrees, which only see committed files (this is how OA
    maintains itself). OK?" *Default:* yes (the only supported model; a clean/symlinked mode is not built).
    If they refuse, stop.
-   - **`.claude/settings.json` specifically wires a Claude Code Stop hook that fires at the end of EVERY
-     Claude Code session in this repo — including the human's own interactive sessions**, not just the
-     loop's (it self-guards, no-op unless `node_modules/ztrack/...` exists). If an existing
-     `.claude/settings.json` is present, `compile` merges the hook into it rather than overwriting (keeps
-     the human's own `permissions`/hooks); if it isn't valid JSON, `compile` refuses by name instead —
-     hand-merge it. The hook is **install-managed**: deleting the entry is re-added by the next
-     compile/upgrade, so a human who wants it gone must set the durable sentinel
-     `"_openAutonomyStopHookOptOut": true` in their settings.json (compile AND upgrade honor it). Full
-     detail: `docs/OPERATIONS.md#claude-settings`.
+   - **`.claude/settings.json` and `.codex/hooks.json` wire byte-identical Stop + SubagentStop validation
+     gates.** They fail closed if the profile-pinned ztrack target is absent. Compile structurally merges
+     existing JSON without dropping adopter hooks; the existing durable
+     `"_openAutonomyStopHookOptOut": true` maintainer control remains honored. Full detail:
+     `docs/OPERATIONS.md#claude-settings`.
 4. **OA's Dependabot + Security workflows (net-new CI surface).** "OA also ships `.github/dependabot.yml`
    (weekly Actions-bumps → PRs the PM triages) and `.github/workflows/security.yml` (a **bun**-based
    supply-chain + workflow scan that runs on your PRs and `<default-branch>`). On a non-bun repo the
@@ -507,9 +503,9 @@ Phase 4 proves *one* merge. For the loop to actually run a backlog over days, se
   `ztrack init` line) — read it there; if the GitHub link is missing, fix `.volter/tracker-config.json`
   directly rather than re-running init.
 - **Re-running `compile` regenerates the harness files** (scripts/, .claude/skills/, .open-autonomy/, …) —
-  but two collision classes are now GUARDED, not silent (OA-10): (1) `.claude/settings.json` is
-  **merged**, not overwritten (your `permissions` and other keys survive; only the Stop hook entry is
-  appended if missing) — no `--force` needed for it specifically; (2) re-compiling **refuses** to
+  but two collision classes are now GUARDED, not silent (OA-10): (1) `.claude/settings.json` and
+  `.codex/hooks.json` are **merged**, not overwritten (adopter keys survive; current Stop and SubagentStop
+  gates are installed once) — no `--force` needed for them specifically; (2) re-compiling **refuses** to
   re-create any OA-generated file you deliberately deleted (e.g. the `dependabot.yml`/`security.yml` from
   step 4) — it names the path and explains it was in a prior `.open-autonomy/generated.json` but is now
   gone from disk; `--force` re-creates it if you actually want that (reported as `resurrected:`). State

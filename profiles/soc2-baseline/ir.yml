@@ -190,6 +190,7 @@ resources:
   # --- shared SDLC standard (identical to simple-gh-sdlc) ---
   - .open-autonomy/architecture-invariants.yml
   - .claude/settings.json
+  - .codex/hooks.json
   - .github/workflows/merge.yml
   - .github/workflows/security.yml
   - .github/dependabot.yml

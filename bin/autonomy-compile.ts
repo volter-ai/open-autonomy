@@ -34,7 +34,7 @@ import type { CompileOutput } from '@open-autonomy/core';
 import type { LocalScheduleConfig } from '@open-autonomy/substrate-local';
 import { KNOWN_GOOD_ZTRACK, resolveZtrackPreset } from './ztrack-preset.ts';
 import { checkNamespaceCollisions } from './collision-check.ts';
-import { settingsMergeStrategies, CLAUDE_SETTINGS_PATH } from './settings-merge.ts';
+import { settingsMergeStrategies, GATE_CONFIG_PATHS } from './settings-merge.ts';
 
 // Repo-shell files ONLY a whole-repo SCAFFOLD profile (self-driving) carries as resources. The clobber
 // guard's message adds scaffold-specific advice iff a collision actually names one of THESE — never keyed
@@ -294,11 +294,11 @@ if (outDir) {
   for (const m of merges) console.log(`  merged: ${m.path} (${m.note})`);
   if (overwritten.length) console.log(`  overwritten (--force): ${overwritten.join(', ')}`);
   if (resurrected.length) console.log(`  resurrected (--force): ${resurrected.join(', ')}`);
-  if (written.includes(CLAUDE_SETTINGS_PATH)) {
+  if (GATE_CONFIG_PATHS.some((path) => written.includes(path))) {
     console.log(
-      `NOTE: ${CLAUDE_SETTINGS_PATH} wires a Claude Code Stop hook that runs at the end of EVERY Claude Code\n` +
-        `session in this repo, including your OWN interactive ones (it no-ops unless\n` +
-        `node_modules/ztrack/... exists). Details: docs/OPERATIONS.md#claude-settings`,
+      `NOTE: ${GATE_CONFIG_PATHS.join(' and ')} wire profile-owned Stop + SubagentStop validation gates.\n` +
+        `The gates fail closed if the pinned ztrack target is absent; the existing explicit maintainer opt-out\n` +
+        `remains available. Details: docs/OPERATIONS.md#claude-settings`,
     );
   }
   if (substrate === 'local') {

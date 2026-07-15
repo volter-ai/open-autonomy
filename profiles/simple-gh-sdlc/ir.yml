@@ -187,6 +187,7 @@ policy:
 resources:
   - .open-autonomy/architecture-invariants.yml
   - .claude/settings.json
+  - .codex/hooks.json
   - .github/workflows/merge.yml
   - .github/workflows/security.yml
   - .github/workflows/security-gate.yml   # dispatched, blocking realization of security.yml on bot PRs — posts `security`

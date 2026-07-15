@@ -10,7 +10,7 @@ import type { AutonomyIR } from '@open-autonomy/core';
 // (the audit: `npx` fetched `ztrack@1.0.0` into a repo pinned to `0.47.1` — two majors of skew). Kept in
 // sync with `package.json`'s `ztrack` devDependency by an assertion in `bin/ztrack-preset.test.ts` — bump
 // both together.
-export const KNOWN_GOOD_ZTRACK = '1.0.0';
+export const KNOWN_GOOD_ZTRACK = '1.3.1';
 
 export interface ZtrackPresetResolution {
   presetName: string;

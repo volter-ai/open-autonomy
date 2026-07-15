@@ -47,7 +47,7 @@ steps 1–5 (shared) vs step 6 (per code host) below.
 > only OA-specific files (`scripts/`, `.claude/skills/`, `.claude/settings.json`, `scheduler/`,
 > `.open-autonomy/`, `standards/`, `.github/workflows/merge.yml`), so `compile … .` is purely additive — it
 > does **not** generate a `package.json`, `README`, or `.gitignore` over yours. You still merge the runner's
-> deps into your repo (`npm install termfleet` in step 1; `npm install -D ztrack@1.0.0` in step 6 — pin the
+> deps into your repo (`npm install termfleet` in step 1; `npm install -D ztrack@1.3.1` in step 6 — pin the
 > version this open-autonomy release is tested against); npm may rewrite **existing** dependency ranges
 > while doing so — review the diff it leaves. The OA files are
 > **committed** to the repo (the agents run in git worktrees, which only see committed files — it's how OA
@@ -365,34 +365,26 @@ review methodology, or role behavior. Every job remains fenced; omitted values r
 `.open-autonomy/paused` default.
 
 If any of these paths **already exist and differ**, the compile refuses by name instead of silently
-overwriting (`--force` to override) — except `.claude/settings.json`, handled specially next.
+overwriting (`--force` to override) — except the two harness gate files, handled specially next.
 
 <a id="claude-settings"></a>
-> **`.claude/settings.json` — a Claude Code Stop hook that runs in every session, including yours.**
-> `simple-sdlc` and `simple-gh-sdlc` both carry this file: it wires a `hooks.Stop` command (the ztrack
-> "drive-to-green" loop gate) that Claude Code runs at the end of **every session in this repo — agent
-> *and* human interactive sessions alike** (Claude Code project settings aren't scoped to the loop's own
-> sessions). The command self-guards — it no-ops unless `node_modules/ztrack/plugins/ztrack-gate/hooks/
-> stop-loop.sh` exists — so it's inert until you install ztrack, but it fires every time either way.
+> **Claude Code and Codex project validation gates run in every repository session, including yours.**
+> Every ztrack-backed profile carries `.claude/settings.json` and `.codex/hooks.json`. Both wire the same
+> `Stop` and `SubagentStop` command to `node_modules/ztrack/plugins/ztrack/hooks/stop-loop.sh`, so root and
+> delegated turns honor the same armed loop. The command fails closed when the pinned hook is absent.
 >
-> - **If you already have a `.claude/settings.json`** (most repos with Claude Code do): the compile does a
->   **structured merge**, not a clobber — it parses both files as JSON and appends the Stop hook entry onto
->   your existing `hooks.Stop` array (only if an identical command isn't already there); every other key
->   (your `permissions`, other hook events, …) is left untouched. The printed receipt reports
->   `merged: .claude/settings.json (+1 Stop hook)`. Re-running never duplicates the entry. If your existing
->   file **isn't valid JSON**, the compile refuses by name instead of guessing — fix or move it aside, then
->   re-run.
+> - Existing hook files are structurally merged, not clobbered. Adopter permissions and unrelated events
+>   survive; retired OA gate commands are replaced; each current event is installed once. Malformed JSON
+>   or a conflicting non-array gate event refuses by path instead of guessing.
 > - **The Stop hook is install-managed.** Simply deleting the `hooks.Stop` entry — or the whole file — is
 >   **not** a durable opt-out: the next `compile` re-appends the entry (append-if-absent), and `upgrade`
 >   re-seeds a deleted file. That is deliberate (it's how hook fixes reach every install), but it means a
 >   naive delete gets silently re-armed on the next routine re-compile/upgrade.
-> - **To opt out durably**, keep `.claude/settings.json` and add the sentinel key
+> - **To opt out durably**, keep the relevant harness file and add the sentinel key
 >   `"_openAutonomyStopHookOptOut": true` at its top level (you may also remove the `hooks.Stop` entry). Both
 >   `compile` and `upgrade` honor it — they will **never** re-add OA's Stop hook while the sentinel is
 >   present, and they leave the rest of your file untouched. This is the one opt-out that survives every
->   re-compile and upgrade. (Claude Code ignores the unknown key, so it has no other effect.)
-> - `simple-gh-sdlc` ships the **same** file (byte-identical hook command) — the callout applies to both
->   the local-git and GitHub code-host setups.
+>   re-compile and upgrade. This is explicit maintainer configuration, not an automatic substrate fallback.
 
 ### 4. Commit the harness
 
@@ -501,14 +493,14 @@ work and how a change lands depends on the code host** you compiled in step 3.
 The agents read work from a local **ztrack** board on disk:
 
 ```bash
-npm install -D ztrack@1.0.0                 # a PROJECT dep, not -g: the installed validation preset
+npm install -D ztrack@1.3.1                 # a PROJECT dep, not -g: the installed validation preset
                                             # `import`s `ztrack/preset-kit`, so it must resolve from the
                                             # repo — a global/npx install fails `ztrack check`.
                                             # PINNED — the version this open-autonomy release is tested
                                             # against; a floating `npx ztrack` may fetch a different major
                                             # than your repo's pin (see package.json's own devDependency).
                                             # NODE_ENV=production / npm omit=dev makes this a silent no-op
-                                            # (exits 0, installs NOTHING) — use: npm install -D ztrack@1.0.0 --include=dev
+                                            # (exits 0, installs NOTHING) — use: npm install -D ztrack@1.3.1 --include=dev
                                             # (works on every omit source; NODE_ENV=development only helps when
                                             # NODE_ENV is the cause)
 npx ztrack init --preset simple-sdlc        # the PR-free dev preset (the `default`); no remote needed
@@ -569,9 +561,9 @@ Here the board is **GitHub issues** and a change lands as an **auto-merging PR**
 
 ```bash
 # a) the tracker, linked to GitHub Issues (GitHub is the source of truth)
-npm install -D ztrack@1.0.0    # or: bun add -d ztrack@1.0.0   (pinned to the version this release is tested against)
+npm install -D ztrack@1.3.1    # or: bun add -d ztrack@1.3.1   (pinned to the version this release is tested against)
                          # NODE_ENV=production / npm omit=dev makes this a silent no-op (exits 0, installs
-                         # NOTHING) — use: npm install -D ztrack@1.0.0 --include=dev (works on every omit source)
+                         # NOTHING) — use: npm install -D ztrack@1.3.1 --include=dev (works on every omit source)
 npx ztrack init --preset simple-gh-sdlc --sync github --repo <owner>/<repo>
 
 # b) require the gate in branch protection (NOT auto-merge yet — that comes after a supervised first merge,

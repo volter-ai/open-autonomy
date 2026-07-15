@@ -322,12 +322,12 @@ export function stepInstallDeps(sel: SelectionRecordRef, opts: { proc: ProcRunne
   const ztrackPresent = tools ? Boolean(tools.ztrack?.vendored || tools.ztrack?.global) : existsSync(join(repoDir, 'node_modules', 'ztrack'));
   if (!ztrackPresent) {
     if (opts.dryRun) {
-      wouldInstall.push('npm install -D ztrack@1.0.0');
-      notes.push('[DRY-RUN] ztrack absent — would run: npm install -D ztrack@1.0.0 (NOT run; node_modules/package.json untouched)');
+      wouldInstall.push('npm install -D ztrack@1.3.1');
+      notes.push('[DRY-RUN] ztrack absent — would run: npm install -D ztrack@1.3.1 (NOT run; node_modules/package.json untouched)');
     } else {
-      const r = opts.proc('npm', ['install', '-D', 'ztrack@1.0.0'], { cwd: repoDir });
-      if (r.status !== 0) return step('install-deps', 'blocked', `npm install -D ztrack@1.0.0 failed (exit ${r.status}): ${firstLine(r.stderr || r.stdout)}`);
-      notes.push('installed ztrack@1.0.0 (was absent)');
+      const r = opts.proc('npm', ['install', '-D', 'ztrack@1.3.1'], { cwd: repoDir });
+      if (r.status !== 0) return step('install-deps', 'blocked', `npm install -D ztrack@1.3.1 failed (exit ${r.status}): ${firstLine(r.stderr || r.stdout)}`);
+      notes.push('installed ztrack@1.3.1 (was absent)');
     }
   } else {
     notes.push(`ztrack present (source: ${toolSource})`);

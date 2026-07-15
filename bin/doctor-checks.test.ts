@@ -208,12 +208,15 @@ describe('checkEnv (AC-2/AC-4, F-4/F-6) — devDeps + NODE_ENV + workspace shado
     writeFileSync(join(dir, 'packages', 'core', 'package.json'), JSON.stringify({ name: '@termfleet/core', version: '9.9.9', main: 'index.js' }));
     writeFileSync(join(dir, 'packages', 'core', 'index.js'), 'module.exports = {};\n');
     // A real (non-shadowed) `termfleet` registry-style install so the pty sub-check has something to walk,
-    // reusing the ACTUAL termfleet package already present in this monorepo (packages/substrate-local's own
-    // node_modules) rather than a fake — its own resolved path is itself under a node_modules/ segment, so
-    // it is correctly NOT flagged as a shadow.
-    const realTermfleetDir = join(REPO_ROOT, 'packages', 'substrate-local', 'node_modules', 'termfleet');
+    // reusing the ACTUAL termfleet package already present in this monorepo rather than a fake. Installers
+    // may keep it beside substrate-local or hoist it to the root; either resolved path is under a
+    // node_modules segment, so it is correctly NOT flagged as a shadow.
+    const realTermfleetDir = [
+      join(REPO_ROOT, 'packages', 'substrate-local', 'node_modules', 'termfleet'),
+      join(REPO_ROOT, 'node_modules', 'termfleet'),
+    ].find((candidate) => existsSync(candidate));
     mkdirSync(join(dir, 'node_modules'), { recursive: true });
-    if (existsSync(realTermfleetDir)) symlinkSync(realTermfleetDir, join(dir, 'node_modules', 'termfleet'), 'dir');
+    if (realTermfleetDir) symlinkSync(realTermfleetDir, join(dir, 'node_modules', 'termfleet'), 'dir');
     mkdirSync(join(dir, 'node_modules', '@termfleet'), { recursive: true });
     symlinkSync(join(dir, 'packages', 'core'), join(dir, 'node_modules', '@termfleet', 'core'), 'dir');
 

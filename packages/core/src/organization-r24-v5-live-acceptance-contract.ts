@@ -1,25 +1,11 @@
-import { createHash } from "node:crypto";
+import { createHash, verify as verifySignature } from "node:crypto";
 import { canonicalSemanticJson } from "./organization-canonical";
+import { V5_INPUT_LOCK_PATHS } from "./organization-r24-v5-protocol";
 const sha = (v: unknown) =>
     `sha256:${createHash("sha256").update(canonicalSemanticJson(v)).digest("hex")}`,
   dig = (x: unknown) =>
     typeof x === "string" && /^sha256:[a-f0-9]{64}$/.test(x);
-export const V5_REQUIRED_LOCKS = [
-  "organization",
-  "behavior",
-  "control",
-  "workload",
-  "assignment",
-  "model",
-  "runtime",
-  "worker",
-  "prompt",
-  "skills",
-  "tools",
-  "session",
-  "isolation",
-  "credentials",
-] as const;
+export const V5_REQUIRED_LOCKS = V5_INPUT_LOCK_PATHS;
 export const V5_NEGATIVE_CONTROLS = [
   "forged-receipt",
   "duplicate-start",
@@ -46,6 +32,9 @@ export type V5LiveCell = {
   substrate: "hermes" | "paperclip";
   order: 0 | 1;
   bindingDigest: string;
+  assignmentDigest: string;
+  launcherSpecDigest: string;
+  inputLockDigest: string;
   challengeDigest: string;
   isolationId: string;
   manualAssistance: "none";
@@ -130,12 +119,20 @@ export type V5LiveArtifact = {
     replications: number;
     assignmentDigest: string;
     launcherDigest: string;
+    launcherSpecDigest: string;
+    inputLockDigest: string;
+    authorization: {
+      algorithm: "Ed25519";
+      signerKeyId: string;
+      signature: string;
+    };
     assignments: Array<{
       unitId: string;
       replication: number;
       pairId: string;
       trialId: string;
       first: "hermes" | "paperclip";
+      fault: { id: string; digest: string };
     }>;
   };
   cells: V5LiveCell[];
@@ -155,10 +152,17 @@ export type V5ProviderDerivation = {
   workId: string;
   pid: number;
   bindingDigest: string;
+  assignmentDigest: string;
   challengeDigest: string;
   launcherDigest: string;
+  launcherSpecDigest: string;
+  inputLockDigest: string;
   receiptAuthenticated: boolean;
 };
+export function r24V5PlanAuthorizationDigest(plan: V5LiveArtifact["plan"]) {
+  const { authorization: _authorization, ...authorized } = plan;
+  return sha(authorized);
+}
 export function verifyR24V5LiveArtifact(
   a: V5LiveArtifact,
   replayNegative: (
@@ -166,6 +170,7 @@ export function verifyR24V5LiveArtifact(
     mutationInput: string,
   ) => string,
   deriveNative: (cell: V5LiveCell) => V5ProviderDerivation,
+  trust: { signerKeyId: string; publicKeyPem: string },
 ) {
   if (
     a.schema !== "autonomy.r24-v5-live-acceptance.v1" ||
@@ -176,7 +181,17 @@ export function verifyR24V5LiveArtifact(
     a.plan.units.some((x) => !x) ||
     !Number.isSafeInteger(a.plan.replications) ||
     a.plan.replications < 2 ||
-    !dig(a.plan.launcherDigest)
+    !dig(a.plan.launcherDigest) ||
+    !dig(a.plan.launcherSpecDigest) ||
+    !dig(a.plan.inputLockDigest) ||
+    a.plan.authorization.algorithm !== "Ed25519" ||
+    a.plan.authorization.signerKeyId !== trust.signerKeyId ||
+    !verifySignature(
+      null,
+      Buffer.from(r24V5PlanAuthorizationDigest(a.plan)),
+      trust.publicKeyPem,
+      Buffer.from(a.plan.authorization.signature, "base64"),
+    )
   )
     throw Error("invalid matched plan");
   const slots = a.plan.units.flatMap((unitId) =>
@@ -239,8 +254,13 @@ export function verifyR24V5LiveArtifact(
       derived.workId !== n.workId ||
       derived.pid !== n.pid ||
       derived.bindingDigest !== c.bindingDigest ||
+      derived.assignmentDigest !== c.assignmentDigest ||
       derived.challengeDigest !== c.challengeDigest ||
-      derived.launcherDigest !== a.plan.launcherDigest
+      derived.launcherDigest !== a.plan.launcherDigest ||
+      derived.launcherSpecDigest !== a.plan.launcherSpecDigest ||
+      derived.inputLockDigest !== a.plan.inputLockDigest ||
+      c.launcherSpecDigest !== a.plan.launcherSpecDigest ||
+      c.inputLockDigest !== a.plan.inputLockDigest
     )
       throw Error("provider-native derivation replay failed");
     const planned = a.plan.assignments.find(
@@ -253,6 +273,17 @@ export function verifyR24V5LiveArtifact(
       (c.order === 0) !== (c.substrate === planned.first)
     )
       throw Error("cell inconsistent with seeded plan");
+    const exactAssignment = {
+      pairId: planned.pairId,
+      trialId: planned.trialId,
+      unitId: planned.unitId,
+      replication: planned.replication,
+      fault: planned.fault,
+      substrate: c.substrate,
+      order: c.order,
+    };
+    if (c.assignmentDigest !== sha(exactAssignment))
+      throw Error("cell assignment differs from authorized plan");
     if (
       n.provider !==
         (c.substrate === "hermes" ? "hermes-kanban" : "paperclip-heartbeat") ||
@@ -372,6 +403,14 @@ export function verifyR24V5LiveArtifact(
       c.locks.some((x) => !dig(x.digest) || !dig(x.evidenceDigest))
     )
       throw Error("lock coverage");
+    const sortedInputLocks = c.locks
+      .slice()
+      .sort((x, y) => x.path.localeCompare(y.path));
+    if (
+      sha(sortedInputLocks.map(({ path, digest }) => ({ path, digest }))) !==
+      a.plan.inputLockDigest
+    )
+      throw Error("cell input locks differ from authorized plan");
     if (
       c.preservation.length !== V5_REQUIRED_LOCKS.length ||
       new Set(c.preservation.map((x) => x.path)).size !==

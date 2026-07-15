@@ -3,10 +3,17 @@ import {
   V5_NEGATIVE_CONTROLS,
   V5_REQUIRED_LOCKS,
   r24V5ArtifactDigest,
+  r24V5PlanAuthorizationDigest,
   verifyR24V5LiveArtifact,
   type V5LiveArtifact,
 } from "./organization-r24-v5-live-acceptance-contract";
+import { generateKeyPairSync, sign } from "node:crypto";
 const d = "sha256:" + "a".repeat(64);
+const keys = generateKeyPairSync("ed25519"),
+  publicKeyPem = keys.publicKey
+    .export({ type: "spki", format: "pem" })
+    .toString(),
+  trust = { signerKeyId: "campaign-key", publicKeyPem };
 const replay = (id: any, input: string) =>
   input === `mutation:${id}` ? `rejected:${id}` : "not-rejected";
 const derive = (c: any) => ({
@@ -14,8 +21,11 @@ const derive = (c: any) => ({
   workId: c.native.workId,
   pid: c.native.pid,
   bindingDigest: c.bindingDigest,
+  assignmentDigest: c.assignmentDigest,
   challengeDigest: c.challengeDigest,
   launcherDigest: d,
+  launcherSpecDigest: c.launcherSpecDigest,
+  inputLockDigest: c.inputLockDigest,
   receiptAuthenticated: true,
 });
 function artifact() {
@@ -27,6 +37,7 @@ function artifact() {
       pairId: "p0",
       trialId: "t0",
       first: "hermes",
+      fault: { id: "none", digest: d },
     },
     {
       unitId: "u",
@@ -34,6 +45,7 @@ function artifact() {
       pairId: "p1",
       trialId: "t1",
       first: "paperclip",
+      fault: { id: "none", digest: d },
     },
   ];
   for (let r = 0; r < 2; r++) {
@@ -65,6 +77,17 @@ function artifact() {
         substrate: s,
         order: o,
         bindingDigest: d,
+        assignmentDigest: r24V5ArtifactDigest({
+          pairId: `p${r}`,
+          trialId: `t${r}`,
+          unitId: "u",
+          replication: r,
+          fault: assignments[r]!.fault,
+          substrate: s,
+          order: o,
+        } as any),
+        launcherSpecDigest: d,
+        inputLockDigest: d,
         challengeDigest: d,
         isolationId: `iso-${r}-${s}`,
         manualAssistance: "none",
@@ -140,6 +163,13 @@ function artifact() {
       });
     }
   }
+  const inputLockDigest = r24V5ArtifactDigest(
+    cells[0]!.locks
+      .slice()
+      .sort((a: any, b: any) => a.path.localeCompare(b.path))
+      .map(({ path, digest }: any) => ({ path, digest })),
+  );
+  for (const cell of cells) cell.inputLockDigest = inputLockDigest;
   const body: any = {
     schema: "autonomy.r24-v5-live-acceptance.v1",
     plan: {
@@ -148,6 +178,13 @@ function artifact() {
       replications: 2,
       assignments,
       launcherDigest: d,
+      launcherSpecDigest: d,
+      inputLockDigest,
+      authorization: {
+        algorithm: "Ed25519",
+        signerKeyId: trust.signerKeyId,
+        signature: "",
+      },
       assignmentDigest: r24V5ArtifactDigest({ seed: "73", assignments } as any),
     },
     cells,
@@ -161,10 +198,17 @@ function artifact() {
     })),
     generatedAt: "2026-07-15T00:00:00Z",
   };
+  body.plan.authorization.signature = sign(
+    null,
+    Buffer.from(r24V5PlanAuthorizationDigest(body.plan)),
+    keys.privateKey,
+  ).toString("base64");
   return { ...body, digest: r24V5ArtifactDigest(body) } as V5LiveArtifact;
 }
 test("accepts only a complete matched native V5 artifact", () =>
-  expect(verifyR24V5LiveArtifact(artifact(), replay, derive)).toBe(true));
+  expect(verifyR24V5LiveArtifact(artifact(), replay, derive, trust)).toBe(
+    true,
+  ));
 test("fails closed across plan, provenance, attempts, timeout, meters, locks, preservation, cleanup, assistance, controls and digest", () => {
   const muts = [
     (a: any) => a.plan.units.push("u"),
@@ -208,12 +252,17 @@ test("fails closed across plan, provenance, attempts, timeout, meters, locks, pr
     m(a);
     if (i < muts.length - 1)
       a.digest = r24V5ArtifactDigest((({ digest, ...x }: any) => x)(a));
-    expect(() => verifyR24V5LiveArtifact(a, replay, derive)).toThrow();
+    expect(() => verifyR24V5LiveArtifact(a, replay, derive, trust)).toThrow();
   }
   expect(() =>
-    verifyR24V5LiveArtifact(artifact(), replay, (c: any) => ({
-      ...derive(c),
-      receiptAuthenticated: false,
-    })),
+    verifyR24V5LiveArtifact(
+      artifact(),
+      replay,
+      (c: any) => ({
+        ...derive(c),
+        receiptAuthenticated: false,
+      }),
+      trust,
+    ),
   ).toThrow("derivation replay");
 });

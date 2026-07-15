@@ -52,9 +52,7 @@ All paths relative to the repo root; all lines verified by reading on branch `ad
 - `profiles/simple-sdlc/ir.yml:80-84` — `resources:` lists `.claude/settings.json` first;
   `profiles/simple-gh-sdlc/ir.yml:129-131` likewise. The actual hook payload is
   `profiles/simple-sdlc/.claude/settings.json`: a `hooks.Stop` command entry running
-  `node_modules/ztrack/plugins/ztrack/hooks/stop-loop.sh` when present (falling back to the legacy
-  `plugins/ztrack-gate/` path — ztrack renamed the plugin dir in 0.3.0, so the wiring checks both).
-  Because it ships as a
+  `node_modules/ztrack/plugins/ztrack/hooks/stop-loop.sh` when present. Because it ships as a
   **whole-file resource copy**, materialize/upgrade can only replace the entire file — there is no
   structured merge anywhere.
 - `packages/substrate-local/src/emit.ts:244-247` — the design note placing settings.json ownership with

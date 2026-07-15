@@ -10,6 +10,10 @@ This is the single continuous roadmap for the canonical repo. Short plans,
 proof-gate notes, and expanded product direction should be folded into this
 file instead of creating parallel roadmap documents.
 
+The post-Organization-IR implementation sequence is governed by the acceptance and proof punch list in
+[`ORGANIZATION-RUNTIME-AC.md`](./ORGANIZATION-RUNTIME-AC.md). That document supplies dependency-ordered engineering
+ACs and falsifiers for roadmap direction; it does not replace this roadmap as the source of product priority.
+
 > **Reading this file:** the roadmap doubles as the historical phase record — later phases
 > supersede earlier ones, and early-phase prose is **not** the current architecture. Three
 > mechanisms described in older phases were later retired: the standalone **merge-gate job**

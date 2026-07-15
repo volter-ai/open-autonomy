@@ -1,0 +1,1 @@
+{"name":"@open-autonomy/substrate-toy","version":"0.1.0","private":true,"type":"module","main":"./src/index.ts","dependencies":{"@open-autonomy/sdk":"workspace:*"}}

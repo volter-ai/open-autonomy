@@ -34,6 +34,7 @@ export interface StableCompilerPass<I=unknown,O=unknown> {
   id:string; version:string; operation:CompilerOperation; input:CompilerLevel; output:CompilerLevel;
   inputKind:CompilerArtifactKind;outputKind:CompilerArtifactKind;
   requires?:string[]; capabilities:CompilerPassCapabilities; configuration?:unknown;
+  accounting?:{sourceObligations:string[];losses:string[]};
   /** Closed audited implementation id. Arbitrary callbacks are never accepted at this boundary. */
   implementation:'artifact.project'|'artifact.diagnostic'|OrganizationBuiltinId;
 }
@@ -85,7 +86,7 @@ export async function runStableCompiler(request:StableCompilerRequest):Promise<S
     const contract=validateStageContract(pass,current);if(contract){fail('OA-API-STAGE-CONTRACT',contract,pass.id);break;}
     const missing=(pass.requires??[]).filter(id=>!completed.has(id));if(missing.length){fail('OA-API-MISSING-PASS',`missing required passes: ${missing.sort().join(', ')}`,pass.id);break;}
     if(pass.capabilities.ambient.length){fail('OA-API-AMBIENT-AUTHORITY',`in-process pass requests ambient capabilities: ${pass.capabilities.ambient.sort().join(', ')}`,pass.id);break;}
-    const key=semanticDigest({apiVersion:COMPILER_API_VERSION,pass:{id:pass.id,version:pass.version,operation:pass.operation,input:pass.input,output:pass.output,inputKind:pass.inputKind,outputKind:pass.outputKind,implementation:pass.implementation,configuration:pass.configuration??null,capabilities:pass.capabilities},input:current.digest},'compiler-cache-key-v1').value;cacheKeys.push(key);
+    const key=semanticDigest({apiVersion:COMPILER_API_VERSION,pass:{id:pass.id,version:pass.version,operation:pass.operation,input:pass.input,output:pass.output,inputKind:pass.inputKind,outputKind:pass.outputKind,implementation:pass.implementation,configuration:pass.configuration??null,accounting:pass.accounting??null,capabilities:pass.capabilities},input:current.digest},'compiler-cache-key-v1').value;cacheKeys.push(key);
     const cached=await request.cache?.get(key);
     if(cached){const authenticated=request.cacheAuthenticationKey&&verifyCacheAuthentication(key,cached,request.cacheAuthenticationKey);const artifact=cached.artifact;const errors=verifyCompilerArtifact(artifact);const provenance=canonicalSemanticJson(artifact.inputs)===canonicalSemanticJson([current.digest])&&artifact.producer.id===pass.id&&artifact.producer.version===pass.version&&artifact.operation===pass.operation;if(!authenticated||errors.length||artifact.level!==pass.output||artifact.kind!==pass.outputKind||!provenance){fail('OA-API-CACHE-CORRUPT',!authenticated?'cache authentication failed':errors.join('; ')||'cached artifact provenance mismatch',pass.id);break;}for(const item of artifact.observations?.diagnostics??[])emit(item);current=structuredClone(artifact);cacheHits.push(pass.id);completed.add(pass.id);continue;}
     const controller=new AbortController();const relay=()=>controller.abort(request.signal?.reason);request.signal?.addEventListener('abort',relay,{once:true});
@@ -97,7 +98,8 @@ export async function runStableCompiler(request:StableCompilerRequest):Promise<S
     finally{clearTimeout(timeout);request.signal?.removeEventListener('abort',relay);}
     if(controller.signal.aborted&&!(result.diagnostics??[]).some(item=>item.severity==='error'))result={diagnostics:[{code:timedOut?'OA-API-TIME-LIMIT':'OA-API-CANCELLED',severity:'error',phase:pass.id,message:timedOut?'compiler time limit exceeded':'compilation cancelled'}]};
     for(const item of result.diagnostics??[]){passDiagnostics.push(sanitize(item,request.redact??[]));emit(item);}if(fatalObserved||result.output===undefined)break;
-    const next=createCompilerArtifact(pass.operation,pass.output,result.output,{id:pass.id,version:pass.version},[current.digest],{diagnostics:passDiagnostics,sourceMap:result.sourceMap??[],obligations:result.obligations??[]},pass.outputKind);
+    const declaredAccounting:PassObligation[]=[...(pass.accounting?.sourceObligations??[]).map((claim,index)=>({id:`${pass.id}:source:${index}`,claim,status:'created' as const,evidence:'stable-pass-accounting'})),...(pass.accounting?.losses??[]).map((claim,index)=>({id:`${pass.id}:loss:${index}`,claim:`declared loss: ${claim}`,status:'created' as const,evidence:'stable-pass-accounting'}))];
+    const next=createCompilerArtifact(pass.operation,pass.output,result.output,{id:pass.id,version:pass.version},[current.digest],{diagnostics:passDiagnostics,sourceMap:result.sourceMap??[],obligations:[...(result.obligations??[]),...declaredAccounting]},pass.outputKind);
     if(bytes(next)>budget.maxOutputBytes){fail('OA-API-OUTPUT-LIMIT',`output exceeds ${budget.maxOutputBytes} bytes`,pass.id);break;}
     current=next;executed.push(pass.id);completed.add(pass.id);if(request.cache){if(!request.cacheAuthenticationKey){fail('OA-API-CACHE-KEY-REQUIRED','cache authentication key is required',pass.id);break;}await request.cache.put(key,{artifact:current,authentication:cacheAuthentication(key,current,request.cacheAuthenticationKey)});}
   }

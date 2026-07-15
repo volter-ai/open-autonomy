@@ -112,4 +112,13 @@ describe('runtime proof-accounting ledger', () => {
     expect(corpus.checkpointStateLedger.find((entry) => entry.id === 'R6')?.status).toBe('ready');
     expect(corpus.obligationLedger.filter((entry) => entry.checkpoint === 'R5').every((entry) => entry.assurance === 'property-tested' && entry.evidence.includes('ev-r5-review'))).toBe(true);
   });
+
+  test('closes R6 only after SDK-only provider and retained-accounting evidence and opens R7', () => {
+    const corpus = JSON.parse(readFileSync('docs/runtime-ledgers/r6-closure.json','utf8')) as RuntimeLedgerCorpus;
+    expect(validateRuntimeLedger(corpus, expected, manifest.items)).toEqual([]);
+    expect(corpus.checkpointStateLedger.find((entry) => entry.id === 'R6')?.status).toBe('complete');
+    expect(corpus.checkpointStateLedger.find((entry) => entry.id === 'R7')?.status).toBe('ready');
+    expect(corpus.residualLedger).toEqual([]);
+    expect(corpus.obligationLedger.filter((entry) => entry.checkpoint === 'R6').every((entry) => entry.assurance === 'property-tested' && entry.evidence.includes('ev-r6-review'))).toBe(true);
+  });
 });

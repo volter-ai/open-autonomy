@@ -50,6 +50,31 @@ describe('trusted agent-review finalization', () => {
       rmSync(dir, { recursive: true, force: true });
     }
   });
+  test('requires a verified typed human task exactly when review parks for a person', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'oa-review-contract-'));
+    const path = join(dir, 'result.json');
+    try {
+      writeFileSync(path, JSON.stringify(valid({ verdict: 'failure', outcome: 'human-required' })));
+      expect(() => parseReviewResult(path)).toThrow('humanTask.ask');
+      writeFileSync(path, JSON.stringify(valid({ verdict: 'failure', outcome: 'changes-requested', humanTask: {
+        ask: 'decide', assignTo: 'maintainer',
+        completion: { ac: 'decision recorded', via: 'command', check: 'deterministic' },
+      } })));
+      expect(() => parseReviewResult(path)).toThrow('only valid for a human-required outcome');
+      writeFileSync(path, JSON.stringify(valid({ verdict: 'failure', outcome: 'human-required', humanTask: {
+        ask: 'decide', assignTo: 'maintainer', undeclared: true,
+        completion: { ac: 'decision recorded', via: 'command', check: 'deterministic' },
+      } as never })));
+      expect(() => parseReviewResult(path)).toThrow('humanTask has unknown fields: undeclared');
+      writeFileSync(path, JSON.stringify(valid({ verdict: 'failure', outcome: 'human-required', humanTask: {
+        ask: 'Decide and reply with /agent decide <decision>.', assignTo: 'maintainer',
+        completion: { ac: 'An authorized maintainer records the decision.', via: 'command', check: 'deterministic' },
+      } })));
+      expect(() => parseReviewResult(path)).not.toThrow();
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
   test('a later model-job failure overrides an already-written success artifact', () => {
     expect(decideFinalization({ jobResult: 'failure', expectedPr: 42, expectedSha: SHA, artifact: valid() }))
       .toEqual({ state: 'failure', reason: 'reviewer job concluded failure' });

@@ -167,6 +167,10 @@ describe('compileGithub — merge is a code-host resource, not engine output', (
     expect(modelJob).toContain('OSS_AGENT_RESULT_PATH: .agent-run/artifacts/result.json');
     expect(modelJob).toContain('OSS_AGENT_RESULT_SCHEMA_PATH: .agent-run/result-schema.json');
     expect(modelJob).toContain(`"$id":"${REVIEW_RESULT_SCHEMA_ID}"`);
+    expect(modelJob).toContain('bun scripts/review-prerequisites.ts');
+    expect(modelJob).toContain("if: steps.review_prerequisites.outputs.run_model == 'true'");
+    expect(modelJob.indexOf('review-prerequisites.ts')).toBeLessThan(modelJob.indexOf('model-proxy-exchange.ts'));
+    expect(out.generated['scripts/review-prerequisites.ts']).toContain('live base');
     const setupJob = wf.slice(wf.indexOf('  setup:'), wf.indexOf('  reviewer:'));
     expect(setupJob).not.toContain('statuses: write');
     expect(setupJob).toContain('Bind review target');

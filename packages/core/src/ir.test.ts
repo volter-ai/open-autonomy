@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { REVIEW_RESULT_SCHEMA_ID, validateIR, irShape, type AutonomyIR, type IRAgent } from './ir';
+import { REVIEW_RESULT_JSON_SCHEMA, REVIEW_RESULT_SCHEMA_ID, validateIR, irShape, type AutonomyIR, type IRAgent } from './ir';
 import { parseIr, applyDocumentAutoGate } from './ir-yaml';
 
 describe('parseIr — runner alias normalization (github → gh-actions)', () => {
@@ -205,6 +205,14 @@ describe('validateIR — result schema (optional, skill agents)', () => {
   test('accepts the named standard review-result schema and rejects an unknown named schema', () => {
     expect(validateIR(ir({ a: agent({ result: { schema: REVIEW_RESULT_SCHEMA_ID } }) }))).toEqual([]);
     expect(validateIR(ir({ a: agent({ result: { schema: 'example.unknown.v1' as never } }) })).some((e) => e.includes('known schema id'))).toBe(true);
+    expect(REVIEW_RESULT_JSON_SCHEMA).toMatchObject({
+      properties: {
+        humanTask: {
+          required: ['ask', 'assignTo', 'completion'],
+          properties: { completion: { required: ['ac', 'via', 'check'] } },
+        },
+      },
+    });
   });
 });
 

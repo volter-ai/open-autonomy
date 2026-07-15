@@ -162,8 +162,8 @@ engage is **github-native** (assignment + @mention → GitHub notifies them out-
 **Engage** — idempotent, do it once (don't re-notify every sweep):
 - assign the item to that person: `gh issue edit <n> --add-assignee <login>` (skip if already assigned).
 - in your status comment, **@mention** them with the specific ask — the exact question (`needs-info`) or the
-  decision/approval needed (`human-required`), and how to resolve it (a maintainer Approve on the PR, or
-  `/agent decide <…>` / `/agent answer <…>` on the issue).
+  decision/approval needed (`human-required`), and how to resolve it (a native maintainer Approve or
+  `/agent approve <full-head-sha>` on the PR, or `/agent decide <…>` / `/agent answer <…>` on the issue).
 - For a scoped **PR**, the `human-approval` gate already assigns + requests the maintainer's review — don't
   double up; just confirm it's engaged.
 
@@ -173,8 +173,9 @@ engage is **github-native** (assignment + @mention → GitHub notifies them out-
   engage** (compare comment timestamps), post a **fresh** escalation comment re-pinging them
   (`@<login> — still blocked after <hours>h; this needs your <decision/answer/approval> to proceed`).
   Re-ping at most once per SLA window, never every sweep.
-- a human item resumes **only** on the authorized human act (a maintainer Approve, or `/agent decide` /
-  `/agent answer`) — never on a timer, and never by you deciding on their behalf.
+- a human item resumes **only** on the authorized human act (a native maintainer Approve, an exact-SHA
+  `/agent approve`, or `/agent decide` / `/agent answer`) — never on a timer, and never by you deciding on
+  their behalf.
 
 ## Step 3 — capacity (judgment, not a blindfold)
 

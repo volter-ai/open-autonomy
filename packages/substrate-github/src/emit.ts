@@ -1,12 +1,19 @@
 // Emit autonomy.ir.v1 → an open-autonomy manifest + the github installation. The IR is the standard;
-// this is github's (partial) implementation. One unit: an agent — a prose skill realized as ONE
-// credentialed job whose token is scoped to its capabilities; the agent acts directly. There is no
-// mediated/credential-less wrapper and no script-as-job path — one realization. See docs/SPEC.md#the-ir.
+// this is github's (partial) implementation. One unit: an agent — a prose skill realized as a bounded model
+// job. Most effects are direct. A proposer's merge reviewer is the security-boundary exception: it emits a
+// bound result and a separate base-branch job publishes the status atomically. See docs/SPEC.md#the-ir.
 import { readFileSync, readdirSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { stringify as stringifyYaml } from 'yaml';
-import { cronOf, emitAutonomy, enforcementReport, withGeneratedManifest } from '@open-autonomy/core';
+import {
+  REVIEW_RESULT_SCHEMA_ID,
+  cronOf,
+  emitAutonomy,
+  enforcementReport,
+  resolveResultSchema,
+  withGeneratedManifest,
+} from '@open-autonomy/core';
 import type { AutonomyIR, CompileOutput, IRAgent } from '@open-autonomy/core';
 
 // Lazy sibling-data reads (OA-01): these used to be module-scope `readFileSync`s, which meant merely
@@ -294,11 +301,12 @@ function onLines(agent: IRAgent): string[] {
 
 // Realize an agent's capabilities (docs/SPEC.md#capabilities) as a GitHub job `permissions:` block. Pure
 // authority → github's permission model; another substrate maps it differently or ignores it.
-function capsToPermissions(caps: string[]): string {
+function capsToPermissions(caps: string[], deferMergeReviewEffects = false): string {
   // The agent job's LEAST-PRIVILEGE token: baseline is checkout (contents:read) + OIDC for the model token
   // (id-token:write); each capability widens it (docs/SPEC.md#capabilities). The merge boundary is the split:
   // code:propose can push/PR/queue-auto-merge/dispatch-CI but never gets statuses:write (can't self-certify
-  // a review); code:review gets statuses:write but never contents:write (can't merge). No agent gets both.
+  // a review); a merge reviewer gets neither statuses nor contents write (its trusted effect publishes the
+  // bound verdict). Other code:review agents get statuses:write but never contents:write. No agent gets both.
   // Baseline OBSERVATION (docs/SPEC.md#capabilities: reads are ambient, not a granted capability): checkout
   // (contents:read), read the work item whether issue or PR (issues+pull-requests:read), and OIDC for the
   // model token (id-token:write). Capabilities below widen WRITE authority.
@@ -307,12 +315,15 @@ function capsToPermissions(caps: string[]): string {
   for (const rawC of caps) {
     const c = rawC.split('@')[0]; // strip an optional @scope (e.g. code:propose@roadmap)
     if (c === 'code:propose') { p.contents = 'write'; p['pull-requests'] = 'write'; p.actions = 'write'; }
-    else if (c === 'code:review') p.statuses = 'write'; // bless-a-merge: post the agent-review status
+    // A reviewer wired as a proposer's merge reviewer emits a typed judgment; a separate trusted job owns
+    // the status/comment effects. Other code:review agents (for example an advisory verifier posting its own
+    // non-merge status) retain the direct capability realization.
+    else if (c === 'code:review' && !deferMergeReviewEffects) p.statuses = 'write';
     // tasks:author manages the work board — create/edit issues AND close stale/duplicate/zombie PRs (a PR whose
     // issue already closed). pull-requests:write enables close/comment/route but NOT merge (merging writes to the
     // protected branch → needs contents:write, which this never grants) — so the no-self-merge boundary holds.
     else if (c === 'tasks:author') { p.issues = 'write'; p['pull-requests'] = 'write'; }
-    else if (c === 'tasks:converse') p.issues = 'write'; // comment only
+    else if (c === 'tasks:converse' && !deferMergeReviewEffects) p.issues = 'write'; // comment only
     else if (c === 'agent:launch' || c === 'agent:cancel') p.actions = 'write';
     else if (c === 'agent:list') grant('actions', 'read');
   }
@@ -339,12 +350,22 @@ function launchConcurrencyLines(name: string, _agent: IRAgent): string[] {
 
 // Every agent is a skill (no script behaviors): one realization, the credentialed wrapper below.
 
-// A skill (model) agent: a single CREDENTIALED job whose token is scoped to its capabilities. It reads its
-// subject, runs the skill, and acts directly (a generic effect step turns a working-tree change into an
-// auto-merging PR; non-proposing agents post their verdict/comment via gh in-skill). No credential-less
-// job, no bundle, no publisher — the merge boundary is the capability/permission split (docs/SPEC.md#capabilities).
-function wrapperYml(name: string, agent: IRAgent, gh: GithubBox, isControlPrimary = false): string {
+// A skill (model) agent reads its subject and runs with capability-scoped authority. Proposers use the
+// generic effect below. A merge reviewer is read-only and emits a typed result; review_effect is the narrow
+// security-boundary publisher. The merge boundary remains the capability split (docs/SPEC.md#capabilities).
+function wrapperYml(
+  name: string,
+  agent: IRAgent,
+  gh: GithubBox,
+  isControlPrimary = false,
+  finalizesMergeReview = false,
+  humanApprovalWorkflow = false,
+): string {
   const caps = agent.capabilities ?? [];
+  if (finalizesMergeReview && agent.result?.schema !== REVIEW_RESULT_SCHEMA_ID) {
+    throw new Error(`merge reviewer '${name}' must declare result.schema: ${REVIEW_RESULT_SCHEMA_ID}`);
+  }
+  const declaredResultSchema = agent.result ? resolveResultSchema(agent.result.schema) : undefined;
   // Only a code:propose agent gets the effect step (push branch + open auto-merging PR). A non-proposer
   // (reviewer/pm/planner) has contents:read, so a stray tracked-file write would make the effect's
   // `git push` 403 and fail the job after the verdict was posted — tie the step to the capability.
@@ -361,6 +382,9 @@ function wrapperYml(name: string, agent: IRAgent, gh: GithubBox, isControlPrimar
   // with no subject.ref is autonomous (cron): it gets a minimal synthetic payload. The skill fetches any
   // deeper context itself (it is credentialed — it has gh + read).
   const refParam = subjectRefParam(agent);
+  if (finalizesMergeReview && !refParam) {
+    throw new Error(`merge reviewer '${name}' must declare a trigger param sourced from subject.ref`);
+  }
   const branchExpr = refParam ? `agent/issue-\${${refParam}}` : `agent/${RID}`;
   // TC.3: an agent can now legitimately carry BOTH a subject.ref-bearing dispatch trigger AND a cron
   // trigger (audit: dispatch for an operator-targeted run, cron for a repo-wide drift sweep with no
@@ -403,6 +427,19 @@ function wrapperYml(name: string, agent: IRAgent, gh: GithubBox, isControlPrimar
         `          mkdir -p .agent-run`,
         `          printf '{"number":0,"title":${JSON.stringify(name)},"body":""}\\n' > .agent-run/issue.json`,
       ];
+  const reviewTarget = finalizesMergeReview && refParam ? [
+    `      - name: Bind review target`,
+    `        id: review_target`,
+    `        env:`,
+    `          GH_TOKEN: \${{ github.token }}`,
+    `        run: |`,
+    `          ref="\${${refParam}}"`,
+    `          pr="$(gh pr view "$ref" --json number --jq .number)"`,
+    `          sha="$(gh pr view "$ref" --json headRefOid --jq .headRefOid)"`,
+    `          test -n "$pr" && test -n "$sha"`,
+    `          echo "pr=$pr" >> "$GITHUB_OUTPUT"`,
+    `          echo "sha=$sha" >> "$GITHUB_OUTPUT"`,
+  ] : [];
   // The EFFECT step: a code:propose agent's propose ACTION — turn the working tree into an auto-merging PR.
   // The logic is the agent-owned, runner-INDEPENDENT scripts/agent-propose.ts (git + gh, identical on any
   // runner); the runner only supplies the credential + env and invokes it. Methodology lives with the agent,
@@ -449,6 +486,11 @@ function wrapperYml(name: string, agent: IRAgent, gh: GithubBox, isControlPrimar
     `  setup:`,
     `    if: ${agentRunIf(name)}`,
     `    runs-on: ubuntu-latest`,
+    ...(finalizesMergeReview ? [
+      `    outputs:`,
+      `      review_pr: \${{ steps.review_target.outputs.pr }}`,
+      `      review_sha: \${{ steps.review_target.outputs.sha }}`,
+    ] : []),
     `    permissions: { contents: read, issues: read, pull-requests: read, id-token: write }`,
     `    env:`,
     `      GH_TOKEN: \${{ github.token }}`,
@@ -458,6 +500,7 @@ function wrapperYml(name: string, agent: IRAgent, gh: GithubBox, isControlPrimar
     `    steps:`,
     ...hardenRunner(gh),
     `      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1`,
+    ...reviewTarget,
     ...egressGuard(gh),
     `      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0`,
     `      - run: bun install --frozen-lockfile`,
@@ -469,14 +512,13 @@ function wrapperYml(name: string, agent: IRAgent, gh: GithubBox, isControlPrimar
     // exit non-zero — the run reported "failure" even though its work (triage, routing, reaping) succeeded.
     // Raise to 250 so the $ cap is what actually bounds a run; a runaway is still stopped by --max-usd-cents.
     `        run: bun scripts/model-proxy-mint.ts --run-id "${RID}" --models "${varOr('PUBLIC_AGENT_MODEL', gh.model)}" --max-usd-cents "\${{ vars.PUBLIC_AGENT_MAX_USD_CENTS || '200' }}" --max-requests "\${{ vars.PUBLIC_AGENT_MAX_REQUESTS || '250' }}" --issue .agent-run/issue.json`,
-    // The agent job is CREDENTIALED — its token is scoped to its capabilities (docs/SPEC.md#capabilities). It
-    // reads its subject, runs the skill, and acts directly; the only thing it can never do is merge (no
-    // statuses:write on a proposer; no contents:write on a reviewer), enforced by the permission split.
+    // The agent job's token is scoped to its capabilities (docs/SPEC.md#capabilities). A merge reviewer is
+    // further narrowed to read-only because the trusted effect owns status/comment publication.
     `  ${name}:`,
     `    needs: setup`,
     `    runs-on: ubuntu-latest`,
     ...timeoutLines(agent),
-    `    permissions: ${capsToPermissions(caps)}`,
+    `    permissions: ${capsToPermissions(caps, finalizesMergeReview)}`,
     `    env:`,
     `      MODEL_PROXY_URL: \${{ vars.MODEL_PROXY_URL }}`,
     `      MODEL_PROXY_OIDC_AUDIENCE: ${varOr('MODEL_PROXY_OIDC_AUDIENCE', gh.oidc_audience)}`,
@@ -502,7 +544,16 @@ function wrapperYml(name: string, agent: IRAgent, gh: GithubBox, isControlPrimar
     `        env:`,
     `          OSS_AGENT_TASK_DIR: .agent-run`,
     `          OSS_AGENT_ISSUE_PATH: .agent-run/issue.json`,
+    ...(declaredResultSchema ? [
+      `          OSS_AGENT_RESULT_PATH: .agent-run/artifacts/result.json`,
+      `          OSS_AGENT_RESULT_SCHEMA_PATH: .agent-run/result-schema.json`,
+    ] : []),
     `        run: |`,
+    ...(declaredResultSchema ? [
+      `          cat > .agent-run/result-schema.json <<'OPEN_AUTONOMY_RESULT_SCHEMA'`,
+      `          ${JSON.stringify(declaredResultSchema)}`,
+      `          OPEN_AUTONOMY_RESULT_SCHEMA`,
+    ] : []),
     `          bun scripts/claude-agent-run.ts --skill ${skillPath} --run-id "${RID}"; rc=$?; bun scripts/agent-visual-verify.ts || true; echo "::group::agent transcript (${RID})"; cat .agent-run/artifacts/transcript.md 2>/dev/null || true; echo "::endgroup::"; exit $rc`,
     ...(proposes ? effect : []),
     // Persist the call result as a durable per-run artifact: claude-agent-run writes .agent-run/artifacts/
@@ -530,6 +581,35 @@ function wrapperYml(name: string, agent: IRAgent, gh: GithubBox, isControlPrimar
     `        run: |`,
     `          for i in 1 2 3 4 5; do bun scripts/model-proxy-revoke.ts --run-id "${RID}" && exit 0 || sleep 3; done`,
     `          echo "::warning::run-slot revoke failed after retries for ${RID}; slot will auto-reap at token TTL"`,
+    ...(finalizesMergeReview ? [
+      `  review_effect:`,
+      `    needs: [setup, ${name}]`,
+      `    if: always() && needs.setup.result == 'success'`,
+      `    runs-on: ubuntu-latest`,
+      `    permissions: { contents: read, issues: write, pull-requests: write, statuses: write, actions: write }`,
+      `    steps:`,
+      `      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1`,
+      `        with:`,
+      `          ref: \${{ github.event.repository.default_branch }}`,
+      `      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0`,
+      `        continue-on-error: true`,
+      `        with:`,
+      `          name: agent-run-${name}`,
+      `          path: .agent-finalize`,
+      `      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0`,
+      `        with:`,
+      `          bun-version: 1.3.10`,
+      `      - name: Finalize the bound review result (fail closed)`,
+      `        env:`,
+      `          GH_TOKEN: \${{ github.token }}`,
+      `          GITHUB_REPOSITORY: \${{ github.repository }}`,
+      `          EXPECTED_PR: \${{ needs.setup.outputs.review_pr }}`,
+      `          EXPECTED_SHA: \${{ needs.setup.outputs.review_sha }}`,
+      `          REVIEWER_JOB_RESULT: \${{ needs['${name}'].result }}`,
+      `          REVIEW_RESULT_PATH: .agent-finalize/artifacts/result.json`,
+      ...(humanApprovalWorkflow ? [`          HUMAN_APPROVAL_WORKFLOW: human-approval.yml`] : []),
+      `        run: bun scripts/finalize-agent-review.ts`,
+    ] : []),
     ``,
   ].join('\n');
 }
@@ -563,9 +643,18 @@ export function compileGithub(ir: AutonomyIR): CompileOutput {
   // The issue-level control primary: the first non-human agent. Its control job (and only its) handles the
   // once-per-issue verbs (decide/answer), so they don't fire N times across every agent's control job.
   const controlPrimary = Object.entries(ir.agents).find(([, a]) => !isHuman(a))?.[0];
+  const mergeReviewers = new Set(Object.values(ir.agents).map((a) => a.review).filter((v): v is string => !!v));
+  const hasHumanApprovalWorkflow = ir.resources.includes('.github/workflows/human-approval.yml');
   for (const [name, agent] of Object.entries(ir.agents)) {
     if (isHuman(agent)) continue; // a human actor is declared in the manifest, not realized as a github job
-    generated[`.github/workflows/${name}.yml`] = wrapperYml(name, agent, githubBox(ir), name === controlPrimary); // every agent is a skill
+    generated[`.github/workflows/${name}.yml`] = wrapperYml(
+      name,
+      agent,
+      githubBox(ir),
+      name === controlPrimary,
+      mergeReviewers.has(name),
+      hasHumanApprovalWorkflow,
+    ); // every agent is a skill
   }
   // Agents carry the operator control plane, so emit its handler.
   if (Object.values(ir.agents).some((a) => !isHuman(a))) {

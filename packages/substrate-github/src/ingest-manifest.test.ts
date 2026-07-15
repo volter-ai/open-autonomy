@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { emitAutonomy, type AutonomyIR } from '@open-autonomy/core';
+import { REVIEW_RESULT_SCHEMA_ID, emitAutonomy, type AutonomyIR } from '@open-autonomy/core';
 import { ingestAutonomy } from './ingest-manifest';
 
 // U2 (supercode study §II.9.1) — verifies the emission shape chosen in manifest.ts (`documents: {
@@ -85,4 +85,10 @@ describe('emitAutonomy → ingestAutonomy — typed policy round-trip', () => {
     expect(back.policy.maxConcurrent).toBe(3);
     expect(back.policy.box).toEqual({ wip: { maxInProgress: 1 } });
   });
+});
+
+test('emitAutonomy → ingestAutonomy preserves a declared typed-result contract', () => {
+  const source = irWith();
+  source.agents.pm!.result = { schema: REVIEW_RESULT_SCHEMA_ID };
+  expect(ingestAutonomy(emitAutonomy(source)).agents.pm?.result).toEqual({ schema: REVIEW_RESULT_SCHEMA_ID });
 });

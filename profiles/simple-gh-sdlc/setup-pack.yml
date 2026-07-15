@@ -3,14 +3,16 @@
 # computed from ir.yml + provision.json by packages/core/src/setup-pack.ts's getSetupPack.
 #
 # landing_mode: GitHub native auto-merge, gated on `ci` + `agent-review` + `security` (provision.json's
-# branch_protection.required_checks) — an independent `reviewer` agent posts `agent-review`
-# (code:review, never held by the same agent as code:propose — ir.yml's `develop`/`reviewer` split).
+# branch_protection.required_checks) — an independent `reviewer` agent judges and the substrate-native
+# review path publishes `agent-review` (code:review, never held by the same agent as code:propose —
+# ir.yml's `develop`/`reviewer` split).
 landing_mode: auto-merge
 
 # check_realizations: `ci` needs a real, standing CI workflow (TA.3) or a required check with nothing
-# behind it wedges every PR forever. `agent-review` is posted NATIVELY by the independent `reviewer`
-# actor's own credentialed job when it runs (event-triggered on the PR) — no separate dispatched workflow
-# involved. `security` is the dispatched, blocking realization of security.yml
+# behind it wedges every PR forever. `agent-review` is realized NATIVELY by the substrate's review-run path:
+# hosted uses the reviewer's bound result + a trusted effect; local currently uses its shared-credential
+# compatibility path. Neither needs a separately authored/dispatched workflow. `security` is the dispatched,
+# blocking realization of security.yml
 # (.github/workflows/security-gate.yml) — a bot-opened PR fires no `pull_request`
 # (GITHUB_TOKEN anti-recursion), so the proposer's effect step explicitly workflow_dispatches it, per
 # `policy.box['gh-actions'].propose_dispatch_checks: [security-gate.yml]` in ir.yml.

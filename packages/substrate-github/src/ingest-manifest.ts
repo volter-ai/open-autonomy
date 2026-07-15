@@ -23,6 +23,7 @@ export function ingestAutonomy(m: OAManifest): AutonomyIR {
       ...(typeof a.timeout === 'number' ? { timeout: a.timeout } : {}),
       ...(a.review ? { review: a.review } : {}),
       ...(a.execution ? { execution: a.execution } : {}),
+      ...(a.result ? { result: a.result } : {}),
     };
   }
 

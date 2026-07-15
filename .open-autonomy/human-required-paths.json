@@ -7,6 +7,8 @@
   ".claude/skills/**",
   "profiles/**/skills/**",
   "**/bun.lock",
+  "scripts/finalize-agent-review.ts",
+  "packages/substrate-github/src/runtime/finalize-agent-review.ts",
   "scripts/human-approval-gate.ts",
   "scripts/rearm-auto-merge.ts",
   "scripts/reconcile-merged-issues.ts",

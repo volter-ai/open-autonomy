@@ -1,14 +1,15 @@
 #!/usr/bin/env bun
 // The `human-approval` gate — a DETERMINISTIC, ADDITIONAL required check (alongside ci + agent-review). It is
-// the github realization of the actor model's human REVIEW task: a maintainer Approve on the CURRENT head SHA,
-// required ONLY for PRs that touch human-required scope (sensitive paths, or the `human-required` label).
+// the github realization of the actor model's human REVIEW task: a maintainer authorizes the CURRENT head
+// SHA through either a native Approve review or an exact-SHA `/agent approve <sha>` PR comment, required ONLY
+// for PRs that touch human-required scope (sensitive paths or an approval-routing label).
 //
 // Why deterministic/script (vs an agent): it IS a security boundary — "did a maintainer approve this exact
 // head?" must not be a model judgment. AI review stays required separately (agent-review); this only adds the
 // human sign-off for sensitive changes. Routine agent PRs auto-pass so the autonomous loop is never blocked.
 //
-// The status flipping to `success` completes `completion: 'maintainer Approve on current SHA'`. Re-earned per
-// SHA: an Approve counts only if its commit_id == the current head, so a new push re-opens the gate.
+// The status flipping to `success` completes `completion: 'maintainer approval on current SHA'`. Re-earned per
+// SHA: a review or command counts only when explicitly bound to the current head, so a new push re-opens the gate.
 import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 
@@ -24,6 +25,24 @@ export const qualifies = (r: Review, headSha: string, isMaintainer: (login: stri
   return isMaintainer(r.user?.login ?? '');
 };
 
+export type ApprovalCommand = { id?: number; body?: string; user?: { login?: string }; author?: { login?: string } };
+
+/** Parse only the explicit, full-SHA command. A bare command cannot safely bind what the human inspected. */
+export function approvalCommandSha(body: string | undefined): string | undefined {
+  return body?.match(/^\/agent approve ([0-9a-fA-F]{40})$/)?.[1]?.toLowerCase();
+}
+
+/** A durable PR comment is a human approval result only when its author still has write+ and its SHA is current. */
+export function commandQualifies(
+  command: ApprovalCommand,
+  headSha: string,
+  isMaintainer: (login: string) => boolean,
+): boolean {
+  const sha = approvalCommandSha(command.body);
+  const login = command.user?.login ?? command.author?.login ?? '';
+  return sha === headSha.toLowerCase() && isMaintainer(login);
+}
+
 // Which repo permissions count as maintainer (write+) for the gate.
 export const isMaintainerPermission = (perm: string): boolean => perm === 'admin' || perm === 'write' || perm === 'maintain';
 
@@ -32,6 +51,10 @@ export const isMaintainerPermission = (perm: string): boolean => perm === 'admin
 // a governance hold would conflate "review found defects" with "merge is held"). The gate treats it exactly
 // like `human-required` on the PR itself.
 export const DEVELOP_ONLY_LABEL = 'agent-develop-only';
+// Unlike `human-required`, this is NOT a merge/re-arm hold. It records only that a sound agent review routed
+// the PR through this additional gate. Keeping the meanings separate avoids a label that both asks for
+// approval and prevents the approved PR from ever being armed.
+export const HUMAN_APPROVAL_REQUIRED_LABEL = 'human-approval-required';
 
 // The develop-only decision from one linked issue's label lookup. FAILS CLOSED: this gate is a security
 // boundary, so an UNREADABLE label set (null — e.g. the workflow token lacks issues:read) scopes the PR
@@ -69,6 +92,10 @@ export function isSensitivePath(f: string, globs: Bun.Glob[]): boolean {
   if (f.startsWith('.open-autonomy/history/')) return false;
   return globs.some((g) => g.match(f));
 }
+export function requiresHumanApproval(labels: string[], developOnly: boolean, files: string[], globs: Bun.Glob[]): boolean {
+  return labels.includes('human-required') || labels.includes(HUMAN_APPROVAL_REQUIRED_LABEL)
+    || developOnly || files.some((f) => isSensitivePath(f, globs));
+}
 
 if (import.meta.main) {
   const repo = process.env.GITHUB_REPOSITORY;
@@ -100,7 +127,7 @@ if (import.meta.main) {
     return owner ? [owner] : []; // best-effort fallback; if the owner is an org login the gh call simply no-ops
   }
 
-  // A PR in scope needs a maintainer Approve; everything else auto-passes.
+  // A PR in scope needs an explicit maintainer authorization; everything else auto-passes.
   const HUMAN_REQUIRED_GLOBS = loadHumanRequiredGlobs();
 
   const view = JSON.parse(gh(['pr', 'view', pr, '-R', repo, '--json', 'headRefOid,labels,files,body,closingIssuesReferences']) || '{}') as {
@@ -136,16 +163,19 @@ if (import.meta.main) {
     }
     return developOnlyFromLookup(issueLabels);
   });
-  const scoped =
-    labels.includes('human-required') || developOnly || files.some((f) => isSensitivePath(f, HUMAN_REQUIRED_GLOBS));
+  const scoped = requiresHumanApproval(labels, developOnly, files, HUMAN_REQUIRED_GLOBS);
 
   // Does this login have maintainer (write+) permission on the repo? Verified per review event — one extra API
   // call, and the only trustworthy signal (see the qualifies() note on author_association).
   function isMaintainer(login: string): boolean {
     if (!login) return false;
+    if (permissionCache.has(login)) return permissionCache.get(login)!;
     const perm = gh(['api', `repos/${repo}/collaborators/${login}/permission`, '--jq', '.permission']);
-    return isMaintainerPermission(perm);
+    const result = isMaintainerPermission(perm);
+    permissionCache.set(login, result);
+    return result;
   }
+  const permissionCache = new Map<string, boolean>();
 
   // The review that fired a `pull_request_review` event is in the event payload. Use it FIRST: it's
   // authoritative, immune to the reviews-API read returning empty under GITHUB_TOKEN, and free of the
@@ -160,11 +190,53 @@ if (import.meta.main) {
     }
   }
 
-  // For a scoped PR, look for a maintainer Approve on the current head.
+  // The triggering comment is authoritative even before GitHub's comments listing becomes consistent. A
+  // deleted comment never qualifies. The workflow filters to PR comments, and this second check keeps the
+  // script fail-closed if it is invoked directly with an issue-comment payload.
+  function eventApprovalCommand(): { action?: string; command?: ApprovalCommand } | undefined {
+    const p = process.env.GITHUB_EVENT_PATH;
+    if (!p) return undefined;
+    try {
+      const event = JSON.parse(readFileSync(p, 'utf8')) as {
+        action?: string;
+        issue?: { pull_request?: unknown };
+        comment?: ApprovalCommand;
+      };
+      if (!event.issue?.pull_request) return undefined;
+      return { action: event.action, command: event.comment };
+    } catch {
+      return undefined;
+    }
+  }
+
+  // Read every current PR comment so workflow re-dispatch and synchronize events can reconstruct the durable
+  // decision. `--slurp` makes paginated REST arrays parseable as one array-of-pages.
+  function approvalCommands(excludedCommentId?: number, distrustListing = false): ApprovalCommand[] {
+    if (distrustListing) return [];
+    const raw = gh(['api', `repos/${repo}/issues/${pr}/comments?per_page=100`, '--paginate', '--slurp']);
+    if (!raw) return [];
+    try {
+      const parsed = JSON.parse(raw) as ApprovalCommand[] | ApprovalCommand[][];
+      if (!Array.isArray(parsed)) return [];
+      const commands = Array.isArray(parsed[0]) ? (parsed as ApprovalCommand[][]).flat() : parsed as ApprovalCommand[];
+      return commands.filter((command) => command.id !== excludedCommentId);
+    } catch (e) {
+      process.stderr.write(`human-approval: could not parse PR comments (${e instanceof Error ? e.message : String(e)})\n`);
+      return [];
+    }
+  }
+
+  // For a scoped PR, look for either realization of the same human result: a native Approve review or an
+  // authenticated exact-SHA command. Independence is already supplied by developer-agent vs reviewer-agent;
+  // this gate verifies human authorization and deliberately does not require a second human identity.
   let approved = false;
+  let approvalMethod: 'review' | 'command' | undefined;
   if (scoped) {
     const er = eventReview();
-    if (er && qualifies(er, headSha, isMaintainer)) approved = true; // primary: the review carried by this event
+    if (er && qualifies(er, headSha, isMaintainer)) {
+      approved = true;
+      approvalMethod = 'review';
+    }
     if (!approved) {
       // Backstop for the synchronize / re-dispatch paths (no event.review). The GITHUB_TOKEN sometimes returns
       // an empty reviews list, so this can only ADD an approval, never the sole gate — and we never silently
@@ -173,10 +245,27 @@ if (import.meta.main) {
       if (raw) {
         try {
           approved = (JSON.parse(raw) as Review[]).some((r) => qualifies(r, headSha, isMaintainer));
+          if (approved) approvalMethod = 'review';
         } catch (e) {
           process.stderr.write(`human-approval: could not parse reviews list (${e instanceof Error ? e.message : String(e)})\n`);
         }
       }
+    }
+    const commandEvent = eventApprovalCommand();
+    if (!approved && commandEvent?.action !== 'deleted') {
+      if (commandEvent?.command && commandQualifies(commandEvent.command, headSha, isMaintainer)) {
+        approved = true;
+        approvalMethod = 'command';
+      }
+    }
+    const commentWasMutated = commandEvent?.action === 'edited' || commandEvent?.action === 'deleted';
+    const excludedCommentId = commentWasMutated ? commandEvent.command?.id : undefined;
+    // The mutation payload is authoritative over an eventually-consistent comments listing. Exclude that
+    // comment by id; if GitHub ever omits the id, distrust the whole listing for this run and fail closed.
+    const commands = approvalCommands(excludedCommentId, commentWasMutated && excludedCommentId === undefined);
+    if (!approved && commands.some((command) => commandQualifies(command, headSha, isMaintainer))) {
+      approved = true;
+      approvalMethod = 'command';
     }
   }
 
@@ -184,10 +273,12 @@ if (import.meta.main) {
   const description = !scoped
     ? 'no human-required scope — auto-passed'
     : approved
-      ? 'maintainer approved the current head'
+      ? approvalMethod === 'command'
+        ? 'maintainer authorized the current head via /agent approve'
+        : 'maintainer approved the current head'
       : developOnly
-        ? 'awaiting a maintainer Approve on the current commit (linked issue is agent-develop-only)'
-        : 'awaiting a maintainer Approve on the current commit (human-required scope)';
+        ? 'awaiting maintainer authorization on current head (linked issue is agent-develop-only)'
+        : 'awaiting maintainer authorization on current head (human-required scope)';
 
   gh(['api', '-X', 'POST', `repos/${repo}/statuses/${headSha}`, '-f', `state=${state}`, '-f', 'context=human-approval', '-f', `description=${description}`]);
   process.stdout.write(`human-approval: #${pr} scoped=${scoped} approved=${approved} → ${state} (${headSha.slice(0, 7)})\n`);
@@ -215,7 +306,7 @@ if (import.meta.main) {
     const existing = gh(['pr', 'view', pr, '-R', repo, '--json', 'comments']) || '{}';
     if (!existing.includes(marker)) {
       const cc = who.length ? ` ${who.map((u) => `@${u}`).join(' ')}` : '';
-      gh(['pr', 'comment', pr, '-R', repo, '--body', `${marker}\n⏳ **Maintainer approval required.**${cc} This PR touches human-required scope, so beyond \`ci\` + \`agent-review\` it needs a maintainer **Approve** on the current commit before it can merge. Re-approve after any new push (the gate is per-commit).`]);
+      gh(['pr', 'comment', pr, '-R', repo, '--body', `${marker}\n⏳ **Maintainer approval required.**${cc} This PR touches human-required scope, so beyond \`ci\` + \`agent-review\` it needs explicit maintainer authorization on the current commit. Either Approve it in GitHub or comment \`/agent approve ${headSha}\`. A new push requires a new current-head approval.`]);
     }
   }
 }

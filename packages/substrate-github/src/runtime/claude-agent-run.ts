@@ -2,16 +2,25 @@
 // Thin skill runner: builds the prompt (the agent's skill + its subject + the universal job contract) and
 // runs Claude Code against the bounded model proxy. The agent acts DIRECTLY with its own scoped token —
 // if it changes the working tree, the wrapper's effect step proposes it as an auto-merging PR; if its job
-// is to review/comment/label, the skill does that itself via gh. There is no bundle and no result schema:
-// the agent's actions ARE its output (docs/SPEC.md#capabilities). This script only sets up the model + prompt.
+// is to review/comment/label, the skill normally does that itself via gh. An actor may instead declare a
+// typed result: the compiler supplies its schema and destination, and the substrate's effect decides how to
+// realize it. This script only sets up the model, prompt, transcript, and declared-result handoff.
 import { spawnSync } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
-import { runClaudeAgent } from './agent.js';
+import { missingRequired, runClaudeAgent } from './agent.js';
 import { renderTranscript, redactSensitive } from './transcript.js';
 
-type Options = { issue?: string; context?: string; model: string; skill?: string; runId?: string };
+type Options = {
+  issue?: string;
+  context?: string;
+  model: string;
+  skill?: string;
+  runId?: string;
+  resultPath?: string;
+  resultSchemaPath?: string;
+};
 
 const root = resolve(import.meta.dir, '..');
 
@@ -33,6 +42,8 @@ function parseArgs(argv: string[]): Options {
     model: argValue(argv, '--model') ?? process.env.PUBLIC_AGENT_MODEL ?? 'deepseek/deepseek-v4-flash',
     skill: argValue(argv, '--skill') ?? process.env.OSS_AGENT_SKILL_PATH,
     runId: argValue(argv, '--run-id'),
+    resultPath: argValue(argv, '--result') ?? process.env.OSS_AGENT_RESULT_PATH,
+    resultSchemaPath: argValue(argv, '--result-schema') ?? process.env.OSS_AGENT_RESULT_SCHEMA_PATH,
   };
 }
 
@@ -60,7 +71,13 @@ function readIssue(issuePath: string): { number?: number; title?: string; body?:
   }
 }
 
-function buildPrompt(issuePath: string | undefined, taskDir: string, contextPath?: string, skillPath?: string): string {
+function buildPrompt(
+  issuePath: string | undefined,
+  taskDir: string,
+  contextPath?: string,
+  skillPath?: string,
+  declaredResult?: { path: string; schema: Record<string, unknown> },
+): string {
   const issue = issuePath ? readIssue(issuePath) : {};
   const context = contextPath && existsSync(contextPath) ? readFileSync(contextPath, 'utf8') : '';
   // The agent's role/instructions come from its skill (the per-agent variable); the rest is the universal
@@ -100,6 +117,14 @@ function buildPrompt(issuePath: string | undefined, taskDir: string, contextPath
     '- Do not read, print, or persist secrets.',
     '- Prefer focused checks over broad, slow commands.',
     '- Leave GitHub workflow/security-sensitive files alone unless your subject explicitly asks for them.',
+    ...(declaredResult ? [
+      '',
+      'Declared typed result:',
+      `- Write exactly one JSON object to ${declaredResult.path} before you finish.`,
+      '- It MUST satisfy this JSON Schema exactly:',
+      `  ${JSON.stringify(declaredResult.schema)}`,
+      '- The declared result is authoritative. Missing or malformed output fails this run closed.',
+    ] : []),
     '',
     'If you change code, write a short PR summary (what changed + tests run) to',
     `${taskDir}/artifacts/pr.md so it becomes the pull request body.`,
@@ -119,7 +144,17 @@ async function main(): Promise<void> {
 
   const issuePath = options.issue ? resolve(options.issue) : undefined;
   const contextPath = options.context ? resolve(options.context) : undefined;
-  const prompt = buildPrompt(issuePath, taskDir, contextPath, options.skill ? resolve(options.skill) : undefined);
+  const resultPath = options.resultPath ? resolve(options.resultPath) : undefined;
+  const resultSchemaPath = options.resultSchemaPath ? resolve(options.resultSchemaPath) : undefined;
+  if (!!resultPath !== !!resultSchemaPath) throw new Error('declared result requires both a result path and schema path');
+  const resultSchema = resultSchemaPath ? readDeclaredSchema(resultSchemaPath) : undefined;
+  const prompt = buildPrompt(
+    issuePath,
+    taskDir,
+    contextPath,
+    options.skill ? resolve(options.skill) : undefined,
+    resultPath && resultSchema ? { path: resultPath, schema: resultSchema } : undefined,
+  );
 
   // Claude Code talks the Anthropic Messages wire; point it at the bounded proxy and authenticate with the
   // minted run token — no provider key in the sandbox. Full tools, scoped by the job's own permissions.
@@ -137,10 +172,33 @@ async function main(): Promise<void> {
   } catch (e) {
     writeFileSync(join(artifactsDir, 'transcript.md'), `# Agent run transcript\n\n_(transcript render failed: ${e instanceof Error ? e.message : String(e)})_\n\n${redactSensitive((result.stdout ?? '').trim())}\n`);
   }
+  if (result.exitCode === 0 && resultPath && resultSchema) validateDeclaredResult(resultPath, resultSchema);
   process.exit(result.exitCode);
 }
 
-main().catch((error) => {
-  process.stderr.write(`${error instanceof Error ? error.message : String(error)}\n`);
-  process.exit(1);
-});
+export function readDeclaredSchema(path: string): Record<string, unknown> {
+  const value = JSON.parse(readFileSync(path, 'utf8')) as unknown;
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    throw new Error('declared result schema must be a JSON object');
+  }
+  return value as Record<string, unknown>;
+}
+
+export function validateDeclaredResult(path: string, schema: Record<string, unknown>): void {
+  let value: unknown;
+  try {
+    value = JSON.parse(readFileSync(path, 'utf8')) as unknown;
+  } catch (e) {
+    throw new Error(`declared result is missing or invalid JSON: ${e instanceof Error ? e.message : String(e)}`);
+  }
+  if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('declared result must be a JSON object');
+  const missing = missingRequired(schema, value);
+  if (missing.length) throw new Error(`declared result is missing required fields: ${missing.join(', ')}`);
+}
+
+if (import.meta.main) {
+  main().catch((error) => {
+    process.stderr.write(`${error instanceof Error ? error.message : String(error)}\n`);
+    process.exit(1);
+  });
+}

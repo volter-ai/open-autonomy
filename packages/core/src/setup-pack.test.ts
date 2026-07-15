@@ -216,7 +216,7 @@ describe('TS.1 acceptance — the four real baseline packs', () => {
 });
 
 // --- TP.1 acceptance — the simple-gh-sdlc pack asserted field-by-field against DESIGN §Q1's ladder ------
-// ("`M3` adds required checks ci+agent-review+security with an independent reviewer posting agent-review
+// ("`M3` adds required checks ci+agent-review+security with an independent reviewer producing agent-review
 // (ir.yml:44-49) and auto-merge armed only after a supervised first merge -> M4 vision anchor (added) +
 // >=1 GitHub issue with ready label + AC body (skills/pm/SKILL.md:18-24) -> M5 pm tick dispatches develop
 // -> M6 a merged PR that passed ci+agent-review+security closed a ready issue

@@ -611,7 +611,7 @@ gh repo edit <owner>/<repo> --enable-auto-merge
 
 On its next tick the PM sweeps GitHub, and for a `ready` issue **launches `develop` in an isolated
 worktree** (`runner.ts launch develop --ref <n> --branch agent/issue-<n>`). The develop agent commits, the
-runner opens the PR, the **reviewer** posts `agent-review`, and once **your CI (`ci`/`build`/…) + `security` +
+runner opens the PR, the **local shared-credential reviewer path** posts `agent-review`, and once **your CI (`ci`/`build`/…) + `security` +
 `agent-review`** are all green the PR is mergeable — **merge the first one yourself** to prove the gate, then
 arm auto-merge (above) so later PRs land via **native auto-merge**. With `enforce_admins:true` no agent
 bypasses the gate — but **your CI is the real boundary**: on a local runner the agents share your token, so

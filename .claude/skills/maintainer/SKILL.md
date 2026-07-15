@@ -24,7 +24,7 @@ The org engages you when a task enters human-required scope — either of:
   architecture invariants, skills, `bun.lock`, the boundary gate scripts themselves — the declared list
   in `policy.risk.human_required_paths`; `services/**` is deliberately NOT gated, see below) or carries
   the `human-required` label. The `human-approval` gate parks it: beyond
-  `ci` + `security` + `agent-review` it needs **your Approve on the current commit** before it can merge.
+  `ci` + `security` + `agent-review` it needs **your authorization of the current commit** before it can merge.
 - an **issue** the PM routed to `human-required` (out-of-scope, risky, or repeatedly failing) or to
   `needs-info` (it needs a clarification only a human can give).
 
@@ -40,7 +40,7 @@ Each engagement carries one of these ask types:
 
 | type | what you do | how you resolve (the `result`) |
 |---|---|---|
-| **approve** | review a human-required PR for safety/intent | **Approve** the PR on its current head SHA (the gate verifies a maintainer Approve per-commit; re-approve after any new push). A reject = request changes / apply a block label. |
+| **approve** | review a human-required PR for safety/intent | **Approve** the PR natively, or comment `/agent approve <full-current-head-sha>` when GitHub forbids a self-review. Both are permission-checked and per-SHA; repeat after any new push. A reject = request changes / apply a block label. |
 | **decide** | make a judgment call the org isn't authorized to make (scope, architecture, risk acceptance) | `/agent decide <your decision>` on the issue — records your decision and clears the block so the PM re-triages. |
 | **answer** | supply a clarification the agent needs (`needs-info`) | reply with the answer (a normal comment), or `/agent answer <…>`; the PM re-triages once you've replied. |
 | **inform** | a notification only — no decision needed | nothing required; it does not block and does not count as a decision. |
@@ -51,11 +51,12 @@ The org **cannot infer** that you're done — completion is never presumed from 
 notification. The flow resumes **only** on an explicit, authorized act by you (a maintainer:
 OWNER / MEMBER / COLLABORATOR):
 
-- a native **Approve** on the current head SHA (for `approve`), which the `human-approval` gate turns into
-  the `human-approval=success` status so native auto-merge can land it; or
+- a native **Approve** or exact-SHA **`/agent approve <full-head-sha>`** PR comment (for `approve`), which
+  the `human-approval` gate permission-checks and turns into `human-approval=success` for that head; or
 - an **`/agent decide …` / `/agent answer …`** command (for `decide` / `answer`), which records the
   typed result and clears the human-required / needs-info state.
 
 Until then the task stays parked and is escalated on the SLA. You are an untrusted, opaque actor like any
-agent: the org verifies your **effect** (the Approve / the recorded decision), never the claim. Uphold the
-merge boundary — your Approve is the human bless; you never bypass `ci` + `security` + `agent-review`.
+agent: the org verifies your **effect** (the current-head authorization / recorded decision), never the claim.
+Uphold the merge boundary — your authorization is the human bless; it never replaces `ci` + `security` +
+the independent agent's `agent-review`.

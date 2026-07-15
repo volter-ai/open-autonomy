@@ -2,6 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { parseIr } from '@open-autonomy/core';
 import { checkPackDrift, profilesWithPack } from './check-setup-pack';
 
 function fixture(opts: { ir: string; pack: string; provision?: string; skills?: Record<string, string> }): string {
@@ -29,7 +30,8 @@ const IR_WITH_REVIEWER = [
   '  reviewer:',
   '    behavior: reviewer',
   '    capabilities: [code:review, tasks:converse]',
-  '    triggers: [{ dispatch: true }]',
+  '    result: { schema: open-autonomy.review.v1 }',
+  '    triggers: [{ dispatch: true, params: { TARGET_REF: subject.ref } }]',
   'policy:',
   '  box: {}',
   'resources: []',
@@ -50,6 +52,14 @@ const IR_NO_REVIEWER = [
   'resources: []',
   '',
 ].join('\n');
+
+// These fixtures are the subjects of the contradiction tests below. Keep them independently valid so
+// a new IR invariant cannot make getSetupPack fail early and silently turn every semantic assertion into
+// a false negative with an unrelated "pack failed to load/validate" result.
+test('setup-pack contradiction fixtures remain valid profile IR', () => {
+  expect(() => parseIr(IR_WITH_REVIEWER)).not.toThrow();
+  expect(() => parseIr(IR_NO_REVIEWER)).not.toThrow();
+});
 
 describe('checkPackDrift — the four real baseline packs are drift-free', () => {
   for (const p of ['profiles/simple-gh', 'profiles/simple-gh-sdlc', 'profiles/self-driving', 'profiles/simple-sdlc']) {

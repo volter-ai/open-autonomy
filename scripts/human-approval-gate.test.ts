@@ -1,16 +1,25 @@
 import { describe, expect, test } from 'bun:test';
+import { spawnSync } from 'node:child_process';
+import { chmodSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import {
+  approvalCommandSha,
+  commandQualifies,
   DEVELOP_ONLY_LABEL,
+  HUMAN_APPROVAL_REQUIRED_LABEL,
   developOnlyFromLookup,
   isMaintainerPermission,
   isSensitivePath,
   linkedIssueNumbers,
   loadHumanRequiredGlobs,
   qualifies,
+  requiresHumanApproval,
   type Review,
 } from './human-approval-gate';
 
 const HEAD = 'abc123';
+const FULL_HEAD = 'a'.repeat(40);
 // A permission oracle keyed by login — what the live gate resolves via repos/{repo}/collaborators/{login}/permission.
 const permissionOf = (perms: Record<string, string>) => (login: string) => isMaintainerPermission(perms[login] ?? 'none');
 
@@ -55,6 +64,100 @@ describe('isMaintainerPermission', () => {
   });
 });
 
+describe('/agent approve — explicit human result, independent of PR author identity', () => {
+  test('a write+ maintainer may authorize the exact current head, including through the GraphQL author shape', () => {
+    for (const command of [
+      { body: `/agent approve ${FULL_HEAD}`, user: { login: 'alice' } },
+      { body: `/agent approve ${FULL_HEAD.toUpperCase()}`, author: { login: 'alice' } },
+    ]) {
+      expect(commandQualifies(command, FULL_HEAD, permissionOf({ alice: 'admin' }))).toBe(true);
+    }
+  });
+
+  test('a stale SHA, non-maintainer, bare command, short SHA, or trailing text fails closed', () => {
+    expect(commandQualifies(
+      { body: `/agent approve ${'b'.repeat(40)}`, user: { login: 'alice' } },
+      FULL_HEAD,
+      permissionOf({ alice: 'admin' }),
+    )).toBe(false);
+    expect(commandQualifies(
+      { body: `/agent approve ${FULL_HEAD}`, user: { login: 'mallory' } },
+      FULL_HEAD,
+      permissionOf({ mallory: 'read' }),
+    )).toBe(false);
+    for (const body of ['/agent approve', '/agent approve abc123', `/agent approve ${FULL_HEAD} looks good`]) {
+      expect(approvalCommandSha(body)).toBeUndefined();
+    }
+  });
+
+  test('the parser keeps whitespace exact so it matches the workflow trigger', () => {
+    expect(approvalCommandSha(`  /agent approve ${FULL_HEAD}  `)).toBeUndefined();
+    expect(approvalCommandSha(`/agent   approve ${FULL_HEAD}`)).toBeUndefined();
+    expect(approvalCommandSha(`/AGENT approve ${FULL_HEAD}`)).toBeUndefined();
+  });
+
+  test('the real gate posts success for a current command and pending for the same command after the head changes', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'oa-human-command-'));
+    const gh = join(dir, 'gh');
+    const log = join(dir, 'gh.log');
+    writeFileSync(gh, `#!/usr/bin/env bash
+set -eu
+printf '%s\n' "$*" >> "$GH_LOG"
+case "$*" in
+  *"--json headRefOid,labels,files,body,closingIssuesReferences"*)
+    printf '{"headRefOid":"%s","labels":[],"files":[{"path":"scripts/human-approval-gate.ts"}],"body":"Closes #205","closingIssuesReferences":[]}\n' "$GH_HEAD" ;;
+  *"issue view 205"*) printf '{"labels":[]}\n' ;;
+  *"pulls/42/reviews"*) printf '[]\n' ;;
+  *"issues/42/comments?per_page=100"*) printf '%s\n' "$GH_COMMENTS" ;;
+  *"collaborators/alice/permission"*) printf '%s\n' "$GH_PERMISSION" ;;
+  *"--json assignees,reviewRequests"*) printf '{"assignees":[],"reviewRequests":[]}\n' ;;
+  *"--json comments"*) printf '{"comments":[{"body":"<!-- human-approval-gate -->"}]}\n' ;;
+  *) printf '\n' ;;
+esac
+`);
+    chmodSync(gh, 0o755);
+    const eventPath = join(dir, 'event.json');
+    const run = (head: string, comments: unknown[][] = [[{
+      id: 7,
+      body: `/agent approve ${FULL_HEAD}`,
+      user: { login: 'alice' },
+    }]], event?: unknown): string => {
+      writeFileSync(log, '');
+      if (event) writeFileSync(eventPath, JSON.stringify(event));
+      const result = spawnSync(process.execPath, [join(import.meta.dir, 'human-approval-gate.ts')], {
+        encoding: 'utf8',
+        env: {
+          ...process.env,
+          PATH: `${dir}:${process.env.PATH}`,
+          GH_LOG: log,
+          GH_HEAD: head,
+          GH_PERMISSION: 'admin',
+          GH_COMMENTS: JSON.stringify(comments),
+          GITHUB_REPOSITORY: 'acme/repo',
+          GITHUB_EVENT_PATH: event ? eventPath : undefined,
+          PR_NUMBER: '42',
+        },
+      });
+      expect(result.status).toBe(0);
+      return result.stdout;
+    };
+    try {
+      expect(run(FULL_HEAD)).toContain('approved=true → success');
+      expect(run('b'.repeat(40))).toContain('approved=false → pending');
+      expect(run(FULL_HEAD, [[]])).toContain('approved=false → pending');
+      // A mutation event outranks an eventually-consistent listing that still contains the old command.
+      for (const event of [
+        { action: 'deleted', issue: { pull_request: {} }, comment: { id: 7, body: `/agent approve ${FULL_HEAD}`, user: { login: 'alice' } } },
+        { action: 'edited', issue: { pull_request: {} }, comment: { id: 7, body: 'approval withdrawn', user: { login: 'alice' } } },
+      ]) {
+        expect(run(FULL_HEAD, undefined, event)).toContain('approved=false → pending');
+      }
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+});
+
 describe('linkedIssueNumbers — the PR→issue link the gate scopes agent-develop-only through', () => {
   test('prefers the code-host link graph (closingIssuesReferences)', () => {
     expect(linkedIssueNumbers([{ number: 12 }, { number: 12 }, { number: 40 }], 'Closes #99')).toEqual([12, 40]);
@@ -88,6 +191,16 @@ describe('linkedIssueNumbers — the PR→issue link the gate scopes agent-devel
   });
 });
 
+describe('approval routing labels', () => {
+  test('the non-hold review-routing label scopes the human gate', () => {
+    expect(requiresHumanApproval([HUMAN_APPROVAL_REQUIRED_LABEL], false, [], [])).toBe(true);
+  });
+
+  test('ordinary labels do not scope the human gate', () => {
+    expect(requiresHumanApproval(['ready'], false, [], [])).toBe(false);
+  });
+});
+
 describe('isSensitivePath — the boundary scripts are inside the gated scope', () => {
   // NOT a fixture: these globs are the repo's REAL compiled .open-autonomy/human-required-paths.json
   // (self-driving's declared policy.risk.human_required_paths, projected at compile). The gate's own
@@ -100,6 +213,8 @@ describe('isSensitivePath — the boundary scripts are inside the gated scope', 
       expect(isSensitivePath(`scripts/${name}.ts`, globs)).toBe(true);
       expect(isSensitivePath(`profiles/self-driving/scripts/${name}.ts`, globs)).toBe(true);
     }
+    expect(isSensitivePath('scripts/finalize-agent-review.ts', globs)).toBe(true);
+    expect(isSensitivePath('packages/substrate-github/src/runtime/finalize-agent-review.ts', globs)).toBe(true);
   });
 
   test('non-boundary dev tooling in scripts/ is NOT scoped (enumerated by name, not a broad glob)', () => {

@@ -151,12 +151,17 @@ describe('public agent production readiness', () => {
     expect(skill).toContain('human-required'); // escalates rather than looping
   });
 
-  test('human-approval is an additional, deterministic gate (maintainer Approve for sensitive PRs)', () => {
+  test('human-approval is an additional, deterministic gate (current-head maintainer authorization)', () => {
     const wf = workflow('human-approval.yml');
     // Deterministic gate, not an agent: posts the human-approval status via the gate script.
     expect(wf).toContain('bun scripts/human-approval-gate.ts');
-    // Re-evaluated on PR changes AND on review submit/dismiss (per-SHA re-earn).
+    // Re-evaluated on PR changes, native reviews, and durable exact-SHA approval comments.
     expect(wf).toContain('pull_request_review');
+    expect(wf).toContain('issue_comment');
+    expect(wf).toContain('types: [created, edited, deleted]');
+    expect(wf).toContain('github.event.issue.pull_request');
+    expect(wf).toContain('github.event.issue.number');
+    expect(wf).toContain('group: human-approval-${{ github.event.pull_request.number || github.event.issue.number || github.event.inputs.pr }}');
     expect(wf).toContain('synchronize');
     // Least privilege: can post the status + comment, but CANNOT merge (no contents:write).
     expect(wf).toContain('statuses: write');
@@ -167,7 +172,11 @@ describe('public agent production readiness', () => {
     const gate = readFileSync(new URL('../scripts/human-approval-gate.ts', import.meta.url), 'utf8');
     expect(gate).toContain("context=human-approval");
     expect(gate).toContain("'human-required'");
+    expect(gate).toContain("'human-approval-required'"); // approval routing is distinct from a re-arm hold
     expect(gate).toContain('headSha'); // per-SHA: an Approve counts only on the current head
+    expect(gate).toContain('approvalCommandSha');
+    expect(gate).toContain('/agent approve');
+    expect(gate).toContain('collaborators/${login}/permission');
     expect(gate).toContain('MAINTAINER'); // only OWNER/MEMBER/COLLABORATOR approvals count
     // The approving review is read from the EVENT PAYLOAD (pull_request_review), not only the reviews API —
     // GITHUB_TOKEN can return an empty reviews list, which would wedge every human-required PR. The payload
@@ -185,17 +194,26 @@ describe('public agent production readiness', () => {
     // human-approval gate supply the human sign-off.
     const reviewer = readFileSync(new URL('../.codex/skills/reviewer/SKILL.md', import.meta.url), 'utf8');
     expect(reviewer).toContain('human-approval');
-    expect(reviewer).toContain('review its code on the merits');
+    expect(reviewer).toContain('Review it on the merits');
+    expect(reviewer).toContain('`human-required` is a real parked/hold state');
+    expect(reviewer).not.toContain('except `human-required`');
+    expect(reviewer).toContain('human-approval-required');
   });
 
-  test('reviewer holds code:review (statuses:write) and cannot merge (no contents:write)', () => {
-    // The reviewer posts the agent-review verdict status; it has no contents:write, so it cannot merge.
-    // GitHub native auto-merge lands the PR once ci + agent-review are green (the permission-split boundary).
+  test('merge reviewer judges read-only; trusted effect alone publishes agent-review and cannot merge', () => {
     const text = workflow('reviewer.yml');
-    const agentJob = text.slice(text.indexOf('  reviewer:'));
-    expect(agentJob).toContain('statuses: write');
+    const agentJob = text.slice(text.indexOf('  reviewer:'), text.indexOf('  review_effect:'));
+    const effectJob = text.slice(text.indexOf('  review_effect:'));
+    expect(agentJob).not.toContain('statuses: write');
+    expect(agentJob).not.toContain('issues: write');
     expect(agentJob).not.toContain('contents: write');
-    // No prepare/interpreter scripts and no bundle — the skill acts directly.
+    expect(agentJob).toContain('OSS_AGENT_RESULT_PATH');
+    expect(agentJob).toContain('OSS_AGENT_RESULT_SCHEMA_PATH');
+    expect(effectJob).toContain('statuses: write');
+    expect(effectJob).not.toContain('contents: write');
+    expect(effectJob).toContain('github.event.repository.default_branch');
+    expect(effectJob).toContain('finalize-agent-review.ts');
+    // No old prepare/interpreter/bundle pipeline: this is a narrow security-boundary effect.
     expect(text).not.toContain('prepare-review');
     expect(text).not.toContain('interpret-review');
     expect(text).not.toContain('github-agent-publish');

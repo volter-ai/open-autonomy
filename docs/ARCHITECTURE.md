@@ -15,7 +15,7 @@ roadmap + repo standards + issues
   -> visible /agent command
   -> developer: a credentialed skill-agent job (token scoped to its capabilities)
   -> the agent edits code + opens its own PR with auto-merge queued
-  -> CI + an independent reviewer post `ci` + `agent-review`
+  -> CI posts `ci`; an independent reviewer judges and the substrate review path posts `agent-review`
   -> native auto-merge (no agent can merge)
   -> merge, retry, wait, or human-required escalation
 ```
@@ -60,9 +60,9 @@ direction, constitution, roadmap, standards, labels, secrets, and risk policy.
 | Planner | Turns roadmap direction into issues | roadmap, issue/PR state, labels | created/updated/prioritized issues |
 | PM/Triage | Decides what should happen to an issue now | issue, labels, comments, open PRs, active runs, autonomy config | visible comment, labels, dispatch decision |
 | Developer | Edits code and opens its own auto-merging PR | issue, acceptance criteria, repo guidance, control files | a pull request (its own scoped token) |
-| Reviewer | Judges PR quality and risk; posts the `agent-review` status | PR diff, CI, issue, rubric, standards | the `agent-review` commit status (cannot merge) |
+| Reviewer | Judges PR quality and risk; emits a bound verdict | PR diff, CI, issue, rubric, standards | typed review result; trusted effect posts `agent-review` (cannot merge) |
 | Merge | Native auto-merge once `ci` + `agent-review` are green | the two required status checks + branch protection | merged PR (no agent performs the merge) |
-| Operator | Lets maintainers control the system | issue comments, labels, run/proxy state | pause/resume/status/cancel/retry effects |
+| Operator | Lets maintainers control the system | issue/PR comments, labels, run/proxy state | pause/resume/status/cancel/retry and exact-head approval effects |
 
 Planner is directional. PM is operational. Every agent uses model judgment (each is a skill). The
 enforcement is structural: the capability/permission split + branch protection + native auto-merge.
@@ -87,9 +87,10 @@ human clarification, after which PM can reconsider the issue.
 - The agent runs as a credentialed job whose token is scoped to its capabilities (least privilege).
 - Raw provider API keys are never passed to the agent job.
 - The agent receives a bounded model token through the model proxy (the budget guard).
-- The agent acts directly with a token scoped to its capabilities; it opens its own PR.
-- No agent can merge: `code:review` (statuses:write) blesses, `code:propose` (contents:write)
-  proposes, never both — so no agent lands unreviewed code.
+- The agent acts with a token scoped to its capabilities; proposers open their own PRs. A merge reviewer is
+  read-only and returns a bound verdict whose security-sensitive effects are finalized separately.
+- No agent can merge: `code:review` blesses through a bound result, `code:propose` (contents:write) proposes,
+  never both — so no agent lands unreviewed code.
 - GitHub native auto-merge lands a PR only once `ci` + `agent-review` are both green.
 
 This split is the core safety model. Prose instructions guide agents; the
@@ -106,8 +107,8 @@ code host**: a `local`-runner org can still use a github repo (PRs, CI, deploy) 
 
 | term | definition |
 |---|---|
-| **IR** (`autonomy.ir.v1`) | the **standard** a profile is written in: `agents` + `policy` + `resources`. An **agent** = `behavior · capabilities · triggers(+params) · config`. There is no `workflow`/`launch`/`run`/`raw` — see `docs/SPEC.md#the-ir`. |
-| **agent** | the one unit: behavior (what it does) + capabilities (authority) + triggers (when + params) + config (opaque misc). |
+| **IR** (`autonomy.ir.v1`) | the **standard** a profile is written in: `agents` + `policy` + `resources`. An **agent** = `behavior · capabilities · triggers(+params) · config`, where the behavior may declare a typed-result contract. There is no `workflow`/`launch`/`run`/`raw` — see `docs/SPEC.md#the-ir`. |
+| **agent** | the one unit: behavior (what it does, optionally with a typed result) + capabilities (authority) + triggers (when + params) + config (opaque misc). |
 | **behavior** | what an agent does — instructions/spec; the substrate runs it (deterministic, or model-interpreted — its choice). |
 | **profile** | a substrate-agnostic **recipe**: a composition of agents + policy + resources. Lives in `profiles/`. |
 | **substrate** | a **partial implementation** of the IR standard = a **trigger executor** + a **runner**, over a **box** — i.e. *where/how agents run*, NOT the code host. `gh-actions` (GitHub Actions) and `local` (termfleet) are peers; each realizes the subset it supports. |

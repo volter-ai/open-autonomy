@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import { emitAutonomy } from './manifest';
-import type { AutonomyIR } from './ir';
+import { REVIEW_RESULT_SCHEMA_ID, type AutonomyIR } from './ir';
 
 const irWithBox = (box: Record<string, unknown>): AutonomyIR => ({
   schema: 'autonomy.ir.v1',
@@ -63,6 +63,14 @@ describe('emitAutonomy — execution workspace', () => {
     });
     expect(isolated.agents?.isolated?.execution).toEqual({ workspace: 'isolated' });
     expect(isolated.agents?.legacy?.execution).toBeUndefined();
+  });
+});
+
+describe('emitAutonomy — declared typed results', () => {
+  test('carries a named result schema in the substrate-neutral actor manifest', () => {
+    const source = irWithBox({});
+    source.agents.pm!.result = { schema: REVIEW_RESULT_SCHEMA_ID };
+    expect(emitAutonomy(source).agents?.pm?.result).toEqual({ schema: REVIEW_RESULT_SCHEMA_ID });
   });
 });
 

@@ -1,0 +1,76 @@
+{
+  "schema": "autonomy.rejected-evidence-manifest.v1",
+  "generatedAt": "2026-07-15T18:06:55-04:00",
+  "closureClaim": false,
+  "scope": ["R24", "R25"],
+  "policy": "These records preserve failed-design provenance only. They are not active evidence and cannot satisfy an acceptance criterion or dependency.",
+  "attempts": [
+    {
+      "id": "R24-V1",
+      "artifactPath": "docs/evidence/R24-LIVE-MATCHED-BUNDLE.json",
+      "schema": "autonomy.r24-live-bundle.v1",
+      "internalDigest": "sha256:5de9e9670fab61b5c0d72b4ba7c8bd2ebcd48b55f826000689a2a5fa0ea4f781",
+      "wholeFileSha256": "73531a7968cf1c819cbe0fae09ec1ad6e2040b96d279d907a0e862c7e65ffaae",
+      "disposition": "rejected",
+      "reasons": ["cold/warm conditions were unmatched", "organization treatment was metadata-only", "inference used pseudoreplication and an invalid critical value", "signer-custody claim was unsupported"],
+      "supersededBy": "R24-V5",
+      "closureClaim": false
+    },
+    {
+      "id": "R24-V2",
+      "artifactPath": "docs/evidence/R24-LIVE-MATCHED-BUNDLE-V2.json",
+      "schema": "autonomy.r24-live-bundle.v2",
+      "internalDigest": "sha256:12f61da7a150edf817cd217484876dc282fbdc8672aefcac3a7519dd49501034",
+      "wholeFileSha256": "c9418841f451c55271b284fd0ab2a41b1187f1ee8a71299d16271fa232386d99",
+      "disposition": "rejected",
+      "reasons": ["adapter creation was measured as if it were worker execution", "no native worker completed the benchmark workload"],
+      "supersededBy": "R24-V5",
+      "closureClaim": false
+    },
+    {
+      "id": "R24-V3",
+      "artifactPath": "docs/evidence/R24-LIVE-EXECUTED-BUNDLE-V3.json",
+      "schema": "autonomy.r24-live-bundle.v3",
+      "internalDigest": "sha256:0dffe9d9db585676673b230f4419ff94820c81446a921af791cea97a8e5f8076",
+      "wholeFileSha256": "c1d9cec672ac3bef1a260ec05384bea107d8d1a2cb6ff2f777c264999bfd5222",
+      "disposition": "rejected",
+      "reasons": ["worker execution occurred outside each substrate's native dispatch", "native task states were advanced manually"],
+      "supersededBy": "R24-V5",
+      "closureClaim": false
+    },
+    {
+      "id": "R24-V4",
+      "artifactPath": "docs/evidence/R24-NATIVE-DISPATCH-INCOMPATIBILITY-V4.json",
+      "schema": "autonomy.r24-native-dispatch-bundle.v4",
+      "internalDigest": "sha256:974bc23b5e22ff64adc6e12ba067e94d57b7f4a1f09a27c4acc678c0cc60a960",
+      "wholeFileSha256": "33d2d7a7f7763821ee59b074c1da74ca03c8f8b576a3ec670d179f78cd935d76",
+      "disposition": "rejected",
+      "reasons": ["capability incompatibility was author-asserted rather than proven", "Paperclip native dispatch was not executed", "absence of a CLI flag was treated as impossibility", "replay verifier was insufficient"],
+      "provenanceWarning": "V4 names sha256:2fc98884... as its V3 predecessor, but the preserved V3 artifact's internal digest is sha256:0dffe9d9...; V4 therefore cannot serve as chain authority.",
+      "supersededBy": "R24-V5",
+      "closureClaim": false
+    },
+    {
+      "id": "R25-V1",
+      "artifactPath": "docs/evidence/R25-LIVE-CALIBRATION.json",
+      "schema": "autonomy.r25-live-calibration.v1",
+      "internalDigest": "sha256:4df727c683ff4bd8895d202d4fc24ed88fbdbf008b44f0ded10505f996711090",
+      "wholeFileSha256": "2f79561def266ac7820e054b7b0a7dff9b32d22a3d5e2d24ea3548478390ae7b",
+      "disposition": "rejected",
+      "reasons": ["calibration source was rejected R24-V1 evidence"],
+      "supersededBy": "R25-post-V5",
+      "closureClaim": false
+    },
+    {
+      "id": "R25-V2",
+      "artifactPath": "docs/evidence/R25-LIVE-CALIBRATION-V2.json",
+      "schema": "autonomy.r25-live-calibration.v2",
+      "internalDigest": "sha256:05003570ee0a06e92b6434609006f8827b3d4803c8518c457f1070604ea50533",
+      "wholeFileSha256": "c26bb9eb055b72256d27c55e2f25d80c1b2d1978a285b9de355beeff0ac41ba0",
+      "disposition": "rejected",
+      "reasons": ["calibration source was rejected R24-V2 control-path data", "no native worker execution underlies the calibration"],
+      "supersededBy": "R25-post-V5",
+      "closureClaim": false
+    }
+  ]
+}

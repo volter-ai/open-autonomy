@@ -3,8 +3,8 @@ import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { parse as parseYaml } from 'yaml';
 import { parseIr } from '@open-autonomy/core';
-import { defaultAgentCommand } from '@termfleet/core/agent-launch.js';
 import { compileLocal } from './emit';
+import { verifyCodexProviderLaunchContract } from './runner';
 
 const ROOT = join(import.meta.dir, '..', '..', '..');
 const PROFILE = join(ROOT, 'profiles', 'simple-gh');
@@ -150,14 +150,27 @@ describe('simple-gh — clean compiled role system', () => {
     expect(existsSync(join(ROOT, ZTRACK_GATE))).toBe(true);
   });
 
-  test('the installed Termfleet Codex launch activates project hooks without interactive trust', () => {
-    // Probe the exact @termfleet/core runtime dependency used by the provider, not a reimplemented command
-    // string. Codex otherwise skips untrusted project hooks, so either flag drifting away must fail CI.
-    const command = defaultAgentCommand('codex', undefined, { trustedCwd: ROOT });
-    expect(command).toContain('--dangerously-bypass-hook-trust');
-    expect(command).toContain('projects.');
-    expect(command).toContain('trust_level="trusted"');
-    expect(command.indexOf('--dangerously-bypass-hook-trust')).toBeGreaterThan(command.indexOf('codex'));
+  test('the installed Termfleet provider runtime activates Codex project hooks or fails before launch', async () => {
+    // Exercise the production runner preflight and let it resolve from termfleet/package.json.
+    // This follows provider-engine.js's own package resolution, including termfleet's nested core version;
+    // importing OA's top-level @termfleet/core directly would probe a different package in this install.
+    const backendPath = join(import.meta.dir, 'backend.mjs');
+    const proof = await verifyCodexProviderLaunchContract(ROOT);
+    expect(proof.termfleetPackagePath).toContain('node_modules/termfleet/package.json');
+    expect(proof.launchRuntimePath).toContain('@termfleet/core');
+    expect(proof.command).toContain('--dangerously-bypass-hook-trust');
+    expect(proof.command).toContain(`projects.${JSON.stringify(ROOT)}.trust_level="trusted"`);
+
+    await expect(
+      verifyCodexProviderLaunchContract(ROOT, async () => {
+        throw new Error('provider launch runtime unavailable');
+      }),
+    ).rejects.toThrow(/refused before provider discovery or model execution.*runtime unavailable/);
+
+    const backendSource = readFileSync(backendPath, 'utf8');
+    expect(backendSource.indexOf("await verifyCodexProviderLaunchContract(process.cwd())")).toBeLessThan(
+      backendSource.indexOf('const client = await this.#client()'),
+    );
   });
 
   test('keeps task and role semantics out of scheduler source', () => {

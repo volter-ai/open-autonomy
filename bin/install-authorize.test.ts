@@ -155,6 +155,11 @@ describe('buildAuthorizeBatch — fixture 1: local-only profile skips GH questio
     const spendQ = batch.questions.find((q) => q.id === 'spend')!;
     expect(spendQ.text).toMatch(/UNCAPPED/);
     expect(spendQ.fact).toMatch(/no OA spend cap/);
+    const harnessQ = batch.questions.find((q) => q.id === 'harness-commit')!;
+    expect(harnessQ.text).toContain('Stop/SubagentStop gate is mandatory');
+    expect(harnessQ.text).toContain('fails closed');
+    expect(harnessQ.text).toContain('.open-autonomy/paused');
+    expect(harnessQ.text).not.toMatch(/self-guards|no-op unless|opt[- ]out/i);
     cleanupAll();
   });
 });

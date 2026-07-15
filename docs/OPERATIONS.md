@@ -428,9 +428,10 @@ a prior `.open-autonomy/generated.json` but is now gone from disk; `--force` re-
 > **Scope: this deletion guard is `compile`-only.** `upgrade` is a *re-compile of the derived set* — by
 > design it **re-creates** any derived file you deleted (it has no refusal/`--force` model), so a deletion
 > you want to persist across upgrades must be re-applied after each `upgrade`, or removed at the source
-> (drop it from the profile / fork). The one exception is the Stop hook, which has the durable sentinel
-> opt-out above (`upgrade` honors it too). Install-owned/state paths — `.open-autonomy/paused`, your
-> roadmap/constitution — are seed-once and never reverted by either path.
+> (drop it from the profile / fork). The generated Stop/SubagentStop gate is mandatory: compile and upgrade
+> structurally restore it, and a missing pinned ztrack target fails closed. Stop new dispatch with
+> `.open-autonomy/paused`; do not remove or disable the lifecycle gate. Install-owned/state paths — your
+> pause fence, roadmap, and constitution — are seed-once and never reverted by either path.
 
 ### 5. Run the loop
 

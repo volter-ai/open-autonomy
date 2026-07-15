@@ -12,8 +12,9 @@
 // `launch` accepts arbitrary --key value params and passes them through verbatim; the system never
 // interprets them (a profile gives them meaning, e.g. a ztrack-using profile declares ZTRACK_ISSUE).
 import { existsSync, readFileSync, realpathSync } from 'node:fs';
+import { createRequire } from 'node:module';
 import { join } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { ProviderClient, providerRefFromUrl } from 'termfleet';
 import { resolveDefaultProvider } from '@termfleet/core/local-providers.js';
 import { RUNNER_DEFAULTS } from './runner-defaults.mjs';
@@ -29,6 +30,49 @@ function resolveHarness(value) {
       'exactly "claude" and "codex" because those are the harnesses whose prompts, skills, and ' +
       'Stop/SubagentStop gates are compiled. Refusing before model execution.',
   );
+}
+
+const requireFromBackend = createRequire(import.meta.url);
+
+async function loadTermfleetProviderLaunchRuntime() {
+  // Resolve from termfleet's OWN package root, exactly like dist/instance/provider-engine.js resolves its
+  // `@termfleet/core/agent-launch.js` import. A top-level @termfleet/core may be a different version and is
+  // not evidence for the provider command OA will execute.
+  const termfleetPackagePath = requireFromBackend.resolve('termfleet/package.json');
+  const requireFromTermfleet = createRequire(termfleetPackagePath);
+  const launchRuntimePath = requireFromTermfleet.resolve('@termfleet/core/agent-launch.js');
+  return {
+    launchRuntimePath,
+    runtime: await import(pathToFileURL(launchRuntimePath).href),
+    termfleetPackagePath,
+  };
+}
+
+/** Fail before provider discovery/model execution unless the exact installed Termfleet provider runtime
+ *  proves that Codex project hooks will load headlessly. `loadRuntime` is injectable only so the failure
+ *  branch can be regression-tested without damaging node_modules. */
+export async function verifyCodexProviderLaunchContract(cwd, loadRuntime = loadTermfleetProviderLaunchRuntime) {
+  try {
+    const loaded = await loadRuntime();
+    if (typeof loaded?.runtime?.buildAgentStartupCommand !== 'function') {
+      throw new Error('provider runtime does not export buildAgentStartupCommand');
+    }
+    const built = loaded.runtime.buildAgentStartupCommand({ agent: 'codex', cwd });
+    const command = built?.command;
+    if (typeof command !== 'string') throw new Error('provider runtime did not return a launch command');
+    const hookTrust = command.indexOf('--dangerously-bypass-hook-trust');
+    const codex = command.indexOf('codex');
+    const trustedProject = `projects.${JSON.stringify(cwd)}.trust_level="trusted"`;
+    if (codex < 0 || hookTrust <= codex || !command.includes(trustedProject)) {
+      throw new Error('provider command lacks canonical project trust or --dangerously-bypass-hook-trust');
+    }
+    return { command, launchRuntimePath: loaded.launchRuntimePath, termfleetPackagePath: loaded.termfleetPackagePath };
+  } catch (error) {
+    throw new Error(
+      `[runner] Codex launch refused before provider discovery or model execution: the installed Termfleet ` +
+        `provider runtime cannot prove mandatory project-hook trust (${error instanceof Error ? error.message : String(error)}).`,
+    );
+  }
 }
 
 // Real local backend: drives termfleet via its ProviderClient SDK. The window name IS the agent; the
@@ -96,6 +140,7 @@ export class TermfleetRunner {
       }
     }
 
+    if (this.harness === 'codex') await verifyCodexProviderLaunchContract(process.cwd());
     const client = await this.#client();
     // Re-export orchestration context so a nested `autonomy launch ...` reaches this provider, plus the
     // opaque params verbatim (a profile may read e.g. $ZTRACK_ISSUE; the system doesn't). The runner stays

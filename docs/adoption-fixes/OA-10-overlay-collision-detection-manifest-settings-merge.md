@@ -174,9 +174,10 @@ All paths relative to the repo root; all lines verified by reading on branch `ad
    `.claude/settings.json` to the overlay file list with an explicit callout (anchor
    `#claude-settings`): what the Stop hook is (the ztrack drive-to-green loop gate), that Claude Code
    project settings apply to **every** session in the repo **including human developers' interactive
-   ones**, that the hook self-guards on `node_modules/ztrack/...` existing, how to opt out (delete the
-   hook entry; the merge/refusal machinery will not resurrect it per (a)2), and that `simple-gh-sdlc`
-   ships the same file. Mirror one line in the `docs/OPERATIONS.md:41-46` overlay note and in
+   ones**, and that the current invariant contract makes Stop/SubagentStop mandatory: the command fails
+   closed when the pinned ztrack target is missing, compile/upgrade restore the entries, and operators use
+   `.open-autonomy/paused` instead of deleting the gate. `simple-gh-sdlc` ships the same file. Mirror one
+   line in the `docs/OPERATIONS.md:41-46` overlay note and in
    `docs/INSTALL-AGENT.md`'s install phase (which currently mentions the file only in the re-run
    appendix, line 371).
 
@@ -192,7 +193,7 @@ All paths relative to the repo root; all lines verified by reading on branch `ad
   `INSTALL_OWNED_PATHS`)** — stops the clobber but also stops profile hook fixes from ever reaching
   installs, and does nothing for the fresh-compile collision (seed-once still writes when the file exists?
   no — it would skip, silently NOT installing the hook, breaking the loop gate with no signal). The
-  structured merge propagates hook updates *and* preserves adopter content, and it degrades loudly.
+  structured merge propagates hook updates *and* preserves adopter content, and it fails loudly.
 - **Refuse-only for settings.json (no merge)** — an existing `.claude/settings.json` is the *normal* case
   in Claude-using repos ("most fleet repos have one"); refusing makes the documented happy path require
   `--force`, which then clobbers — exactly the failure being fixed. Merge is deterministic (JSON,

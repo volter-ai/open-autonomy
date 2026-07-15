@@ -191,8 +191,9 @@ export async function buildAuthorizeBatch(sel: SelectionRecordRef, profileDir: s
       `.open-autonomy/, .github/workflows/…, per the ${sel.profile}@${sel.substrate} compile — counted from ` +
       `the real compiled manifest, not a fixed figure) and COMMITS them to the default branch — the agents ` +
       `run in git worktrees, which only see committed files. This includes a Claude Code Stop hook that ` +
-      `fires at the end of EVERY session in this repo, including your own interactive ones (self-guards, ` +
-      `no-op unless the harness is present). OK?`,
+      `fires at the end of EVERY session in this repo, including your own interactive ones. The ` +
+      `Stop/SubagentStop gate is mandatory and fails closed if its pinned ztrack target is missing; use ` +
+      `.open-autonomy/paused to stop new dispatch without removing the gate. OK?`,
     default: 'yes (the only supported model)',
   });
 

@@ -59,3 +59,5 @@ export * from './organization-fleet-runtime-adapters';
 export * from './organization-benchmark-protocol';
 export * from './organization-autonomy-accounting';
 export * from './organization-twin';
+export * from './organization-command-plane';
+export * from './organization-command-transports';

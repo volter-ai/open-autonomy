@@ -15,7 +15,7 @@ roadmap + repo standards + issues
   -> visible /agent command
   -> developer: a credentialed skill-agent job (token scoped to its capabilities)
   -> the agent edits code + opens its own PR with auto-merge queued
-  -> CI + an independent reviewer post `ci` + `agent-review`
+  -> CI posts `ci`; an independent reviewer judges and the substrate review path posts `agent-review`
   -> native auto-merge (no agent can merge)
   -> merge, retry, wait, or human-required escalation
 ```

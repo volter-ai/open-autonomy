@@ -37,8 +37,9 @@ export interface IRAgent {
   // The review edge of the merge boundary: a code:propose agent names the INDEPENDENT reviewer agent that
   // judges its proposals. Requesting that review is mechanical WIRING, not a judgment — so the substrate
   // triggers `review` deterministically when the proposal is opened (never an LLM remembering to route).
-  // The reviewer still makes the judgment (posts agent-review). Required-ish for a proposer; absent ⇒ no
-  // auto-review wiring (e.g. a profile that gates merges only on ci, or reviews out-of-band).
+  // The reviewer still makes the judgment; the substrate decides how a trusted effect publishes that
+  // judgment as its merge gate. Required-ish for a proposer; absent ⇒ no auto-review wiring (e.g. a profile
+  // that gates merges only on ci, or reviews out-of-band).
   review?: string; // the name of the reviewer agent (must hold code:review and not be this agent)
   // Optional formal result of a skill agent's run: a value that validates against `result.schema` (a JSON
   // Schema object). A declarative seam for a typed result; absent ⇒ the agent just runs and acts directly.

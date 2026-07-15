@@ -344,7 +344,7 @@ export async function provisionTargetRepo(options: Options, proc: ProcFn = defau
         // Require a PR (no direct push to main, even for a contents:write agent) + the status checks that
         // gate a merge (e.g. `ci` + `agent-review`, or the SOC 2 set). By default 0 approvals — the
         // agent-review status is the gate (the reviewer can't post a PR approval), and a proposer can't
-        // post agent-review (no statuses:write), so no agent can land unreviewed code. strict:false avoids
+        // publish agent-review through the trusted review effect, so no agent can land unreviewed code. strict:false avoids
         // the up-to-date-with-base deadlock. A hardened profile (soc2-baseline) overrides enforce_admins +
         // required_reviews + required_signatures via the manifest (gap G1 — branch protection is profile-derived).
         required_status_checks: { strict: false, contexts: bp.required_checks },

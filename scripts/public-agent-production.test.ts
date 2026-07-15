@@ -186,7 +186,10 @@ describe('public agent production readiness', () => {
     // human-approval gate supply the human sign-off.
     const reviewer = readFileSync(new URL('../.codex/skills/reviewer/SKILL.md', import.meta.url), 'utf8');
     expect(reviewer).toContain('human-approval');
-    expect(reviewer).toContain('review its code on the merits');
+    expect(reviewer).toContain('Review it on the merits');
+    expect(reviewer).toContain('`human-required` is a real parked/hold state');
+    expect(reviewer).not.toContain('except `human-required`');
+    expect(reviewer).toContain('human-approval-required');
   });
 
   test('merge reviewer judges read-only; trusted effect alone publishes agent-review and cannot merge', () => {

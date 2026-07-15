@@ -11,8 +11,9 @@ landing_mode: auto-merge
 
 # check_realizations: `ci` and `human-approval` each need their OWN standing, authored workflow file (this
 # profile carries `.github/workflows/human-approval.yml` as a resource — ir.yml) — a required check with no
-# workflow behind it wedges every PR forever (TA.3). `agent-review` posts NATIVELY from the independent
-# `reviewer` actor's own job. `security` is the dispatched, blocking realization of security.yml
+# workflow behind it wedges every PR forever (TA.3). `agent-review` is realized NATIVELY by the substrate's
+# review-run path: hosted uses the reviewer's bound result + a trusted effect; local currently uses its
+# shared-credential compatibility path. `security` is the dispatched, blocking realization of security.yml
 # (security-gate.yml), same mechanism as simple-gh-sdlc — `policy.box['gh-actions'].propose_dispatch_checks`
 # in ir.yml.
 check_realizations:

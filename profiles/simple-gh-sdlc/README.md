@@ -10,16 +10,17 @@ Five agents, each a prose skill the substrate runs model-interpreted:
 | `pm` | `cron */15` | the only dispatcher — sweeps the ztrack board, enforces WIP, **launches** the next eligible `develop` (review is automatic on the PR) |
 | `draft` | `dispatch` | shapes an untriaged request into a verifiable Ready issue (sources + 1-3 ACs + evidence scaffold) |
 | `develop` | `dispatch` | implements one Ready issue with evidence and pushes its branch; the substrate opens an auto-merging PR. `code:propose`, reviewed by `reviewer` |
-| `reviewer` | `event: pull_request_target` | the independent GitHub reviewer: verifies the PR (ztrack green + every passed AC backed by cited evidence) and posts `agent-review`. `code:review`, never merges |
+| `reviewer` | `event: pull_request_target` | the independent GitHub reviewer: verifies the PR (ztrack green + every passed AC backed by cited evidence) and returns the bound `agent-review` judgment. `code:review`, never merges |
 | `planner` | `cron` (daily-style) | keeps the board from drying up: reads the repo's declared vision and, only when the board is starving, files new **draft** (unlabeled) issues — the one thing nothing else in this loop originates. `tasks:author` only; never `ready`-labels its own issues, never opens a PR |
 
 The PM (cron) reads each issue's state (a property it READS, not a trigger) and **launches** `develop`
 through the Runner (`bun scripts/runner.ts launch develop --ref <id>`; the work item rides in as `--ref`
 → `$ZTRACK_ISSUE`). It does **not** dispatch review: the developer's change opens an auto-merging PR and
 the substrate triggers the `reviewer` on it. The **merge boundary** is the `code:propose` / `code:review`
-permission split — no agent holds both, none can land unreviewed code; `ci` + `agent-review` green →
-native auto-merge (done = merged PR). This is `self-driving`'s merge model, generalized to a ztrack-tracked
-SDLC.
+permission split — no agent holds both, none can land unreviewed code; the hosted substrate's trusted effect
+publishes the bound judgment, then `ci` + `agent-review` green → native auto-merge (done = merged PR). The
+local target retains a documented shared-credential compatibility path until it gains the same effect. This
+is `self-driving`'s merge model, generalized to a ztrack-tracked SDLC.
 
 `planner` (D3) sits outside that landing flow entirely — it only ever creates a plain GitHub issue, never
 touches code or opens a PR, so it holds no `code:propose`/`agent:launch` capability at all. It exists

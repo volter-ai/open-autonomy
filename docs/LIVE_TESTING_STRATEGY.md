@@ -136,7 +136,7 @@ operator-sim manufactures the genuine condition and verifies the system's real r
 | Reviewer low-risk pass → auto-merge | `review-low-risk-merge` / dogfood | none | `done` |
 | Reviewer failure → PM decides from history | `retry-review-failure` | reviewer rejection (real change) | `human-required` |
 | Reviewer/merge rubric + constitution enforcement | `governance-maintainer-hold` | none | `human-required` |
-| Maintainer hold blocks auto-merge (reviewer posts `agent-review=failure`) | `governance-maintainer-hold` / `review-human-block` | apply hold label/comment, then clear | `human-required` → `done` |
+| Maintainer hold blocks auto-merge (review path publishes `agent-review=failure`) | `governance-maintainer-hold` / `review-human-block` | apply hold label/comment, then clear | `human-required` → `done` |
 | Changed head clears `agent-review` so it can't auto-merge on stale approval | `head-changed-before-merge` | push to reviewed PR | `blocked` |
 | Operator pause/status/resume (issue) | `operator-pause-resume` | `/agent pause`, `/agent status`, `/agent resume` | manual fixture |
 | Operator repo pause/resume | `repo-pause` | set/clear `PUBLIC_AGENT_REPO_PAUSED` | manual fixture |

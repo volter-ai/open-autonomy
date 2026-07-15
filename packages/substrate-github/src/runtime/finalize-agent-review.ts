@@ -10,6 +10,7 @@ import {
 } from './review-result.js';
 export {
   MAX_RESULT_BYTES,
+  MAX_REVIEW_SUMMARY_LENGTH,
   REVIEW_RESULT_SCHEMA,
   parseReviewResult,
   type ReviewResult,

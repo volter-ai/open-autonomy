@@ -127,13 +127,13 @@ jobs:
         run: bun scripts/review-prerequisites.ts --pr "${{ needs.setup.outputs.review_pr }}" --sha "${{ needs.setup.outputs.review_sha }}" --result .agent-run/artifacts/result.json --github-output "$GITHUB_OUTPUT" --parallel human-approval
       - name: Mint bounded model token
         if: steps.review_prerequisites.outputs.run_model == 'true'
-        run: bun scripts/model-proxy-mint.ts --run-id "ir-reviewer-${{ github.run_id }}" --models "${{ vars.PUBLIC_AGENT_MODEL || 'deepseek/deepseek-v4-flash' }}" --max-usd-cents "${{ vars.PUBLIC_AGENT_MAX_USD_CENTS || '200' }}" --max-requests "${{ vars.PUBLIC_AGENT_MAX_REQUESTS || '250' }}" --issue .agent-run/issue.json
+        run: bun scripts/model-proxy-mint.ts --run-id "ir-reviewer-${{ github.run_id }}-${{ github.run_attempt }}" --models "${{ vars.PUBLIC_AGENT_MODEL || 'deepseek/deepseek-v4-flash' }}" --max-usd-cents "${{ vars.PUBLIC_AGENT_MAX_USD_CENTS || '200' }}" --max-requests "${{ vars.PUBLIC_AGENT_MAX_REQUESTS || '250' }}" --issue .agent-run/issue.json
       - name: install Claude Code CLI
         if: steps.review_prerequisites.outputs.run_model == 'true'
         run: npm install -g "@anthropic-ai/claude-code@${PUBLIC_AGENT_CITED_VERSION:-latest}" && claude --version
       - name: Exchange OIDC for the bounded token
         if: steps.review_prerequisites.outputs.run_model == 'true'
-        run: bun scripts/model-proxy-exchange.ts --run-id "ir-reviewer-${{ github.run_id }}" --audience "$MODEL_PROXY_OIDC_AUDIENCE"
+        run: bun scripts/model-proxy-exchange.ts --run-id "ir-reviewer-${{ github.run_id }}-${{ github.run_attempt }}" --audience "$MODEL_PROXY_OIDC_AUDIENCE"
       - name: Run agent (Claude Code + skill)
         if: steps.review_prerequisites.outputs.run_model == 'true'
         env:
@@ -145,7 +145,7 @@ jobs:
           cat > .agent-run/result-schema.json <<'OPEN_AUTONOMY_RESULT_SCHEMA'
           {"$id":"open-autonomy.review.v1","type":"object","additionalProperties":false,"required":["schema","pr","headSha","verdict","outcome","summary","findings","humanApprovalRequired"],"properties":{"schema":{"const":"open-autonomy.review.v1"},"pr":{"type":"integer","minimum":1},"headSha":{"type":"string","pattern":"^[0-9a-fA-F]{40}$"},"verdict":{"enum":["success","failure","skip"]},"outcome":{"enum":["approved","changes-requested","human-required","not-applicable"]},"summary":{"type":"string","minLength":1,"maxLength":1000},"findings":{"type":"array","maxItems":50,"items":{"type":"string","maxLength":2000}},"humanApprovalRequired":{"type":"boolean"},"humanTask":{"type":"object","additionalProperties":false,"required":["ask","assignTo","completion"],"properties":{"ask":{"type":"string","minLength":1,"maxLength":2000},"assignTo":{"type":"string","minLength":1,"maxLength":200},"completion":{"type":"object","additionalProperties":false,"required":["ac","via","check"],"properties":{"ac":{"type":"string","minLength":1,"maxLength":2000},"via":{"enum":["review","label","artifact","command"]},"check":{"enum":["deterministic","judge","both"]}}}}}},"allOf":[{"if":{"properties":{"verdict":{"const":"success"}},"required":["verdict"]},"then":{"properties":{"outcome":{"const":"approved"}}}},{"if":{"properties":{"verdict":{"const":"failure"}},"required":["verdict"]},"then":{"properties":{"outcome":{"enum":["changes-requested","human-required"]},"humanApprovalRequired":{"const":false}}}},{"if":{"properties":{"verdict":{"const":"skip"}},"required":["verdict"]},"then":{"properties":{"outcome":{"const":"not-applicable"},"humanApprovalRequired":{"const":false}}}},{"if":{"properties":{"outcome":{"const":"human-required"}},"required":["outcome"]},"then":{"required":["humanTask"]},"else":{"not":{"required":["humanTask"]}}}]}
           OPEN_AUTONOMY_RESULT_SCHEMA
-          bun scripts/claude-agent-run.ts --skill .codex/skills/reviewer/SKILL.md --run-id "ir-reviewer-${{ github.run_id }}"; rc=$?; bun scripts/agent-visual-verify.ts || true; echo "::group::agent transcript (ir-reviewer-${{ github.run_id }})"; cat .agent-run/artifacts/transcript.md 2>/dev/null || true; echo "::endgroup::"; exit $rc
+          bun scripts/claude-agent-run.ts --skill .codex/skills/reviewer/SKILL.md --run-id "ir-reviewer-${{ github.run_id }}-${{ github.run_attempt }}"; rc=$?; bun scripts/agent-visual-verify.ts || true; echo "::group::agent transcript (ir-reviewer-${{ github.run_id }}-${{ github.run_attempt }})"; cat .agent-run/artifacts/transcript.md 2>/dev/null || true; echo "::endgroup::"; exit $rc
       - name: Save the agent run result (durable transcript artifact)
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
@@ -158,8 +158,8 @@ jobs:
       - name: Release the run slot (revoke minted token)
         if: always() && steps.review_prerequisites.outputs.run_model == 'true'
         run: |
-          for i in 1 2 3 4 5; do bun scripts/model-proxy-revoke.ts --run-id "ir-reviewer-${{ github.run_id }}" && exit 0 || sleep 3; done
-          echo "::warning::run-slot revoke failed after retries for ir-reviewer-${{ github.run_id }}; slot will auto-reap at token TTL"
+          for i in 1 2 3 4 5; do bun scripts/model-proxy-revoke.ts --run-id "ir-reviewer-${{ github.run_id }}-${{ github.run_attempt }}" && exit 0 || sleep 3; done
+          echo "::warning::run-slot revoke failed after retries for ir-reviewer-${{ github.run_id }}-${{ github.run_attempt }}; slot will auto-reap at token TTL"
   review_effect:
     needs: [setup, reviewer]
     if: always() && needs.setup.result == 'success'

@@ -4,6 +4,8 @@
 
 ### Fixed
 
+- Exact-head reviewer results now safely normalize overlong summaries, and workflow reruns use distinct
+  model-proxy identities instead of colliding with the original attempt.
 - Reviewer runs now wait for live required checks before model judgment, route mechanical failures back
   to rework instead of parking them on a person, allocate no bounded model run when those checks fail, and
   require a durable typed ask for genuine human decisions.

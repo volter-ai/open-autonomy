@@ -5,6 +5,7 @@ import { join } from 'node:path';
 import { REVIEW_RESULT_JSON_SCHEMA, REVIEW_RESULT_SCHEMA_ID } from '@open-autonomy/core';
 import {
   MAX_RESULT_BYTES,
+  MAX_REVIEW_SUMMARY_LENGTH,
   REVIEW_RESULT_SCHEMA,
   decideFinalization,
   parseReviewResult,
@@ -87,6 +88,49 @@ describe('trusted agent-review finalization', () => {
       .toBe('failure');
     expect(decideFinalization({ jobResult: 'success', expectedPr: 42, expectedSha: 'b'.repeat(40), artifact: valid() }).state)
       .toBe('failure');
+  });
+
+  test('normalizes only an oversized summary and preserves the exact authority binding', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'oa-review-summary-'));
+    const path = join(dir, 'result.json');
+    const original = valid({ summary: 'x'.repeat(MAX_REVIEW_SUMMARY_LENGTH + 73) });
+    try {
+      writeFileSync(path, JSON.stringify(original));
+      const parsed = parseReviewResult(path);
+      expect(parsed.summary.length).toBe(MAX_REVIEW_SUMMARY_LENGTH);
+      expect(parsed.summary.endsWith('…')).toBe(true);
+      expect({ ...parsed, summary: original.summary }).toEqual(original);
+      expect(decideFinalization({ jobResult: 'success', expectedPr: original.pr, expectedSha: original.headSha,
+        artifact: parsed }).state).toBe('success');
+      expect(decideFinalization({ jobResult: 'success', expectedPr: original.pr + 1, expectedSha: original.headSha,
+        artifact: parsed }).state).toBe('failure');
+      expect(decideFinalization({ jobResult: 'success', expectedPr: original.pr, expectedSha: 'b'.repeat(40),
+        artifact: parsed }).state).toBe('failure');
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test('summary normalization does not admit malformed result fields', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'oa-review-malformed-'));
+    const path = join(dir, 'result.json');
+    const oversized = 'x'.repeat(MAX_REVIEW_SUMMARY_LENGTH + 1);
+    const malformed: Array<[Record<string, unknown>, string]> = [
+      [{ ...valid(), summary: oversized, pr: 0 }, 'positive integer'],
+      [{ ...valid(), summary: oversized, headSha: 'short' }, 'full commit SHA'],
+      [{ ...valid(), summary: oversized, verdict: 'approve' }, 'verdict is invalid'],
+      [{ ...valid(), summary: oversized, undeclared: true }, 'unknown fields'],
+      [{ ...valid(), summary: '   ' }, '1..1000 characters'],
+      [{ ...valid(), summary: 7 }, '1..1000 characters'],
+    ];
+    try {
+      for (const [value, error] of malformed) {
+        writeFileSync(path, JSON.stringify(value));
+        expect(() => parseReviewResult(path)).toThrow(error);
+      }
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 
   test('missing or malformed output fails closed; a lane skip remains status-neutral', () => {

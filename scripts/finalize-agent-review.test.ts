@@ -82,6 +82,13 @@ const humanTask = {
 };
 
 describe('finalize-agent-review effects', () => {
+  test('an oversized valid summary is normalized before the exact-head green effect', () => {
+    const run = runFinalizer('success', { ...success, summary: 'x'.repeat(1001) });
+    expect(run.status).toBe(0);
+    expect(run.log).toContain(`statuses/${SHA} -f state=success`);
+    expect(run.log).toContain('pr comment 42');
+  });
+
   test('an early success artifact followed by model-job failure publishes failure first and never success', () => {
     const run = runFinalizer('failure', success);
     expect(run.status).toBe(1);

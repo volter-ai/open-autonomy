@@ -174,6 +174,11 @@ describe('compileGithub — merge is a code-host resource, not engine output', (
     expect(modelJob.indexOf('review-prerequisites.ts')).toBeLessThan(modelJob.indexOf('Mint bounded model token'));
     expect(modelJob.indexOf('Mint bounded model token')).toBeLessThan(modelJob.indexOf('install Claude Code CLI'));
     expect(modelJob).toContain("if: always() && steps.review_prerequisites.outputs.run_model == 'true'");
+    const proxyIdentityLines = modelJob.split('\n').filter((line) => line.includes('--run-id'));
+    expect(proxyIdentityLines.length).toBe(4);
+    expect(proxyIdentityLines.every((line) => line.includes(
+      'ir-reviewer-${{ github.run_id }}-${{ github.run_attempt }}',
+    ))).toBe(true);
     expect(out.generated['scripts/review-prerequisites.ts']).toContain('live base');
     const setupJob = wf.slice(wf.indexOf('  setup:'), wf.indexOf('  reviewer:'));
     expect(setupJob).not.toContain('statuses: write');

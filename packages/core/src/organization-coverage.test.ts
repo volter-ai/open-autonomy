@@ -16,6 +16,7 @@ import {
   ORGANIZATION_P10_OBLIGATIONS,
   ORGANIZATION_P11_OBLIGATIONS,
   ORGANIZATION_P12_OBLIGATIONS,
+  ORGANIZATION_P13_OBLIGATIONS,
   ORGANIZATION_SEMANTIC_COVERAGE,
 } from './organization-coverage';
 
@@ -39,6 +40,7 @@ const publicSurfaceFiles = [
   'organization-causal-state.ts',
   'organization-substrate-proof.ts',
   'organization-analysis.ts',
+  'organization-ecosystem.ts',
 ];
 
 function declaredInterfaceFields(): Map<string, string[]> {
@@ -78,8 +80,8 @@ describe('B0 semantic coverage and residual accounting', () => {
     }
   });
 
-  test('has no untriaged residual and every residual id and finding is unique', () => {
-    expect(ORGANIZATION_AUDIT_RESIDUALS.length).toBeGreaterThan(0);
+  test('has zero residuals after punch-list closure', () => {
+    expect(ORGANIZATION_AUDIT_RESIDUALS).toEqual([]);
     expect(new Set(ORGANIZATION_AUDIT_RESIDUALS.map((item) => item.id)).size).toBe(ORGANIZATION_AUDIT_RESIDUALS.length);
     expect(new Set(ORGANIZATION_AUDIT_RESIDUALS.map((item) => item.finding)).size).toBe(ORGANIZATION_AUDIT_RESIDUALS.length);
     for (const residual of ORGANIZATION_AUDIT_RESIDUALS) expect(residual.owner).toMatch(/^P(?:[1-9]|1[0-3])$/);
@@ -212,6 +214,16 @@ describe('B0 semantic coverage and residual accounting', () => {
     const documented = [...audit.matchAll(/^\| (P12-[A-Z]+-\d+) /gm)].map((match) => match[1]).sort();
     expect(ORGANIZATION_P12_OBLIGATIONS.map((item) => item.id).sort()).toEqual(documented);
     for (const obligation of ORGANIZATION_P12_OBLIGATIONS) {
+      expect(obligation.disposition).not.toBe('unresolved');
+      expect(obligation.evidence?.trim().length).toBeGreaterThan(0);
+    }
+  });
+
+  test('accounts for every formal P13 obligation with evidence and no unresolved disposition', () => {
+    const audit = readFileSync('docs/ORGANIZATION-IR-LENS-AUDIT.md', 'utf8');
+    const documented = [...audit.matchAll(/^\| (P13-[A-Z]+-\d+) /gm)].map((match) => match[1]).sort();
+    expect(ORGANIZATION_P13_OBLIGATIONS.map((item) => item.id).sort()).toEqual(documented);
+    for (const obligation of ORGANIZATION_P13_OBLIGATIONS) {
       expect(obligation.disposition).not.toBe('unresolved');
       expect(obligation.evidence?.trim().length).toBeGreaterThan(0);
     }

@@ -710,6 +710,13 @@ is claimed, and loss fixtures where it is not.
 
 **Falsifier.** A successful import/export silently drops a construct in the mapping's declared supported subset.
 
+**Implementation record.** P13 provides versioned mapping descriptors for Oracle Agent Spec, MCP, A2A,
+CloudEvents, OpenTelemetry, CNCF Serverless Workflow, OPA Rego, and provider component manifests. Each defines its
+semantic subset, direction, per-construct adopt/embed/adapt/invent/reject disposition, round-trip boundary, exact
+losses, and separate wire/schema/behavioral/semantic claims. External inputs are untrusted, byte-bounded, identity
+and version checked, and closed to unsupported constructs. Unknown extensions are either value-preserved through a
+round trip or rejected. No mapping descriptor by itself claims full native wire-protocol conformance.
+
 ## Foundation completion gate
 
 P1-P4 are complete only when B0 is complete and one repeatable scenario can:

@@ -212,6 +212,11 @@ export const ORGANIZATION_SEMANTIC_COVERAGE: readonly SemanticCoverageEntry[] = 
   entry('InformationFlowEdge', 'from to sourceLabel targetClearance sanitizer', 'portable', 'implemented', 'finite security-lattice flow edge and optional trusted sanitizer', 'P12'),
   entry('ResourceDemand', 'budget amount unit horizon arrivals serviceCapacity', 'portable', 'implemented', 'typed finite-horizon demand and burst-capacity assumptions', 'P12'),
   entry('AnalysisEnvironment', 'bounds fairnessAssumptions delegations informationFlows resourceDemands closedWorld', 'compiler', 'implemented', 'closed-world declarations and environment assumptions for analyses', 'P12'),
+  entry('MappingConstruct', 'external organization disposition roundTrip losses rationale', 'compiler', 'implemented', 'per-construct external-to-organization semantic disposition', 'P13'),
+  entry('EcosystemMappingSpec', 'id standard versionRange direction semanticDomain constructs interoperability unknownExtensions trust maximumBytes', 'compiler', 'implemented', 'versioned bounded mapping and layered interoperability claims', 'P13'),
+  entry('ExternalMappingDocument', 'mapping standard version constructs extensions', 'dialect-bound', 'implemented', 'untrusted versioned external mapping envelope with preservable extensions', 'P13'),
+  entry('MappingLoss', 'construct reason', 'compiler', 'implemented', 'exact noninvertibility reason for an external construct', 'P13'),
+  entry('MappingResult', 'status values preservedExtensions dispositions losses errors', 'compiler', 'implemented', 'atomic mapped/rejected result with total disposition and loss accounting', 'P13'),
 ] as const;
 
 export interface AuditResidual {
@@ -222,7 +227,6 @@ export interface AuditResidual {
 
 /** B0 residual parking is closed: every known gap has a punch-list owner. */
 export const ORGANIZATION_AUDIT_RESIDUALS: readonly AuditResidual[] = [
-  { id: 'OAIR-R014', finding: 'external standard mappings lack versioned semantic coverage and loss reports', owner: 'P13' },
 ] as const;
 
 export type SemanticDisposition = 'preserved' | 'adapter-realized' | 'approximated' | 'rejected' | 'unresolved';
@@ -381,4 +385,13 @@ export const ORGANIZATION_P12_OBLIGATIONS: readonly BaselineObligation[] = [
   { id: 'P12-RES-1', claim: 'budget and capacity use aligned units, horizons, and explicit arrival/service assumptions', disposition: 'preserved', assurance: 'model-checked', evidence: 'budget-bounds demand, unit, limit, and burst-capacity fixtures' },
   { id: 'P12-VER-1', claim: 'results distinguish proof, violation, and unknown and certificates bind model and result', disposition: 'preserved', assurance: 'property-tested', evidence: 'verifyAnalysisCertificate positive and tampered-result fixtures' },
   { id: 'P12-COMP-1', claim: 'open delegation, information-flow, and resource worlds yield unknown rather than compositional proof', disposition: 'preserved', assurance: 'property-tested', evidence: 'closedWorld assumptions and three open-world unknown fixtures' },
+] as const;
+
+export const ORGANIZATION_P13_OBLIGATIONS: readonly BaselineObligation[] = [
+  { id: 'P13-SEM-1', claim: 'every external mapping declares its semantic domain, supported subset, and per-construct disposition', disposition: 'preserved', assurance: 'statically-checked', evidence: 'ECOSYSTEM_MAPPINGS registry validation and complete construct rationales' },
+  { id: 'P13-REF-1', claim: 'round-trip claims permit no declared loss and noninvertible constructs return exact losses', disposition: 'preserved', assurance: 'property-tested', evidence: 'organization-ecosystem.test.ts MCP round trip, A2A loss report, and dishonest-claim rejection' },
+  { id: 'P13-INT-1', claim: 'wire, schema, behavioral, and semantic interoperability are four independent claims', disposition: 'preserved', assurance: 'statically-checked', evidence: 'EcosystemMappingSpec interoperability matrix and A2A layered-claim fixture' },
+  { id: 'P13-EVO-1', claim: 'mapping versions are bounded and unknown extensions are preserved or rejected without erasure', disposition: 'preserved', assurance: 'property-tested', evidence: 'organization-ecosystem.test.ts version rejection, extension round trip, and rejection-policy fixture' },
+  { id: 'P13-ADV-1', claim: 'external documents are untrusted, size-bounded, identity-checked, and closed to unsupported constructs', disposition: 'preserved', assurance: 'property-tested', evidence: 'mapExternalDocument byte, mapping/standard identity, version, and construct negative corpus' },
+  { id: 'P13-STD-1', claim: 'adopt/embed/adapt/invent/reject decisions follow semantic-domain overlap with explicit rationale', disposition: 'preserved', assurance: 'statically-checked', evidence: 'eight mapping registry entries cover Agent Spec, MCP, A2A, CloudEvents, OTel, workflow, policy, and provider domains' },
 ] as const;

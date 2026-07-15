@@ -21,7 +21,7 @@ export const ORGANIZATION_SEMANTIC_COVERAGE: readonly SemanticCoverageEntry[] = 
   entry('SourceRef', 'uri digest mediaType', 'portable', 'partial', 'content address or location with optional integrity and media type', 'P1'),
   entry('ExpressionDecl', 'language source resultType freeVariables effects analyzability', 'portable', 'implemented', 'dialect-tagged expression envelope with explicit portable-analysis boundary', 'P5'),
   entry('AnnotationSet', 'labels documentation provenance extensions', 'portable', 'partial', 'nonsemantic metadata, source assertions, and namespaced extension payload', 'P2'),
-  entry('ImportDecl', 'source namespace format required symbols', 'portable', 'partial', 'module dependency, local namespace binding, and named-symbol visibility', 'P1'),
+  entry('ImportDecl', 'source module namespace format required symbols', 'portable', 'partial', 'module dependency, expected logical identity, local namespace binding, and named-symbol visibility', 'P1'),
   entry('TypeDecl', 'schema', 'portable', 'partial', 'named structural data type', 'P5'),
   entry('BehaviorDecl', 'kind source inline inputs outputs instructions tools memories behaviors effects context', 'portable', 'implemented', 'typed reusable behavior and its declared dependencies', 'P5'),
   entry('BehaviorContextRequirement', 'required maximumTokens trust', 'portable', 'implemented', 'behavior-level contextual kind, resource, and trust requirements', 'P5'),

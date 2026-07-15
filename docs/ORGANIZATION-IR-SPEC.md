@@ -11,9 +11,9 @@ The key words **MUST**, **MUST NOT**, **REQUIRED**, **SHALL**, **SHALL NOT**, **
 **RECOMMENDED**, **NOT RECOMMENDED**, **MAY**, and **OPTIONAL** are to be interpreted as described by RFC 2119 and
 RFC 8174 when, and only when, they appear in capitals. Sections labelled “Informative” are not requirements.
 
-A conforming reader MUST parse YAML or JSON into the data model exported by
-`packages/core/src/organization-ir.ts`, MUST apply the validation rules below, and MUST reject rather than guess
-meaning for invalid required fields. A conforming implementation MAY use another internal representation if its
+A conforming reader MUST parse the closed structural grammar in the field appendix, MUST apply the validation rules
+below, and MUST reject rather than guess meaning for invalid required fields. TypeScript is one implementation of
+that grammar, not its normative source. A conforming implementation MAY use another internal representation if its
 portable observations are equivalent under section 5.
 
 ## 2. Artifacts and denotation
@@ -38,27 +38,41 @@ compiler artifacts, and assurance reports are distinct artifact families defined
 - Catalog identifiers MUST match `[A-Za-z][A-Za-z0-9._/-]*` and are compared byte-for-byte.
 - A reference is resolved in its declared target catalog. A wrong-sort reference is invalid even if the same key
   exists in another catalog. A qualified imported reference is deferred only through a declared namespace.
-- Required scalar and array fields are as typed by the public TypeScript model. Absence of an optional field invokes
-  the default rules in section 4; `null` is not absence unless its declared JSON type admits null.
-- Parent and initial-work dependency graphs MUST be acyclic. Lifecycle initial/terminal/transition states MUST exist;
-  a lifecycle MUST have a terminal state; transition events MUST be nonempty.
+- Requiredness, structural type, enum domain, reference sort, and sequence ordering are given per field in the
+  appendix. Unknown members are invalid. Absence invokes section 4; `null` is not absence unless its type admits null.
+- Unit-parent, goal-parent, budget-parent, initial-work-parent, initial-work-dependency, and behavior-composition graphs MUST be acyclic.
+  Parent edges are child→parent; `a.dependencies=[b]` and `a.behaviors=[b]` create a→b. Self edges are cycles and
+  duplicate edges reject. Lifecycle initial/terminal/transition states MUST exist; a lifecycle MUST have a terminal
+  state; transition events MUST be nonempty. A lifecycle edge identity is `(from-state, to-state, event)` after
+  expanding an array-valued `from`; repeated identities reject.
+- Protocol roles MUST be nonempty and unique. Message endpoint sequences MUST be nonempty, contain unique roles, and
+  reference declared roles. Session initial/terminal/target states and triggering messages MUST exist in the same
+  protocol. An empty message catalog is valid only when no session transition refers to a message.
 - Behaviors MUST have a source, inline body, instruction assembly, or composed behavior. Actors MUST name at least
   one behavior. Budgets MUST be nonnegative.
 
-The normative public field inventory and each field group’s denotation are generated in
+The normative public field grammar and denotation are generated in
 [`ORGANIZATION-IR-FIELD-SEMANTICS.md`](./ORGANIZATION-IR-FIELD-SEMANTICS.md). The executable validator and YAML
 reader are [`organization-ir.ts`](../packages/core/src/organization-ir.ts) and
-[`organization-ir-yaml.ts`](../packages/core/src/organization-ir-yaml.ts). R2 will publish representation schemas;
-until then these linked types and validator are the normative structural schema for this experimental version.
+[`organization-ir-yaml.ts`](../packages/core/src/organization-ir-yaml.ts). The generated closed machine grammar is
+[`organization-ir-v2.schema.json`](../packages/core/src/generated/organization-ir-v2.schema.json). R2 will add the
+remaining representation schemas and package-level conformance surface; the appendix remains normative if an
+implementation surface drifts from it.
+
+YAML input MUST use the JSON-compatible YAML 1.2 core subset: string mapping keys, no duplicate keys, aliases,
+anchors, merge keys, explicit tags, timestamps, binary scalars, or non-finite numbers. The parsed value MUST be JSON
+representable. JSON input follows RFC 8259 and duplicate object names MUST be rejected before model validation.
 
 ## 4. Defaults and absence
 
-- An absent optional catalog denotes an empty catalog. An absent optional list denotes an empty list.
+- An absent optional Organization IR catalog denotes an empty catalog. The appendix marks every list materialized as
+  an empty ordered sequence during normalization. Other absent optional values remain absent.
 - `ImportDecl.required` defaults to true; omitted `symbols` exposes all declarations from the imported module.
 - Instruction precedence defaults to the declared standard layer order during normalization; omitted fragment layer
   is derived from its role. An omitted conflict rule is `reject`.
-- Optional booleans do not generally default to true. A compiler MUST use the explicit normalization rules implemented
-  by `normalizeOrganization`; it MUST NOT invent provider-specific defaults.
+- Optional booleans do not generally default to true. The normative normalization implementation is
+  [`organization-normalize.ts`](../packages/core/src/organization-normalize.ts); a compiler MUST NOT invent
+  provider-specific defaults.
 - An omitted `WorkItemDecl.initialState` denotes its work type’s lifecycle initial state.
 - Missing evidence, provider properties, observations, or assurance denotes `unknown`, never success.
 - Opaque expression dialects are retained with their language tag. They are not portable predicates and MUST NOT be
@@ -70,6 +84,20 @@ Catalog identity is `(module logical identity, catalog sort, identifier)`. Impor
 qualification, not nominal identity. Retrieval location, content digest, actor, worker, session, model, and account
 identities are distinct.
 
+Canonical bytes use `oa-c14n-v1`, which is RFC 8785 JSON Canonicalization Scheme (JCS): strings and finite IEEE-754
+numbers use its ECMAScript serialization (including `-0`→`0`), arrays retain order, and object keys sort by ascending
+UTF-16 code units. Lone surrogates, undefined, non-finite, cyclic, and non-plain values reject. Organization semantic
+bytes omit only `documentation` and `provenance`; labels and extensions are
+semantic. SHA-256 hashes `"oa-c14n-v1" NUL "autonomy.organization.v2" NUL canonical-json`.
+
+The semantic digest input MUST be constructed as follows. Resolve the closed module graph and sort module IDs
+lexically. For every reference, replace its authored spelling with `module-id#catalog/id`, where `module-id` is the
+resolved stable logical identity, `catalog` is the target sort, and `id` is the declaration key. Materialize exactly
+the defaults in section 4 and the field appendix, then remove each module's `imports`. Recursively remove only
+`documentation` and `provenance` members at positions declared as annotations. Retain labels and extensions. Hash the
+closed object `{schema:"autonomy.normalized-organization-semantics.v1",root:<root-module-id>,modules:<module-map>}`;
+do not hash source maps or a prior digest. Repeating these steps on a normalized artifact MUST be idempotent.
+
 Two closed organizations are semantically equivalent when normalization produces the same domain-framed semantic
 digest. Object-key permutation and nonsemantic annotations do not change this digest; array permutation, catalog
 identifier changes, opaque semantic payload changes, or any field not explicitly excluded by normalization may change
@@ -78,21 +106,42 @@ projection, assumptions, and ignored losses.
 
 ## 6. Composition algebra
 
-Module linking is nominal, deterministic, and bounded. The empty disjoint import set is identity. Composition of
+Module linking is nominal, deterministic, and bounded. A qualified reference is `namespace/id`, split at its first
+slash. A namespace MUST match `[A-Za-z][A-Za-z0-9._-]*`; it is the explicit import namespace or otherwise its import
+catalog key, and duplicates reject. Relative URIs resolve against the importer. If `ImportDecl.module` is present,
+the loader MUST match that expected stable logical identity; otherwise the loader-provided identity is explicitly
+implementation-defined and the resulting digest is not cross-loader portable. The loader verifies any declared digest before exposing all
+symbols or the per-catalog `symbols` allowlist. A required import (the default) failing load, integrity, identity,
+visibility, or closure rejects. An optional import may be absent after load failure, but references to it remain
+invalid. Lookup selects the field’s target catalog before identifier lookup, so wrong-sort references reject.
+
+The empty disjoint import set is identity. Composition of
 closed modules with disjoint exported identities is associative and order-independent after canonicalization.
 Colliding logical identities, namespace ambiguity, digest substitution, cycles, or exceeded graph bounds are errors.
 
 Profile patches compose in declaration order. Last-writer behavior applies only where the patch algebra declares it;
 unresolved semantic conflicts reject. Instruction assembly is idempotent for identical fragments and follows explicit
 precedence; `most-restrictive` is valid only for constraints with a defined restriction order. Runtime conflict choice
-is an implementation choice and MUST remain visible in the artifact/evidence.
+is an implementation choice and MUST remain visible in the artifact/evidence. Standard precedence, strongest first,
+is `constitution, organization, role, task, skill, conversation, runtime`. Role mapping is constitution→constitution;
+policy/constraint→organization; identity→role; procedure/context→task; example→skill; user→conversation. Duplicate
+layers or fragments mapped to an absent layer reject. Priority defaults to zero. Missing fragment IDs are derived from
+role, layer, text, and source. `higher-precedence` selects stronger layer then higher priority; conflicting distinct
+fragments with equal layer and priority reject rather than use authored order. `most-restrictive`
+without a declared restriction lattice returns `unsupported` rather than guessing.
 
 ## 7. Types, authority, effects, and invalid states
 
-Every reference has a source sort and target sort defined by the field-level appendix and validator. Effects are
+Every reference has a source sort and target sort defined by the field-level appendix. Effects are
 abstract `(resource, action, mode, reversible)` declarations; they do not grant authority. A behavior’s composed
-effect set MUST be covered by the executing actor’s capability grants or compilation fails. Delegation MUST attenuate
-authority and MUST NOT cross a declared trust boundary without an enforcing component.
+effect set MUST be covered by the executing actor’s capability grants or compilation fails. Coverage requires equal
+resource/action, equal mode when both sides specify mode, and equal `reversible` when both sides specify it; absence
+of mode or reversibility is a wildcard. A grant covers only effects of its referenced capability within its selector.
+Opaque selector/condition containment is `unknown` and MUST block invocation unless a later runtime authorization
+step is explicitly represented and successfully discharged; a conditional match is not covered authority. Delegation is
+componentwise containment of capability, selector, expiry, budget, and delegation flag; open-world delegation is
+`unknown`. A trust crossing requires a deployment component whose enforcement contract names the boundary/mechanism;
+Organization IR alone cannot assert enforcement.
 
 Accountability, assignment, claim, attempt, execution, verification, and conversation are distinct relations.
 Transport threads are correlation identifiers, not work identity. A provider claim is not assurance: preservation,

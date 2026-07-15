@@ -52,6 +52,15 @@ describe('P1 organization module graph', () => {
       .toBe(qualifyDeclaration(library.moduleId, 'behaviors', 'work'));
   });
 
+  test('checks an authored expected logical identity instead of trusting the loader', async () => {
+    const library = loaded('acme/other', 'mem:/library.yml', organization('library'));
+    const root = loaded('acme/root', 'mem:/root.yml', organization('root', {
+      imports: { library: { source: { uri: 'library' }, module: 'acme/library' } },
+    }));
+    const result = await resolveOrganizationModules(root, memoryLoader({ library }));
+    expect(result.errors).toContain("module 'acme/root' import 'library': logical module identity mismatch: expected 'acme/library', got 'acme/other'");
+  });
+
   test('reports a complete import cycle and returns no partial graph', async () => {
     const a = loaded('acme/a', 'mem:/a.yml', organization('a', { imports: { b: { source: { uri: 'b' } } } }));
     const b = loaded('acme/b', 'mem:/b.yml', organization('b', { imports: { a: { source: { uri: 'a' } } } }));

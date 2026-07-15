@@ -69,6 +69,25 @@ describe('P2 normalized organization form', () => {
     expect(normalizeOrganization(short)).toEqual({ normalized: short, errors: [] });
   });
 
+  test('gives omitted and explicit normative defaults identical semantic digests', async () => {
+    const normalize = async (organization: OrganizationIR) => normalizeOrganization((await resolveOrganizationModules(
+      loaded('acme/root', 'mem:/root.yml', organization), loader({}),
+    )).graph!).normalized!;
+    const definition = (explicit: boolean): OrganizationIR => org('defaults', {
+      behaviors: { work: { kind: 'prompt', instructions: {
+        ...(explicit ? { precedence: ['constitution', 'organization', 'role', 'task', 'skill', 'conversation', 'runtime'] as const, conflict: 'reject' as const } : {}),
+        fragments: [{ role: 'procedure', text: 'work', ...(explicit ? { layer: 'task' as const, priority: 0 } : {}) }],
+      } } },
+      workTypes: { task: { lifecycle: { initial: 'queued', terminal: ['done'], states: { queued: {}, done: {} }, transitions: [] } } },
+      initialWork: { first: { type: 'task', title: 'First', ...(explicit ? { initialState: 'queued' } : {}) } },
+    });
+    const omitted = await normalize(definition(false));
+    const explicit = await normalize(definition(true));
+    expect(omitted.digest).toEqual(explicit.digest);
+    expect(omitted.modules['acme/root'].initialWork!.first.initialState).toBe('queued');
+    expect(omitted.modules['acme/root'].behaviors!.work.instructions).toMatchObject({ conflict: 'reject', fragments: [{ layer: 'task', priority: 0 }] });
+  });
+
   test('excludes annotation documentation/provenance from digest but retains semantic labels and opaque content', async () => {
     const make = async (changes: Partial<OrganizationIR>) => normalizeOrganization((await resolveOrganizationModules(
       loaded('acme/root', 'mem:/root.yml', org('root', changes)), loader({}),

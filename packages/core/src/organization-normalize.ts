@@ -61,6 +61,7 @@ export function normalizeOrganization(input: ResolvedModuleGraph | NormalizedOrg
       sources: [reference.source, { location: reference.declaration.location, path: reference.declaration.path }],
     });
   }
+  materializeInitialStates(modules);
   const draft: NormalizedOrganizationIR = {
     schema: 'autonomy.normalized-organization.v1', root: graph.root,
     modules: canonicalClone(modules), sourceMap: sourceMap.sort((a, b) => compareText(a.output, b.output)),
@@ -84,6 +85,14 @@ function elaborateDefaults(ir: OrganizationIR): OrganizationIR {
   ir.protocols ??= {}; ir.policies ??= {}; ir.budgets ??= {}; ir.decisions ??= {}; ir.artifacts ??= {};
   for (const behavior of Object.values(ir.behaviors)) {
     behavior.inputs ??= {}; behavior.outputs ??= {}; behavior.tools ??= []; behavior.memories ??= []; behavior.behaviors ??= [];
+    if (behavior.instructions) {
+      behavior.instructions.precedence ??= ['constitution', 'organization', 'role', 'task', 'skill', 'conversation', 'runtime'];
+      behavior.instructions.conflict ??= 'reject';
+      for (const fragment of behavior.instructions.fragments) {
+        fragment.layer ??= instructionLayer(fragment.role);
+        fragment.priority ??= 0;
+      }
+    }
   }
   for (const actor of Object.values(ir.actors)) {
     actor.memberOf ??= []; actor.reportsTo ??= []; actor.capabilities ??= []; actor.constraints ??= [];
@@ -103,6 +112,19 @@ function elaborateDefaults(ir: OrganizationIR): OrganizationIR {
   for (const policy of Object.values(ir.policies)) policy.appliesTo ??= [];
   for (const decision of Object.values(ir.decisions)) decision.participants ??= [];
   return ir;
+}
+
+function materializeInitialStates(modules: Record<string, OrganizationIR>): void {
+  for (const organization of Object.values(modules)) for (const work of Object.values(organization.initialWork ?? {})) {
+    if (work.initialState !== undefined) continue;
+    const match = /^(.+)#workTypes\/(.+)$/.exec(work.type);
+    if (match) work.initialState = modules[match[1]]?.workTypes?.[match[2]]?.lifecycle.initial;
+  }
+}
+
+function instructionLayer(role: 'constitution' | 'policy' | 'identity' | 'procedure' | 'context' | 'example' | 'constraint' | 'user') {
+  return ({ constitution: 'constitution', policy: 'organization', constraint: 'organization', identity: 'role',
+    procedure: 'task', context: 'task', example: 'skill', user: 'conversation' } as const)[role];
 }
 
 function stripNonsemanticAnnotations(ir: OrganizationIR): OrganizationIR {

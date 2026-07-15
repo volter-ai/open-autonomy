@@ -45,6 +45,18 @@ describe('P5 behavior contracts and authority', () => {
     const conditional = ir();
     conditional.actors.worker.capabilities![1].conditions = [portableExpression({ kind: 'literal', value: true }, 'boolean')];
     expect(analyzeBehaviorAssignment(conditional, 'worker', 'change').effects[0].status).toBe('conditional');
+    expect(createInvocationPlan(conditional, 'worker', 'change', []).errors).toContain(
+      "actor 'worker' authority for repository:write requires unresolved runtime authorization",
+    );
+  });
+
+  test('does not equate contradictory reversible effect declarations', () => {
+    const candidate = ir();
+    candidate.behaviors!.change.effects![0]!.reversible = false;
+    candidate.capabilities!.writer.resourceKinds = [];
+    candidate.capabilities!.writer.actions = [];
+    candidate.capabilities!.writer.effects = [{ resource: 'repository', action: 'write', mode: 'write', reversible: true }];
+    expect(analyzeBehaviorAssignment(candidate, 'worker', 'change').errors).toContain("actor 'worker' lacks authority for repository:write");
   });
 
   test('checks input/output/effect substitution and rejects composition cycles', () => {
@@ -89,6 +101,10 @@ describe('P5 instruction algebra', () => {
     ];
     expect(assembleInstructions({ fragments, conflict: 'reject' }).errors).toContain("conflicting instruction fragment id 'same' cannot be resolved by reject");
     expect(assembleInstructions({ fragments, conflict: 'higher-precedence' }).fragments[0].text).toBe('strong');
+    const tied = fragments.map((fragment) => ({ ...fragment, layer: 'task' as const, priority: 1 }));
+    expect(assembleInstructions({ fragments: tied, conflict: 'higher-precedence' }).errors).toContain(
+      "conflicting instruction fragment id 'same' has an unresolved equal precedence and priority",
+    );
   });
 
   test('evaluates only portable conditions and fails closed on opaque conditions', () => {

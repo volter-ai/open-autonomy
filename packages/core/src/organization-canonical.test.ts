@@ -37,6 +37,13 @@ describe('P2 canonical semantic serialization', () => {
     expect(() => canonicalSemanticJson([undefined])).toThrow('undefined array/root value');
     const cyclic: Record<string, unknown> = {}; cyclic.self = cyclic;
     expect(() => canonicalSemanticJson(cyclic)).toThrow('cyclic value');
+    expect(() => canonicalSemanticJson({ value: '\ud800' })).toThrow('lone Unicode surrogate');
+  });
+
+  test('matches RFC 8785 number rendering and UTF-16 property ordering vectors', () => {
+    expect(canonicalSemanticJson([333333333.33333329, 1e30, 4.5, 0.002, 1e-27]))
+      .toBe('[333333333.3333333,1e+30,4.5,0.002,1e-27]');
+    expect(canonicalSemanticJson({ '\ue000': 2, '😀': 1 })).toBe('{"😀":1,"":2}');
   });
 
   test('is stable over a generated family of key permutations', () => {

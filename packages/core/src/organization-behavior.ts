@@ -165,8 +165,12 @@ export function assembleInstructions(assembly: InstructionAssembly, options: Ins
     const distinct = unique(candidates.map((item) => JSON.stringify(item)));
     if (distinct.length === 1) { output.push(candidates[0]); continue; }
     if (assembly.conflict === 'higher-precedence') {
-      output.push([...candidates].sort((a, b) => rank(a, precedence) - rank(b, precedence) || b.priority - a.priority)[0]);
+      const ranked = [...candidates].sort((a, b) => rank(a, precedence) - rank(b, precedence) || b.priority - a.priority);
+      if (rank(ranked[0], precedence) === rank(ranked[1], precedence) && ranked[0].priority === ranked[1].priority)
+        errors.push(`conflicting instruction fragment id '${id}' has an unresolved equal precedence and priority`);
+      else output.push(ranked[0]);
     } else if (assembly.conflict === 'runtime') output.push(...candidates);
+    else if (assembly.conflict === 'most-restrictive') errors.push(`unsupported most-restrictive conflict for instruction fragment id '${id}': no restriction lattice is declared`);
     else errors.push(`conflicting instruction fragment id '${id}' cannot be resolved by ${assembly.conflict ?? 'reject'}`);
   }
   output.sort((a, b) => rank(a, precedence) - rank(b, precedence) || b.priority - a.priority || compare(a.id, b.id));
@@ -213,7 +217,9 @@ export function createInvocationPlan(
   const behavior = ir.behaviors?.[behaviorId];
   const instructions = assembleInstructions(behavior?.instructions ?? { fragments: [] }, options);
   const context = planContext(options.contextPolicy, contextItems);
-  const errors = [...analysis.errors, ...instructions.errors, ...context.errors];
+  const unresolvedAuthority = analysis.effects.filter((effect) => effect.status === 'conditional').map((effect) =>
+    `actor '${actorId}' authority for ${effect.effect.resource}:${effect.effect.action} requires unresolved runtime authorization`);
+  const errors = [...analysis.errors, ...unresolvedAuthority, ...instructions.errors, ...context.errors];
   if (!analysis.contract || errors.length) return { errors };
   return { plan: {
     actor: actorId, behavior: behaviorId, implementation: options.implementation,
@@ -255,7 +261,9 @@ function contextExpressionValue(item: ContextItem): ExpressionValue {
   return { id: item.id, kind: item.kind, trust: item.trust, evidence: item.evidence, tokens: item.tokens, labels: item.labels ?? {} };
 }
 function effectMatches(allowed: EffectDecl, required: EffectDecl): boolean {
-  return allowed.resource === required.resource && allowed.action === required.action && (!required.mode || !allowed.mode || allowed.mode === required.mode);
+  return allowed.resource === required.resource && allowed.action === required.action &&
+    (!required.mode || !allowed.mode || allowed.mode === required.mode) &&
+    (required.reversible === undefined || allowed.reversible === undefined || allowed.reversible === required.reversible);
 }
 function dedupeEffects(values: EffectDecl[]): EffectDecl[] { return unique(values.map((value) => JSON.stringify(value))).map((value) => JSON.parse(value)); }
 function mergeSignatures(values: Record<string, string>[], own: Record<string, string>, path: string, errors: string[]): Record<string, string> {

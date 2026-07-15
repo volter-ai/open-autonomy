@@ -8,6 +8,7 @@ const corpus = JSON.parse(readFileSync('docs/runtime-ledgers/baseline.json', 'ut
 const manifest = JSON.parse(readFileSync('docs/organization-runtime-punchlist.json', 'utf8')) as { items: Array<{ id: string; dependsOn: string[] }> };
 const baseline = JSON.parse(readFileSync('docs/runtime-ledgers/baseline-manifest.json', 'utf8')) as { semanticInputs: Array<{ path: string; digest: string }>; fixtureCorpus: Array<{ path: string; digest: string }> };
 const closure = JSON.parse(readFileSync('docs/runtime-ledgers/r0-closure.json', 'utf8')) as RuntimeLedgerCorpus;
+const r1Closure = JSON.parse(readFileSync('docs/runtime-ledgers/r1-closure.json', 'utf8')) as RuntimeLedgerCorpus;
 
 describe('runtime proof-accounting ledger', () => {
   test('seeds every formal runtime obligation exactly once at unknown', () => {
@@ -68,5 +69,13 @@ describe('runtime proof-accounting ledger', () => {
     expect(closure.checkpointStateLedger.find((entry) => entry.id === 'R0')?.status).toBe('complete');
     expect(closure.checkpointStateLedger.find((entry) => entry.id === 'R1')?.status).toBe('ready');
     expect(closure.obligationLedger.filter((entry) => entry.checkpoint === 'R0').every((entry) => entry.evidence.length > 0 && entry.assurance !== 'unknown')).toBe(true);
+  });
+
+  test('closes R1 only after independent semantic evidence and opens R2', () => {
+    expect(validateRuntimeLedger(r1Closure, expected, manifest.items)).toEqual([]);
+    expect(r1Closure.checkpointStateLedger.find((entry) => entry.id === 'R1')?.status).toBe('complete');
+    expect(r1Closure.checkpointStateLedger.find((entry) => entry.id === 'R2')?.status).toBe('ready');
+    expect(r1Closure.obligationLedger.filter((entry) => entry.checkpoint === 'R1')
+      .every((entry) => entry.evidence.includes('ev-r1-external-review') && entry.assurance === 'property-tested')).toBe(true);
   });
 });

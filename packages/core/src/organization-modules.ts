@@ -154,6 +154,8 @@ export async function resolveOrganizationModules(
       try {
         const imported = await loader.load(declaration.source, loaded);
         assertImportDigest(declaration.source, imported);
+        if (declaration.module && imported.moduleId !== declaration.module)
+          throw new Error(`logical module identity mismatch: expected '${declaration.module}', got '${imported.moduleId}'`);
         const symbolErrors = validateImportedSymbols(declaration, imported);
         if (symbolErrors.length) {
           errors.push(...symbolErrors.map((message) => `module '${loaded.moduleId}' import '${localName}': ${message}`));

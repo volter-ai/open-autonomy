@@ -1,4 +1,4 @@
-import { parse as parseYaml } from 'yaml';
+import { isAlias, parse as parseYaml, parseDocument, visit } from 'yaml';
 import {
   validateOrganizationIR,
   validateOrganizationStateIR,
@@ -8,9 +8,44 @@ import {
 import type { V1LoweringOptions } from './organization-compile';
 import type { DeploymentIR, SubstrateComponentManifest } from './organization-substrate';
 import { validateOrganizationProfile, type OrganizationProfileIR } from './organization-profile';
+import { validateOrganizationStructure } from './organization-structural';
+
+function parseClosedYaml(yamlText: string): unknown {
+  const document = parseDocument(yamlText, { schema: 'core', strict: true, uniqueKeys: true });
+  if (document.errors.length) throw new Error(`invalid YAML:\n  ${document.errors.map((error) => error.message).join('\n  ')}`);
+  const forbidden: string[] = [];
+  visit(document, (_key, node) => {
+    if (isAlias(node)) forbidden.push('aliases are not allowed');
+    if (typeof node === 'object' && node !== null && 'anchor' in node && node.anchor)
+      forbidden.push(`anchor '${String(node.anchor)}' is not allowed`);
+    if (typeof node === 'object' && node !== null && 'tag' in node && node.tag)
+      forbidden.push(`explicit tag '${String(node.tag)}' is not allowed`);
+  });
+  if (forbidden.length) throw new Error(`invalid YAML:\n  ${[...new Set(forbidden)].join('\n  ')}`);
+  const value = document.toJS({ maxAliasCount: 0 });
+  assertJsonValue(value, '/');
+  return value;
+}
+
+function assertJsonValue(value: unknown, path: string): void {
+  if (value === null || typeof value === 'string' || typeof value === 'boolean') return;
+  if (typeof value === 'number') {
+    if (!Number.isFinite(value)) throw new Error(`${path}: non-finite numbers are not allowed`);
+    return;
+  }
+  if (Array.isArray(value)) return value.forEach((item, index) => assertJsonValue(item, `${path}/${index}`));
+  if (typeof value === 'object' && Object.getPrototypeOf(value) === Object.prototype) {
+    for (const [key, item] of Object.entries(value as Record<string, unknown>)) assertJsonValue(item, `${path}/${key}`);
+    return;
+  }
+  throw new Error(`${path}: value is not JSON-representable`);
+}
 
 export function parseOrganizationIr(yamlText: string): OrganizationIR {
-  const ir = parseYaml(yamlText) as OrganizationIR;
+  const value = parseClosedYaml(yamlText);
+  const structural = validateOrganizationStructure(value);
+  if (!structural.valid) throw new Error(`invalid organization IR structure:\n  ${structural.errors.join('\n  ')}`);
+  const ir = value as OrganizationIR;
   const result = validateOrganizationIR(ir, { allowImportedReferences: true });
   if (result.errors.length) throw new Error(`invalid organization IR:\n  ${result.errors.join('\n  ')}`);
   return ir;

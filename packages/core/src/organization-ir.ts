@@ -36,6 +36,8 @@ export interface AnnotationSet {
 
 export interface ImportDecl {
   source: SourceRef;
+  /** Expected stable logical module identity. Required for identity-pinned imports. */
+  module?: Id;
   namespace?: string;
   format?: string;
   required?: boolean;
@@ -522,11 +524,21 @@ export function validateOrganizationIR(ir: OrganizationIR, options: Organization
   const checkRefs = (path: string, refs: string[] | undefined, exists: (id: string) => boolean, kind: string) => {
     for (const ref of refs ?? []) if (!exists(ref) && !deferredImport(ref)) errors.push(`${path}: unknown ${kind} '${ref}'`);
   };
+  const effectiveNamespaces = new Set<string>();
+  for (const [id, declaration] of Object.entries(ir.imports ?? {})) {
+    const namespace = declaration.namespace ?? id;
+    if (!/^[A-Za-z][A-Za-z0-9._-]*$/.test(namespace)) errors.push(`imports.${id}.namespace: invalid namespace '${namespace}'`);
+    if (effectiveNamespaces.has(namespace)) errors.push(`imports.${id}.namespace: duplicate namespace '${namespace}'`);
+    effectiveNamespaces.add(namespace);
+  }
 
   for (const [id, behavior] of Object.entries(ir.behaviors ?? {})) {
+    checkRefs(`behaviors.${id}.inputs`, Object.values(behavior.inputs ?? {}), (x) => has(ir.types, x), 'type');
+    checkRefs(`behaviors.${id}.outputs`, Object.values(behavior.outputs ?? {}), (x) => has(ir.types, x), 'type');
     checkRefs(`behaviors.${id}.tools`, behavior.tools, (x) => has(ir.tools, x), 'tool');
     checkRefs(`behaviors.${id}.memories`, behavior.memories, (x) => has(ir.memories, x), 'memory');
     checkRefs(`behaviors.${id}.behaviors`, behavior.behaviors, (x) => has(ir.behaviors, x), 'behavior');
+    detectDuplicates(`behaviors.${id}.behaviors`, behavior.behaviors, errors);
     if (!behavior.source && behavior.inline === undefined && !behavior.instructions && !behavior.behaviors?.length)
       errors.push(`behaviors.${id}: needs source, inline, instructions, or composed behaviors`);
   }
@@ -559,16 +571,22 @@ export function validateOrganizationIR(ir: OrganizationIR, options: Organization
     if (!actorOrUnit(relation.to) && !deferredImport(relation.to)) errors.push(`relations.${id}.to: unknown actor or unit '${relation.to}'`);
     if (relation.from === relation.to) warnings.push(`relations.${id}: self-relation`);
     if (relation.protocol && !has(ir.protocols, relation.protocol) && !deferredImport(relation.protocol)) errors.push(`relations.${id}.protocol: unknown protocol '${relation.protocol}'`);
+    checkRefs(`relations.${id}.constraints`, relation.constraints, (x) => has(ir.policies, x), 'policy');
   }
   for (const [id, goal] of Object.entries(ir.goals ?? {})) {
     if (goal.parent && !has(ir.goals, goal.parent) && !deferredImport(goal.parent)) errors.push(`goals.${id}.parent: unknown goal '${goal.parent}'`);
     if (goal.owner && !actorOrUnit(goal.owner) && !deferredImport(goal.owner)) errors.push(`goals.${id}.owner: unknown actor or unit '${goal.owner}'`);
+    checkRefs(`goals.${id}.constraints`, goal.constraints, (x) => has(ir.policies, x), 'policy');
+    for (const [index, measure] of (goal.measures ?? []).entries()) if (measure.type && !has(ir.types, measure.type) && !deferredImport(measure.type))
+      errors.push(`goals.${id}.measures[${index}].type: unknown type '${measure.type}'`);
   }
   for (const [id, type] of Object.entries(ir.workTypes ?? {})) {
     validateLifecycle(`workTypes.${id}.lifecycle`, type.lifecycle, errors);
     checkRefs(`workTypes.${id}.requiredCapabilities`, type.requiredCapabilities, (x) => has(ir.capabilities, x), 'capability');
     checkRefs(`workTypes.${id}.assignment.candidates`, type.assignment?.candidates, actorOrUnit, 'actor or unit');
     checkRefs(`workTypes.${id}.verification.verifier`, type.verification?.verifier, actorOrUnit, 'actor or unit');
+    if (type.context?.compaction && !has(ir.behaviors, type.context.compaction) && !deferredImport(type.context.compaction))
+      errors.push(`workTypes.${id}.context.compaction: unknown behavior '${type.context.compaction}'`);
     for (const [index, transition] of (type.lifecycle?.transitions ?? []).entries())
       checkRefs(`workTypes.${id}.lifecycle.transitions[${index}].authority`, transition.authority, (x) => has(ir.capabilities, x), 'capability');
   }
@@ -582,11 +600,15 @@ export function validateOrganizationIR(ir: OrganizationIR, options: Organization
     checkRefs(`initialWork.${id}.assignees`, work.assignees, actorOrUnit, 'actor or unit');
     if (type && work.initialState && !type.lifecycle.states[work.initialState])
       errors.push(`initialWork.${id}.initialState: unknown state '${work.initialState}' for type '${work.type}'`);
+    detectDuplicates(`initialWork.${id}.dependencies`, work.dependencies, errors);
   }
   detectParentCycles('goals', ir.goals, (x) => x.parent, errors);
   detectParentCycles('units', ir.units, (x) => x.parent, errors);
   detectParentCycles('initialWork', ir.initialWork, (x) => x.parent, errors);
+  detectParentCycles('budgets', ir.budgets, (x) => x.parent, errors);
   detectDependencyCycles(ir.initialWork, errors);
+  detectBehaviorCycles(ir.behaviors, errors);
+  for (const [id, protocol] of Object.entries(ir.protocols ?? {})) validateProtocol(`protocols.${id}`, protocol, errors);
   for (const [id, budget] of Object.entries(ir.budgets ?? {})) {
     if (!(budget.limit >= 0)) errors.push(`budgets.${id}.limit must be non-negative`);
     if (budget.parent && !has(ir.budgets, budget.parent) && !deferredImport(budget.parent)) errors.push(`budgets.${id}.parent: unknown budget '${budget.parent}'`);
@@ -599,13 +621,64 @@ function validateLifecycle(path: string, lifecycle: LifecycleDecl, errors: strin
   const states = lifecycle.states ?? {};
   if (!states[lifecycle.initial]) errors.push(`${path}.initial: unknown state '${lifecycle.initial}'`);
   if (!lifecycle.terminal?.length) errors.push(`${path}.terminal must not be empty`);
+  detectDuplicates(`${path}.terminal`, lifecycle.terminal, errors);
   for (const terminal of lifecycle.terminal ?? []) if (!states[terminal]) errors.push(`${path}.terminal: unknown state '${terminal}'`);
+  const edges = new Set<string>();
   for (const [index, transition] of (lifecycle.transitions ?? []).entries()) {
     const from = Array.isArray(transition.from) ? transition.from : [transition.from];
-    for (const state of from) if (!states[state]) errors.push(`${path}.transitions[${index}].from: unknown state '${state}'`);
+    detectDuplicates(`${path}.transitions[${index}].from`, from, errors);
+    for (const state of from) {
+      if (!states[state]) errors.push(`${path}.transitions[${index}].from: unknown state '${state}'`);
+      const edge = JSON.stringify([state, transition.to, transition.event]);
+      if (edges.has(edge)) errors.push(`${path}.transitions[${index}]: duplicate edge '${state}' -> '${transition.to}' on '${transition.event}'`);
+      edges.add(edge);
+    }
     if (!states[transition.to]) errors.push(`${path}.transitions[${index}].to: unknown state '${transition.to}'`);
     if (!transition.event) errors.push(`${path}.transitions[${index}].event is required`);
   }
+}
+
+function validateProtocol(path: string, protocol: ProtocolDecl, errors: string[]): void {
+  if (!protocol.roles.length) errors.push(`${path}.roles must not be empty`);
+  detectDuplicates(`${path}.roles`, protocol.roles, errors);
+  const roles = new Set(protocol.roles);
+  for (const [name, message] of Object.entries(protocol.messages)) {
+    const from = Array.isArray(message.from) ? message.from : [message.from];
+    const to = Array.isArray(message.to) ? message.to : [message.to];
+    if (!from.length || !to.length) errors.push(`${path}.messages.${name}: from and to must not be empty`);
+    detectDuplicates(`${path}.messages.${name}.from`, from, errors);
+    detectDuplicates(`${path}.messages.${name}.to`, to, errors);
+    for (const role of [...from, ...to]) if (!roles.has(role)) errors.push(`${path}.messages.${name}: unknown role '${role}'`);
+  }
+  const session = protocol.sessions;
+  if (!session) return;
+  if (!session.states[session.initial]) errors.push(`${path}.sessions.initial: unknown state '${session.initial}'`);
+  for (const terminal of session.terminal ?? []) if (!session.states[terminal]) errors.push(`${path}.sessions.terminal: unknown state '${terminal}'`);
+  for (const [state, declaration] of Object.entries(session.states)) for (const [message, target] of Object.entries(declaration.on)) {
+    if (!protocol.messages[message]) errors.push(`${path}.sessions.states.${state}: unknown message '${message}'`);
+    if (!session.states[target]) errors.push(`${path}.sessions.states.${state}: unknown state '${target}'`);
+  }
+}
+
+function detectDuplicates(path: string, values: string[] | undefined, errors: string[]): void {
+  const seen = new Set<string>();
+  for (const value of values ?? []) {
+    if (seen.has(value)) errors.push(`${path}: duplicate '${value}'`);
+    seen.add(value);
+  }
+}
+
+function detectBehaviorCycles(map: Record<string, BehaviorDecl> | undefined, errors: string[]): void {
+  const visiting = new Set<string>();
+  const visited = new Set<string>();
+  const visit = (id: string): boolean => {
+    if (visiting.has(id)) return true;
+    if (visited.has(id)) return false;
+    visiting.add(id);
+    for (const nested of map?.[id]?.behaviors ?? []) if (map?.[nested] && visit(nested)) return true;
+    visiting.delete(id); visited.add(id); return false;
+  };
+  for (const id of Object.keys(map ?? {})) if (visit(id)) { errors.push(`behaviors.${id}: composition cycle`); break; }
 }
 
 function detectParentCycles<T>(catalog: string, map: Record<string, T> | undefined, parentOf: (value: T) => string | undefined, errors: string[]): void {

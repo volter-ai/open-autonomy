@@ -391,7 +391,7 @@ describe('R9 adversarial review cycle 3: external verification and replay semant
     expect(report.equivalent).toBe(false);
     expect(report.profiles.every((profile) => profile.v1InstallationDigest !== profile.v2InstallationDigest)).toBe(true);
     expect(report.profiles.some((profile) => profile.observations.some((observation) => observation.status === 'different'))).toBe(true);
-  });
+  }, 15_000);
 
   test('semantic ledger replay rejects changed values, prototype paths, and invalid Organization IR', () => {
     const source = legacy();

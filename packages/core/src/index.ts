@@ -57,3 +57,4 @@ export * from './organization-runtime-event-store';
 export * from './organization-fleet-reconciler';
 export * from './organization-fleet-runtime-adapters';
 export * from './organization-benchmark-protocol';
+export * from './organization-autonomy-accounting';

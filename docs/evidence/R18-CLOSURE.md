@@ -1,0 +1,5 @@
+# R18 closure
+
+R18 closes the portable event-store and observed-state materializer checkpoint. Authenticated native envelopes progress through separately authorized lift, causal acceptance, and projection stages. Event time, ingest sequence, logical order, issuer, adapter, reducer, policy, integrity, and provenance remain reconstructible. Signed snapshots, exact replay, partition reconciliation, schema/reducer migration, retention, derivation-closed purge, and idempotent physical-erasure evidence have explicit durable semantics.
+
+The closure is bounded rather than asymptotic: resource ceilings are part of the accepted state-machine domain, and compaction removes redundant hot payload copies without claiming an unbounded archive. The implementation rejects over-bound states before persistence. Closure is supported by the focused adversarial suite, full typecheck, and independent skeptical review; the closure ledger records all four formal R18 obligations as property-tested with zero untriaged residuals.

@@ -53,3 +53,4 @@ export * from './organization-paperclip-deployment';
 export * from './organization-paperclip-live-provider';
 export * from './organization-paperclip-runtime';
 export * from './organization-paperclip-runtime-adapters';
+export * from './organization-runtime-event-store';

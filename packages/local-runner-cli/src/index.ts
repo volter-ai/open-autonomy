@@ -81,11 +81,11 @@ function pkgVersion(): string {
 const HELP = `oa <command> [args]  (@volter/oa v${pkgVersion()}) — the local open-autonomy substrate as a CLI
 
   oa start                     continuous generic job scheduler (was: node scheduler/run.mjs)
-  oa once                      fire every currently unfenced job once (was: node scheduler/run.mjs --once)
+  oa once                      make one pass over jobs, respecting fences and concurrency
   oa pause [reason]             touch the conventional .open-autonomy/paused job fence
   oa resume                     remove .open-autonomy/paused and re-arm jobs assigned that fence
   oa status                     fence state + live sessions + last-fire info
-  oa dispatch <agent>           fire exactly the one schedule line for <agent> now, bypassing the fence
+  oa dispatch <agent>           fire one declared agent job now, bypassing cadence only
   oa doctor [--live] [--json]   offline checks: dep-integrity + fence + schedule.json + prompts/skills;
                                 --live additionally probes the termfleet provider's /healthz over the network
   oa maturity [--json] [--profile-dir <path>] [--profile <name>] [--target local|gh-actions]
@@ -135,6 +135,7 @@ export async function runCli(argv: string[]): Promise<number> {
   }
   if (cmd === '--once' || cmd === 'once') {
     const r = await once({ cwd });
+    if (r.reason) console.error(`[oa] once: ${r.reason}`);
     return r.ok ? 0 : 1;
   }
   if (cmd === 'pause') {
@@ -159,7 +160,7 @@ export async function runCli(argv: string[]): Promise<number> {
       return 1;
     }
     const r = dispatch(agent, { cwd });
-    if (r.reason && !r.matched) console.error(r.reason);
+    if (r.reason) console.error(r.reason);
     return r.ok ? 0 : 1;
   }
   if (cmd === 'doctor') {

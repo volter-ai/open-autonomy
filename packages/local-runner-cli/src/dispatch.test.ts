@@ -45,14 +45,37 @@ describe('oa dispatch <agent> — the manual single dispatch', () => {
     }
   });
 
-  test('dispatch WORKS EVEN WHILE PAUSED — the documented workaround for the first-run circularity (the paused driver fires nothing, but a manual dispatch must still be possible)', () => {
+  test('dispatch refuses a fenced job instead of bypassing a declared control', () => {
     const dir = tmpRepo({ intervalSeconds: 900, scripts: ['AUTONOMY_AGENT=planner node scripts/run-agent.mjs'] });
     try {
       pause({ cwd: dir });
       const stub = new StubProc().on(() => true, () => ok(''));
       const r = dispatch('planner', { cwd: dir, proc: stub.runner });
-      expect(r.ok).toBe(true); // NOT blocked by the fence
-      expect(stub.calls).toHaveLength(1);
+      expect(r.ok).toBe(false);
+      expect(r.reason).toContain('fenced by .open-autonomy/paused');
+      expect(stub.calls).toHaveLength(0);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test('dispatch honors the schedule-wide concurrency cap', () => {
+    const dir = tmpRepo({
+      maxConcurrent: 1,
+      jobs: [
+        { name: 'manager', agent: 'manager', command: 'node scripts/manager.mjs', intervalSeconds: 900 },
+        { name: 'planner', agent: 'planner', command: 'node scripts/planner.mjs', intervalSeconds: 900 },
+      ],
+    });
+    try {
+      const stub = new StubProc()
+        .on(() => true, () => ok(''))
+        .onArgs('node', [join(dir, 'scripts', 'autonomy-runner.mjs'), 'list'], () =>
+          ok(JSON.stringify([{ id: 'live', agent: 'manager', status: 'running' }])));
+      const r = dispatch('planner', { cwd: dir, proc: stub.runner });
+      expect(r.ok).toBe(false);
+      expect(r.reason).toContain('maxConcurrent=1 is already reached');
+      expect(stub.calls.some((call) => call.cmd === 'node scripts/planner.mjs')).toBe(false);
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }

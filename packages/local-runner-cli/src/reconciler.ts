@@ -194,6 +194,7 @@ export async function start(opts: StartOptions = {}): Promise<void> {
       try {
         const reaped = await runner.reapIdle({ idleMs: idleReapMs, agents, since: idleSince });
         for (const result of reaped) console.log(`[oa] reaped idle ${result.agent} (${result.id})`);
+        markWorkspaceLeasesObserved(cwd, reaped.map((result) => result.id));
         await reconcilePendingEffects(cwd, runner, proc);
         await reconcileWorkspaceLeases(cwd, runner, proc);
       } catch (error) {
@@ -232,6 +233,16 @@ async function reconcilePendingEffects(cwd: string, runner: SessionRunner, proc:
       continue;
     }
     if (live.has(marker.id)) continue;
+    // The provider may have returned the terminal ID before list() exposes it. A co-located fresh lease
+    // distinguishes that bootstrap gap from a completed session; old markers without leases retain the
+    // historical immediate-reconciliation behavior.
+    try {
+      const lease = JSON.parse(readFileSync(join(cwd, '.open-autonomy', 'runner-state', 'workspaces', file), 'utf8')) as WorkspaceLease;
+      const createdAt = Date.parse(lease.createdAt);
+      if (!lease.observedLiveAt && Number.isFinite(createdAt) && Date.now() - createdAt < workspaceLeaseBootstrapGraceMs()) continue;
+    } catch {
+      /* no readable lease: preserve backward-compatible effect reconciliation */
+    }
     console.log(`[oa] post-session effect: ${marker.agent} (${marker.id}) -> ${marker.effect} in ${marker.worktree}`);
     const result = proc('bun', [marker.effect], { cwd: marker.worktree, stdio: 'inherit', env: { ...process.env, ...marker.env } });
     if (result.status === 0 && !result.error) {
@@ -251,7 +262,36 @@ interface WorkspaceLease {
   branch: string;
   worktree: string;
   createdAt: string;
+  observedLiveAt?: string;
 }
+
+const DEFAULT_WORKSPACE_LEASE_BOOTSTRAP_GRACE_MS = 120_000;
+
+function workspaceLeaseBootstrapGraceMs(): number {
+  const configured = Number(process.env.AUTONOMY_WORKSPACE_LEASE_GRACE_MS ?? DEFAULT_WORKSPACE_LEASE_BOOTSTRAP_GRACE_MS);
+  return Number.isFinite(configured) && configured >= 0 ? configured : DEFAULT_WORKSPACE_LEASE_BOOTSTRAP_GRACE_MS;
+}
+
+/** Reaping is itself authoritative observation: persist it so a just-reaped session does not wait out the
+ * bootstrap grace before its effect and workspace can reconcile. */
+function markWorkspaceLeasesObserved(cwd: string, ids: string[]): void {
+  if (!ids.length) return;
+  const wanted = new Set(ids);
+  const dir = join(cwd, '.open-autonomy', 'runner-state', 'workspaces');
+  let files: string[] = [];
+  try { files = readdirSync(dir).filter((file) => file.endsWith('.json')); } catch { return; }
+  const observedLiveAt = new Date().toISOString();
+  for (const file of files) {
+    const path = join(dir, file);
+    try {
+      const lease = JSON.parse(readFileSync(path, 'utf8')) as WorkspaceLease;
+      if (!wanted.has(lease.id) || lease.observedLiveAt) continue;
+      writeFileSync(path, `${JSON.stringify({ ...lease, observedLiveAt }, null, 2)}\n`);
+    } catch { /* workspace reconciliation owns malformed-lease handling */ }
+  }
+}
+
+export { markWorkspaceLeasesObserved };
 
 /** Reclaim runner-owned isolated workspaces after their session and any completion effect finish.
  * Clean worktrees are removed immediately. Dirty or unreadable worktrees are moved to a quarantine
@@ -297,7 +337,21 @@ export async function reconcileWorkspaceLeases(
     if (handled.has(lease.worktree)) continue;
     handled.add(lease.worktree);
     const peers = records.filter((candidate) => candidate.lease.worktree === lease.worktree);
-    if (peers.some((peer) => live.has(peer.lease.id) || existsSync(join(effectsDir, peer.file)))) continue;
+    const livePeers = peers.filter((peer) => live.has(peer.lease.id));
+    for (const peer of livePeers) {
+      if (peer.lease.observedLiveAt) continue;
+      peer.lease.observedLiveAt = new Date().toISOString();
+      try { writeFileSync(peer.path, `${JSON.stringify(peer.lease, null, 2)}\n`); } catch { /* retry next heartbeat */ }
+    }
+    if (livePeers.length || peers.some((peer) => existsSync(join(effectsDir, peer.file)))) continue;
+    const now = Date.now();
+    const graceMs = workspaceLeaseBootstrapGraceMs();
+    const bootstrapping = peers.some((peer) => {
+      if (peer.lease.observedLiveAt) return false;
+      const createdAt = Date.parse(peer.lease.createdAt);
+      return Number.isFinite(createdAt) && now - createdAt < graceMs;
+    });
+    if (bootstrapping) continue;
     if (!existsSync(lease.worktree)) {
       for (const peer of peers) try { unlinkSync(peer.path); } catch { /* retry later */ }
       continue;

@@ -418,18 +418,16 @@ target — `scripts/runner.ts`'s `launch()` (`packages/substrate-local/src/runne
 above that gate). The `run-agent.mjs → autonomy-runner.mjs` adapter chain contains **no**
 `.open-autonomy/paused` check at all (read both files to confirm — the only "paused" strings in the
 backend are session-*status* vocabulary, not the fence), so this invocation launches on a paused install.
-That exemption is *correct* for this actor, not a hole: a read-only audit dispatched by an explicit human
-act spends nothing against the un-triaged backlog the fence protects — the same posture the `oa dispatch`
-verb's own header records ("manual dispatch bypasses the fence by design; … this breaks the circularity",
-`packages/local-runner-cli/src/dispatch.ts:1-8`). **As of TC.3, `oa dispatch audit` DOES work for this
-actor** (corrected from an earlier, now-false claim here): that verb fires an agent's *schedule line*, and
-this actor now has one — its own weekly `cron` trigger gave it a `scheduler/schedule.json` entry (the
-compiled `jobs` list carries every cron-bearing agent, `audit` included as of TC.3). `oa dispatch audit`
-tags its own fire `AUTONOMY_TRIGGER_KIND=dispatch` (§ CRON-TRIGGERED RUNS above), so it correctly bypasses
-the self-throttle and gets a full run — but it carries no `MODE`, so it runs **drift mode**, never
-setup-completion mode. For setup-completion mode specifically (this section's actual subject), the
-paused-safe adapter above (with `MODE=setup AUTONOMY_FORWARD=MODE`) remains the right command — `oa
-dispatch audit` is a real, additional way to fire a *drift-mode* run on demand, not a substitute for it.
+That exemption is *correct* for this actor, not a hole: it is the explicitly named setup-completion path
+for a read-only audit, not ordinary schedule dispatch. `oa dispatch <agent>` enters through the declared
+schedule job and therefore honors its fence; a paused `oa dispatch audit` is refused. On an **unpaused**
+install, `oa dispatch audit` works because this actor's weekly `cron` gives it a
+`scheduler/schedule.json` entry. It tags the fire `AUTONOMY_TRIGGER_KIND=dispatch` (§ CRON-TRIGGERED RUNS
+above), so the operator still gets a full run rather than the cron self-throttle — but it carries no
+`MODE`, so it runs **drift mode**, never setup-completion mode. For setup-completion mode specifically
+(this section's actual subject), the paused-safe adapter above (with
+`MODE=setup AUTONOMY_FORWARD=MODE`) remains the right command; the distinct raw-adapter spelling makes the
+fence exception visible instead of weakening every declared job dispatch.
 
 How `MODE` actually reaches your session on this path: `run-agent.mjs` forwards each env name listed in
 `AUTONOMY_FORWARD` as an opaque `--key value` param (`--MODE setup`) to the backend, and the backend

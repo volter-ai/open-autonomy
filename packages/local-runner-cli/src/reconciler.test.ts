@@ -1,9 +1,9 @@
 import { describe, expect, test } from 'bun:test';
-import { existsSync, mkdirSync, mkdtempSync, realpathSync, rmSync, unlinkSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, unlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { backoffMsFor, reconcilePendingEffects, reconcileWorkspaceLeases, start } from './reconciler.ts';
+import { backoffMsFor, markWorkspaceLeasesObserved, reconcilePendingEffects, reconcileWorkspaceLeases, start } from './reconciler.ts';
 import { StubProc, ok } from './test-support/stub-proc.ts';
 import { StubSessionRunner } from './test-support/stub-session-runner.ts';
 
@@ -200,7 +200,48 @@ test('a failed post-session effect keeps its durable marker and retries until su
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });
 
-function workspaceLease(dir: string, id: string, worktree: string): string {
+test('a completion effect waits while its fresh session lease is not yet observable', async () => {
+  const dir = repo({ jobs: [{ name: 'maintenance', command: 'bun maintenance.ts', intervalSeconds: 60 }] });
+  try {
+    const effectsDir = join(dir, '.open-autonomy', 'runner-state', 'effects');
+    mkdirSync(effectsDir, { recursive: true });
+    const marker = join(effectsDir, 'session-bootstrap.json');
+    writeFileSync(marker, JSON.stringify({ id: 'session-bootstrap', agent: 'worker', effect: 'scripts/effect.ts', worktree: dir }));
+    const lease = workspaceLease(dir, 'session-bootstrap', dir, new Date().toISOString());
+    const proc = new StubProc().onArgs('bun', ['scripts/effect.ts'], () => ok(''));
+    const runner = new StubSessionRunner();
+
+    await reconcilePendingEffects(dir, runner, proc.runner);
+    expect(existsSync(marker)).toBe(true);
+    expect(proc.calls).toHaveLength(0);
+
+    const observed = JSON.parse(readFileSync(lease, 'utf8'));
+    observed.observedLiveAt = new Date().toISOString();
+    writeFileSync(lease, JSON.stringify(observed));
+    await reconcilePendingEffects(dir, runner, proc.runner);
+    expect(existsSync(marker)).toBe(false);
+    expect(proc.calls.some((call) => call.cmd === 'bun')).toBe(true);
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+test('a reaped session is persisted as observed so its ready effect does not wait out bootstrap grace', async () => {
+  const dir = repo({ jobs: [{ name: 'maintenance', command: 'bun maintenance.ts', intervalSeconds: 60 }] });
+  try {
+    const effectsDir = join(dir, '.open-autonomy', 'runner-state', 'effects');
+    mkdirSync(effectsDir, { recursive: true });
+    const marker = join(effectsDir, 'session-reaped.json');
+    writeFileSync(marker, JSON.stringify({ id: 'session-reaped', agent: 'worker', effect: 'scripts/effect.ts', worktree: dir }));
+    const lease = workspaceLease(dir, 'session-reaped', dir, new Date().toISOString());
+    const proc = new StubProc().onArgs('bun', ['scripts/effect.ts'], () => ok(''));
+
+    markWorkspaceLeasesObserved(dir, ['session-reaped']);
+    expect(JSON.parse(readFileSync(lease, 'utf8')).observedLiveAt).toBeTruthy();
+    await reconcilePendingEffects(dir, new StubSessionRunner(), proc.runner);
+    expect(existsSync(marker)).toBe(false);
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+function workspaceLease(dir: string, id: string, worktree: string, createdAt = '1970-01-01T00:00:00.000Z'): string {
   const leases = join(dir, '.open-autonomy', 'runner-state', 'workspaces');
   mkdirSync(leases, { recursive: true });
   const path = join(leases, `${id}.json`);
@@ -210,7 +251,7 @@ function workspaceLease(dir: string, id: string, worktree: string): string {
     agent: 'planner',
     branch: `agent/planner/${id}`,
     worktree,
-    createdAt: new Date().toISOString(),
+    createdAt,
   }));
   return path;
 }
@@ -268,6 +309,41 @@ test('live sessions and pending completion effects fence workspace cleanup', asy
     expect(existsSync(liveLease)).toBe(true);
     expect(existsSync(effectLease)).toBe(true);
     expect(proc.calls).toHaveLength(0);
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+test('a fresh lease absent from list is protected during provider bootstrap lag', async () => {
+  const dir = repo({ jobs: [{ name: 'maintenance', command: 'bun maintenance.ts', intervalSeconds: 60 }] });
+  try {
+    const worktree = join(dir, '.worktrees', 'planner-bootstrapping');
+    mkdirSync(worktree, { recursive: true });
+    const lease = workspaceLease(dir, 'session-bootstrapping', worktree, new Date().toISOString());
+    const proc = new StubProc();
+    await reconcileWorkspaceLeases(dir, new StubSessionRunner(), proc.runner);
+    expect(existsSync(lease)).toBe(true);
+    expect(proc.calls).toHaveLength(0);
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+test('an observed lease reconciles immediately after its session disappears', async () => {
+  const dir = repo({ jobs: [{ name: 'maintenance', command: 'bun maintenance.ts', intervalSeconds: 60 }] });
+  try {
+    const worktree = join(dir, '.worktrees', 'planner-observed');
+    mkdirSync(worktree, { recursive: true });
+    const lease = workspaceLease(dir, 'session-observed', worktree, new Date().toISOString());
+    const runner = new StubSessionRunner();
+    runner.addSession({ id: 'session-observed', agent: 'planner', status: 'running' });
+    const proc = new StubProc()
+      .onArgs('git', ['status', '--porcelain'], () => ok(''))
+      .onArgs('git', ['worktree', 'remove'], () => ok())
+      .onArgs('git', ['branch', '-D'], () => ok());
+
+    await reconcileWorkspaceLeases(dir, runner, proc.runner);
+    expect(JSON.parse(readFileSync(lease, 'utf8')).observedLiveAt).toBeString();
+    runner.endSession('session-observed');
+    await reconcileWorkspaceLeases(dir, runner, proc.runner);
+    expect(existsSync(lease)).toBe(false);
+    expect(proc.calls.some((call) => call.args[0] === 'worktree' && call.args[1] === 'remove')).toBe(true);
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });
 

@@ -199,4 +199,12 @@ describe('runtime proof-accounting ledger', () => {
     expect(corpus.residualLedger).toEqual([]);
     expect(corpus.obligationLedger.filter((entry) => entry.checkpoint === 'R12').every((entry) => entry.assurance === 'property-tested' && entry.evidence.includes('ev-r12-review'))).toBe(true);
   });
+
+  test('closes R15 only after isolated live Hermes lifecycle and fault evidence', () => {
+    const corpus = JSON.parse(readFileSync('docs/runtime-ledgers/r15-closure.json','utf8')) as RuntimeLedgerCorpus;
+    expect(validateRuntimeLedger(corpus, expected, manifest.items)).toEqual([]);
+    expect(corpus.checkpointStateLedger.find((entry) => entry.id === 'R15')?.status).toBe('complete');
+    expect(corpus.residualLedger).toEqual([]);
+    expect(corpus.obligationLedger.filter((entry) => entry.checkpoint === 'R15').every((entry) => entry.assurance === 'property-tested' && entry.evidence.includes('ev-r15-review'))).toBe(true);
+  });
 });

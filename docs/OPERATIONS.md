@@ -372,8 +372,10 @@ overwriting (`--force` to override) — except `.claude/settings.json`, handled 
 > `simple-sdlc` and `simple-gh-sdlc` both carry this file: it wires a `hooks.Stop` command (the ztrack
 > "drive-to-green" loop gate) that Claude Code runs at the end of **every session in this repo — agent
 > *and* human interactive sessions alike** (Claude Code project settings aren't scoped to the loop's own
-> sessions). The command self-guards — it no-ops unless `node_modules/ztrack/plugins/ztrack/hooks/
-> stop-loop.sh` exists — so it's inert until you install ztrack, but it fires every time either way.
+> sessions). The command self-guards — it no-ops unless the ztrack loop hook is present at
+> `node_modules/ztrack/plugins/ztrack/hooks/stop-loop.sh` (or the legacy `plugins/ztrack-gate/`
+> location — ztrack renamed the plugin dir in 0.3.0, and the wiring checks both so it survives
+> either ztrack version) — so it's inert until you install ztrack, but it fires every time either way.
 >
 > - **If you already have a `.claude/settings.json`** (most repos with Claude Code do): the compile does a
 >   **structured merge**, not a clobber — it parses both files as JSON and appends the Stop hook entry onto

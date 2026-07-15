@@ -3,7 +3,7 @@
 // bin/autonomy-compile.test.ts exercises this through the real CLI end-to-end; this file pins the merge
 // function's own contract (append-if-absent, idempotent, preserves unrelated keys, refuses on bad JSON).
 import { describe, expect, test } from 'bun:test';
-import { readFileSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { CLAUDE_SETTINGS_PATH, STOP_HOOK_OPT_OUT_KEY, settingsMergeStrategies } from './settings-merge.ts';
 
@@ -121,6 +121,33 @@ describe('profile .claude/settings.json shape pin (Finding 4b — merge is Stop-
       expect(Object.keys(parsed)).toEqual(['hooks']); // no permissions / other top-level keys
       expect(Object.keys(parsed.hooks)).toEqual(['Stop']); // no other hook events
       expect(Array.isArray(parsed.hooks.Stop)).toBe(true);
+    });
+  }
+});
+
+// The loop's enforcement was silently dead in an adopter (ponder) because the profile's Stop-hook
+// pointed at `node_modules/ztrack/plugins/ztrack-gate/hooks/stop-loop.sh`, but a newer ztrack renamed
+// the plugin dir `ztrack-gate` -> `ztrack` (0.3.0). The `if [ -f ... ]` guard on the vanished path
+// no-ops, so `ztrack loop start` armed a loop nothing ever held. ztrack is a dependency here, so we can
+// resolve each path the profile hardcodes against the SHIPPED plugin: if a rename outruns the wiring
+// again, this fails CI instead of silently disabling the drive-to-green loop for every adopter.
+describe('profile Stop-hook path resolves in the installed ztrack (loop must not be silently dead)', () => {
+  const profilesDir = join(REPO_ROOT, 'profiles');
+  const profiles = readdirSync(profilesDir, { withFileTypes: true })
+    .filter((d) => d.isDirectory())
+    .map((d) => d.name)
+    .filter((name) => existsSync(join(profilesDir, name, '.claude', 'settings.json')));
+  for (const profile of profiles) {
+    const raw = readFileSync(join(profilesDir, profile, '.claude', 'settings.json'), 'utf8');
+    const commands: string[] = Object.values(JSON.parse(raw).hooks ?? {})
+      .flat()
+      .flatMap((e: { hooks?: Array<{ command?: string }> }) => e.hooks ?? [])
+      .map((h) => h.command ?? '');
+    const paths = [...new Set(commands.flatMap((c) => [...c.matchAll(/node_modules\/\S*stop-loop\.sh/g)].map((m) => m[0])))];
+    if (paths.length === 0) continue; // this profile ships no loop hook — nothing to resolve
+    test(`${profile}: at least one wired stop-loop.sh path resolves under node_modules/ztrack`, () => {
+      const resolved = paths.filter((p) => existsSync(join(REPO_ROOT, p)));
+      expect(resolved.length).toBeGreaterThan(0);
     });
   }
 });

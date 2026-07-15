@@ -5,7 +5,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "if [ -f node_modules/ztrack/plugins/ztrack/hooks/stop-loop.sh ]; then bash node_modules/ztrack/plugins/ztrack/hooks/stop-loop.sh; fi"
+            "command": "if [ -f node_modules/ztrack/plugins/ztrack/hooks/stop-loop.sh ]; then bash node_modules/ztrack/plugins/ztrack/hooks/stop-loop.sh; elif [ -f node_modules/ztrack/plugins/ztrack-gate/hooks/stop-loop.sh ]; then bash node_modules/ztrack/plugins/ztrack-gate/hooks/stop-loop.sh; fi"
           }
         ]
       }

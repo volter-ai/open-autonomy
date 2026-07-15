@@ -6,6 +6,7 @@ documents:
     - .github/ISSUE_TEMPLATE/public_agent_session.yml
     - .github/workflows/merge.yml
     - .github/workflows/human-approval.yml
+    - .github/workflows/native-approval.yml
     - .github/workflows/security.yml
     - .github/workflows/security-gate.yml
     - .github/workflows/open-autonomy-preflight.yml
@@ -31,6 +32,7 @@ documents:
     - docs/standards/docs.md
     - docs/standards/security.md
     - docs/standards/tests.md
+    - docs/NATIVE-APPROVAL.md
     - docs/standards/issue-and-evidence.md
     - package.json
     - scripts/open-autonomy-config.ts
@@ -39,6 +41,7 @@ documents:
     - scripts/rearm-auto-merge.ts
     - scripts/reconcile-merged-issues.ts
     - scripts/human-approval-gate.ts
+    - scripts/native-approval-adapter.ts
     - scripts/check-supply-chain.ts
   roles:
     vision: docs/VISION.md
@@ -204,11 +207,15 @@ policy:
       - "**/bun.lock"
       - scripts/finalize-agent-review.ts
       - packages/substrate-github/src/runtime/finalize-agent-review.ts
+      - scripts/review-result.ts
+      - packages/substrate-github/src/runtime/review-result.ts
       - scripts/human-approval-gate.ts
+      - scripts/native-approval-adapter.ts
       - scripts/rearm-auto-merge.ts
       - scripts/reconcile-merged-issues.ts
       - scripts/check-supply-chain.ts
       - profiles/self-driving/scripts/human-approval-gate.ts
+      - profiles/self-driving/scripts/native-approval-adapter.ts
       - profiles/self-driving/scripts/rearm-auto-merge.ts
       - profiles/self-driving/scripts/reconcile-merged-issues.ts
       - profiles/self-driving/scripts/check-supply-chain.ts

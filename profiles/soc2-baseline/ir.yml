@@ -167,7 +167,9 @@ policy:
         - scripts/check-supply-chain.ts
         - scripts/claude-agent-run.ts
         - scripts/finalize-agent-review.ts
+        - scripts/review-result.ts
         - scripts/human-approval-gate.ts
+        - scripts/native-approval-adapter.ts
         - scripts/model-proxy-exchange.ts
         - scripts/model-proxy-mint.ts
         - scripts/model-proxy-revoke.ts
@@ -200,6 +202,7 @@ resources:
   - .github/workflows/codeql-gate.yml       # C8  richer SAST gate (dispatched; posts `codeql` status) — NOT in required_checks; code-scan.yml (Semgrep) is the no-GHAS blocker
   - .github/workflows/supply-chain.yml      # C7  supply-chain BLOCKING gate on bot PRs (dispatched; posts `supply-chain` status)
   - .github/workflows/human-approval.yml    # C4  deterministic per-head-SHA maintainer change gate
+  - .github/workflows/native-approval.yml   # optional native APPROVE adapter; not a substitute for C4
   - .github/workflows/code-scan.yml         # C8  no-signup SAST gate (Semgrep OSS) — enforces on private, no GHAS
   - .github/workflows/secret-scan.yml       # C12 no-signup secret-scan gate (gitleaks) — enforces on private, no GHAS
   - .github/workflows/dependency-review.yml # C9  PR-time dependency vulnerability review (GHAS)
@@ -220,7 +223,9 @@ resources:
   - scripts/rearm-auto-merge.ts        # merge.yml
   - scripts/reconcile-merged-issues.ts # merge.yml
   - scripts/human-approval-gate.ts     # C4 human-approval.yml
+  - scripts/native-approval-adapter.ts # optional native-approval.yml
   - scripts/check-supply-chain.ts      # C7 security.yml + supply-chain.yml
+  - docs/NATIVE-APPROVAL.md            # optional adapter identity + fail-closed setup contract
   - package.json                   # runnable-install seed (install-owned) — makes `bun install` work so the agents run
   - bun.lock                       # matching lockfile (frozen-lockfile) — merge-dangerous, human-required
   - provision.json

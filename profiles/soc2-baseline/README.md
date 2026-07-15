@@ -21,7 +21,14 @@ Same agents, same loop. The delta is a control layer:
 - (inherited from simple-gh-sdlc: `security.yml` supply-chain + zizmor (C7/C11), `merge.yml`, `dependabot.yml`)
 
 **Branch protection** (`provision.json`, applied by `scripts/provision-target-repo.ts`)
-- required checks, `enforce_admins: true`, ≥1 review, secret-scanning + push-protection (C5/C12).
+- required checks, `enforce_admins: true`, ≥1 review re-earned after every push, secret-scanning +
+  push-protection (C5/C12).
+
+The carried `native-approval.yml` adapter is optional and dormant without
+`OPEN_AUTONOMY_NATIVE_APPROVAL_TOKEN`. This profile's native-review requirement is documented as a
+**maintainer** control, so do not configure the automated adapter unless your control design explicitly
+allows an independent agent identity to satisfy that separate native-review requirement. It never satisfies
+the C4 `human-approval` gate. See [`docs/NATIVE-APPROVAL.md`](docs/NATIVE-APPROVAL.md).
 
 **Policy + evidence tree** (`compliance/`, install-owned — you edit it)
 - a full SOC 2 policy set, risk register, subprocessor inventory, and the control matrix.

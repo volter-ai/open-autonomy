@@ -22,6 +22,12 @@ publishes the bound judgment, then `ci` + `agent-review` green → native auto-m
 local target retains a documented shared-credential compatibility path until it gains the same effect. This
 is `self-driving`'s merge model, generalized to a ztrack-tracked SDLC.
 
+The profile also carries an optional native GitHub approval adapter for installations whose branch
+protection requires an approving review in addition to `agent-review`. It is dormant without
+`OPEN_AUTONOMY_NATIVE_APPROVAL_TOKEN`; the configured identity must be distinct and write-capable, and stale
+reviews must be dismissed. The adapter never substitutes for a human approval gate. See
+[`docs/NATIVE-APPROVAL.md`](docs/NATIVE-APPROVAL.md).
+
 `planner` (D3) sits outside that landing flow entirely — it only ever creates a plain GitHub issue, never
 touches code or opens a PR, so it holds no `code:propose`/`agent:launch` capability at all. It exists
 because a seed-only board empties (D8): `pm`/`draft`/`develop`/`reviewer` only ever consume or shape

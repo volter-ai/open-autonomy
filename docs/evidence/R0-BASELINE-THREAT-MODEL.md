@@ -71,6 +71,10 @@ repository creation/deletion, pushes, variables, labels, protection, auto-merge,
 process launch/cancel, transcript upload, provider calls, run revocation, and credit transfer (R11, R15, R20–R21).
 Separate Cloudflare Durable Objects create cross-object consistency, backup, restore, and partition questions
 (R17–R18, R21). Full tool/model transcripts are themselves privacy and supply-chain assets (R8, R18, R22).
+The local CLI also assumes a Node 22 build with TypeScript stripping enabled; version alone is insufficient because
+distributions may compile Node without TypeScript support. Packaging/runtime capability detection belongs to R8 and
+legacy installation migration to R9. The 2026-07-15 full gate falsified the version-only assumption with
+`Node v22.22.1` returning `ERR_NO_TYPESCRIPT` for the plain-Node CLI fixture.
 
 ## Residual disposition
 

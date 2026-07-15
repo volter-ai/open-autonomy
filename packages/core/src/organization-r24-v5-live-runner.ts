@@ -3,6 +3,7 @@ import { createHash } from "node:crypto";
 import { canonicalSemanticJson } from "./organization-canonical";
 import {
   deriveV5Trace,
+  parseV5Receipts,
   type V5Binding,
   type V5Derived,
   type V5LauncherInput,
@@ -108,6 +109,35 @@ export type V5CellRecord = {
   attempts: V5Attempt[];
   selectedAttemptId: string;
   derived: V5Derived;
+  fault: {
+    id: string;
+    digest: string;
+    assignmentDigest: string;
+    bindingDigest: string;
+    injectorDigest: string;
+    requestDigest: string;
+    acknowledgementDigest: string;
+    observedScopeDigest: string;
+    raw: {
+      injector: { revision: string; commandDigest: string };
+      request: {
+        faultId: string;
+        faultDigest: string;
+        bindingDigest: string;
+        isolationId: string;
+        targetWorkId: string;
+        issuedAt: string;
+      };
+      acknowledgement: { requestDigest: string; acceptedAt: string };
+      observedScope: {
+        isolationId: string;
+        nativeRunId: string;
+        applied: true;
+        appliedAt: string;
+        evidenceDigest: string;
+      };
+    };
+  };
   locks: {
     fields: V5LockField[];
   };
@@ -137,6 +167,10 @@ export type V5CellRecord = {
     operatorMinutes: 0;
     provenance: string;
   };
+  sourceCustody?: Record<
+    "provider" | "supervisor" | "meter" | "fault" | "cleanup" | "assistance",
+    { keyId: string; sourceDigest: string; signature: string }
+  >;
 };
 function outerProjection(o: V5OuterEvidence, b: V5Binding) {
   if (o.provider === "paperclip") {
@@ -295,6 +329,34 @@ export function validateV5Cell(c: V5CellRecord, key: string) {
     throw Error(
       "V5 selected attempt is absent, setup-failed, or caller-derived",
     );
+  if (
+    !c.fault.id ||
+    c.fault.assignmentDigest !== c.binding.assignmentDigest ||
+    c.fault.bindingDigest !== sha(c.binding) ||
+    c.fault.injectorDigest !== sha(c.fault.raw.injector) ||
+    c.fault.requestDigest !== sha(c.fault.raw.request) ||
+    c.fault.acknowledgementDigest !== sha(c.fault.raw.acknowledgement) ||
+    c.fault.observedScopeDigest !== sha(c.fault.raw.observedScope) ||
+    c.fault.raw.request.faultId !== c.fault.id ||
+    c.fault.raw.request.faultDigest !== c.fault.digest ||
+    c.fault.raw.request.bindingDigest !== sha(c.binding) ||
+    !Number.isFinite(Date.parse(c.fault.raw.request.issuedAt)) ||
+    !c.isolation.ownedScopeIds.includes(c.fault.raw.request.isolationId) ||
+    c.fault.raw.acknowledgement.requestDigest !== c.fault.requestDigest ||
+    !Number.isFinite(Date.parse(c.fault.raw.acknowledgement.acceptedAt)) ||
+    c.fault.raw.observedScope.isolationId !== c.fault.raw.request.isolationId ||
+    c.fault.raw.observedScope.applied !== true ||
+    !Number.isFinite(Date.parse(c.fault.raw.observedScope.appliedAt)) ||
+    !/^sha256:[a-f0-9]{64}$/.test(c.fault.raw.observedScope.evidenceDigest) ||
+    ![
+      c.fault.digest,
+      c.fault.injectorDigest,
+      c.fault.requestDigest,
+      c.fault.acknowledgementDigest,
+      c.fault.observedScopeDigest,
+    ].every((x) => /^sha256:[a-f0-9]{64}$/.test(x))
+  )
+    throw Error("V5 fault injection evidence invalid or unbound");
   const requiredPaths: readonly string[] = V5_NORMATIVE_LOCK_PATHS,
     byPath = new Map(c.locks.fields.map((x) => [x.path, x])),
     preserved = new Map(c.preservation.map((x) => [x.source, x]));
@@ -324,6 +386,19 @@ export function validateV5Cell(c: V5CellRecord, key: string) {
       .slice()
       .sort((a, b) => a.path.localeCompare(b.path));
   if (
+    c.fault.raw.request.targetWorkId !== native.workId ||
+    c.fault.raw.observedScope.nativeRunId !== native.nativeRunId ||
+    Date.parse(c.fault.raw.request.issuedAt) < Date.parse(launched.startedAt) ||
+    Date.parse(c.fault.raw.request.issuedAt) <
+      Date.parse(launched.trace.dispatch.at) ||
+    Date.parse(c.fault.raw.acknowledgement.acceptedAt) <
+      Date.parse(c.fault.raw.request.issuedAt) ||
+    Date.parse(c.fault.raw.observedScope.appliedAt) <
+      Date.parse(c.fault.raw.acknowledgement.acceptedAt) ||
+    Date.parse(c.fault.raw.observedScope.appliedAt) >
+      Date.parse(launched.trace.terminal.at) ||
+    Date.parse(c.fault.raw.observedScope.appliedAt) >
+      Date.parse(launched.completedAt) ||
     Object.entries(providerExpected).some(
       ([p, d]) => byPath.get(p)?.digest !== d,
     ) ||
@@ -381,6 +456,82 @@ export function validateV5Cell(c: V5CellRecord, key: string) {
       "V5 preservation/isolation/cleanup/assistance evidence invalid",
     );
   return structuredClone(c.derived);
+}
+export function deriveV5ProviderFromRecord(c: V5CellRecord, key: string) {
+  const derived = validateV5Cell(c, key),
+    launched = c.attempts.find(
+      (a): a is V5LaunchedAttempt => a.kind === "launched",
+    )!,
+    native = deriveProviderOuterJoin(launched.providerTranscript),
+    receipts = parseV5Receipts(launched.trace.log),
+    start = receipts.find((r) => r.phase === "start")!,
+    result = receipts.find((r) => r.phase === "result") ?? null;
+  const providerTerminal = native.terminal.trim().toLowerCase(),
+    terminalMap: Record<string, "success" | "failure" | "timeout"> =
+      native.provider === "hermes"
+        ? {
+            completed: "success",
+            failed: "failure",
+            error: "failure",
+            cancelled: "failure",
+            killed: "failure",
+            timeout: "timeout",
+            timed_out: "timeout",
+          }
+        : {
+            succeeded: "success",
+            failed: "failure",
+            cancelled: "failure",
+            timeout: "timeout",
+            timed_out: "timeout",
+          },
+    normalizedProviderTerminal = terminalMap[providerTerminal] ?? null;
+  if (
+    !normalizedProviderTerminal ||
+    normalizedProviderTerminal !== derived.status
+  )
+    throw Error(
+      "provider terminal disagrees with authenticated launcher terminal",
+    );
+  return {
+    runId: native.nativeRunId,
+    workId: native.workId,
+    pid: native.pid,
+    bindingDigest: sha(c.binding),
+    assignmentDigest: c.binding.assignmentDigest,
+    challengeDigest: sha(c.binding.nonce),
+    launcherDigest: launched.input.pins.launcher,
+    launcherSpecDigest: c.binding.launcherSpecDigest,
+    inputLockDigest: c.binding.lockDigest,
+    receiptAuthenticated: derived.authenticated,
+    provider: native.provider,
+    revisionDigest: sha(native.revision),
+    configurationDigest: native.configurationDigest,
+    dispatchDigest: launched.trace.dispatch.rawDigest,
+    commandDigest: native.commandDigest,
+    logDigest: native.logDigest,
+    terminalDigest: sha(native.terminal),
+    receiptDigest: sha(receipts),
+    processGroup: launched.trace.spawn.launcherPgid,
+    attempt: {
+      id: launched.attemptId,
+      nativeRunId: native.nativeRunId,
+      startReceiptDigest: sha(start),
+      resultReceiptDigest: result ? sha(result) : null,
+      startedAt: start.at,
+      finishedAt: result?.at ?? launched.trace.terminal.at,
+    },
+    status: derived.status,
+    terminal: launched.trace.terminal,
+    descendants: launched.trace.descendants,
+    meter: launched.trace.externalMeter,
+    termAt:
+      launched.trace.supervisor.signals.find((x) => x.kind === "TERM")?.at ??
+      null,
+    killAt:
+      launched.trace.supervisor.signals.find((x) => x.kind === "KILL")?.at ??
+      null,
+  };
 }
 type Proc = {
   pid: number;
@@ -469,9 +620,17 @@ export class V5ProcessTreeMeter {
       wallMs,
       cpuMs,
       maxRssKiB,
-      provenance:
+      method:
         "linux-/proc process-tree sampled meter; CPU is sampled lower bound",
-      samples: structuredClone(this.samples),
+      raw: {
+        rootPid: this.rootPid,
+        clockTicksPerSecond: this.clockTicksPerSecond,
+        samples: this.samples.map((sample) => ({
+          monotonicNs: sample.monotonicNs,
+          rootPid: sample.rootPid,
+          processes: structuredClone(sample.processes),
+        })),
+      },
     };
   }
 }

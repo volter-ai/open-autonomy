@@ -153,6 +153,21 @@ export type V5NativeTrace = {
     cpuMs: number | null;
     maxRssKiB: number | null;
     method: string;
+    raw: {
+      rootPid: number;
+      clockTicksPerSecond: number;
+      samples: Array<{
+        monotonicNs: string;
+        rootPid: number;
+        processes: Array<{
+          pid: number;
+          ppid: number;
+          group: number;
+          cpuTicks: number;
+          rssKiB: number;
+        }>;
+      }>;
+    };
   };
   preservation: Array<{
     source: string;
@@ -303,7 +318,56 @@ export function deriveV5Trace(
     (trace.externalMeter.maxRssKiB !== null &&
       (!Number.isFinite(trace.externalMeter.maxRssKiB) ||
         trace.externalMeter.maxRssKiB < 0)) ||
-    !trace.externalMeter.method
+    !trace.externalMeter.method ||
+    trace.externalMeter.raw.rootPid !== trace.spawn.launcherPid ||
+    !Number.isFinite(trace.externalMeter.raw.clockTicksPerSecond) ||
+    trace.externalMeter.raw.clockTicksPerSecond < 1 ||
+    trace.externalMeter.raw.samples.length < 2 ||
+    trace.externalMeter.raw.samples.some(
+      (s) =>
+        s.rootPid !== trace.externalMeter.raw.rootPid ||
+        !/^\d+$/.test(s.monotonicNs) ||
+        s.processes.some(
+          (p) =>
+            !Number.isSafeInteger(p.pid) ||
+            p.pid < 1 ||
+            !Number.isSafeInteger(p.ppid) ||
+            p.ppid < 0 ||
+            !Number.isSafeInteger(p.group) ||
+            p.group < 1 ||
+            !Number.isFinite(p.cpuTicks) ||
+            p.cpuTicks < 0 ||
+            !Number.isFinite(p.rssKiB) ||
+            p.rssKiB < 0,
+        ),
+    ) ||
+    !trace.externalMeter.raw.samples[0]!.processes.some(
+      (p) => p.pid === trace.externalMeter.raw.rootPid,
+    ) ||
+    trace.externalMeter.wallMs !==
+      Number(
+        BigInt(trace.externalMeter.raw.samples.at(-1)!.monotonicNs) -
+          BigInt(trace.externalMeter.raw.samples[0]!.monotonicNs),
+      ) /
+        1e6 ||
+    trace.externalMeter.cpuMs !==
+      ((Math.max(
+        ...trace.externalMeter.raw.samples.map((s) =>
+          s.processes.reduce((n, p) => n + p.cpuTicks, 0),
+        ),
+      ) -
+        trace.externalMeter.raw.samples[0]!.processes.reduce(
+          (n, p) => n + p.cpuTicks,
+          0,
+        )) *
+        1000) /
+        trace.externalMeter.raw.clockTicksPerSecond ||
+    trace.externalMeter.maxRssKiB !==
+      Math.max(
+        ...trace.externalMeter.raw.samples.flatMap((s) =>
+          s.processes.map((p) => p.rssKiB),
+        ),
+      )
   )
     throw Error("V5 trace binding/spawn/meter invalid");
   const j = trace.outerJoin;

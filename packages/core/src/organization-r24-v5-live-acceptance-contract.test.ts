@@ -1,268 +1,277 @@
 import { expect, test } from "bun:test";
+import { generateKeyPairSync, sign } from "node:crypto";
 import {
   V5_NEGATIVE_CONTROLS,
-  V5_REQUIRED_LOCKS,
+  V5_SOURCE_ROLES,
+  applyCanonicalV5NegativeMutation,
+  projectV5LiveCellFromRecord,
   r24V5ArtifactDigest,
   r24V5PlanAuthorizationDigest,
+  r24V5PlannedIdentity,
+  r24V5ResultAuthorizationDigest,
+  r24V5SourceCustodyDigest,
   verifyR24V5LiveArtifact,
   type V5LiveArtifact,
 } from "./organization-r24-v5-live-acceptance-contract";
-import { generateKeyPairSync, sign } from "node:crypto";
-const d = "sha256:" + "a".repeat(64);
-const keys = generateKeyPairSync("ed25519"),
-  publicKeyPem = keys.publicKey
+import { v5ProtocolDigest } from "./organization-r24-v5-protocol";
+import { createV5CellFixture } from "./test-support/organization-r24-v5-fixture";
+
+const d = "sha256:" + "a".repeat(64),
+  planner = generateKeyPairSync("ed25519"),
+  resultCustodian = generateKeyPairSync("ed25519"),
+  plannerPublic = planner.publicKey
     .export({ type: "spki", format: "pem" })
     .toString(),
-  trust = { signerKeyId: "campaign-key", publicKeyPem };
-const replay = (id: any, input: string) =>
-  input === `mutation:${id}` ? `rejected:${id}` : "not-rejected";
-const derive = (c: any) => ({
-  runId: c.native.runId,
-  workId: c.native.workId,
-  pid: c.native.pid,
-  bindingDigest: c.bindingDigest,
-  assignmentDigest: c.assignmentDigest,
-  challengeDigest: c.challengeDigest,
-  launcherDigest: d,
-  launcherSpecDigest: c.launcherSpecDigest,
-  inputLockDigest: c.inputLockDigest,
-  receiptAuthenticated: true,
-});
-function artifact() {
-  const cells: any[] = [];
-  const assignments = [
-    {
-      unitId: "u",
-      replication: 0,
-      pairId: "p0",
-      trialId: "t0",
-      first: "hermes",
-      fault: { id: "none", digest: d },
+  resultPublic = resultCustodian.publicKey
+    .export({ type: "spki", format: "pem" })
+    .toString(),
+  sourceKeys = Object.fromEntries(
+    V5_SOURCE_ROLES.map((role) => [role, generateKeyPairSync("ed25519")]),
+  ) as Record<
+    (typeof V5_SOURCE_ROLES)[number],
+    ReturnType<typeof generateKeyPairSync>
+  >,
+  receiptKeyFor = (keyId: string) => `${keyId}:${"k".repeat(64)}`.slice(0, 48),
+  trust = {
+    signerKeyId: "planner-key",
+    publicKeyPem: plannerPublic,
+    resultSignerKeyId: "result-custodian-key",
+    resultPublicKeyPem: resultPublic,
+    sourcePublicKeys: Object.fromEntries(
+      V5_SOURCE_ROLES.map((role) => [
+        `source-${role}`,
+        sourceKeys[role].publicKey
+          .export({ type: "spki", format: "pem" })
+          .toString(),
+      ]),
+    ),
+    resolveReceiptKey: (keyId: string) => {
+      if (!/^receipt-\d+-(?:hermes|paperclip)$/.test(keyId))
+        throw Error("unknown receipt key id");
+      return receiptKeyFor(keyId);
     },
-    {
+  };
+
+function signResult(a: V5LiveArtifact) {
+  a.resultAuthorization.signature = sign(
+    null,
+    Buffer.from(r24V5ResultAuthorizationDigest(a)),
+    resultCustodian.privateKey,
+  ).toString("base64");
+  const { digest: _digest, ...body } = a;
+  a.digest = r24V5ArtifactDigest(body);
+}
+
+function artifact(): V5LiveArtifact {
+  const campaignDigest = v5ProtocolDigest("campaign"),
+    seed = "73",
+    units = ["u"],
+    replications = 2,
+    fault = { id: "none", digest: v5ProtocolDigest("fault:none") },
+    assignments = Array.from({ length: replications }, (_, replication) => ({
       unitId: "u",
-      replication: 1,
-      pairId: "p1",
-      trialId: "t1",
-      first: "paperclip",
-      fault: { id: "none", digest: d },
-    },
-  ];
-  for (let r = 0; r < 2; r++) {
-    const order: any[] = r
-      ? [
-          ["paperclip", 0],
-          ["hermes", 1],
-        ]
-      : [
-          ["hermes", 0],
-          ["paperclip", 1],
-        ];
-    for (const [s, o] of order) {
-      const raw = {
-          revision: "revision",
-          configurationReadback: `config ${d}`,
-          dispatch: "dispatch",
-          command: `command ${d}`,
-          log: "log",
-          receipt: `receipt ${d} ${d}`,
-          terminal: "terminal",
-        },
-        ev = (x: string) => r24V5ArtifactDigest(x as any);
-      cells.push({
-        pairId: `p${r}`,
-        trialId: `t${r}`,
-        replication: r,
-        unitId: "u",
-        substrate: s,
-        order: o,
-        bindingDigest: d,
-        assignmentDigest: r24V5ArtifactDigest({
-          pairId: `p${r}`,
-          trialId: `t${r}`,
-          unitId: "u",
-          replication: r,
-          fault: assignments[r]!.fault,
-          substrate: s,
-          order: o,
-        } as any),
-        launcherSpecDigest: d,
-        inputLockDigest: d,
-        challengeDigest: d,
-        isolationId: `iso-${r}-${s}`,
-        manualAssistance: "none",
-        native: {
-          provider: s === "hermes" ? "hermes-kanban" : "paperclip-heartbeat",
-          derivation:
-            s === "hermes"
-              ? "verified-hermes-native-v1"
-              : "verified-paperclip-native-v1",
-          revisionDigest: ev(raw.revision),
-          configurationReadbackDigest: ev(raw.configurationReadback),
-          dispatchDigest: ev(raw.dispatch),
-          runId: `run-${r}-${s}`,
-          workId: `work-${r}`,
-          pid: 10 + r,
-          processGroup: 10 + r,
-          commandDigest: ev(raw.command),
-          logDigest: ev(raw.log),
-          receiptDigest: ev(raw.receipt),
-          receiptBindingDigest: d,
-          configurationChallengeDigest: d,
-          receiptChallengeDigest: d,
-          commandLauncherDigest: d,
-          terminalDigest: ev(raw.terminal),
-          rawEvidence: raw,
-          concurrentCandidateRunIds: [],
-        },
-        attempts: [
-          {
-            id: "a",
-            nativeRunId: `run-${r}-${s}`,
-            startReceiptDigest: d,
-            resultReceiptDigest: d,
-            startedAt: "2026-07-15T00:00:01Z",
-            finishedAt: "2026-07-15T00:00:02Z",
+      replication,
+      fault,
+      ...r24V5PlannedIdentity(campaignDigest, seed, "u", replication, fault),
+    })),
+    cells = assignments.flatMap((planned) =>
+      (["hermes", "paperclip"] as const).map((substrate) => {
+        const order = (substrate === planned.first ? 0 : 1) as 0 | 1,
+          exactAssignment = {
+            pairId: planned.pairId,
+            trialId: planned.trialId,
+            unitId: planned.unitId,
+            replication: planned.replication,
+            fault: planned.fault,
+            substrate,
+            order,
           },
-        ],
-        terminal: {
-          status: "success",
-          exitCode: 0,
-          signal: null,
-          termAt: null,
-          killAt: null,
-          descendantsObserved: [10 + r],
-          aliveAfterTerminal: [],
-          reaped: true,
-          startedAt: "2026-07-15T00:00:00Z",
-          finishedAt: "2026-07-15T00:00:03Z",
-        },
-        meters: {
-          wall: { value: 1, method: "clock", evidenceDigest: d },
-          cpu: { value: 1, method: "rusage", evidenceDigest: d },
-          maxRss: { value: 1, method: "rusage", evidenceDigest: d },
-        },
-        locks: V5_REQUIRED_LOCKS.map((path) => ({
-          path,
-          digest: d,
-          application: "enforced",
-          evidenceDigest: d,
-        })),
-        preservation: V5_REQUIRED_LOCKS.map((path) => ({
-          path,
-          disposition: "preserved",
-          rationale: "exact",
-          evidenceDigest: d,
-        })),
-        cleanup: {
-          status: "deleted",
-          evidenceDigest: d,
-          unownedStateDigestBefore: d,
-          unownedStateDigestAfter: d,
-        },
-      });
-    }
-  }
-  const inputLockDigest = r24V5ArtifactDigest(
-    cells[0]!.locks
-      .slice()
-      .sort((a: any, b: any) => a.path.localeCompare(b.path))
-      .map(({ path, digest }: any) => ({ path, digest })),
-  );
-  for (const cell of cells) cell.inputLockDigest = inputLockDigest;
-  const body: any = {
-    schema: "autonomy.r24-v5-live-acceptance.v1",
-    plan: {
-      seed: "73",
-      units: ["u"],
-      replications: 2,
-      assignments,
+          assignmentDigest = v5ProtocolDigest(exactAssignment),
+          nonce = Buffer.from(`${planned.replication}`.padEnd(32, "!"))
+            .toString("hex")
+            .slice(0, 64),
+          receiptKeyId = `receipt-${planned.replication}-${substrate}`,
+          receiptKey = receiptKeyFor(receiptKeyId),
+          record = createV5CellFixture({
+            substrate,
+            pairId: planned.pairId,
+            trialId: planned.trialId,
+            replication: planned.replication,
+            assignmentDigest,
+            launcherSpecDigest: d,
+            nonce,
+            isolationId: `cell:${planned.replication}:${substrate}`,
+            fault: planned.fault,
+            receiptKey,
+          });
+        const bindingDigest = v5ProtocolDigest(record.binding),
+          launched = record.attempts.find((x) => x.kind === "launched")!,
+          sourceValues = {
+            provider: launched.providerTranscript,
+            supervisor: launched.trace.supervisor,
+            meter: launched.trace.externalMeter,
+            fault: record.fault,
+            cleanup: { isolation: record.isolation, cleanup: record.cleanup },
+            assistance: record.assistance,
+          };
+        record.sourceCustody = Object.fromEntries(
+          V5_SOURCE_ROLES.map((role) => {
+            const sourceDigest = r24V5ArtifactDigest(sourceValues[role] as any),
+              signature = sign(
+                null,
+                Buffer.from(
+                  r24V5SourceCustodyDigest(role, bindingDigest, sourceDigest),
+                ),
+                sourceKeys[role].privateKey,
+              ).toString("base64");
+            return [role, { keyId: `source-${role}`, sourceDigest, signature }];
+          }),
+        ) as NonNullable<typeof record.sourceCustody>;
+        return projectV5LiveCellFromRecord(
+          record,
+          {
+            pairId: planned.pairId,
+            trialId: planned.trialId,
+            unitId: planned.unitId,
+            replication: planned.replication,
+            substrate,
+            order,
+            fault: planned.fault,
+          },
+          receiptKeyId,
+          receiptKey,
+        );
+      }),
+    ),
+    bindings = cells.map((cell) => ({
+      pairId: cell.pairId,
+      substrate: cell.substrate,
+      bindingDigest: cell.bindingDigest,
+      receiptKeyId: cell.receiptKeyId,
+      receiptKeyCommitment: r24V5ArtifactDigest({
+        receiptKey: receiptKeyFor(cell.receiptKeyId),
+      } as any),
+      assignmentDigest: cell.assignmentDigest,
+      launcherSpecDigest: cell.launcherSpecDigest,
+      inputLockDigest: cell.inputLockDigest,
+      challengeDigest: cell.challengeDigest,
+      sourceKeyIds: Object.fromEntries(
+        V5_SOURCE_ROLES.map((role) => [role, `source-${role}`]),
+      ) as Record<(typeof V5_SOURCE_ROLES)[number], string>,
+    })),
+    inputLockDigest = v5ProtocolDigest(
+      bindings
+        .map(({ pairId, substrate, inputLockDigest }) => ({
+          pairId,
+          substrate,
+          inputLockDigest,
+        }))
+        .sort((x, y) =>
+          `${x.pairId}:${x.substrate}`.localeCompare(
+            `${y.pairId}:${y.substrate}`,
+          ),
+        ),
+    ),
+    plan: V5LiveArtifact["plan"] = {
+      schema: "autonomy.r24-authorized-plan.v1",
+      campaignDigest,
+      authorizedAt: "2026-07-15T00:00:00Z",
+      notAfter: "2026-07-16T00:00:00Z",
+      seed,
+      units,
+      replications,
+      assignmentDigest: v5ProtocolDigest({ seed, assignments }),
       launcherDigest: d,
       launcherSpecDigest: d,
       inputLockDigest,
+      bindings,
+      assignments,
       authorization: {
         algorithm: "Ed25519",
-        signerKeyId: trust.signerKeyId,
+        signerKeyId: "planner-key",
         signature: "",
       },
-      assignmentDigest: r24V5ArtifactDigest({ seed: "73", assignments } as any),
-    },
-    cells,
-    negativeControls: V5_NEGATIVE_CONTROLS.map((id) => ({
-      id,
-      mutationInput: `mutation:${id}`,
-      mutationDigest: r24V5ArtifactDigest(`mutation:${id}` as any),
-      observedRejection: `rejected:${id}`,
-      evidenceRaw: `evidence:${id}`,
-      evidenceDigest: r24V5ArtifactDigest(`evidence:${id}` as any),
-    })),
-    generatedAt: "2026-07-15T00:00:00Z",
-  };
-  body.plan.authorization.signature = sign(
+    };
+  plan.authorization.signature = sign(
     null,
-    Buffer.from(r24V5PlanAuthorizationDigest(body.plan)),
-    keys.privateKey,
+    Buffer.from(r24V5PlanAuthorizationDigest(plan)),
+    planner.privateKey,
   ).toString("base64");
-  return { ...body, digest: r24V5ArtifactDigest(body) } as V5LiveArtifact;
+  const base = cells[0]!,
+    negativeControls = V5_NEGATIVE_CONTROLS.map((id) => ({
+      id,
+      basePairId: base.pairId,
+      baseSubstrate: base.substrate,
+      mutatedRecordDigest: v5ProtocolDigest(
+        applyCanonicalV5NegativeMutation(id, base.evidenceRecord),
+      ),
+    })),
+    value: V5LiveArtifact = {
+      schema: "autonomy.r24-v5-live-acceptance.v1",
+      plan,
+      cells,
+      negativeControls,
+      generatedAt: "2026-07-15T12:00:00Z",
+      resultAuthorization: {
+        algorithm: "Ed25519",
+        signerKeyId: "result-custodian-key",
+        signature: "",
+      },
+      digest: d,
+    };
+  signResult(value);
+  return value;
 }
-test("accepts only a complete matched native V5 artifact", () =>
-  expect(verifyR24V5LiveArtifact(artifact(), replay, derive, trust)).toBe(
-    true,
-  ));
-test("fails closed across plan, provenance, attempts, timeout, meters, locks, preservation, cleanup, assistance, controls and digest", () => {
-  const muts = [
-    (a: any) => a.plan.units.push("u"),
-    (a: any) => (a.plan.replications = 2.5),
-    (a: any) => (a.plan.assignments[0].trialId = "duplicate"),
-    (a: any) => (a.plan.assignmentDigest = d),
-    (a: any) => (a.cells[1].native.workId = "other-work"),
-    (a: any) => (a.cells[1].challengeDigest = "sha256:" + "b".repeat(64)),
-    (a: any) =>
-      (a.cells[0].native.receiptBindingDigest = "sha256:" + "b".repeat(64)),
-    (a: any) =>
-      (a.cells[0].native.commandLauncherDigest = "sha256:" + "b".repeat(64)),
-    (a: any) => (a.cells[0].attempts[0].finishedAt = "not-a-date"),
-    (a: any) => (a.cells[0].terminal.exitCode = 3),
-    (a: any) => a.cells[0].locks.push(a.cells[0].locks[0]),
-    (a: any) => a.cells[0].preservation.push(a.cells[0].preservation[0]),
-    (a: any) => a.cells.pop(),
-    (a: any) => (a.cells[2].order = 1),
-    (a: any) => (a.cells[0].native.logDigest = "x"),
-    (a: any) => (a.cells[0].native.rawEvidence.log = "tampered raw log"),
-    (a: any) => a.cells[0].attempts.push(a.cells[0].attempts[0]),
-    (a: any) => {
-      a.cells[0].terminal.status = "timeout";
-      a.cells[0].terminal.signal = null;
-      a.cells[0].attempts[0].resultReceiptDigest = null;
+
+test("accepts only signed plans and independently signed canonical raw-record projections", () => {
+  expect(verifyR24V5LiveArtifact(artifact(), trust)).toBe(true);
+});
+
+test("rejects post-plan summary fabrication, raw receipt tampering, fake controls, and trust substitution", () => {
+  for (const mutate of [
+    (a: V5LiveArtifact) => (a.cells[0]!.native.runId = "fabricated"),
+    (a: V5LiveArtifact) => {
+      const launched = a.cells[0]!.evidenceRecord.attempts.find(
+        (x) => x.kind === "launched",
+      )!;
+      launched.trace.log = launched.trace.log.replace(/"mac":"./, '"mac":"0');
     },
-    (a: any) => (a.cells[0].terminal.aliveAfterTerminal = [99]),
-    (a: any) => (a.cells[0].meters.cpu.value = -1),
-    (a: any) => a.cells[0].locks.pop(),
-    (a: any) => (a.cells[0].preservation = []),
-    (a: any) =>
-      (a.cells[0].cleanup.unownedStateDigestAfter = "sha256:" + "b".repeat(64)),
-    (a: any) => (a.cells[0].manualAssistance = "one-minute"),
-    (a: any) => a.negativeControls.pop(),
-    (a: any) => (a.negativeControls[0].mutationInput = "different mutation"),
-    (a: any) => (a.negativeControls[0].observedRejection = "accepted"),
-    (a: any) => (a.digest = "sha256:" + "b".repeat(64)),
-  ];
-  for (const [i, m] of muts.entries()) {
-    const a: any = artifact();
-    m(a);
-    if (i < muts.length - 1)
-      a.digest = r24V5ArtifactDigest((({ digest, ...x }: any) => x)(a));
-    expect(() => verifyR24V5LiveArtifact(a, replay, derive, trust)).toThrow();
+    (a: V5LiveArtifact) => (a.negativeControls[0]!.mutatedRecordDigest = d),
+    (a: V5LiveArtifact) =>
+      (a.cells[0]!.evidenceRecord.sourceCustody!.provider.signature = "forged"),
+  ]) {
+    const a = artifact();
+    mutate(a);
+    signResult(a);
+    expect(() => verifyR24V5LiveArtifact(a, trust)).toThrow();
   }
   expect(() =>
-    verifyR24V5LiveArtifact(
-      artifact(),
-      replay,
-      (c: any) => ({
-        ...derive(c),
-        receiptAuthenticated: false,
-      }),
-      trust,
-    ),
-  ).toThrow("derivation replay");
+    verifyR24V5LiveArtifact(artifact(), {
+      ...trust,
+      resolveReceiptKey: () => "wrong-key-wrong-key-wrong-key-wrong",
+    }),
+  ).toThrow();
+  const collapsed = artifact();
+  collapsed.resultAuthorization.signature = sign(
+    null,
+    Buffer.from(r24V5ResultAuthorizationDigest(collapsed)),
+    planner.privateKey,
+  ).toString("base64");
+  const { digest: _digest, ...collapsedBody } = collapsed;
+  collapsed.digest = r24V5ArtifactDigest(collapsedBody);
+  expect(() =>
+    verifyR24V5LiveArtifact(collapsed, {
+      ...trust,
+      resultPublicKeyPem: `${plannerPublic}\n`,
+    }),
+  ).toThrow("independent result authorization");
+});
+
+test("rejects any covered plan mutation without the planner key", () => {
+  const a = artifact();
+  a.plan.launcherSpecDigest = "sha256:" + "b".repeat(64);
+  signResult(a);
+  expect(() => verifyR24V5LiveArtifact(a, trust)).toThrow(
+    "invalid matched plan",
+  );
 });

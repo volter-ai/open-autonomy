@@ -121,6 +121,8 @@ describe("R24 V5 evidence-backed runner primitives", () => {
     expect(r.wallMs).toBeGreaterThan(0);
     expect(r.cpuMs).toBeGreaterThanOrEqual(0);
     expect(r.maxRssKiB).toBeGreaterThanOrEqual(0);
-    expect(r.provenance).toContain("/proc");
+    expect(r.method).toContain("/proc");
+    expect(r.raw.rootPid).toBe(p.pid);
+    expect(r.raw.samples.length).toBeGreaterThanOrEqual(2);
   });
 });

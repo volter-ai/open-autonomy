@@ -401,9 +401,10 @@ PM's own doctrine, not an operator action.
 ### 3. Review the first PR yourself (this is the "babysit" step)
 
 Read the diff. This is the one PR in the whole lifecycle a human reads end-to-end before trusting the
-fleet's own \`agent-review\` gate. If the profile carries a \`human-approval\` required check, approve it on
-GitHub (a maintainer Approve on the current head SHA); otherwise merge directly once \`ci\`+\`agent-review\`
-are green:
+fleet's own \`agent-review\` gate. If the profile carries a \`human-approval\` required check, either submit a
+native maintainer Approve or comment \`/agent approve <full-current-head-sha>\` on the PR. The latter is the
+same human result and works when the agent proposed through your GitHub identity. Otherwise merge directly
+once \`ci\`+\`agent-review\` are green:
 
 \`\`\`bash
 gh pr merge <pr-number> --squash

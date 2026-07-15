@@ -1,0 +1,6 @@
+#!/usr/bin/env node
+"use strict";
+const fs=require("node:fs"),crypto=require("node:crypto"),path=require("node:path");
+const args=process.argv.slice(2),take=k=>{const i=args.indexOf(k);return i<0?null:args[i+1]},mode=take("--mode"),binding=JSON.parse(take("--binding")??"null"),root=process.env.OA_R24_IDEMPOTENCY_ROOT;
+if(!["success","failure","timeout"].includes(mode)||!binding||!/^[a-f0-9]{64}$/.test(binding.nonce)||!root||!path.isAbsolute(root))throw Error("outcome worker input invalid");fs.mkdirSync(root,{recursive:true,mode:0o700});const file=path.join(root,binding.nonce+".json"),body={schema:"autonomy.r24-deterministic-outcome.v5",nonce:binding.nonce,mode,bindingDigest:`sha256:${crypto.createHash("sha256").update(JSON.stringify(binding)).digest("hex")}`};let canonical;try{const fd=fs.openSync(file,"wx",0o600);canonical=JSON.stringify(body);fs.writeFileSync(fd,canonical);fs.closeSync(fd)}catch(e){if(e.code!=="EEXIST")throw e;canonical=fs.readFileSync(file,"utf8");if(canonical!==JSON.stringify(body))throw Error("idempotency equivocation")}
+process.stdout.write(`OA_R24_OUTCOME ${canonical}\n`);if(mode==="success")process.exit(0);if(mode==="failure")process.exit(17);setInterval(()=>{},1000);

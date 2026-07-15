@@ -36,11 +36,9 @@ jobs:
     outputs:
       review_pr: ${{ steps.review_target.outputs.pr }}
       review_sha: ${{ steps.review_target.outputs.sha }}
-    permissions: { contents: read, issues: read, pull-requests: read, id-token: write }
+    permissions: { contents: read, issues: read, pull-requests: read }
     env:
       GH_TOKEN: ${{ github.token }}
-      MODEL_PROXY_URL: ${{ vars.MODEL_PROXY_URL }}
-      MODEL_PROXY_OIDC_AUDIENCE: ${{ vars.MODEL_PROXY_OIDC_AUDIENCE || 'volter-agent-model-proxy' }}
       TARGET_REF: ${{ github.event.issue.number || github.event.inputs.issue_number || github.event.pull_request.number }}
       SUBJECT_TEXT: ${{ github.event.comment.body || github.event.issue.body }}
       ACTOR_ROLE: ${{ github.event.comment.author_association }}
@@ -81,8 +79,6 @@ jobs:
           ref="${TARGET_REF}"
           if [ -z "$ref" ]; then echo "no subject.ref forwarded by the trigger"; exit 1; fi
           gh api "repos/${{ github.repository }}/issues/$ref" --jq '{number,title,body,user:{login:.user.login},labels:[.labels[].name]}' > .agent-run/issue.json
-      - name: Mint bounded model token
-        run: bun scripts/model-proxy-mint.ts --run-id "ir-reviewer-${{ github.run_id }}" --models "${{ vars.PUBLIC_AGENT_MODEL || 'deepseek/deepseek-v4-flash' }}" --max-usd-cents "${{ vars.PUBLIC_AGENT_MAX_USD_CENTS || '200' }}" --max-requests "${{ vars.PUBLIC_AGENT_MAX_REQUESTS || '250' }}" --issue .agent-run/issue.json
   reviewer:
     needs: setup
     runs-on: ubuntu-latest
@@ -129,6 +125,9 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: bun scripts/review-prerequisites.ts --pr "${{ needs.setup.outputs.review_pr }}" --sha "${{ needs.setup.outputs.review_sha }}" --result .agent-run/artifacts/result.json --github-output "$GITHUB_OUTPUT" --parallel human-approval
+      - name: Mint bounded model token
+        if: steps.review_prerequisites.outputs.run_model == 'true'
+        run: bun scripts/model-proxy-mint.ts --run-id "ir-reviewer-${{ github.run_id }}" --models "${{ vars.PUBLIC_AGENT_MODEL || 'deepseek/deepseek-v4-flash' }}" --max-usd-cents "${{ vars.PUBLIC_AGENT_MAX_USD_CENTS || '200' }}" --max-requests "${{ vars.PUBLIC_AGENT_MAX_REQUESTS || '250' }}" --issue .agent-run/issue.json
       - name: install Claude Code CLI
         if: steps.review_prerequisites.outputs.run_model == 'true'
         run: npm install -g "@anthropic-ai/claude-code@${PUBLIC_AGENT_CITED_VERSION:-latest}" && claude --version
@@ -157,7 +156,7 @@ jobs:
           retention-days: 30
           if-no-files-found: ignore
       - name: Release the run slot (revoke minted token)
-        if: always()
+        if: always() && steps.review_prerequisites.outputs.run_model == 'true'
         run: |
           for i in 1 2 3 4 5; do bun scripts/model-proxy-revoke.ts --run-id "ir-reviewer-${{ github.run_id }}" && exit 0 || sleep 3; done
           echo "::warning::run-slot revoke failed after retries for ir-reviewer-${{ github.run_id }}; slot will auto-reap at token TTL"

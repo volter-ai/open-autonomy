@@ -5,7 +5,8 @@
 ### Fixed
 
 - Reviewer runs now wait for live required checks before model judgment, route mechanical failures back
-  to rework instead of parking them on a person, and require a durable typed ask for genuine human decisions.
+  to rework instead of parking them on a person, allocate no bounded model run when those checks fail, and
+  require a durable typed ask for genuine human decisions.
 
 ## 0.4.2
 

@@ -169,10 +169,17 @@ describe('compileGithub — merge is a code-host resource, not engine output', (
     expect(modelJob).toContain(`"$id":"${REVIEW_RESULT_SCHEMA_ID}"`);
     expect(modelJob).toContain('bun scripts/review-prerequisites.ts');
     expect(modelJob).toContain("if: steps.review_prerequisites.outputs.run_model == 'true'");
+    expect(modelJob).toContain('Mint bounded model token');
     expect(modelJob.indexOf('review-prerequisites.ts')).toBeLessThan(modelJob.indexOf('model-proxy-exchange.ts'));
+    expect(modelJob.indexOf('review-prerequisites.ts')).toBeLessThan(modelJob.indexOf('Mint bounded model token'));
+    expect(modelJob.indexOf('Mint bounded model token')).toBeLessThan(modelJob.indexOf('install Claude Code CLI'));
+    expect(modelJob).toContain("if: always() && steps.review_prerequisites.outputs.run_model == 'true'");
     expect(out.generated['scripts/review-prerequisites.ts']).toContain('live base');
     const setupJob = wf.slice(wf.indexOf('  setup:'), wf.indexOf('  reviewer:'));
     expect(setupJob).not.toContain('statuses: write');
+    expect(setupJob).not.toContain('id-token: write');
+    expect(setupJob).not.toContain('MODEL_PROXY_URL');
+    expect(setupJob).not.toContain('Mint bounded model token');
     expect(setupJob).toContain('Bind review target');
     expect(effectJob).toContain("if: always() && needs.setup.result == 'success'");
     expect(effectJob).toContain('statuses: write');
@@ -190,8 +197,13 @@ describe('compileGithub — merge is a code-host resource, not engine output', (
       },
     };
     const wf = compileGithub(advisory).generated['.github/workflows/verifier.yml'] ?? '';
+    const setupJob = wf.slice(wf.indexOf('  setup:'), wf.indexOf('  verifier:'));
     expect(wf).toContain('statuses: write');
     expect(wf).not.toContain('review_effect:');
+    expect(setupJob).toContain('id-token: write');
+    expect(setupJob).toContain('MODEL_PROXY_URL');
+    expect(setupJob).toContain('Mint bounded model token');
+    expect(wf).toContain('if: always()');
   });
 
   test('a merge reviewer without a subject.ref binding is rejected instead of emitting a decorative finalizer', () => {

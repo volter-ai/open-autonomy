@@ -6,13 +6,14 @@ B0–P13 and Organization Runtime R0–R28; it does not reopen their bounded eng
 
 ## Mission and exact completion claim
 
-The phase is complete only when a preregistered, structurally diverse corpus of real autonomy systems has a total
-source-fact disposition into canonical Organization IR, and every preregistered organization × substrate-composition
+The phase is complete only when preregistered source-system and substrate-composition populations have independent
+semantic inventories, a structurally diverse development corpus and frozen holdout corpus have total source-fact
+dispositions into canonical Organization IR, and every preregistered organization × composition × mandatory-profile
 cell produces exactly one independently replayable result:
 
 1. a deployment with an explicit preservation certificate;
 2. a deployment with explicit typed losses accepted by the selected preservation profile; or
-3. an incompatibility result with a verified minimal unsatisfied core.
+3. an incompatibility result with a core labelled and verified as `minimal`, `bounded-irreducible`, or `explanatory`.
 
 For source system `A`, encoding `E`, substrate composition `Σ`, compiler `C`, native execution `run`, portable lifting
 `L`, selected observations `O`, and equivalence relation `≈O`:
@@ -26,8 +27,11 @@ C(E(A), Σ, O) =
   incompatible core K             otherwise
 ```
 
-The quantified claim must name its finite target population and sampling rule. “Essentially any” may be published
-only as a measured coverage statement over that population, never as unbounded universality.
+U0 freezes numeric closure thresholds before results exist. Diagnostic matrix completeness alone never closes this
+phase: thresholds must separately cover canonical representability, mandatory observations, per-system coverage,
+compatible compositions, independent backend-family portability, certified compilation, and executed preservation.
+The quantified claim must name its finite target populations and sampling rules. “Essentially any” may be published
+only as a measured coverage statement over those populations, never as unbounded universality.
 
 ## Non-claims
 
@@ -44,6 +48,7 @@ claim independently reproducible.
 Every checkpoint must bind these machine-readable units:
 
 - `SourceFact`: one semantically meaningful native-system fact with provenance;
+- `SourceInventory`: an independently owned, frozen set of source facts and mandatory observations;
 - `Disposition`: `preserved | derived | lowered | extension | opaque | abstracted | unsupported | inexpressible`;
 - `ObservationProfile`: selected observations, equivalence, tolerated variance, and forbidden loss;
 - `FacetRequirement`: required behavior, authority, cardinality, topology, and lifecycle;
@@ -53,6 +58,7 @@ Every checkpoint must bind these machine-readable units:
 - `PreservationCertificate` or `IncompatibilityCore`;
 - `ExecutionComparison`: source/native and compiled portable observations;
 - `CoverageReport`: denominators, weights, uncertainty, exclusions, and all cell outcomes.
+- `CreditPolicy`: the frozen rule determining which dispositions count toward which coverage numerator.
 
 Global invariants:
 
@@ -66,6 +72,14 @@ Global invariants:
 8. lifting cannot use compiler-intended outcomes as observed evidence;
 9. all cross-product cells are populated; no blank, inferred, or marketing-valued cells;
 10. all residual facts are triaged before a coverage claim is published.
+11. source inventories are frozen independently of the frontend that must satisfy them;
+12. `opaque`, provider-local `extension`, `abstracted`, `unsupported`, and `inexpressible` never earn canonical
+    representability credit;
+13. source-mandatory observations cannot be weakened by a selected observation profile;
+14. incompatible cells prove diagnostic honesty, not portability or successful compilation;
+15. frozen-core holdout scores are retained before any extension or language revision;
+16. static, conformance-tested, native-executed, and independently reproduced assurances have separate numerators;
+17. no finite prompt/harness probe certifies behavior outside its declared observation and model domain.
 
 Each checkpoint requires positive, negative, minimal-counterexample, mutation, version-skew, and resource-bound tests;
 a skeptical review; machine-indexed evidence; and a clean full repository gate.
@@ -90,14 +104,14 @@ Assurance class and independently replayable evidence:
 
 | Checkpoints | Required lenses | Concrete question |
 |---|---|---|
-| U0–U3 | measurement, sampling, ontology, epistemic, adversarial | Is the claimed population fixed, representative, and immune to denominator gaming? |
-| U1–U2 | semantics, type theory, algebra, refinement, information flow | What observations distinguish systems, and is every source fact disposition total and honest? |
-| U4–U5 | language translation, evolution, provenance, interoperability | Does importing preserve native meaning rather than merely parse syntax? |
-| U6–U10 | algebra, constraint solving, distributed systems, security, lifecycle | Is a component composition coherent, constructible, and safely owned across failures? |
-| U11 | programming-language semantics, context, security, HCI | Do instructions, skills, tools, memory, and harnesses preserve operational meaning? |
-| U12–U13 | compiler construction, modularity, refinement, supply chain | Can independent providers implement the contract without private coupling? |
-| U14–U16 | differential testing, causal/provenance, temporal logic, migration | Does native execution support the claimed preservation across the whole matrix? |
-| U17–U18 | statistics, measurement validity, reproducibility, adversarial review | Is the published universality claim no broader than the replayable evidence? |
+| U0–U2 | measurement, sampling, ontology, epistemic, adversarial | Are both populations and every threshold frozen and immune to denominator gaming? |
+| U3–U5 | semantics, type theory, refinement, information flow, measurement | Which native facts and observations are mandatory, independently inventoried, and eligible for credit? |
+| U6–U8 | language translation, evolution, provenance, interoperability | Does importing preserve native meaning, including on an untouched frozen-core holdout? |
+| U9–U13 | algebra, constraint solving, distributed systems, security, lifecycle | Is a composition coherent, constructible, and safely owned across failures? |
+| U14 | programming-language semantics, context, security, HCI | What bounded meaning is preserved across prompts, skills, tools, memory, and harnesses? |
+| U15–U16 | compiler construction, modularity, refinement, supply chain | Can independent providers implement the contract without private coupling? |
+| U17–U19 | differential testing, causal/provenance, temporal logic, migration | Does stratified native execution support each assurance-class claim? |
+| U20–U22 | statistics, measurement validity, reproducibility, adversarial review | Do results pass frozen thresholds and reproduce independently without product inflation? |
 
 Formal language is evidence-bearing only when variables, domains, relations, and falsifiers are executable or
 machine-indexed. A diagram or analogy is not a proof artifact.
@@ -107,231 +121,214 @@ machine-indexed. A diagram or analogy is not a proof artifact.
 The authoritative graph is [`organization-universality-punchlist.json`](./organization-universality-punchlist.json).
 
 ```text
-U0 → U1 → U2 → U3
-U2 → U4 → U5
-U1/U2 → U6 → U7 → U8 → U9 → U10
-U1/U4/U8 → U11
-U7/U8/U9/U11 → U12
-U3/U5/U10/U12 → U13 → U14 → U15 → U16 → U17 → U18
+U0 → U1 → U2 → U3 → U4 → U5
+U4/U5 → U6 → U7; U1/U3/U5/U7 → U8
+U2/U3 → U9 → U10 → U11 → U12 → U13
+U3/U6/U11 → U14
+U10/U11/U12/U14 → U15
+U2/U8/U13/U15 → U16 → U17 → U18 → U19 → U20 → U21 → U22
 ```
 
-## U0. Quantified target domain and claim grammar
+## U0. Claim grammar, metrics, and numeric closure thresholds
+
+Freeze exact formulas and minimum thresholds for canonical fact coverage, mandatory-observation coverage, per-system
+coverage, compatibility opportunity, independent-family portability, certified compilation, native execution, and
+violations. “90%” must name its numerator, denominator, weights, population, and assurance class. Diagnostic matrix
+completeness is always 100% or the campaign is invalid, but never contributes to portability credit. Threshold or
+formula mutation creates a new campaign version.
+
+U0 may strengthen but cannot lower these campaign floors:
+
+| Metric | Required floor |
+|---|---:|
+| Diagnostic matrix accounting | 100% of preregistered cells |
+| Canonically represented source facts, population-weighted | ≥ 90% |
+| Canonically represented source facts in every included system | ≥ 70% |
+| Preserved mandatory observations, population-weighted | ≥ 95% |
+| Preserved mandatory observations in every included system | ≥ 80% |
+| Systems compiling to ≥2 independently implemented compatible composition families | ≥ 90% |
+| Certified compilation among independently adjudicated compatible cells | ≥ 95% |
+| Native-executed preservation among executed cells | ≥ 95%, with zero unexplained violations |
+| Execution sampling | every source/backend stratum and ≥30% of compatible cells |
+| Frozen-core holdout degradation versus development score | ≤10 percentage points per headline metric |
+| Silent loss, result-dependent exclusion, critical unresolved inventory conflict | exactly 0 |
 
-Define the autonomy-system population, inclusion/exclusion rule, unit of analysis, system/version pinning, structural
-strata, and admissible coverage claims.
+The independent compatibility adjudication uses frozen native requirements and component contracts; the compiler
+cannot improve its success denominator by declaring difficult cells incompatible. Any floor that is mathematically
+undefined for the frozen population invalidates the campaign design before implementation rather than becoming
+vacuously satisfied.
 
-Acceptance:
+## U1. Source-system population
 
-- The domain is “autonomous software organizations,” not all workflow or agent systems.
-- Inclusion is reproducible from public facts and does not select only systems already easy to encode.
-- Popularity and structural-diversity strata are recorded separately.
-- “90%” identifies whether it weights systems, source facts, required observations, or compilation cells.
-- Mutation tests reject denominator changes, post-result exclusions, and ambiguous system versions.
+Freeze the finite population of autonomous software-organization systems, versions, inclusion/exclusion rule,
+popularity weights, structural strata, licenses, and selection provenance. Distinguish `SourceSystem`,
+`SourceOrganization`, `NativePlatform`, and `BehaviorHarness`. Maintain development, frozen holdout, and long-tail
+audit corpora. Include all systems above the preregistered adoption rule plus structural forcing functions; no
+post-result exclusions.
 
-## U1. Observation and preservation-profile calculus
+The adoption census must include every in-domain public system with at least 1,000 GitHub stars at the frozen census
+time, plus non-GitHub systems only when comparable adoption is supported by a preregistered independent measure.
+Stars select the population but never weight semantic facts. Unpopular vendor provenance alone does not qualify a
+system. A separately reported forcing-function supplement covers semantic families missing from the adoption census.
 
-Define versioned profiles such as `work-lifecycle`, `authority-policy`, `human-handoff`, `prompt-skill-context`,
-`failure-recovery`, `economic`, and `full-declared`.
+## U2. Substrate-component population and composition corpus
 
-Acceptance:
+Freeze `SubstrateComponent`, remote-service, and admissible `SubstrateComposition` populations before backend work.
+Cover control/work, scheduling, execution/session, model, interaction, storage, identity/secrets, policy, observation,
+and lifecycle families. Predeclare meaningful compositions, exact versions, forcing features, multi-provider cells,
+weights, and one holdout composition family. Arbitrary nonsensical combinations remain outside the opportunity-rate
+denominator but their exclusion rule is frozen.
 
-- Each profile declares observables, equivalence, tolerated variance, forbidden loss, and unknown handling.
-- Profile refinement and composition have executable laws; conflicting profiles yield a typed conflict.
-- Timing, fairness, nondeterminism, and provider-local behavior cannot disappear behind generic equivalence.
-- A certificate can be independently replayed from profile, source observations, and lifted target observations.
+The composition corpus must include at least five independently implemented structural families and at least two
+compositions with three independently owned facet providers; product aliases or two configurations of one engine do
+not count as independent families.
 
-## U2. Source-fact inventory and total disposition ledger
+## U3. Mandatory observation and preservation calculus
 
-Create the canonical fact grammar and ledger used for every imported system.
+For each source-system stratum define source-mandatory observations that no user profile can weaken; optional profiles
+may only strengthen them. Versioned profiles declare observables, equivalence, variance, forbidden loss, unknowns,
+refinement, and conflicts. Timing, fairness, nondeterminism, authority, failure, prompt/context, and provider-local
+behavior cannot disappear behind eventual success. Certificates replay exact source and lifted observations.
 
-Acceptance:
+## U4. Independent native semantic inventories
 
-- Facts cover configuration, runtime behavior, authority, failure, lifecycle, prompt/context, extension, and omission.
-- Every fact has stable identity, source citation/digest, semantic scope, and exactly one disposition.
-- `opaque` preserves invocation boundaries but makes no internal semantic claim.
-- `abstracted` requires proof that the selected observation profile cannot distinguish the removed detail.
-- `unsupported` and `inexpressible` remain in coverage denominators under preregistered rules.
+An authority independent of each frontend freezes every `SourceInventory` from official specification, native schema,
+runtime probes, and source behavior where needed. Facts cover configuration, runtime, authority, failure, lifecycle,
+prompt/context, extensions, and omissions. Every fact has identity, provenance, criticality, and mandatory observations.
+Triangulation conflicts remain explicit; a frontend cannot add/remove facts from the inventory it must satisfy.
 
-## U3. Preregistered ecosystem corpus
+## U5. Disposition-credit and anti-opacity policy
 
-Freeze a minimum 15-system corpus spanning at least: controller/kanban, durable workflow, graph runtime, actor system,
-coding-session harness, GitHub-native automation, Kubernetes/operator reconciliation, multi-agent conversation, and
-human-heavy coordination.
+Freeze the total disposition grammar and coverage credit lattice. Canonical `preserved`, `derived`, and `lowered` may
+earn canonical credit. Portable standardized extensions, provider-neutral single-implementation extensions,
+provider-local extensions, opaque behaviors, abstractions, unsupported, and inexpressible facts are reported in
+separate noncanonical strata. Opaque invocation proves interoperation only. Abstraction requires observational
+indistinguishability but earns no canonical representation credit. Every frozen fact receives exactly one disposition.
 
-Acceptance:
+## U6. Frontend/importer protocol and TCK
 
-- At least five systems exceed the declared adoption threshold and at least five are structural forcing functions.
-- Exact versions, native examples, licenses, source evidence, and selection rationale are content-addressed.
-- One holdout system family is chosen before frontend and backend completion.
-- Corpus changes create a new campaign version rather than rewriting results.
+Native configurations, APIs, graphs, workflows, and opaque boundaries become canonical IR plus a disposition ledger
+through deterministic plugins with version negotiation, provenance, diagnostics, and namespace isolation. Missing
+native evidence never becomes a guarantee. A clean-room frontend passes a public TCK and cannot read expected corpus
+outcomes or modify inventories.
 
-## U4. Frontend/importer protocol
+## U7. Development-corpus encodings
 
-Define how native configurations, APIs, graphs, workflows, and retained opaque behaviors become canonical IR plus a
-source-fact ledger.
+Encode characteristic native examples for the development corpus against frozen U4 inventories. Every encoding is
+valid IR with zero unowned facts. Three systems receive independent dual encodings and triaged differentials. Native
+baseline executions cover defining success and failure behaviors before target compilation begins.
 
-Acceptance:
+## U8. Frozen-core holdout encodings
 
-- Frontends are plugins with version negotiation, provenance, diagnostics, extensions, and deterministic output.
-- Import never interprets absent native evidence as a default semantic guarantee.
-- Native extensions are namespaced and cannot silently affect canonical passes.
-- A clean-room third-party frontend passes a published frontend TCK.
+Encode source and composition holdouts without changing U0–U6. Publish the frozen-core result first. Any required
+language extension starts a new campaign/version and produces a separate post-extension score; it cannot improve the
+original holdout numerator. Holdout access and chronology are independently attested.
 
-## U5. Canonical source encodings
+## U9. Substrate facet algebra
 
-Implement encodings/importers for the U3 corpus.
+Each facet declares behavior, cardinality, authority, replication, ordering, consistency, failure, and lifecycle laws.
+Composition defines identity, event, transaction, credential, and failure boundaries. Exclusive-authority collision,
+retry ambiguity, teardown gaps, and cyclic bootstrap dependencies are rejected. Algebraic laws are claimed only with
+executable side conditions and counterexamples.
 
-Acceptance:
+## U10. Component advertisements and constructive requirements
 
-- Every system has at least one characteristic native example exercising its distinctive semantics.
-- Every example produces valid canonical IR and a zero-unowned-fact ledger.
-- At least three systems are encoded independently by two authors or implementations and differentials are triaged.
-- The holdout family is encoded without changing U0–U2 semantics; required extensions are explicit evidence.
+Advertisements bind implementation/version, semantic facet predicates, assumptions, limits, exclusions, and external
+evidence. False, stale, aliased, or self-attested advertisements fail closed. Partial components compose only when the
+union closes every requirement and link obligation; capability-name strings alone are insufficient.
 
-## U6. Substrate facet algebra
+## U11. Portable composition/link IR
 
-Define facets independently of products: control/work, scheduling, execution/session, model, interaction, storage,
-identity/secrets, policy, observation, and lifecycle.
+Bind stable identities, endpoints, credential references, schemas, routes, correlations, retry ownership, delivery,
+health, observation, upgrade, rollback, and teardown. Cross-component effects specify prepare/delivery/ack and
+idempotency boundaries. Secret values never enter portable artifacts. Link plans are deterministic, content-addressed,
+diffable, and independently validated.
 
-Acceptance:
+## U12. Solver soundness, completeness boundary, and explanations
 
-- Each facet declares cardinality, authority, replication, ordering, failure, consistency, and lifecycle laws.
-- Composition defines identity, event, transaction, credential, and failure boundaries.
-- Exclusive-authority collisions, retry ambiguity, teardown gaps, and cyclic bootstrap dependencies are rejected.
-- Associativity/commutativity/idempotence are claimed only where property-tested with stated side conditions.
+Every accepted plan replay-satisfies all semantic, topology, policy, resource, and link predicates. Bounded finite
+cases are differentially checked against exhaustive enumeration. Rejections declare `minimal`,
+`bounded-irreducible`, or `explanatory`; only the first proves subset minimality, and each label has a verifier. The
+decidable fragment is explicit and other cases return `unknown`. Preferences cannot turn incompatibility into success.
 
-## U7. Component advertisements and requirement contracts
+## U13. Multi-substrate lifecycle and failure semantics
 
-Upgrade capability advertisements into constructive facet contracts.
+Apply, observe, reconcile, upgrade, rollback, drain, and destroy operate over the composition. Ownership is total for
+resources, credentials, state, and effects. Crash tests cover every cross-component effect boundary with no duplicate
+acknowledged effect. Partial teardown, split authority, stale epoch, and incompatible rolling versions fail safe.
 
-Acceptance:
+## U14. Bounded prompt, skill, context, memory, tool, and harness semantics
 
-- Advertisements bind implementation/version, supplied facets, assumptions, limits, exclusions, and evidence.
-- Requirements carry semantic predicates rather than capability-name strings alone.
-- False, stale, aliased, or self-attested advertisements fail closed.
-- Partial implementations may compose only when the union closes all requirements and link obligations.
+Canonical contracts cover instruction precedence, assembly, skill discovery/invocation, tool/MCP schemas, memory,
+continuation, cancellation, timeout, extraction, and model binding. Byte, structural, and bounded behavioral
+preservation are separate. Three dissimilar harnesses run preregistered adversarial probes. Certificates explicitly
+exclude behavior outside the fixed model, harness, context, observation, and probe domains.
 
-## U8. Portable composition/link IR
+## U15. Public backend and linker SDK
 
-Create the intermediate representation between solved deployment and native backend plans.
+Backends consume only published canonical, solved, and link artifacts. Provider packages supply lowering, application,
+lifting, lifecycle, and conformance hooks; SDK compatibility and provider conformance versions differ. A clean-room
+backend compiles, links, runs, lifts, and destroys without private core imports.
 
-Acceptance:
+## U16. Structurally diverse backend corpus
 
-- It binds stable identities, endpoints, credentials, schemas, routes, correlations, retries, delivery, health,
-  observability, upgrades, rollback, and teardown ownership.
-- Secret values never enter portable artifacts; only authority-bound references do.
-- Cross-component effects specify prepare/delivery/acknowledgement and idempotency boundaries.
-- Link plans are deterministic, content-addressed, diffable, and independently validateable.
+Implement the frozen U2 corpus: at least five independently shaped families, including real Hermes and Paperclip plus
+three forcing families. Each uses native control/execution paths, publishes exact profiles/losses/limits/versions, and
+has authenticated lifting. At least two deployments combine three independently owned facet providers. Canonical
+passes contain no backend-name branch.
 
-## U9. Solver soundness, completeness boundary, and explanations
+## U17. Complete diagnostic compilation matrix
 
-Acceptance:
+Populate every preregistered source × meaningful composition × mandatory-profile cell with certified success,
+permitted typed loss, labelled incompatibility core, unknown, or violation. No cell is omitted from aggregates.
+Report accounting completeness, compatibility opportunity, successful compilation, and independent-family portability
+separately; incompatibility earns only diagnostic-completeness credit.
 
-- Every accepted plan satisfies all facet, topology, policy, resource, and link predicates under replay.
-- Rejected finite cases return a verified minimal or declared irreducible unsatisfied core.
-- The solver states its decidable fragment and returns `unknown` outside it.
-- Differential testing against exhaustive enumeration covers bounded small compositions.
-- Optimization preferences cannot turn incompatibility into a lower-scored success.
+## U18. Stratified differential native execution
 
-## U10. Multi-substrate lifecycle and failure semantics
+Execute the preregistered sample of compatible cells across every source and backend stratum, including all cells needed
+by U0 execution thresholds. Compare authenticated source-native baselines with lifted compiled observations for success,
+refusal, timeout, retry, cancellation, human handoff, crash, recovery, and teardown. Static, conformance, native-run,
+and independent evidence remain separate. Every difference is preserved variance, permitted loss, violation, or open
+investigation; open investigations block the affected numerator.
 
-Acceptance:
+## U19. Round-trip, migration, and version-skew campaign
 
-- Apply, observe, reconcile, upgrade, rollback, drain, and destroy operate over a composition, not isolated components.
-- Ownership is total for spawned resources, credentials, durable state, and external effects.
-- Crash tests cover every cross-component effect boundary and restart with no duplicated acknowledged effect.
-- Partial teardown, split authority, stale epoch, and incompatible rolling-version cases fail safe.
+Where export exists, test native → IR → same native and native → IR → different composition. Lossless claims round-trip
+mandatory observations; lossy claims retain exact provenance. Cover frontend, IR, compiler, SDK, backend, and native
+version skew. Historical evidence remains interpretable and rollback works until an explicit irreversible boundary.
 
-## U11. Prompt, skill, context, memory, tool, and harness semantics
+## U20. Thresholded universality estimator and report
 
-Acceptance:
+Publish system-, fact-, mandatory-observation-, compatible-cell-, portability-, and executed-preservation coverage with
+frozen denominators, assurance strata, confidence intervals, family-cluster sensitivity, and holdout scores. Publish
+all dispositions and raw artifacts. UG6 passes only when every U0 threshold passes, violations are zero, silent loss is
+zero, and no result-dependent exclusion exists; otherwise the honest result is a failed universality campaign.
 
-- Canonical semantics cover instruction precedence, assembly order, skill discovery/invocation, tool schemas, MCP,
-  memory injection, continuation, cancellation, timeout, result extraction, and model/provider binding.
-- Byte preservation is distinguished from behavioral preservation.
-- Harness adapters publish semantic gaps and adversarial instruction-precedence tests.
-- At least three dissimilar harnesses execute matched behavior/context fixtures with dispositioned differences.
+## U21. Independent semantic reproduction
 
-## U12. Backend and linker SDK
+Independent operators reproduce a source inventory, frontend encoding, multi-provider link plan, native execution,
+preservation certificate, incompatibility core, holdout result, and final coverage calculation using public artifacts.
+A second implementation supplies at least one frontend and one backend. Reproduction differences are dispositions,
+not editorial notes, and unresolved critical differences block closure.
 
-Acceptance:
+## U22. Public product and legacy-cutover gate
 
-- A backend consumes only published compiler/link artifacts and SDK interfaces.
-- Provider packages supply lowering, application, lifting, lifecycle, and conformance hooks independently.
-- SDK compatibility and provider conformance versions are distinct.
-- A clean-room backend compiles, links, runs, lifts, and tears down without importing private core modules.
-
-## U13. Structurally diverse backend families
-
-Implement at least five independently shaped backend compositions, including the existing Hermes and Paperclip paths
-plus at least three of: durable workflow, graph runtime, Kubernetes/operator, GitHub-native, actor runtime, or
-standalone coding-harness composition.
-
-Acceptance:
-
-- Each uses its native control/execution path; a service twin may replace only declared remote dependencies.
-- Each publishes supported profiles, losses, limits, and exact version evidence.
-- At least two deployments combine three or more independently owned facet providers.
-- No backend-specific special case appears in canonical normalization or analysis.
-
-## U14. Complete source × composition compilation matrix
-
-Acceptance:
-
-- Every preregistered source encoding is compiled against every preregistered composition/profile cell.
-- Every cell ends in certified success, permitted typed loss, or verified incompatibility core.
-- Equivalent compositions produce equivalent portable link obligations modulo declared topology.
-- Matrix generation is deterministic and cannot omit failed cells from aggregate coverage.
-
-## U15. Differential native execution and causal lifting
-
-Acceptance:
-
-- Representative compatible cells run matched workloads on source-native and compiled deployments.
-- Lifted observations are derived only from authenticated native evidence.
-- Comparisons cover success, refusal, timeout, retry, cancellation, human handoff, crash, recovery, and teardown.
-- Every difference is assigned to preserved variance, permitted loss, violation, or unresolved investigation.
-
-## U16. Round-trip, migration, and version-skew campaign
-
-Acceptance:
-
-- Where native export exists: native → IR → same native and native → IR → different composition are tested.
-- Lossless claims round-trip selected observations; lossy claims preserve exact disposition provenance.
-- Frontend, IR, compiler, SDK, backend, and native-version skew is covered.
-- Migration preserves historical interpretation and supports rollback until an explicit irreversible boundary.
-
-## U17. Coverage estimator and universality report
-
-Acceptance:
-
-- Report system-, fact-, observation-, and cell-weighted coverage separately with denominators.
-- Publish preserved, derived, permitted-loss, incompatible, unsupported, inexpressible, unknown, and violation rates.
-- Confidence/sensitivity analysis covers corpus weighting and system-family clustering.
-- No “essentially any” or percentage claim exceeds its measured population and preservation profile.
-- All raw ledgers, matrices, certificates, incompatibility cores, and replay commands are published.
-
-## U18. Independent reproduction and release gate
-
-Acceptance:
-
-- An independent operator selects one encoded source and one compatible multi-provider composition from published
-  artifacts, compiles it, applies it, runs the fixture, verifies the certificate, and destroys it.
-- A second implementation reproduces at least one frontend or backend result using only public specifications/TCKs.
-- The released CLI exposes import, validate, plan, compile, apply, status, diff, migrate, and destroy for this path.
-- Legacy profile compilation is either a frontend to canonical IR or explicitly isolated with a migration plan.
-- The final review finds zero silent losses, blank cells, unowned facts, or unscoped universality claims.
+Release import, validate, plan, compile, apply, status, diff, migrate, and destroy for the proven path. Packages use
+public versioned SDKs rather than workspace/private imports. Legacy profiles either enter canonical IR through a
+frontend or remain explicitly isolated with a migration deadline. Product release cannot strengthen U20 semantic
+coverage, but the overall phase closes only when an external operator can reproduce a selected deployment end to end.
 
 ## Milestone gates
 
 | Gate | Checkpoints | Claim unlocked |
 |---|---|---|
-| UG1 — Claim gate | U0–U3 | The target population and meaning of preservation are fixed before results |
-| UG2 — Representation gate | U4–U5 | Real source systems have total, replayable encodings |
-| UG3 — Composition gate | U6–U10 | Compatible multi-provider deployments are constructively solvable and operable |
-| UG4 — Extensibility gate | U11–U12 | Behavioral assets and third-party backends have public semantic contracts |
-| UG5 — Cross-product gate | U13–U16 | Diverse backends compile and execute the preregistered source corpus |
-| UG6 — Universality gate | U17–U18 | A scoped coverage claim is quantified and independently reproducible |
+| UG1 — Claim gate | U0–U5 | Populations, thresholds, mandatory observations, inventories, and credit are frozen |
+| UG2 — Representation gate | U6–U8 | Development and frozen-core holdout systems have total replayable encodings |
+| UG3 — Composition gate | U9–U13 | Multi-provider deployments are constructively solvable and safely operable |
+| UG4 — Extensibility gate | U14–U15 | Behavioral assets and third-party providers have bounded public contracts |
+| UG5 — Cross-product gate | U16–U19 | Frozen backends compile, execute, and round-trip the source corpus |
+| UG6 — Universality gate | U20–U22 | Thresholded coverage is independently reproduced and publicly operable |
 
-No later gate may be used to retroactively change U0’s population, U1’s equivalence, or U3’s corpus. A new claim
-requires a new versioned campaign.
+No later gate may retroactively change U0 thresholds, U1/U2 populations, U3 mandatory observations, U4 inventories,
+or U5 credit. A new claim requires a new versioned campaign.

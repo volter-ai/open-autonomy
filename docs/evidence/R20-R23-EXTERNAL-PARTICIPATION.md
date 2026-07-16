@@ -1,8 +1,9 @@
 # R20–R23 external evidence participation manifest
 
-Status: required external evidence; none of the rows below is satisfied by a simulator, generated identity, local fixture,
-or self-attestation. This manifest does not close R20–R23. It defines the minimum evidence that must be collected and
-bound into their closure ledgers after the local property gates pass.
+Status: additive `external-validation` evidence. None of the rows below is satisfied by a simulator, generated
+identity, local fixture, service twin, or self-attestation. This manifest does not close or block the
+`twin-conformant-engineering` profile; it defines the stronger empirical claims that may be bound to the corresponding
+engineering closure after its local property and service-twin conformance gates pass.
 
 | Checkpoint | External authority or participant | Required observation | Acceptance boundary |
 |---|---|---|---|
@@ -18,10 +19,10 @@ bound into their closure ledgers after the local property gates pass.
 
 ## Dependency rule
 
-Evidence may be collected in parallel, but closure follows the normative DAG: R21 requires R20; R22 requires R20 and
-R21; R23 requires R20 and R22. A downstream study result can be retained while its checkpoint remains blocked on an
-inherited dependency. Closure scripts must reference immutable evidence digests, participant/public-key identifiers,
-provider revisions, and the applicable preregistrations.
+Evidence may be collected in parallel. Engineering closure follows the normative DAG independently of this manifest;
+an external-validation claim may be attached only after the corresponding engineering checkpoint and all of its
+dependencies are closed. Validation scripts must reference immutable engineering-evidence digests,
+participant/public-key identifiers, provider revisions, and the applicable preregistrations.
 
 ## Secret-handling rule
 

@@ -39,7 +39,7 @@ const sha = (bytes: string | Buffer) =>
   `sha256:${createHash("sha256").update(bytes).digest("hex")}`;
 const semanticDigest = (x: unknown) => sha(canonicalSemanticJson(x));
 const CANONICAL_PROGRESS_SOURCES: BenchProgressLedger["sources"] = [
-  { path: "docs/evidence/R20-R23-EXTERNAL-PARTICIPATION.md", sha256: "sha256:2970a3ca9d1a1578e7f64d679047b709f27c50319f7f9fd9d3b5ebf9d7aca33c", selector: "external-participation-rows", expectedCount: 9 },
+  { path: "docs/evidence/R20-R23-EXTERNAL-PARTICIPATION.md", sha256: "sha256:019c126201f86102ec1217748d6d1806f4f1bbcb12433d8634457f1aa86a205a", selector: "external-participation-rows", expectedCount: 9 },
   { path: "docs/evidence/R21-LIVE-CAMPAIGN.json", sha256: "sha256:ac567dec901f1951d09004ac7ec12ab5e306c35933fe154515a905649e373c92", selector: "residuals", expectedCount: 24 },
   { path: "docs/evidence/R22-EXTERNAL-CUSTODY-GATE.json", sha256: "sha256:54272e1eb14f52b70b8448bf8d3df81b37dec8b2b722e4f4e3831fc8eb5d1139", selector: "residuals", expectedCount: 1 },
   { path: "docs/evidence/R23-LOCAL-PROPERTY-GATE.json", sha256: "sha256:c20a51632de12f79fb8e12203f478943bc7aad5c05eb4d9a2d88de9740bd24db", selector: "dependency-residuals", expectedCount: 10 },

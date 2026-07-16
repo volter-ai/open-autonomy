@@ -10,7 +10,7 @@
   "sources": [
     {
       "path": "docs/evidence/R20-R23-EXTERNAL-PARTICIPATION.md",
-      "sha256": "sha256:2970a3ca9d1a1578e7f64d679047b709f27c50319f7f9fd9d3b5ebf9d7aca33c",
+      "sha256": "sha256:019c126201f86102ec1217748d6d1806f4f1bbcb12433d8634457f1aa86a205a",
       "selector": "external-participation-rows",
       "expectedCount": 9
     },

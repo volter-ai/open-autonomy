@@ -59,6 +59,11 @@
   ],
   "readinessEvidence": [
     {
+      "checkpoint": "R20",
+      "path": "docs/evidence/R20-VOLTER-STRUCTURAL-READINESS.json",
+      "sha256": "sha256:09622f6272ae16191c057ae682db9c83b411bea255700792421c1f42d4853306"
+    },
+    {
       "checkpoint": "R24",
       "path": "docs/evidence/R24-V5-STRUCTURAL-READINESS.json",
       "sha256": "sha256:6c3b7eef0f9a09eacc63bcf272c0db26ff763f4dd6e1a2b6f295342863263efc"
@@ -69,10 +74,22 @@
       "id": "R20",
       "state": "ready",
       "obligations": [
-        { "id": "R20-HCI-1", "assurance": "unknown" },
-        { "id": "R20-SEC-1", "assurance": "unknown" },
-        { "id": "R20-EPI-1", "assurance": "unknown" },
-        { "id": "R20-ADV-1", "assurance": "unknown" }
+        {
+          "id": "R20-HCI-1",
+          "assurance": "unknown"
+        },
+        {
+          "id": "R20-SEC-1",
+          "assurance": "unknown"
+        },
+        {
+          "id": "R20-EPI-1",
+          "assurance": "unknown"
+        },
+        {
+          "id": "R20-ADV-1",
+          "assurance": "unknown"
+        }
       ],
       "nextArtifact": {
         "id": "R20-SLACK-AND-USABILITY-CAMPAIGN",
@@ -88,11 +105,26 @@
       "id": "R21",
       "state": "blocked",
       "obligations": [
-        { "id": "R21-SRE-1", "assurance": "unknown" },
-        { "id": "R21-QUE-1", "assurance": "unknown" },
-        { "id": "R21-DIST-1", "assurance": "unknown" },
-        { "id": "R21-OPS-1", "assurance": "unknown" },
-        { "id": "R21-SEC-1", "assurance": "unknown" }
+        {
+          "id": "R21-SRE-1",
+          "assurance": "unknown"
+        },
+        {
+          "id": "R21-QUE-1",
+          "assurance": "unknown"
+        },
+        {
+          "id": "R21-DIST-1",
+          "assurance": "unknown"
+        },
+        {
+          "id": "R21-OPS-1",
+          "assurance": "unknown"
+        },
+        {
+          "id": "R21-SEC-1",
+          "assurance": "unknown"
+        }
       ],
       "nextArtifact": {
         "id": "R21-EIGHT-SERVICE-DISASTER-CAMPAIGN",
@@ -108,11 +140,26 @@
       "id": "R22",
       "state": "blocked",
       "obligations": [
-        { "id": "R22-MEA-1", "assurance": "unknown" },
-        { "id": "R22-STAT-1", "assurance": "unknown" },
-        { "id": "R22-ADV-1", "assurance": "unknown" },
-        { "id": "R22-PRIV-1", "assurance": "unknown" },
-        { "id": "R22-HUM-1", "assurance": "unknown" }
+        {
+          "id": "R22-MEA-1",
+          "assurance": "unknown"
+        },
+        {
+          "id": "R22-STAT-1",
+          "assurance": "unknown"
+        },
+        {
+          "id": "R22-ADV-1",
+          "assurance": "unknown"
+        },
+        {
+          "id": "R22-PRIV-1",
+          "assurance": "unknown"
+        },
+        {
+          "id": "R22-HUM-1",
+          "assurance": "unknown"
+        }
       ],
       "nextArtifact": {
         "id": "R22-HUMAN-CALIBRATION-AND-PRIVACY-BUNDLE",
@@ -128,10 +175,22 @@
       "id": "R23",
       "state": "blocked",
       "obligations": [
-        { "id": "R23-MEA-1", "assurance": "unknown" },
-        { "id": "R23-ACC-1", "assurance": "unknown" },
-        { "id": "R23-ECO-1", "assurance": "unknown" },
-        { "id": "R23-ADV-1", "assurance": "unknown" }
+        {
+          "id": "R23-MEA-1",
+          "assurance": "unknown"
+        },
+        {
+          "id": "R23-ACC-1",
+          "assurance": "unknown"
+        },
+        {
+          "id": "R23-ECO-1",
+          "assurance": "unknown"
+        },
+        {
+          "id": "R23-ADV-1",
+          "assurance": "unknown"
+        }
       ],
       "nextArtifact": {
         "id": "R23-REAL-HUMAN-AND-PROVIDER-ACCOUNTING-BUNDLE",
@@ -147,11 +206,26 @@
       "id": "R24",
       "state": "blocked",
       "obligations": [
-        { "id": "R24-EXP-1", "assurance": "unknown" },
-        { "id": "R24-REF-1", "assurance": "unknown" },
-        { "id": "R24-STAT-1", "assurance": "unknown" },
-        { "id": "R24-FALS-1", "assurance": "unknown" },
-        { "id": "R24-LOCK-1", "assurance": "unknown" }
+        {
+          "id": "R24-EXP-1",
+          "assurance": "unknown"
+        },
+        {
+          "id": "R24-REF-1",
+          "assurance": "unknown"
+        },
+        {
+          "id": "R24-STAT-1",
+          "assurance": "unknown"
+        },
+        {
+          "id": "R24-FALS-1",
+          "assurance": "unknown"
+        },
+        {
+          "id": "R24-LOCK-1",
+          "assurance": "unknown"
+        }
       ],
       "nextArtifact": {
         "id": "R24-LIVE-MATCHED-BUNDLE-V5",
@@ -167,10 +241,22 @@
       "id": "R25",
       "state": "blocked",
       "obligations": [
-        { "id": "R25-SEM-1", "assurance": "unknown" },
-        { "id": "R25-STAT-1", "assurance": "unknown" },
-        { "id": "R25-QUE-1", "assurance": "unknown" },
-        { "id": "R25-IDENT-1", "assurance": "unknown" }
+        {
+          "id": "R25-SEM-1",
+          "assurance": "unknown"
+        },
+        {
+          "id": "R25-STAT-1",
+          "assurance": "unknown"
+        },
+        {
+          "id": "R25-QUE-1",
+          "assurance": "unknown"
+        },
+        {
+          "id": "R25-IDENT-1",
+          "assurance": "unknown"
+        }
       ],
       "nextArtifact": {
         "id": "R25-HELDOUT-LIVE-CALIBRATION-V3",
@@ -186,10 +272,22 @@
       "id": "R26",
       "state": "blocked",
       "obligations": [
-        { "id": "R26-CSP-1", "assurance": "unknown" },
-        { "id": "R26-DEC-1", "assurance": "unknown" },
-        { "id": "R26-CAU-1", "assurance": "unknown" },
-        { "id": "R26-ADV-1", "assurance": "unknown" }
+        {
+          "id": "R26-CSP-1",
+          "assurance": "unknown"
+        },
+        {
+          "id": "R26-DEC-1",
+          "assurance": "unknown"
+        },
+        {
+          "id": "R26-CAU-1",
+          "assurance": "unknown"
+        },
+        {
+          "id": "R26-ADV-1",
+          "assurance": "unknown"
+        }
       ],
       "nextArtifact": {
         "id": "R26-CONSTRAINED-SEARCH-CERTIFICATE",
@@ -205,10 +303,22 @@
       "id": "R27",
       "state": "blocked",
       "obligations": [
-        { "id": "R27-CAU-1", "assurance": "unknown" },
-        { "id": "R27-STAT-1", "assurance": "unknown" },
-        { "id": "R27-SEC-1", "assurance": "unknown" },
-        { "id": "R27-PROV-1", "assurance": "unknown" }
+        {
+          "id": "R27-CAU-1",
+          "assurance": "unknown"
+        },
+        {
+          "id": "R27-STAT-1",
+          "assurance": "unknown"
+        },
+        {
+          "id": "R27-SEC-1",
+          "assurance": "unknown"
+        },
+        {
+          "id": "R27-PROV-1",
+          "assurance": "unknown"
+        }
       ],
       "nextArtifact": {
         "id": "R27-COMPLETE-CAUSAL-CANARY-BUNDLE",
@@ -224,12 +334,30 @@
       "id": "R28",
       "state": "blocked",
       "obligations": [
-        { "id": "R28-CTRL-1", "assurance": "unknown" },
-        { "id": "R28-ORG-1", "assurance": "unknown" },
-        { "id": "R28-SEC-1", "assurance": "unknown" },
-        { "id": "R28-REF-1", "assurance": "unknown" },
-        { "id": "R28-CAU-1", "assurance": "unknown" },
-        { "id": "R28-OPS-1", "assurance": "unknown" }
+        {
+          "id": "R28-CTRL-1",
+          "assurance": "unknown"
+        },
+        {
+          "id": "R28-ORG-1",
+          "assurance": "unknown"
+        },
+        {
+          "id": "R28-SEC-1",
+          "assurance": "unknown"
+        },
+        {
+          "id": "R28-REF-1",
+          "assurance": "unknown"
+        },
+        {
+          "id": "R28-CAU-1",
+          "assurance": "unknown"
+        },
+        {
+          "id": "R28-OPS-1",
+          "assurance": "unknown"
+        }
       ],
       "nextArtifact": {
         "id": "R28-LONG-RUNNING-CANONICAL-DOGFOOD-CAMPAIGN",

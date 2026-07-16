@@ -67,6 +67,46 @@ function requiredR24ReadinessPaths(root: string) {
       .map((path) => `bin/${path}`);
   return [...selectedCore, ...bin].sort();
 }
+const REQUIRED_R20_READINESS_PATHS = [
+  "scripts/generate-r20-readiness-evidence.ts", "package.json", "bun.lock",
+  "packages/core/src/organization-command-plane.ts", "packages/core/src/organization-command-plane.test.ts",
+  "packages/core/src/organization-command-transports.ts", "packages/core/src/organization-command-transports.test.ts",
+  "packages/core/src/organization-slack-http-runtime.ts", "packages/core/src/organization-slack-http-runtime.test.ts",
+  "packages/core/src/organization-slack-web-api-port.ts", "packages/core/src/organization-slack-volter-twin.test.ts",
+  "packages/core/src/organization-r20-external-campaign.ts", "packages/core/src/organization-r20-external-campaign.test.ts",
+  "packages/core/src/organization-r20-r23-external-readiness.ts", "packages/core/src/organization-r20-r23-external-readiness.test.ts",
+].sort();
+const R20_SIMULATION_PROVES = ["real Slack SDK compatibility", "threaded Web API delivery",
+  "provider-side metadata reconciliation", "accept-then-timeout duplicate suppression", "durable restart"];
+const R20_SIMULATION_LIMITS = ["live Slack request delivery", "real workspace credentials", "real human usability",
+  "keyboard accessibility", "screen-reader accessibility", "operator unfamiliarity"];
+const R20_CLOSURE_REQUIREMENTS = ["closed R10, R17, R18 and R19 evidence pins",
+  "externally administered live Slack workspace and app", "two authorized external participants plus a distinct unauthorized identity",
+  "independently attested unfamiliar, keyboard and screen-reader participant strata",
+  "complete signed real command, attack and recovery trial matrix accepted by the R20 external campaign verifier"];
+export function verifyR20ReadinessEvidence(root: string, evidence: any) {
+  if (evidence.checkpoint !== "R20" || evidence.closureClaim !== false ||
+      evidence.purpose !== "machine-reviewable implementation and Volter simulation readiness; never external Slack or human evidence" ||
+      evidence.simulation?.evidenceClass !== "simulated-local-substrate" || evidence.simulation?.provider !== "@volter/twin-slack" ||
+      semanticDigest(evidence.simulation.proves) !== semanticDigest(R20_SIMULATION_PROVES) ||
+      semanticDigest(evidence.simulation.doesNotProve) !== semanticDigest(R20_SIMULATION_LIMITS) ||
+      semanticDigest(evidence.stillRequiredForClosure) !== semanticDigest(R20_CLOSURE_REQUIREMENTS) ||
+      evidence.simulation.proves.some((x: string) => evidence.simulation.doesNotProve.includes(x)))
+    throw Error("R20 readiness evidence cannot prove closure");
+  const submitted = evidence.components.map((x: any) => x.path).sort();
+  if (new Set(submitted).size !== submitted.length || semanticDigest(submitted) !== semanticDigest(REQUIRED_R20_READINESS_PATHS))
+    throw Error("R20 readiness component inventory incomplete");
+  for (const component of evidence.components)
+    if (sha(readFileSync(join(root, component.path))) !== component.sha256)
+      throw Error(`R20 readiness component drift: ${component.path}`);
+  const pkg = JSON.parse(readFileSync(join(root, "package.json"), "utf8"));
+  if (semanticDigest(Object.keys(evidence.simulation.versions).sort()) !==
+      semanticDigest(["@slack/web-api", "@volter/twin", "@volter/twin-slack"]))
+    throw Error("R20 simulation dependency inventory incomplete");
+  for (const [name, version] of Object.entries(evidence.simulation.versions))
+    if (pkg.devDependencies?.[name] !== version) throw Error(`R20 simulation dependency drift: ${name}`);
+  return { closureClaim: false as const, components: submitted.length, evidenceClass: "simulated-local-substrate" as const };
+}
 export function verifyR24ReadinessEvidence(root: string, evidence: any) {
   if (
     evidence.checkpoint !== "R24" ||
@@ -232,7 +272,7 @@ export function verifyProgressLedger(root: string, ledger: ProgressLedger) {
     throw Error("imported residual inventory mismatch");
   if (
     !Array.isArray(ledger.readinessEvidence) ||
-    !ledger.readinessEvidence.length ||
+    semanticDigest(ledger.readinessEvidence.map(x => x.checkpoint).sort()) !== semanticDigest(["R20", "R24"]) ||
     new Set(ledger.readinessEvidence.map((x) => x.checkpoint)).size !==
       ledger.readinessEvidence.length
   )
@@ -244,7 +284,9 @@ export function verifyProgressLedger(root: string, ledger: ProgressLedger) {
     const evidence = JSON.parse(raw);
     if (evidence.checkpoint !== entry.checkpoint)
       throw Error(`readiness checkpoint mismatch: ${entry.path}`);
-    verifyR24ReadinessEvidence(root, evidence);
+    if (entry.checkpoint === "R20") verifyR20ReadinessEvidence(root, evidence);
+    else if (entry.checkpoint === "R24") verifyR24ReadinessEvidence(root, evidence);
+    else throw Error(`unsupported readiness checkpoint: ${entry.checkpoint}`);
   }
   return {
     status: "nonclosure-progress-verified" as const,

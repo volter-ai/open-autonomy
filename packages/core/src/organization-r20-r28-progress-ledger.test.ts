@@ -5,6 +5,7 @@ import { join } from "node:path";
 import {
   verifyProgressLedger,
   importProgressResiduals,
+  verifyR20ReadinessEvidence,
   verifyR24ReadinessEvidence,
   type ProgressLedger,
 } from "./organization-r20-r28-progress-ledger";
@@ -24,6 +25,7 @@ test("imports every bound partial-evidence residual while preserving unknown obl
   expect(result.status).toBe("nonclosure-progress-verified");
   expect(result.residuals).toHaveLength(74);
   expect(result.readinessEvidence).toEqual([
+    expect.objectContaining({ checkpoint: "R20" }),
     expect.objectContaining({ checkpoint: "R24" }),
   ]);
   expect(new Set(result.residuals.map((x) => x.checkpoint))).toEqual(
@@ -40,6 +42,24 @@ test("imports every bound partial-evidence residual while preserving unknown obl
       "R28",
     ]),
   );
+});
+
+test("rejects omission or drift in R20 implementation and Volter simulation readiness", () => {
+  const evidence = JSON.parse(readFileSync(join(root, "docs/evidence/R20-VOLTER-STRUCTURAL-READINESS.json"), "utf8"));
+  expect(verifyR20ReadinessEvidence(root, evidence)).toMatchObject({ components: 15, closureClaim: false,
+    evidenceClass: "simulated-local-substrate" });
+  const omitted = structuredClone(evidence); omitted.components.pop();
+  expect(() => verifyR20ReadinessEvidence(root, omitted)).toThrow("component inventory incomplete");
+  const lied = structuredClone(evidence); lied.closureClaim = true;
+  expect(() => verifyR20ReadinessEvidence(root, lied)).toThrow("cannot prove closure");
+  const drifted = structuredClone(evidence); drifted.components[0].sha256 = "sha256:" + "0".repeat(64);
+  expect(() => verifyR20ReadinessEvidence(root, drifted)).toThrow("component drift");
+  const contradictory = structuredClone(evidence); contradictory.simulation.proves.push("real human usability");
+  expect(() => verifyR20ReadinessEvidence(root, contradictory)).toThrow("cannot prove closure");
+  const replaced = structuredClone(evidence); replaced.stillRequiredForClosure = Array(5).fill("anything");
+  expect(() => verifyR20ReadinessEvidence(root, replaced)).toThrow("cannot prove closure");
+  const omittedDependency = structuredClone(evidence); delete omittedDependency.simulation.versions["@volter/twin"];
+  expect(() => verifyR20ReadinessEvidence(root, omittedDependency)).toThrow("dependency inventory incomplete");
 });
 
 test("fails closed on fabricated closure, omitted residual import, source drift, or upgraded assurance", () => {

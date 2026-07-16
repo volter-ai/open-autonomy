@@ -54,8 +54,8 @@ test("imports every bound partial-evidence residual while preserving unknown obl
 
 test("rejects omission or drift in R20 implementation and Volter simulation readiness", () => {
   const evidence = JSON.parse(readFileSync(join(root, "docs/evidence/R20-VOLTER-STRUCTURAL-READINESS.json"), "utf8"));
-  expect(verifyR20ReadinessEvidence(root, evidence)).toMatchObject({ components: 18, closureClaim: false,
-    evidenceClass: "simulated-local-substrate" });
+  expect(verifyR20ReadinessEvidence(root, evidence)).toMatchObject({ components: 22, closureClaim: false,
+    evidenceClass: "simulated-local-substrate", acquisitionClass: "external-evidence-acquisition" });
   const omitted = structuredClone(evidence); omitted.components.pop();
   expect(() => verifyR20ReadinessEvidence(root, omitted)).toThrow("component inventory incomplete");
   const lied = structuredClone(evidence); lied.closureClaim = true;
@@ -68,6 +68,8 @@ test("rejects omission or drift in R20 implementation and Volter simulation read
   expect(() => verifyR20ReadinessEvidence(root, replaced)).toThrow("cannot prove closure");
   const omittedDependency = structuredClone(evidence); delete omittedDependency.simulation.versions["@volter/twin"];
   expect(() => verifyR20ReadinessEvidence(root, omittedDependency)).toThrow("dependency inventory incomplete");
+  const inflatedAcquisition = structuredClone(evidence); inflatedAcquisition.acquisition.doesNotProve = [];
+  expect(() => verifyR20ReadinessEvidence(root, inflatedAcquisition)).toThrow("cannot prove closure");
 });
 
 test("rejects omission, drift, or closure inflation in R21 structural readiness", () => {

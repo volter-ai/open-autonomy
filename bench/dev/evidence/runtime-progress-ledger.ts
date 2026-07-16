@@ -77,10 +77,17 @@ const REQUIRED_R20_READINESS_PATHS = [
   "packages/core/src/organization-r20-r23-external-readiness.ts", "packages/core/src/organization-r20-r23-external-readiness.test.ts",
   "bench/dev/evidence/verify-external-campaign.ts", "bench/dev/evidence/verify-external-campaign.test.ts",
   "docs/evidence/R20-R28-EXTERNAL-INTAKE-SKEPTICAL-REVIEW.md",
+  "bench/dev/evidence/r20-acquisition.ts", "bench/dev/evidence/r20-acquisition-cli.ts", "bench/dev/evidence/r20-acquisition.test.ts",
+  "docs/evidence/R20-ACQUISITION-SKEPTICAL-REVIEW.md",
 ].sort();
 const R20_SIMULATION_PROVES = ["real Slack SDK compatibility", "threaded Web API delivery",
   "provider-side metadata reconciliation", "accept-then-timeout duplicate suppression", "durable restart"];
 const R20_SIMULATION_LIMITS = ["live Slack request delivery", "real workspace credentials", "real human usability",
+  "keyboard accessibility", "screen-reader accessibility", "operator unfamiliarity"];
+const R20_ACQUISITION_PROVES = ["registration and participant key separation", "exact preregistered trial request domain",
+  "parallel participant-bound signed response custody", "complete-before-collection gating", "restart-safe exact campaign assembly",
+  "production R20 verifier composition"];
+const R20_ACQUISITION_LIMITS = ["live Slack request delivery", "real workspace credentials", "real human participation",
   "keyboard accessibility", "screen-reader accessibility", "operator unfamiliarity"];
 const R20_CLOSURE_REQUIREMENTS = ["closed R10, R17, R18 and R19 evidence pins",
   "externally administered live Slack workspace and app", "two authorized external participants plus a distinct unauthorized identity",
@@ -105,12 +112,16 @@ const REQUIRED_R28_READINESS_PATHS=["scripts/generate-r28-readiness-evidence.ts"
 const R28_CLASSES=["deterministic-model","owned-short-dogfood","external-evidence-acquisition","external-evidence-verifier"],R28_PROVES=["proposal, evaluation, approval, deployment, canary, decision, effect, pause, and audit transitions are bounded and restartable in the model","accepted, rejected, and automatically rolled-back repository proposals execute with explicit accounting and protected controls","forged approval and compromised-worker evidence are rejected","external campaign verification requires role separation, dependency closure, repository mutation, 90-day heartbeats, OS-process crash coverage, zero residuals, and an independent validator","external campaign evidence can be accumulated as independently custodied append-only streams, externally sealed, durably resumed, and bound to an exact final validator signature"],R28_LIMITS=["closure of every R0 through R27 dependency","a 90-day canonical-repository campaign","fresh OS-process restart and durable storage recovery at every phase and effect boundary","external identity, signing, accounting, crash-injection, and validation authorities","measurable preregistered improvement without safety regression under real operation"],R28_CLOSURE_REQUIREMENTS=["closed dependency artifacts for every prior checkpoint","long-running canonical-repository heartbeats within the declared maximum observation gap","at least one accepted, one rejected, and one automatically rolled-back externally evidenced proposal","fresh-process crash/recovery evidence for every phase plus prepare, delivery, acknowledgement, and storage boundaries","independent role grants, external accounting and attack attestations, global-pause safe-state proof, zero residuals, and independent campaign validation"];
 export function verifyR20ReadinessEvidence(root: string, evidence: any) {
   if (evidence.checkpoint !== "R20" || evidence.closureClaim !== false ||
-      evidence.purpose !== "machine-reviewable implementation and Volter simulation readiness; never external Slack or human evidence" ||
+      evidence.purpose !== "machine-reviewable implementation, Volter simulation, and external-acquisition readiness; never external Slack or human evidence" ||
       evidence.simulation?.evidenceClass !== "simulated-local-substrate" || evidence.simulation?.provider !== "@volter/twin-slack" ||
       semanticDigest(evidence.simulation.proves) !== semanticDigest(R20_SIMULATION_PROVES) ||
       semanticDigest(evidence.simulation.doesNotProve) !== semanticDigest(R20_SIMULATION_LIMITS) ||
+      evidence.acquisition?.evidenceClass !== "external-evidence-acquisition" ||
+      semanticDigest(evidence.acquisition.proves) !== semanticDigest(R20_ACQUISITION_PROVES) ||
+      semanticDigest(evidence.acquisition.doesNotProve) !== semanticDigest(R20_ACQUISITION_LIMITS) ||
       semanticDigest(evidence.stillRequiredForClosure) !== semanticDigest(R20_CLOSURE_REQUIREMENTS) ||
-      evidence.simulation.proves.some((x: string) => evidence.simulation.doesNotProve.includes(x)))
+      evidence.simulation.proves.some((x: string) => evidence.simulation.doesNotProve.includes(x)) ||
+      evidence.acquisition.proves.some((x: string) => evidence.acquisition.doesNotProve.includes(x)))
     throw Error("R20 readiness evidence cannot prove closure");
   const submitted = evidence.components.map((x: any) => x.path).sort();
   if (new Set(submitted).size !== submitted.length || semanticDigest(submitted) !== semanticDigest(REQUIRED_R20_READINESS_PATHS))
@@ -124,7 +135,8 @@ export function verifyR20ReadinessEvidence(root: string, evidence: any) {
     throw Error("R20 simulation dependency inventory incomplete");
   for (const [name, version] of Object.entries(evidence.simulation.versions))
     if (pkg.devDependencies?.[name] !== version) throw Error(`R20 simulation dependency drift: ${name}`);
-  return { closureClaim: false as const, components: submitted.length, evidenceClass: "simulated-local-substrate" as const };
+  return { closureClaim: false as const, components: submitted.length, evidenceClass: "simulated-local-substrate" as const,
+    acquisitionClass: "external-evidence-acquisition" as const };
 }
 export function verifyR21ReadinessEvidence(root: string, evidence: any) {
   if (evidence.checkpoint !== "R21" || evidence.closureClaim !== false || evidence.purpose !== "machine-reviewable reliability model, local-fixture, and external-campaign-verifier readiness; never deployed disaster-campaign evidence" ||

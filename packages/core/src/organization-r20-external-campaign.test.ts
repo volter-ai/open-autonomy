@@ -5,6 +5,11 @@ import {
   signableR20Campaign, signableR20Observation, signableR20Registration,
   verifyR20ExternalCampaign, type R20CampaignBundle, type R20Observation,
 } from "./organization-r20-external-campaign";
+import {
+  acceptR20Collection, acceptR20CollectorIntent, acceptR20Observation, acceptR20Registration,
+  assembleR20AcquisitionBundle, createR20AcquisitionState, issueR20Collection, issueR20CollectorIntent,
+  issueR20Observation, issueR20Registration, type R20AcquisitionRequest, type R20AcquisitionState,
+} from "../../../bench/dev/evidence/r20-acquisition";
 
 const commands = ["status", "explain", "create-work", "question", "answer", "approve", "mutate",
   "pause", "resume", "repair", "rollback", "revoke", "reject-approval", "notification-preference",
@@ -135,7 +140,7 @@ function fixture() {
     bundle.collector.signature = sign(null, Buffer.from(canonicalSemanticJson(signableR20Campaign(bundle))),
       collector.privateKey).toString("base64");
   };
-  return { bundle: bundle as R20CampaignBundle, trust, resignObservation };
+  return { bundle: bundle as R20CampaignBundle, trust, resignObservation, acquisitionKeys: { registrar, collector, people } };
 }
 
 test("verifies a complete independently collected real Slack R20 matrix", () => {
@@ -144,6 +149,32 @@ test("verifies a complete independently collected real Slack R20 matrix", () => 
     status: "R20-external-evidence-verified", closureClaim: true,
     observationCount: commands.length * 2 + attacks.length, participantCount: 3,
   });
+});
+
+test("reconstructs the exact valid campaign through participant-bound acquisition", () => {
+  const { bundle: source, trust, acquisitionKeys } = fixture(), registrationKeyId = "registration-key", collectorKeyId = "collector-key",
+    participantKeyIds = Object.fromEntries(acquisitionKeys.people.map((_, i) => [`person-${i}`, `participant-key-${i}`])),
+    publicKeys = { [registrationKeyId]: source.registration.registrationAuthority.publicKeyPem, [collectorKeyId]: source.collector.publicKeyPem,
+      ...Object.fromEntries(acquisitionKeys.people.map((person, i) => [`participant-key-${i}`, person.publicKey.export({ type: "spki", format: "pem" }).toString()])) },
+    state = createR20AcquisitionState({ campaignId: source.registration.campaignId, createdAt: "2026-07-15T08:00:00Z", registrationKeyId, collectorKeyId, participantKeyIds, publicKeys });
+  const respond = (request: R20AcquisitionRequest, fragment: unknown, privateKey: any, signedAt: string) => {
+    const signerKeyId = request.authority === "registration" ? registrationKeyId : request.authority === "collector" ? collectorKeyId : participantKeyIds[request.signerId]!,
+      body = { schema: "open-autonomy.bench-r20-acquisition-response.v1" as const, requestDigest: h(request), fragmentDigest: h(fragment), signerKeyId, signedAt };
+    return { ...body, signature: sign(null, Buffer.from(canonicalSemanticJson(body)), privateKey).toString("base64"), fragment };
+  };
+  let request = issueR20Registration(state);
+  acceptR20Registration(state, respond(request, source.registration, acquisitionKeys.registrar.privateKey, source.registration.registrationAuthority.signedAt));
+  for (const observation of [...source.observations].reverse()) {
+    request = issueR20Observation(state, observation.trialId); const person = acquisitionKeys.people[Number(observation.participantId.slice(-1))]!;
+    acceptR20Observation(state, observation.trialId, respond(request, observation, person.privateKey, observation.participantSignature.signedAt));
+  }
+  request = issueR20CollectorIntent(state); const { signature: campaignSignature, ...intent } = source.collector;
+  acceptR20CollectorIntent(state, respond(request, intent, acquisitionKeys.collector.privateKey, source.collector.signedAt));
+  request = issueR20Collection(state);
+  acceptR20Collection(state, respond(request, { campaignSignature }, acquisitionKeys.collector.privateKey, source.collector.signedAt));
+  const reconstructed = assembleR20AcquisitionBundle(state);
+  expect(canonicalSemanticJson(reconstructed)).toBe(canonicalSemanticJson(source));
+  expect(verifyR20ExternalCampaign(reconstructed, trust)).toMatchObject({ status: "R20-external-evidence-verified" });
 });
 
 test("rejects omission, forged participants, duplicate effects, missing receipts, accepted attacks, and slow ack", () => {

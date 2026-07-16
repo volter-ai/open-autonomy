@@ -43,6 +43,7 @@
     "check:core": "bun test packages/*/src/*.test.ts && bun scripts/generate-runtime-r9-evidence.ts --check",
     "check:bench-dev": "bun test bench/dev",
     "verify:external-campaign": "bun bench/dev/evidence/verify-external-campaign.ts",
+    "acquire:r20": "bun bench/dev/evidence/r20-acquisition-cli.ts",
     "acquire:r27": "bun bench/dev/evidence/r27-acquisition-cli.ts",
     "acquire:r28": "bun bench/dev/evidence/r28-acquisition-cli.ts",
     "runtime-ledgers:init": "bun scripts/initialize-runtime-ledgers.ts",

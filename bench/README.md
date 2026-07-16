@@ -32,6 +32,25 @@ R20..R28 --verified-at <ISO-8601> --bundle <json> --trust-module <module> --trus
 The explicit verification time is included in the receipt, bounds trust-module attestations, and is
 passed to the time-sensitive R26 and R28 verifiers. No wall-clock default is permitted.
 
+R20 acquisition freezes the externally signed registration, then exposes immutable requests for
+each preregistered trial. Requests may be handled in parallel, but only by the participant and key
+assigned to that trial. Collection remains unavailable until every observation is accepted. The
+independent collector then declares its identity and signing time before receiving the digest of the
+exact complete campaign to sign:
+
+```sh
+bun run acquire:r20 -- init --state campaign.state.json --registry external-registry.json
+bun run acquire:r20 -- issue-registration --state campaign.state.json --out registration.request.json
+bun run acquire:r20 -- issue-observation --state campaign.state.json --trial trial-id --out trial.request.json
+bun run acquire:r20 -- accept-observation --state campaign.state.json --trial trial-id --response trial.response.json
+bun run acquire:r20 -- status --state campaign.state.json
+```
+
+The other actions are `accept-registration`, `issue-collector-intent`,
+`accept-collector-intent`, `issue-collection`, `accept-collection`, and `assemble`. As with R27 and
+R28, every issued request is persisted before exposure, and assembly still requires the production
+external verifier.
+
 R27 evidence collection uses a separate, restart-safe custody protocol. Initialize it with an
 externally supplied registry whose roles have distinct Ed25519 public keys, then issue and accept
 one stage at a time:

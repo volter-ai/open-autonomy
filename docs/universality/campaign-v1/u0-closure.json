@@ -1,0 +1,38 @@
+{
+  "schema": "open-autonomy.universality-checkpoint-closure.v1",
+  "checkpoint": "U0",
+  "status": "complete",
+  "assurance": "property-tested",
+  "claimDigest": "sha256:538c85ccbb4ad9b5ebae709977c1bc7aff1ac233b043488e6713a584d83cbcfa",
+  "semanticCoverage": [
+    "claim identity and scoped domain",
+    "population identities and selection rules",
+    "census chronology",
+    "metric numerators and denominators",
+    "weights and populations",
+    "assurance classes",
+    "normative thresholds and directions",
+    "undefined-denominator invalidation",
+    "deterministic stratified execution sampling"
+  ],
+  "falsifiersExercised": [
+    "metric omission and duplication",
+    "weakened or impossible threshold",
+    "direction substitution",
+    "numerator, denominator, weight, population, or assurance substitution",
+    "surplus semantic field",
+    "vacuity-policy removal",
+    "post-freeze body mutation"
+  ],
+  "evidence": [
+    "docs/universality/campaign-v1/claim.json",
+    "packages/core/src/organization-universality-claim.ts",
+    "packages/core/src/organization-universality-claim.test.ts"
+  ],
+  "skepticalReview": {
+    "round1": "rejected: chronology, referent, vacuity, sampling, schema, and feasibility gaps",
+    "round2": "accepted for U0 after fixes; finite manifests and denominator realization remain U1/U2 obligations"
+  },
+  "residuals": [],
+  "next": "U1"
+}

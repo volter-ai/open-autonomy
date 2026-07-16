@@ -10,6 +10,22 @@
   ],
   "components": [
     {
+      "path": "bench/dev/evidence/r24-acquisition-cli.ts",
+      "sha256": "sha256:6f7191c2c0accb9bdc8aeb92f19336e6c5207a180e759f8692054466bafeaa6f"
+    },
+    {
+      "path": "bench/dev/evidence/r24-acquisition.test.ts",
+      "sha256": "sha256:ddf0aced56430dfc77659140c76eb4361bb447547f65c0756fc1fd8aba94c7a4"
+    },
+    {
+      "path": "bench/dev/evidence/r24-acquisition.ts",
+      "sha256": "sha256:41c6521e83b14f1ce18b3e235607b0b8148183722735a5dc349475072f840236"
+    },
+    {
+      "path": "docs/evidence/R24-ACQUISITION-SKEPTICAL-REVIEW.md",
+      "sha256": "sha256:acad2d2835fb1333bdd8f2038ec2e79f6189671b310004c411330eb40e95e380"
+    },
+    {
       "path": "packages/core/src/organization-r24-external-closure.ts",
       "sha256": "sha256:07d0bfbe8084a59c2fe4775e27e377a01bf109b7fb06d394ca55b5b93acb74c9"
     },
@@ -99,7 +115,7 @@
     },
     {
       "path": "packages/core/src/organization-r24-v5-live-acceptance-contract.test.ts",
-      "sha256": "sha256:35655578aeba2b4465333a299fd037a8851488443344f6da3e2fcaea8de3c0d2"
+      "sha256": "sha256:535db06ebe3ae84cb50602a2be4e3398982372ccb48171ad97ec0ed34e1e2373"
     },
     {
       "path": "packages/core/src/organization-r24-v5-live-runner.ts",

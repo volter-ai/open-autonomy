@@ -65,7 +65,7 @@ function requiredR24ReadinessPaths(root: string) {
     bin = readdirSync(join(root, "bin"))
       .filter((path) => /^organization-r24-v5(?:\.test)?\.ts$/.test(path))
       .map((path) => `bin/${path}`);
-  return [...selectedCore, ...bin].sort();
+  return [...selectedCore, ...bin, "bench/dev/evidence/r24-acquisition.ts", "bench/dev/evidence/r24-acquisition-cli.ts", "bench/dev/evidence/r24-acquisition.test.ts", "docs/evidence/R24-ACQUISITION-SKEPTICAL-REVIEW.md"].sort();
 }
 const REQUIRED_R20_READINESS_PATHS = [
   "scripts/generate-r20-readiness-evidence.ts", "package.json", "bun.lock",

@@ -229,8 +229,8 @@ agent job skips while it is set; clear it to resume the fleet.
 
 ## External evidence acquisition (contributors)
 
-R21 through R23 readiness campaigns use crash-safe, role-separated request/response collectors. Run
-`bun run acquire:r21 -- <command>`, `bun run acquire:r22 -- <command>`, or `bun run acquire:r23 -- <command>`; each CLI reports its command
+R21 through R24 readiness campaigns use crash-safe, role-separated request/response collectors. Run
+`bun run acquire:r21 -- <command>` through `bun run acquire:r24 -- <command>`; each CLI reports its command
 set when invoked without a valid command. These tools assemble verifier inputs but do not claim that
 synthetic or locally signed evidence closes an external checkpoint.
 

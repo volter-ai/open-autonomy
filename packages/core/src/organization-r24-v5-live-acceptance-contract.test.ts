@@ -52,6 +52,7 @@ import { writeR24V5BundleAtomic } from "./organization-r24-v5-bundle-store";
 import { createV5CellFixture } from "./test-support/organization-r24-v5-fixture";
 import { canonicalSemanticJson } from "./organization-canonical";
 import { deriveR24DifferenceInventory, verifyR24ExternalClosure, type ClosureSigned, type R24ExternalCampaign, type R24ExternalClosureTrust } from "./organization-r24-external-closure";
+import { acceptR24Bundle, acceptR24Closure, acceptR24Evidence, acceptR24Preregistration, assembleR24, createR24State, issueR24Bundle, issueR24Closure, issueR24Evidence, issueR24Preregistration, type R24Request, type R24Response } from "../../../bench/dev/evidence/r24-acquisition";
 
 const d = "sha256:" + "a".repeat(64),
   planner = generateKeyPairSync("ed25519"),
@@ -696,4 +697,16 @@ test("production external closure accepts a complete independently signed V5 stu
     }, closureBody = { schema: "autonomy.r24-external-closure.v2" as const, closureClaim: true as const, bundle, bundleDigest: bundle.digest, preregistration, equivalence, triage, dependencies, generatedAt: "2026-07-15T12:03:00Z" }, closureSigned = signed("closure", "closure", closureBody, closureBody.generatedAt),
     campaign: R24ExternalCampaign = { ...closureBody, signerKeyId: closureSigned.keyId, digest: closureSigned.digest, signature: closureSigned.signature };
   expect(verifyR24ExternalClosure(campaign, externalTrust)).toEqual({ closed: true, studyConclusion: "inconclusive", bundleDigest: bundle.digest, pairs: 8, differences: triage.length });
-});
+  const publicKeys: Record<string, string> = { preregistration: closurePublicKeys.preregistration!, bundle: resultPublic, equivalence: closurePublicKeys.equivalence!, triage: closurePublicKeys.triage!, closure: closurePublicKeys.closure!, ...Object.fromEntries(dependencyIds.map((id) => [`dependency-key-${id}`, dependencyRegistry[id].publicKeyPem])) },
+    acquisition = createR24State({ campaignId: "r24-complete", createdAt: "2026-07-14T00:00:00Z", preregistrationKeyId: "preregistration", bundleKeyId: "bundle", equivalenceKeyId: "equivalence", triageKeyId: "triage", closureKeyId: "closure", dependencyKeyIds: Object.fromEntries(dependencyIds.map((id) => [id, `dependency-key-${id}`])) as any, publicKeys }),
+    acquisitionPrivate: Record<string, any> = { preregistration: closureKeys.preregistration!.privateKey, bundle: resultCustodian.privateKey, equivalence: closureKeys.equivalence!.privateKey, triage: closureKeys.triage!.privateKey, closure: closureKeys.closure!.privateKey, ...Object.fromEntries(dependencyIds.map((id) => [`dependency-key-${id}`, dependencyKeys[id]!.privateKey])) },
+    responseKey = (q: R24Request) => q.action === "preregistration" ? "preregistration" : q.action === "bundle" ? "bundle" : q.action === "closure" ? "closure" : q.kind === "equivalence" ? "equivalence" : q.kind === "triage" ? "triage" : `dependency-key-${q.signerId}`,
+    respond = (q: R24Request, fragment: unknown): R24Response => { const signerKeyId = responseKey(q), value = { schema: "open-autonomy.bench-r24-acquisition-response.v1" as const, requestDigest: digest(q) as `sha256:${string}`, fragmentDigest: digest(fragment) as `sha256:${string}`, signerKeyId, signedAt: closureBody.generatedAt }; return { ...value, signature: sign(null, Buffer.from(canonicalSemanticJson(value)), acquisitionPrivate[signerKeyId]).toString("base64"), fragment }; },
+    acceptCell = (kind: "equivalence" | "triage" | "dependencies", id: string, fragment: unknown) => { const q = issueR24Evidence(acquisition, kind, id); acceptR24Evidence(acquisition, kind, id, respond(q, fragment)); };
+  let q = issueR24Preregistration(acquisition); acceptR24Preregistration(acquisition, respond(q, preregistration)); q = issueR24Bundle(acquisition); acceptR24Bundle(acquisition, respond(q, bundle));
+  for (const x of equivalence) acceptCell("equivalence", [x.body.pairId, x.body.path].map(encodeURIComponent).join("/"), x);
+  for (const x of dependencies) acceptCell("dependencies", encodeURIComponent(x.checkpoint), x);
+  for (const x of triage) acceptCell("triage", encodeURIComponent(x.body.differenceId), x);
+  q = issueR24Closure(acquisition, closureBody.generatedAt); acceptR24Closure(acquisition, respond(q, { generatedAt: closureBody.generatedAt, signerKeyId: campaign.signerKeyId, digest: campaign.digest, signature: campaign.signature }));
+  const assembled = assembleR24(acquisition); expect(canonicalSemanticJson(assembled)).toBe(canonicalSemanticJson(campaign)); expect(verifyR24ExternalClosure(assembled, externalTrust).closed).toBe(true);
+}, 30_000);

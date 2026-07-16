@@ -16,13 +16,24 @@ import { v5ProtocolDigest } from "./organization-r24-v5-protocol";
 import {
   matchedBenchmarkDigest,
   planMatchedV2,
+  type V2Measure,
   type V2Design,
 } from "./organization-matched-benchmark";
+import {
+  analyzeVerifiedR24V5Artifact,
+  r24V5AccountingEvidenceDigest,
+  r24V5CellKey,
+  r24V5PortableEvidenceDigest,
+  type V5AccountingEvidence,
+  type V5PortableEvidence,
+} from "./organization-r24-v5-matched-projection";
 import { createV5CellFixture } from "./test-support/organization-r24-v5-fixture";
 
 const d = "sha256:" + "a".repeat(64),
   planner = generateKeyPairSync("ed25519"),
   resultCustodian = generateKeyPairSync("ed25519"),
+  grader = generateKeyPairSync("ed25519"),
+  accountant = generateKeyPairSync("ed25519"),
   plannerPublic = planner.publicKey
     .export({ type: "spki", format: "pem" })
     .toString(),
@@ -311,4 +322,264 @@ test("rejects planner-signed divergence from the sole V2 assignment authority", 
       "seeded assignment replay failed",
     );
   }
+});
+
+function observed(value: number, unit: string, provenance: string): V2Measure {
+  const raw = { value, unit, provenance };
+  return {
+    status: "observed",
+    value,
+    unit,
+    provenance,
+    raw,
+    rawDigest: matchedBenchmarkDigest(raw),
+  };
+}
+
+function observedNativeMemory(
+  cell: V5LiveArtifact["cells"][number],
+): V2Measure {
+  const samples = cell.evidenceRecord.attempts.find(
+      (attempt) => attempt.kind === "launched",
+    )!.trace.externalMeter.raw.samples,
+    raw = { samples },
+    value = samples.slice(1).reduce((area, sample, index) => {
+      const previous = samples[index]!,
+        dt =
+          Number(BigInt(sample.monotonicNs) - BigInt(previous.monotonicNs)) /
+          1e6,
+        rss = (x: (typeof samples)[number]) =>
+          x.processes.reduce((sum, process) => sum + process.rssKiB, 0) * 1024;
+      return area + ((rss(previous) + rss(sample)) / 2) * dt;
+    }, 0);
+  return {
+    status: "observed",
+    value,
+    unit: "byte-ms",
+    provenance: "authenticated-native-procfs-integration",
+    raw,
+    rawDigest: matchedBenchmarkDigest(raw),
+  };
+}
+
+function projectedEvidence(a: V5LiveArtifact) {
+  const portable: V5PortableEvidence[] = [],
+    accounting: V5AccountingEvidence[] = [];
+  for (const cell of a.cells) {
+    const cellKey = r24V5CellKey(cell.pairId, cell.substrate),
+      assignment = a.plan.assignments.find(
+        (x) => x.pairId === cell.pairId && x.substrate === cell.substrate,
+      )!,
+      evidenceBinding = {
+        artifactDigest: a.digest,
+        planDigest: v5ProtocolDigest(a.plan),
+        assignmentDigest: v5ProtocolDigest(assignment),
+        bindingDigest: cell.bindingDigest,
+        cellEvidenceRecordDigest: v5ProtocolDigest(cell.evidenceRecord),
+        nativeRunId: cell.native.runId,
+        challengeDigest: cell.challengeDigest,
+      },
+      score = observed(1, "ratio", "portable-grader"),
+      p: V5PortableEvidence = {
+        schema: "autonomy.r24-portable-evidence.v1",
+        cellKey,
+        ...evidenceBinding,
+        outcome: { accepted: true },
+        portableTrace: [{ grader: "portable" }],
+        portableScore: score,
+        signerKeyId: "grader-key",
+        signature: "",
+      },
+      unknown = (unit: string): V2Measure => ({
+        status: "unknown",
+        value: null,
+        unit,
+        reason: "provider did not expose a signed observation",
+        provenance: "accounting-collector",
+      }),
+      ac: V5AccountingEvidence = {
+        schema: "autonomy.r24-accounting-evidence.v1",
+        cellKey,
+        ...evidenceBinding,
+        measures: {
+          portableScore: score,
+          wallTimeMs: observed(
+            cell.meters.wall.value,
+            "ms",
+            "native-procfs-meter",
+          ),
+          cpuMs: observed(
+            cell.meters.cpu.value,
+            "ms",
+            "native-procfs-meter",
+          ),
+          memoryByteMs: observedNativeMemory(cell),
+          tokens: unknown("token"),
+          computeUnits: unknown("compute-unit"),
+          moneyUsd: unknown("USD"),
+          humanMinutes: observed(0, "minute", "signed-assistance-ledger"),
+        },
+        nativeMeterJoins: {
+          wall: v5ProtocolDigest(cell.meters.wall),
+          cpu: v5ProtocolDigest(cell.meters.cpu),
+          maxRss: v5ProtocolDigest(cell.meters.maxRss),
+        },
+        signerKeyId: "accounting-key",
+        signature: "",
+      };
+    p.signature = sign(
+      null,
+      Buffer.from(r24V5PortableEvidenceDigest(p)),
+      grader.privateKey,
+    ).toString("base64");
+    ac.signature = sign(
+      null,
+      Buffer.from(r24V5AccountingEvidenceDigest(ac)),
+      accountant.privateKey,
+    ).toString("base64");
+    portable.push(p);
+    accounting.push(ac);
+  }
+  return { portable, accounting };
+}
+
+test("projects verified V5 evidence canonically into the matched V2 analyzer", () => {
+  const a = artifact(),
+    evidence = projectedEvidence(a),
+    result = analyzeVerifiedR24V5Artifact(
+      a,
+      evidence.portable,
+      evidence.accounting,
+      {
+        ...trust,
+        graderPublicKeys: {
+          "grader-key": grader.publicKey
+            .export({ type: "spki", format: "pem" })
+            .toString(),
+        },
+        accountingPublicKeys: {
+          "accounting-key": accountant.publicKey
+            .export({ type: "spki", format: "pem" })
+            .toString(),
+        },
+      },
+      "2026-07-15T12:01:00Z",
+    );
+  expect(result.assignments).toEqual(a.plan.assignments);
+  expect(result.cells).toHaveLength(a.cells.length);
+  expect(result.cells.every((cell) => cell.measures.tokens.status === "unknown"))
+    .toBe(true);
+});
+
+test("rejects signed accounting drift and max-RSS substitution for memory integration", () => {
+  const projectionTrust = {
+    ...trust,
+    graderPublicKeys: {
+      "grader-key": grader.publicKey
+        .export({ type: "spki", format: "pem" })
+        .toString(),
+    },
+    accountingPublicKeys: {
+      "accounting-key": accountant.publicKey
+        .export({ type: "spki", format: "pem" })
+        .toString(),
+    },
+  };
+  for (const mutate of [
+    (e: V5AccountingEvidence) => {
+      const wall = e.measures.wallTimeMs;
+      if (wall.status !== "observed") throw Error("fixture wall absent");
+      e.measures.wallTimeMs = observed(
+        wall.value + 1,
+        wall.unit,
+        wall.provenance,
+      );
+    },
+    (e: V5AccountingEvidence) => {
+      e.measures.memoryByteMs = observed(
+        1024,
+        "byte-ms",
+        "max-rss-substitution",
+      );
+    },
+    (e: V5AccountingEvidence) => {
+      e.nativeMeterJoins.wall = d;
+    },
+    (e: V5AccountingEvidence) => {
+      e.measures.memoryByteMs = {
+        status: "unknown",
+        value: null,
+        unit: "byte-ms",
+        reason: "selectively suppressed",
+        provenance: "accounting-collector",
+      };
+    },
+    (e: V5AccountingEvidence) => {
+      const cpu = e.measures.cpuMs;
+      if (cpu.status !== "observed") throw Error("fixture CPU absent");
+      e.measures.cpuMs = { ...cpu, unit: "seconds" };
+    },
+  ]) {
+    const a = artifact(),
+      evidence = projectedEvidence(a),
+      target = evidence.accounting[0]!;
+    mutate(target);
+    target.signature = sign(
+      null,
+      Buffer.from(r24V5AccountingEvidenceDigest(target)),
+      accountant.privateKey,
+    ).toString("base64");
+    expect(() =>
+      analyzeVerifiedR24V5Artifact(
+        a,
+        evidence.portable,
+        evidence.accounting,
+        projectionTrust,
+        "2026-07-15T12:01:00Z",
+      ),
+    ).toThrow();
+  }
+});
+
+test("rejects cross-campaign evidence replay and globally overlapping evidence roles", () => {
+  const original = artifact(),
+    evidence = projectedEvidence(original),
+    fresh = artifact();
+  fresh.plan.campaignDigest = "sha256:" + "c".repeat(64);
+  resign(fresh);
+  const graderPem = grader.publicKey
+      .export({ type: "spki", format: "pem" })
+      .toString(),
+    accountantPem = accountant.publicKey
+      .export({ type: "spki", format: "pem" })
+      .toString(),
+    baseProjectionTrust = {
+      ...trust,
+      graderPublicKeys: { "grader-key": graderPem },
+      accountingPublicKeys: { "accounting-key": accountantPem },
+    };
+  expect(() =>
+    analyzeVerifiedR24V5Artifact(
+      fresh,
+      evidence.portable,
+      evidence.accounting,
+      baseProjectionTrust,
+      "2026-07-15T12:01:00Z",
+    ),
+  ).toThrow("projected evidence independence or provenance invalid");
+  expect(() =>
+    analyzeVerifiedR24V5Artifact(
+      original,
+      evidence.portable,
+      evidence.accounting,
+      {
+        ...baseProjectionTrust,
+        accountingPublicKeys: {
+          "accounting-key": accountantPem,
+          "unused-overlap": graderPem,
+        },
+      },
+      "2026-07-15T12:01:00Z",
+    ),
+  ).toThrow("projected evidence cardinality mismatch");
 });

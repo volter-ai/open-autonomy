@@ -348,6 +348,9 @@ workflow preservation certificates, policy allow/deny/undefined/error fixtures.
 **Engineering ACs.** Replace proof-only composition with a supported Hermes provider implementing manifest discovery,
 deployment, configuration, durable work/control, worker execution integration, Slack interaction, health, upgrades,
 event lifting, pause/resume, backup/restore, and teardown; pin versions and detect CLI success-without-mutation.
+Compile the unchanged canonical organization into a real Hermes component composition. For controlled tests, declare
+Slack, model-provider, GitHub, and other independently observable dependencies in an `autonomy.execution-world.v1`;
+service twins may substitute those dependencies but MUST NOT substitute Hermes itself.
 
 **Evidence.** Disposable live environment from bundle, complete TCK, restart/partition/duplicate/stale-fence/upgrade/
 rollback drills, identified run traces, zero manual hidden state.
@@ -362,6 +365,8 @@ rollback drills, identified run traces, zero manual hidden state.
 interaction providers; cover issue checkout, heartbeat, recovery, approvals, hierarchy, budgets, events, upgrades,
 lifting, and teardown; map native states without adding them to Organization IR; document stronger assumptions and
 weaker guarantees.
+Compile the unchanged canonical organization into that real composition. Any controlled service substitutions must
+be declared in an execution world; Paperclip and its real worker/interaction providers remain the system under test.
 
 **Evidence.** Same live TCK and fault schedule as R15, pinned source/container, differential portable traces, complete
 behavioral residual classification, no shared controller implementation with Hermes.
@@ -565,7 +570,9 @@ support does not pass.
 ### G4 — Two-live-substrate gate (R15–R16)
 
 The identical canonical organization runs on independent Hermes and Paperclip control/work implementations under the
-same adversarial schedule, with portable trace comparison and no shared hidden controller.
+same adversarial schedule, with portable trace comparison and no shared hidden controller. Both cells may consume
+the same pinned service-twin world, but neither Hermes nor Paperclip may be replaced by a twin or simulator. Simulator
+results are separately labeled and cannot satisfy this live-substrate gate.
 
 ### G5 — Truthful production-control-plane gate (R17–R21)
 

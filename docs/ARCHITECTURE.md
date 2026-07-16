@@ -130,6 +130,13 @@ Per-substrate internal terms are **scoped to their substrate**, not global: gith
 / `model proxy` / native `auto-merge`; local's `loop` / `termfleet` / `evidence gate`. **There is no
 `templates/` in the core.**
 
+Organization IR v2 generalizes the v1 runner into a resolved composition of capability providers. Under that
+experimental model, `local` is scheduler + Termfleet, while Hermes and Paperclip are native compilation targets
+whose manifests may provide several overlapping facets. A controlled execution world runs those real targets and
+may substitute declared service dependencies (Slack, GitHub, model APIs) with contract-bounded Volter twins. It may
+also contain explicitly labeled behavioral simulators. A twin never replaces the substrate under test, and a
+simulator never counts as substrate or service conformance evidence. See `docs/ORGANIZATION-IR.md#execution-worlds-targets-services-twins-and-simulators`.
+
 ## Source repo layout
 
 ```

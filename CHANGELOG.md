@@ -486,6 +486,7 @@ via the runner seam.
 
 - Published the normative experimental Organization IR v2 specification with a generated field-level semantic appendix and executable examples.
 - Added fail-closed runtime proof ledgers and a reproducible threat-model baseline for the autonomous-organization implementation phase.
+- Added a typed Organization IR execution-world contract that keeps compiled Hermes/Paperclip/local targets, external service dependencies, Volter twins, and behavioral simulators formally disjoint.
 
 ### Fixed
 

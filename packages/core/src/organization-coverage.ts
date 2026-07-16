@@ -284,6 +284,13 @@ export const ORGANIZATION_SEMANTIC_COVERAGE: readonly SemanticCoverageEntry[] = 
   entry('ConformanceMutationManifest', 'schema suiteVersion mutants', 'portable', 'implemented', 'nonempty exact mutation inventory covering every mandatory rule', 'P1'),
   entry('ConformanceTrustEntry', 'key roles', 'compiler', 'implemented', 'trusted public key and externally assigned conformance signing roles', 'P1'),
   entry('ConformanceImplementationMatrixEntry', 'provider implementationVersion suiteVersion certification levels', 'observation', 'implemented', 'per-level implementation status without certification collapse', 'P1'),
+  entry('CompiledSubstrateTarget', 'kind id organizationDigest deploymentDigest composition artifacts', 'compiler', 'implemented', 'real lowered component composition under evaluation, never a service substitute', 'P8'),
+  entry('ServiceDependency', 'kind id contract required endpoint', 'compiler', 'implemented', 'independently observable versioned dependency consumed by a compiled target', 'P8'),
+  entry('ServiceBinding', 'provider service interface', 'compiler', 'implemented', 'typed edge from a compiled provider to a declared service dependency', 'P8'),
+  entry('DigitalTwinSubstitution', 'kind id service contract implementation coveredOperations knownGaps conformanceEvidence', 'compiler', 'implemented', 'contract-bounded replacement for one declared service and never for the substrate under test', 'P8'),
+  entry('BehavioralSimulator', 'kind id role version contract calibrationEvidence', 'compiler', 'implemented', 'explicit non-service behavioral model whose evidence cannot satisfy conformance', 'P8'),
+  entry('ExecutionWorld', 'schema target services serviceBindings twins simulators', 'compiler', 'implemented', 'controlled evaluation topology separating real target, service dependencies, twins, and simulators', 'P8'),
+  entry('ExecutionWorldValidation', 'errors warnings', 'compiler', 'implemented', 'fail-closed topology diagnostics for execution-world category and binding errors', 'P8'),
 ] as const;
 
 export interface AuditResidual {

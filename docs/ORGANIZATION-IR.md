@@ -126,6 +126,38 @@ conformance boundary: their storage and scheduling mechanisms may differ, but th
 the same observable state. Unknown native events must first be lifted by a component-owned adapter; the core
 reducer does not guess their meaning.
 
+## Execution worlds: targets, services, twins, and simulators
+
+Compilation and controlled evaluation use four disjoint kinds of object. They MUST NOT be substituted for one
+another:
+
+| Object | Formal role | Examples |
+|---|---|---|
+| Compiled substrate target | A real component composition that receives lowered organization semantics | Hermes; Paperclip plus a worker provider; local scheduler plus Termfleet |
+| Service dependency | An independently observable contract consumed while the target runs | Slack Events/Web API, GitHub, OpenRouter |
+| Digital twin substitution | A contract-bounded replacement for exactly one declared service dependency | `@volter/twin-slack`, `@volter/twin-github`, `@volter/twin-openrouter` |
+| Behavioral simulator | A controlled model of a worker, human, workload, or environment | scripted worker outcomes, calibrated maintainer simulator |
+
+The typed `autonomy.execution-world.v1` artifact makes this separation checkable. A twin identifies the service
+contract version, covered operations, gaps, implementation revision, and conformance evidence. It cannot name or
+replace a provider in the compiled target. A simulator has a versioned behavioral contract and calibration evidence;
+it cannot discharge service conformance or substrate conformance obligations.
+
+Thus a controlled Hermes proof has the following shape:
+
+```text
+Organization IR -> solve/lower -> real Hermes component composition
+                                      | consumes
+                          Slack/model/GitHub service contracts
+                                      | substituted in a controlled world by
+                          Volter service twins (where available)
+```
+
+Hermes and Paperclip are compilation targets even when locally deployed. Their location is irrelevant: the
+distinguishing fact is that they receive compiled semantics and own runtime facets. Conversely, a service need not
+be remote to admit a twin; it must have an independent observable contract and be declared as a dependency.
+Generative-model twins establish wire/protocol behavior only, never equivalence of model intelligence.
+
 ## Semantic planes
 
 The v2 module is organized into linked catalogs rather than one universal agent object.

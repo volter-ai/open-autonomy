@@ -358,8 +358,10 @@ export function negotiateMcpInitialize(
     capabilities: Record<string, unknown>;
   },
 ) {
+  const clientRevision = request.protocolVersion;
   if (
-    request.protocolVersion !== MCP_PROTOCOL_REVISION ||
+    !/^\d{4}-\d{2}-\d{2}$/.test(clientRevision) ||
+    clientRevision < MCP_PROTOCOL_REVISION ||
     server.protocolVersion !== MCP_PROTOCOL_REVISION
   )
     throw new Error("MCP downgrade or unsupported revision");

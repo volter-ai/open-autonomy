@@ -147,6 +147,18 @@ describe("R12-INT native lifecycle and transports", () => {
     expect(negotiateMcpInitialize(request, server).protocolVersion).toBe(
       MCP_PROTOCOL_REVISION,
     );
+    expect(
+      negotiateMcpInitialize(
+        { ...request, protocolVersion: "2025-11-25" },
+        server,
+      ).protocolVersion,
+    ).toBe(MCP_PROTOCOL_REVISION);
+    expect(() =>
+      negotiateMcpInitialize(
+        { ...request, protocolVersion: "latest" },
+        server,
+      ),
+    ).toThrow(/unsupported/);
     expect(() =>
       negotiateMcpInitialize(request, {
         ...server,

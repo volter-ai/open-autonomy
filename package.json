@@ -42,6 +42,7 @@
     "check:autonomy": "bunx tsc -p tsconfig.json",
     "check:core": "bun test packages/*/src/*.test.ts && bun scripts/generate-runtime-r9-evidence.ts --check",
     "check:bench-dev": "bun test bench/dev",
+    "verify:external-campaign": "bun bench/dev/evidence/verify-external-campaign.ts",
     "runtime-ledgers:init": "bun scripts/initialize-runtime-ledgers.ts",
     "organization-spec:fields": "bun scripts/generate-organization-field-semantics.ts",
     "organization-spec:schema": "bun scripts/generate-artifact-schema-corpus.ts",

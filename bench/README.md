@@ -27,6 +27,11 @@ External R27 experiment-closure and R28 long-running-campaign verifiers live in 
 Core owns the reusable experiment and bounded-improvement semantics; bench decides whether external evidence is
 strong enough to close their punch-list checkpoints.
 
+Independently administered R27/R28 evidence is consumed through `bun run verify:external-campaign -- --checkpoint
+R27|R28 --bundle <json> --trust-module <module> --out <receipt.json>`. The trusted module exports `trust` implementing
+the checkpoint contract. Verification writes one content-addressed canonical receipt only after the complete verifier
+passes; malformed or rejected evidence produces no receipt.
+
 ### Graders — pluggable per workload
 
 Each workload declares which graders apply (`"graders": [...]`) — the eval-framework idiom (one case suite,

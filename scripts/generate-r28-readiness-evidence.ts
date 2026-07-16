@@ -15,6 +15,8 @@ const paths = [
   "packages/core/src/organization-r28-dogfood-v3.test.ts",
   "bench/dev/evidence/r28-external-campaign.ts",
   "bench/dev/evidence/r28-external-campaign.test.ts",
+  "bench/dev/evidence/verify-external-campaign.ts",
+  "bench/dev/evidence/verify-external-campaign.test.ts",
   "docs/evidence/R28-REPOSITORY-DOGFOOD.json",
 ].sort();
 const sha = (value: string | Buffer) => `sha256:${createHash("sha256").update(value).digest("hex")}`;

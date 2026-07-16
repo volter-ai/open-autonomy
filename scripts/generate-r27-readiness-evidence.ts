@@ -13,6 +13,8 @@ const paths = [
   "packages/core/src/organization-r27-live-canary-gate.test.ts",
   "bench/dev/evidence/r27-external-closure.ts",
   "bench/dev/evidence/r27-external-closure.test.ts",
+  "bench/dev/evidence/verify-external-campaign.ts",
+  "bench/dev/evidence/verify-external-campaign.test.ts",
   "docs/evidence/R27-LIVE-CANARY-BUNDLE.json",
 ].sort();
 const sha = (value: string | Buffer) => `sha256:${createHash("sha256").update(value).digest("hex")}`;

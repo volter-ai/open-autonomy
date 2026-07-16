@@ -29,6 +29,28 @@ strong enough to close their punch-list checkpoints.
 
 Independently administered R27/R28 evidence is consumed through `bun run verify:external-campaign -- --checkpoint
 R27|R28 --bundle <json> --trust-module <module> --trust-attestation <json> --trust-root <pem> --out <receipt.json>`.
+
+R27 evidence collection uses a separate, restart-safe custody protocol. Initialize it with an
+externally supplied registry whose roles have distinct Ed25519 public keys, then issue and accept
+one stage at a time:
+
+```sh
+bun run acquire:r27 -- init --state campaign.state.json --registry external-registry.json
+bun run acquire:r27 -- issue --state campaign.state.json --stage dependencies --out dependencies.request.json
+bun run acquire:r27 -- accept --state campaign.state.json --stage dependencies --response dependencies.response.json
+bun run acquire:r27 -- status --state campaign.state.json
+bun run acquire:r27 -- assemble --state campaign.state.json --out r27-external-bundle.json
+```
+
+Each response signs the canonical JSON of `{schema, requestDigest, fragmentDigest, signerKeyId,
+signedAt}` and contains the exact `fragment`. Requests bind the campaign, role, fixed protocol
+manifest, and accepted prerequisite response digests. The collector rejects premature stages,
+role substitution, altered fragments, equivocation, duplicate cryptographic identities, and
+invalid signatures. Successful state transitions use atomic replacement plus file and directory
+`fsync`. Assembly is impossible until every stage is accepted; assembly does not establish R27
+closure. The resulting bundle must still pass the independently configured external verifier and
+trust-module attestation command above.
+
 The trusted module exports `trust` implementing
 the checkpoint contract. It must also be supplied with `--trust-attestation <json> --trust-root <pem>`: an external
 Ed25519 authority signs the exact module digest and checkpoint, preventing an unapproved always-allow policy from

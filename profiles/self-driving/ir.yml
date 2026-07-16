@@ -280,6 +280,13 @@ policy:
         # resources below are not mirrored. Both sides of this boundary must be human-gated.
         - scripts/finalize-agent-review.ts
         - packages/substrate-github/src/runtime/finalize-agent-review.ts
+        # break-glass-gate is the audited maintainer path that POSTS agent-review past the review gate — the
+        # review BYPASS itself. It MUST be human-gated: an un-human-approved agent PR must not be able to
+        # widen/weaken the one mechanism that skips agent-review. Code-host only, NOT mirrored (no generic
+        # runtime imports the gate script), so a single by-name entry — no runtime/profile sibling to add.
+        # (.github/workflows/break-glass.yml, the workflow that runs it, is already gated by the
+        # `.github/workflows/**` glob above — not re-listed by name.)
+        - scripts/break-glass-gate.ts
         - scripts/review-result.ts
         - packages/substrate-github/src/runtime/review-result.ts
         - scripts/human-approval-gate.ts

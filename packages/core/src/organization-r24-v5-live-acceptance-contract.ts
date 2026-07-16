@@ -9,6 +9,12 @@ import {
   deriveV5ProviderFromRecord,
   type V5CellRecord,
 } from "./organization-r24-v5-live-runner";
+import {
+  matchedBenchmarkDigest,
+  planMatchedV2,
+  type V2Assignment,
+  type V2Design,
+} from "./organization-matched-benchmark";
 const sha = (v: unknown) =>
     `sha256:${createHash("sha256").update(canonicalSemanticJson(v)).digest("hex")}`,
   dig = (x: unknown) =>
@@ -140,9 +146,8 @@ export type V5LiveArtifact = {
     campaignDigest: string;
     authorizedAt: string;
     notAfter: string;
-    seed: string;
-    units: string[];
-    replications: number;
+    design: V2Design;
+    designDigest: string;
     assignmentDigest: string;
     launcherDigest: string;
     launcherSpecDigest: string;
@@ -164,7 +169,8 @@ export type V5LiveArtifact = {
       challengeDigest: string;
       sourceKeyIds: Record<V5SourceRole, string>;
     }>;
-    assignments: Array<{
+    assignments: V2Assignment[];
+    pairSummaries: Array<{
       unitId: string;
       replication: number;
       pairId: string;
@@ -220,24 +226,17 @@ export function r24V5SourceCustodyDigest(
     sourceDigest,
   });
 }
-export function r24V5PlannedIdentity(
-  campaignDigest: string,
-  seed: string,
-  unitId: string,
-  replication: number,
-  fault: { id: string; digest: string },
-) {
-  const pairId = sha({ campaignDigest, seed, unitId, replication }),
-    trialId = sha({ pairId, fault }),
-    unitBit = Number.parseInt(sha({ seed, unitId }).at(-1)!, 16) % 2;
-  return {
-    pairId,
-    trialId,
-    first:
-      (replication + unitBit) % 2 === 0
-        ? ("hermes" as const)
-        : ("paperclip" as const),
-  };
+function v5PairSummaries(assignments: V2Assignment[]) {
+  return assignments
+    .filter((assignment) => assignment.order === 0)
+    .map(({ pairId, trialId, unitId, replication, fault, substrate }) => ({
+      pairId,
+      trialId,
+      unitId,
+      replication,
+      fault,
+      first: substrate,
+    }));
 }
 export function applyCanonicalV5NegativeMutation(
   id: (typeof V5_NEGATIVE_CONTROLS)[number],
@@ -458,9 +457,8 @@ export function verifyR24V5LiveArtifact(
         "campaignDigest",
         "authorizedAt",
         "notAfter",
-        "seed",
-        "units",
-        "replications",
+        "design",
+        "designDigest",
         "assignmentDigest",
         "launcherDigest",
         "launcherSpecDigest",
@@ -468,6 +466,7 @@ export function verifyR24V5LiveArtifact(
         "authorization",
         "bindings",
         "assignments",
+        "pairSummaries",
       ]
         .sort()
         .join("\0") ||
@@ -477,13 +476,8 @@ export function verifyR24V5LiveArtifact(
     Date.parse(a.plan.authorizedAt) >= Date.parse(a.plan.notAfter) ||
     Date.parse(a.generatedAt) < Date.parse(a.plan.authorizedAt) ||
     Date.parse(a.generatedAt) > Date.parse(a.plan.notAfter) ||
-    !dig(a.plan.assignmentDigest) ||
-    !a.plan.seed ||
-    !a.plan.units.length ||
-    new Set(a.plan.units).size !== a.plan.units.length ||
-    a.plan.units.some((x) => !x) ||
-    !Number.isSafeInteger(a.plan.replications) ||
-    a.plan.replications < 2 ||
+    !/^[a-f0-9]{64}$/.test(a.plan.designDigest) ||
+    !/^[a-f0-9]{64}$/.test(a.plan.assignmentDigest) ||
     !dig(a.plan.launcherDigest) ||
     !dig(a.plan.launcherSpecDigest) ||
     !dig(a.plan.inputLockDigest) ||
@@ -511,43 +505,18 @@ export function verifyR24V5LiveArtifact(
     )
   )
     throw Error("invalid independent result authorization");
-  const slots = a.plan.units.flatMap((unitId) =>
-    Array.from(
-      { length: a.plan.replications },
-      (_, replication) => `${unitId}:${replication}`,
-    ),
-  );
+  const plannedAssignments = planMatchedV2(a.plan.design),
+    pairSummaries = v5PairSummaries(plannedAssignments);
   if (
-    a.plan.assignments.length !== slots.length ||
-    new Set(a.plan.assignments.map((x) => `${x.unitId}:${x.replication}`))
-      .size !== slots.length ||
-    slots.some(
-      (slot) =>
-        !a.plan.assignments.some(
-          (x) => `${x.unitId}:${x.replication}` === slot,
-        ),
-    ) ||
-    new Set(a.plan.assignments.map((x) => x.pairId)).size !== slots.length ||
-    new Set(a.plan.assignments.map((x) => x.trialId)).size !== slots.length ||
-    a.plan.assignments.some((x) => {
-      const expected = r24V5PlannedIdentity(
-        a.plan.campaignDigest,
-        a.plan.seed,
-        x.unitId,
-        x.replication,
-        x.fault,
-      );
-      return (
-        x.pairId !== expected.pairId ||
-        x.trialId !== expected.trialId ||
-        x.first !== expected.first
-      );
-    }) ||
-    a.plan.assignmentDigest !==
-      sha({ seed: a.plan.seed, assignments: a.plan.assignments })
+    a.plan.designDigest !== matchedBenchmarkDigest(a.plan.design) ||
+    matchedBenchmarkDigest(a.plan.assignments) !==
+      matchedBenchmarkDigest(plannedAssignments) ||
+    a.plan.assignmentDigest !== matchedBenchmarkDigest(plannedAssignments) ||
+    matchedBenchmarkDigest(a.plan.pairSummaries) !==
+      matchedBenchmarkDigest(pairSummaries)
   )
     throw Error("seeded assignment replay failed");
-  const expected = a.plan.units.length * a.plan.replications * 2;
+  const expected = plannedAssignments.length;
   if (
     a.cells.length !== expected ||
     a.plan.bindings.length !== expected ||
@@ -559,7 +528,7 @@ export function verifyR24V5LiveArtifact(
       expected ||
     new Set(a.plan.bindings.map((x) => x.challengeDigest)).size !==
       expected / 2 ||
-    a.plan.assignments.some((assignment) => {
+    pairSummaries.some((assignment) => {
       const bindings = a.plan.bindings.filter(
         (binding) => binding.pairId === assignment.pairId,
       );
@@ -603,7 +572,7 @@ export function verifyR24V5LiveArtifact(
   const pairs = new Map<string, V5LiveCell[]>();
   for (const c of a.cells)
     pairs.set(c.pairId, [...(pairs.get(c.pairId) ?? []), c]);
-  if (pairs.size !== a.plan.units.length * a.plan.replications)
+  if (pairs.size !== pairSummaries.length)
     throw Error("pair cardinality");
   let hFirst = 0,
     pFirst = 0;
@@ -628,13 +597,26 @@ export function verifyR24V5LiveArtifact(
       throw Error("cell isolation collision");
     isolations.add(c.isolationId);
     if (c.manualAssistance !== "none") throw Error("manual assistance");
-    const n = c.native,
+    const exactAssignment = plannedAssignments.find(
+        (assignment) =>
+          assignment.pairId === c.pairId &&
+          assignment.substrate === c.substrate,
+      ),
+      n = c.native,
       receiptKey = trust.resolveReceiptKey(c.receiptKeyId),
       authorizedBinding = a.plan.bindings.find(
         (x) => x.pairId === c.pairId && x.substrate === c.substrate,
       ),
       derived = deriveV5ProviderFromRecord(c.evidenceRecord, receiptKey);
     if (
+      !exactAssignment ||
+      c.assignmentDigest !== sha(exactAssignment) ||
+      c.trialId !== exactAssignment.trialId ||
+      c.unitId !== exactAssignment.unitId ||
+      c.replication !== exactAssignment.replication ||
+      c.order !== exactAssignment.order ||
+      sha(c.fault.id ? { id: c.fault.id, digest: c.fault.digest } : null) !==
+        sha(exactAssignment.fault) ||
       !authorizedBinding ||
       authorizedBinding.bindingDigest !== c.bindingDigest ||
       authorizedBinding.receiptKeyId !== c.receiptKeyId ||
@@ -784,42 +766,21 @@ export function verifyR24V5LiveArtifact(
           : ("invalid" as any))
     )
       throw Error("live lock/cleanup/assistance summary is not record-derived");
-    const planned = a.plan.assignments.find(
-      (x) => x.unitId === c.unitId && x.replication === c.replication,
-    );
     if (
-      !planned ||
-      planned.pairId !== c.pairId ||
-      planned.trialId !== c.trialId ||
-      (c.order === 0) !== (c.substrate === planned.first)
-    )
-      throw Error("cell inconsistent with seeded plan");
-    const exactAssignment = {
-      pairId: planned.pairId,
-      trialId: planned.trialId,
-      unitId: planned.unitId,
-      replication: planned.replication,
-      fault: planned.fault,
-      substrate: c.substrate,
-      order: c.order,
-    };
-    if (c.assignmentDigest !== sha(exactAssignment))
-      throw Error("cell assignment differs from authorized plan");
-    if (
-      c.evidenceRecord.fault.id !== planned.fault.id ||
-      c.evidenceRecord.fault.digest !== planned.fault.digest
+      c.evidenceRecord.fault.id !== exactAssignment.fault.id ||
+      c.evidenceRecord.fault.digest !== exactAssignment.fault.digest
     )
       throw Error("observed fault differs from authorized assignment");
     const canonicalCell = projectV5LiveCellFromRecord(
       c.evidenceRecord,
       {
-        pairId: planned.pairId,
-        trialId: planned.trialId,
-        unitId: planned.unitId,
-        replication: planned.replication,
+        pairId: exactAssignment.pairId,
+        trialId: exactAssignment.trialId,
+        unitId: exactAssignment.unitId,
+        replication: exactAssignment.replication,
         substrate: c.substrate,
         order: c.order,
-        fault: planned.fault,
+        fault: exactAssignment.fault,
       },
       c.receiptKeyId,
       receiptKey,

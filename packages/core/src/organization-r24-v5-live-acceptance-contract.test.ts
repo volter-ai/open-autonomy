@@ -7,13 +7,17 @@ import {
   projectV5LiveCellFromRecord,
   r24V5ArtifactDigest,
   r24V5PlanAuthorizationDigest,
-  r24V5PlannedIdentity,
   r24V5ResultAuthorizationDigest,
   r24V5SourceCustodyDigest,
   verifyR24V5LiveArtifact,
   type V5LiveArtifact,
 } from "./organization-r24-v5-live-acceptance-contract";
 import { v5ProtocolDigest } from "./organization-r24-v5-protocol";
+import {
+  matchedBenchmarkDigest,
+  planMatchedV2,
+  type V2Design,
+} from "./organization-matched-benchmark";
 import { createV5CellFixture } from "./test-support/organization-r24-v5-fixture";
 
 const d = "sha256:" + "a".repeat(64),
@@ -62,46 +66,61 @@ function signResult(a: V5LiveArtifact) {
   a.digest = r24V5ArtifactDigest(body);
 }
 
+function resign(a: V5LiveArtifact) {
+  a.plan.authorization.signature = sign(
+    null,
+    Buffer.from(r24V5PlanAuthorizationDigest(a.plan)),
+    planner.privateKey,
+  ).toString("base64");
+  signResult(a);
+}
+
 function artifact(): V5LiveArtifact {
   const campaignDigest = v5ProtocolDigest("campaign"),
-    seed = "73",
-    units = ["u"],
-    replications = 2,
     fault = { id: "none", digest: v5ProtocolDigest("fault:none") },
-    assignments = Array.from({ length: replications }, (_, replication) => ({
-      unitId: "u",
-      replication,
-      fault,
-      ...r24V5PlannedIdentity(campaignDigest, seed, "u", replication, fault),
-    })),
-    cells = assignments.flatMap((planned) =>
-      (["hermes", "paperclip"] as const).map((substrate) => {
-        const order = (substrate === planned.first ? 0 : 1) as 0 | 1,
-          exactAssignment = {
-            pairId: planned.pairId,
-            trialId: planned.trialId,
-            unitId: planned.unitId,
-            replication: planned.replication,
-            fault: planned.fault,
-            substrate,
-            order,
-          },
+    design: V2Design = {
+      schema: "autonomy.matched-design.v2",
+      seed: 73,
+      units: ["u"],
+      repetitions: 2,
+      faults: [fault],
+      primaryEndpoint: "portableScore",
+      alpha: 0.05,
+      multiplicity: "holm",
+      missingness: "complete-pair",
+      failureEstimand: "worst-score-and-observed-resources",
+      strata: ["unit", "fault"],
+      permutations: "exact-pair-swap",
+    },
+    exactAssignments = planMatchedV2(design),
+    pairSummaries = exactAssignments
+      .filter((assignment) => assignment.order === 0)
+      .map(({ substrate, ...assignment }) => ({
+        pairId: assignment.pairId,
+        trialId: assignment.trialId,
+        unitId: assignment.unitId,
+        replication: assignment.replication,
+        fault: assignment.fault,
+        first: substrate,
+      })),
+    cells = exactAssignments.map((exactAssignment) => {
+        const { substrate } = exactAssignment,
           assignmentDigest = v5ProtocolDigest(exactAssignment),
-          nonce = Buffer.from(`${planned.replication}`.padEnd(32, "!"))
+          nonce = Buffer.from(`${exactAssignment.replication}`.padEnd(32, "!"))
             .toString("hex")
             .slice(0, 64),
-          receiptKeyId = `receipt-${planned.replication}-${substrate}`,
+          receiptKeyId = `receipt-${exactAssignment.replication}-${substrate}`,
           receiptKey = receiptKeyFor(receiptKeyId),
           record = createV5CellFixture({
             substrate,
-            pairId: planned.pairId,
-            trialId: planned.trialId,
-            replication: planned.replication,
+            pairId: exactAssignment.pairId,
+            trialId: exactAssignment.trialId,
+            replication: exactAssignment.replication,
             assignmentDigest,
             launcherSpecDigest: d,
             nonce,
-            isolationId: `cell:${planned.replication}:${substrate}`,
-            fault: planned.fault,
+            isolationId: `cell:${exactAssignment.replication}:${substrate}`,
+            fault: exactAssignment.fault,
             receiptKey,
           });
         const bindingDigest = v5ProtocolDigest(record.binding),
@@ -130,19 +149,18 @@ function artifact(): V5LiveArtifact {
         return projectV5LiveCellFromRecord(
           record,
           {
-            pairId: planned.pairId,
-            trialId: planned.trialId,
-            unitId: planned.unitId,
-            replication: planned.replication,
+            pairId: exactAssignment.pairId,
+            trialId: exactAssignment.trialId,
+            unitId: exactAssignment.unitId,
+            replication: exactAssignment.replication,
             substrate,
-            order,
-            fault: planned.fault,
+            order: exactAssignment.order,
+            fault: exactAssignment.fault,
           },
           receiptKeyId,
           receiptKey,
         );
       }),
-    ),
     bindings = cells.map((cell) => ({
       pairId: cell.pairId,
       substrate: cell.substrate,
@@ -177,15 +195,15 @@ function artifact(): V5LiveArtifact {
       campaignDigest,
       authorizedAt: "2026-07-15T00:00:00Z",
       notAfter: "2026-07-16T00:00:00Z",
-      seed,
-      units,
-      replications,
-      assignmentDigest: v5ProtocolDigest({ seed, assignments }),
+      design,
+      designDigest: matchedBenchmarkDigest(design),
+      assignmentDigest: matchedBenchmarkDigest(exactAssignments),
       launcherDigest: d,
       launcherSpecDigest: d,
       inputLockDigest,
       bindings,
-      assignments,
+      assignments: exactAssignments,
+      pairSummaries,
       authorization: {
         algorithm: "Ed25519",
         signerKeyId: "planner-key",
@@ -274,4 +292,23 @@ test("rejects any covered plan mutation without the planner key", () => {
   expect(() => verifyR24V5LiveArtifact(a, trust)).toThrow(
     "invalid matched plan",
   );
+});
+
+test("rejects planner-signed divergence from the sole V2 assignment authority", () => {
+  for (const mutate of [
+    (a: V5LiveArtifact) => a.plan.assignments.reverse(),
+    (a: V5LiveArtifact) => a.plan.assignments.pop(),
+    (a: V5LiveArtifact) =>
+      (a.plan.assignments[0]!.order = a.plan.assignments[0]!.order ? 0 : 1),
+    (a: V5LiveArtifact) =>
+      (a.plan.pairSummaries[0]!.first =
+        a.plan.pairSummaries[0]!.first === "hermes" ? "paperclip" : "hermes"),
+  ]) {
+    const a = artifact();
+    mutate(a);
+    resign(a);
+    expect(() => verifyR24V5LiveArtifact(a, trust)).toThrow(
+      "seeded assignment replay failed",
+    );
+  }
 });

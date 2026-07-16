@@ -1,0 +1,90 @@
+{
+  "schema": "open-autonomy.external-validation-program.v1",
+  "programId": "replace-with-external-program-id",
+  "campaigns": {
+    "R20": {
+      "registry": "private/r20-registry.json",
+      "state": "state/r20-campaign.json",
+      "dependencies": [],
+      "requirements": [
+        { "kind": "environment", "name": "SLACK_BOT_TOKEN" },
+        { "kind": "environment", "name": "SLACK_SIGNING_SECRET" },
+        { "kind": "environment", "name": "SLACK_APP_TOKEN" },
+        { "kind": "attestation", "path": "private/r20-authorized-1.json", "subject": "r20-authorized-participant" },
+        { "kind": "attestation", "path": "private/r20-authorized-2.json", "subject": "r20-authorized-participant" },
+        { "kind": "attestation", "path": "private/r20-unauthorized.json", "subject": "r20-unauthorized-participant" },
+        { "kind": "attestation", "path": "private/r20-keyboard.json", "subject": "r20-keyboard-participant" },
+        { "kind": "attestation", "path": "private/r20-screen-reader.json", "subject": "r20-screen-reader-participant" },
+        { "kind": "attestation", "path": "private/r20-collector.json", "subject": "r20-independent-collector" }
+      ]
+    },
+    "R21": {
+      "registry": "private/r21-registry.json",
+      "state": "state/r21-campaign.json",
+      "dependencies": [{ "checkpoint": "R20", "receipt": "receipts/r20.json" }],
+      "requirements": [
+        { "kind": "environment", "name": "OA_EXTERNAL_CLOUD_IDENTITY" },
+        { "kind": "environment", "name": "OA_EXTERNAL_KMS_KEY" },
+        { "kind": "file", "path": "private/r21-topology.json" },
+        { "kind": "attestation", "path": "private/r21-billing.json", "subject": "r21-independent-billing-authority" },
+        { "kind": "attestation", "path": "private/r21-operator.json", "subject": "r21-unfamiliar-operator" }
+      ]
+    },
+    "R22": {
+      "registry": "private/r22-registry.json",
+      "state": "state/r22-campaign.json",
+      "dependencies": [{ "checkpoint": "R21", "receipt": "receipts/r21.json" }],
+      "requirements": [
+        { "kind": "file", "path": "private/r22-preregistration.json" },
+        { "kind": "attestation", "path": "private/r22-rater-1.json", "subject": "r22-consenting-rater" },
+        { "kind": "attestation", "path": "private/r22-rater-2.json", "subject": "r22-consenting-rater" },
+        { "kind": "attestation", "path": "private/r22-privacy.json", "subject": "r22-independent-privacy-authority" }
+      ]
+    },
+    "R23": {
+      "registry": "private/r23-registry.json",
+      "state": "state/r23-campaign.json",
+      "dependencies": [{ "checkpoint": "R22", "receipt": "receipts/r22.json" }],
+      "requirements": [
+        { "kind": "environment", "name": "OA_PROVIDER_A_CREDENTIAL" },
+        { "kind": "environment", "name": "OA_PROVIDER_B_CREDENTIAL" },
+        { "kind": "file", "path": "private/r23-normalization-registry.json" },
+        { "kind": "attestation", "path": "private/r23-human-1.json", "subject": "r23-consenting-timing-participant" },
+        { "kind": "attestation", "path": "private/r23-human-2.json", "subject": "r23-consenting-timing-participant" }
+      ]
+    },
+    "R24": {
+      "registry": "private/r24-registry.json",
+      "state": "state/r24-campaign.json",
+      "dependencies": [{ "checkpoint": "R23", "receipt": "receipts/r23.json" }],
+      "requirements": [{ "kind": "file", "path": "private/r24-preregistration.json" }]
+    },
+    "R25": {
+      "registry": "private/r25-registry.json",
+      "state": "state/r25-campaign.json",
+      "dependencies": [{ "checkpoint": "R24", "receipt": "receipts/r24.json" }],
+      "requirements": [{ "kind": "file", "path": "private/r25-population-registry.json" }]
+    },
+    "R26": {
+      "registry": "private/r26-registry.json",
+      "state": "state/r26-campaign.json",
+      "dependencies": [{ "checkpoint": "R25", "receipt": "receipts/r25.json" }],
+      "requirements": [{ "kind": "attestation", "path": "private/r26-validator.json", "subject": "r26-independent-validator" }]
+    },
+    "R27": {
+      "registry": "private/r27-registry.json",
+      "state": "state/r27-campaign.json",
+      "dependencies": [{ "checkpoint": "R26", "receipt": "receipts/r26.json" }],
+      "requirements": [{ "kind": "file", "path": "private/r27-preregistration.json" }]
+    },
+    "R28": {
+      "registry": "private/r28-registry.json",
+      "state": "state/r28-campaign.json",
+      "dependencies": [{ "checkpoint": "R27", "receipt": "receipts/r27.json" }],
+      "requirements": [
+        { "kind": "file", "path": "private/r28-canonical-repository.json" },
+        { "kind": "attestation", "path": "private/r28-validator.json", "subject": "r28-independent-validator" }
+      ]
+    }
+  }
+}

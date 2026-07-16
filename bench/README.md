@@ -32,6 +32,24 @@ R20..R28 --verified-at <ISO-8601> --bundle <json> --trust-module <module> --trus
 The explicit verification time is included in the receipt, bounds trust-module attestations, and is
 passed to the time-sensitive R26 and R28 verifiers. No wall-clock default is permitted.
 
+The unified external-program controller turns those checkpoint CLIs into one fail-closed operating queue. Copy
+`bench/external-validation-program.example.json` to a private campaign directory, replace its registries,
+attestations, topology, preregistrations, and credential environment-variable names with the externally administered
+campaign inputs, then run:
+
+```sh
+bun bench/dev/evidence/external-validation-program.ts status --program /private/campaign/program.json
+bun bench/dev/evidence/external-validation-program.ts init-ready --program /private/campaign/program.json
+```
+
+`status` reports credential *names* only, never values. `init-ready` initializes only a checkpoint whose registry,
+external attestations, files, credential presence, and upstream external receipts all exist. An attestation must use
+schema `open-autonomy.external-authority-attestation.v1` and carry exactly `subject`, `authorityId`, `publicKeyId`,
+`consent: true`, `independent: true`, `signedAt`, and a nonempty external `signature`. This controller checks campaign
+operability; the checkpoint acquisition registry and production verifier remain responsible for cryptographic
+identity binding and evidence acceptance. Private registries, state, participant records, credentials, and raw
+invoices stay outside the repository.
+
 R20 acquisition freezes the externally signed registration, then exposes immutable requests for
 each preregistered trial. Requests may be handled in parallel, but only by the participant and key
 assigned to that trial. Collection remains unavailable until every observation is accepted. The

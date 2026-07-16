@@ -18,6 +18,36 @@ export {
 export const HUMAN_APPROVAL_LABEL = 'human-approval-required';
 const isSha = (value: unknown): value is string => typeof value === 'string' && /^[0-9a-f]{40}$/i.test(value);
 
+// Break-glass integration (framework issue #234). A maintainer's `/agent break-glass <head-sha> <reason>`
+// comment posts agent-review=success out-of-band via scripts/break-glass-gate.ts. This reviewer effect is the
+// one place that posts agent-review=FAILURE, and it re-fires whenever the reviewer re-runs on the SAME head
+// (reopened / ready_for_review / an explicit `/agent reviewer`). So before posting any failure we check for a
+// qualifying break-glass on the CURRENT head and, if present, DEFER — leaving agent-review at the break-glass
+// success rather than clobbering a maintainer's deliberate, audited override. Per-SHA: a new push has a new
+// head with no matching break-glass, so review resumes normally.
+//
+// This is a SELF-CONTAINED copy of break-glass-gate.ts's parse + maintainer primitives: this file is mirrored
+// verbatim into the generic substrate runtime (bin/sync-runtime.ts), which must NOT import the code-host gate
+// script. The regex is kept identical to BREAK_GLASS_RE and the check is deliberately at-least-as-strict and
+// fail-closed — a non-matching SHA, a non-maintainer, or an unreadable permission means NO deferral, so the
+// failure still posts. It changes no PR state; human-approval remains a fully independent gate.
+const BREAK_GLASS_RE = /^\/agent break-glass ([0-9a-fA-F]{40})\s+(.+\S)$/;
+type BreakGlassComment = { body?: string; user?: { login?: string }; author?: { login?: string } };
+
+/** True iff some PR comment is a qualifying break-glass for `headSha` from a current write+ maintainer. */
+export function breakGlassClearsHead(
+  comments: BreakGlassComment[],
+  headSha: string,
+  isMaintainer: (login: string) => boolean,
+): boolean {
+  return comments.some((c) => {
+    const m = c.body?.match(BREAK_GLASS_RE);
+    if (!m || m[1].toLowerCase() !== headSha.toLowerCase()) return false;
+    const login = c.user?.login ?? c.author?.login ?? '';
+    return Boolean(login) && isMaintainer(login);
+  });
+}
+
 export type Finalization = { state: 'success' | 'failure' | 'skip'; result?: ReviewResult; reason: string };
 
 /** A non-successful model job always wins over any artifact it happened to leave behind. */
@@ -92,7 +122,36 @@ if (import.meta.main) {
     }
   };
 
+  // A maintainer break-glass on the current head clears agent-review deliberately; never clobber it with a
+  // re-posted failure (see the header note). Fail-closed: any read/permission error defers to posting failure.
+  const breakGlassClearsCurrentHead = (): boolean => {
+    try {
+      const raw = gh(['api', `repos/${repo}/issues/${expectedPr}/comments?per_page=100`, '--paginate', '--slurp']);
+      if (!raw) return false;
+      const parsed = JSON.parse(raw) as BreakGlassComment[] | BreakGlassComment[][];
+      const comments = Array.isArray(parsed[0]) ? (parsed as BreakGlassComment[][]).flat() : (parsed as BreakGlassComment[]);
+      const cache = new Map<string, boolean>();
+      const isMaintainer = (login: string): boolean => {
+        if (!login) return false;
+        if (cache.has(login)) return cache.get(login)!;
+        let perm = '';
+        try { perm = gh(['api', `repos/${repo}/collaborators/${login}/permission`, '--jq', '.permission']).trim(); } catch { perm = ''; }
+        const r = perm === 'admin' || perm === 'write' || perm === 'maintain';
+        cache.set(login, r);
+        return r;
+      };
+      return breakGlassClearsHead(comments, expectedSha, isMaintainer);
+    } catch (e) {
+      process.stderr.write(`agent-review: break-glass check failed (${e instanceof Error ? e.message : String(e)}); NOT deferring — posting failure\n`);
+      return false;
+    }
+  };
+
   if (final.state === 'failure') {
+    if (breakGlassClearsCurrentHead()) {
+      process.stdout.write(`agent-review: #${expectedPr} failure DEFERRED — valid maintainer break-glass on current head ${expectedSha.slice(0, 7)}; leaving agent-review success in place\n`);
+      process.exit(0);
+    }
     postStatus('failure', final.reason);
     // Failure is bound to the reviewed SHA and is safe to publish even if the PR advances. Re-check before
     // touching PR/issue-scoped state so an old review cannot comment on or park a newer head.

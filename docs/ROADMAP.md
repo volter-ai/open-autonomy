@@ -14,6 +14,12 @@ The post-Organization-IR implementation sequence is governed by the acceptance a
 [`ORGANIZATION-RUNTIME-AC.md`](./ORGANIZATION-RUNTIME-AC.md). That document supplies dependency-ordered engineering
 ACs and falsifiers for roadmap direction; it does not replace this roadmap as the source of product priority.
 
+The next experimental proof sequence is governed by
+[`ORGANIZATION-UNIVERSALITY-AC.md`](./ORGANIZATION-UNIVERSALITY-AC.md). It tests the project’s primary abstraction
+claim: real autonomy systems can be represented with zero silent loss and compatible specifications can be compiled
+into heterogeneous substrate compositions with explicit preservation certificates or verified incompatibility cores.
+It likewise supplies proof obligations rather than replacing this roadmap’s product priorities.
+
 > **Reading this file:** the roadmap doubles as the historical phase record — later phases
 > supersede earlier ones, and early-phase prose is **not** the current architecture. Three
 > mechanisms described in older phases were later retired: the standalone **merge-gate job**

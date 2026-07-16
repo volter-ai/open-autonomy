@@ -1,0 +1,25 @@
+{
+  "schema": "open-autonomy.organization-universality-punchlist.v1",
+  "claim": "quantified representation and sound compilation into compatible substrate compositions",
+  "checkpoints": [
+    {"id":"U0","dependsOn":[],"gate":"UG1"},
+    {"id":"U1","dependsOn":["U0"],"gate":"UG1"},
+    {"id":"U2","dependsOn":["U1"],"gate":"UG1"},
+    {"id":"U3","dependsOn":["U2"],"gate":"UG1"},
+    {"id":"U4","dependsOn":["U2"],"gate":"UG2"},
+    {"id":"U5","dependsOn":["U3","U4"],"gate":"UG2"},
+    {"id":"U6","dependsOn":["U1","U2"],"gate":"UG3"},
+    {"id":"U7","dependsOn":["U6"],"gate":"UG3"},
+    {"id":"U8","dependsOn":["U7"],"gate":"UG3"},
+    {"id":"U9","dependsOn":["U8"],"gate":"UG3"},
+    {"id":"U10","dependsOn":["U9"],"gate":"UG3"},
+    {"id":"U11","dependsOn":["U1","U4","U8"],"gate":"UG4"},
+    {"id":"U12","dependsOn":["U7","U8","U9","U11"],"gate":"UG4"},
+    {"id":"U13","dependsOn":["U3","U5","U10","U12"],"gate":"UG5"},
+    {"id":"U14","dependsOn":["U13"],"gate":"UG5"},
+    {"id":"U15","dependsOn":["U14"],"gate":"UG5"},
+    {"id":"U16","dependsOn":["U15"],"gate":"UG5"},
+    {"id":"U17","dependsOn":["U16"],"gate":"UG6"},
+    {"id":"U18","dependsOn":["U17"],"gate":"UG6"}
+  ]
+}

@@ -1,0 +1,153 @@
+{
+  "schema": "autonomy.r24-v5-structural-readiness.v1",
+  "checkpoint": "R24",
+  "closureClaim": false,
+  "purpose": "machine-reviewable implementation readiness; never live benchmark evidence",
+  "commits": [
+    "370ee882fc77a51492ea74f1855a1a63632ac987",
+    "278d33f2ca03b00225845340f1dd2cd44852d850",
+    "f76f9ea1b6d3e6e3b97b6f9b9b8b41e04943d9bb"
+  ],
+  "components": [
+    {
+      "path": "packages/core/src/organization-r24-v5-live-acceptance-contract.ts",
+      "sha256": "sha256:1816aa7eb1c2fb75fe1bdd89afee41de4165b355718258d5cb58b918c6a5c6f0"
+    },
+    {
+      "path": "packages/core/src/organization-r24-v5-bundle-composer.ts",
+      "sha256": "sha256:c8bdaa522a60f6437cbd53147c3fa3299168378780c4273cd79ae9647f847ddf"
+    },
+    {
+      "path": "packages/core/src/organization-r24-v5-matched-projection.ts",
+      "sha256": "sha256:0930640f416423f3dafad0b0c40d4d3fe9c5e733c1fbb730c970fc7a285a390a"
+    },
+    {
+      "path": "packages/core/src/organization-r24-v5-bundle-store.ts",
+      "sha256": "sha256:cdc5505d9fa926670033456ee0e4c5ce0c2bffcb4201dcffbf74008d7cae5e90"
+    },
+    {
+      "path": "bin/organization-r24-v5.ts",
+      "sha256": "sha256:06aa04389ad4d5358e8e7cbfb886c55a2827731057c3844720c9f8f205c814be"
+    },
+    {
+      "path": "bin/organization-r24-v5.test.ts",
+      "sha256": "sha256:e3665786c5cc16e3d29132812a61299c8d57977228e16541deb82ba111a1de44"
+    },
+    {
+      "path": "packages/core/src/organization-canonical.ts",
+      "sha256": "sha256:248f62aca4b1bc32bbbf9209f6292283d8f2276dca663622e177cd56f0715cd9"
+    },
+    {
+      "path": "packages/core/src/organization-canonical.test.ts",
+      "sha256": "sha256:652653a51eb6a1bf49958db4130ddd641604098a319d4e5dc9548a9f60be15c1"
+    },
+    {
+      "path": "packages/core/src/organization-matched-benchmark.ts",
+      "sha256": "sha256:53285584b8943d6beb30b5c32c07bbab3c1aa42285dcf16b2294b83599e60876"
+    },
+    {
+      "path": "packages/core/src/organization-matched-benchmark.test.ts",
+      "sha256": "sha256:9cb46f81aa146926397e59d458e69e8a122036e9c4b0d99a95db342c1f41e74b"
+    },
+    {
+      "path": "packages/core/src/organization-process-tree-supervisor-contract.ts",
+      "sha256": "sha256:cc15e12233cf4763b117021e1a36925eabc7d54a057c4d626780c0467eda7d2d"
+    },
+    {
+      "path": "packages/core/src/organization-process-tree-supervisor-contract.test.ts",
+      "sha256": "sha256:4ac66bd882eaf21f28d09ce88995f65b6e4ec8747fa6e40ae22e5937fc0ceb14"
+    },
+    {
+      "path": "packages/core/src/organization-r24-paperclip-native-dispatch-spike.ts",
+      "sha256": "sha256:b847d6e91401c744cba64100b9bbe592c150ec66c351fcb1aa15baca3d19f5d1"
+    },
+    {
+      "path": "packages/core/src/organization-r24-paperclip-native-dispatch-spike.test.ts",
+      "sha256": "sha256:4d69c7f7d61e7b47d794afd7da6b5d5e4d9fa7fcb229db8fbb7a362347ee8623"
+    },
+    {
+      "path": "packages/core/src/organization-r24-provider-transcripts.ts",
+      "sha256": "sha256:228a2feb22824a3045d9b69ba53c7da368357cff37cce636b7f6958344d969f4"
+    },
+    {
+      "path": "packages/core/src/organization-r24-provider-transcripts.test.ts",
+      "sha256": "sha256:0a54087c32089290d769822be7bbc70ba11c65dbb51f67afc6cea2867d89d2ea"
+    },
+    {
+      "path": "packages/core/src/organization-r24-transparent-launcher-contract.ts",
+      "sha256": "sha256:8545f8ea863de1530562e36b212d20788467e52ac2ecf53383c034bd7382d02b"
+    },
+    {
+      "path": "packages/core/src/organization-r24-transparent-launcher-contract.test.ts",
+      "sha256": "sha256:08f3ef10954d878fb32540a56d53637f438ad14b5bc647745ff97e7a5a0f8314"
+    },
+    {
+      "path": "packages/core/src/organization-r24-v5-launcher.cjs",
+      "sha256": "sha256:4e9800501c91bb088d507f1025f1a73d66480fd03a635113280a0c5b3d38e5f4"
+    },
+    {
+      "path": "packages/core/src/organization-r24-v5-launcher.test.ts",
+      "sha256": "sha256:85de92fc12dd77241988a439754233d5623b308b39bb71ae5d977d5338f73e64"
+    },
+    {
+      "path": "packages/core/src/organization-r24-v5-live-acceptance-contract.test.ts",
+      "sha256": "sha256:e2a15caa23108199e4ed1515a2612562d4b5d1b63efc1306bd373f9e6aa9b57c"
+    },
+    {
+      "path": "packages/core/src/organization-r24-v5-live-runner.ts",
+      "sha256": "sha256:dfb743e551848c7595cc7d55a9a96a7ddd397a579ad6f1e6c7837f087c0f2a3a"
+    },
+    {
+      "path": "packages/core/src/organization-r24-v5-live-runner.test.ts",
+      "sha256": "sha256:5f8fbdf0c6ac52b1638554247d995a8a7f7e35425bb950ab632cdd13909c33c5"
+    },
+    {
+      "path": "packages/core/src/organization-r24-v5-local-smoke.ts",
+      "sha256": "sha256:26778c914e567d89193f02b7f85d1480c8b17da29872983a756e7546863ba962"
+    },
+    {
+      "path": "packages/core/src/organization-r24-v5-local-smoke.test.ts",
+      "sha256": "sha256:59c20df390c1fcbd21a70ce01bb554626ef9adfd3edf3d1da40f54b4a2af05ee"
+    },
+    {
+      "path": "packages/core/src/organization-r24-v5-outcome-worker.cjs",
+      "sha256": "sha256:b7b3dff0b33203da67de5c5853be09c5fa6083d3cd14f8d6d69acb1d06d3a964"
+    },
+    {
+      "path": "packages/core/src/organization-r24-v5-protocol.ts",
+      "sha256": "sha256:c4d837442112a2907669b09554324a15b177ca1948e5d5156dec37fbbf579c3e"
+    },
+    {
+      "path": "packages/core/src/organization-r24-v5-protocol.test.ts",
+      "sha256": "sha256:c2a60dc6f0feba04314cea2f00da66b76b51416d58967730f54144ba165fc4d2"
+    },
+    {
+      "path": "packages/core/src/test-support/organization-r24-v5-fixture.ts",
+      "sha256": "sha256:984f2d5f7711aba87db2ce48e90e9469f5b6a3e34e6fdd4880b8e7989b69c2bb"
+    },
+    {
+      "path": "packages/core/src/test-support/organization-r24-v5-fixture.test.ts",
+      "sha256": "sha256:431dea326d400f4421168039aaeb8c4cd10849ae0dd696fde161ecebd22d02f1"
+    }
+  ],
+  "replayCommands": [
+    "bun test packages/core/src/organization-r24-v5-*.test.ts packages/core/src/test-support/organization-r24-v5-fixture.test.ts bin/organization-r24-v5.test.ts",
+    "bunx tsc -p tsconfig.json --noEmit"
+  ],
+  "structurallyProven": [
+    "signed preregistration replays the sole V2 matched assignment plan",
+    "each native cell is canonically derived from authenticated receipts, provider transcripts, supervisor traces, procfs meters, faults, locks, cleanup and custody signatures",
+    "grader and accounting policy, signer identity, DER-SPKI fingerprint and trust-registry snapshot are committed before execution",
+    "portable and accounting evidence is signed and bound to the exact artifact, plan, assignment, cell record, native run and challenge",
+    "wall, CPU and memory-byte-ms are derived from authenticated native meter evidence; missing economic measures remain unknown",
+    "the final bundle replays through analyzeMatchedV2 with no caller-selected semantic verifier",
+    "verified bundles publish immutably through fsynced atomic no-overwrite linkage"
+  ],
+  "stillRequiredForClosure": [
+    "accepted closure evidence for R21, R22 and R23 dependencies",
+    "multiple independent live native Hermes and Paperclip repetitions using unchanged canonical organizations",
+    "authoritative provider revisions and externally controlled source, grader, accounting, result and trust-registry authorities",
+    "matched live faults, failures and timeouts with complete provider usage, billing and human-labor attribution",
+    "published statistical report with effects, intervals, sensitivity analyses and zero untriaged differences"
+  ]
+}

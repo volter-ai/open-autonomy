@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { canonicalSemanticJson } from "./organization-canonical";
 
@@ -13,6 +13,11 @@ export type ProgressLedger = {
     sha256: string;
     selector: string;
     expectedCount: number;
+  }>;
+  readinessEvidence: Array<{
+    checkpoint: string;
+    path: string;
+    sha256: string;
   }>;
   checkpoints: Array<{
     id: string;
@@ -33,6 +38,63 @@ type Residual = {
 const sha = (bytes: string | Buffer) =>
   `sha256:${createHash("sha256").update(bytes).digest("hex")}`;
 const semanticDigest = (x: unknown) => sha(canonicalSemanticJson(x));
+const CANONICAL_PROGRESS_SOURCES: ProgressLedger["sources"] = [
+  { path: "docs/evidence/R20-R23-EXTERNAL-PARTICIPATION.md", sha256: "sha256:2970a3ca9d1a1578e7f64d679047b709f27c50319f7f9fd9d3b5ebf9d7aca33c", selector: "external-participation-rows", expectedCount: 9 },
+  { path: "docs/evidence/R21-LIVE-CAMPAIGN.json", sha256: "sha256:ac567dec901f1951d09004ac7ec12ab5e306c35933fe154515a905649e373c92", selector: "residuals", expectedCount: 24 },
+  { path: "docs/evidence/R22-EXTERNAL-CUSTODY-GATE.json", sha256: "sha256:54272e1eb14f52b70b8448bf8d3df81b37dec8b2b722e4f4e3831fc8eb5d1139", selector: "residuals", expectedCount: 1 },
+  { path: "docs/evidence/R23-LOCAL-PROPERTY-GATE.json", sha256: "sha256:c20a51632de12f79fb8e12203f478943bc7aad5c05eb4d9a2d88de9740bd24db", selector: "dependency-residuals", expectedCount: 10 },
+  { path: "docs/evidence/R24-V5-NESTED-HERMES-SMOKE.json", sha256: "sha256:de3c0b6b719a5567289234a5a1dd72d0c0661b038fe359843ee78a8ca01a6844", selector: "null-live-fields", expectedCount: 3 },
+  { path: "docs/evidence/rejected/R24-R25-ATTEMPTS.json", sha256: "sha256:76ba3b035365979157817e9a759175f67974f90e3b07a52b7962cc63071b13b3", selector: "rejected-attempt-reasons", expectedCount: 15 },
+  { path: "docs/evidence/R27-LIVE-CANARY-BUNDLE.json", sha256: "sha256:2301a65a4c4968f2c84a726392172d80cb2e64f2363bc609f1f21d72a185aa0d", selector: "unknown-telemetry", expectedCount: 1 },
+  { path: "docs/evidence/R28-REPOSITORY-DOGFOOD.json", sha256: "sha256:e8e736591b2fe0eaa2d6574fc6d4894f5de4d4d75ca05403616adb2cef87ec33", selector: "residuals", expectedCount: 11 },
+];
+const CANONICAL_RESIDUAL_COUNT = 74;
+const CANONICAL_RESIDUAL_DIGEST =
+  "sha256:2d27a737bf52d74fff32aefbb6aaafa0bd798bb20f4d73c05026fabbbada03da";
+function requiredR24ReadinessPaths(root: string) {
+  const core = readdirSync(join(root, "packages/core/src"), {
+      recursive: true,
+    }) as string[],
+    selectedCore = core
+      .map((path) => `packages/core/src/${path.replaceAll("\\", "/")}`)
+      .filter((path) =>
+        /\/(?:organization-r24-[^/]+|organization-matched-benchmark(?:\.test)?\.ts|organization-canonical(?:\.test)?\.ts|organization-process-tree-supervisor-contract(?:\.test)?\.ts|test-support\/organization-r24-v5-fixture(?:\.test)?\.ts)$/.test(
+          path,
+        ),
+      ),
+    bin = readdirSync(join(root, "bin"))
+      .filter((path) => /^organization-r24-v5(?:\.test)?\.ts$/.test(path))
+      .map((path) => `bin/${path}`);
+  return [...selectedCore, ...bin].sort();
+}
+export function verifyR24ReadinessEvidence(root: string, evidence: any) {
+  if (
+    evidence.checkpoint !== "R24" ||
+    evidence.closureClaim !== false ||
+    evidence.purpose !==
+      "machine-reviewable implementation readiness; never live benchmark evidence" ||
+    !Array.isArray(evidence.components) ||
+    !evidence.components.length ||
+    !Array.isArray(evidence.stillRequiredForClosure) ||
+    !evidence.stillRequiredForClosure.length
+  )
+    throw Error("R24 readiness evidence cannot prove closure");
+  const submittedComponents = evidence.components
+      .map((component: any) => component.path)
+      .sort(),
+    requiredComponents = requiredR24ReadinessPaths(root);
+  if (
+    new Set(submittedComponents).size !== submittedComponents.length ||
+    semanticDigest(submittedComponents) !== semanticDigest(requiredComponents)
+  )
+    throw Error("R24 readiness component inventory incomplete");
+  for (const component of evidence.components) {
+    const bytes = readFileSync(join(root, component.path));
+    if (sha(bytes) !== component.sha256)
+      throw Error(`readiness component drift: ${component.path}`);
+  }
+  return { closureClaim: false as const, components: requiredComponents.length };
+}
 
 function extract(path: string, selector: string, raw: string): Residual[] {
   if (selector === "external-participation-rows")
@@ -114,6 +176,12 @@ export function verifyProgressLedger(root: string, ledger: ProgressLedger) {
     ledger.normativePredecessor.immutable !== true
   )
     throw Error("progress ledger cannot be consumed as closure");
+  if (
+    semanticDigest(ledger.sources) !== semanticDigest(CANONICAL_PROGRESS_SOURCES) ||
+    ledger.importedResidualCount !== CANONICAL_RESIDUAL_COUNT ||
+    ledger.importedResidualDigest !== CANONICAL_RESIDUAL_DIGEST
+  )
+    throw Error("canonical residual source inventory drift");
   const predecessor = readFileSync(
     join(root, ledger.normativePredecessor.path),
   );
@@ -135,13 +203,17 @@ export function verifyProgressLedger(root: string, ledger: ProgressLedger) {
     const state = expectedStates.find((x: any) => x.id === checkpoint.id),
       obligations = expectedObligations.filter(
         (x: any) => x.checkpoint === checkpoint.id,
-      );
+      ),
+      submittedIds = checkpoint.obligations.map((x) => x.id).sort(),
+      expectedIds = obligations.map((x: any) => x.id).sort();
     if (
       !state ||
       checkpoint.state !== state.status ||
       !checkpoint.nextArtifact.id ||
       !checkpoint.nextArtifact.requirements.length ||
       checkpoint.obligations.length !== obligations.length ||
+      new Set(submittedIds).size !== submittedIds.length ||
+      semanticDigest(submittedIds) !== semanticDigest(expectedIds) ||
       checkpoint.obligations.some(
         (x) =>
           x.assurance !== "unknown" ||
@@ -158,10 +230,27 @@ export function verifyProgressLedger(root: string, ledger: ProgressLedger) {
     semanticDigest(residuals) !== ledger.importedResidualDigest
   )
     throw Error("imported residual inventory mismatch");
+  if (
+    !Array.isArray(ledger.readinessEvidence) ||
+    !ledger.readinessEvidence.length ||
+    new Set(ledger.readinessEvidence.map((x) => x.checkpoint)).size !==
+      ledger.readinessEvidence.length
+  )
+    throw Error("readiness evidence index invalid");
+  for (const entry of ledger.readinessEvidence) {
+    const raw = readFileSync(join(root, entry.path), "utf8");
+    if (sha(raw) !== entry.sha256)
+      throw Error(`readiness evidence drift: ${entry.path}`);
+    const evidence = JSON.parse(raw);
+    if (evidence.checkpoint !== entry.checkpoint)
+      throw Error(`readiness checkpoint mismatch: ${entry.path}`);
+    verifyR24ReadinessEvidence(root, evidence);
+  }
   return {
     status: "nonclosure-progress-verified" as const,
     closureClaim: false as const,
     residuals,
+    readinessEvidence: structuredClone(ledger.readinessEvidence),
   };
 }
 

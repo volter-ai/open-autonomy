@@ -487,6 +487,7 @@ via the runner seam.
 - Published the normative experimental Organization IR v2 specification with a generated field-level semantic appendix and executable examples.
 - Added fail-closed runtime proof ledgers and a reproducible threat-model baseline for the autonomous-organization implementation phase.
 - Added a typed bench-world contract that keeps real compiled Hermes/Paperclip/local targets, external service twins, and behavioral simulators formally disjoint without shipping test scaffolding as substrate content.
+- Added bench-owned external evidence verifiers for R27 causal canary closure and the R28 long-running bounded-improvement campaign.
 
 ### Fixed
 

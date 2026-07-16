@@ -23,6 +23,10 @@ Campaign/readiness accounting follows the same dependency direction. The R20–R
 `bench/dev/evidence/` and may inspect bench fixtures and Volter dependency pins; core never imports the bench or
 hardcodes a service-twin implementation.
 
+External R27 experiment-closure and R28 long-running-campaign verifiers live in the same bench evidence layer.
+Core owns the reusable experiment and bounded-improvement semantics; bench decides whether external evidence is
+strong enough to close their punch-list checkpoints.
+
 ### Graders — pluggable per workload
 
 Each workload declares which graders apply (`"graders": [...]`) — the eval-framework idiom (one case suite,

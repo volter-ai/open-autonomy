@@ -70,6 +70,7 @@ export * from './organization-r22-external-campaign';
 export * from './organization-r23-external-campaign';
 export * from './organization-r24-external-closure';
 export * from './organization-r25-external-calibration';
+export * from './organization-r26-external-certificate';
 export * from './organization-runtime-reliability';
 export * from './organization-counterfactual-planner';
 export * from './organization-experiment';

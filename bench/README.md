@@ -27,8 +27,10 @@ External R27 experiment-closure and R28 long-running-campaign verifiers live in 
 Core owns the reusable experiment and bounded-improvement semantics; bench decides whether external evidence is
 strong enough to close their punch-list checkpoints.
 
-Independently administered R27/R28 evidence is consumed through `bun run verify:external-campaign -- --checkpoint
-R27|R28 --bundle <json> --trust-module <module> --trust-attestation <json> --trust-root <pem> --out <receipt.json>`.
+Independently administered R20–R28 evidence is consumed through `bun run verify:external-campaign -- --checkpoint
+R20..R28 --verified-at <ISO-8601> --bundle <json> --trust-module <module> --trust-attestation <json> --trust-root <pem> --out <receipt.json>`.
+The explicit verification time is included in the receipt, bounds trust-module attestations, and is
+passed to the time-sensitive R26 and R28 verifiers. No wall-clock default is permitted.
 
 R27 evidence collection uses a separate, restart-safe custody protocol. Initialize it with an
 externally supplied registry whose roles have distinct Ed25519 public keys, then issue and accept

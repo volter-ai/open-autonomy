@@ -21,6 +21,7 @@ const paths = [
   "docs/evidence/R28-ACQUISITION-SKEPTICAL-REVIEW.md",
   "bench/dev/evidence/verify-external-campaign.ts",
   "bench/dev/evidence/verify-external-campaign.test.ts",
+  "docs/evidence/R20-R28-EXTERNAL-INTAKE-SKEPTICAL-REVIEW.md",
   "docs/evidence/R28-REPOSITORY-DOGFOOD.json",
 ].sort();
 const sha = (value: string | Buffer) => `sha256:${createHash("sha256").update(value).digest("hex")}`;

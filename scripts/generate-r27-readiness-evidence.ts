@@ -19,6 +19,7 @@ const paths = [
   "docs/evidence/R27-ACQUISITION-SKEPTICAL-REVIEW.md",
   "bench/dev/evidence/verify-external-campaign.ts",
   "bench/dev/evidence/verify-external-campaign.test.ts",
+  "docs/evidence/R20-R28-EXTERNAL-INTAKE-SKEPTICAL-REVIEW.md",
   "docs/evidence/R27-LIVE-CANARY-BUNDLE.json",
 ].sort();
 const sha = (value: string | Buffer) => `sha256:${createHash("sha256").update(value).digest("hex")}`;

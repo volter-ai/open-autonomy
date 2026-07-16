@@ -54,7 +54,7 @@ test("imports every bound partial-evidence residual while preserving unknown obl
 
 test("rejects omission or drift in R20 implementation and Volter simulation readiness", () => {
   const evidence = JSON.parse(readFileSync(join(root, "docs/evidence/R20-VOLTER-STRUCTURAL-READINESS.json"), "utf8"));
-  expect(verifyR20ReadinessEvidence(root, evidence)).toMatchObject({ components: 15, closureClaim: false,
+  expect(verifyR20ReadinessEvidence(root, evidence)).toMatchObject({ components: 18, closureClaim: false,
     evidenceClass: "simulated-local-substrate" });
   const omitted = structuredClone(evidence); omitted.components.pop();
   expect(() => verifyR20ReadinessEvidence(root, omitted)).toThrow("component inventory incomplete");
@@ -72,7 +72,7 @@ test("rejects omission or drift in R20 implementation and Volter simulation read
 
 test("rejects omission, drift, or closure inflation in R21 structural readiness", () => {
   const evidence = JSON.parse(readFileSync(join(root, "docs/evidence/R21-STRUCTURAL-READINESS.json"), "utf8"));
-  expect(verifyR21ReadinessEvidence(root, evidence)).toMatchObject({ components: 9, closureClaim: false });
+  expect(verifyR21ReadinessEvidence(root, evidence)).toMatchObject({ components: 12, closureClaim: false });
   expect(evidence.components.map((x: any) => x.path)).toEqual(expect.arrayContaining([
     "packages/core/src/organization-canonical.ts", "packages/core/src/organization-canonical.test.ts",
   ]));
@@ -85,7 +85,7 @@ test("rejects omission, drift, or closure inflation in R21 structural readiness"
   const erased = structuredClone(evidence); erased.doesNotProve = [];
   expect(() => verifyR21ReadinessEvidence(root, erased)).toThrow("cannot prove closure");
 });
-test("keeps R22 local custody and benchmark readiness structurally exact and non-closing",()=>{const evidence=JSON.parse(readFileSync(join(root,"docs/evidence/R22-STRUCTURAL-READINESS.json"),"utf8"));expect(verifyR22ReadinessEvidence(root,evidence)).toMatchObject({components:11,closureClaim:false});for(const mutate of [(x:any)=>x.components.pop(),(x:any)=>x.components[0].sha256="sha256:"+"0".repeat(64),(x:any)=>x.closureClaim=true,(x:any)=>x.doesNotProve=[]]){const changed=structuredClone(evidence);mutate(changed);expect(()=>verifyR22ReadinessEvidence(root,changed)).toThrow()}});
+test("keeps R22 local custody and benchmark readiness structurally exact and non-closing",()=>{const evidence=JSON.parse(readFileSync(join(root,"docs/evidence/R22-STRUCTURAL-READINESS.json"),"utf8"));expect(verifyR22ReadinessEvidence(root,evidence)).toMatchObject({components:14,closureClaim:false});for(const mutate of [(x:any)=>x.components.pop(),(x:any)=>x.components[0].sha256="sha256:"+"0".repeat(64),(x:any)=>x.closureClaim=true,(x:any)=>x.doesNotProve=[]]){const changed=structuredClone(evidence);mutate(changed);expect(()=>verifyR22ReadinessEvidence(root,changed)).toThrow()}});
 
 test("fails closed on fabricated closure, omitted residual import, source drift, or upgraded assurance", () => {
   for (const mutate of [

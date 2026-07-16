@@ -61,17 +61,17 @@
     {
       "checkpoint": "R20",
       "path": "docs/evidence/R20-VOLTER-STRUCTURAL-READINESS.json",
-      "sha256": "sha256:a841ca6f8ef993ecd655a21725c38823a03c88f9d7ba56bc7aa6f60ebb106a66"
+      "sha256": "sha256:24d25407f60f8f46696103e675dd7aa4e57904e9111a9fc98c903a6da06bfda6"
     },
     {
       "checkpoint": "R21",
       "path": "docs/evidence/R21-STRUCTURAL-READINESS.json",
-      "sha256": "sha256:08110bc27328fb3a64572b9a329a848b4cd1aa6bedf4895addbbb7baa237238f"
+      "sha256": "sha256:e532ce8393d1295ef95182f23fc2f350e7cb445e1b24179bb3446ff3f0fe7b47"
     },
     {
       "checkpoint": "R22",
       "path": "docs/evidence/R22-STRUCTURAL-READINESS.json",
-      "sha256": "sha256:9562b2f126fedb7576e64d0956ac226311936974a7385f095f8a5536b671eca1"
+      "sha256": "sha256:35983ae83404666697f48e539a56f6be3ce919c196a2e4981c10d35bf29a7986"
     },
     {
       "checkpoint": "R24",
@@ -81,12 +81,12 @@
     {
       "checkpoint": "R27",
       "path": "docs/evidence/R27-STRUCTURAL-READINESS.json",
-      "sha256": "sha256:37a91a84d259eca9a9d2139dc3cff7c1e26892f598268ee26181bf1748b7672c"
+      "sha256": "sha256:204f8d4bb320fc7c1b820292f9e1a8c7166a76da5ff83cbc9adbf3a98177fd93"
     },
     {
       "checkpoint": "R28",
       "path": "docs/evidence/R28-STRUCTURAL-READINESS.json",
-      "sha256": "sha256:0d4b7a9bd1fd226df0b2b283fbcd635eec26ee6a9b7e6f8458ab965cd2736bfc"
+      "sha256": "sha256:9560c25de24adb070cba26279286fe6aede75e544df6c65c1299aecae47b6e21"
     }
   ],
   "checkpoints": [

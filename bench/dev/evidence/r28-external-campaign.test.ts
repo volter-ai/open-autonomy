@@ -16,6 +16,7 @@ import {
   issueR28Seal, issueR28Validation, issueR28ValidatorIntent, type R28AcquisitionRequest, type R28AcquisitionRole,
   type R28AcquisitionState, type R28Stream,
 } from "./r28-acquisition";
+import { verifyExternalCampaign } from "./verify-external-campaign";
 const h = (x: unknown) =>
     `sha256:${createHash("sha256").update(canonicalSemanticJson(x)).digest("hex")}` as const,
   k = () => {
@@ -365,6 +366,12 @@ test("validates a fully trusted 90-day externally signed campaign", () =>
     status: "valid-complete-external-campaign",
     proposalCount: 3,
   }));
+test("accepts the valid campaign through the production timestamp-bound intake", () => {
+  const receipt = verifyExternalCampaign("R28", canonicalSemanticJson(campaign()), "export const trust = externallyConfigured;", trust,
+    "2026-04-02T12:00:00Z", { attestationDigest: `sha256:${"1".repeat(64)}`, rootFingerprint: `sha256:${"2".repeat(64)}` });
+  expect(receipt.result).toMatchObject({ status: "valid-complete-external-campaign" });
+  expect(receipt.verifiedAt).toBe("2026-04-02T12:00:00Z");
+});
 test("reconstructs the exact valid campaign through externally custodied append streams", () => {
   const source = campaign(), acquisitionRoles: R28AcquisitionRole[] = ["registration-authority", "heartbeat-collector", "crash-injector", "proposal-custodian", "audit-custodian", "finalizer", "validator"],
     roleKeys = {} as Record<R28AcquisitionRole, string>, publicKeys: Record<string, string> = {}, privateKeys: Record<string, any> = {};

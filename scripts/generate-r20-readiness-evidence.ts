@@ -10,6 +10,8 @@ const paths = [
   "packages/core/src/organization-slack-web-api-port.ts", "bench/dev/integration/slack-volter-twin.test.ts",
   "packages/core/src/organization-r20-external-campaign.ts", "packages/core/src/organization-r20-external-campaign.test.ts",
   "packages/core/src/organization-r20-r23-external-readiness.ts", "packages/core/src/organization-r20-r23-external-readiness.test.ts",
+  "bench/dev/evidence/verify-external-campaign.ts", "bench/dev/evidence/verify-external-campaign.test.ts",
+  "docs/evidence/R20-R28-EXTERNAL-INTAKE-SKEPTICAL-REVIEW.md",
 ].sort();
 const sha = (bytes: string | Buffer) => `sha256:${createHash("sha256").update(bytes).digest("hex")}`;
 const pkg = JSON.parse(readFileSync("package.json", "utf8"));

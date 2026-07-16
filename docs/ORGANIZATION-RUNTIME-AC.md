@@ -45,6 +45,27 @@ The system must preserve these separations:
 
 ## Global closure rules
 
+### Evidence profiles
+
+Checkpoint completion uses an explicit evidence profile. The normative engineering profile is
+`twin-conformant-engineering`: real compiled substrate components execute against content-addressed dependencies;
+remote service dependencies may be replaced only by version-pinned digital twins whose declared contract,
+operation coverage, known gaps, and conformance evidence are recorded. Deterministic behavioral actors may drive
+worker, human, workload, or environment inputs, but their results prove protocol and safety behavior only. They do
+not prove usability, accessibility, unfamiliar-operator performance, population validity, or production duration.
+
+`external-validation` is an additive assurance profile for live remote services, independently controlled
+authorities, real-human studies, unfamiliar operators, and wall-clock production campaigns. Its open questions are
+tracked as validation residuals and do not block engineering checkpoint completion. An engineering result must list
+the external claims it excludes; an external result must bind the engineering evidence it extends. Neither profile
+may silently promote simulated observations to human or population claims.
+
+The substitution boundary is strict: a service twin may replace only a declared remote service dependency. Hermes,
+Paperclip, local scheduling, Termfleet, workers, models, and the R25 organizational twin are not service twins.
+R15, R16, R24, and R27 therefore require their named real substrate executions even in the
+`twin-conformant-engineering` profile. A behavioral simulator is never sufficient evidence for a substrate or service
+conformance claim.
+
 Every item R0–R28 must include the review card from [`ORGANIZATION-IR-AC.md`](./ORGANIZATION-IR-AC.md), plus:
 
 ```text
@@ -424,6 +445,10 @@ show evidence and uncertainty rather than fabricated summaries.
 **Evidence.** End-to-end interaction corpus, replay/forgery/confused-deputy/prompt-injection attacks, usability tests,
 lost-message recovery, approval binding and revocation, complete audit trail.
 
+For engineering closure, the interaction corpus must run through the real Slack SDK against a pinned conformant
+Slack service twin; scripted actors cover identity and protocol cases. Usability and accessibility tests belong to
+the additive external-validation profile.
+
 **Falsifier.** Ambiguous natural language directly performs a privileged mutation without a typed confirmation boundary.
 
 ## R21. Production reliability, scaling, and disaster operations
@@ -441,6 +466,10 @@ drills, complete-system restore into an isolated environment, RPO/RTO measuremen
 expired/revoked-credential recovery, overload fairness, runbooks exercised by an operator unfamiliar with the incident,
 and a resolved alert-to-root-cause trace.
 
+Engineering closure may use virtual time, controlled load actors, and pinned service twins for dependency, billing,
+KMS, and regional failure surfaces. The resulting bounds are bench-world bounds, not production SLO claims;
+unfamiliar-operator and real-provider validation remain additive external-validation evidence.
+
 **Falsifier.** A declared recoverable outage either exceeds RPO/RTO without an error-budget violation or restores a
 state that can repeat an acknowledged privileged effect.
 
@@ -453,6 +482,10 @@ randomization policy, contamination controls, judge independence, stopping rules
 cost accounting, privacy, and result schemas; version human simulators, define their role contract and calibration
 population, quantify transfer error against real-human observations, and report simulated and real-human outcomes
 separately; register coding and noncoding organizational tasks; make criteria externally owned and immutable during a run.
+
+Engineering closure requires the calibration protocol, known-ground-truth simulator recovery, separate result labels,
+and rejection of absent human calibration. Quantified simulator-to-human transfer error is an external-validation
+claim and remains unknown until real-human observations exist.
 
 **Evidence.** Reproducible workload packages, adversarial gaming tests, inter-rater and human-simulator calibration,
 simulated-versus-real transfer report, repeated-run variance, hidden test set, signed result bundles.
@@ -472,6 +505,9 @@ across retries, providers, and humans.
 **Evidence.** Synthetic ground-truth ledgers, conservation/accounting invariants, missing/censored-data fixtures,
 cross-provider normalization, real-human timing calibration, confidence intervals.
 
+Engineering closure proves normalization and timing arithmetic with pinned provider-service twins and scripted actors.
+It must label real-provider cost and real-human timing calibration as external-validation claims.
+
 **Falsifier.** Moving hidden work to a human or external service improves reported autonomy or cost without attribution.
 
 ## R24. Competitive benchmark execution on two live substrates
@@ -486,6 +522,10 @@ failures and timeouts, compare portable outcomes and economic/operational residu
 **Evidence.** Multiple independent live repetitions, identified provider revisions, raw/lifted traces, statistical
 report with effect sizes/error bars, zero untriaged differences.
 
+For engineering closure, “live” refers to actual Hermes and Paperclip substrate processes executing the unchanged
+organization; their remote APIs may share one pinned service-twin world. Provider revisions in this profile identify
+the twin implementation and scenario revision. Live-provider repetitions are additive external-validation evidence.
+
 **Falsifier.** A ranking changes merely because one substrate received easier tasks, hidden manual help, or excluded failures.
 
 ## R25. Organizational twin v1
@@ -499,6 +539,9 @@ and identifiability limits.
 
 **Evidence.** Simulation invariants, synthetic parameter recovery, posterior/prediction calibration, held-out live
 predictions, ablation and uncertainty coverage, falsifying traces.
+
+Engineering closure calibrates against held-out observations produced by the closed twin-conformant R23/R24 world and
+scopes prediction validity to that world. Transfer to independently operated populations is external validation.
 
 **Falsifier.** The twin is called calibrated while its prediction intervals systematically miss held-out observations.
 
@@ -527,6 +570,9 @@ rollback; detect novelty, carryover, selection bias, and cross-task interference
 **Evidence.** Randomization and analysis tests, simulated false-positive/coverage studies, live low-risk canary,
 automatic guardrail rollback, immutable preregistration and complete analysis bundle.
 
+The engineering canary must mutate and roll back a real low-risk target through its compiled substrate; remote service
+effects may terminate in pinned twins. A behavioral simulator alone cannot satisfy this requirement.
+
 **Falsifier.** A post-hoc metric or selectively stopped run is presented as causal evidence for an organization change.
 
 ## R28. Bounded autonomous organization-improvement loop
@@ -541,6 +587,11 @@ proposer, evaluator, approver, deployer, and auditor; provide global pause and d
 **Evidence.** Long-running dogfood on this repository, at least one accepted and one rejected proposal, one automatic
 rollback, restart during every phase, forged approval and compromised-worker drills, measurable improvement against
 pre-registered criteria without safety regression, complete causal/audit reconstruction.
+
+Engineering closure uses bounded accelerated cycles with virtual time, real repository mutations, real substrate
+restart boundaries, and pinned service twins. It proves complete phase coverage and safety invariants, not a claim of
+months-long production reliability; wall-clock dogfood duration and real-human governance outcomes are external
+validation.
 
 **Falsifier.** The optimizer can modify its own constitution, grader, authority ceiling, evidence, or rollback guard
 and then use the modified rule to approve itself.
@@ -601,7 +652,8 @@ The phase cannot close until:
 1. all R0–R28 formal-lens rows are machine-matched to obligation-ledger entries;
 2. every public interface field has a semantic-coverage owner;
 3. every required obligation has one disposition and one honest assurance status;
-4. every external version, live run, benchmark cell, and deployment bundle is pinned and resolvable;
+4. every external version, service-twin implementation and scenario, live substrate run, benchmark cell, and
+   deployment bundle used by the selected evidence profile is pinned and resolvable;
 5. every behavioral difference and audit finding is triaged, leaving zero parking-lot residuals;
 6. every milestone gate has rerunnable or externally identified evidence;
 7. a fresh adversarial review pair finds no unowned critical claim;

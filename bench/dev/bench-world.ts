@@ -42,7 +42,8 @@ export interface BenchServiceTwin {
   id: string;
   service: string;
   contract: { id: string; version: string };
-  implementation: { package: string; version: string; revision?: string };
+  implementation: { package: string; version: string; revision: string };
+  scenario: { id: string; digest: string };
   coveredOperations: string[];
   knownGaps: string[];
   conformanceEvidence: string[];
@@ -126,7 +127,10 @@ export function validateBenchWorld(
     substituted.add(twin.service);
     if (twin.contract.id !== service.contract.id || twin.contract.version !== service.contract.version)
       errors.push(`twins.${index}: twin contract does not match service '${service.id}'`);
-    if (!twin.implementation.package || !twin.implementation.version) errors.push(`twins.${index}: implementation package and version are required`);
+    if (!twin.implementation.package || !twin.implementation.version || !twin.implementation.revision)
+      errors.push(`twins.${index}: implementation package, version, and revision are required`);
+    if (!twin.scenario.id || !/^sha256:[a-f0-9]{64}$/.test(twin.scenario.digest))
+      errors.push(`twins.${index}: content-addressed scenario id and sha256 digest are required`);
     if (!twin.coveredOperations.length) errors.push(`twins.${index}: covered operations must be explicit`);
     if (!twin.conformanceEvidence.length) warnings.push(`twins.${index}: no conformance evidence; fidelity is unproven`);
   }

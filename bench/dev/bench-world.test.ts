@@ -17,7 +17,8 @@ function world(): BenchWorld {
     serviceBindings: [{ provider: 'hermes', service: 'slack', interface: 'hermes-gateway' }],
     twins: [{
       kind: 'digital-twin', id: 'volter-slack', service: 'slack', contract: { id: 'slack-events-and-web-api', version: '2026-07' },
-      implementation: { package: '@volter/twin-slack', version: '0.1.0' }, coveredOperations: ['events.message', 'chat.postMessage'],
+      implementation: { package: '@volter/twin-slack', version: '0.1.0', revision: 'git:abc123' },
+      scenario: { id: 'slack-r20', digest: `sha256:${'a'.repeat(64)}` }, coveredOperations: ['events.message', 'chat.postMessage'],
       knownGaps: ['socket-mode'], conformanceEvidence: ['test://slack-sdk-and-event-delivery'],
     }],
     simulators: [{ kind: 'behavioral-simulator', id: 'worker-scenario', role: 'worker', version: '1', contract: 'fixture://worker-outcomes', calibrationEvidence: ['report://worker-transfer'] }],
@@ -45,6 +46,15 @@ describe('bench-world boundary algebra', () => {
     const result = validateBenchWorld(value, INITIAL_COMPONENT_CATALOG);
     expect(result.errors).toContain("twins.0: twin contract does not match service 'slack'");
     expect(result.errors).toContain('twins.0: covered operations must be explicit');
+  });
+
+  test('requires an immutable twin implementation and scenario pin', () => {
+    const value = world();
+    value.twins[0]!.implementation.revision = '';
+    value.twins[0]!.scenario.digest = 'mutable';
+    const errors = validateBenchWorld(value, INITIAL_COMPONENT_CATALOG).errors;
+    expect(errors).toContain('twins.0: implementation package, version, and revision are required');
+    expect(errors).toContain('twins.0: content-addressed scenario id and sha256 digest are required');
   });
 
   test('keeps behavioral simulators separate and reports missing calibration', () => {

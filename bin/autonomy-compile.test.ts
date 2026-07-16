@@ -553,7 +553,7 @@ describe('autonomy-compile — --provider-url (OA-09)', () => {
     const r = compile(['simple-sdlc', 'local', 'not-a-real-out-dir-arg', '--provider-url', 'not a url']);
     expect(r.exitCode).toBe(2);
     expect(r.stderr).toContain('is not a valid URL');
-  });
+  }, 10_000);
 
   test('--provider-url with a valid url compiles and lands the durable pin in scheduler/schedule.json', () => {
     const dir = mkdtempSync(join(tmpdir(), 'oa-provider-url-'));

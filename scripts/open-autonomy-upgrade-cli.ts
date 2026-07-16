@@ -30,4 +30,4 @@ if (existsSync('bin/autonomy-upgrade.ts') && existsSync('profiles/self-driving/i
   await $`git clone --depth 1 --branch ${TEMPLATE_REF} https://github.com/${TEMPLATE_REPO}.git ${oa}`;
 }
 
-await $`cd ${oa} && (bun install --frozen-lockfile || bun install) && bun bin/autonomy-upgrade.ts --profile profiles/self-driving --target ${target} ${apply}`;
+await $`cd ${oa} && (bun install --frozen-lockfile || bun install) && bun bin/autonomy-upgrade.ts --profile profiles/self-driving --target ${target} --substrate gh-actions ${apply}`;

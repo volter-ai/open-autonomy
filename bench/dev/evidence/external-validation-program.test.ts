@@ -1,5 +1,8 @@
 import { describe, expect, test } from "bun:test";
-import { externalProgramStatus, initializeReadyCampaigns, type ExternalProgram } from "./external-validation-program";
+import { mkdtempSync, readFileSync, statSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { authorityInvitations, bootstrapExternalProgram, externalProgramStatus, initializeReadyCampaigns, type ExternalProgram } from "./external-validation-program";
 
 const program: ExternalProgram = { schema: "open-autonomy.external-validation-program.v1", programId: "external-1", campaigns: {
   R20: { registry: "r20-registry.json", state: "r20-state.json", dependencies: [], requirements: [
@@ -50,5 +53,22 @@ describe("external validation program", () => {
       "/campaign/r21-state.json": JSON.stringify({ assembledBundleDigest: "sha256:abc" }) };
     const statuses = externalProgramStatus("/campaign/program.json", program, deps(files));
     expect(statuses[0]!.phase).toBe("collecting"); expect(statuses[1]!.phase).toBe("assembled");
+  });
+
+  test("derives authority invitations without private material", () => {
+    const invitations = authorityInvitations(program);
+    expect(invitations).toHaveLength(1);
+    expect(invitations[0]).toEqual(expect.objectContaining({ checkpoint: "R20", subject: "r20-authorized-participant", destination: "human.json" }));
+    expect(JSON.stringify(invitations)).not.toMatch(/privateKey|credential|secret-never-returned/);
+  });
+
+  test("bootstraps a mode-restricted workspace outside the repository and never overwrites it", () => {
+    const parent = mkdtempSync(join(tmpdir(), "oa-external-bootstrap-")), target = join(parent, "campaign");
+    const result = bootstrapExternalProgram(target);
+    expect(result.invitations).toBeGreaterThan(0);
+    expect(statSync(join(target, "private")).mode & 0o777).toBe(0o700);
+    expect(statSync(join(target, "program.json")).mode & 0o777).toBe(0o600);
+    expect(readFileSync(join(target, ".gitignore"), "utf8")).toBe("*\n!.gitignore\n");
+    expect(() => bootstrapExternalProgram(target)).toThrow("already exists");
   });
 });

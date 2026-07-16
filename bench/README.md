@@ -38,9 +38,17 @@ attestations, topology, preregistrations, and credential environment-variable na
 campaign inputs, then run:
 
 ```sh
+bun bench/dev/evidence/external-validation-program.ts bootstrap --out /private/campaign
 bun bench/dev/evidence/external-validation-program.ts status --program /private/campaign/program.json
 bun bench/dev/evidence/external-validation-program.ts init-ready --program /private/campaign/program.json
 ```
+
+`bootstrap` refuses a destination inside the repository, refuses to overwrite an existing directory, creates
+mode-0700 private/state/receipt directories and mode-0600 control files, installs a deny-all `.gitignore`, and emits
+`AUTHORITY-INVITATIONS.json`. Invitations request only public attestations and explicitly prohibit returning private
+keys, credentials, raw invoices, or participant-private data. Before creating the workspace it probes the destination
+filesystem and refuses filesystems (including commonly configured Windows mounts) that cannot enforce POSIX private
+permissions.
 
 `status` reports credential *names* only, never values. `init-ready` initializes only a checkpoint whose registry,
 external attestations, files, credential presence, and upstream external receipts all exist. An attestation must use

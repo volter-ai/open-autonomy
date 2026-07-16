@@ -1,5 +1,5 @@
-import { existsSync, readFileSync } from "node:fs";
-import { dirname, isAbsolute, resolve } from "node:path";
+import { existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { dirname, isAbsolute, relative, resolve } from "node:path";
 import { spawnSync } from "node:child_process";
 
 export const CHECKPOINTS = ["R20", "R21", "R22", "R23", "R24", "R25", "R26", "R27", "R28"] as const;
@@ -26,6 +26,14 @@ export type CampaignStatus = {
   phase: "not-configured" | "blocked" | "ready" | "collecting" | "assembled";
   blockers: string[];
   state: string | null;
+};
+
+export type AuthorityInvitation = {
+  checkpoint: ExternalCheckpoint;
+  subject: string;
+  destination: string;
+  requiredSchema: "open-autonomy.external-authority-attestation.v1";
+  warning: "private key material and participant-private data must never be returned";
 };
 
 type Deps = {
@@ -119,15 +127,50 @@ export function initializeReadyCampaigns(programPath: string, program: ExternalP
   return initialized;
 }
 
+export function authorityInvitations(program: ExternalProgram): AuthorityInvitation[] {
+  return CHECKPOINTS.flatMap((checkpoint) => (program.campaigns[checkpoint]?.requirements ?? [])
+    .filter((requirement): requirement is Extract<Requirement, { kind: "attestation" }> => requirement.kind === "attestation")
+    .map((requirement) => ({ checkpoint, subject: requirement.subject, destination: requirement.path,
+      requiredSchema: "open-autonomy.external-authority-attestation.v1" as const,
+      warning: "private key material and participant-private data must never be returned" as const })));
+}
+
+export function bootstrapExternalProgram(outDir: string) {
+  const root = resolve(import.meta.dir, "../../.."), target = resolve(outDir), rel = relative(root, target);
+  if (!rel || (!rel.startsWith("..") && !isAbsolute(rel))) throw Error("external program workspace must be outside the repository");
+  if (existsSync(target)) throw Error("external program workspace already exists");
+  const parent = dirname(target), probe = resolve(parent, `.oa-permission-probe-${process.pid}`);
+  mkdirSync(parent, { recursive: true });
+  try {
+    mkdirSync(probe, { mode: 0o700 });
+    if ((statSync(probe).mode & 0o777) !== 0o700) throw Error("external program filesystem cannot enforce private POSIX permissions");
+  } finally { if (existsSync(probe)) rmSync(probe, { recursive: true }); }
+  const program = JSON.parse(readFileSync(resolve(root, "bench/external-validation-program.example.json"), "utf8")) as ExternalProgram;
+  mkdirSync(resolve(target, "private"), { recursive: true, mode: 0o700 });
+  mkdirSync(resolve(target, "state"), { mode: 0o700 });
+  mkdirSync(resolve(target, "receipts"), { mode: 0o700 });
+  writeFileSync(resolve(target, "program.json"), `${JSON.stringify(program, null, 2)}\n`, { flag: "wx", mode: 0o600 });
+  writeFileSync(resolve(target, "AUTHORITY-INVITATIONS.json"), `${JSON.stringify({
+    schema: "open-autonomy.external-authority-invitations.v1", programId: program.programId,
+    instructions: "Each independent authority returns only a public attestation at its destination. Never return private keys, credentials, raw invoices, or participant-private data.",
+    invitations: authorityInvitations(program),
+  }, null, 2)}\n`, { flag: "wx", mode: 0o600 });
+  writeFileSync(resolve(target, ".gitignore"), "*\n!.gitignore\n", { flag: "wx", mode: 0o600 });
+  return { workspace: target, program: resolve(target, "program.json"), invitations: authorityInvitations(program).length };
+}
+
 function parse(argv: string[]) {
   const command = argv.shift(), flag = argv.shift(), path = argv.shift();
+  if (command === "bootstrap" && flag === "--out" && path && !argv.length) return { command, path } as const;
   if (!(["status", "init-ready"].includes(command ?? "")) || flag !== "--program" || !path || argv.length)
-    throw Error("usage: external-validation-program <status|init-ready> --program <program.json>");
-  return { command: command as "status" | "init-ready", path };
+    throw Error("usage: external-validation-program <status|init-ready> --program <program.json> | bootstrap --out <private-directory>");
+  return { command: command as "status" | "init-ready", path } as const;
 }
 
 export function runExternalProgramCli(argv: string[]) {
-  const { command, path } = parse([...argv]), program = loadExternalProgram(path);
+  const { command, path } = parse([...argv]);
+  if (command === "bootstrap") return bootstrapExternalProgram(path);
+  const program = loadExternalProgram(path);
   return command === "status" ? externalProgramStatus(path, program) : { initialized: initializeReadyCampaigns(path, program) };
 }
 

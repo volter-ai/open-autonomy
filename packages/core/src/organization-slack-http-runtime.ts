@@ -77,6 +77,8 @@ export interface SlackIngressStore {
   acknowledge(record: SlackAcknowledgmentRecord): void;
   ingressAttempts(key: string): SlackIngressRecord[];
   pendingIngress(): SlackIngressRecord[];
+  claimIngress(key: string): string | undefined;
+  releaseIngress(key: string, claim: string): void;
   prepareOutbox(record: SlackOutboxRecord): void;
   pendingOutbox(): SlackOutboxRecord[];
   recordDeliveryAttempt(attempt: SlackDeliveryAttempt): void;
@@ -85,6 +87,7 @@ export interface SlackIngressStore {
   delivery(outboxId: string): SlackDeliveryReceipt | undefined;
 }
 export interface SlackResponsePort {
+  reconcile(idempotencyKey: string): SlackDeliveryReceipt | undefined;
   deliver(input: {
     idempotencyKey: string;
     thread: string;
@@ -180,17 +183,24 @@ export class SlackHttpRuntime {
   processPending(limit = 100) {
     let processed = 0;
     for (const ingress of this.store.pendingIngress().slice(0, limit)) {
-      const response = this.transport.handleVerified(ingress.authentication),
-        outbox: SlackOutboxRecord = {
+      const claim = this.store.claimIngress(ingress.key);
+      if (!claim) continue;
+      try {
+        const response = this.transport.handleVerified(ingress.authentication),
+          outbox: SlackOutboxRecord = {
           schema: "autonomy.slack-http-outbox.v1",
           id: digest({ ingressKey: ingress.key, response }),
           ingressKey: ingress.key,
           thread: response.thread_ts,
           response,
-          preparedAt: this.clock(),
-        };
-      this.store.prepareOutbox(outbox);
-      processed++;
+            // Stable across crash/replay; wall-clock retry time is not semantic output.
+            preparedAt: ingress.receivedAt,
+          };
+        this.store.prepareOutbox(outbox);
+        processed++;
+      } finally {
+        this.store.releaseIngress(ingress.key, claim);
+      }
     }
     return processed;
   }
@@ -200,6 +210,14 @@ export class SlackHttpRuntime {
     for (const outbox of this.store.pendingOutbox().slice(0, limit)) {
       const priorAttempts = this.store.deliveryAttempts(outbox.id).length,
         attempt = priorAttempts + 1;
+      const reconciled = this.responsePort.reconcile(outbox.id);
+      if (reconciled) {
+        if (reconciled.outboxId !== outbox.id)
+          throw Error("Slack reconciled receipt is not bound to outbox");
+        this.store.recordDelivery(reconciled);
+        delivered++;
+        continue;
+      }
       let receipt: SlackDeliveryReceipt;
       try {
         receipt = this.responsePort.deliver({
@@ -209,6 +227,18 @@ export class SlackHttpRuntime {
           priorAttempts,
         });
       } catch (error) {
+        const accepted = this.responsePort.reconcile(outbox.id);
+        if (accepted) {
+          if (accepted.outboxId !== outbox.id)
+            throw Error("Slack reconciled receipt is not bound to outbox");
+          this.store.recordDeliveryAttempt({
+            schema: "autonomy.slack-http-delivery-attempt.v1", outboxId: outbox.id,
+            attempt, attemptedAt: this.clock(), outcome: "delivered",
+          });
+          this.store.recordDelivery(accepted);
+          delivered++;
+          continue;
+        }
         this.store.recordDeliveryAttempt({
           schema: "autonomy.slack-http-delivery-attempt.v1",
           outboxId: outbox.id,
@@ -239,13 +269,13 @@ export class SlackHttpRuntime {
 
 export class FileSlackIngressStore implements SlackIngressStore {
   private directories: Record<
-    "ingress" | "attempt" | "ack" | "outbox" | "processed" | "deliveryAttempt" | "delivery",
+    "ingress" | "attempt" | "ack" | "claim" | "outbox" | "processed" | "deliveryAttempt" | "delivery",
     string
   >;
   constructor(private root: string) {
     mkdirSync(root, { recursive: true, mode: 0o700 });
     this.directories = Object.fromEntries(
-      (["ingress", "attempt", "ack", "outbox", "processed", "deliveryAttempt", "delivery"] as const).map((name) => {
+      (["ingress", "attempt", "ack", "claim", "outbox", "processed", "deliveryAttempt", "delivery"] as const).map((name) => {
         const path = join(root, name);
         mkdirSync(path, { recursive: true, mode: 0o700 });
         return [name, path];
@@ -332,6 +362,26 @@ export class FileSlackIngressStore implements SlackIngressStore {
     return this.all<SlackIngressRecord>("ingress").filter(
       (record) => !existsSync(this.path("processed", record.key)),
     );
+  }
+  claimIngress(key: string): string | undefined {
+    const path = this.path("claim", key), claim = randomBytes(16).toString("hex"),
+      record = { key, claim, pid: process.pid };
+    try {
+      this.put(path, record);
+      return claim;
+    } catch (error) {
+      if (!(error instanceof Error) || !error.message.includes("equivocation")) throw error;
+      const prior = this.read<typeof record>(path);
+      if (!prior || prior.key !== key || !Number.isSafeInteger(prior.pid))
+        throw Error("Slack ingress claim invalid");
+      try { process.kill(prior.pid, 0); return undefined; }
+      catch { rmSync(path); return this.claimIngress(key); }
+    }
+  }
+  releaseIngress(key: string, claim: string) {
+    const path = this.path("claim", key), prior = this.read<{ claim: string }>(path);
+    if (!prior || prior.claim !== claim) throw Error("Slack ingress claim fencing failed");
+    rmSync(path);
   }
   prepareOutbox(record: SlackOutboxRecord) {
     this.put(this.path("outbox", record.id), record);

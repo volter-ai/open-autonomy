@@ -54,6 +54,7 @@ test("Slack HTTP runtime acknowledges before processing, survives restart, and d
       },
     } as any,
     responsePort = {
+      reconcile(idempotencyKey: string) { return delivered.get(idempotencyKey); },
       deliver(input: { idempotencyKey: string }) {
         const n = (attempts.get(input.idempotencyKey) ?? 0) + 1;
         attempts.set(input.idempotencyKey, n);
@@ -132,7 +133,7 @@ test("Slack HTTP runtime rejects forged requests, handles URL verification, and 
       new SlackHmacVerifier("slack-secret", () => now),
       { handleVerified: () => { throw Error("not reached"); } } as any,
       store,
-      { deliver: () => { throw Error("not reached"); } },
+      { reconcile: () => undefined, deliver: () => { throw Error("not reached"); } },
     );
   try {
     const raw = event();
@@ -161,7 +162,7 @@ test("Slack durable journal rejects corrupted private ingress state", () => {
       new SlackHmacVerifier("slack-secret", () => now),
       { handleVerified: () => { throw Error("not reached"); } } as any,
       store,
-      { deliver: () => { throw Error("not reached"); } },
+      { reconcile: () => undefined, deliver: () => { throw Error("not reached"); } },
     );
   try {
     const raw = event();
@@ -174,4 +175,52 @@ test("Slack durable journal rejects corrupted private ingress state", () => {
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
+});
+
+test("reconciles accept-then-timeout without posting a duplicate", () => {
+  const root = mkdtempSync(join(tmpdir(), "oa-slack-http-")), store = new FileSlackIngressStore(root);
+  let posts = 0;
+  const receipts = new Map<string, SlackDeliveryReceipt>(), runtime = new SlackHttpRuntime(
+    new SlackHmacVerifier("slack-secret", () => now),
+    { handleVerified: () => ({ response_type: "ephemeral", thread_ts: "t", blocks: [] }) } as any,
+    store,
+    {
+      reconcile: (id) => receipts.get(id),
+      deliver(input) {
+        posts++;
+        receipts.set(input.idempotencyKey, { schema: "autonomy.slack-http-delivery.v1",
+          outboxId: input.idempotencyKey, providerMessageDigest: "sha256:" + "b".repeat(64),
+          deliveredAt: "2026-07-15T12:00:00Z", attempt: 1 });
+        throw Error("provider accepted request but response was lost");
+      },
+    },
+  );
+  try {
+    const raw = event("Ev-timeout");
+    expect(runtime.receive(auth(raw), raw).status).toBe(200);
+    expect(runtime.processPending()).toBe(1);
+    expect(runtime.deliverPending()).toBe(1);
+    expect(runtime.deliverPending()).toBe(0);
+    expect(posts).toBe(1);
+  } finally { rmSync(root, { recursive: true, force: true }); }
+});
+
+test("fences concurrent ingress processors before command effects", () => {
+  const root = mkdtempSync(join(tmpdir(), "oa-slack-http-")), store = new FileSlackIngressStore(root);
+  let effects = 0, competing = -1, second!: SlackHttpRuntime;
+  const transport = { handleVerified: () => {
+    effects++;
+    competing = second.processPending();
+    return { response_type: "ephemeral" as const, thread_ts: "t", blocks: [] };
+  }} as any, response = { reconcile: () => undefined, deliver: () => { throw Error("not reached"); } };
+  const first = new SlackHttpRuntime(new SlackHmacVerifier("slack-secret", () => now), transport, store, response);
+  second = new SlackHttpRuntime(new SlackHmacVerifier("slack-secret", () => now), transport,
+    new FileSlackIngressStore(root), response);
+  try {
+    const raw = event("Ev-race");
+    expect(first.receive(auth(raw), raw).status).toBe(200);
+    expect(first.processPending()).toBe(1);
+    expect(competing).toBe(0);
+    expect(effects).toBe(1);
+  } finally { rmSync(root, { recursive: true, force: true }); }
 });

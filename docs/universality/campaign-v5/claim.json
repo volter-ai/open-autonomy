@@ -1,0 +1,150 @@
+{
+  "schema": "open-autonomy.universality-claim.v2",
+  "campaignId": "organization-universality-2026-v5",
+  "registeredAt": "2026-07-16T23:58:41.104Z",
+  "domain": "autonomous-software-organizations",
+  "sourceSelectionRule": "Operational U1 census defined exactly by oa-source-census-2026-v5 at sha256:e2714f6e2c0fcd4c5f3c0bbb6a15da0ef56cd6b86596db5fcbe521bbab9f6189; its second converged pass is the sampling frame and the all-and-only in-domain dispositions are the source population",
+  "compositionSelectionRule": "U2 corpus: preregistered meaningful version-pinned component compositions spanning every named facet family, multi-provider cells, forcing features, and one frozen holdout family; arbitrary combinations excluded only by the frozen rule",
+  "sourcePopulationId": "oa-source-population-2026-v5",
+  "compositionPopulationId": "oa-composition-population-2026-v5",
+  "censusAt": "2026-07-22T23:59:59.999Z",
+  "executionSamplingRule": "Within every frozen source-system by backend-family stratum, rank independently adjudicated compatible cells by sha256(seed || cell-id), select the lowest rank in every nonempty stratum, then continue global hash rank without replacement until at least 30% of all compatible cells are selected",
+  "executionSamplingSeed": "oa-universality-2026-v5-execution-sample",
+  "undefinedDenominatorPolicy": "invalidate-campaign",
+  "assurancePolicyId": "oa-universality-assurance-policy-v1",
+  "metrics": [
+    {
+      "metric": "diagnosticAccounting",
+      "threshold": 1,
+      "direction": "exactly",
+      "numerator": "number of preregistered compilation cells with exactly one terminal result",
+      "denominator": "number of preregistered compilation cells",
+      "weight": "one per cell",
+      "population": "compilation-cells",
+      "assurance": "static"
+    },
+    {
+      "metric": "canonicalFactWeighted",
+      "threshold": 0.9,
+      "direction": "at-least",
+      "numerator": "sum of preregistered source-fact weights for preserved, derived, or lowered canonical dispositions",
+      "denominator": "sum of preregistered source-fact weights",
+      "weight": "frozen source-inventory fact weight",
+      "population": "source-systems",
+      "assurance": "conformance"
+    },
+    {
+      "metric": "canonicalFactPerSystem",
+      "threshold": 0.7,
+      "direction": "at-least",
+      "numerator": "within-system sum of source-fact weights for preserved, derived, or lowered canonical dispositions",
+      "denominator": "within-system sum of preregistered source-fact weights",
+      "weight": "frozen source-inventory fact weight; minimum over systems",
+      "population": "source-systems",
+      "assurance": "conformance"
+    },
+    {
+      "metric": "mandatoryObservationWeighted",
+      "threshold": 0.95,
+      "direction": "at-least",
+      "numerator": "sum of preregistered mandatory-observation weights preserved by source encodings",
+      "denominator": "sum of preregistered mandatory-observation weights",
+      "weight": "frozen source-inventory observation weight",
+      "population": "source-systems",
+      "assurance": "conformance"
+    },
+    {
+      "metric": "mandatoryObservationPerSystem",
+      "threshold": 0.8,
+      "direction": "at-least",
+      "numerator": "within-system sum of preserved mandatory-observation weights",
+      "denominator": "within-system sum of preregistered mandatory-observation weights",
+      "weight": "frozen source-inventory observation weight; minimum over systems",
+      "population": "source-systems",
+      "assurance": "conformance"
+    },
+    {
+      "metric": "twoFamilyPortability",
+      "threshold": 0.9,
+      "direction": "at-least",
+      "numerator": "source systems with certified compilation to at least two independently implemented compatible backend families",
+      "denominator": "preregistered source systems having at least two independently adjudicated compatible backend families",
+      "weight": "frozen source-system population weight",
+      "population": "source-systems",
+      "assurance": "conformance"
+    },
+    {
+      "metric": "certifiedCompatibleCompilation",
+      "threshold": 0.95,
+      "direction": "at-least",
+      "numerator": "independently adjudicated compatible cells producing a preservation certificate or profile-permitted typed-loss certificate",
+      "denominator": "all independently adjudicated compatible cells",
+      "weight": "frozen compilation-cell weight",
+      "population": "compilation-cells",
+      "assurance": "conformance"
+    },
+    {
+      "metric": "nativeExecutedPreservation",
+      "threshold": 0.95,
+      "direction": "at-least",
+      "numerator": "executed cells whose lifted native observations satisfy the frozen equivalence relation with no unexplained violation",
+      "denominator": "all executed compatible cells",
+      "weight": "frozen executed-cell weight",
+      "population": "executed-cells",
+      "assurance": "native-executed"
+    },
+    {
+      "metric": "compatibleCellExecutionSampling",
+      "threshold": 0.3,
+      "direction": "at-least",
+      "numerator": "independently adjudicated compatible cells selected and completed for native execution",
+      "denominator": "all independently adjudicated compatible cells",
+      "weight": "one per compatible cell, subject to every source/backend stratum being sampled",
+      "population": "compilation-cells",
+      "assurance": "native-executed"
+    },
+    {
+      "metric": "maxHoldoutDegradation",
+      "threshold": 0.1,
+      "direction": "at-most",
+      "numerator": "development-corpus headline score minus frozen-core holdout headline score",
+      "denominator": "one percentage-point scale for the same frozen headline metric",
+      "weight": "maximum degradation over headline metrics",
+      "population": "source-systems",
+      "assurance": "conformance"
+    },
+    {
+      "metric": "maxSilentLoss",
+      "threshold": 0,
+      "direction": "exactly",
+      "numerator": "facts or mandatory observations absent from output without a typed disposition",
+      "denominator": "all facts and mandatory observations presented to a frontend or compiler",
+      "weight": "one per silent loss",
+      "population": "compilation-cells",
+      "assurance": "conformance"
+    },
+    {
+      "metric": "maxResultDependentExclusion",
+      "threshold": 0,
+      "direction": "exactly",
+      "numerator": "population members or cells excluded after any result-dependent inspection",
+      "denominator": "all frozen population members and cells",
+      "weight": "one per exclusion",
+      "population": "compilation-cells",
+      "assurance": "independently-reproduced"
+    },
+    {
+      "metric": "maxCriticalInventoryConflict",
+      "threshold": 0,
+      "direction": "exactly",
+      "numerator": "critical source-inventory conflicts unresolved at publication",
+      "denominator": "all critical source-inventory conflicts",
+      "weight": "one per unresolved critical conflict",
+      "population": "source-systems",
+      "assurance": "independently-reproduced"
+    }
+  ],
+  "sourceCensusContractDigest": "sha256:e2714f6e2c0fcd4c5f3c0bbb6a15da0ef56cd6b86596db5fcbe521bbab9f6189",
+  "forcingSupplementDigest": "sha256:6a3530e627e0140a6dbc39f9d1d0243bec45a8bff8c19cbd4f9c4591a4673880",
+  "digest": "sha256:becaea59149f6ac914a2d218ca85c64465a25916aadac53b76ab787eee822921"
+}

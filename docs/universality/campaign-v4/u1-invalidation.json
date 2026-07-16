@@ -1,0 +1,214 @@
+{
+  "schema": "open-autonomy.github-census-invalidation.v1",
+  "campaignId": "organization-universality-2026-v4",
+  "reason": "three-total-pass-attempts-exhausted",
+  "detail": "two accepted transport failures followed by operator interruption of the third running pass; no complete pass or population was accepted",
+  "stateDigest": "sha256:39cdc56aafa2bcdd77803e07412e5fe859198d2d7c3b803c6eb00b27298c5e7c",
+  "evidence": [
+    {
+      "path": "attempt-01/00001.transport-error.json",
+      "digest": "sha256:9dcd2f0f2f45b104256f2adb7d028565dc3210f959b0cff28e3012f11bc207ea",
+      "bytes": 298
+    },
+    {
+      "path": "attempt-02/00001.transport-error.json",
+      "digest": "sha256:384b61d7bc8f6d4741e3da0db6eb762f7d3655c68e9f24951ab06a7692cebb28",
+      "bytes": 276
+    },
+    {
+      "path": "attempt-03/00001.headers.json",
+      "digest": "sha256:dddde0f83a6fc063bfb14c6888d10d1117fe172eed9e4e228343b2d9ed73b392",
+      "bytes": 2098
+    },
+    {
+      "path": "attempt-03/00001.json.gz",
+      "digest": "sha256:b2ea8fe1d6d3b3f3521563f73ac9d3e3cf9e0a8814b22e79c54962e9f56bcf61",
+      "bytes": 1379
+    },
+    {
+      "path": "attempt-03/00002.headers.json",
+      "digest": "sha256:d3f5dec0620ca29ddf0882ff9a9c1a3059f82da4c57a1b20244e3bef89c3738d",
+      "bytes": 2104
+    },
+    {
+      "path": "attempt-03/00002.json.gz",
+      "digest": "sha256:b2ea8fe1d6d3b3f3521563f73ac9d3e3cf9e0a8814b22e79c54962e9f56bcf61",
+      "bytes": 1379
+    },
+    {
+      "path": "attempt-03/00003.headers.json",
+      "digest": "sha256:6b1cf18048eabf57f0e3cf44fea1f66b5774a63f6a8510811bba0b3757d85112",
+      "bytes": 2104
+    },
+    {
+      "path": "attempt-03/00003.json.gz",
+      "digest": "sha256:572b7232ab0740f8b4076b7c28f55955d151c31257aed554a48722c059d156fb",
+      "bytes": 1382
+    },
+    {
+      "path": "attempt-03/00004.headers.json",
+      "digest": "sha256:f979f2b062bb896e2d65b85a9e364720ef94ae4ac682be89909aa94e7714b484",
+      "bytes": 2104
+    },
+    {
+      "path": "attempt-03/00004.json.gz",
+      "digest": "sha256:cbcb4d934b1ed6c19e044e9dcba6142041cb94d5102f0f5c92d3db63e96d033c",
+      "bytes": 1448
+    },
+    {
+      "path": "attempt-03/00005.headers.json",
+      "digest": "sha256:2fb8d6cdafc57357aa42640a56ee97ab3a685b8e8d36a8c1c0e73406998a885c",
+      "bytes": 2101
+    },
+    {
+      "path": "attempt-03/00005.json.gz",
+      "digest": "sha256:b2c3695b3a029b15400db8e09d51a404bb3f88f3d5fefe598385676c5049c3e6",
+      "bytes": 1451
+    },
+    {
+      "path": "attempt-03/00006.headers.json",
+      "digest": "sha256:50952123523fb26611cbe5350398f8bd6e6090a52a14c36462461f1a6c95f3ea",
+      "bytes": 2101
+    },
+    {
+      "path": "attempt-03/00006.json.gz",
+      "digest": "sha256:4f197d2c483bdf9bac8d8ad0bd18b898da37c9e936a77abd08d4fad1adc41c26",
+      "bytes": 1450
+    },
+    {
+      "path": "attempt-03/00007.headers.json",
+      "digest": "sha256:bc1c473a2590aa5d91f76a5a55bf823a1f8d55bf1e892cf50bdeaa9e4ec46dac",
+      "bytes": 2101
+    },
+    {
+      "path": "attempt-03/00007.json.gz",
+      "digest": "sha256:da58c9567af781ba55644e2e558e3d26878738843dc0e76ba8b50ee7545cfa52",
+      "bytes": 1388
+    },
+    {
+      "path": "attempt-03/00008.headers.json",
+      "digest": "sha256:33024acf737268463c903534cc1eebdc0ebf22bf5ea9fa66ae0fc4deec3c14fb",
+      "bytes": 2098
+    },
+    {
+      "path": "attempt-03/00008.json.gz",
+      "digest": "sha256:be9782a4800e89acd36b065c67a7c6d7988d3bf7f394a62f7ef74c9742e194da",
+      "bytes": 1446
+    },
+    {
+      "path": "attempt-03/00009.headers.json",
+      "digest": "sha256:3f5e67830c52e67172e6fff11e96f56c8dead80b08a6bdc50d323384faf6e31c",
+      "bytes": 2098
+    },
+    {
+      "path": "attempt-03/00009.json.gz",
+      "digest": "sha256:0b7647889a834829c327030cbd533c857e3097a6a186369b1d1c87ab39284f2a",
+      "bytes": 1408
+    },
+    {
+      "path": "attempt-03/00010.headers.json",
+      "digest": "sha256:b55a49b85a818fe0aff151cf0dafe256896c0828849e1c81658634d2f37b0ea2",
+      "bytes": 2099
+    },
+    {
+      "path": "attempt-03/00010.json.gz",
+      "digest": "sha256:8465cc7c0dbe72c386a23d523d671ee9758cee061ae83f66e73fe428272ebcd2",
+      "bytes": 1334
+    },
+    {
+      "path": "attempt-03/00011.headers.json",
+      "digest": "sha256:2c9b845add77d8c5a243c44ad86e8876e7ce0def569e23b75334997a527461ec",
+      "bytes": 2099
+    },
+    {
+      "path": "attempt-03/00011.json.gz",
+      "digest": "sha256:fe1ce9d911411fd48ff45acc2bf073727dcfdbaa1af6946854b339ab9b4ecc1c",
+      "bytes": 1307
+    },
+    {
+      "path": "attempt-03/00012.headers.json",
+      "digest": "sha256:9c0a96098d606c3cc31d903ef1d720651a380b15329b0485484faac826a27e61",
+      "bytes": 2099
+    },
+    {
+      "path": "attempt-03/00012.json.gz",
+      "digest": "sha256:c14c9a07e5a1eb84fa05aca4a0a8058164cde4faac8c9740ece00c34027d9170",
+      "bytes": 1379
+    },
+    {
+      "path": "attempt-03/00013.headers.json",
+      "digest": "sha256:64b1843fffb5f59c2af46cee5d4bfe4b7514310fce53e3f6590d7eb908eb8dfd",
+      "bytes": 2099
+    },
+    {
+      "path": "attempt-03/00013.json.gz",
+      "digest": "sha256:8ded24a8b82e14e16abfd10b9d5b1cf68461b2464aa58b2ffb9be107d9dfaf1c",
+      "bytes": 1472
+    },
+    {
+      "path": "attempt-03/00014.headers.json",
+      "digest": "sha256:24a65c578b64ee65510ff2af42ef69288b06c775a421b152111efab418763066",
+      "bytes": 2099
+    },
+    {
+      "path": "attempt-03/00014.json.gz",
+      "digest": "sha256:7d29f131bc6880f06d2d29008893f8307a72be1f65b2e92e66798897ab926bb8",
+      "bytes": 1302
+    },
+    {
+      "path": "attempt-03/00015.headers.json",
+      "digest": "sha256:0296ef433db9057909db2f83bcdd0f224cd8fadaabc227de3e834d0b13710e8b",
+      "bytes": 2099
+    },
+    {
+      "path": "attempt-03/00015.json.gz",
+      "digest": "sha256:87f642b1d3e11a8c24c6e83226578783632dd4f06a31c3e1ff3ee448b2292b33",
+      "bytes": 1320
+    },
+    {
+      "path": "attempt-03/00016.headers.json",
+      "digest": "sha256:9aa256cb2f8a0b37f79ed27d4868c74d67b6869830b8d6c752ee53ae62a511d7",
+      "bytes": 2099
+    },
+    {
+      "path": "attempt-03/00016.json.gz",
+      "digest": "sha256:d3c04d7499981d866db98f7d8747768d010e6c8f32266154591ae21de29f9001",
+      "bytes": 1556
+    },
+    {
+      "path": "attempt-03/00017.headers.json",
+      "digest": "sha256:0d33cea3587f921fbb8cc5f44d60600ee4da439d5abb8c799c245c19b9b39e94",
+      "bytes": 2098
+    },
+    {
+      "path": "attempt-03/00017.json.gz",
+      "digest": "sha256:79514317b7575ff8f23a503785aaf62c3acd83855aa06b4a301d31bb9cd2b86f",
+      "bytes": 1289
+    },
+    {
+      "path": "attempt-03/00018.headers.json",
+      "digest": "sha256:643829f39f7626f6f1e3fc933de1c5220c6e83e381fbaf039c394c5b2e6dfa29",
+      "bytes": 2103
+    },
+    {
+      "path": "attempt-03/00018.json.gz",
+      "digest": "sha256:76ea1a6e662ec1d3cd2ba8f6b4b7945251ba8ec4b0979b87ef8910898e892898",
+      "bytes": 52666
+    },
+    {
+      "path": "attempt-03/00019.headers.json",
+      "digest": "sha256:79bb60a03ff5664b07f99a9b832ec8b681f86cb7bd8f202c2551d7cf4fa2d8e0",
+      "bytes": 2374
+    },
+    {
+      "path": "attempt-03/00019.json.gz",
+      "digest": "sha256:6a39840024ed0a06ebabdf663a5870f8019c042e2cf5eb721cd4af53fab8043e",
+      "bytes": 51499
+    },
+    {
+      "path": "capture-state.json",
+      "digest": "sha256:39cdc56aafa2bcdd77803e07412e5fe859198d2d7c3b803c6eb00b27298c5e7c",
+      "bytes": 12665
+    }
+  ]
+}

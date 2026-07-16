@@ -1,0 +1,10 @@
+{
+  "schema": "open-autonomy.campaign-supersession.v1",
+  "predecessorCampaign": "organization-universality-2026-v4",
+  "predecessorDigest": "sha256:57732096f76b3b3c17f65000d61b9279c3cc913ff835ec310f2189a6fab1f7e1",
+  "successorCampaign": "organization-universality-2026-v5",
+  "successorDigest": "sha256:becaea59149f6ac914a2d218ca85c64465a25916aadac53b76ab787eee822921",
+  "reason": "v4 exhausted its three total capture attempts before convergence: two transport failures and an operator-interrupted third pass; v5 preserves the accepted census semantics with a new prospective registration and cutoff",
+  "predecessorStatus": "invalidated-before-u1-closure",
+  "digest": "sha256:5addec128e8fd7b760a5e014c0b77e3ea21ccbceb27a87b38f5166cd02b46252"
+}

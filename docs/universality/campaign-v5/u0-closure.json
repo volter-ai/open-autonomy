@@ -1,0 +1,18 @@
+{
+  "schema": "open-autonomy.universality-checkpoint-closure.v1",
+  "checkpoint": "U0",
+  "status": "complete",
+  "assurance": "property-tested",
+  "claimDigest": "sha256:becaea59149f6ac914a2d218ca85c64465a25916aadac53b76ab787eee822921",
+  "supersessionDigest": "sha256:5addec128e8fd7b760a5e014c0b77e3ea21ccbceb27a87b38f5166cd02b46252",
+  "sourceCensusContractDigest": "sha256:e2714f6e2c0fcd4c5f3c0bbb6a15da0ef56cd6b86596db5fcbe521bbab9f6189",
+  "forcingSupplementDigest": "sha256:6a3530e627e0140a6dbc39f9d1d0243bec45a8bff8c19cbd4f9c4591a4673880",
+  "predecessorInvalidation": "docs/universality/campaign-v4/u1-invalidation.json",
+  "semanticCoverage": ["versioned claim and historical custody","prospective operational census","finite exhaustive partition state machine","raw response custody","bounded retry and invalidation","two-pass convergence","total domain classification","exact independent review sampling","forcing eligibility and overlap","metric formulas and floors","predecessor failed-attempt custody"],
+  "falsifiersExercised": ["premature successor registration","unfinalized predecessor state","evidence digest mutation","historical schema substitution","range overlap","retry ambiguity","review sample substitution","forcing credit laundering","forged supersession join","weakened metric floor"],
+  "evidence": ["docs/universality/campaign-v4/u1-invalidation.json","docs/universality/campaign-v5/claim.json","docs/universality/campaign-v5/source-census-contract.json","docs/universality/campaign-v5/forcing-supplement.json","docs/universality/campaign-v5/supersession.json","packages/core/src/organization-universality-claim.ts","packages/core/src/organization-universality-census-contract.ts"],
+  "skepticalReview": {"round1":"rejected: v5 registration preceded durable finalization of the v4 third-attempt failure and authenticated invalidation","round2":"accepted: final v4 state and all 41 evidence entries authenticate before v5 registration; claim, contract, forcing, chronology, and supersession joins verify"},
+  "obligationAccounting": {"open":0,"discharged":10,"deferredExternal":0},
+  "residuals": [],
+  "next": "U1"
+}

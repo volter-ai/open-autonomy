@@ -253,5 +253,6 @@ describe('runtime proof-accounting ledger', () => {
       entry.assurance === 'property-tested' && entry.evidence.includes('ev-r21-campaign') && entry.evidence.includes('ev-r21-review'))).toBe(true);
   });
   test('closes R22 with immutable benchmark, custody, statistics, privacy, and simulator-separation properties',()=>{const c=JSON.parse(readFileSync('docs/runtime-ledgers/r22-closure.json','utf8'))as RuntimeLedgerCorpus;expect(validateRuntimeLedger(c,expected,manifest.items)).toEqual([]);expect(c.checkpointStateLedger.find(x=>x.id==='R22')?.status).toBe('complete');expect(c.checkpointStateLedger.find(x=>x.id==='R23')?.status).toBe('ready');expect(c.obligationLedger.filter(x=>x.checkpoint==='R22').every(x=>x.assurance==='property-tested'&&x.evidence.includes('ev-r22-review'))).toBe(true);});
+  test('closes R23 with conserved dimensioned accounting',()=>{const c=JSON.parse(readFileSync('docs/runtime-ledgers/r23-closure.json','utf8'))as RuntimeLedgerCorpus;expect(validateRuntimeLedger(c,expected,manifest.items)).toEqual([]);expect(c.checkpointStateLedger.find(x=>x.id==='R23')?.status).toBe('complete');expect(c.checkpointStateLedger.find(x=>x.id==='R24')?.status).toBe('ready');});
 
 });

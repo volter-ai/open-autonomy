@@ -9,6 +9,8 @@ import {
   verifyR21ReadinessEvidence,
   verifyR22ReadinessEvidence,
   verifyR24ReadinessEvidence,
+  verifyR27ReadinessEvidence,
+  verifyR28ReadinessEvidence,
   type BenchProgressLedger,
 } from "./runtime-progress-ledger";
 import { canonicalSemanticJson } from "@open-autonomy/core";
@@ -31,6 +33,8 @@ test("imports every bound partial-evidence residual while preserving unknown obl
     expect.objectContaining({ checkpoint: "R21" }),
     expect.objectContaining({ checkpoint: "R22" }),
     expect.objectContaining({ checkpoint: "R24" }),
+    expect.objectContaining({ checkpoint: "R27" }),
+    expect.objectContaining({ checkpoint: "R28" }),
   ]);
   expect(new Set(result.residuals.map((x) => x.checkpoint))).toEqual(
     new Set([
@@ -142,4 +146,21 @@ test("rejects omission or drift anywhere in the derived R24 dependency and test 
   expect(() => verifyR24ReadinessEvidence(root, canonicalDrift)).toThrow(
     "readiness component drift",
   );
+});
+
+test("binds R27 and R28 readiness without upgrading local evidence to closure", () => {
+  for (const [checkpoint, verifier] of [
+    ["R27", verifyR27ReadinessEvidence],
+    ["R28", verifyR28ReadinessEvidence],
+  ] as const) {
+    const path = join(root, `docs/evidence/${checkpoint}-STRUCTURAL-READINESS.json`),
+      evidence = JSON.parse(readFileSync(path, "utf8"));
+    expect(verifier(root, evidence)).toMatchObject({ closureClaim: false });
+    const lied = structuredClone(evidence); lied.closureClaim = true;
+    expect(() => verifier(root, lied)).toThrow("cannot prove closure");
+    const omitted = structuredClone(evidence); omitted.components.pop();
+    expect(() => verifier(root, omitted)).toThrow("component inventory incomplete");
+    const drifted = structuredClone(evidence); drifted.components[0].sha256 = `sha256:${"0".repeat(64)}`;
+    expect(() => verifier(root, drifted)).toThrow("component drift");
+  }
 });

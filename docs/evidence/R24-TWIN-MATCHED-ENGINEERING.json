@@ -1,0 +1,167 @@
+{
+  "schema": "autonomy.r24-twin-matched-engineering.v1",
+  "closureClaim": false,
+  "profile": "twin-conformant-engineering",
+  "binding": {
+    "schema": "autonomy.r24-engineering-binding.v1",
+    "campaignId": "r24-twin-engineering-2026-07-16",
+    "organizationDigest": "sha256:7d3aa89a5a737d0ceba963bed84e90f0469ce6ed49703c7f3c9117c468127214",
+    "workloadDigest": "sha256:b9643c9f5144b8e9c75d3da92088978fb70ef4847e83f3037e238cbdf8f02855",
+    "assignmentDigest": "sha256:85c837d0e962e62e500023c9c56b5f1bf426698a2564e890cc15d02cb55d5180",
+    "repositoryDigest": "sha256:2f187d33111666328b59e65f1be91aedc4230479c79bd05a484699ff0f187db9",
+    "harnessDigest": "sha256:a696bfa72c383c5af6dd58c40f4cfa8634e8823a7283bb17d8efa50a36591e69",
+    "modelDigest": "sha256:7bcf052981703980c5d685f0f23e8d1165caa15aac18a019e7e27c60a13f4c20",
+    "promptDigest": "sha256:aee0052aae5cc52e1ebdcd7fb4365f0abeb47237b4aa000cbd4626e82f7f0b2a",
+    "contextDigest": "sha256:b8cb91b797dd083c1af5004e0e8fc3e91ecfeda4dbac6f175830a13aa3790b23",
+    "sessionPolicyDigest": "sha256:9013139fab6915df5da0e8eccdefe0ef25c249b93d4ca77ea9cfbea450868978",
+    "credentialScopeDigest": "sha256:e0c056b20dac91655c58066462d7d0278e41a4a9d04226eca38940ff165c69ab",
+    "serviceTwin": {
+      "implementationDigest": "sha256:e654f3144502f55bd395cb11a9d2c65eee327e412da3d76689ec51f9119543de",
+      "scenarioDigest": "sha256:974d5378f1d3b4db707ef9fc88954ef08cfcb40456848fb3ae3cb23831c9165d"
+    }
+  },
+  "bindingDigest": "sha256:4726ab8505cd940a0f5859defcde001293fc512fa539d38ac40b1b20bd01de36",
+  "order": [
+    "hermes",
+    "paperclip"
+  ],
+  "cells": [
+    {
+      "schema": "autonomy.r24-native-engineering-receipt.v1",
+      "substrate": "hermes",
+      "nativePath": "hermes-kanban-worker",
+      "providerVersion": "0.18.2",
+      "providerRevision": "0c1adb48",
+      "trialId": "r24-twin-engineering-2026-07-16:hermes",
+      "order": 0,
+      "bindingDigest": "sha256:4726ab8505cd940a0f5859defcde001293fc512fa539d38ac40b1b20bd01de36",
+      "organizationDigest": "sha256:7d3aa89a5a737d0ceba963bed84e90f0469ce6ed49703c7f3c9117c468127214",
+      "workloadDigest": "sha256:b9643c9f5144b8e9c75d3da92088978fb70ef4847e83f3037e238cbdf8f02855",
+      "serviceTwinImplementationDigest": "sha256:e654f3144502f55bd395cb11a9d2c65eee327e412da3d76689ec51f9119543de",
+      "serviceTwinScenarioDigest": "sha256:974d5378f1d3b4db707ef9fc88954ef08cfcb40456848fb3ae3cb23831c9165d",
+      "nativeRunId": "t_0c642d3d",
+      "processId": 3223356,
+      "startedAt": "2026-07-16T17:45:31.285Z",
+      "completedAt": "2026-07-16T17:49:13.765Z",
+      "terminal": "success",
+      "portableOutcomeDigest": "sha256:96baf5cc2aac98af6443f5c5d0770fe211c1cdf316cacbd384f85b26ce3e06ef",
+      "rawTraceDigest": "sha256:52e86040be3249bef6dc34260eab2c7425c8f3ba407f134290e361e4a8ad5eb3",
+      "cleanupDigest": "sha256:bda6dd1d1b96e3085d78a5b33a3a813e3f7ceda95e9aff8a9d1daf7ea5632407",
+      "humanAssistanceMinutes": 0,
+      "liveProviderClaim": false
+    },
+    {
+      "schema": "autonomy.r24-native-engineering-receipt.v1",
+      "substrate": "paperclip",
+      "nativePath": "paperclip-issue-process-adapter",
+      "providerVersion": "0.3.1",
+      "providerRevision": "90f85a7d11c517b1d09db90dbec97f4de7d96b83",
+      "trialId": "r24-twin-engineering-2026-07-16:paperclip",
+      "order": 1,
+      "bindingDigest": "sha256:4726ab8505cd940a0f5859defcde001293fc512fa539d38ac40b1b20bd01de36",
+      "organizationDigest": "sha256:7d3aa89a5a737d0ceba963bed84e90f0469ce6ed49703c7f3c9117c468127214",
+      "workloadDigest": "sha256:b9643c9f5144b8e9c75d3da92088978fb70ef4847e83f3037e238cbdf8f02855",
+      "serviceTwinImplementationDigest": "sha256:e654f3144502f55bd395cb11a9d2c65eee327e412da3d76689ec51f9119543de",
+      "serviceTwinScenarioDigest": "sha256:974d5378f1d3b4db707ef9fc88954ef08cfcb40456848fb3ae3cb23831c9165d",
+      "nativeRunId": "aee9a10d-fc65-4444-8e45-b4d15ef8c1f3",
+      "processId": 3230621,
+      "startedAt": "2026-07-16T17:49:16.404Z",
+      "completedAt": "2026-07-16T17:49:17.273Z",
+      "terminal": "success",
+      "portableOutcomeDigest": "sha256:96baf5cc2aac98af6443f5c5d0770fe211c1cdf316cacbd384f85b26ce3e06ef",
+      "rawTraceDigest": "sha256:9b9ddd4b45d8d180b6905947bd58ebd049639ac797bf2da3dbf99600cd8a9c4b",
+      "cleanupDigest": "sha256:1b22af354761a92c582d4215aa1ac5a617dd61641efdb5463df91ac42b94e675",
+      "humanAssistanceMinutes": 0,
+      "liveProviderClaim": false
+    }
+  ],
+  "sharedServiceTwin": true,
+  "claims": {
+    "actualNativeSubstrateProcesses": true,
+    "liveRemoteProvider": false,
+    "humanParticipants": false,
+    "humanAssistance": false
+  },
+  "replay": {
+    "binding": {
+      "schema": "autonomy.r24-engineering-binding.v1",
+      "campaignId": "r24-twin-engineering-2026-07-16",
+      "organizationDigest": "sha256:7d3aa89a5a737d0ceba963bed84e90f0469ce6ed49703c7f3c9117c468127214",
+      "workloadDigest": "sha256:b9643c9f5144b8e9c75d3da92088978fb70ef4847e83f3037e238cbdf8f02855",
+      "assignmentDigest": "sha256:85c837d0e962e62e500023c9c56b5f1bf426698a2564e890cc15d02cb55d5180",
+      "repositoryDigest": "sha256:2f187d33111666328b59e65f1be91aedc4230479c79bd05a484699ff0f187db9",
+      "harnessDigest": "sha256:a696bfa72c383c5af6dd58c40f4cfa8634e8823a7283bb17d8efa50a36591e69",
+      "modelDigest": "sha256:7bcf052981703980c5d685f0f23e8d1165caa15aac18a019e7e27c60a13f4c20",
+      "promptDigest": "sha256:aee0052aae5cc52e1ebdcd7fb4365f0abeb47237b4aa000cbd4626e82f7f0b2a",
+      "contextDigest": "sha256:b8cb91b797dd083c1af5004e0e8fc3e91ecfeda4dbac6f175830a13aa3790b23",
+      "sessionPolicyDigest": "sha256:9013139fab6915df5da0e8eccdefe0ef25c249b93d4ca77ea9cfbea450868978",
+      "credentialScopeDigest": "sha256:e0c056b20dac91655c58066462d7d0278e41a4a9d04226eca38940ff165c69ab",
+      "serviceTwin": {
+        "implementationDigest": "sha256:e654f3144502f55bd395cb11a9d2c65eee327e412da3d76689ec51f9119543de",
+        "scenarioDigest": "sha256:974d5378f1d3b4db707ef9fc88954ef08cfcb40456848fb3ae3cb23831c9165d"
+      }
+    },
+    "requests": [
+      {
+        "binding": {
+          "schema": "autonomy.r24-engineering-binding.v1",
+          "campaignId": "r24-twin-engineering-2026-07-16",
+          "organizationDigest": "sha256:7d3aa89a5a737d0ceba963bed84e90f0469ce6ed49703c7f3c9117c468127214",
+          "workloadDigest": "sha256:b9643c9f5144b8e9c75d3da92088978fb70ef4847e83f3037e238cbdf8f02855",
+          "assignmentDigest": "sha256:85c837d0e962e62e500023c9c56b5f1bf426698a2564e890cc15d02cb55d5180",
+          "repositoryDigest": "sha256:2f187d33111666328b59e65f1be91aedc4230479c79bd05a484699ff0f187db9",
+          "harnessDigest": "sha256:a696bfa72c383c5af6dd58c40f4cfa8634e8823a7283bb17d8efa50a36591e69",
+          "modelDigest": "sha256:7bcf052981703980c5d685f0f23e8d1165caa15aac18a019e7e27c60a13f4c20",
+          "promptDigest": "sha256:aee0052aae5cc52e1ebdcd7fb4365f0abeb47237b4aa000cbd4626e82f7f0b2a",
+          "contextDigest": "sha256:b8cb91b797dd083c1af5004e0e8fc3e91ecfeda4dbac6f175830a13aa3790b23",
+          "sessionPolicyDigest": "sha256:9013139fab6915df5da0e8eccdefe0ef25c249b93d4ca77ea9cfbea450868978",
+          "credentialScopeDigest": "sha256:e0c056b20dac91655c58066462d7d0278e41a4a9d04226eca38940ff165c69ab",
+          "serviceTwin": {
+            "implementationDigest": "sha256:e654f3144502f55bd395cb11a9d2c65eee327e412da3d76689ec51f9119543de",
+            "scenarioDigest": "sha256:974d5378f1d3b4db707ef9fc88954ef08cfcb40456848fb3ae3cb23831c9165d"
+          }
+        },
+        "substrate": "hermes",
+        "trialId": "r24-twin-engineering-2026-07-16:hermes",
+        "order": 0,
+        "nonce": "sha256:1580545f5a179a316387ee2518f1c75e1d86c305bdc59b3b787dcd2a549eccae"
+      },
+      {
+        "binding": {
+          "schema": "autonomy.r24-engineering-binding.v1",
+          "campaignId": "r24-twin-engineering-2026-07-16",
+          "organizationDigest": "sha256:7d3aa89a5a737d0ceba963bed84e90f0469ce6ed49703c7f3c9117c468127214",
+          "workloadDigest": "sha256:b9643c9f5144b8e9c75d3da92088978fb70ef4847e83f3037e238cbdf8f02855",
+          "assignmentDigest": "sha256:85c837d0e962e62e500023c9c56b5f1bf426698a2564e890cc15d02cb55d5180",
+          "repositoryDigest": "sha256:2f187d33111666328b59e65f1be91aedc4230479c79bd05a484699ff0f187db9",
+          "harnessDigest": "sha256:a696bfa72c383c5af6dd58c40f4cfa8634e8823a7283bb17d8efa50a36591e69",
+          "modelDigest": "sha256:7bcf052981703980c5d685f0f23e8d1165caa15aac18a019e7e27c60a13f4c20",
+          "promptDigest": "sha256:aee0052aae5cc52e1ebdcd7fb4365f0abeb47237b4aa000cbd4626e82f7f0b2a",
+          "contextDigest": "sha256:b8cb91b797dd083c1af5004e0e8fc3e91ecfeda4dbac6f175830a13aa3790b23",
+          "sessionPolicyDigest": "sha256:9013139fab6915df5da0e8eccdefe0ef25c249b93d4ca77ea9cfbea450868978",
+          "credentialScopeDigest": "sha256:e0c056b20dac91655c58066462d7d0278e41a4a9d04226eca38940ff165c69ab",
+          "serviceTwin": {
+            "implementationDigest": "sha256:e654f3144502f55bd395cb11a9d2c65eee327e412da3d76689ec51f9119543de",
+            "scenarioDigest": "sha256:974d5378f1d3b4db707ef9fc88954ef08cfcb40456848fb3ae3cb23831c9165d"
+          }
+        },
+        "substrate": "paperclip",
+        "trialId": "r24-twin-engineering-2026-07-16:paperclip",
+        "order": 1,
+        "nonce": "sha256:fa08f4dd4e3e3724b77ad8b61cb0293fdab12a237ebe311b2b2ba555c804b616"
+      }
+    ],
+    "pins": {
+      "hermes": {
+        "version": "0.18.2",
+        "revision": "0c1adb48"
+      },
+      "paperclip": {
+        "version": "0.3.1",
+        "revision": "90f85a7d11c517b1d09db90dbec97f4de7d96b83"
+      }
+    }
+  },
+  "differences": [],
+  "digest": "sha256:dff8140298a890a5b3369cca13fe0003805c3b5ab4024db80d0ba3d6c14846d5"
+}

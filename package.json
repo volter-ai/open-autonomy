@@ -49,6 +49,7 @@
     "acquire:r23": "bun bench/dev/evidence/r23-acquisition-cli.ts",
     "acquire:r24": "bun bench/dev/evidence/r24-acquisition-cli.ts",
     "acquire:r25": "bun bench/dev/evidence/r25-acquisition-cli.ts",
+    "acquire:r26": "bun bench/dev/evidence/r26-acquisition-cli.ts",
     "acquire:r27": "bun bench/dev/evidence/r27-acquisition-cli.ts",
     "acquire:r28": "bun bench/dev/evidence/r28-acquisition-cli.ts",
     "runtime-ledgers:init": "bun scripts/initialize-runtime-ledgers.ts",

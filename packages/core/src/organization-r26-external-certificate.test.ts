@@ -11,6 +11,7 @@ import {
   type R26Certificate,
   type R26ExternalTrust,
 } from "./organization-r26-external-certificate";
+import { acceptR26Decision, acceptR26Evidence, acceptR26Manifest, assembleR26, createR26State, issueR26Decision, issueR26Evidence, issueR26Manifest, type R26Kind, type R26Request, type R26Response } from "../../../bench/dev/evidence/r26-acquisition";
 const digest = (v: unknown) =>
   `sha256:${createHash("sha256").update(canonicalSemanticJson(v)).digest("hex")}` as const;
 const key = () => {
@@ -388,6 +389,10 @@ test("accepts only a complete independently signed R25-bound replayable certific
       recommendation: "faster",
     },
   );
+});
+test("reconstructs the exact candidate certificate through authority-separated acquisition", () => {
+  const source = certificate(), publicKeys: Record<string, string> = { "manifest-key": manifestKey.pub, "assessment-key": assessmentKey.pub, "validator-key": validatorKey.pub, ...Object.fromEntries(Object.entries(authorities).map(([role, value]) => [`${role}-key`, value.pub])) }, state = createR26State({ campaignId: "r26-complete", createdAt: "2026-07-16T09:00:00Z", manifestKeyId: "manifest-key", assessmentKeyId: "assessment-key", approvalKeyIds: { governance: "governance-key", security: "security-key", rollout: "rollout-key", budget: "budget-key" }, validatorKeyId: "validator-key", publicKeys }), privateKeys: Record<string, any> = { "manifest-key": manifestKey.priv, "assessment-key": assessmentKey.priv, "validator-key": validatorKey.priv, ...Object.fromEntries(Object.entries(authorities).map(([role, value]) => [`${role}-key`, value.priv])) }, keyFor = (q: R26Request) => q.action === "manifest" ? "manifest-key" : q.action === "decision" ? "validator-key" : q.kind === "assessments" ? "assessment-key" : `${q.signerId}-key`, respond = (q: R26Request, fragment: unknown): R26Response => { const signerKeyId = keyFor(q), body = { schema: "open-autonomy.bench-r26-acquisition-response.v1" as const, requestDigest: digest(q), fragmentDigest: digest(fragment), signerKeyId, signedAt: now }; return { ...body, signature: sign(null, Buffer.from(canonicalSemanticJson(body)), privateKeys[signerKeyId]).toString("base64"), fragment }; }, manifestFragment = { r25: source.r25, baseline: source.baseline, manifest: source.manifest, candidates: source.candidates, objectives: source.objectives, constraints: source.constraints }, decision = { paretoFront: source.paretoFront, recommendation: source.recommendation, outcome: source.outcome, rationale: source.rationale, generatedAt: source.generatedAt, validator: source.validator }, acceptCell = (kind: R26Kind, id: string, fragment: unknown) => { const q = issueR26Evidence(state, kind, id); acceptR26Evidence(state, kind, id, respond(q, fragment)); };
+  let q = issueR26Manifest(state); acceptR26Manifest(state, respond(q, manifestFragment)); for (const x of source.approvals) acceptCell("approvals", [x.candidateId, x.kind].map(encodeURIComponent).join("/"), x); for (const x of source.assessments) acceptCell("assessments", encodeURIComponent(x.candidateId), x); q = issueR26Decision(state); acceptR26Decision(state, respond(q, decision)); const assembled = assembleR26(state); expect(canonicalSemanticJson(assembled)).toBe(canonicalSemanticJson(source)); expect(verifyR26ExternalCertificate(assembled, trust, now).status).toBe("valid-complete-certificate");
 });
 test("rejects forged trust, incomplete manifests, validator collapse, approvals, expiry and heldout provenance", () => {
   const attacks = [

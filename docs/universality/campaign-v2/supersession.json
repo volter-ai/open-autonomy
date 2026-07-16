@@ -1,0 +1,10 @@
+{
+  "schema": "open-autonomy.campaign-supersession.v1",
+  "predecessorCampaign": "organization-universality-2026-v1",
+  "predecessorDigest": "sha256:538c85ccbb4ad9b5ebae709977c1bc7aff1ac233b043488e6713a584d83cbcfa",
+  "successorCampaign": "organization-universality-2026-v2",
+  "successorDigest": "sha256:3e254540db8dfb13d630858ed5469429d8503b856aff00acb19087f5c3a41f38",
+  "reason": "v1 froze a midnight census instant but exact GitHub observations occurred later that day; v2 preregisters an end-of-day cutoff before any frontend, compilation, or execution outcome exists",
+  "predecessorStatus": "invalidated-before-u1-closure",
+  "digest": "sha256:34d3e3ea81ba529d5eac42b4481a94fba747eccd96959af8e3f14ed2c4eae812"
+}

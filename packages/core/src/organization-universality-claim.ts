@@ -46,6 +46,16 @@ export type UniversalityClaimRegistration = {
   metrics: UniversalityMetricContract[];
 };
 export type FrozenUniversalityClaim = UniversalityClaimRegistration & { digest: `sha256:${string}` };
+export type CampaignSupersession = {
+  schema: "open-autonomy.campaign-supersession.v1";
+  predecessorCampaign: string;
+  predecessorDigest: `sha256:${string}`;
+  successorCampaign: string;
+  successorDigest: `sha256:${string}`;
+  reason: string;
+  predecessorStatus: "invalidated-before-u1-closure";
+};
+export type FrozenCampaignSupersession = CampaignSupersession & { digest: `sha256:${string}` };
 
 const directions: Record<UniversalityMetric, MetricDirection> = {
   diagnosticAccounting: "exactly", canonicalFactWeighted: "at-least", canonicalFactPerSystem: "at-least",
@@ -82,7 +92,7 @@ export function freezeUniversalityClaim(value: UniversalityClaimRegistration): F
   if (value.schema !== "open-autonomy.universality-claim.v1" || !value.campaignId ||
       !Number.isFinite(Date.parse(value.registeredAt)) || value.domain !== "autonomous-software-organizations" ||
       !value.sourceSelectionRule || !value.compositionSelectionRule || !value.sourcePopulationId ||
-      !value.compositionPopulationId || !Number.isFinite(Date.parse(value.censusAt)) || !value.executionSamplingRule ||
+      !value.compositionPopulationId || !Number.isFinite(Date.parse(value.censusAt)) || Date.parse(value.registeredAt) >= Date.parse(value.censusAt) || !value.executionSamplingRule ||
       !value.executionSamplingSeed || value.undefinedDenominatorPolicy !== "invalidate-campaign" || !value.assurancePolicyId)
     throw Error("universality claim identity invalid");
   const expected = Object.keys(UNIVERSALITY_FLOORS) as UniversalityMetric[];
@@ -110,5 +120,33 @@ export function verifyFrozenUniversalityClaim(value: FrozenUniversalityClaim) {
   const { digest, ...body } = value;
   const frozen = freezeUniversalityClaim(body);
   if (frozen.digest !== digest) throw Error("universality claim digest mismatch");
+  return frozen;
+}
+
+/** Authenticate historical claim bytes even when a later verifier intentionally rejects an old campaign invariant. */
+export function verifyHistoricalUniversalityClaimDigest(value: FrozenUniversalityClaim) {
+  const {digest,...body}=value;
+  const expected=`sha256:${createHash("sha256").update(canonicalSemanticJson(body)).digest("hex")}`;
+  if (digest!==expected) throw Error("historical universality claim digest mismatch");
+  return value;
+}
+
+export function freezeCampaignSupersession(value: CampaignSupersession, predecessor: FrozenUniversalityClaim, successor: FrozenUniversalityClaim): FrozenCampaignSupersession {
+  verifyHistoricalUniversalityClaimDigest(predecessor);
+  verifyFrozenUniversalityClaim(successor);
+  const keys=Object.keys(value).sort(), expected=["schema","predecessorCampaign","predecessorDigest","successorCampaign","successorDigest","reason","predecessorStatus"].sort();
+  if (JSON.stringify(keys)!==JSON.stringify(expected) || value.schema!=="open-autonomy.campaign-supersession.v1" ||
+      value.predecessorCampaign!==predecessor.campaignId || value.predecessorDigest!==predecessor.digest ||
+      value.successorCampaign!==successor.campaignId || value.successorDigest!==successor.digest ||
+      value.predecessorCampaign===value.successorCampaign || value.predecessorDigest===value.successorDigest || !value.reason.trim() ||
+      value.predecessorStatus!=="invalidated-before-u1-closure" || Date.parse(successor.registeredAt)>=Date.parse(successor.censusAt))
+    throw Error("campaign supersession join invalid");
+  const body=structuredClone(value), digest=`sha256:${createHash("sha256").update(`open-autonomy.campaign-supersession.v1\0${canonicalSemanticJson(body)}`).digest("hex")}` as const;
+  return {...body,digest};
+}
+
+export function verifyFrozenCampaignSupersession(value: FrozenCampaignSupersession, predecessor: FrozenUniversalityClaim, successor: FrozenUniversalityClaim) {
+  const {digest,...body}=value, frozen=freezeCampaignSupersession(body,predecessor,successor);
+  if (digest!==frozen.digest) throw Error("campaign supersession digest mismatch");
   return frozen;
 }

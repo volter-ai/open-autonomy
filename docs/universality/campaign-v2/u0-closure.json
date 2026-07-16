@@ -1,0 +1,14 @@
+{
+  "schema": "open-autonomy.universality-checkpoint-closure.v1",
+  "checkpoint": "U0",
+  "status": "complete",
+  "assurance": "property-tested",
+  "claimDigest": "sha256:3e254540db8dfb13d630858ed5469429d8503b856aff00acb19087f5c3a41f38",
+  "supersessionDigest": "sha256:34d3e3ea81ba529d5eac42b4481a94fba747eccd96959af8e3f14ed2c4eae812",
+  "semanticCoverage": ["claim identity and domain","prospective census chronology","population identities and selection rules","metric formulas and weights","assurance classes","normative thresholds","undefined-denominator invalidation","deterministic stratified execution sampling","campaign supersession custody"],
+  "falsifiersExercised": ["metric omission or duplication","weakened or impossible threshold","formula or population substitution","surplus semantic field","reversed census chronology","forged campaign join","historical claim rewrite","post-freeze mutation"],
+  "evidence": ["docs/universality/campaign-v2/claim.json","docs/universality/campaign-v2/supersession.json","packages/core/src/organization-universality-claim.ts","packages/core/src/organization-universality-claim.test.ts"],
+  "skepticalReview": {"round1":"rejected: active closure, supersession, and chronology enforcement gaps","round2":"accepted: chronology, historical digest custody, authenticated supersession joins, and active v2 closure verified"},
+  "residuals": [],
+  "next": "U1"
+}

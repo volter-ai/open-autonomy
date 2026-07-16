@@ -30,8 +30,13 @@ is durable before request exposure.
 1. Custody signatures do not establish source, population, trace, outcome, or estimator truth.
 2. The end-to-end fixture is synthetic and cannot establish absence of external contamination.
 3. One CLI writer is assumed per state path; issued immutable requests may execute concurrently.
-4. R25 remains blocked on closed dependencies and genuine external execution.
+4. This acquisition artifact is not itself engineering closure. Engineering closure still requires closed R19,
+   R23, and R24 pins plus a complete calibration over observations produced by that closed twin-conformant world.
+   Independently operated populations, real-provider transfer, and independently administered custody remain
+   additive `external-validation` evidence rather than engineering blockers.
 
 ## Decision
 
-The protocol is ready to acquire a real R25 calibration but proves no R25 closure by itself.
+The protocol is ready to acquire either scoped `twin-conformant-engineering` evidence or additive
+`external-validation` evidence, but proves no R25 closure by itself and never promotes the former into claims about
+independently operated populations.

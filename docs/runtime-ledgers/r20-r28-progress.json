@@ -46,7 +46,7 @@
     },
     {
       "path": "docs/evidence/R27-LIVE-CANARY-BUNDLE.json",
-      "sha256": "sha256:2301a65a4c4968f2c84a726392172d80cb2e64f2363bc609f1f21d72a185aa0d",
+      "sha256": "sha256:8a0315165f11f4da8ef4ddbb9d917db860dfceb730bc65bdf30d2d4653dcc7c2",
       "selector": "unknown-telemetry",
       "expectedCount": 1
     },
@@ -81,22 +81,22 @@
     {
       "checkpoint": "R24",
       "path": "docs/evidence/R24-V5-STRUCTURAL-READINESS.json",
-      "sha256": "sha256:8df1f817e6ab565f424d69e8635415f979c51e355b42f0580f2878e1693c1c62"
+      "sha256": "sha256:536b4d42845fefdba10bd7cd819c3506da2de50d33bb7851093acc21719607ed"
     },
     {
       "checkpoint": "R25",
       "path": "docs/evidence/R25-STRUCTURAL-READINESS.json",
-      "sha256": "sha256:9ff207a6205dbabbfde2d70a3dab60c80c182cbc36e0b068ddc2b77b510c97ee"
+      "sha256": "sha256:0e2f4b798b14a02cd91cec499ef76fc4d1c300bdeb95783f2eb60e38bbe8b663"
     },
     {
       "checkpoint": "R26",
       "path": "docs/evidence/R26-STRUCTURAL-READINESS.json",
-      "sha256": "sha256:1add75c1f33edcba0145483f588814ed6da22efa6cbc6d402c26cc9485ab67a6"
+      "sha256": "sha256:6ce39613155d03d8233ae6d10edb11a9e576aa87ce3bfd62fc47bc9c082c486b"
     },
     {
       "checkpoint": "R27",
       "path": "docs/evidence/R27-STRUCTURAL-READINESS.json",
-      "sha256": "sha256:204f8d4bb320fc7c1b820292f9e1a8c7166a76da5ff83cbc9adbf3a98177fd93"
+      "sha256": "sha256:937c55eb64ba7606fc9dda475f96d1372ea1f74a673776a6c93b22439d00f610"
     },
     {
       "checkpoint": "R28",

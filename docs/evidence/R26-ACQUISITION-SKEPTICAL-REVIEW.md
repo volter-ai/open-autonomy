@@ -28,8 +28,13 @@ request mutation. CLI issuance is durable before request exposure.
 1. Custody signatures do not prove causal identification, held-out truth, or institutional authority.
 2. The complete fixture is synthetic and executes no recommended patch.
 3. One CLI writer is assumed per state path; issued immutable requests may execute concurrently.
-4. R26 remains blocked on closed dependencies and genuine external execution.
+4. This acquisition artifact is not itself engineering closure. Engineering closure still requires closed R7 and
+   R25 pins plus a complete certificate evaluated inside their closed twin-conformant world. Real institutional
+   authorities, independently administered assessment, and safe execution of a recommendation remain additive
+   `external-validation` or downstream rollout evidence rather than being silently inferred here.
 
 ## Decision
 
-The protocol is ready to acquire a real R26 certificate but proves no R26 closure by itself.
+The protocol is ready to acquire either scoped `twin-conformant-engineering` evidence or additive
+`external-validation` evidence, but proves no R26 closure by itself and never turns simulated approvals or assessments
+into claims about real institutional authority.

@@ -51,6 +51,27 @@ invalid signatures. Successful state transitions use atomic replacement plus fil
 closure. The resulting bundle must still pass the independently configured external verifier and
 trust-module attestation command above.
 
+R28 uses an append-only variant because the final artifact represents at least 90 days of live
+operation. Its externally signed registration freezes the dependency, bounds, protected-control,
+role-grant, and repository-baseline inputs. Four independently custodied streams (`heartbeats`,
+`crashes`, `proposals`, and `audit`) are then appended and externally sealed. Completion binds the
+final repository, attack drills, pause result, zero residuals, and generation time. Finally, a
+distinct validator first declares its identity and key, then signs the exact assembled campaign:
+
+```sh
+bun run acquire:r28 -- init --state campaign.state.json --registry external-registry.json
+bun run acquire:r28 -- issue-registration --state campaign.state.json --out registration.request.json
+bun run acquire:r28 -- issue-append --state campaign.state.json --stream heartbeats --out heartbeat.request.json
+bun run acquire:r28 -- accept-append --state campaign.state.json --stream heartbeats --ordinal 1 --response heartbeat.response.json
+bun run acquire:r28 -- issue-seal --state campaign.state.json --stream heartbeats --out heartbeat-seal.request.json
+bun run acquire:r28 -- status --state campaign.state.json
+```
+
+The remaining CLI actions are `accept-registration`, `accept-seal`, `issue-completion`,
+`accept-completion`, `issue-validator-intent`, `accept-validator-intent`, `issue-validation`,
+`accept-validation`, and `assemble`. Every issuance is persisted before its request file is exposed.
+The final campaign must still pass `verify:external-campaign`; collection is not closure.
+
 The trusted module exports `trust` implementing
 the checkpoint contract. It must also be supplied with `--trust-attestation <json> --trust-root <pem>`: an external
 Ed25519 authority signs the exact module digest and checkpoint, preventing an unapproved always-allow policy from

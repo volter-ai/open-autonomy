@@ -10,6 +10,12 @@ import {
   type R28Proposal,
   type R28RoleGrant,
 } from "./r28-external-campaign";
+import {
+  acceptR28Append, acceptR28Completion, acceptR28Registration, acceptR28Seal, acceptR28Validation, acceptR28ValidatorIntent,
+  assembleR28AcquisitionCampaign, createR28AcquisitionState, issueR28Append, issueR28Completion, issueR28Registration,
+  issueR28Seal, issueR28Validation, issueR28ValidatorIntent, type R28AcquisitionRequest, type R28AcquisitionRole,
+  type R28AcquisitionState, type R28Stream,
+} from "./r28-acquisition";
 const h = (x: unknown) =>
     `sha256:${createHash("sha256").update(canonicalSemanticJson(x)).digest("hex")}` as const,
   k = () => {
@@ -359,6 +365,36 @@ test("validates a fully trusted 90-day externally signed campaign", () =>
     status: "valid-complete-external-campaign",
     proposalCount: 3,
   }));
+test("reconstructs the exact valid campaign through externally custodied append streams", () => {
+  const source = campaign(), acquisitionRoles: R28AcquisitionRole[] = ["registration-authority", "heartbeat-collector", "crash-injector", "proposal-custodian", "audit-custodian", "finalizer", "validator"],
+    roleKeys = {} as Record<R28AcquisitionRole, string>, publicKeys: Record<string, string> = {}, privateKeys: Record<string, any> = {};
+  for (const role of acquisitionRoles) {
+    const id = role === "validator" ? "validator-key" : `custody-${role}`, pair = role === "validator" ? keys.validator! : k();
+    roleKeys[role] = id; publicKeys[id] = pair.pub; privateKeys[id] = pair.priv;
+  }
+  const state = createR28AcquisitionState({ campaignId: source.campaignId, createdAt: "2025-12-01T00:00:00Z", roleKeys, publicKeys });
+  const respond = (request: R28AcquisitionRequest, fragment: unknown) => {
+    const signerKeyId = state.roleKeys[request.role], body = { schema: "open-autonomy.bench-r28-acquisition-response.v1" as const,
+      requestDigest: h(request), fragmentDigest: h(fragment), signerKeyId, signedAt: source.generatedAt };
+    return { ...body, signature: sign(null, Buffer.from(canonicalSemanticJson(body)), privateKeys[signerKeyId]).toString("base64"), fragment };
+  };
+  const registration = { dependencies: source.dependencies, bounds: source.bounds, protectedControls: source.protectedControls,
+    roleGrants: source.roleGrants, repositoryBaseline: { remoteDigest: source.repository.remoteDigest, baselineHead: source.repository.baselineHead } };
+  let request = issueR28Registration(state); acceptR28Registration(state, respond(request, registration));
+  const streamValues: Record<R28Stream, unknown[]> = { heartbeats: source.heartbeats, crashes: source.crashes, proposals: source.proposals, audit: source.audit };
+  for (const stream of Object.keys(streamValues) as R28Stream[]) {
+    for (const value of streamValues[stream]) { request = issueR28Append(state, stream); acceptR28Append(state, stream, request.ordinal, respond(request, value)); }
+    request = issueR28Seal(state, stream); const entries = state.streams[stream].entries;
+    acceptR28Seal(state, stream, respond(request, { count: entries.length, headResponseDigest: h(entries.at(-1)!.response!) }));
+  }
+  request = issueR28Completion(state); acceptR28Completion(state, respond(request, { repository: source.repository, attacks: source.attacks, pause: source.pause, residuals: source.residuals, generatedAt: source.generatedAt }));
+  request = issueR28ValidatorIntent(state); acceptR28ValidatorIntent(state, respond(request, { identity: source.validator.identity, keyId: source.validator.keyId,
+    publicKeyPem: source.validator.publicKeyPem, signedAt: source.validator.signedAt }));
+  request = issueR28Validation(state); acceptR28Validation(state, respond(request, { campaignSignature: source.validator.signature }));
+  const reconstructed = assembleR28AcquisitionCampaign(state);
+  expect(canonicalSemanticJson(reconstructed)).toBe(canonicalSemanticJson(source));
+  expect(verifyR28ExternalCampaign(reconstructed, trust, "2026-04-02T12:00:00Z")).toMatchObject({ status: "valid-complete-external-campaign" });
+});
 test("rejects dependency/repository/identity/time/crash and residual fabrication", () => {
   const ms = [
     (c: any) => c.dependencies.pop(),

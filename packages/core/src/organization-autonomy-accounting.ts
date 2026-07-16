@@ -51,7 +51,7 @@ const definition = (
   attribution: string,
   censoring: string,
   uncertainty: MetricDefinition["uncertainty"],
-): MetricDefinition => ({
+): MetricDefinition => Object.freeze({
   name,
   eventBasis,
   unit,
@@ -62,7 +62,7 @@ const definition = (
   uncertainty,
 });
 export const AUTONOMY_METRICS: Readonly<Record<MetricName, MetricDefinition>> =
-  {
+  Object.freeze({
     "lead-time": definition(
       "lead-time",
       "createdAt→terminalAt",
@@ -216,7 +216,7 @@ export const AUTONOMY_METRICS: Readonly<Record<MetricName, MetricDefinition>> =
       "missing value counted and not imputed",
       "accounting-exact",
     ),
-  };
+  });
 
 export type WorkItem = {
   id: string;

@@ -222,16 +222,17 @@ const ledger = (): AccountingLedger => ({
 describe("R23 autonomy accounting", () => {
   test("declares every named estimand with complete measurement semantics", () => {
     expect(Object.keys(AUTONOMY_METRICS)).toHaveLength(17);
-    for (const metric of Object.values(AUTONOMY_METRICS))
-      expect(metric).toMatchObject({
-        eventBasis: expect.any(String),
-        unit: expect.any(String),
-        estimand: expect.any(String),
-        horizon: "closed-interval",
-        attribution: expect.any(String),
-        censoring: expect.any(String),
-        uncertainty: expect.any(String),
-      });
+    for (const metric of Object.values(AUTONOMY_METRICS)) {
+      expect(typeof metric.eventBasis).toBe("string");
+      expect(typeof metric.unit).toBe("string");
+      expect(typeof metric.estimand).toBe("string");
+      expect(metric.horizon).toBe("closed-interval");
+      expect(typeof metric.attribution).toBe("string");
+      expect(typeof metric.censoring).toBe("string");
+      expect(typeof metric.uncertainty).toBe("string");
+      expect(Object.isFrozen(metric)).toBe(true);
+    }
+    expect(Object.isFrozen(AUTONOMY_METRICS)).toBe(true);
   });
   test("recovers synthetic ground truth without retry, provider, or overlapping-human double counting", () => {
     const report = measureAutonomy(ledger()),

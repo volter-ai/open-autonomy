@@ -10,6 +10,7 @@ import { join } from 'node:path';
 import type { Session, SessionRunner } from './types.ts';
 import { isPaused, pausedMarkerPath, pauseReasonText } from './pause.ts';
 import { defaultSessionRunner, listSessionsBestEffort } from './sessions.ts';
+import { readControlGeneration, type ControlGeneration } from './control-generation.ts';
 
 function lastFireDir(cwd: string): string {
   return join(cwd, '.open-autonomy', 'runner-state', 'last-fire');
@@ -58,6 +59,7 @@ export interface StatusReport {
   pauseReason: string | null;
   sessions: Session[] | null;
   lastFires: LastFireRecord[];
+  controlGeneration: ControlGeneration | null;
   rationale: string;
 }
 
@@ -67,6 +69,7 @@ export async function status(opts: { cwd?: string; sessionRunnerFactory?: (cwd: 
   const runner = await (opts.sessionRunnerFactory ?? defaultSessionRunner)(cwd);
   const sessions = await listSessionsBestEffort(cwd, runner);
   const lastFires = readLastFires(cwd);
+  const controlGeneration = readControlGeneration(cwd);
 
   const rationaleLines: string[] = [];
   rationaleLines.push(paused
@@ -77,6 +80,9 @@ export async function status(opts: { cwd?: string; sessionRunnerFactory?: (cwd: 
   else rationaleLines.push(`sessions: ${sessions.length} live (${sessions.map((s) => `${s.agent}:${s.status}`).join(', ')}).`);
   if (!lastFires.length) rationaleLines.push('last-fire: no scheduled fire recorded yet (either `oa start` has not run, or no job has become due).');
   else for (const lf of lastFires) rationaleLines.push(`last-fire[${lf.agent}]: ${lf.firedAt}`);
+  rationaleLines.push(controlGeneration
+    ? `control-generation: ${controlGeneration.sha} (${controlGeneration.codeHost || 'undeclared'}).`
+    : 'control-generation: none recorded (the accepted scheduler has not started).');
 
   return {
     paused,
@@ -84,6 +90,7 @@ export async function status(opts: { cwd?: string; sessionRunnerFactory?: (cwd: 
     pauseReason: pauseReasonText(cwd),
     sessions,
     lastFires,
+    controlGeneration,
     rationale: rationaleLines.join('\n'),
   };
 }

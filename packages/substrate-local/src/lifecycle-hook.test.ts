@@ -5,7 +5,7 @@
 //   2. RUN     — the REAL emitted scheduler/run.mjs runs a recorded effect in its worktree once that session
 //                is GONE from the runner's live list, and never while it is still live; then retires the marker.
 import { afterEach, describe, expect, test } from 'bun:test';
-import { spawn } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -198,7 +198,8 @@ describe('the review edge is realized through the runner seam (Blocker 2)', () =
     expect(out.generated['scripts/runner.ts']).toContain('REVIEW_AGENT: review'); // the develop agent's review edge
     const propose = out.generated['scripts/agent-propose.ts'];
     expect(propose).toContain('REVIEW_AGENT'); // agent-propose reads the review agent
-    expect(propose).toMatch(/runner\.ts['"],\s*['"]launch['"],\s*reviewAgent/); // and launches it via the runner seam
+    expect(propose).toContain("[trustedRunner, 'launch', reviewAgent"); // and launches it via the accepted runner seam
+    expect(propose).toContain("'--workspace', 'isolated'"); // reviewer doctrine comes from the accepted generation
     expect(propose).toContain('if (reviewWorkflow)'); // github's workflow dispatch is preserved (proven path untouched)
   });
 });
@@ -296,10 +297,28 @@ function scaffold(): { dir: string; worktree: string; markerPath: string; sentin
   // Real effect script: writes a sentinel into its CWD (proving it ran IN the worktree) carrying marker.env.
   const sentinel = join(worktree, 'effect-ran.txt');
   writeFileSync(join(dir, 'scripts', 'effect.mjs'), `import { writeFileSync } from 'node:fs';\nwriteFileSync('effect-ran.txt', process.env.FOO || '');\n`);
+  spawnSync('git', ['init', '-q', '-b', 'main'], { cwd: dir });
+  spawnSync('git', ['config', 'user.email', 'lifecycle@example.invalid'], { cwd: dir });
+  spawnSync('git', ['config', 'user.name', 'lifecycle-test'], { cwd: dir });
+  spawnSync('git', ['add', 'scheduler/run.mjs', 'scheduler/schedule.json', 'scripts/autonomy-runner.mjs', 'scripts/effect.mjs'], { cwd: dir });
+  spawnSync('git', ['commit', '-q', '-m', 'accepted test control'], { cwd: dir });
+  const controlSha = spawnSync('git', ['rev-parse', 'HEAD'], { cwd: dir, encoding: 'utf8' }).stdout.trim();
+  writeFileSync(join(dir, '.open-autonomy', 'runner-state', 'control-generation.json'), JSON.stringify({
+    schema: 'open-autonomy.control-generation.v1', sha: controlSha, codeHost: 'local-git', acceptedAt: new Date().toISOString(),
+  }));
   const markerPath = join(effectsDir, 'local-iterm-7.json');
   writeFileSync(
     markerPath,
-    JSON.stringify({ id: 'local-iterm-7', agent: 'develop', worktree, effect: join(dir, 'scripts', 'effect.mjs'), env: { FOO: 'bar' } }),
+    JSON.stringify({
+      schema: 'open-autonomy.effect-marker.v2',
+      id: 'local-iterm-7',
+      agent: 'develop',
+      worktree,
+      effect: 'scripts/effect.mjs',
+      controlRoot: dir,
+      controlSha,
+      env: { FOO: 'bar' },
+    }),
   );
   return { dir, worktree, markerPath, sentinel };
 }

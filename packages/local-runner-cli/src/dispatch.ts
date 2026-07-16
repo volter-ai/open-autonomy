@@ -12,6 +12,7 @@ import { buildTickEnv } from './env.ts';
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { activeScheduledSessionCount } from './capacity.ts';
+import { acceptControlGeneration } from './control-generation.ts';
 
 export interface DispatchResult {
   ok: boolean;
@@ -24,6 +25,12 @@ export function dispatch(agentName: string, opts: { cwd?: string; proc?: ProcRun
   const cwd = opts.cwd ?? process.cwd();
   const proc = opts.proc ?? defaultProc;
   const schedule = loadSchedule(cwd);
+  let generation;
+  try {
+    generation = acceptControlGeneration(cwd, proc);
+  } catch (error) {
+    return { ok: false, matched: null, reason: (error as Error).message };
+  }
   const job = schedule.jobs.find((candidate) => candidate.agent === agentName);
   if (!job) {
     return { ok: false, matched: null, reason: `[oa] dispatch: no scheduled job matches agent "${agentName}" (declared: ${schedule.jobs.map((candidate) => candidate.agent).filter(Boolean).join(', ') || 'none'})` };
@@ -32,6 +39,10 @@ export function dispatch(agentName: string, opts: { cwd?: string; proc?: ProcRun
     return { ok: false, matched: job.cmd, reason: `[oa] dispatch: job "${job.name}" is fenced by ${job.fence}` };
   }
   const env = buildTickEnv(schedule.env, process.env, 'dispatch');
+  if (generation) {
+    env.AUTONOMY_CONTROL_ROOT = cwd;
+    env.AUTONOMY_CONTROL_SHA = generation.sha;
+  }
   if (job.agent && Number.isFinite(schedule.maxConcurrent)) {
     const active = activeScheduledSessionCount(cwd, schedule, env, proc);
     if (active === null) {

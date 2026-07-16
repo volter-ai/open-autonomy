@@ -7,6 +7,9 @@ export { once } from './once.ts';
 export type { OnceResult } from './once.ts';
 export { pause, resume, isPaused, pausedMarkerPath, pausedMessage, pauseReasonText, DRAIN_NOTE } from './pause.ts';
 export { status, formatStatus, readLastFires } from './status.ts';
+export { acceptControlGeneration, readControlGeneration, verifyControlGeneration, verifyControlPaths } from './control-generation.ts';
+export type { ControlGeneration } from './control-generation.ts';
+export { recoverEffect } from './effect-recovery.ts';
 export type { StatusReport, LastFireRecord } from './status.ts';
 export { dispatch } from './dispatch.ts';
 export type { DispatchResult } from './dispatch.ts';
@@ -86,6 +89,8 @@ const HELP = `oa <command> [args]  (@volter/oa v${pkgVersion()}) — the local o
   oa resume                     remove .open-autonomy/paused and re-arm jobs assigned that fence
   oa status                     fence state + live sessions + last-fire info
   oa dispatch <agent>           fire one declared agent job now, bypassing cadence only
+  oa recover-effect <marker> --control-sha <sha>
+                                bind one inspected legacy marker to the active accepted generation
   oa doctor [--live] [--json]   offline checks: dep-integrity + fence + schedule.json + prompts/skills;
                                 --live additionally probes the termfleet provider's /healthz over the network
   oa maturity [--json] [--profile-dir <path>] [--profile <name>] [--target local|gh-actions]
@@ -162,6 +167,23 @@ export async function runCli(argv: string[]): Promise<number> {
     const r = dispatch(agent, { cwd });
     if (r.reason) console.error(r.reason);
     return r.ok ? 0 : 1;
+  }
+  if (cmd === 'recover-effect') {
+    const marker = rest[0];
+    const shaIndex = rest.indexOf('--control-sha');
+    const sha = shaIndex >= 0 ? rest[shaIndex + 1] : undefined;
+    if (!marker || !sha) {
+      console.error('[oa] recover-effect: usage: oa recover-effect <parked-marker> --control-sha <accepted-sha>');
+      return 1;
+    }
+    const { recoverEffect } = await import('./effect-recovery.ts');
+    const result = recoverEffect(marker, sha, { cwd });
+    if (!result.ok) {
+      console.error(`[oa] recover-effect refused: ${result.reason}`);
+      return 1;
+    }
+    console.log(`[oa] recovered effect into ${result.path}`);
+    return 0;
   }
   if (cmd === 'doctor') {
     const json = rest.includes('--json');

@@ -31,6 +31,7 @@ export interface RunInfo {
   conclusion: string | null;
   title: string;
   ref?: string; // the work-item this session is isolated for (the issue number) — lets a caller dedup per issue
+  controlSha?: string;
 }
 
 const scriptsDir = dirname(fileURLToPath(import.meta.url));
@@ -128,12 +129,15 @@ export function terminalIdFromLaunch(stdout: string): string {
   return '';
 }
 interface EffectMarker {
+  schema?: 'open-autonomy.effect-marker.v2';
   id: string;
   agent: string;
   ref: string; // the work-item (issue number) this session is isolated for — surfaced in `list` for per-issue dedup
   worktree: string;
   effect: string;
   env: Record<string, string>;
+  controlRoot?: string;
+  controlSha?: string;
 }
 
 interface WorkspaceLease {
@@ -143,6 +147,7 @@ interface WorkspaceLease {
   branch: string;
   worktree: string;
   createdAt: string;
+  controlSha?: string;
 }
 
 function recordWorkspaceLease(lease: Omit<WorkspaceLease, 'schema' | 'createdAt'>): void {
@@ -154,6 +159,72 @@ function recordWorkspaceLease(lease: Omit<WorkspaceLease, 'schema' | 'createdAt'
     ...lease,
     createdAt: new Date().toISOString(),
   } satisfies WorkspaceLease, null, 2)}\n`);
+}
+
+interface ControlGeneration {
+  schema: 'open-autonomy.control-generation.v1';
+  sha: string;
+  codeHost: string;
+  defaultBranch?: string;
+}
+
+export class ControlGenerationError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'ControlGenerationError';
+  }
+}
+
+function activeControlGeneration(codeHost: string): ControlGeneration | null {
+  // A local-git checkout has no remote merge/review authority boundary: HEAD remains its existing source
+  // of truth. Generation pinning is mandatory where a finished candidate becomes a GitHub PR and can
+  // trigger independent review/merge authority.
+  if (codeHost !== 'github') return null;
+  let generation: ControlGeneration;
+  try {
+    generation = JSON.parse(readFileSync(controlPath('.open-autonomy/runner-state/control-generation.json'), 'utf8')) as ControlGeneration;
+  } catch {
+    throw new ControlGenerationError('[runner] control generation is missing; run `oa start` (or `oa dispatch`) from the accepted control checkout first');
+  }
+  if (generation.schema !== 'open-autonomy.control-generation.v1' || !/^[0-9a-f]{40}$/.test(generation.sha)) {
+    throw new ControlGenerationError('[runner] control generation receipt is invalid; keep the loop paused and restart it from the accepted checkout');
+  }
+  const requested = (process.env.AUTONOMY_CONTROL_SHA ?? '').trim();
+  if (requested && requested !== generation.sha) {
+    throw new ControlGenerationError(`[runner] control generation mismatch: caller ${requested.slice(0, 12)}, active ${generation.sha.slice(0, 12)}`);
+  }
+  const head = git(['rev-parse', 'HEAD'], installRoot()).stdout.trim().toLowerCase();
+  if (head !== generation.sha) {
+    throw new ControlGenerationError(`[runner] control checkout changed: active generation ${generation.sha.slice(0, 12)}, HEAD ${head.slice(0, 12) || '(unresolved)'}`);
+  }
+  if (codeHost === 'github') {
+    const branch = generation.defaultBranch ?? '';
+    const remote = branch ? git(['ls-remote', 'origin', `refs/heads/${branch}`], installRoot()).stdout.trim().split(/\s+/)[0]?.toLowerCase() : '';
+    if (!branch || remote !== generation.sha) {
+      throw new ControlGenerationError(
+        `[runner] accepted remote generation changed: expected ${generation.sha.slice(0, 12)} at origin/${branch || '(unknown)'}. ` +
+          'Stop, update the control checkout, and restart before launching more work.',
+      );
+    }
+  }
+  const authorityPaths = ['scripts/runner.ts', '.open-autonomy/autonomy.json', '.open-autonomy/autonomy.yml'];
+  const dirty = git(['diff', '--quiet', generation.sha, '--', ...authorityPaths], installRoot());
+  if (dirty.status !== 0) {
+    throw new ControlGenerationError(
+      `[runner] control generation bytes changed outside review: ${authorityPaths.join(', ')}. ` +
+        'Restore the accepted files or land the change, then restart.',
+    );
+  }
+  return generation;
+}
+
+function recordSessionGeneration(id: string, agent: string, controlSha: string): void {
+  if (!id || !controlSha) return;
+  const dir = controlPath('.open-autonomy/runner-state/control-sessions');
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(join(dir, `${id.replace(/[^0-9A-Za-z._-]/g, '-')}.json`), `${JSON.stringify({
+    schema: 'open-autonomy.control-session.v1', id, agent, controlSha, launchedAt: new Date().toISOString(),
+  }, null, 2)}\n`);
 }
 function recordPostSessionEffect(marker: EffectMarker): void {
   const dir = effectsDir();
@@ -249,6 +320,7 @@ interface HumanSession {
   status: string; // running | cancelled | done | failed — bookkeeping only until an authorized `update`
   params?: Record<string, string>;
   note?: string;
+  controlSha?: string;
 }
 
 function readHumanSessions(): HumanSession[] {
@@ -308,18 +380,20 @@ function engageHuman(session: HumanSession): void {
 /** Launch a kind:human actor (agent:launch's human realization): park a session, engage, return. NEVER
  *  completes on its own — the note tells the caller (the PM / an operator) exactly what to verify before
  *  driving `update(id, { status: 'done' })`, the only path to terminal (docs/SPEC.md#handoffs). */
-function launchHuman(agent: string, params: LaunchParams = {}): void {
+function launchHuman(agent: string, params: LaunchParams = {}, controlSha = ''): void {
   const stringParams = Object.fromEntries(Object.entries(params).map(([k, v]) => [k, String(v)]));
   const session: HumanSession = {
     id: `${agent}-${Date.now()}-${Math.floor(Math.random() * 1e6)}`,
     agent,
     status: 'running', // parked; a human runner can never confirm completion itself — no presumed-done
     ...(Object.keys(stringParams).length ? { params: stringParams } : {}),
+    ...(controlSha ? { controlSha } : {}),
     note: `bookkeeping only — completion is not auto-detected here; verify this completion condition, then mark done: ${stringParams.completion ?? '(none provided)'}`,
   };
   const sessions = readHumanSessions();
   sessions.push(session);
   writeHumanSessions(sessions);
+  recordSessionGeneration(session.id, agent, controlSha);
   engageHuman(session);
   console.log(JSON.stringify(session)); // same convention as autonomy-runner.mjs's launch (last line = JSON)
 }
@@ -530,7 +604,7 @@ function linkNodeModulesInto(worktree: string): void {
 // 'origin/<trunk>'). Callers that don't care (launch()) simply ignore the return value; the doctor's
 // worktree-probe entry (below) reports it so an operator can see exactly which base a real dispatch would
 // pick, without doctor ever re-deriving that decision itself (OA-18).
-function ensureWorktree(branch: string, worktree: string, codeHost: string): string {
+function ensureWorktree(branch: string, worktree: string, codeHost: string, controlSha = ''): string {
   if (existsSync(worktree)) return 'existing';
   ensureRunnerPathsIgnored();
   mkdirSync(dirname(worktree), { recursive: true });
@@ -544,14 +618,10 @@ function ensureWorktree(branch: string, worktree: string, codeHost: string): str
   // fully-local guarantee ("GitHub is not needed") even when the repo happens to have a GitHub-shaped remote.
   let base = 'HEAD';
   if (!branchExists && codeHost === 'github') {
-    const trunk = remoteDefaultBranch('origin');
-    const fetched = git(['fetch', 'origin', trunk]);
-    if (fetched.status !== 0) {
-      throw new Error(`cannot refresh origin/${trunk}; refusing to branch from a possibly stale remote-tracking ref: ${fetched.stderr || fetched.stdout}`);
-    }
-    const resolves = git(['rev-parse', '--verify', '--quiet', `origin/${trunk}`]).status === 0;
-    if (!resolves) throw new Error(`cannot resolve origin/${trunk} after fetch; refusing to branch from a stale local checkout`);
-    base = worktreeBase(codeHost, resolves, trunk);
+    if (!controlSha) throw new ControlGenerationError('[runner] a github workspace requires an accepted control generation');
+    const resolves = git(['cat-file', '-e', `${controlSha}^{commit}`], installRoot()).status === 0;
+    if (!resolves) throw new ControlGenerationError(`[runner] accepted control commit ${controlSha.slice(0, 12)} is unavailable locally`);
+    base = controlSha;
   }
   const add = branchExists ? ['worktree', 'add', worktree, branch] : ['worktree', 'add', '-b', branch, worktree, base];
   const r = git(add);
@@ -575,8 +645,9 @@ export interface WorktreeProbeResult {
  *  cleanup (`git worktree remove --force` + `git branch -D`) — this function only ever creates. */
 export function worktreeProbe(branch: string): WorktreeProbeResult {
   const codeHost = manifestCodeHost();
+  const generation = activeControlGeneration(codeHost);
   const worktree = worktreePathFor(branch);
-  const base = ensureWorktree(branch, worktree, codeHost);
+  const base = ensureWorktree(branch, worktree, codeHost, generation?.sha);
   const sha = git(['rev-parse', 'HEAD'], worktree).stdout.trim();
   return { branch, worktree, base, sha, codeHost };
 }
@@ -616,11 +687,13 @@ async function defaultHarness(): Promise<string> {
  *  refusal (and the pause gate, OA-07) throw instead — see runCli, which maps both to a nonzero exit. */
 export async function launch(agent: string, params: LaunchParams = {}): Promise<number> {
   const { kind, skill: behavior = '', params: declared = {}, review = '', prelaunch = '', execution } = manifestAgent(agent);
+  const codeHost = manifestCodeHost();
+  const generation = activeControlGeneration(codeHost);
 
   if (kind === 'human') {
     // The THIRD route: a person cannot be executed — park the ask instead (see the human route above).
     // Exempt from the pause gate: parking an ask for a person spends nothing.
-    launchHuman(agent, params);
+    launchHuman(agent, params, generation?.sha);
     return 0;
   }
 
@@ -654,12 +727,11 @@ export async function launch(agent: string, params: LaunchParams = {}): Promise<
   const worktree = branch ? worktreePathFor(branch) : '';
   // Read the declared code host ONCE per launch and reuse it for both decisions it gates: the worktree base
   // (below) and the post-session propose effect (below, at the github-only branch).
-  const codeHost = manifestCodeHost();
   // `ensureWorktree` returns 'existing' when the branch already had a worktree (idempotent reuse), otherwise
   // the base ref it just created the worktree at ('HEAD' | 'origin/<trunk>'). Capture that so the pre-check
   // below can tear down ONLY a worktree THIS launch created — never a pre-existing one (which may be a legit
   // in-progress rework worktree a reviewer sent back).
-  const worktreeStatus = branch ? ensureWorktree(branch, worktree, codeHost) : '';
+  const worktreeStatus = branch ? ensureWorktree(branch, worktree, codeHost, generation?.sha) : '';
   const createdWorktreeThisCall = !!branch && worktreeStatus !== 'existing';
 
   // OA-08 pre-check: does this launch's skill invocation resolve to the SAME doctrine selected by the
@@ -713,6 +785,7 @@ export async function launch(agent: string, params: LaunchParams = {}): Promise<
   const env: Record<string, string> = {
     ...(process.env as Record<string, string>),
     AUTONOMY_CONTROL_ROOT: installRoot(),
+    ...(generation ? { AUTONOMY_CONTROL_SHA: generation.sha } : {}),
     AUTONOMY_AGENT: agent,
     AUTONOMY_FORWARD: [process.env.AUTONOMY_FORWARD, ...names].filter(Boolean).join(','),
     ...Object.fromEntries(names.map((k) => [k, String(params[k])])),
@@ -749,15 +822,19 @@ export async function launch(agent: string, params: LaunchParams = {}): Promise<
     if (id) {
       // Every session using an isolated worktree owns a lease, including a reviewer joining a branch
       // another session created. Cleanup groups leases by worktree and waits for all of them.
-      recordWorkspaceLease({ id, agent, branch, worktree });
+      recordSessionGeneration(id, agent, generation?.sha ?? '');
+      recordWorkspaceLease({ id, agent, branch, worktree, ...(generation ? { controlSha: generation.sha } : {}) });
       if (explicitBranch && codeHost === 'github') {
         const ghBox = manifestGhActionsBox();
         recordPostSessionEffect({
+          schema: 'open-autonomy.effect-marker.v2',
           id,
           agent,
           ref: /agent\/issue-(\d+)/.exec(branch)?.[1] ?? '', // the issue this session is isolated for
           worktree,
           effect: 'scripts/agent-propose.ts', // the github code host's publish effect (git + gh; runner-independent)
+          controlRoot: installRoot(),
+          controlSha: generation!.sha,
           env: {
             // ISSUE_REF derives from the worktree's branch so agent-propose checks out the SAME branch the
             // worker committed onto (`agent/issue-<n>`); the rest mirror github's propose-step env.
@@ -766,6 +843,9 @@ export async function launch(agent: string, params: LaunchParams = {}): Promise<
             AGENT_BOT_NAME: process.env.AGENT_BOT_NAME ?? 'open-autonomy-agent',
             AGENT_BOT_EMAIL: process.env.AGENT_BOT_EMAIL ?? 'open-autonomy-agent@users.noreply.github.com',
             REVIEW_AGENT: review,
+            AUTONOMY_CONTROL_ROOT: installRoot(),
+            AUTONOMY_CONTROL_SHA: generation!.sha,
+            AUTONOMY_TRUSTED_RUNNER: join(installRoot(), 'scripts', 'runner.ts'),
             ...(ghBox.propose_dispatch_checks?.length
               ? { EXTRA_CHECK_WORKFLOWS: ghBox.propose_dispatch_checks.join(',') }
               : {}),
@@ -780,7 +860,11 @@ export async function launch(agent: string, params: LaunchParams = {}): Promise<
     }
     return r.status ?? 1;
   }
-  const r = spawnSync('node', [join(scriptsDir, 'run-agent.mjs')], { stdio: 'inherit', env, ...(worktree ? { cwd: worktree } : {}) });
+  const r = spawnSync('node', [join(scriptsDir, 'run-agent.mjs')], { encoding: 'utf8', env, cwd });
+  if (r.stdout) process.stdout.write(r.stdout);
+  if (r.stderr) process.stderr.write(r.stderr);
+  const id = terminalIdFromLaunch(r.stdout ?? '');
+  if (id) recordSessionGeneration(id, agent, generation?.sha ?? '');
   return r.status ?? 1;
 }
 
@@ -795,7 +879,7 @@ export async function launch(agent: string, params: LaunchParams = {}): Promise<
  *  proposed, the marker is gone (the PR exists, which the caller dedups on instead). */
 export async function list(agent: string, _limit = 50): Promise<RunInfo[]> {
   const r = spawnSync('node', [join(scriptsDir, 'autonomy-runner.mjs'), 'list'], { encoding: 'utf8' });
-  let sessions: Array<{ id: string; agent: string; status: string }> = [];
+  let sessions: Array<{ id: string; agent: string; status: string; controlSha?: string }> = [];
   try {
     sessions = JSON.parse(r.stdout || '[]');
   } catch {
@@ -811,18 +895,32 @@ export async function list(agent: string, _limit = 50): Promise<RunInfo[]> {
 /** Merge live sessions + pending effects into one in-flight list for `agent`, deduped by id (a live session
  *  and its own pending marker are the same unit of work). Pure — the testable core of the race fix. */
 export function mergeInFlight(
-  sessions: Array<{ id: string; agent: string; status: string }>,
+  sessions: Array<{ id: string; agent: string; status: string; controlSha?: string }>,
   pending: EffectMarker[],
   agent: string,
 ): RunInfo[] {
   const markerById = new Map(pending.filter((m) => m.agent === agent).map((m) => [m.id, m]));
   const live = sessions
     .filter((s) => s.agent === agent)
-    .map((s) => ({ id: s.id, status: s.status, conclusion: null, title: s.agent, ...refOf(markerById.get(s.id)) }));
+    .map((s) => ({
+      id: s.id,
+      status: s.status,
+      conclusion: null,
+      title: s.agent,
+      ...(s.controlSha ? { controlSha: s.controlSha } : {}),
+      ...refOf(markerById.get(s.id)),
+    }));
   const liveIds = new Set(live.map((s) => s.id));
   const pend = [...markerById.values()]
     .filter((m) => !liveIds.has(m.id)) // session already counted; don't double-count
-    .map((m) => ({ id: m.id, status: 'proposing', conclusion: null, title: agent, ...refOf(m) }));
+    .map((m) => ({
+      id: m.id,
+      status: 'proposing',
+      conclusion: null,
+      title: agent,
+      ...(m.controlSha ? { controlSha: m.controlSha } : {}),
+      ...refOf(m),
+    }));
   return [...live, ...pend];
 }
 // Surface the isolated session's work-item (issue) so a caller can dedup per issue, not just per agent.
@@ -910,7 +1008,10 @@ export async function runCli(argv: string[]): Promise<number> {
       // PausedError / SkillMissingError already printed their own message (launch()) — just surface the
       // nonzero exit so a scripted caller (or a human at the terminal) notices, instead of silently
       // returning 0.
-      if (e instanceof PausedError || e instanceof SkillMissingError) return 1;
+      if (e instanceof PausedError || e instanceof SkillMissingError || e instanceof ControlGenerationError) {
+        if (e instanceof ControlGenerationError) console.error(e.message);
+        return 1;
+      }
       throw e;
     }
   }

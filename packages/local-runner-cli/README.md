@@ -33,8 +33,9 @@ Once it is published, adopting the CLI is a packaging/release change—not a new
 | `oa once` | make one pass over jobs, respecting fences and `maxConcurrent` | `node scheduler/run.mjs --once` |
 | `oa pause [reason]` | touch the conventional `.open-autonomy/paused` fence; jobs assigned that fence drain and stop | `touch .open-autonomy/paused` |
 | `oa resume` | remove `.open-autonomy/paused`; jobs assigned that fence are re-armed within one heartbeat | `rm .open-autonomy/paused` |
-| `oa status` | fence state + rationale, live sessions (via the runner SDK), and last-fire info per job | — (new) |
+| `oa status` | fence state + rationale, accepted control generation, live sessions (via the runner SDK), and last-fire info per job | — (new) |
 | `oa dispatch <agent>` | fire one declared agent job now, bypassing cadence only; fence, environment, singleton, and `maxConcurrent` remain enforced | `node scheduler/run.mjs --dispatch <agent>` |
+| `oa recover-effect <marker> --control-sha <sha>` | after inspection, bind one parked pre-generation effect marker to the still-active accepted generation | — |
 | `oa doctor [--live] [--json]` | offline: OA-04 dep-integrity probe + fence state + `schedule.json` parse + prompts/skills existence per declared agent; `--live` additionally probes the provider `/healthz` over the network | — (new; folds in checks that used to live only in `bin/doctor.ts`/`bin/collision-check.ts`) |
 | `oa provider up` | (TG.1) bring up a termfleet console+provider on a repo-unique, genuinely-free port pair (never the box defaults 7373/7402/7620/7621); verify the thing that answered is REALLY termfleet (never a foreign occupant); pin `TERMFLEET_PROVIDER_URL` durably into `scheduler/schedule.json`'s `env`. Idempotent: no-ops on a healthy pin, restarts a dead one on the SAME pinned ports. | — (new) |
 | `oa provider status` | report whether the pinned provider (and console) are up and really answering as termfleet | — (new) |
@@ -50,6 +51,16 @@ Once it is published, adopting the CLI is a packaging/release change—not a new
 - **The repo keeps committing `autonomy.yml`/`schedule.json`/prompts.** This package reads them from `cwd`
   — nothing is bundled, cached, or baked in at publish time. Point `oa` at a different repo and it reads
   *that* repo's config.
+- **A GitHub-backed loop has one accepted control generation.** Startup and manual dispatch require the
+  control checkout's `HEAD` to equal the remote default-branch SHA, then record that SHA under
+  `.open-autonomy/runner-state/control-generation.json`. Sessions, workspace leases, and proposal-effect
+  markers carry it. A candidate worktree remains free to run and change application code, but proposal,
+  reviewer launch, reviewer doctrine, and policy resolve from the recorded control checkout. If the remote
+  default branch or local control `HEAD` changes, launches/effects fail closed until the operator stops,
+  updates, and restarts the loop.
+- **Generation-less effects are evidence, not executable instructions.** An old or malformed marker is
+  moved to `runner-state/effect-quarantine` with an exact `oa recover-effect` command. Recovery requires
+  an operator to inspect it and bind it to the still-active SHA; nothing silently guesses its authority.
 - **`schedule.json` accepts both shapes.** Legacy `{ intervalSeconds, scripts: string[] }` and the new
   generic job form:
 

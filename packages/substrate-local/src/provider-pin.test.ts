@@ -97,7 +97,13 @@ describe('scheduler/run.mjs --once — the effective-provider log line (AC-4)', 
   test('a compiled pin (schedule.json.env.TERMFLEET_PROVIDER_URL, no ambient override) logs "(schedule)"', () => {
     const dir = scaffold('http://127.0.0.1:7602');
     try {
-      const r = spawnSync('node', ['scheduler/run.mjs', '--once'], { cwd: dir, encoding: 'utf8' });
+      const r = spawnSync('node', ['scheduler/run.mjs', '--once'], {
+        cwd: dir,
+        encoding: 'utf8',
+        // This case explicitly proves "no ambient override" and must remain hermetic on operator boxes
+        // that legitimately run OA under a pinned provider themselves.
+        env: { ...process.env, TERMFLEET_PROVIDER_URL: '' },
+      });
       const line = r.stderr.split('\n').find((l) => l.includes('provider http://127.0.0.1:7602'));
       expect(line).toBeDefined();
       expect(line).toMatch(/provider .*http:\/\/127\.0\.0\.1:7602.*\(schedule\)/);

@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { mkdtempSync, readdirSync, rmSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { pause } from './pause.ts';
@@ -90,6 +90,23 @@ describe('oa status', () => {
       const r = await status({ cwd: dir, sessionRunnerFactory: async () => null });
       expect(r.sessions).toBeNull();
       expect(r.rationale).toContain('unknown');
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test('surfaces the accepted control generation in both structured status and rationale', async () => {
+    const dir = tmpRepo();
+    try {
+      const sha = 'c'.repeat(40);
+      const state = join(dir, '.open-autonomy', 'runner-state');
+      mkdirSync(state, { recursive: true });
+      writeFileSync(join(state, 'control-generation.json'), JSON.stringify({
+        schema: 'open-autonomy.control-generation.v1', sha, codeHost: 'github', defaultBranch: 'main', acceptedAt: new Date().toISOString(),
+      }));
+      const r = await status({ cwd: dir, sessionRunnerFactory: async () => new StubSessionRunner() });
+      expect(r.controlGeneration?.sha).toBe(sha);
+      expect(r.rationale).toContain(`control-generation: ${sha} (github)`);
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }

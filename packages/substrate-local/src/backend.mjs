@@ -11,7 +11,7 @@
 //
 // `launch` accepts arbitrary --key value params and passes them through verbatim; the system never
 // interprets them (a profile gives them meaning, e.g. a ztrack-using profile declares ZTRACK_ISSUE).
-import { existsSync, readFileSync, realpathSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, realpathSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { ProviderClient, providerRefFromUrl } from 'termfleet';
@@ -111,12 +111,22 @@ export class TermfleetRunner {
     if (!terminalId) {
       throw new Error(`termfleet createAgentWindow returned no terminalId for agent "${agent}": ${ack.error ?? '(no error)'}`);
     }
+    const controlSha = (process.env.AUTONOMY_CONTROL_SHA || '').trim();
+    if (controlSha) {
+      const controlRoot = (process.env.AUTONOMY_CONTROL_ROOT || process.cwd()).trim();
+      const dir = join(controlRoot, '.open-autonomy', 'runner-state', 'control-sessions');
+      mkdirSync(dir, { recursive: true });
+      writeFileSync(join(dir, `${terminalId.replace(/[^0-9A-Za-z._-]/g, '-')}.json`), `${JSON.stringify({
+        schema: 'open-autonomy.control-session.v1', id: terminalId, agent, controlSha, launchedAt: new Date().toISOString(),
+      }, null, 2)}\n`);
+    }
     return {
       id: terminalId,
       agent,
       status: 'running',
       ...(ack.result?.agentSessionId ? { ref: ack.result.agentSessionId } : {}),
       ...(Object.keys(params).length ? { params } : {}),
+      ...(controlSha ? { controlSha } : {}),
     };
   }
   async get(id) {
@@ -188,7 +198,13 @@ export class TermfleetRunner {
 // the finer distinction. No session yet (just launched) reads as running.
 function sessionOf(w, byId) {
   const s = w.lifecycle?.currentSessionId ? byId.get(w.lifecycle.currentSessionId) : undefined;
-  const base = { id: w.terminalId, agent: w.name };
+  let controlSha = '';
+  try {
+    const root = (process.env.AUTONOMY_CONTROL_ROOT || process.cwd()).trim();
+    const receipt = JSON.parse(readFileSync(join(root, '.open-autonomy', 'runner-state', 'control-sessions', `${w.terminalId.replace(/[^0-9A-Za-z._-]/g, '-')}.json`), 'utf8'));
+    controlSha = typeof receipt.controlSha === 'string' ? receipt.controlSha : '';
+  } catch { /* pre-generation session */ }
+  const base = { id: w.terminalId, agent: w.name, ...(controlSha ? { controlSha } : {}) };
   if (!s) return { ...base, status: 'running' };
   const ref = s.sessionId;
   if (s.state === 'session_running') return { ...base, status: 'running', ref };

@@ -457,6 +457,19 @@ node scheduler/run.mjs --once   # fire one tick, then exit — use this to verif
 node scheduler/run.mjs          # run continuously, sleeping between ticks
 ```
 
+For a GitHub code host, both compatibility commands first establish an **accepted control generation**:
+the checkout's `HEAD` must exactly equal `origin`'s default-branch SHA. The versioned equivalents are
+`oa once` and `oa start`; `oa status` prints the recorded SHA. Every developer/reviewer session and pending
+proposal effect is bound to it. Candidate worktrees still compile, test, run, commit, and become PRs, but
+they cannot substitute their own proposer, runner, reviewer skill, or approval policy before those changes
+merge. When the remote default branch advances, stop the old loop, update this checkout, and restart; the
+old generation fails closed instead of mixing old scheduler code with new remote doctrine.
+
+An upgrade may encounter a pending marker from before generation pinning. It is parked under
+`.open-autonomy/runner-state/effect-quarantine` and prints a recovery command. Inspect it first, then bind
+it explicitly with `oa recover-effect <marker> --control-sha <sha>`; it is never silently discarded or run
+under an inferred generation.
+
 Each tick fires the cron agents in `scheduler/schedule.json` (for `simple-sdlc` that's the PM; the
 PM then launches the workers). To use Codex instead of Claude Code:
 

@@ -75,7 +75,15 @@ const CODE_HOST_RESOURCE = new Set([
 // Unit tests are dev artifacts, NOT install content — they never run in an installation and would carry
 // dangling deps if vendored. They stay in scripts/ (run by check:public-agent) and ship to no profile.
 const excluded = (f: string) =>
-  DEV_ONLY.has(f) || PROFILE_OWNED.has(f) || CODE_HOST_RESOURCE.has(f) || f.endsWith('.test.ts');
+  DEV_ONLY.has(f) ||
+  PROFILE_OWNED.has(f) ||
+  CODE_HOST_RESOURCE.has(f) ||
+  f.endsWith('.test.ts') ||
+  f.startsWith('close-runtime-') ||
+  /^generate-r\d+-readiness-evidence\.ts$/.test(f) ||
+  f === 'generate-runtime-r9-evidence.ts' ||
+  f === 'run-r4-compatibility.ts' ||
+  f === 'runtime-r9-observer.ts';
 const set = readdirSync(SRC).filter((f) => f.endsWith('.ts') && !excluded(f)).sort();
 
 const check = process.argv.includes('--check');

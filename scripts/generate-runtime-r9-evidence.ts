@@ -10,7 +10,7 @@ import {deriveAtomicObligations} from '../packages/core/src/organization-solver'
 import {INITIAL_COMPONENT_CATALOG} from '../packages/core/src/organization-component-catalog';
 import {createMigrationCutoverController,discoverRealProfileMigrationCorpus,dualCompileMigrationCorpus,signMigrationCutoverEvidence} from '../packages/core/src/organization-migration-cutover';
 
-const digest=(value:unknown)=>`sha256:${createHash('sha256').update(canonicalSemanticJson(value)).digest('hex')}`;
+const digest=(value:unknown):`sha256:${string}`=>`sha256:${createHash('sha256').update(canonicalSemanticJson(value)).digest('hex')}`;
 const sha256=(value:string|Uint8Array)=>createHash('sha256').update(value).digest('hex'),sha1=(value:string|Uint8Array)=>createHash('sha1').update(value).digest('hex');
 const outputPath='docs/evidence/r9-repository-dogfood.json',publicKeyPath='docs/trust/r9-observer-public.pem';
 const discovered=await discoverRealProfileMigrationCorpus({repositoryRoot:'.',profilesDirectory:'profiles'});

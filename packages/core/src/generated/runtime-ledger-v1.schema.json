@@ -217,6 +217,9 @@
             },
             {
               "const": "measurement"
+            },
+            {
+              "const": "portability"
             }
           ]
         },

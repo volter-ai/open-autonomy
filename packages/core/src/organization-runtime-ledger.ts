@@ -28,7 +28,7 @@ export interface RuntimeObligationEntry {
 export interface RuntimeResidualEntry {
   id: string;
   checkpoint: string;
-  category: 'semantic' | 'assurance' | 'implementation' | 'operational' | 'security' | 'measurement';
+  category: 'semantic' | 'assurance' | 'implementation' | 'operational' | 'security' | 'measurement' | 'portability';
   finding: string;
   owner: string;
   disposition: 'open' | 'accepted' | 'rejected' | 'resolved';

@@ -81,12 +81,12 @@
     {
       "checkpoint": "R27",
       "path": "docs/evidence/R27-STRUCTURAL-READINESS.json",
-      "sha256": "sha256:e4c3dc282f951eaa0c3e5b98b14e03deea8a5bc01816b41dec83907440a0f4d7"
+      "sha256": "sha256:cac8397e2a1e5279f332b73f26b5c5bbe0b188a2ceed99d5eacbaa11008dd9f4"
     },
     {
       "checkpoint": "R28",
       "path": "docs/evidence/R28-STRUCTURAL-READINESS.json",
-      "sha256": "sha256:c6fb6c5c66be57b26eae471093ff7c88f19f90f561f190e2400042428522c9bc"
+      "sha256": "sha256:69759475caafe34a0aefdc48d6988bfc547bb6f30182000efd3a1b03c0530dcf"
     }
   ],
   "checkpoints": [

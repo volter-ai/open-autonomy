@@ -28,9 +28,12 @@ Core owns the reusable experiment and bounded-improvement semantics; bench decid
 strong enough to close their punch-list checkpoints.
 
 Independently administered R27/R28 evidence is consumed through `bun run verify:external-campaign -- --checkpoint
-R27|R28 --bundle <json> --trust-module <module> --out <receipt.json>`. The trusted module exports `trust` implementing
-the checkpoint contract. Verification writes one content-addressed canonical receipt only after the complete verifier
-passes; malformed or rejected evidence produces no receipt.
+R27|R28 --bundle <json> --trust-module <module> --trust-attestation <json> --trust-root <pem> --out <receipt.json>`.
+The trusted module exports `trust` implementing
+the checkpoint contract. It must also be supplied with `--trust-attestation <json> --trust-root <pem>`: an external
+Ed25519 authority signs the exact module digest and checkpoint, preventing an unapproved always-allow policy from
+being substituted. Verification writes one content-addressed canonical receipt only after the trust binding and
+complete campaign verifier pass; malformed or rejected evidence produces no receipt.
 
 ### Graders — pluggable per workload
 

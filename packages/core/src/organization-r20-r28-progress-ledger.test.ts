@@ -6,6 +6,7 @@ import {
   verifyProgressLedger,
   importProgressResiduals,
   verifyR20ReadinessEvidence,
+  verifyR21ReadinessEvidence,
   verifyR24ReadinessEvidence,
   type ProgressLedger,
 } from "./organization-r20-r28-progress-ledger";
@@ -26,6 +27,7 @@ test("imports every bound partial-evidence residual while preserving unknown obl
   expect(result.residuals).toHaveLength(74);
   expect(result.readinessEvidence).toEqual([
     expect.objectContaining({ checkpoint: "R20" }),
+    expect.objectContaining({ checkpoint: "R21" }),
     expect.objectContaining({ checkpoint: "R24" }),
   ]);
   expect(new Set(result.residuals.map((x) => x.checkpoint))).toEqual(
@@ -60,6 +62,22 @@ test("rejects omission or drift in R20 implementation and Volter simulation read
   expect(() => verifyR20ReadinessEvidence(root, replaced)).toThrow("cannot prove closure");
   const omittedDependency = structuredClone(evidence); delete omittedDependency.simulation.versions["@volter/twin"];
   expect(() => verifyR20ReadinessEvidence(root, omittedDependency)).toThrow("dependency inventory incomplete");
+});
+
+test("rejects omission, drift, or closure inflation in R21 structural readiness", () => {
+  const evidence = JSON.parse(readFileSync(join(root, "docs/evidence/R21-STRUCTURAL-READINESS.json"), "utf8"));
+  expect(verifyR21ReadinessEvidence(root, evidence)).toMatchObject({ components: 9, closureClaim: false });
+  expect(evidence.components.map((x: any) => x.path)).toEqual(expect.arrayContaining([
+    "packages/core/src/organization-canonical.ts", "packages/core/src/organization-canonical.test.ts",
+  ]));
+  const omitted = structuredClone(evidence); omitted.components.pop();
+  expect(() => verifyR21ReadinessEvidence(root, omitted)).toThrow("component inventory incomplete");
+  const drifted = structuredClone(evidence); drifted.components[0].sha256 = "sha256:" + "0".repeat(64);
+  expect(() => verifyR21ReadinessEvidence(root, drifted)).toThrow("component drift");
+  const lied = structuredClone(evidence); lied.closureClaim = true;
+  expect(() => verifyR21ReadinessEvidence(root, lied)).toThrow("cannot prove closure");
+  const erased = structuredClone(evidence); erased.doesNotProve = [];
+  expect(() => verifyR21ReadinessEvidence(root, erased)).toThrow("cannot prove closure");
 });
 
 test("fails closed on fabricated closure, omitted residual import, source drift, or upgraded assurance", () => {

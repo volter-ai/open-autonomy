@@ -64,6 +64,11 @@
       "sha256": "sha256:09622f6272ae16191c057ae682db9c83b411bea255700792421c1f42d4853306"
     },
     {
+      "checkpoint": "R21",
+      "path": "docs/evidence/R21-STRUCTURAL-READINESS.json",
+      "sha256": "sha256:08110bc27328fb3a64572b9a329a848b4cd1aa6bedf4895addbbb7baa237238f"
+    },
+    {
       "checkpoint": "R24",
       "path": "docs/evidence/R24-V5-STRUCTURAL-READINESS.json",
       "sha256": "sha256:6c3b7eef0f9a09eacc63bcf272c0db26ff763f4dd6e1a2b6f295342863263efc"

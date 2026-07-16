@@ -84,6 +84,15 @@ const R20_CLOSURE_REQUIREMENTS = ["closed R10, R17, R18 and R19 evidence pins",
   "externally administered live Slack workspace and app", "two authorized external participants plus a distinct unauthorized identity",
   "independently attested unfamiliar, keyboard and screen-reader participant strata",
   "complete signed real command, attack and recovery trial matrix accepted by the R20 external campaign verifier"];
+const REQUIRED_R21_READINESS_PATHS = ["scripts/generate-r21-readiness-evidence.ts",
+  "packages/core/src/organization-canonical.ts", "packages/core/src/organization-canonical.test.ts",
+  "packages/core/src/organization-runtime-reliability.ts", "packages/core/src/organization-runtime-reliability.test.ts",
+  "packages/core/src/organization-runtime-reliability-live.ts", "packages/core/src/organization-runtime-reliability-live.test.ts",
+  "packages/core/src/organization-r21-external-campaign.ts", "packages/core/src/organization-r21-external-campaign.test.ts"].sort();
+const R21_CLASSES = ["deterministic-model", "owned-local-fixture", "external-evidence-verifier"];
+const R21_PROVES = ["eight-service campaign evidence has an exact matrix", "SLO and billing arithmetic is dimensioned and conserved", "fault RPO/RTO and recovery cuts are causal", "topology and workload choices are preregistered", "operator and authority attestations are ordered and authenticated"];
+const R21_LIMITS = ["eight independently deployed services", "multi-region infrastructure", "real provider billing", "external KMS custody", "genuinely unfamiliar human operation", "real production disaster recovery"];
+const R21_CLOSURE_REQUIREMENTS = ["closed R15 through R20 dependency evidence", "owned two-region eight-service deployment with authenticated telemetry and billing", "owned process, storage, dependency, network, control-plane and region fault injection", "external KMS and billing authorities", "independently attested unfamiliar operator", "complete signed campaign accepted by the R21 external campaign verifier"];
 export function verifyR20ReadinessEvidence(root: string, evidence: any) {
   if (evidence.checkpoint !== "R20" || evidence.closureClaim !== false ||
       evidence.purpose !== "machine-reviewable implementation and Volter simulation readiness; never external Slack or human evidence" ||
@@ -106,6 +115,18 @@ export function verifyR20ReadinessEvidence(root: string, evidence: any) {
   for (const [name, version] of Object.entries(evidence.simulation.versions))
     if (pkg.devDependencies?.[name] !== version) throw Error(`R20 simulation dependency drift: ${name}`);
   return { closureClaim: false as const, components: submitted.length, evidenceClass: "simulated-local-substrate" as const };
+}
+export function verifyR21ReadinessEvidence(root: string, evidence: any) {
+  if (evidence.checkpoint !== "R21" || evidence.closureClaim !== false || evidence.purpose !== "machine-reviewable reliability model, local-fixture, and external-campaign-verifier readiness; never deployed disaster-campaign evidence" ||
+      semanticDigest(evidence.evidenceClasses) !== semanticDigest(R21_CLASSES) || semanticDigest(evidence.proves) !== semanticDigest(R21_PROVES) ||
+      semanticDigest(evidence.doesNotProve) !== semanticDigest(R21_LIMITS) || semanticDigest(evidence.stillRequiredForClosure) !== semanticDigest(R21_CLOSURE_REQUIREMENTS) ||
+      evidence.proves.some((x: string) => evidence.doesNotProve.includes(x))) throw Error("R21 readiness evidence cannot prove closure");
+  const submitted = evidence.components.map((x: any) => x.path).sort();
+  if (new Set(submitted).size !== submitted.length || semanticDigest(submitted) !== semanticDigest(REQUIRED_R21_READINESS_PATHS))
+    throw Error("R21 readiness component inventory incomplete");
+  for (const component of evidence.components) if (sha(readFileSync(join(root, component.path))) !== component.sha256)
+    throw Error(`R21 readiness component drift: ${component.path}`);
+  return { closureClaim: false as const, components: submitted.length, evidenceClasses: structuredClone(R21_CLASSES) };
 }
 export function verifyR24ReadinessEvidence(root: string, evidence: any) {
   if (
@@ -272,7 +293,7 @@ export function verifyProgressLedger(root: string, ledger: ProgressLedger) {
     throw Error("imported residual inventory mismatch");
   if (
     !Array.isArray(ledger.readinessEvidence) ||
-    semanticDigest(ledger.readinessEvidence.map(x => x.checkpoint).sort()) !== semanticDigest(["R20", "R24"]) ||
+    semanticDigest(ledger.readinessEvidence.map(x => x.checkpoint).sort()) !== semanticDigest(["R20", "R21", "R24"]) ||
     new Set(ledger.readinessEvidence.map((x) => x.checkpoint)).size !==
       ledger.readinessEvidence.length
   )
@@ -285,6 +306,7 @@ export function verifyProgressLedger(root: string, ledger: ProgressLedger) {
     if (evidence.checkpoint !== entry.checkpoint)
       throw Error(`readiness checkpoint mismatch: ${entry.path}`);
     if (entry.checkpoint === "R20") verifyR20ReadinessEvidence(root, evidence);
+    else if (entry.checkpoint === "R21") verifyR21ReadinessEvidence(root, evidence);
     else if (entry.checkpoint === "R24") verifyR24ReadinessEvidence(root, evidence);
     else throw Error(`unsupported readiness checkpoint: ${entry.checkpoint}`);
   }

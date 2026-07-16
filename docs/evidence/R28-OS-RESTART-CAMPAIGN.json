@@ -1,0 +1,100 @@
+{
+  "schema": "autonomy.r28-os-restart-campaign.v1",
+  "phases": [
+    "observation",
+    "measurement",
+    "twin-update",
+    "proposal",
+    "checks",
+    "benchmark",
+    "preregistration",
+    "approval",
+    "deployment",
+    "canary",
+    "evaluation",
+    "decision"
+  ],
+  "records": [
+    {
+      "phase": "observation",
+      "pid": 3237211,
+      "previous": null,
+      "digest": "sha256:7c9290b8675ca22977411952a538ed4c39632f13672fd64826174cc639aa85bf"
+    },
+    {
+      "phase": "measurement",
+      "pid": 3237221,
+      "previous": "sha256:7c9290b8675ca22977411952a538ed4c39632f13672fd64826174cc639aa85bf",
+      "digest": "sha256:86087a7e1887cc6a146fe11344509d663f707af6660e8245f2b187757e512329"
+    },
+    {
+      "phase": "twin-update",
+      "pid": 3237231,
+      "previous": "sha256:86087a7e1887cc6a146fe11344509d663f707af6660e8245f2b187757e512329",
+      "digest": "sha256:d227061d0806e9e2dcff66af6816cc4b567dc0d2199a1b49f4611ef36611402b"
+    },
+    {
+      "phase": "proposal",
+      "pid": 3237246,
+      "previous": "sha256:d227061d0806e9e2dcff66af6816cc4b567dc0d2199a1b49f4611ef36611402b",
+      "digest": "sha256:67c93141b02fb6b2821467e260d09ecf63eaad554ca54de25a935005eb329ddf"
+    },
+    {
+      "phase": "checks",
+      "pid": 3237260,
+      "previous": "sha256:67c93141b02fb6b2821467e260d09ecf63eaad554ca54de25a935005eb329ddf",
+      "digest": "sha256:afb50f2d4d87a189c12e357fbc96ff21a260d1a4749298ec8d544bf74a9c8aef"
+    },
+    {
+      "phase": "benchmark",
+      "pid": 3237271,
+      "previous": "sha256:afb50f2d4d87a189c12e357fbc96ff21a260d1a4749298ec8d544bf74a9c8aef",
+      "digest": "sha256:d8b1baa8ce1e31b924300d2b96e973e62b0dcf2d5261a99ee98970253aa55438"
+    },
+    {
+      "phase": "preregistration",
+      "pid": 3237281,
+      "previous": "sha256:d8b1baa8ce1e31b924300d2b96e973e62b0dcf2d5261a99ee98970253aa55438",
+      "digest": "sha256:a4e9276dc47aa739ada99e99aae539305095171657c5b8da42d632746c690ae0"
+    },
+    {
+      "phase": "approval",
+      "pid": 3237291,
+      "previous": "sha256:a4e9276dc47aa739ada99e99aae539305095171657c5b8da42d632746c690ae0",
+      "digest": "sha256:a27546fc75b0dc7283ab702360d738a039af379056130b7c94470a1665cd4d3f"
+    },
+    {
+      "phase": "deployment",
+      "pid": 3237301,
+      "previous": "sha256:a27546fc75b0dc7283ab702360d738a039af379056130b7c94470a1665cd4d3f",
+      "digest": "sha256:f329b84f5607ee3fe7448c4507bd6792115239a5df1609b459eb25661b3b381a"
+    },
+    {
+      "phase": "canary",
+      "pid": 3237311,
+      "previous": "sha256:f329b84f5607ee3fe7448c4507bd6792115239a5df1609b459eb25661b3b381a",
+      "digest": "sha256:aab4993f2997d99f2cc06240b136470a37450ba4e090bff52e01374fe28a325d"
+    },
+    {
+      "phase": "evaluation",
+      "pid": 3237324,
+      "previous": "sha256:aab4993f2997d99f2cc06240b136470a37450ba4e090bff52e01374fe28a325d",
+      "digest": "sha256:940caf7b850c686e7af22fb30a8a9e2c3122ecf5e03504eb1b586d67f5e1f163"
+    },
+    {
+      "phase": "decision",
+      "pid": 3237337,
+      "previous": "sha256:940caf7b850c686e7af22fb30a8a9e2c3122ecf5e03504eb1b586d67f5e1f163",
+      "digest": "sha256:68973bec88ecc8b3d802a51af2814b888a92d5e64947a951a43f8d27d3d53bc0"
+    }
+  ],
+  "effectBoundaries": [
+    "prepare",
+    "delivery",
+    "ack"
+  ],
+  "distinctProcessCount": 12,
+  "storageProtocol": "write-fsync-rename",
+  "safeState": true,
+  "digest": "sha256:57a2298197f142e8c37e85806f754dd95bf24f8754f9431f518954121f7de1ed"
+}

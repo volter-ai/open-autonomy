@@ -146,6 +146,14 @@
       "sha256": "sha256:c2a60dc6f0feba04314cea2f00da66b76b51416d58967730f54144ba165fc4d2"
     },
     {
+      "path": "packages/core/src/organization-r24-native-engineering-adapters.test.ts",
+      "sha256": "sha256:49317a4790b2b92171cc7e31037de84b19a8964ca57d68c388681a854ebf5130"
+    },
+    {
+      "path": "packages/core/src/organization-r24-native-engineering-adapters.ts",
+      "sha256": "sha256:a696bfa72c383c5af6dd58c40f4cfa8634e8823a7283bb17d8efa50a36591e69"
+    },
+    {
       "path": "packages/core/src/organization-r24-twin-matched-engineering.test.ts",
       "sha256": "sha256:f4d43d560f257a970e9744c0d57d33988e82147cd90691d9e89f6e8387757f84"
     },

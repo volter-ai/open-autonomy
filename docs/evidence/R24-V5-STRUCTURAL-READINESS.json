@@ -10,6 +10,14 @@
   ],
   "components": [
     {
+      "path": "packages/core/src/organization-r24-external-closure.ts",
+      "sha256": "sha256:98578bc189956947697f71e5305c033fe252e8860ee0c9fb242361db21999267"
+    },
+    {
+      "path": "packages/core/src/organization-r24-external-closure.test.ts",
+      "sha256": "sha256:e956bfce89e93993943e9c94d734391425dfeab57e007ac82f594fc0d8c5db5d"
+    },
+    {
       "path": "packages/core/src/organization-r24-v5-live-acceptance-contract.ts",
       "sha256": "sha256:1816aa7eb1c2fb75fe1bdd89afee41de4165b355718258d5cb58b918c6a5c6f0"
     },

@@ -1,10 +1,10 @@
 import { describe, expect, test } from 'bun:test';
 import { INITIAL_COMPONENT_CATALOG, SLACK_CONVERSATION_BRIDGE } from '@open-autonomy/core';
-import { validateExecutionWorld, type ExecutionWorld } from './execution-world';
+import { validateBenchWorld, type BenchWorld } from './bench-world';
 
-function world(): ExecutionWorld {
+function world(): BenchWorld {
   return {
-    schema: 'autonomy.execution-world.v1',
+    schema: 'open-autonomy.bench-world.v1',
     target: {
       kind: 'compiled-substrate', id: 'hermes-target', organizationDigest: 'sha256:organization', deploymentDigest: 'sha256:deployment',
       composition: {
@@ -24,16 +24,16 @@ function world(): ExecutionWorld {
   };
 }
 
-describe('execution-world boundary algebra', () => {
+describe('bench-world boundary algebra', () => {
   test('runs a real compiled Hermes composition inside a Slack service twin world', () => {
-    const result = validateExecutionWorld(world(), INITIAL_COMPONENT_CATALOG, { 'slack-conversation-bridge': SLACK_CONVERSATION_BRIDGE });
+    const result = validateBenchWorld(world(), INITIAL_COMPONENT_CATALOG, { 'slack-conversation-bridge': SLACK_CONVERSATION_BRIDGE });
     expect(result.errors).toEqual([]);
   });
 
   test('does not permit a digital twin to replace Hermes or another substrate component', () => {
     const value = world();
     value.twins[0]!.service = 'hermes';
-    expect(validateExecutionWorld(value, INITIAL_COMPONENT_CATALOG).errors).toContain(
+    expect(validateBenchWorld(value, INITIAL_COMPONENT_CATALOG).errors).toContain(
       "twins.0: digital twin may only substitute a declared service, not a substrate component ('hermes')",
     );
   });
@@ -42,7 +42,7 @@ describe('execution-world boundary algebra', () => {
     const value = world();
     value.twins[0]!.contract.version = 'wrong';
     value.twins[0]!.coveredOperations = [];
-    const result = validateExecutionWorld(value, INITIAL_COMPONENT_CATALOG);
+    const result = validateBenchWorld(value, INITIAL_COMPONENT_CATALOG);
     expect(result.errors).toContain("twins.0: twin contract does not match service 'slack'");
     expect(result.errors).toContain('twins.0: covered operations must be explicit');
   });
@@ -50,12 +50,12 @@ describe('execution-world boundary algebra', () => {
   test('keeps behavioral simulators separate and reports missing calibration', () => {
     const value = world();
     value.simulators[0]!.calibrationEvidence = [];
-    expect(validateExecutionWorld(value, INITIAL_COMPONENT_CATALOG).warnings).toContain('simulators.0: worker simulator has no calibration evidence');
+    expect(validateBenchWorld(value, INITIAL_COMPONENT_CATALOG).warnings).toContain('simulators.0: worker simulator has no calibration evidence');
   });
 
   test('requires every required service to be consumed by the real target', () => {
     const value = world();
     value.serviceBindings = [];
-    expect(validateExecutionWorld(value, INITIAL_COMPONENT_CATALOG).errors).toContain("required service 'slack' is not bound to a compiled provider");
+    expect(validateBenchWorld(value, INITIAL_COMPONENT_CATALOG).errors).toContain("required service 'slack' is not bound to a compiled provider");
   });
 });

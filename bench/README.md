@@ -9,11 +9,15 @@ outcome.
 ### Development execution worlds
 
 The creation/conformance stack may run a real compiled substrate inside a controlled service world. The typed
-`bench/dev/execution-world.ts` contract keeps four roles disjoint: the real compiled target (Hermes, Paperclip, or
+`bench/dev/bench-world.ts` contract keeps four roles disjoint: the real compiled target (Hermes, Paperclip, or
 local composition), external service dependencies, Volter twins that substitute only those services, and explicitly
 labeled behavioral simulators. This is bench scaffolding, not Organization IR and not content shipped in a compiled
 installation. A twin cannot replace the substrate under test, and simulator evidence cannot satisfy substrate or
 service conformance.
+
+This service-twin machinery is distinct from the **organizational twin** in R25: the latter is an executable,
+calibrated mathematical model used by the autonomous-improvement loop. It may be shipped as product functionality;
+Volter service twins and bench behavioral simulators are creation-time infrastructure only.
 
 ### Graders — pluggable per workload
 

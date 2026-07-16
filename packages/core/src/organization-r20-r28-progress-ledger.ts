@@ -72,7 +72,7 @@ const REQUIRED_R20_READINESS_PATHS = [
   "packages/core/src/organization-command-plane.ts", "packages/core/src/organization-command-plane.test.ts",
   "packages/core/src/organization-command-transports.ts", "packages/core/src/organization-command-transports.test.ts",
   "packages/core/src/organization-slack-http-runtime.ts", "packages/core/src/organization-slack-http-runtime.test.ts",
-  "packages/core/src/organization-slack-web-api-port.ts", "packages/core/src/organization-slack-volter-twin.test.ts",
+  "packages/core/src/organization-slack-web-api-port.ts", "bench/dev/integration/slack-volter-twin.test.ts",
   "packages/core/src/organization-r20-external-campaign.ts", "packages/core/src/organization-r20-external-campaign.test.ts",
   "packages/core/src/organization-r20-r23-external-readiness.ts", "packages/core/src/organization-r20-r23-external-readiness.test.ts",
 ].sort();

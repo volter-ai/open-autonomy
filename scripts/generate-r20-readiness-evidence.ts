@@ -7,7 +7,7 @@ const paths = [
   "packages/core/src/organization-command-plane.ts", "packages/core/src/organization-command-plane.test.ts",
   "packages/core/src/organization-command-transports.ts", "packages/core/src/organization-command-transports.test.ts",
   "packages/core/src/organization-slack-http-runtime.ts", "packages/core/src/organization-slack-http-runtime.test.ts",
-  "packages/core/src/organization-slack-web-api-port.ts", "packages/core/src/organization-slack-volter-twin.test.ts",
+  "packages/core/src/organization-slack-web-api-port.ts", "bench/dev/integration/slack-volter-twin.test.ts",
   "packages/core/src/organization-r20-external-campaign.ts", "packages/core/src/organization-r20-external-campaign.test.ts",
   "packages/core/src/organization-r20-r23-external-readiness.ts", "packages/core/src/organization-r20-r23-external-readiness.test.ts",
 ].sort();
@@ -19,7 +19,7 @@ const evidence = {
   simulation: { evidenceClass: "simulated-local-substrate", provider: "@volter/twin-slack",
     versions: { "@volter/twin": pkg.devDependencies["@volter/twin"], "@volter/twin-slack": pkg.devDependencies["@volter/twin-slack"],
       "@slack/web-api": pkg.devDependencies["@slack/web-api"] },
-    test: "packages/core/src/organization-slack-volter-twin.test.ts",
+    test: "bench/dev/integration/slack-volter-twin.test.ts",
     proves: ["real Slack SDK compatibility", "threaded Web API delivery", "provider-side metadata reconciliation", "accept-then-timeout duplicate suppression", "durable restart"],
     doesNotProve: ["live Slack request delivery", "real workspace credentials", "real human usability", "keyboard accessibility", "screen-reader accessibility", "operator unfamiliarity"] },
   stillRequiredForClosure: ["closed R10, R17, R18 and R19 evidence pins", "externally administered live Slack workspace and app",

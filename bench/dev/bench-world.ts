@@ -6,7 +6,7 @@ import {
 } from '@open-autonomy/core';
 
 /** A real compilation target assembled from one or more substrate components. */
-export interface CompiledSubstrateTarget {
+export interface BenchCompiledTarget {
   kind: 'compiled-substrate';
   id: string;
   organizationDigest: string;
@@ -17,7 +17,7 @@ export interface CompiledSubstrateTarget {
 }
 
 /** An independently observable dependency used by the target while it executes. */
-export interface ServiceDependency {
+export interface BenchServiceDependency {
   kind: 'service';
   id: string;
   contract: { id: string; version: string };
@@ -26,7 +26,7 @@ export interface ServiceDependency {
 }
 
 /** Which compiled provider consumes which external service contract. */
-export interface ServiceBinding {
+export interface BenchServiceBinding {
   provider: string;
   service: string;
   interface: string;
@@ -37,7 +37,7 @@ export interface ServiceBinding {
  * bounded by an explicit contract and operation set; it never substitutes for
  * the compiled substrate or claims to reproduce generative intelligence.
  */
-export interface DigitalTwinSubstitution {
+export interface BenchServiceTwin {
   kind: 'digital-twin';
   id: string;
   service: string;
@@ -49,7 +49,7 @@ export interface DigitalTwinSubstitution {
 }
 
 /** A controlled actor/environment model; useful evidence, but never a service replica. */
-export interface BehavioralSimulator {
+export interface BenchBehaviorSimulator {
   kind: 'behavioral-simulator';
   id: string;
   role: 'worker' | 'human' | 'workload' | 'environment';
@@ -58,28 +58,28 @@ export interface BehavioralSimulator {
   calibrationEvidence?: string[];
 }
 
-export interface ExecutionWorld {
-  schema: 'autonomy.execution-world.v1';
-  target: CompiledSubstrateTarget;
-  services: ServiceDependency[];
-  serviceBindings: ServiceBinding[];
-  twins: DigitalTwinSubstitution[];
-  simulators: BehavioralSimulator[];
+export interface BenchWorld {
+  schema: 'open-autonomy.bench-world.v1';
+  target: BenchCompiledTarget;
+  services: BenchServiceDependency[];
+  serviceBindings: BenchServiceBinding[];
+  twins: BenchServiceTwin[];
+  simulators: BenchBehaviorSimulator[];
 }
 
-export interface ExecutionWorldValidation {
+export interface BenchWorldValidation {
   errors: string[];
   warnings: string[];
 }
 
-export function validateExecutionWorld(
-  world: ExecutionWorld,
+export function validateBenchWorld(
+  world: BenchWorld,
   manifests: Record<string, ComponentManifestV2>,
   adapters: Record<string, AdapterContract> = {},
-): ExecutionWorldValidation {
+): BenchWorldValidation {
   const errors: string[] = [];
   const warnings: string[] = [];
-  if (world.schema !== 'autonomy.execution-world.v1') errors.push('unsupported execution world schema');
+  if (world.schema !== 'open-autonomy.bench-world.v1') errors.push('unsupported bench world schema');
   if (world.target.kind !== 'compiled-substrate') errors.push('execution target must be a compiled substrate');
   if (!world.target.organizationDigest || !world.target.deploymentDigest) errors.push('compiled target requires organization and deployment digests');
   if (!world.target.artifacts.length) errors.push('compiled target must identify at least one native artifact');

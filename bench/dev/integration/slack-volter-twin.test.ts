@@ -5,9 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { WebClient } from "@slack/web-api";
 import { createSlackTwinServer } from "@volter/twin-slack";
-import { SlackHmacVerifier } from "./organization-command-transports";
-import { FileSlackIngressStore, SlackHttpRuntime } from "./organization-slack-http-runtime";
-import { SlackWebApiResponsePort } from "./organization-slack-web-api-port";
+import { FileSlackIngressStore, SlackHmacVerifier, SlackHttpRuntime, SlackWebApiResponsePort } from "@open-autonomy/core";
 
 test("R20 runs the real Slack SDK through Volter Twin and reconciles an accepted timeout", async () => {
   const root = mkdtempSync(join(tmpdir(), "oa-volter-slack-")), journal = join(root, "journal"),

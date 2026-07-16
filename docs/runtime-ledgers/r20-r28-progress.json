@@ -61,7 +61,7 @@
     {
       "checkpoint": "R20",
       "path": "docs/evidence/R20-VOLTER-STRUCTURAL-READINESS.json",
-      "sha256": "sha256:09622f6272ae16191c057ae682db9c83b411bea255700792421c1f42d4853306"
+      "sha256": "sha256:2f0fa71d5009e3347f48204e0c334bbdd89020e4c500a4574135accc9dc2a888"
     },
     {
       "checkpoint": "R21",
@@ -76,7 +76,7 @@
     {
       "checkpoint": "R24",
       "path": "docs/evidence/R24-V5-STRUCTURAL-READINESS.json",
-      "sha256": "sha256:6c3b7eef0f9a09eacc63bcf272c0db26ff763f4dd6e1a2b6f295342863263efc"
+      "sha256": "sha256:4b69585bf1d588ea2e9848895f8a3c3d9d6ae1749ee13d045896815791898da1"
     }
   ],
   "checkpoints": [

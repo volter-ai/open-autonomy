@@ -120,7 +120,7 @@ test("rejects omission or drift anywhere in the derived R24 dependency and test 
       "utf8",
     ),
   );
-  expect(verifyR24ReadinessEvidence(root, evidence).components).toBe(30);
+  expect(verifyR24ReadinessEvidence(root, evidence).components).toBe(32);
   const omitted = structuredClone(evidence);
   omitted.components = omitted.components.filter(
     (x: any) => x.path !== "packages/core/src/organization-r24-v5-protocol.ts",

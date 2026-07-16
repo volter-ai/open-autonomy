@@ -3,7 +3,7 @@ import {
   type AdapterContract,
   type ComponentComposition,
   type ComponentManifestV2,
-} from './organization-component';
+} from '@open-autonomy/core';
 
 /** A real compilation target assembled from one or more substrate components. */
 export interface CompiledSubstrateTarget {

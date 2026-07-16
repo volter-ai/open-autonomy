@@ -348,9 +348,8 @@ workflow preservation certificates, policy allow/deny/undefined/error fixtures.
 **Engineering ACs.** Replace proof-only composition with a supported Hermes provider implementing manifest discovery,
 deployment, configuration, durable work/control, worker execution integration, Slack interaction, health, upgrades,
 event lifting, pause/resume, backup/restore, and teardown; pin versions and detect CLI success-without-mutation.
-Compile the unchanged canonical organization into a real Hermes component composition. For controlled tests, declare
-Slack, model-provider, GitHub, and other independently observable dependencies in an `autonomy.execution-world.v1`;
-service twins may substitute those dependencies but MUST NOT substitute Hermes itself.
+Compile the unchanged canonical organization into a real Hermes component composition. Controlled development may
+replace external service dependencies, but MUST NOT replace Hermes itself.
 
 **Evidence.** Disposable live environment from bundle, complete TCK, restart/partition/duplicate/stale-fence/upgrade/
 rollback drills, identified run traces, zero manual hidden state.
@@ -365,8 +364,8 @@ rollback drills, identified run traces, zero manual hidden state.
 interaction providers; cover issue checkout, heartbeat, recovery, approvals, hierarchy, budgets, events, upgrades,
 lifting, and teardown; map native states without adding them to Organization IR; document stronger assumptions and
 weaker guarantees.
-Compile the unchanged canonical organization into that real composition. Any controlled service substitutions must
-be declared in an execution world; Paperclip and its real worker/interaction providers remain the system under test.
+Compile the unchanged canonical organization into that real composition. Paperclip and its real worker/interaction
+providers remain the system under test when controlled development replaces external services.
 
 **Evidence.** Same live TCK and fault schedule as R15, pinned source/container, differential portable traces, complete
 behavioral residual classification, no shared controller implementation with Hermes.

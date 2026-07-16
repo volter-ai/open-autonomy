@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
-import { INITIAL_COMPONENT_CATALOG, SLACK_CONVERSATION_BRIDGE } from './organization-component-catalog';
-import { validateExecutionWorld, type ExecutionWorld } from './organization-execution-world';
+import { INITIAL_COMPONENT_CATALOG, SLACK_CONVERSATION_BRIDGE } from '@open-autonomy/core';
+import { validateExecutionWorld, type ExecutionWorld } from './execution-world';
 
 function world(): ExecutionWorld {
   return {

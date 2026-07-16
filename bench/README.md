@@ -6,6 +6,15 @@ Bench is the **one** live-eval harness — it measures **org design**, not model
 provision a real repo, hand the autonomous org its intake, let it run for **real time**, then **grade** the
 outcome.
 
+### Development execution worlds
+
+The creation/conformance stack may run a real compiled substrate inside a controlled service world. The typed
+`bench/dev/execution-world.ts` contract keeps four roles disjoint: the real compiled target (Hermes, Paperclip, or
+local composition), external service dependencies, Volter twins that substitute only those services, and explicitly
+labeled behavioral simulators. This is bench scaffolding, not Organization IR and not content shipped in a compiled
+installation. A twin cannot replace the substrate under test, and simulator evidence cannot satisfy substrate or
+service conformance.
+
 ### Graders — pluggable per workload
 
 Each workload declares which graders apply (`"graders": [...]`) — the eval-framework idiom (one case suite,

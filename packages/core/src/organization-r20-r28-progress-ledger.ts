@@ -93,6 +93,8 @@ const R21_CLASSES = ["deterministic-model", "owned-local-fixture", "external-evi
 const R21_PROVES = ["eight-service campaign evidence has an exact matrix", "SLO and billing arithmetic is dimensioned and conserved", "fault RPO/RTO and recovery cuts are causal", "topology and workload choices are preregistered", "operator and authority attestations are ordered and authenticated"];
 const R21_LIMITS = ["eight independently deployed services", "multi-region infrastructure", "real provider billing", "external KMS custody", "genuinely unfamiliar human operation", "real production disaster recovery"];
 const R21_CLOSURE_REQUIREMENTS = ["closed R15 through R20 dependency evidence", "owned two-region eight-service deployment with authenticated telemetry and billing", "owned process, storage, dependency, network, control-plane and region fault injection", "external KMS and billing authorities", "independently attested unfamiliar operator", "complete signed campaign accepted by the R21 external campaign verifier"];
+const REQUIRED_R22_READINESS_PATHS=["scripts/generate-r22-readiness-evidence.ts","packages/core/src/organization-canonical.ts","packages/core/src/organization-canonical.test.ts","packages/core/src/organization-benchmark-protocol.ts","packages/core/src/organization-benchmark-protocol.test.ts","packages/core/src/organization-r22-external-evidence-live.ts","packages/core/src/organization-r22-external-evidence-live.test.ts","packages/core/src/organization-r22-human-calibration-cli.ts","packages/core/src/generated/r22-human-calibration-study.schema.json"].sort();
+const R22_CLASSES=["deterministic-model","owned-local-fixture"],R22_PROVES=["workload partitions and signed bundle mechanics are implemented","assigned trial omission is rejected by the model","local bubblewrap fixture denies unmounted hidden files and network","simulator and real-human result labels are separated","human calibration refuses an absent or single-rater matrix"],R22_LIMITS=["externally trusted workload or grader custody","independently replayable custody conclusions","authority-backed human identity and consent","valid externally preregistered statistical inference","real-human calibration population coverage"],R22_CLOSURE_REQUIREMENTS=["closed R3, R4, R8, R10, R11, R14, R16, R20 and R21 dependencies","external registration, workload, environment, scorer, privacy and grader trust roots","complete replayable signed trial and custody evidence","authenticated consented rater identity-key bijection and exact rater-item matrix","preregistered estimand, blocking, uncertainty, censoring and multiplicity analysis","complete signed campaign accepted by an external R22 campaign verifier"];
 export function verifyR20ReadinessEvidence(root: string, evidence: any) {
   if (evidence.checkpoint !== "R20" || evidence.closureClaim !== false ||
       evidence.purpose !== "machine-reviewable implementation and Volter simulation readiness; never external Slack or human evidence" ||
@@ -128,6 +130,7 @@ export function verifyR21ReadinessEvidence(root: string, evidence: any) {
     throw Error(`R21 readiness component drift: ${component.path}`);
   return { closureClaim: false as const, components: submitted.length, evidenceClasses: structuredClone(R21_CLASSES) };
 }
+export function verifyR22ReadinessEvidence(root:string,evidence:any){if(evidence.checkpoint!=="R22"||evidence.closureClaim!==false||evidence.purpose!=="machine-reviewable benchmark-model and local-custody-fixture readiness; never externally trusted benchmark closure"||semanticDigest(evidence.evidenceClasses)!==semanticDigest(R22_CLASSES)||semanticDigest(evidence.proves)!==semanticDigest(R22_PROVES)||semanticDigest(evidence.doesNotProve)!==semanticDigest(R22_LIMITS)||semanticDigest(evidence.stillRequiredForClosure)!==semanticDigest(R22_CLOSURE_REQUIREMENTS)||evidence.proves.some((x:string)=>evidence.doesNotProve.includes(x)))throw Error("R22 readiness evidence cannot prove closure");const submitted=evidence.components.map((x:any)=>x.path).sort();if(new Set(submitted).size!==submitted.length||semanticDigest(submitted)!==semanticDigest(REQUIRED_R22_READINESS_PATHS))throw Error("R22 readiness component inventory incomplete");for(const x of evidence.components)if(sha(readFileSync(join(root,x.path)))!==x.sha256)throw Error(`R22 readiness component drift: ${x.path}`);return{closureClaim:false as const,components:submitted.length,evidenceClasses:structuredClone(R22_CLASSES)}}
 export function verifyR24ReadinessEvidence(root: string, evidence: any) {
   if (
     evidence.checkpoint !== "R24" ||
@@ -293,7 +296,7 @@ export function verifyProgressLedger(root: string, ledger: ProgressLedger) {
     throw Error("imported residual inventory mismatch");
   if (
     !Array.isArray(ledger.readinessEvidence) ||
-    semanticDigest(ledger.readinessEvidence.map(x => x.checkpoint).sort()) !== semanticDigest(["R20", "R21", "R24"]) ||
+    semanticDigest(ledger.readinessEvidence.map(x => x.checkpoint).sort()) !== semanticDigest(["R20", "R21", "R22", "R24"]) ||
     new Set(ledger.readinessEvidence.map((x) => x.checkpoint)).size !==
       ledger.readinessEvidence.length
   )
@@ -307,6 +310,7 @@ export function verifyProgressLedger(root: string, ledger: ProgressLedger) {
       throw Error(`readiness checkpoint mismatch: ${entry.path}`);
     if (entry.checkpoint === "R20") verifyR20ReadinessEvidence(root, evidence);
     else if (entry.checkpoint === "R21") verifyR21ReadinessEvidence(root, evidence);
+    else if (entry.checkpoint === "R22") verifyR22ReadinessEvidence(root, evidence);
     else if (entry.checkpoint === "R24") verifyR24ReadinessEvidence(root, evidence);
     else throw Error(`unsupported readiness checkpoint: ${entry.checkpoint}`);
   }

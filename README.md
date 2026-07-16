@@ -227,6 +227,13 @@ else is ignored. To launch an agent by comment, name it: `/agent <agent>` (the w
 `PUBLIC_AGENT_REPO_PAUSED=true` (`gh variable set PUBLIC_AGENT_REPO_PAUSED --body true`) — every
 agent job skips while it is set; clear it to resume the fleet.
 
+## External evidence acquisition (contributors)
+
+R21 and R22 readiness campaigns use crash-safe, role-separated request/response collectors. Run
+`bun run acquire:r21 -- <command>` or `bun run acquire:r22 -- <command>`; each CLI reports its command
+set when invoked without a valid command. These tools assemble verifier inputs but do not claim that
+synthetic or locally signed evidence closes an external checkpoint.
+
 ## Security
 
 open-autonomy runs semi-untrusted agents and operates a model-token/funding proxy. See

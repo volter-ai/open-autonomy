@@ -45,6 +45,7 @@
     "verify:external-campaign": "bun bench/dev/evidence/verify-external-campaign.ts",
     "acquire:r20": "bun bench/dev/evidence/r20-acquisition-cli.ts",
     "acquire:r21": "bun bench/dev/evidence/r21-acquisition-cli.ts",
+    "acquire:r22": "bun bench/dev/evidence/r22-acquisition-cli.ts",
     "acquire:r27": "bun bench/dev/evidence/r27-acquisition-cli.ts",
     "acquire:r28": "bun bench/dev/evidence/r28-acquisition-cli.ts",
     "runtime-ledgers:init": "bun scripts/initialize-runtime-ledgers.ts",

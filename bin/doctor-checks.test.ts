@@ -620,6 +620,22 @@ describe('checkSkills (AC-9, F-3) — resolution in the check-5 probe worktree',
     cleanupAll();
   });
 
+  test('twin drift: .claude and .codex copies of the same skill diverge -> FAIL naming both trees', async () => {
+    const dir = track(scaffoldSimpleSdlc());
+    const skillPath = join(dir, '.claude', 'skills', 'develop', 'SKILL.md');
+    writeFileSync(skillPath, `${readFileSync(skillPath, 'utf8')}\nEDITED IN ONE TREE ONLY\n`);
+    gitInit(dir);
+    commitAll(dir, 'harness with a one-tree skill edit');
+    const harness = await checkHarness(dir, 'oa-doctor');
+    const skills = checkSkills(harness);
+    cleanupProbe();
+    expect(skills.status).toBe('FAIL');
+    expect(skills.detail).toContain('drifted apart');
+    expect(skills.detail).toContain('.claude/skills/develop/SKILL.md');
+    expect(skills.detail).toContain('.codex/skills/develop/SKILL.md');
+    cleanupAll();
+  });
+
   test('SKIP when check 5 could not produce a worktree (no manifest at all)', () => {
     const noManifestHarness = { result: { id: 'harness' as const, status: 'FAIL' as const, detail: 'no manifest', finding: [] } };
     const skills = checkSkills(noManifestHarness);

@@ -1,10 +1,10 @@
 import { createHash } from "node:crypto";
 import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
-import { canonicalSemanticJson } from "./organization-canonical";
+import { canonicalSemanticJson } from "@open-autonomy/core";
 
-export type ProgressLedger = {
-  schema: "autonomy.runtime-progress-ledger.v1";
+export type BenchProgressLedger = {
+  schema: "open-autonomy.bench-progress-ledger.v1";
   purpose: "progress-and-residual-accounting-only";
   closureClaim: false;
   normativePredecessor: { path: string; sha256: string; immutable: true };
@@ -38,7 +38,7 @@ type Residual = {
 const sha = (bytes: string | Buffer) =>
   `sha256:${createHash("sha256").update(bytes).digest("hex")}`;
 const semanticDigest = (x: unknown) => sha(canonicalSemanticJson(x));
-const CANONICAL_PROGRESS_SOURCES: ProgressLedger["sources"] = [
+const CANONICAL_PROGRESS_SOURCES: BenchProgressLedger["sources"] = [
   { path: "docs/evidence/R20-R23-EXTERNAL-PARTICIPATION.md", sha256: "sha256:2970a3ca9d1a1578e7f64d679047b709f27c50319f7f9fd9d3b5ebf9d7aca33c", selector: "external-participation-rows", expectedCount: 9 },
   { path: "docs/evidence/R21-LIVE-CAMPAIGN.json", sha256: "sha256:ac567dec901f1951d09004ac7ec12ab5e306c35933fe154515a905649e373c92", selector: "residuals", expectedCount: 24 },
   { path: "docs/evidence/R22-EXTERNAL-CUSTODY-GATE.json", sha256: "sha256:54272e1eb14f52b70b8448bf8d3df81b37dec8b2b722e4f4e3831fc8eb5d1139", selector: "residuals", expectedCount: 1 },
@@ -232,9 +232,9 @@ function extract(path: string, selector: string, raw: string): Residual[] {
   throw Error(`unsupported residual selector: ${selector}`);
 }
 
-export function verifyProgressLedger(root: string, ledger: ProgressLedger) {
+export function verifyProgressLedger(root: string, ledger: BenchProgressLedger) {
   if (
-    ledger.schema !== "autonomy.runtime-progress-ledger.v1" ||
+    ledger.schema !== "open-autonomy.bench-progress-ledger.v1" ||
     ledger.purpose !== "progress-and-residual-accounting-only" ||
     ledger.closureClaim !== false ||
     ledger.normativePredecessor.immutable !== true
@@ -324,7 +324,7 @@ export function verifyProgressLedger(root: string, ledger: ProgressLedger) {
 
 export function importProgressResiduals(
   root: string,
-  sources: ProgressLedger["sources"],
+  sources: BenchProgressLedger["sources"],
 ) {
   const residuals: Residual[] = [];
   for (const source of sources) {

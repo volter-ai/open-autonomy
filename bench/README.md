@@ -19,6 +19,10 @@ This service-twin machinery is distinct from the **organizational twin** in R25:
 calibrated mathematical model used by the autonomous-improvement loop. It may be shipped as product functionality;
 Volter service twins and bench behavioral simulators are creation-time infrastructure only.
 
+Campaign/readiness accounting follows the same dependency direction. The R20–R28 progress verifier lives under
+`bench/dev/evidence/` and may inspect bench fixtures and Volter dependency pins; core never imports the bench or
+hardcodes a service-twin implementation.
+
 ### Graders — pluggable per workload
 
 Each workload declares which graders apply (`"graders": [...]`) — the eval-framework idiom (one case suite,

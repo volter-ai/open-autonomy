@@ -9,9 +9,9 @@ import {
   verifyR21ReadinessEvidence,
   verifyR22ReadinessEvidence,
   verifyR24ReadinessEvidence,
-  type ProgressLedger,
-} from "./organization-r20-r28-progress-ledger";
-import { canonicalSemanticJson } from "./organization-canonical";
+  type BenchProgressLedger,
+} from "./runtime-progress-ledger";
+import { canonicalSemanticJson } from "@open-autonomy/core";
 
 const root = join(import.meta.dir, "../../..");
 const ledger = () =>
@@ -20,7 +20,7 @@ const ledger = () =>
       join(root, "docs/runtime-ledgers/r20-r28-progress.json"),
       "utf8",
     ),
-  ) as ProgressLedger;
+  ) as BenchProgressLedger;
 
 test("imports every bound partial-evidence residual while preserving unknown obligations", () => {
   const result = verifyProgressLedger(root, ledger());

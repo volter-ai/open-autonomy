@@ -1,5 +1,5 @@
 {
-  "schema": "autonomy.runtime-progress-ledger.v1",
+  "schema": "open-autonomy.bench-progress-ledger.v1",
   "purpose": "progress-and-residual-accounting-only",
   "closureClaim": false,
   "normativePredecessor": {

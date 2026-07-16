@@ -1019,6 +1019,18 @@ export function checkSkills(harness: HarnessProbe): CheckResult {
         );
       }
     }
+    // Twin parity: compile writes ONE authored skill to both harness discovery paths. An edit landing in
+    // only one tree means Claude and Codex agents run DIFFERENT processes for the same role — a drift no
+    // launch failure ever surfaces (both agents start fine; they just follow diverged instructions).
+    const claudePath = join(harness.worktree, '.claude', 'skills', behavior, 'SKILL.md');
+    const codexPath = join(harness.worktree, '.codex', 'skills', behavior, 'SKILL.md');
+    if (existsSync(claudePath) && existsSync(codexPath) && readFileSync(claudePath, 'utf8') !== readFileSync(codexPath, 'utf8')) {
+      problems.push(
+        `agent '${role}': .claude/skills/${behavior}/SKILL.md and .codex/skills/${behavior}/SKILL.md have drifted apart — ` +
+          `the two harnesses would run different processes for the same role. Apply the same edit to both trees ` +
+          `(they are twin projections of one authored skill).`,
+      );
+    }
   }
   if (problems.length) return FAIL('skills', problems.join(' | '), ['F-3']);
   return PASS('skills', `${checked} dispatchable agent(s) resolve to a name-matching skill file in the probe worktree.`, ['F-3']);

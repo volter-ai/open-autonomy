@@ -1,0 +1,3588 @@
+{
+  "schema": "open-autonomy.runtime-ledger.v1",
+  "obligationLedger": [
+    {
+      "id": "R0-SEM-1",
+      "checkpoint": "R0",
+      "owner": "R0",
+      "disposition": "preserved",
+      "assurance": "property-tested",
+      "evidence": [
+        "ev-r0-baseline",
+        "ev-r0-full-gate"
+      ]
+    },
+    {
+      "id": "R0-SEC-1",
+      "checkpoint": "R0",
+      "owner": "R0",
+      "disposition": "preserved",
+      "assurance": "property-tested",
+      "evidence": [
+        "ev-r0-threats",
+        "ev-r0-reviews"
+      ]
+    },
+    {
+      "id": "R0-DIST-1",
+      "checkpoint": "R0",
+      "owner": "R0",
+      "disposition": "preserved",
+      "assurance": "property-tested",
+      "evidence": [
+        "ev-r0-threats",
+        "ev-r0-reviews"
+      ]
+    },
+    {
+      "id": "R0-ADV-1",
+      "checkpoint": "R0",
+      "owner": "R0",
+      "disposition": "preserved",
+      "assurance": "property-tested",
+      "evidence": [
+        "ev-r0-threats",
+        "ev-r0-reviews"
+      ]
+    },
+    {
+      "id": "R0-ACC-1",
+      "checkpoint": "R0",
+      "owner": "R0",
+      "disposition": "preserved",
+      "assurance": "property-tested",
+      "evidence": [
+        "ev-r0-ledger-tests",
+        "ev-r0-full-gate"
+      ]
+    },
+    {
+      "id": "R1-SEM-1",
+      "checkpoint": "R1",
+      "owner": "R1",
+      "disposition": "preserved",
+      "assurance": "property-tested",
+      "evidence": [
+        "ev-r1-spec",
+        "ev-r1-field-grammar",
+        "ev-r1-machine-grammar",
+        "ev-r1-drift-tests",
+        "ev-r1-external-review"
+      ]
+    },
+    {
+      "id": "R1-TYP-1",
+      "checkpoint": "R1",
+      "owner": "R1",
+      "disposition": "preserved",
+      "assurance": "property-tested",
+      "evidence": [
+        "ev-r1-field-grammar",
+        "ev-r1-machine-grammar",
+        "ev-r1-drift-tests",
+        "ev-r1-external-review"
+      ]
+    },
+    {
+      "id": "R1-ALG-1",
+      "checkpoint": "R1",
+      "owner": "R1",
+      "disposition": "preserved",
+      "assurance": "property-tested",
+      "evidence": [
+        "ev-r1-spec",
+        "ev-r1-semantic-tests",
+        "ev-r1-external-review"
+      ]
+    },
+    {
+      "id": "R1-EVO-1",
+      "checkpoint": "R1",
+      "owner": "R1",
+      "disposition": "preserved",
+      "assurance": "property-tested",
+      "evidence": [
+        "ev-r1-spec",
+        "ev-r1-field-grammar",
+        "ev-r1-semantic-tests",
+        "ev-r1-external-review"
+      ]
+    },
+    {
+      "id": "R2-SEM-1",
+      "checkpoint": "R2",
+      "owner": "R2",
+      "disposition": "preserved",
+      "assurance": "property-tested",
+      "evidence": [
+        "ev-r2-protocol",
+        "ev-r2-schema-corpus",
+        "ev-r2-package-tests",
+        "ev-r2-external-review"
+      ]
+    },
+    {
+      "id": "R2-SEC-1",
+      "checkpoint": "R2",
+      "owner": "R2",
+      "disposition": "preserved",
+      "assurance": "property-tested",
+      "evidence": [
+        "ev-r2-protocol",
+        "ev-r2-package-tests",
+        "ev-r2-external-review",
+        "ev-r2-full-gate"
+      ]
+    },
+    {
+      "id": "R2-ALG-1",
+      "checkpoint": "R2",
+      "owner": "R2",
+      "disposition": "preserved",
+      "assurance": "property-tested",
+      "evidence": [
+        "ev-r2-protocol",
+        "ev-r2-package-tests",
+        "ev-r2-external-review"
+      ]
+    },
+    {
+      "id": "R2-PROV-1",
+      "checkpoint": "R2",
+      "owner": "R2",
+      "disposition": "preserved",
+      "assurance": "property-tested",
+      "evidence": [
+        "ev-r2-schema-corpus",
+        "ev-r2-package-tests",
+        "ev-r2-external-review"
+      ]
+    },
+    {
+      "id": "R3-REF-1",
+      "checkpoint": "R3",
+      "owner": "R3",
+      "disposition": "preserved",
+      "assurance": "property-tested",
+      "evidence": [
+        "ev-r3-spec",
+        "ev-r3-tck",
+        "ev-r3-runner",
+        "ev-r3-tests",
+        "ev-r3-review"
+      ]
+    },
+    {
+      "id": "R3-EPI-1",
+      "checkpoint": "R3",
+      "owner": "R3",
+      "disposition": "preserved",
+      "assurance": "property-tested",
+      "evidence": [
+        "ev-r3-spec",
+        "ev-r3-matrix",
+        "ev-r3-tests",
+        "ev-r3-review"
+      ]
+    },
+    {
+      "id": "R3-ADV-1",
+      "checkpoint": "R3",
+      "owner": "R3",
+      "disposition": "preserved",
+      "assurance": "property-tested",
+      "evidence": [
+        "ev-r3-runner",
+        "ev-r3-mutations",
+        "ev-r3-tests",
+        "ev-r3-review"
+      ]
+    },
+    {
+      "id": "R3-EVO-1",
+      "checkpoint": "R3",
+      "owner": "R3",
+      "disposition": "preserved",
+      "assurance": "property-tested",
+      "evidence": [
+        "ev-r3-spec",
+        "ev-r3-tck",
+        "ev-r3-tests",
+        "ev-r3-review"
+      ]
+    },
+    {
+      "id": "R4-SEM-1",
+      "checkpoint": "R4",
+      "owner": "R4",
+      "disposition": "preserved",
+      "assurance": "property-tested",
+      "evidence": [
+        "ev-r4-corpus",
+        "ev-r4-report",
+        "ev-r4-tests",
+        "ev-r4-review"
+      ]
+    },
+    {
+      "id": "R4-COMP-1",
+      "checkpoint": "R4",
+      "owner": "R4",
+      "disposition": "preserved",
+      "assurance": "property-tested",
+      "evidence": [
+        "ev-r4-cleanroom",
+        "ev-r4-exposure",
+        "ev-r4-feedback",
+        "ev-r4-review"
+      ]
+    },
+    {
+      "id": "R4-FALS-1",
+      "checkpoint": "R4",
+      "owner": "R4",
+      "disposition": "preserved",
+      "assurance": "property-tested",
+      "evidence": [
+        "ev-r4-report",
+        "ev-r4-tests",
+        "ev-r4-review"
+      ]
+    },
+    {
+      "id": "R4-IND-1",
+      "checkpoint": "R4",
+      "owner": "R4",
+      "disposition": "preserved",
+      "assurance": "property-tested",
+      "evidence": [
+        "ev-r4-exposure",
+        "ev-r4-policy",
+        "ev-r4-feedback",
+        "ev-r4-review"
+      ]
+    },
+    {
+      "id": "R5-COMP-1",
+      "checkpoint": "R5",
+      "owner": "R5",
+      "disposition": "preserved",
+      "assurance": "property-tested",
+      "evidence": [
+        "ev-r5-api",
+        "ev-r5-builtins",
+        "ev-r5-tests",
+        "ev-r5-review"
+      ]
+    },
+    {
+      "id": "R5-ALG-1",
+      "checkpoint": "R5",
+      "owner": "R5",
+      "disposition": "preserved",
+      "assurance": "property-tested",
+      "evidence": [
+        "ev-r5-api",
+        "ev-r5-golden",
+        "ev-r5-tests",
+        "ev-r5-review"
+      ]
+    },
+    {
+      "id": "R5-SEC-1",
+      "checkpoint": "R5",
+      "owner": "R5",
+      "disposition": "preserved",
+      "assurance": "property-tested",
+      "evidence": [
+        "ev-r5-api",
+        "ev-r5-hostile",
+        "ev-r5-tests",
+        "ev-r5-review"
+      ]
+    },
+    {
+      "id": "R5-EVO-1",
+      "checkpoint": "R5",
+      "owner": "R5",
+      "disposition": "preserved",
+      "assurance": "property-tested",
+      "evidence": [
+        "ev-r5-schema",
+        "ev-r5-cli",
+        "ev-r5-golden",
+        "ev-r5-policy",
+        "ev-r5-review"
+      ]
+    },
+    {
+      "id": "R6-EXT-1",
+      "checkpoint": "R6",
+      "owner": "R6",
+      "disposition": "preserved",
+      "assurance": "property-tested",
+      "evidence": [
+        "ev-r6-sdk",
+        "ev-r6-provider",
+        "ev-r6-docs",
+        "ev-r6-cleanroom",
+        "ev-r6-tck",
+        "ev-r6-review"
+      ]
+    },
+    {
+      "id": "R6-REF-1",
+      "checkpoint": "R6",
+      "owner": "R6",
+      "disposition": "preserved",
+      "assurance": "property-tested",
+      "evidence": [
+        "ev-r6-sdk",
+        "ev-r6-provider",
+        "ev-r6-tests",
+        "ev-r6-tck",
+        "ev-r6-review"
+      ]
+    },
+    {
+      "id": "R6-OPS-1",
+      "checkpoint": "R6",
+      "owner": "R6",
+      "disposition": "preserved",
+      "assurance": "property-tested",
+      "evidence": [
+        "ev-r6-sdk",
+        "ev-r6-tests",
+        "ev-r6-tck",
+        "ev-r6-review"
+      ]
+    },
+    {
+      "id": "R6-DIR-1",
+      "checkpoint": "R6",
+      "owner": "R6",
+      "disposition": "preserved",
+      "assurance": "property-tested",
+      "evidence": [
+        "ev-r6-provider",
+        "ev-r6-tests",
+        "ev-r6-cleanroom",
+        "ev-r6-review"
+      ]
+    },
+    {
+      "id": "R7-CSP-1",
+      "checkpoint": "R7",
+      "owner": "R7",
+      "disposition": "preserved",
+      "assurance": "property-tested",
+      "evidence": [
+        "ev-r7-solver",
+        "ev-r7-verifier",
+        "ev-r7-tests",
+        "ev-r7-review"
+      ]
+    },
+    {
+      "id": "R7-ECO-1",
+      "checkpoint": "R7",
+      "owner": "R7",
+      "disposition": "preserved",
+      "assurance": "property-tested",
+      "evidence": [
+        "ev-r7-solver",
+        "ev-r7-verifier",
+        "ev-r7-tests",
+        "ev-r7-review"
+      ]
+    },
+    {
+      "id": "R7-REF-1",
+      "checkpoint": "R7",
+      "owner": "R7",
+      "disposition": "preserved",
+      "assurance": "property-tested",
+      "evidence": [
+        "ev-r7-solver",
+        "ev-r7-verifier",
+        "ev-r7-tests",
+        "ev-r7-review"
+      ]
+    },
+    {
+      "id": "R7-EPI-1",
+      "checkpoint": "R7",
+      "owner": "R7",
+      "disposition": "preserved",
+      "assurance": "property-tested",
+      "evidence": [
+        "ev-r7-solver",
+        "ev-r7-verifier",
+        "ev-r7-tests",
+        "ev-r7-certificate-tests",
+        "ev-r7-review"
+      ]
+    },
+    {
+      "id": "R8-ALG-1",
+      "checkpoint": "R8",
+      "owner": "R8",
+      "disposition": "preserved",
+      "assurance": "property-tested",
+      "evidence": [
+        "ev-r8-bundle",
+        "ev-r8-tests",
+        "ev-r8-review"
+      ]
+    },
+    {
+      "id": "R8-SEC-1",
+      "checkpoint": "R8",
+      "owner": "R8",
+      "disposition": "preserved",
+      "assurance": "property-tested",
+      "evidence": [
+        "ev-r8-bundle",
+        "ev-r8-tests",
+        "ev-r8-review"
+      ]
+    },
+    {
+      "id": "R8-OPS-1",
+      "checkpoint": "R8",
+      "owner": "R8",
+      "disposition": "preserved",
+      "assurance": "property-tested",
+      "evidence": [
+        "ev-r8-bundle",
+        "ev-r8-tests",
+        "ev-r8-review"
+      ]
+    },
+    {
+      "id": "R8-PROV-1",
+      "checkpoint": "R8",
+      "owner": "R8",
+      "disposition": "preserved",
+      "assurance": "property-tested",
+      "evidence": [
+        "ev-r8-bundle",
+        "ev-r8-tests",
+        "ev-r8-review"
+      ]
+    },
+    {
+      "id": "R9-SEM-1",
+      "checkpoint": "R9",
+      "owner": "R9",
+      "disposition": "preserved",
+      "assurance": "property-tested",
+      "evidence": [
+        "ev-r9-runtime",
+        "ev-r9-tests",
+        "ev-r9-review"
+      ]
+    },
+    {
+      "id": "R9-REF-1",
+      "checkpoint": "R9",
+      "owner": "R9",
+      "disposition": "preserved",
+      "assurance": "property-tested",
+      "evidence": [
+        "ev-r9-runtime",
+        "ev-r9-tests",
+        "ev-r9-review"
+      ]
+    },
+    {
+      "id": "R9-EVO-1",
+      "checkpoint": "R9",
+      "owner": "R9",
+      "disposition": "preserved",
+      "assurance": "property-tested",
+      "evidence": [
+        "ev-r9-runtime",
+        "ev-r9-tests",
+        "ev-r9-review"
+      ]
+    },
+    {
+      "id": "R9-DOG-1",
+      "checkpoint": "R9",
+      "owner": "R9",
+      "disposition": "preserved",
+      "assurance": "property-tested",
+      "evidence": [
+        "ev-r9-dogfood",
+        "ev-r9-tests",
+        "ev-r9-review"
+      ]
+    },
+    {
+      "id": "R10-SEC-1",
+      "checkpoint": "R10",
+      "owner": "R10",
+      "disposition": "preserved",
+      "assurance": "property-tested",
+      "evidence": [
+        "ev-r10-authority",
+        "ev-r10-tests",
+        "ev-r10-review"
+      ]
+    },
+    {
+      "id": "R10-CAP-1",
+      "checkpoint": "R10",
+      "owner": "R10",
+      "disposition": "preserved",
+      "assurance": "property-tested",
+      "evidence": [
+        "ev-r10-authority",
+        "ev-r10-tests",
+        "ev-r10-review"
+      ]
+    },
+    {
+      "id": "R10-DIST-1",
+      "checkpoint": "R10",
+      "owner": "R10",
+      "disposition": "preserved",
+      "assurance": "property-tested",
+      "evidence": [
+        "ev-r10-authority",
+        "ev-r10-tests",
+        "ev-r10-review"
+      ]
+    },
+    {
+      "id": "R10-OPS-1",
+      "checkpoint": "R10",
+      "owner": "R10",
+      "disposition": "preserved",
+      "assurance": "property-tested",
+      "evidence": [
+        "ev-r10-process-custody",
+        "ev-r10-tests",
+        "ev-r10-review"
+      ]
+    },
+    {
+      "id": "R11-ORG-1",
+      "checkpoint": "R11",
+      "owner": "R11",
+      "disposition": "preserved",
+      "assurance": "property-tested",
+      "evidence": [
+        "ev-r11-runtime",
+        "ev-r11-tests",
+        "ev-r11-review"
+      ]
+    },
+    {
+      "id": "R11-CTX-1",
+      "checkpoint": "R11",
+      "owner": "R11",
+      "disposition": "preserved",
+      "assurance": "property-tested",
+      "evidence": [
+        "ev-r11-runtime",
+        "ev-r11-tests",
+        "ev-r11-review"
+      ]
+    },
+    {
+      "id": "R11-DIST-1",
+      "checkpoint": "R11",
+      "owner": "R11",
+      "disposition": "preserved",
+      "assurance": "property-tested",
+      "evidence": [
+        "ev-r11-runtime",
+        "ev-r11-tests",
+        "ev-r11-review"
+      ]
+    },
+    {
+      "id": "R11-SEC-1",
+      "checkpoint": "R11",
+      "owner": "R11",
+      "disposition": "preserved",
+      "assurance": "property-tested",
+      "evidence": [
+        "ev-r11-runtime",
+        "ev-r11-tests",
+        "ev-r11-review"
+      ]
+    },
+    {
+      "id": "R11-EPI-1",
+      "checkpoint": "R11",
+      "owner": "R11",
+      "disposition": "preserved",
+      "assurance": "property-tested",
+      "evidence": [
+        "ev-r11-runtime",
+        "ev-r11-tests",
+        "ev-r11-review"
+      ]
+    },
+    {
+      "id": "R11-INT-1",
+      "checkpoint": "R11",
+      "owner": "R11",
+      "disposition": "preserved",
+      "assurance": "property-tested",
+      "evidence": [
+        "ev-r11-runtime",
+        "ev-r11-tests",
+        "ev-r11-review"
+      ]
+    },
+    {
+      "id": "R12-INT-1",
+      "checkpoint": "R12",
+      "owner": "R12",
+      "disposition": "preserved",
+      "assurance": "property-tested",
+      "evidence": [
+        "ev-r12-runtime",
+        "ev-r12-schema",
+        "ev-r12-tests",
+        "ev-r12-review"
+      ]
+    },
+    {
+      "id": "R12-SEC-1",
+      "checkpoint": "R12",
+      "owner": "R12",
+      "disposition": "preserved",
+      "assurance": "property-tested",
+      "evidence": [
+        "ev-r12-runtime",
+        "ev-r12-schema",
+        "ev-r12-tests",
+        "ev-r12-review"
+      ]
+    },
+    {
+      "id": "R12-REF-1",
+      "checkpoint": "R12",
+      "owner": "R12",
+      "disposition": "preserved",
+      "assurance": "property-tested",
+      "evidence": [
+        "ev-r12-runtime",
+        "ev-r12-schema",
+        "ev-r12-tests",
+        "ev-r12-review"
+      ]
+    },
+    {
+      "id": "R13-ORG-1",
+      "checkpoint": "R13",
+      "owner": "R13",
+      "disposition": "preserved",
+      "assurance": "property-tested",
+      "evidence": [
+        "ev-r13-runtime",
+        "ev-r13-tests",
+        "ev-r13-review"
+      ]
+    },
+    {
+      "id": "R13-REF-1",
+      "checkpoint": "R13",
+      "owner": "R13",
+      "disposition": "preserved",
+      "assurance": "property-tested",
+      "evidence": [
+        "ev-r13-runtime",
+        "ev-r13-tests",
+        "ev-r13-review"
+      ]
+    },
+    {
+      "id": "R13-SEC-1",
+      "checkpoint": "R13",
+      "owner": "R13",
+      "disposition": "preserved",
+      "assurance": "property-tested",
+      "evidence": [
+        "ev-r13-runtime",
+        "ev-r13-tests",
+        "ev-r13-review"
+      ]
+    },
+    {
+      "id": "R14-EPI-1",
+      "checkpoint": "R14",
+      "owner": "R14",
+      "disposition": "preserved",
+      "assurance": "property-tested",
+      "evidence": [
+        "ev-r14-runtime",
+        "ev-r14-tests",
+        "ev-r14-review"
+      ]
+    },
+    {
+      "id": "R14-DIST-1",
+      "checkpoint": "R14",
+      "owner": "R14",
+      "disposition": "preserved",
+      "assurance": "property-tested",
+      "evidence": [
+        "ev-r14-runtime",
+        "ev-r14-tests",
+        "ev-r14-review"
+      ]
+    },
+    {
+      "id": "R14-REF-1",
+      "checkpoint": "R14",
+      "owner": "R14",
+      "disposition": "preserved",
+      "assurance": "property-tested",
+      "evidence": [
+        "ev-r14-runtime",
+        "ev-r14-tests",
+        "ev-r14-review"
+      ]
+    },
+    {
+      "id": "R14-EVO-1",
+      "checkpoint": "R14",
+      "owner": "R14",
+      "disposition": "preserved",
+      "assurance": "property-tested",
+      "evidence": [
+        "ev-r14-runtime",
+        "ev-r14-tests",
+        "ev-r14-review"
+      ]
+    },
+    {
+      "id": "R15-DIST-1",
+      "checkpoint": "R15",
+      "owner": "R15",
+      "disposition": "preserved",
+      "assurance": "property-tested",
+      "evidence": [
+        "ev-r15-runtime",
+        "ev-r15-tests",
+        "ev-r15-review"
+      ]
+    },
+    {
+      "id": "R15-OPS-1",
+      "checkpoint": "R15",
+      "owner": "R15",
+      "disposition": "preserved",
+      "assurance": "property-tested",
+      "evidence": [
+        "ev-r15-runtime",
+        "ev-r15-tests",
+        "ev-r15-review"
+      ]
+    },
+    {
+      "id": "R15-HCI-1",
+      "checkpoint": "R15",
+      "owner": "R15",
+      "disposition": "preserved",
+      "assurance": "property-tested",
+      "evidence": [
+        "ev-r15-runtime",
+        "ev-r15-tests",
+        "ev-r15-review"
+      ]
+    },
+    {
+      "id": "R15-EPI-1",
+      "checkpoint": "R15",
+      "owner": "R15",
+      "disposition": "preserved",
+      "assurance": "property-tested",
+      "evidence": [
+        "ev-r15-runtime",
+        "ev-r15-tests",
+        "ev-r15-review"
+      ]
+    },
+    {
+      "id": "R16-IND-1",
+      "checkpoint": "R16",
+      "owner": "R16",
+      "disposition": "preserved",
+      "assurance": "property-tested",
+      "evidence": [
+        "ev-r16-runtime",
+        "ev-r16-tests",
+        "ev-r16-review"
+      ]
+    },
+    {
+      "id": "R16-REF-1",
+      "checkpoint": "R16",
+      "owner": "R16",
+      "disposition": "preserved",
+      "assurance": "property-tested",
+      "evidence": [
+        "ev-r16-runtime",
+        "ev-r16-tests",
+        "ev-r16-review"
+      ]
+    },
+    {
+      "id": "R16-OPS-1",
+      "checkpoint": "R16",
+      "owner": "R16",
+      "disposition": "preserved",
+      "assurance": "property-tested",
+      "evidence": [
+        "ev-r16-runtime",
+        "ev-r16-tests",
+        "ev-r16-review"
+      ]
+    },
+    {
+      "id": "R16-ECO-1",
+      "checkpoint": "R16",
+      "owner": "R16",
+      "disposition": "preserved",
+      "assurance": "property-tested",
+      "evidence": [
+        "ev-r16-runtime",
+        "ev-r16-tests",
+        "ev-r16-review"
+      ]
+    },
+    {
+      "id": "R17-DB-1",
+      "checkpoint": "R17",
+      "owner": "R17",
+      "disposition": "preserved",
+      "assurance": "property-tested",
+      "evidence": [
+        "ev-r17-runtime",
+        "ev-r17-tests",
+        "ev-r17-review"
+      ]
+    },
+    {
+      "id": "R17-SEC-1",
+      "checkpoint": "R17",
+      "owner": "R17",
+      "disposition": "preserved",
+      "assurance": "property-tested",
+      "evidence": [
+        "ev-r17-runtime",
+        "ev-r17-tests",
+        "ev-r17-review"
+      ]
+    },
+    {
+      "id": "R17-EVO-1",
+      "checkpoint": "R17",
+      "owner": "R17",
+      "disposition": "preserved",
+      "assurance": "property-tested",
+      "evidence": [
+        "ev-r17-runtime",
+        "ev-r17-tests",
+        "ev-r17-review"
+      ]
+    },
+    {
+      "id": "R18-ALG-1",
+      "checkpoint": "R18",
+      "owner": "R18",
+      "disposition": "preserved",
+      "assurance": "property-tested",
+      "evidence": [
+        "ev-r18-runtime",
+        "ev-r18-tests",
+        "ev-r18-review"
+      ]
+    },
+    {
+      "id": "R18-DB-1",
+      "checkpoint": "R18",
+      "owner": "R18",
+      "disposition": "preserved",
+      "assurance": "property-tested",
+      "evidence": [
+        "ev-r18-runtime",
+        "ev-r18-tests",
+        "ev-r18-review"
+      ]
+    },
+    {
+      "id": "R18-PRIV-1",
+      "checkpoint": "R18",
+      "owner": "R18",
+      "disposition": "preserved",
+      "assurance": "property-tested",
+      "evidence": [
+        "ev-r18-runtime",
+        "ev-r18-tests",
+        "ev-r18-review"
+      ]
+    },
+    {
+      "id": "R18-PROV-1",
+      "checkpoint": "R18",
+      "owner": "R18",
+      "disposition": "preserved",
+      "assurance": "property-tested",
+      "evidence": [
+        "ev-r18-runtime",
+        "ev-r18-tests",
+        "ev-r18-review"
+      ]
+    },
+    {
+      "id": "R19-CTRL-1",
+      "checkpoint": "R19",
+      "owner": "R19",
+      "disposition": "preserved",
+      "assurance": "property-tested",
+      "evidence": [
+        "ev-r19-runtime",
+        "ev-r19-adapters",
+        "ev-r19-tests",
+        "ev-r19-live",
+        "ev-r19-review"
+      ]
+    },
+    {
+      "id": "R19-DIST-1",
+      "checkpoint": "R19",
+      "owner": "R19",
+      "disposition": "preserved",
+      "assurance": "property-tested",
+      "evidence": [
+        "ev-r19-runtime",
+        "ev-r19-adapters",
+        "ev-r19-tests",
+        "ev-r19-live",
+        "ev-r19-review"
+      ]
+    },
+    {
+      "id": "R19-SEM-1",
+      "checkpoint": "R19",
+      "owner": "R19",
+      "disposition": "preserved",
+      "assurance": "property-tested",
+      "evidence": [
+        "ev-r19-runtime",
+        "ev-r19-adapters",
+        "ev-r19-tests",
+        "ev-r19-live",
+        "ev-r19-review"
+      ]
+    },
+    {
+      "id": "R19-OPS-1",
+      "checkpoint": "R19",
+      "owner": "R19",
+      "disposition": "preserved",
+      "assurance": "property-tested",
+      "evidence": [
+        "ev-r19-runtime",
+        "ev-r19-adapters",
+        "ev-r19-tests",
+        "ev-r19-live",
+        "ev-r19-review"
+      ]
+    },
+    {
+      "id": "R20-HCI-1",
+      "checkpoint": "R20",
+      "owner": "R20",
+      "disposition": "preserved",
+      "assurance": "property-tested",
+      "evidence": [
+        "ev-r20-runtime",
+        "ev-r20-transports",
+        "ev-r20-tests",
+        "ev-r20-slack-twin",
+        "ev-r20-review"
+      ]
+    },
+    {
+      "id": "R20-SEC-1",
+      "checkpoint": "R20",
+      "owner": "R20",
+      "disposition": "preserved",
+      "assurance": "property-tested",
+      "evidence": [
+        "ev-r20-runtime",
+        "ev-r20-transports",
+        "ev-r20-tests",
+        "ev-r20-slack-twin",
+        "ev-r20-review"
+      ]
+    },
+    {
+      "id": "R20-EPI-1",
+      "checkpoint": "R20",
+      "owner": "R20",
+      "disposition": "preserved",
+      "assurance": "property-tested",
+      "evidence": [
+        "ev-r20-runtime",
+        "ev-r20-transports",
+        "ev-r20-tests",
+        "ev-r20-slack-twin",
+        "ev-r20-review"
+      ]
+    },
+    {
+      "id": "R20-ADV-1",
+      "checkpoint": "R20",
+      "owner": "R20",
+      "disposition": "preserved",
+      "assurance": "property-tested",
+      "evidence": [
+        "ev-r20-runtime",
+        "ev-r20-transports",
+        "ev-r20-tests",
+        "ev-r20-slack-twin",
+        "ev-r20-review"
+      ]
+    },
+    {
+      "id": "R21-SRE-1",
+      "checkpoint": "R21",
+      "owner": "R21",
+      "disposition": "preserved",
+      "assurance": "property-tested",
+      "evidence": [
+        "ev-r21-runtime",
+        "ev-r21-tests",
+        "ev-r21-campaign",
+        "ev-r21-review"
+      ]
+    },
+    {
+      "id": "R21-QUE-1",
+      "checkpoint": "R21",
+      "owner": "R21",
+      "disposition": "preserved",
+      "assurance": "property-tested",
+      "evidence": [
+        "ev-r21-runtime",
+        "ev-r21-tests",
+        "ev-r21-campaign",
+        "ev-r21-review"
+      ]
+    },
+    {
+      "id": "R21-DIST-1",
+      "checkpoint": "R21",
+      "owner": "R21",
+      "disposition": "preserved",
+      "assurance": "property-tested",
+      "evidence": [
+        "ev-r21-runtime",
+        "ev-r21-tests",
+        "ev-r21-campaign",
+        "ev-r21-review"
+      ]
+    },
+    {
+      "id": "R21-OPS-1",
+      "checkpoint": "R21",
+      "owner": "R21",
+      "disposition": "preserved",
+      "assurance": "property-tested",
+      "evidence": [
+        "ev-r21-runtime",
+        "ev-r21-tests",
+        "ev-r21-campaign",
+        "ev-r21-review"
+      ]
+    },
+    {
+      "id": "R21-SEC-1",
+      "checkpoint": "R21",
+      "owner": "R21",
+      "disposition": "preserved",
+      "assurance": "property-tested",
+      "evidence": [
+        "ev-r21-runtime",
+        "ev-r21-tests",
+        "ev-r21-campaign",
+        "ev-r21-review"
+      ]
+    },
+    {
+      "id": "R22-MEA-1",
+      "checkpoint": "R22",
+      "owner": "R22",
+      "disposition": "preserved",
+      "assurance": "property-tested",
+      "evidence": [
+        "ev-r22-runtime",
+        "ev-r22-tests",
+        "ev-r22-custody",
+        "ev-r22-campaign",
+        "ev-r22-review"
+      ]
+    },
+    {
+      "id": "R22-STAT-1",
+      "checkpoint": "R22",
+      "owner": "R22",
+      "disposition": "preserved",
+      "assurance": "property-tested",
+      "evidence": [
+        "ev-r22-runtime",
+        "ev-r22-tests",
+        "ev-r22-custody",
+        "ev-r22-campaign",
+        "ev-r22-review"
+      ]
+    },
+    {
+      "id": "R22-ADV-1",
+      "checkpoint": "R22",
+      "owner": "R22",
+      "disposition": "preserved",
+      "assurance": "property-tested",
+      "evidence": [
+        "ev-r22-runtime",
+        "ev-r22-tests",
+        "ev-r22-custody",
+        "ev-r22-campaign",
+        "ev-r22-review"
+      ]
+    },
+    {
+      "id": "R22-PRIV-1",
+      "checkpoint": "R22",
+      "owner": "R22",
+      "disposition": "preserved",
+      "assurance": "property-tested",
+      "evidence": [
+        "ev-r22-runtime",
+        "ev-r22-tests",
+        "ev-r22-custody",
+        "ev-r22-campaign",
+        "ev-r22-review"
+      ]
+    },
+    {
+      "id": "R22-HUM-1",
+      "checkpoint": "R22",
+      "owner": "R22",
+      "disposition": "preserved",
+      "assurance": "property-tested",
+      "evidence": [
+        "ev-r22-runtime",
+        "ev-r22-tests",
+        "ev-r22-custody",
+        "ev-r22-campaign",
+        "ev-r22-review"
+      ]
+    },
+    {
+      "id": "R23-MEA-1",
+      "checkpoint": "R23",
+      "owner": "R23",
+      "disposition": "preserved",
+      "assurance": "property-tested",
+      "evidence": [
+        "ev-r23-runtime",
+        "ev-r23-tests",
+        "ev-r23-gate",
+        "ev-r23-review"
+      ]
+    },
+    {
+      "id": "R23-ACC-1",
+      "checkpoint": "R23",
+      "owner": "R23",
+      "disposition": "preserved",
+      "assurance": "property-tested",
+      "evidence": [
+        "ev-r23-runtime",
+        "ev-r23-tests",
+        "ev-r23-gate",
+        "ev-r23-review"
+      ]
+    },
+    {
+      "id": "R23-ECO-1",
+      "checkpoint": "R23",
+      "owner": "R23",
+      "disposition": "preserved",
+      "assurance": "property-tested",
+      "evidence": [
+        "ev-r23-runtime",
+        "ev-r23-tests",
+        "ev-r23-gate",
+        "ev-r23-review"
+      ]
+    },
+    {
+      "id": "R23-ADV-1",
+      "checkpoint": "R23",
+      "owner": "R23",
+      "disposition": "preserved",
+      "assurance": "property-tested",
+      "evidence": [
+        "ev-r23-runtime",
+        "ev-r23-tests",
+        "ev-r23-gate",
+        "ev-r23-review"
+      ]
+    },
+    {
+      "id": "R24-EXP-1",
+      "checkpoint": "R24",
+      "owner": "R24",
+      "disposition": "preserved",
+      "assurance": "live-observed",
+      "evidence": [
+        "ev-r24-runtime",
+        "ev-r24-native",
+        "ev-r24-tests",
+        "ev-r24-review"
+      ]
+    },
+    {
+      "id": "R24-REF-1",
+      "checkpoint": "R24",
+      "owner": "R24",
+      "disposition": "preserved",
+      "assurance": "live-observed",
+      "evidence": [
+        "ev-r24-runtime",
+        "ev-r24-native",
+        "ev-r24-tests",
+        "ev-r24-review"
+      ]
+    },
+    {
+      "id": "R24-STAT-1",
+      "checkpoint": "R24",
+      "owner": "R24",
+      "disposition": "preserved",
+      "assurance": "live-observed",
+      "evidence": [
+        "ev-r24-runtime",
+        "ev-r24-native",
+        "ev-r24-tests",
+        "ev-r24-review"
+      ]
+    },
+    {
+      "id": "R24-FALS-1",
+      "checkpoint": "R24",
+      "owner": "R24",
+      "disposition": "preserved",
+      "assurance": "live-observed",
+      "evidence": [
+        "ev-r24-runtime",
+        "ev-r24-native",
+        "ev-r24-tests",
+        "ev-r24-review"
+      ]
+    },
+    {
+      "id": "R24-LOCK-1",
+      "checkpoint": "R24",
+      "owner": "R24",
+      "disposition": "preserved",
+      "assurance": "live-observed",
+      "evidence": [
+        "ev-r24-runtime",
+        "ev-r24-native",
+        "ev-r24-tests",
+        "ev-r24-review"
+      ]
+    },
+    {
+      "id": "R25-SEM-1",
+      "checkpoint": "R25",
+      "owner": "R25",
+      "disposition": "preserved",
+      "assurance": "property-tested",
+      "evidence": [
+        "ev-r25-runtime",
+        "ev-r25-tests",
+        "ev-r25-calibration",
+        "ev-r25-review"
+      ]
+    },
+    {
+      "id": "R25-STAT-1",
+      "checkpoint": "R25",
+      "owner": "R25",
+      "disposition": "preserved",
+      "assurance": "property-tested",
+      "evidence": [
+        "ev-r25-runtime",
+        "ev-r25-tests",
+        "ev-r25-calibration",
+        "ev-r25-review"
+      ]
+    },
+    {
+      "id": "R25-QUE-1",
+      "checkpoint": "R25",
+      "owner": "R25",
+      "disposition": "preserved",
+      "assurance": "property-tested",
+      "evidence": [
+        "ev-r25-runtime",
+        "ev-r25-tests",
+        "ev-r25-calibration",
+        "ev-r25-review"
+      ]
+    },
+    {
+      "id": "R25-IDENT-1",
+      "checkpoint": "R25",
+      "owner": "R25",
+      "disposition": "preserved",
+      "assurance": "property-tested",
+      "evidence": [
+        "ev-r25-runtime",
+        "ev-r25-tests",
+        "ev-r25-calibration",
+        "ev-r25-review"
+      ]
+    },
+    {
+      "id": "R26-CSP-1",
+      "checkpoint": "R26",
+      "owner": "R26",
+      "disposition": "preserved",
+      "assurance": "property-tested",
+      "evidence": [
+        "ev-r26-runtime",
+        "ev-r26-tests",
+        "ev-r26-certificate",
+        "ev-r26-review"
+      ]
+    },
+    {
+      "id": "R26-DEC-1",
+      "checkpoint": "R26",
+      "owner": "R26",
+      "disposition": "preserved",
+      "assurance": "property-tested",
+      "evidence": [
+        "ev-r26-runtime",
+        "ev-r26-tests",
+        "ev-r26-certificate",
+        "ev-r26-review"
+      ]
+    },
+    {
+      "id": "R26-CAU-1",
+      "checkpoint": "R26",
+      "owner": "R26",
+      "disposition": "preserved",
+      "assurance": "property-tested",
+      "evidence": [
+        "ev-r26-runtime",
+        "ev-r26-tests",
+        "ev-r26-certificate",
+        "ev-r26-review"
+      ]
+    },
+    {
+      "id": "R26-ADV-1",
+      "checkpoint": "R26",
+      "owner": "R26",
+      "disposition": "preserved",
+      "assurance": "property-tested",
+      "evidence": [
+        "ev-r26-runtime",
+        "ev-r26-tests",
+        "ev-r26-certificate",
+        "ev-r26-review"
+      ]
+    },
+    {
+      "id": "R27-CAU-1",
+      "checkpoint": "R27",
+      "owner": "R27",
+      "disposition": "unresolved",
+      "assurance": "unknown",
+      "evidence": []
+    },
+    {
+      "id": "R27-STAT-1",
+      "checkpoint": "R27",
+      "owner": "R27",
+      "disposition": "unresolved",
+      "assurance": "unknown",
+      "evidence": []
+    },
+    {
+      "id": "R27-SEC-1",
+      "checkpoint": "R27",
+      "owner": "R27",
+      "disposition": "unresolved",
+      "assurance": "unknown",
+      "evidence": []
+    },
+    {
+      "id": "R27-PROV-1",
+      "checkpoint": "R27",
+      "owner": "R27",
+      "disposition": "unresolved",
+      "assurance": "unknown",
+      "evidence": []
+    },
+    {
+      "id": "R28-CTRL-1",
+      "checkpoint": "R28",
+      "owner": "R28",
+      "disposition": "unresolved",
+      "assurance": "unknown",
+      "evidence": []
+    },
+    {
+      "id": "R28-ORG-1",
+      "checkpoint": "R28",
+      "owner": "R28",
+      "disposition": "unresolved",
+      "assurance": "unknown",
+      "evidence": []
+    },
+    {
+      "id": "R28-SEC-1",
+      "checkpoint": "R28",
+      "owner": "R28",
+      "disposition": "unresolved",
+      "assurance": "unknown",
+      "evidence": []
+    },
+    {
+      "id": "R28-REF-1",
+      "checkpoint": "R28",
+      "owner": "R28",
+      "disposition": "unresolved",
+      "assurance": "unknown",
+      "evidence": []
+    },
+    {
+      "id": "R28-CAU-1",
+      "checkpoint": "R28",
+      "owner": "R28",
+      "disposition": "unresolved",
+      "assurance": "unknown",
+      "evidence": []
+    },
+    {
+      "id": "R28-OPS-1",
+      "checkpoint": "R28",
+      "owner": "R28",
+      "disposition": "unresolved",
+      "assurance": "unknown",
+      "evidence": []
+    }
+  ],
+  "semanticCoverageLedger": [
+    {
+      "construct": "public semantic and API baseline",
+      "checkpoint": "R0",
+      "disposition": "preserved",
+      "obligationIds": [
+        "R0-SEM-1"
+      ]
+    },
+    {
+      "construct": "principals, credentials, tenants, trust, effects, and data",
+      "checkpoint": "R0",
+      "disposition": "preserved",
+      "obligationIds": [
+        "R0-SEC-1"
+      ]
+    },
+    {
+      "construct": "distributed failure and recovery assumptions",
+      "checkpoint": "R0",
+      "disposition": "preserved",
+      "obligationIds": [
+        "R0-DIST-1"
+      ]
+    },
+    {
+      "construct": "finding ownership and rejection accounting",
+      "checkpoint": "R0",
+      "disposition": "preserved",
+      "obligationIds": [
+        "R0-ADV-1"
+      ]
+    },
+    {
+      "construct": "runtime proof-accounting closure",
+      "checkpoint": "R0",
+      "disposition": "preserved",
+      "obligationIds": [
+        "R0-ACC-1"
+      ]
+    },
+    {
+      "construct": "normative syntax, denotation, and unsupported-domain boundary",
+      "checkpoint": "R1",
+      "disposition": "preserved",
+      "obligationIds": [
+        "R1-SEM-1"
+      ]
+    },
+    {
+      "construct": "closed sorts, references, effects, and invalid-state rules",
+      "checkpoint": "R1",
+      "disposition": "preserved",
+      "obligationIds": [
+        "R1-TYP-1"
+      ]
+    },
+    {
+      "construct": "composition, identity, equivalence, ordering, and conflict algebra",
+      "checkpoint": "R1",
+      "disposition": "preserved",
+      "obligationIds": [
+        "R1-ALG-1"
+      ]
+    },
+    {
+      "construct": "defaults, extensions, versions, deprecation, and migration",
+      "checkpoint": "R1",
+      "disposition": "preserved",
+      "obligationIds": [
+        "R1-EVO-1"
+      ]
+    },
+    {
+      "construct": "logical, version, content, registry, and mirror identity separation",
+      "checkpoint": "R2",
+      "disposition": "preserved",
+      "obligationIds": [
+        "R2-SEM-1"
+      ]
+    },
+    {
+      "construct": "bounded exact resolution, trust, revocation, and dependency-confusion defenses",
+      "checkpoint": "R2",
+      "disposition": "preserved",
+      "obligationIds": [
+        "R2-SEC-1"
+      ]
+    },
+    {
+      "construct": "hermetic deterministic lock and package graph algebra",
+      "checkpoint": "R2",
+      "disposition": "preserved",
+      "obligationIds": [
+        "R2-ALG-1"
+      ]
+    },
+    {
+      "construct": "verified immutable package, signer, artifact-family, and source-pointer provenance",
+      "checkpoint": "R2",
+      "disposition": "preserved",
+      "obligationIds": [
+        "R2-PROV-1"
+      ]
+    },
+    {
+      "construct": "eight independently reportable conformance refinement levels",
+      "checkpoint": "R3",
+      "disposition": "preserved",
+      "obligationIds": [
+        "R3-REF-1"
+      ]
+    },
+    {
+      "construct": "self, test, live, runner, observer, and independent evidence separation",
+      "checkpoint": "R3",
+      "disposition": "preserved",
+      "obligationIds": [
+        "R3-EPI-1"
+      ]
+    },
+    {
+      "construct": "omission, swallowing, oracle, selective execution, and mutation defenses",
+      "checkpoint": "R3",
+      "disposition": "preserved",
+      "obligationIds": [
+        "R3-ADV-1"
+      ]
+    },
+    {
+      "construct": "independent language, suite, provider, result, and mutation version pins",
+      "checkpoint": "R3",
+      "disposition": "preserved",
+      "obligationIds": [
+        "R3-EVO-1"
+      ]
+    },
+    {
+      "construct": "canonical bytes, domain-framed semantic hashes, diagnostics, normalization, and migration agreement",
+      "checkpoint": "R4",
+      "disposition": "preserved",
+      "obligationIds": [
+        "R4-SEM-1"
+      ]
+    },
+    {
+      "construct": "public specification sufficiency independent of private TypeScript behavior",
+      "checkpoint": "R4",
+      "disposition": "preserved",
+      "obligationIds": [
+        "R4-COMP-1"
+      ]
+    },
+    {
+      "construct": "closed discrepancy taxonomy with zero untriaged residuals",
+      "checkpoint": "R4",
+      "disposition": "preserved",
+      "obligationIds": [
+        "R4-FALS-1"
+      ]
+    },
+    {
+      "construct": "constrained and recorded clean-room exposure",
+      "checkpoint": "R4",
+      "disposition": "preserved",
+      "obligationIds": [
+        "R4-IND-1"
+      ]
+    },
+    {
+      "construct": "immutable declared bounded cancellable deterministic compiler pass inputs",
+      "checkpoint": "R5",
+      "disposition": "preserved",
+      "obligationIds": [
+        "R5-COMP-1"
+      ]
+    },
+    {
+      "construct": "clean incremental cached serial and deterministic-parallel artifact equivalence",
+      "checkpoint": "R5",
+      "disposition": "preserved",
+      "obligationIds": [
+        "R5-ALG-1"
+      ]
+    },
+    {
+      "construct": "closed audited built-ins and kernel-bounded isolated plugin authority",
+      "checkpoint": "R5",
+      "disposition": "preserved",
+      "obligationIds": [
+        "R5-SEC-1"
+      ]
+    },
+    {
+      "construct": "versioned closed artifact schema CLI golden and compatibility window",
+      "checkpoint": "R5",
+      "disposition": "preserved",
+      "obligationIds": [
+        "R5-EVO-1"
+      ]
+    },
+    {
+      "construct": "public provider registration without core product cases",
+      "checkpoint": "R6",
+      "disposition": "preserved",
+      "obligationIds": [
+        "R6-EXT-1"
+      ]
+    },
+    {
+      "construct": "artifact-retained lowering obligations losses and migration dispositions",
+      "checkpoint": "R6",
+      "disposition": "preserved",
+      "obligationIds": [
+        "R6-REF-1"
+      ]
+    },
+    {
+      "construct": "bounded executable health lifecycle recovery fault trace and credential contracts",
+      "checkpoint": "R6",
+      "disposition": "preserved",
+      "obligationIds": [
+        "R6-OPS-1"
+      ]
+    },
+    {
+      "construct": "core to SDK to provider dependency direction",
+      "checkpoint": "R6",
+      "disposition": "preserved",
+      "obligationIds": [
+        "R6-DIR-1"
+      ]
+    },
+    {
+      "construct": "finite hard-feasibility CSP Pareto frontier and replayed UNSAT core",
+      "checkpoint": "R7",
+      "disposition": "preserved",
+      "obligationIds": [
+        "R7-CSP-1"
+      ]
+    },
+    {
+      "construct": "dimensioned uncertain freshness-bound objective coordinates",
+      "checkpoint": "R7",
+      "disposition": "preserved",
+      "obligationIds": [
+        "R7-ECO-1"
+      ]
+    },
+    {
+      "construct": "exact constructive adapter and migration obligation plans",
+      "checkpoint": "R7",
+      "disposition": "preserved",
+      "obligationIds": [
+        "R7-REF-1"
+      ]
+    },
+    {
+      "construct": "scoped version-bounded acceptor-qualified evidence assumptions",
+      "checkpoint": "R7",
+      "disposition": "preserved",
+      "obligationIds": [
+        "R7-EPI-1"
+      ]
+    },
+    {
+      "construct": "canonical content-addressed deployment bundle and exact inventory",
+      "checkpoint": "R8",
+      "disposition": "preserved",
+      "obligationIds": [
+        "R8-ALG-1"
+      ]
+    },
+    {
+      "construct": "signed SPDX/SLSA supply-chain closure and recursive secret exclusion",
+      "checkpoint": "R8",
+      "disposition": "preserved",
+      "obligationIds": [
+        "R8-SEC-1"
+      ]
+    },
+    {
+      "construct": "no-recompilation signed environment promotion and rollback contracts",
+      "checkpoint": "R8",
+      "disposition": "preserved",
+      "obligationIds": [
+        "R8-OPS-1"
+      ]
+    },
+    {
+      "construct": "immutable release and live-instance provenance attestations",
+      "checkpoint": "R8",
+      "disposition": "preserved",
+      "obligationIds": [
+        "R8-PROV-1"
+      ]
+    },
+    {
+      "construct": "total versioned v1 construct migration disposition and retained ABI round trip",
+      "checkpoint": "R9",
+      "disposition": "preserved",
+      "obligationIds": [
+        "R9-SEM-1"
+      ]
+    },
+    {
+      "construct": "independently replayed dual compilation with artifact-derived observational equivalence",
+      "checkpoint": "R9",
+      "disposition": "preserved",
+      "obligationIds": [
+        "R9-REF-1"
+      ]
+    },
+    {
+      "construct": "signed durable shadow canary cutover rollback and legacy-removal state machine",
+      "checkpoint": "R9",
+      "disposition": "preserved",
+      "obligationIds": [
+        "R9-EVO-1"
+      ]
+    },
+    {
+      "construct": "canonical repository self-driving execution through the observed v2 controller path",
+      "checkpoint": "R9",
+      "disposition": "preserved",
+      "obligationIds": [
+        "R9-DOG-1"
+      ]
+    },
+    {
+      "construct": "tenant-scoped signed identity graph and authorization-path revocation",
+      "checkpoint": "R10",
+      "disposition": "preserved",
+      "obligationIds": [
+        "R10-SEC-1"
+      ]
+    },
+    {
+      "construct": "monotone grant attenuation and request-bound proof of possession",
+      "checkpoint": "R10",
+      "disposition": "preserved",
+      "obligationIds": [
+        "R10-CAP-1"
+      ]
+    },
+    {
+      "construct": "tenant-local ordered revocation, durable replay receipts, signed restore, and idempotent custody outbox",
+      "checkpoint": "R10",
+      "disposition": "preserved",
+      "obligationIds": [
+        "R10-DIST-1"
+      ]
+    },
+    {
+      "construct": "authenticated process-isolated custody and independently approved nondelegable break glass",
+      "checkpoint": "R10",
+      "disposition": "preserved",
+      "obligationIds": [
+        "R10-OPS-1"
+      ]
+    },
+    {
+      "construct": "CloudEvents and pinned OpenTelemetry trace metric and log observation separated from signed work verification",
+      "checkpoint": "R14",
+      "disposition": "preserved",
+      "obligationIds": [
+        "R14-EPI-1"
+      ]
+    },
+    {
+      "construct": "transport delivery trace parentage and signed control-adapter causality as distinct relations",
+      "checkpoint": "R14",
+      "disposition": "preserved",
+      "obligationIds": [
+        "R14-DIST-1"
+      ]
+    },
+    {
+      "construct": "total workflow artifact lowering with typed loss and independently verified graph closure plus fail-closed policy enforcement",
+      "checkpoint": "R14",
+      "disposition": "preserved",
+      "obligationIds": [
+        "R14-REF-1"
+      ]
+    },
+    {
+      "construct": "signed replay checkpoint and pinned telemetry convention workflow policy and adapter rule identities",
+      "checkpoint": "R14",
+      "disposition": "preserved",
+      "obligationIds": [
+        "R14-EVO-1"
+      ]
+    },
+    {
+      "construct": "A2A 0.3 task message artifact part card endpoint and streaming semantics with exact JSON-RPC lifecycle",
+      "checkpoint": "R13",
+      "disposition": "preserved",
+      "obligationIds": [
+        "R13-ORG-1"
+      ]
+    },
+    {
+      "construct": "tenant organization actor task context endpoint and signed authorization binding",
+      "checkpoint": "R13",
+      "disposition": "preserved",
+      "obligationIds": [
+        "R13-SEC-1"
+      ]
+    },
+    {
+      "construct": "total native-to-portable projection with explicit extension preservation and typed refinement loss",
+      "checkpoint": "R13",
+      "disposition": "preserved",
+      "obligationIds": [
+        "R13-REF-1"
+      ]
+    },
+    {
+      "construct": "subprocess wire interoperability and version-pinned Agent Spec graph validation",
+      "checkpoint": "R13",
+      "disposition": "preserved",
+      "obligationIds": [
+        "R13-ORG-1",
+        "R13-REF-1"
+      ]
+    },
+    {
+      "construct": "content-addressed immutable revisions branches promotions approvals and linearizable compare-and-swap generations",
+      "checkpoint": "R17",
+      "disposition": "preserved",
+      "obligationIds": [
+        "R17-DB-1"
+      ]
+    },
+    {
+      "construct": "tenant-scoped metadata blob reachability authorization export backup restore and irreversible purge",
+      "checkpoint": "R17",
+      "disposition": "preserved",
+      "obligationIds": [
+        "R17-SEC-1"
+      ]
+    },
+    {
+      "construct": "signed causal journal migrations retention point-in-time recovery revocation and rollback-resistant restore",
+      "checkpoint": "R17",
+      "disposition": "preserved",
+      "obligationIds": [
+        "R17-EVO-1"
+      ]
+    },
+    {
+      "construct": "canonical work execution attempt session artifact interaction usage report and terminal-result bindings",
+      "checkpoint": "R11",
+      "disposition": "preserved",
+      "obligationIds": [
+        "R11-ORG-1",
+        "R11-CTX-1"
+      ]
+    },
+    {
+      "construct": "atomic effect receipts interprocess serialization fencing replay reconstruction and dead-owner recovery",
+      "checkpoint": "R11",
+      "disposition": "preserved",
+      "obligationIds": [
+        "R11-DIST-1"
+      ]
+    },
+    {
+      "construct": "byte-attested executable sandbox filesystem argv cwd identity and effect-time network authority",
+      "checkpoint": "R11",
+      "disposition": "preserved",
+      "obligationIds": [
+        "R11-SEC-1"
+      ]
+    },
+    {
+      "construct": "schema-bound artifacts reports usage and success evidence specific to the completed result",
+      "checkpoint": "R11",
+      "disposition": "preserved",
+      "obligationIds": [
+        "R11-EPI-1"
+      ]
+    },
+    {
+      "construct": "protocol-distinct installed Codex JSONL and independent stateful process harness adapters",
+      "checkpoint": "R11",
+      "disposition": "preserved",
+      "obligationIds": [
+        "R11-INT-1"
+      ]
+    },
+    {
+      "construct": "official MCP 2025-06-18 SDK stdio and Streamable HTTP lifecycle interoperability",
+      "checkpoint": "R12",
+      "disposition": "preserved",
+      "obligationIds": [
+        "R12-INT-1"
+      ]
+    },
+    {
+      "construct": "closed capabilities method schemas recursive metadata aggregate bounds and connection-bound endpoint execution",
+      "checkpoint": "R12",
+      "disposition": "preserved",
+      "obligationIds": [
+        "R12-SEC-1"
+      ]
+    },
+    {
+      "construct": "exact native payload preservation and total per-field typed refinement loss",
+      "checkpoint": "R12",
+      "disposition": "preserved",
+      "obligationIds": [
+        "R12-REF-1"
+      ]
+    },
+    {
+      "construct": "durable monotonic dispatcher fencing replay duplicate delay loss partition restart and stale-completion handling",
+      "checkpoint": "R15",
+      "disposition": "preserved",
+      "obligationIds": [
+        "R15-DIST-1"
+      ]
+    },
+    {
+      "construct": "manifest-driven deploy inspect pause upgrade backup restore rollback and restartable teardown",
+      "checkpoint": "R15",
+      "disposition": "preserved",
+      "obligationIds": [
+        "R15-OPS-1"
+      ]
+    },
+    {
+      "construct": "signed Slack thread work decision correlation with replay and equivocation protection",
+      "checkpoint": "R15",
+      "disposition": "preserved",
+      "obligationIds": [
+        "R15-HCI-1"
+      ]
+    },
+    {
+      "construct": "source release local revision executable and post-mutation native observation evidence",
+      "checkpoint": "R15",
+      "disposition": "preserved",
+      "obligationIds": [
+        "R15-EPI-1"
+      ]
+    },
+    {
+      "construct": "independent Paperclip work control interaction and execution authority with no Hermes controller dependency",
+      "checkpoint": "R16",
+      "disposition": "preserved",
+      "obligationIds": [
+        "R16-IND-1"
+      ]
+    },
+    {
+      "construct": "portable work approval heartbeat activity budget and gap observations without native enums in Organization IR",
+      "checkpoint": "R16",
+      "disposition": "preserved",
+      "obligationIds": [
+        "R16-REF-1"
+      ]
+    },
+    {
+      "construct": "pinned deploy checkout heartbeat recovery approvals hierarchy backup restore upgrade rollback fencing and owned teardown",
+      "checkpoint": "R16",
+      "disposition": "preserved",
+      "obligationIds": [
+        "R16-OPS-1"
+      ]
+    },
+    {
+      "construct": "observed cost latency capacity and human-load evidence with missing measurements represented as uncertainty rather than imputation",
+      "checkpoint": "R16",
+      "disposition": "preserved",
+      "obligationIds": [
+        "R16-ECO-1"
+      ]
+    },
+    {
+      "construct": "authenticated causal replay snapshot hot-payload compaction partition merge correction and retraction materialization",
+      "checkpoint": "R18",
+      "disposition": "preserved",
+      "obligationIds": [
+        "R18-ALG-1"
+      ]
+    },
+    {
+      "construct": "separately authorized native lift accept pending reject project and durable compare-and-swap transitions",
+      "checkpoint": "R18",
+      "disposition": "preserved",
+      "obligationIds": [
+        "R18-DB-1"
+      ]
+    },
+    {
+      "construct": "derivation-closed logical purge idempotent physical erasure immutable snapshot invalidation and retained-metadata residuals",
+      "checkpoint": "R18",
+      "disposition": "preserved",
+      "obligationIds": [
+        "R18-PRIV-1"
+      ]
+    },
+    {
+      "construct": "reconstructible event ingest logical issuer integrity adapter policy reducer migration and purge provenance",
+      "checkpoint": "R18",
+      "disposition": "preserved",
+      "obligationIds": [
+        "R18-PROV-1"
+      ]
+    },
+    {
+      "construct": "bounded convergent desired-versus-observed control with hysteresis canaries refusal and escalation",
+      "checkpoint": "R19",
+      "disposition": "preserved",
+      "obligationIds": [
+        "R19-CTRL-1"
+      ]
+    },
+    {
+      "construct": "signed observations durable fence prepare-dispatch-ack idempotent effects and split-brain crash recovery",
+      "checkpoint": "R19",
+      "disposition": "preserved",
+      "obligationIds": [
+        "R19-DIST-1"
+      ]
+    },
+    {
+      "construct": "distinct semantic configuration version health capacity credential policy and observation drift",
+      "checkpoint": "R19",
+      "disposition": "preserved",
+      "obligationIds": [
+        "R19-SEM-1"
+      ]
+    },
+    {
+      "construct": "observable repair canary maintenance pause refusal rollback failure and convergence traces",
+      "checkpoint": "R19",
+      "disposition": "preserved",
+      "obligationIds": [
+        "R19-OPS-1"
+      ]
+    },
+    {
+      "construct": "correlatable status explanation interruption approval revocation and durable recovery seams",
+      "checkpoint": "R20",
+      "disposition": "preserved",
+      "obligationIds": [
+        "R20-HCI-1"
+      ]
+    },
+    {
+      "construct": "tenant principal scope artifact expiry thread and idempotency binding for privileged commands",
+      "checkpoint": "R20",
+      "disposition": "preserved",
+      "obligationIds": [
+        "R20-SEC-1"
+      ]
+    },
+    {
+      "construct": "evidence assumptions conflicts and unknown-preserving organizational summaries",
+      "checkpoint": "R20",
+      "disposition": "preserved",
+      "obligationIds": [
+        "R20-EPI-1"
+      ]
+    },
+    {
+      "construct": "typed confirmation barrier against ambiguity forgery replay confused deputy and prompt-like input",
+      "checkpoint": "R20",
+      "disposition": "preserved",
+      "obligationIds": [
+        "R20-ADV-1"
+      ]
+    },
+    {
+      "construct": "dimensioned eight-service SLI SLO window error-budget cost and degradation accounting",
+      "checkpoint": "R21",
+      "disposition": "preserved",
+      "obligationIds": [
+        "R21-SRE-1"
+      ]
+    },
+    {
+      "construct": "bounded admission backpressure shedding reservation and dominant-resource tenant fairness",
+      "checkpoint": "R21",
+      "disposition": "preserved",
+      "obligationIds": [
+        "R21-QUE-1"
+      ]
+    },
+    {
+      "construct": "causal dependency zone region network storage and control-plane fault cuts with measured RPO RTO",
+      "checkpoint": "R21",
+      "disposition": "preserved",
+      "obligationIds": [
+        "R21-DIST-1"
+      ]
+    },
+    {
+      "construct": "authenticated backup restore maintenance schema rollout upgrade downgrade rotation drain and decommission",
+      "checkpoint": "R21",
+      "disposition": "preserved",
+      "obligationIds": [
+        "R21-OPS-1"
+      ]
+    },
+    {
+      "construct": "tenant authority revocation and acknowledged-effect preservation across degraded and recovered states",
+      "checkpoint": "R21",
+      "disposition": "preserved",
+      "obligationIds": [
+        "R21-SEC-1"
+      ]
+    },
+    {
+      "construct": "predeclared workload outcome unit population scorer stopping retry and missing-data semantics",
+      "checkpoint": "R22",
+      "disposition": "preserved",
+      "obligationIds": [
+        "R22-MEA-1"
+      ]
+    },
+    {
+      "construct": "seeded randomization replication sample variance uncertainty and multiplicity accounting",
+      "checkpoint": "R22",
+      "disposition": "preserved",
+      "obligationIds": [
+        "R22-STAT-1"
+      ]
+    },
+    {
+      "construct": "hidden custody independent grading contamination cherry-pick and self-judging defenses",
+      "checkpoint": "R22",
+      "disposition": "preserved",
+      "obligationIds": [
+        "R22-ADV-1"
+      ]
+    },
+    {
+      "construct": "bounded secrets retention deletion release and public-result projection",
+      "checkpoint": "R22",
+      "disposition": "preserved",
+      "obligationIds": [
+        "R22-PRIV-1"
+      ]
+    },
+    {
+      "construct": "versioned simulator contracts explicit calibration absence and human-result separation",
+      "checkpoint": "R22",
+      "disposition": "preserved",
+      "obligationIds": [
+        "R22-HUM-1"
+      ]
+    },
+    {
+      "construct": "unit horizon attribution censoring uncertainty and provenance complete metric semantics",
+      "checkpoint": "R23",
+      "disposition": "preserved",
+      "obligationIds": [
+        "R23-MEA-1"
+      ]
+    },
+    {
+      "construct": "conserved work attempt charge allocation and overlapping-human accounting",
+      "checkpoint": "R23",
+      "disposition": "preserved",
+      "obligationIds": [
+        "R23-ACC-1"
+      ]
+    },
+    {
+      "construct": "separate money token compute time and human-burden quantities",
+      "checkpoint": "R23",
+      "disposition": "preserved",
+      "obligationIds": [
+        "R23-ECO-1"
+      ]
+    },
+    {
+      "construct": "off-ledger external and human work included in autonomy denominator",
+      "checkpoint": "R23",
+      "disposition": "preserved",
+      "obligationIds": [
+        "R23-ADV-1"
+      ]
+    },
+    {
+      "construct": "unchanged locked randomized binding and complete native outcomes",
+      "checkpoint": "R24",
+      "disposition": "preserved",
+      "obligationIds": [
+        "R24-EXP-1"
+      ]
+    },
+    {
+      "construct": "portable outcome equality across actual native substrate processes",
+      "checkpoint": "R24",
+      "disposition": "preserved",
+      "obligationIds": [
+        "R24-REF-1"
+      ]
+    },
+    {
+      "construct": "paired effect and uncertainty protocol with inconclusive outcomes representable",
+      "checkpoint": "R24",
+      "disposition": "preserved",
+      "obligationIds": [
+        "R24-STAT-1"
+      ]
+    },
+    {
+      "construct": "terminal operational and semantic differences classified without exclusions",
+      "checkpoint": "R24",
+      "disposition": "preserved",
+      "obligationIds": [
+        "R24-FALS-1"
+      ]
+    },
+    {
+      "construct": "model tool repository harness prompt context session isolation and credential locks",
+      "checkpoint": "R24",
+      "disposition": "preserved",
+      "obligationIds": [
+        "R24-LOCK-1"
+      ]
+    },
+    {
+      "construct": "explicit executable states parameters equations observables and abstraction scope",
+      "checkpoint": "R25",
+      "disposition": "preserved",
+      "obligationIds": [
+        "R25-SEM-1"
+      ]
+    },
+    {
+      "construct": "held-out predictive intervals coverage error and falsification",
+      "checkpoint": "R25",
+      "disposition": "preserved",
+      "obligationIds": [
+        "R25-STAT-1"
+      ]
+    },
+    {
+      "construct": "arrival service routing priority retry blocking and capacity queue model",
+      "checkpoint": "R25",
+      "disposition": "preserved",
+      "obligationIds": [
+        "R25-QUE-1"
+      ]
+    },
+    {
+      "construct": "unknown parameters and observational equivalence retained",
+      "checkpoint": "R25",
+      "disposition": "preserved",
+      "obligationIds": [
+        "R25-IDENT-1"
+      ]
+    },
+    {
+      "construct": "semantic authority budget governance and rollout constraints before scoring",
+      "checkpoint": "R26",
+      "disposition": "preserved",
+      "obligationIds": [
+        "R26-CSP-1"
+      ]
+    },
+    {
+      "construct": "explicit robust objectives Pareto tradeoffs baseline uncertainty and dominance",
+      "checkpoint": "R26",
+      "disposition": "preserved",
+      "obligationIds": [
+        "R26-DEC-1"
+      ]
+    },
+    {
+      "construct": "prediction separated from identifiable intervention effects",
+      "checkpoint": "R26",
+      "disposition": "preserved",
+      "obligationIds": [
+        "R26-CAU-1"
+      ]
+    },
+    {
+      "construct": "Goodhart hidden-labor complexity and distribution-shift defenses",
+      "checkpoint": "R26",
+      "disposition": "preserved",
+      "obligationIds": [
+        "R26-ADV-1"
+      ]
+    }
+  ],
+  "residualLedger": [
+    {
+      "id": "r16-paperclip-archive-boundary",
+      "checkpoint": "R16",
+      "category": "operational",
+      "finding": "Pinned Paperclip 0.3.1 cannot physically delete the owned budgeted company through its native API; isolated deployment teardown is the erasure boundary.",
+      "owner": "R16",
+      "disposition": "accepted",
+      "rationale": "The stronger assumption is explicit in the manifest, live post-state is archived, and the bundle owns and destroys the isolated deployment resources."
+    },
+    {
+      "id": "r16-platform-bound-physical-backup",
+      "checkpoint": "R16",
+      "category": "portability",
+      "finding": "The R16 physical Paperclip backup is bound to its declared Linux platform and is not claimed to be a cross-platform archive format.",
+      "owner": "R16",
+      "disposition": "accepted",
+      "rationale": "R16 proves quiescent backup and restore on the pinned deployment platform; portable archive conversion is a separate capability and no cross-platform claim is made."
+    },
+    {
+      "id": "r16-matched-economics-unknown",
+      "checkpoint": "R16",
+      "category": "measurement",
+      "finding": "Matched cost, latency, capacity, and human-load quantities were not measured under one calibrated Hermes/Paperclip workload.",
+      "owner": "R16",
+      "disposition": "accepted",
+      "rationale": "All four values are recorded as null/unknown in R16-MATCHED-ECONOMICS.json and the comparison is forced to undetermined with no ranking; missing evidence is never imputed as zero."
+    },
+    {
+      "id": "r19-paperclip-archive-teardown",
+      "checkpoint": "R19",
+      "category": "operational",
+      "finding": "Pinned Paperclip 0.3.1 native DELETE fails for the owned live-gate company; teardown verifies durable archive instead of erasure.",
+      "owner": "R19",
+      "disposition": "accepted",
+      "rationale": "The weaker guarantee is scoped to a uniquely owned disposable company, post-state verified, sentinel checked, and signed in R19-LIVE-GATE.json; no deletion claim is made."
+    }
+  ],
+  "checkpointStateLedger": [
+    {
+      "id": "R0",
+      "dependsOn": [],
+      "gate": "G1",
+      "status": "complete"
+    },
+    {
+      "id": "R1",
+      "dependsOn": [
+        "R0"
+      ],
+      "gate": "G1",
+      "status": "complete"
+    },
+    {
+      "id": "R2",
+      "dependsOn": [
+        "R1"
+      ],
+      "gate": "G1",
+      "status": "complete"
+    },
+    {
+      "id": "R3",
+      "dependsOn": [
+        "R1",
+        "R2"
+      ],
+      "gate": "G1",
+      "status": "complete"
+    },
+    {
+      "id": "R4",
+      "dependsOn": [
+        "R1",
+        "R2",
+        "R3"
+      ],
+      "gate": "G1",
+      "status": "complete"
+    },
+    {
+      "id": "R5",
+      "dependsOn": [
+        "R1",
+        "R2"
+      ],
+      "gate": "G2",
+      "status": "complete"
+    },
+    {
+      "id": "R6",
+      "dependsOn": [
+        "R3",
+        "R5"
+      ],
+      "gate": "G2",
+      "status": "complete"
+    },
+    {
+      "id": "R7",
+      "dependsOn": [
+        "R5",
+        "R6"
+      ],
+      "gate": "G2",
+      "status": "complete"
+    },
+    {
+      "id": "R8",
+      "dependsOn": [
+        "R5",
+        "R6",
+        "R7"
+      ],
+      "gate": "G2",
+      "status": "complete"
+    },
+    {
+      "id": "R9",
+      "dependsOn": [
+        "R1",
+        "R5",
+        "R8"
+      ],
+      "gate": "G3",
+      "status": "complete"
+    },
+    {
+      "id": "R10",
+      "dependsOn": [
+        "R6",
+        "R8"
+      ],
+      "gate": "G3",
+      "status": "complete"
+    },
+    {
+      "id": "R11",
+      "dependsOn": [
+        "R6",
+        "R8",
+        "R10"
+      ],
+      "gate": "G3",
+      "status": "complete"
+    },
+    {
+      "id": "R12",
+      "dependsOn": [
+        "R6",
+        "R8",
+        "R10"
+      ],
+      "gate": "G3",
+      "status": "complete"
+    },
+    {
+      "id": "R13",
+      "dependsOn": [
+        "R6",
+        "R8",
+        "R10"
+      ],
+      "gate": "G3",
+      "status": "complete"
+    },
+    {
+      "id": "R14",
+      "dependsOn": [
+        "R6",
+        "R8",
+        "R10"
+      ],
+      "gate": "G3",
+      "status": "complete"
+    },
+    {
+      "id": "R15",
+      "dependsOn": [
+        "R8",
+        "R10",
+        "R11",
+        "R14"
+      ],
+      "gate": "G4",
+      "status": "complete"
+    },
+    {
+      "id": "R16",
+      "dependsOn": [
+        "R8",
+        "R10",
+        "R11",
+        "R14"
+      ],
+      "gate": "G4",
+      "status": "complete"
+    },
+    {
+      "id": "R17",
+      "dependsOn": [
+        "R2",
+        "R5",
+        "R8",
+        "R10"
+      ],
+      "gate": "G5",
+      "status": "complete"
+    },
+    {
+      "id": "R18",
+      "dependsOn": [
+        "R14",
+        "R17"
+      ],
+      "gate": "G5",
+      "status": "complete"
+    },
+    {
+      "id": "R19",
+      "dependsOn": [
+        "R15",
+        "R16",
+        "R17",
+        "R18"
+      ],
+      "gate": "G5",
+      "status": "complete"
+    },
+    {
+      "id": "R20",
+      "dependsOn": [
+        "R10",
+        "R17",
+        "R18",
+        "R19"
+      ],
+      "gate": "G5",
+      "status": "complete"
+    },
+    {
+      "id": "R21",
+      "dependsOn": [
+        "R15",
+        "R16",
+        "R17",
+        "R18",
+        "R19",
+        "R20"
+      ],
+      "gate": "G5",
+      "status": "complete"
+    },
+    {
+      "id": "R22",
+      "dependsOn": [
+        "R3",
+        "R4",
+        "R8",
+        "R10",
+        "R11",
+        "R14",
+        "R16",
+        "R20",
+        "R21"
+      ],
+      "gate": "G6",
+      "status": "complete"
+    },
+    {
+      "id": "R23",
+      "dependsOn": [
+        "R18",
+        "R20",
+        "R22"
+      ],
+      "gate": "G6",
+      "status": "complete"
+    },
+    {
+      "id": "R24",
+      "dependsOn": [
+        "R15",
+        "R16",
+        "R21",
+        "R22",
+        "R23"
+      ],
+      "gate": "G6",
+      "status": "complete"
+    },
+    {
+      "id": "R25",
+      "dependsOn": [
+        "R19",
+        "R23",
+        "R24"
+      ],
+      "gate": "G7",
+      "status": "complete"
+    },
+    {
+      "id": "R26",
+      "dependsOn": [
+        "R7",
+        "R25"
+      ],
+      "gate": "G7",
+      "status": "complete"
+    },
+    {
+      "id": "R27",
+      "dependsOn": [
+        "R19",
+        "R21",
+        "R22",
+        "R23",
+        "R24",
+        "R25",
+        "R26"
+      ],
+      "gate": "G7",
+      "status": "ready"
+    },
+    {
+      "id": "R28",
+      "dependsOn": [
+        "R0",
+        "R1",
+        "R2",
+        "R3",
+        "R4",
+        "R5",
+        "R6",
+        "R7",
+        "R8",
+        "R9",
+        "R10",
+        "R11",
+        "R12",
+        "R13",
+        "R14",
+        "R15",
+        "R16",
+        "R17",
+        "R18",
+        "R19",
+        "R20",
+        "R21",
+        "R22",
+        "R23",
+        "R24",
+        "R25",
+        "R26",
+        "R27"
+      ],
+      "gate": "G8",
+      "status": "blocked"
+    }
+  ],
+  "evidenceLedger": [
+    {
+      "id": "ev-r0-baseline",
+      "kind": "artifact",
+      "uri": "docs/runtime-ledgers/baseline-manifest.json",
+      "producer": "scripts/initialize-runtime-ledgers.ts"
+    },
+    {
+      "id": "ev-r0-threats",
+      "kind": "artifact",
+      "uri": "docs/evidence/R0-BASELINE-THREAT-MODEL.md",
+      "producer": "runtime phase R0"
+    },
+    {
+      "id": "ev-r0-reviews",
+      "kind": "review",
+      "uri": "docs/evidence/R0-SKEPTICAL-REVIEWS.md",
+      "producer": "two independent read-only reviewers"
+    },
+    {
+      "id": "ev-r0-ledger-tests",
+      "kind": "test",
+      "uri": "packages/core/src/organization-runtime-ledger.test.ts",
+      "producer": "bun test"
+    },
+    {
+      "id": "ev-r0-full-gate",
+      "kind": "test",
+      "uri": "docs/evidence/R0-CLOSURE.md",
+      "producer": "bun run check"
+    },
+    {
+      "id": "ev-r1-spec",
+      "kind": "artifact",
+      "uri": "docs/ORGANIZATION-IR-SPEC.md",
+      "producer": "open-autonomy R1"
+    },
+    {
+      "id": "ev-r1-field-grammar",
+      "kind": "artifact",
+      "uri": "docs/ORGANIZATION-IR-FIELD-SEMANTICS.md",
+      "producer": "generated organization field semantics"
+    },
+    {
+      "id": "ev-r1-machine-grammar",
+      "kind": "artifact",
+      "uri": "packages/core/src/generated/organization-ir-v2.schema.json",
+      "producer": "generated organization schema"
+    },
+    {
+      "id": "ev-r1-drift-tests",
+      "kind": "test",
+      "uri": "packages/core/src/organization-spec.test.ts",
+      "producer": "Bun test runner"
+    },
+    {
+      "id": "ev-r1-semantic-tests",
+      "kind": "test",
+      "uri": "packages/core/src/organization-normalize.test.ts",
+      "producer": "Bun test runner"
+    },
+    {
+      "id": "ev-r1-external-review",
+      "kind": "review",
+      "uri": "docs/evidence/R1-EXTERNAL-IMPLEMENTER-REVIEW.md",
+      "producer": "independent clean-room review agent"
+    },
+    {
+      "id": "ev-r2-protocol",
+      "kind": "artifact",
+      "uri": "docs/ORGANIZATION-PACKAGE-SPEC.md",
+      "producer": "open-autonomy R2"
+    },
+    {
+      "id": "ev-r2-schema-corpus",
+      "kind": "artifact",
+      "uri": "packages/core/src/generated/artifact-schema-index.json",
+      "producer": "generated artifact schema corpus"
+    },
+    {
+      "id": "ev-r2-package-tests",
+      "kind": "test",
+      "uri": "packages/core/src/organization-package.test.ts",
+      "producer": "Bun test runner"
+    },
+    {
+      "id": "ev-r2-external-review",
+      "kind": "review",
+      "uri": "docs/evidence/R2-SKEPTICAL-REVIEW.md",
+      "producer": "independent adversarial review agent"
+    },
+    {
+      "id": "ev-r2-full-gate",
+      "kind": "test",
+      "uri": "packages/*/src/*.test.ts",
+      "producer": "Bun core gate"
+    },
+    {
+      "id": "ev-r3-spec",
+      "kind": "artifact",
+      "uri": "docs/ORGANIZATION-CONFORMANCE-SPEC.md",
+      "producer": "open-autonomy R3"
+    },
+    {
+      "id": "ev-r3-tck",
+      "kind": "artifact",
+      "uri": "docs/conformance/tck-v1.json",
+      "producer": "versioned TCK manifest"
+    },
+    {
+      "id": "ev-r3-runner",
+      "kind": "artifact",
+      "uri": "bin/organization-conformance-tck.ts",
+      "producer": "reference black-box runner"
+    },
+    {
+      "id": "ev-r3-mutations",
+      "kind": "test",
+      "uri": "docs/conformance/mutations-v1.json",
+      "producer": "required defective-provider inventory"
+    },
+    {
+      "id": "ev-r3-matrix",
+      "kind": "artifact",
+      "uri": "docs/conformance/implementation-matrix.json",
+      "producer": "validated implementation matrix"
+    },
+    {
+      "id": "ev-r3-tests",
+      "kind": "test",
+      "uri": "packages/core/src/organization-conformance.test.ts",
+      "producer": "Bun test runner"
+    },
+    {
+      "id": "ev-r3-review",
+      "kind": "review",
+      "uri": "docs/evidence/R3-CONFORMANCE-REVIEW.md",
+      "producer": "independent software quality subagent"
+    },
+    {
+      "id": "ev-r4-cleanroom",
+      "kind": "artifact",
+      "uri": "independent/python/r4.py",
+      "producer": "clean-room Python author"
+    },
+    {
+      "id": "ev-r4-corpus",
+      "kind": "artifact",
+      "uri": "docs/compatibility/corpus-lock.json",
+      "producer": "digest-locked interoperability corpus"
+    },
+    {
+      "id": "ev-r4-report",
+      "kind": "test",
+      "uri": "docs/compatibility/differential-report.json",
+      "producer": "separate TypeScript/Python toolchains"
+    },
+    {
+      "id": "ev-r4-exposure",
+      "kind": "artifact",
+      "uri": "docs/compatibility/EXPOSURE-RECORD.md",
+      "producer": "clean-room Python author"
+    },
+    {
+      "id": "ev-r4-policy",
+      "kind": "artifact",
+      "uri": "docs/ORGANIZATION-COMPATIBILITY-POLICY.md",
+      "producer": "open-autonomy R4"
+    },
+    {
+      "id": "ev-r4-feedback",
+      "kind": "review",
+      "uri": "docs/compatibility/clean-room-author-feedback.md",
+      "producer": "clean-room Python author"
+    },
+    {
+      "id": "ev-r4-tests",
+      "kind": "test",
+      "uri": "packages/core/src/organization-compatibility.test.ts",
+      "producer": "Bun and Python test runners"
+    },
+    {
+      "id": "ev-r4-review",
+      "kind": "review",
+      "uri": "docs/evidence/R4-COMPATIBILITY-REVIEW.md",
+      "producer": "independent software quality subagent"
+    },
+    {
+      "id": "ev-r5-api",
+      "kind": "artifact",
+      "uri": "packages/core/src/organization-compiler-api.ts",
+      "producer": "open-autonomy R5"
+    },
+    {
+      "id": "ev-r5-builtins",
+      "kind": "artifact",
+      "uri": "packages/core/src/organization-compiler-builtins.ts",
+      "producer": "audited domain adapters"
+    },
+    {
+      "id": "ev-r5-schema",
+      "kind": "artifact",
+      "uri": "packages/core/src/generated/compiler-artifact-v1.schema.json",
+      "producer": "generated closed artifact protocol"
+    },
+    {
+      "id": "ev-r5-cli",
+      "kind": "artifact",
+      "uri": "bin/organization-compiler-api.ts",
+      "producer": "bounded JSON CLI"
+    },
+    {
+      "id": "ev-r5-golden",
+      "kind": "test",
+      "uri": "docs/compiler/golden-artifact-v1.json",
+      "producer": "API 1.0 golden protocol"
+    },
+    {
+      "id": "ev-r5-hostile",
+      "kind": "test",
+      "uri": "docs/compiler/fixtures/hostile-plugin.c",
+      "producer": "hostile isolated plugin fixture"
+    },
+    {
+      "id": "ev-r5-tests",
+      "kind": "test",
+      "uri": "packages/core/src/organization-compiler-api.test.ts",
+      "producer": "Bun, GCC, Bubblewrap, prlimit"
+    },
+    {
+      "id": "ev-r5-policy",
+      "kind": "artifact",
+      "uri": "docs/ORGANIZATION-COMPILER-API.md",
+      "producer": "open-autonomy R5"
+    },
+    {
+      "id": "ev-r5-review",
+      "kind": "review",
+      "uri": "docs/evidence/R5-COMPILER-API-REVIEW.md",
+      "producer": "independent software quality subagent"
+    },
+    {
+      "id": "ev-r6-sdk",
+      "kind": "artifact",
+      "uri": "packages/sdk/src/index.ts",
+      "producer": "open-autonomy R6"
+    },
+    {
+      "id": "ev-r6-provider",
+      "kind": "artifact",
+      "uri": "packages/substrate-toy/src/index.ts",
+      "producer": "SDK-only provider author"
+    },
+    {
+      "id": "ev-r6-tests",
+      "kind": "test",
+      "uri": "packages/sdk/src/index.test.ts",
+      "producer": "Bun test runner"
+    },
+    {
+      "id": "ev-r6-tck",
+      "kind": "test",
+      "uri": "packages/substrate-toy/src/index.test.ts",
+      "producer": "published conformance TCK"
+    },
+    {
+      "id": "ev-r6-docs",
+      "kind": "artifact",
+      "uri": "packages/sdk/README.md",
+      "producer": "public SDK documentation"
+    },
+    {
+      "id": "ev-r6-cleanroom",
+      "kind": "review",
+      "uri": "docs/sdk/clean-room-author-feedback.md",
+      "producer": "independent clean-room provider author"
+    },
+    {
+      "id": "ev-r6-review",
+      "kind": "review",
+      "uri": "docs/evidence/R6-SDK-REVIEW.md",
+      "producer": "independent adversarial reviewer"
+    },
+    {
+      "id": "ev-r6-closure",
+      "kind": "test",
+      "uri": "docs/evidence/R6-CLOSURE.md",
+      "producer": "R6 closure gate"
+    },
+    {
+      "id": "ev-r7-solver",
+      "kind": "artifact",
+      "uri": "packages/core/src/organization-deployment-solver.ts",
+      "producer": "open-autonomy R7"
+    },
+    {
+      "id": "ev-r7-verifier",
+      "kind": "artifact",
+      "uri": "packages/core/src/organization-deployment-certificate.ts",
+      "producer": "independent certificate verifier"
+    },
+    {
+      "id": "ev-r7-tests",
+      "kind": "test",
+      "uri": "packages/core/src/organization-deployment-solver.test.ts",
+      "producer": "Bun test runner"
+    },
+    {
+      "id": "ev-r7-certificate-tests",
+      "kind": "test",
+      "uri": "packages/core/src/organization-deployment-certificate.test.ts",
+      "producer": "Bun test runner"
+    },
+    {
+      "id": "ev-r7-review",
+      "kind": "review",
+      "uri": "docs/evidence/R7-DEPLOYMENT-SOLVER-REVIEW.md",
+      "producer": "independent adversarial reviewer"
+    },
+    {
+      "id": "ev-r7-closure",
+      "kind": "test",
+      "uri": "docs/evidence/R7-CLOSURE.md",
+      "producer": "R7 closure gate"
+    },
+    {
+      "id": "ev-r8-bundle",
+      "kind": "artifact",
+      "uri": "packages/core/src/organization-deployment-bundle.ts",
+      "producer": "open-autonomy R8"
+    },
+    {
+      "id": "ev-r8-tests",
+      "kind": "test",
+      "uri": "packages/core/src/organization-deployment-bundle.test.ts",
+      "producer": "Bun test runner"
+    },
+    {
+      "id": "ev-r8-review",
+      "kind": "review",
+      "uri": "docs/evidence/R8-SUPPLY-CHAIN-REVIEW.md",
+      "producer": "independent adversarial reviewer"
+    },
+    {
+      "id": "ev-r8-closure",
+      "kind": "test",
+      "uri": "docs/evidence/R8-CLOSURE.md",
+      "producer": "R8 closure gate"
+    },
+    {
+      "id": "ev-r9-runtime",
+      "kind": "artifact",
+      "uri": "packages/core/src/organization-migration-cutover.ts",
+      "producer": "open-autonomy R9"
+    },
+    {
+      "id": "ev-r9-tests",
+      "kind": "test",
+      "uri": "packages/core/src/organization-migration-cutover.test.ts",
+      "producer": "Bun test runner"
+    },
+    {
+      "id": "ev-r9-dogfood",
+      "kind": "artifact",
+      "uri": "docs/evidence/r9-repository-dogfood.json",
+      "producer": "repository R9 evidence generator"
+    },
+    {
+      "id": "ev-r9-review",
+      "kind": "review",
+      "uri": "docs/evidence/R9-MIGRATION-REVIEW.md",
+      "producer": "independent adversarial reviewer"
+    },
+    {
+      "id": "ev-r9-closure",
+      "kind": "test",
+      "uri": "docs/evidence/R9-CLOSURE.md",
+      "producer": "R9 closure gate"
+    },
+    {
+      "id": "ev-r10-authority",
+      "kind": "artifact",
+      "uri": "packages/core/src/organization-identity-authority.ts",
+      "producer": "open-autonomy R10"
+    },
+    {
+      "id": "ev-r10-tests",
+      "kind": "test",
+      "uri": "packages/core/src/organization-identity-authority.test.ts",
+      "producer": "Bun test runner"
+    },
+    {
+      "id": "ev-r10-process-custody",
+      "kind": "live-run",
+      "uri": "packages/core/src/organization-identity-authority.integration.test.ts",
+      "producer": "process-isolated R10 custody drill"
+    },
+    {
+      "id": "ev-r10-review",
+      "kind": "review",
+      "uri": "docs/evidence/R10-AUTHORITY-REVIEW.md",
+      "producer": "independent skeptical reviewer"
+    },
+    {
+      "id": "ev-r10-closure",
+      "kind": "test",
+      "uri": "docs/evidence/R10-CLOSURE.md",
+      "producer": "R10 closure gate"
+    },
+    {
+      "id": "ev-r14-runtime",
+      "kind": "artifact",
+      "uri": "packages/core/src/organization-observability-policy.ts",
+      "producer": "open-autonomy R14"
+    },
+    {
+      "id": "ev-r14-tests",
+      "kind": "test",
+      "uri": "packages/core/src/organization-observability-policy.test.ts",
+      "producer": "Bun test runner"
+    },
+    {
+      "id": "ev-r14-review",
+      "kind": "review",
+      "uri": "docs/evidence/R14-OBSERVABILITY-REVIEW.md",
+      "producer": "independent skeptical reviewer"
+    },
+    {
+      "id": "ev-r14-closure",
+      "kind": "test",
+      "uri": "docs/evidence/R14-CLOSURE.md",
+      "producer": "R14 closure gate"
+    },
+    {
+      "id": "ev-r13-runtime",
+      "kind": "artifact",
+      "uri": "packages/core/src/organization-a2a-agent-spec.ts",
+      "producer": "open-autonomy R13"
+    },
+    {
+      "id": "ev-r13-tests",
+      "kind": "test",
+      "uri": "packages/core/src/organization-a2a-agent-spec.test.ts",
+      "producer": "Bun test runner"
+    },
+    {
+      "id": "ev-r13-review",
+      "kind": "review",
+      "uri": "docs/evidence/R13-A2A-AGENT-SPEC-REVIEW.md",
+      "producer": "independent skeptical reviewer"
+    },
+    {
+      "id": "ev-r13-closure",
+      "kind": "test",
+      "uri": "docs/evidence/R13-CLOSURE.md",
+      "producer": "R13 closure gate"
+    },
+    {
+      "id": "ev-r17-runtime",
+      "kind": "artifact",
+      "uri": "packages/core/src/organization-desired-state-registry.ts",
+      "producer": "open-autonomy R17"
+    },
+    {
+      "id": "ev-r17-tests",
+      "kind": "test",
+      "uri": "packages/core/src/organization-desired-state-registry.test.ts",
+      "producer": "Bun test runner"
+    },
+    {
+      "id": "ev-r17-review",
+      "kind": "review",
+      "uri": "docs/evidence/R17-DESIRED-STATE-REGISTRY-REVIEW.md",
+      "producer": "independent skeptical reviewer"
+    },
+    {
+      "id": "ev-r17-closure",
+      "kind": "test",
+      "uri": "docs/evidence/R17-CLOSURE.md",
+      "producer": "R17 closure gate"
+    },
+    {
+      "id": "ev-r11-runtime",
+      "kind": "artifact",
+      "uri": "packages/core/src/organization-harness-worker.ts",
+      "producer": "open-autonomy R11"
+    },
+    {
+      "id": "ev-r11-tests",
+      "kind": "test",
+      "uri": "packages/core/src/organization-harness-worker.test.ts",
+      "producer": "Bun test runner"
+    },
+    {
+      "id": "ev-r11-review",
+      "kind": "review",
+      "uri": "docs/evidence/R11-HARNESS-WORKER-REVIEW.md",
+      "producer": "independent skeptical reviewer"
+    },
+    {
+      "id": "ev-r11-closure",
+      "kind": "test",
+      "uri": "docs/evidence/R11-CLOSURE.md",
+      "producer": "R11 closure gate"
+    },
+    {
+      "id": "ev-r12-runtime",
+      "kind": "artifact",
+      "uri": "packages/core/src/organization-mcp-native.ts",
+      "producer": "open-autonomy R12"
+    },
+    {
+      "id": "ev-r12-schema",
+      "kind": "artifact",
+      "uri": "packages/core/src/fixtures/mcp-2025-06-18-schema.json.base64",
+      "producer": "official MCP schema fixture"
+    },
+    {
+      "id": "ev-r12-tests",
+      "kind": "test",
+      "uri": "packages/core/src/organization-mcp-native.test.ts",
+      "producer": "Bun test runner and official MCP SDK"
+    },
+    {
+      "id": "ev-r12-review",
+      "kind": "review",
+      "uri": "docs/evidence/R12-MCP-NATIVE-REVIEW.md",
+      "producer": "independent skeptical reviewer"
+    },
+    {
+      "id": "ev-r12-closure",
+      "kind": "test",
+      "uri": "docs/evidence/R12-CLOSURE.md",
+      "producer": "R12 closure gate"
+    },
+    {
+      "id": "ev-r15-runtime",
+      "kind": "artifact",
+      "uri": "packages/core/src/organization-hermes-live-provider.ts",
+      "producer": "open-autonomy R15"
+    },
+    {
+      "id": "ev-r15-tests",
+      "kind": "test",
+      "uri": "packages/core/src/organization-hermes-live-provider.test.ts",
+      "producer": "Bun test runner and Hermes 0.18.2"
+    },
+    {
+      "id": "ev-r15-review",
+      "kind": "review",
+      "uri": "docs/evidence/R15-HERMES-LIVE-REVIEW.md",
+      "producer": "independent skeptical reviewer"
+    },
+    {
+      "id": "ev-r15-closure",
+      "kind": "test",
+      "uri": "docs/evidence/R15-CLOSURE.md",
+      "producer": "R15 closure gate"
+    },
+    {
+      "id": "ev-r16-runtime",
+      "kind": "artifact",
+      "uri": "packages/core/src/organization-paperclip-runtime-adapters.ts",
+      "producer": "open-autonomy R16"
+    },
+    {
+      "id": "ev-r16-tests",
+      "kind": "test",
+      "uri": "packages/core/src/organization-paperclip-deployment.test.ts",
+      "producer": "Bun test runner and pinned Paperclip live process"
+    },
+    {
+      "id": "ev-r16-review",
+      "kind": "review",
+      "uri": "docs/evidence/R16-PAPERCLIP-LIVE-REVIEW.md",
+      "producer": "independent skeptical reviewer"
+    },
+    {
+      "id": "ev-r16-closure",
+      "kind": "test",
+      "uri": "docs/evidence/R16-CLOSURE.md",
+      "producer": "R16 closure gate"
+    },
+    {
+      "id": "ev-r18-runtime",
+      "kind": "artifact",
+      "uri": "packages/core/src/organization-runtime-event-store.ts",
+      "producer": "open-autonomy R18"
+    },
+    {
+      "id": "ev-r18-tests",
+      "kind": "test",
+      "uri": "packages/core/src/organization-runtime-event-store.test.ts",
+      "producer": "Bun test runner"
+    },
+    {
+      "id": "ev-r18-review",
+      "kind": "review",
+      "uri": "docs/evidence/R18-PORTABLE-EVENT-STORE-REVIEW.md",
+      "producer": "independent skeptical reviewer"
+    },
+    {
+      "id": "ev-r18-closure",
+      "kind": "test",
+      "uri": "docs/evidence/R18-CLOSURE.md",
+      "producer": "R18 closure gate"
+    },
+    {
+      "id": "ev-r19-runtime",
+      "kind": "artifact",
+      "uri": "packages/core/src/organization-fleet-reconciler.ts",
+      "producer": "open-autonomy R19"
+    },
+    {
+      "id": "ev-r19-adapters",
+      "kind": "artifact",
+      "uri": "packages/core/src/organization-fleet-runtime-adapters.ts",
+      "producer": "open-autonomy R19"
+    },
+    {
+      "id": "ev-r19-tests",
+      "kind": "test",
+      "uri": "packages/core/src/organization-fleet-reconciler.test.ts",
+      "producer": "Bun test runner"
+    },
+    {
+      "id": "ev-r19-live",
+      "kind": "live-run",
+      "uri": "docs/evidence/R19-LIVE-GATE.json",
+      "producer": "isolated Hermes and Paperclip live gates"
+    },
+    {
+      "id": "ev-r19-review",
+      "kind": "review",
+      "uri": "docs/evidence/R19-FLEET-RECONCILER-REVIEW.md",
+      "producer": "independent skeptical reviewer"
+    },
+    {
+      "id": "ev-r19-closure",
+      "kind": "test",
+      "uri": "docs/evidence/R19-CLOSURE.md",
+      "producer": "R19 closure gate"
+    },
+    {
+      "id": "ev-r20-runtime",
+      "kind": "artifact",
+      "uri": "packages/core/src/organization-command-plane.ts",
+      "producer": "open-autonomy R20"
+    },
+    {
+      "id": "ev-r20-transports",
+      "kind": "artifact",
+      "uri": "packages/core/src/organization-command-transports.ts",
+      "producer": "open-autonomy R20"
+    },
+    {
+      "id": "ev-r20-tests",
+      "kind": "test",
+      "uri": "packages/core/src/organization-command-plane.test.ts",
+      "producer": "Bun test runner"
+    },
+    {
+      "id": "ev-r20-slack-twin",
+      "kind": "live-run",
+      "uri": "bench/dev/integration/slack-volter-twin.test.ts",
+      "producer": "real Slack SDK over pinned Volter service twin"
+    },
+    {
+      "id": "ev-r20-review",
+      "kind": "review",
+      "uri": "docs/evidence/R20-TWIN-CLOSURE-SKEPTICAL-REVIEW.md",
+      "producer": "skeptical engineering review"
+    },
+    {
+      "id": "ev-r20-closure",
+      "kind": "test",
+      "uri": "docs/evidence/R20-CLOSURE.md",
+      "producer": "R20 twin-conformant engineering closure gate"
+    },
+    {
+      "id": "ev-r21-runtime",
+      "kind": "artifact",
+      "uri": "packages/core/src/organization-runtime-reliability.ts",
+      "producer": "open-autonomy R21"
+    },
+    {
+      "id": "ev-r21-tests",
+      "kind": "test",
+      "uri": "packages/core/src/organization-runtime-reliability.test.ts",
+      "producer": "Bun deterministic fault/load runner"
+    },
+    {
+      "id": "ev-r21-campaign",
+      "kind": "test",
+      "uri": "packages/core/src/organization-runtime-reliability-live.test.ts",
+      "producer": "signed bounded campaign fixture"
+    },
+    {
+      "id": "ev-r21-review",
+      "kind": "review",
+      "uri": "docs/evidence/R21-TWIN-CLOSURE-SKEPTICAL-REVIEW.md",
+      "producer": "skeptical engineering review"
+    },
+    {
+      "id": "ev-r21-closure",
+      "kind": "test",
+      "uri": "docs/evidence/R21-CLOSURE.md",
+      "producer": "R21 twin-conformant engineering closure gate"
+    },
+    {
+      "id": "ev-r22-runtime",
+      "kind": "artifact",
+      "uri": "packages/core/src/organization-benchmark-protocol.ts",
+      "producer": "open-autonomy R22"
+    },
+    {
+      "id": "ev-r22-tests",
+      "kind": "test",
+      "uri": "packages/core/src/organization-benchmark-protocol.test.ts",
+      "producer": "Bun test runner"
+    },
+    {
+      "id": "ev-r22-custody",
+      "kind": "test",
+      "uri": "packages/core/src/organization-r22-external-evidence-live.test.ts",
+      "producer": "process-isolated custody gate"
+    },
+    {
+      "id": "ev-r22-campaign",
+      "kind": "test",
+      "uri": "packages/core/src/organization-r22-external-campaign.test.ts",
+      "producer": "signed deterministic campaign verifier"
+    },
+    {
+      "id": "ev-r22-review",
+      "kind": "review",
+      "uri": "docs/evidence/R22-TWIN-CLOSURE-SKEPTICAL-REVIEW.md",
+      "producer": "skeptical engineering review"
+    },
+    {
+      "id": "ev-r22-closure",
+      "kind": "test",
+      "uri": "docs/evidence/R22-CLOSURE.md",
+      "producer": "R22 engineering closure gate"
+    },
+    {
+      "id": "ev-r23-runtime",
+      "kind": "artifact",
+      "uri": "packages/core/src/organization-autonomy-accounting.ts",
+      "producer": "open-autonomy R23"
+    },
+    {
+      "id": "ev-r23-tests",
+      "kind": "test",
+      "uri": "packages/core/src/organization-autonomy-accounting.test.ts",
+      "producer": "Bun property runner"
+    },
+    {
+      "id": "ev-r23-gate",
+      "kind": "test",
+      "uri": "packages/core/src/organization-r23-local-evidence-gate.test.ts",
+      "producer": "signed ground-truth gate"
+    },
+    {
+      "id": "ev-r23-review",
+      "kind": "review",
+      "uri": "docs/evidence/R23-TWIN-CLOSURE-SKEPTICAL-REVIEW.md",
+      "producer": "skeptical engineering review"
+    },
+    {
+      "id": "ev-r24-runtime",
+      "kind": "artifact",
+      "uri": "packages/core/src/organization-r24-twin-matched-engineering.ts",
+      "producer": "open-autonomy R24"
+    },
+    {
+      "id": "ev-r24-native",
+      "kind": "live-run",
+      "uri": "docs/evidence/R24-TWIN-MATCHED-ENGINEERING.json",
+      "producer": "pinned Hermes and Paperclip native campaign"
+    },
+    {
+      "id": "ev-r24-tests",
+      "kind": "test",
+      "uri": "packages/core/src/organization-r24-native-engineering-adapters.test.ts",
+      "producer": "Bun verifier"
+    },
+    {
+      "id": "ev-r24-review",
+      "kind": "review",
+      "uri": "docs/evidence/R24-TWIN-CLOSURE-SKEPTICAL-REVIEW.md",
+      "producer": "skeptical engineering review"
+    },
+    {
+      "id": "ev-r25-runtime",
+      "kind": "artifact",
+      "uri": "packages/core/src/organization-twin.ts",
+      "producer": "open-autonomy R25"
+    },
+    {
+      "id": "ev-r25-tests",
+      "kind": "test",
+      "uri": "packages/core/src/organization-twin.test.ts",
+      "producer": "Bun property runner"
+    },
+    {
+      "id": "ev-r25-calibration",
+      "kind": "test",
+      "uri": "packages/core/src/organization-r25-external-calibration.test.ts",
+      "producer": "held-out twin-world calibration verifier"
+    },
+    {
+      "id": "ev-r25-review",
+      "kind": "review",
+      "uri": "docs/evidence/R25-TWIN-CLOSURE-SKEPTICAL-REVIEW.md",
+      "producer": "skeptical engineering review"
+    },
+    {
+      "id": "ev-r26-runtime",
+      "kind": "artifact",
+      "uri": "packages/core/src/organization-counterfactual-planner.ts",
+      "producer": "open-autonomy R26"
+    },
+    {
+      "id": "ev-r26-tests",
+      "kind": "test",
+      "uri": "packages/core/src/organization-counterfactual-planner.test.ts",
+      "producer": "Bun property runner"
+    },
+    {
+      "id": "ev-r26-certificate",
+      "kind": "test",
+      "uri": "packages/core/src/organization-r26-external-certificate.test.ts",
+      "producer": "independent certificate verifier"
+    },
+    {
+      "id": "ev-r26-review",
+      "kind": "review",
+      "uri": "docs/evidence/R26-TWIN-CLOSURE-SKEPTICAL-REVIEW.md",
+      "producer": "skeptical engineering review"
+    }
+  ]
+}

@@ -268,7 +268,7 @@ function exact(x: any, k: string[], n: string) {
     throw Error(`R23 ${n} schema invalid`);
 }
 function body(domain: string, x: any, key: string) {
-  const y = structuredClone(x);
+  const y = JSON.parse(canonicalSemanticJson(x));
   y[key] = { ...y[key], signature: "" };
   return { domain, body: y };
 }

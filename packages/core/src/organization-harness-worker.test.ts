@@ -484,7 +484,7 @@ describe("R11 transactional harness outbox", () => {
                 adapter: "codex-jsonl",
                 protocolVersion: "responses-jsonl/1",
                 implementationDigest: digestContent(
-                  "codex-cli:0.144.4:jsonl-v1",
+                  "codex-cli:0.144.5:jsonl-v1",
                 ),
                 opaqueSession: "allocated",
                 launchDigest,
@@ -990,7 +990,7 @@ describe("R11 independent evidence", () => {
     const version = spawnSync("codex", ["--version"], { encoding: "utf8" }),
       help = spawnSync("codex", ["exec", "--help"], { encoding: "utf8" });
     expect(version.status).toBe(0);
-    expect(version.stdout).toMatch(/codex-cli 0\.144\.4/);
+    expect(version.stdout).toMatch(/codex-cli 0\.144\.5/);
     expect(help.stdout).toContain("--json");
     r.observe(
       evidence(req, {

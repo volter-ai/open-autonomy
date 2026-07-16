@@ -171,7 +171,7 @@ export class CodexJsonlHarness implements HarnessAdapter<
 > {
   readonly id = "codex-jsonl";
   readonly protocolVersion = "responses-jsonl/1";
-  readonly implementationDigest = digestContent("codex-cli:0.144.4:jsonl-v1");
+  readonly implementationDigest = digestContent("codex-cli:0.144.5:jsonl-v1");
   readonly calls: string[] = [];
   constructor(
     private readonly driver?: CodexHarnessDriver,

@@ -324,6 +324,29 @@ function keyRoles(
     })),
   ];
 }
+export function deriveR24DifferenceInventory(bundle: V5MatchedBundle) {
+  const rows: R24Difference[] = [], artifact = bundle.artifact, pairs = new Map<string, typeof artifact.cells>();
+  for (const cell of artifact.cells) pairs.set(cell.pairId, [...(pairs.get(cell.pairId) ?? []), cell]);
+  for (const [pairId, xs] of pairs) {
+    const h = xs.find((x) => x.substrate === "hermes")!, p = xs.find((x) => x.substrate === "paperclip")!,
+      ha = artifact.plan.assignments.find((x) => x.pairId === pairId && x.substrate === "hermes")!, pa = artifact.plan.assignments.find((x) => x.pairId === pairId && x.substrate === "paperclip")!,
+      hp = bundle.portableEvidence.find((x) => x.cellKey === r24V5CellKey(pairId, "hermes"))!, pp = bundle.portableEvidence.find((x) => x.cellKey === r24V5CellKey(pairId, "paperclip"))!,
+      hc = bundle.accountingEvidence.find((x) => x.cellKey === r24V5CellKey(pairId, "hermes"))!, pc = bundle.accountingEvidence.find((x) => x.cellKey === r24V5CellKey(pairId, "paperclip"))!;
+    if (![h, p, ha, pa, hp, pp, hc, pc].every(Boolean)) throw Error("R24 difference inventory pair incomplete");
+    addCategory(rows, pairId, "locks", Object.fromEntries(h.locks.map((x) => [x.path, x])), Object.fromEntries(p.locks.map((x) => [x.path, x])));
+    addCategory(rows, pairId, "preservation", { summary: h.preservation, source: h.evidenceRecord.preservation, sourceLocks: h.evidenceRecord.locks }, { summary: p.preservation, source: p.evidenceRecord.preservation, sourceLocks: p.evidenceRecord.locks });
+    addCategory(rows, pairId, "fault", { assignment: ha.fault, cell: h.fault, source: h.evidenceRecord.fault }, { assignment: pa.fault, cell: p.fault, source: p.evidenceRecord.fault });
+    addCategory(rows, pairId, "native", h.native, p.native);
+    addCategory(rows, pairId, "provider", h.evidenceRecord.attempts.map((x) => x.kind === "launched" ? x.providerTranscript : null), p.evidenceRecord.attempts.map((x) => x.kind === "launched" ? x.providerTranscript : null));
+    addCategory(rows, pairId, "attempt", h.evidenceRecord.attempts, p.evidenceRecord.attempts);
+    addCategory(rows, pairId, "process", { terminal: h.terminal, supervisor: h.evidenceRecord.attempts.map((x) => x.kind === "launched" ? x.trace.supervisor : null) }, { terminal: p.terminal, supervisor: p.evidenceRecord.attempts.map((x) => x.kind === "launched" ? x.trace.supervisor : null) });
+    addCategory(rows, pairId, "cleanup", { summary: h.cleanup, source: h.evidenceRecord.cleanup, isolation: h.evidenceRecord.isolation }, { summary: p.cleanup, source: p.evidenceRecord.cleanup, isolation: p.evidenceRecord.isolation });
+    addCategory(rows, pairId, "portable", hp, pp); addCategory(rows, pairId, "accounting", hc, pc); addCategory(rows, pairId, "assistance", h.evidenceRecord.assistance, p.evidenceRecord.assistance);
+    addCategory(rows, pairId, "provenance", Object.fromEntries(Object.entries(hc.measures).map(([k, v]) => [k, v.provenance])), Object.fromEntries(Object.entries(pc.measures).map(([k, v]) => [k, v.provenance])));
+    addCategory(rows, pairId, "missingness", Object.fromEntries(Object.entries(hc.measures).map(([k, v]) => [k, v.status])), Object.fromEntries(Object.entries(pc.measures).map(([k, v]) => [k, v.status])));
+  }
+  return rows;
+}
 export function verifyR24ExternalClosure(
   c: R24ExternalCampaign,
   trust: R24ExternalClosureTrust,
@@ -590,6 +613,8 @@ export function verifyR24ExternalClosure(
     );
   }
   const expectedEquivalence = pairs.size * 5;
+  const canonicalRows = deriveR24DifferenceInventory(c.bundle);
+  if (canonicalSemanticJson(canonicalRows) !== canonicalSemanticJson(rows)) throw Error("R24 difference inventory derivation drift");
   if (c.equivalence.length !== expectedEquivalence)
     throw Error("surplus or missing equivalence witness");
   const triage = new Map(c.triage.map((x) => [x.body.differenceId, x.body]));

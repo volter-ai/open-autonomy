@@ -3,6 +3,7 @@ import {
   createHash,
   generateKeyPairSync,
   sign,
+  verify,
 } from "node:crypto";
 import {
   existsSync,
@@ -29,6 +30,7 @@ import { v5ProtocolDigest } from "./organization-r24-v5-protocol";
 import {
   matchedBenchmarkDigest,
   planMatchedV2,
+  V2_METRICS,
   type V2Measure,
   type V2Design,
 } from "./organization-matched-benchmark";
@@ -48,6 +50,8 @@ import {
 } from "./organization-r24-v5-bundle-composer";
 import { writeR24V5BundleAtomic } from "./organization-r24-v5-bundle-store";
 import { createV5CellFixture } from "./test-support/organization-r24-v5-fixture";
+import { canonicalSemanticJson } from "./organization-canonical";
+import { deriveR24DifferenceInventory, verifyR24ExternalClosure, type ClosureSigned, type R24ExternalCampaign, type R24ExternalClosureTrust } from "./organization-r24-external-closure";
 
 const d = "sha256:" + "a".repeat(64),
   planner = generateKeyPairSync("ed25519"),
@@ -112,13 +116,13 @@ function resign(a: V5LiveArtifact) {
 
 function artifact(): V5LiveArtifact {
   const campaignDigest = v5ProtocolDigest("campaign"),
-    fault = { id: "none", digest: v5ProtocolDigest("fault:none") },
+    faults = ["f0", "f1"].map((id) => ({ id, digest: v5ProtocolDigest(`fault:${id}`) })),
     design: V2Design = {
       schema: "autonomy.matched-design.v2",
       seed: 73,
-      units: ["u"],
-      repetitions: 2,
-      faults: [fault],
+      units: ["u0", "u1"],
+      repetitions: 4,
+      faults,
       primaryEndpoint: "portableScore",
       alpha: 0.05,
       multiplicity: "holm",
@@ -138,13 +142,11 @@ function artifact(): V5LiveArtifact {
         fault: assignment.fault,
         first: substrate,
       })),
-    cells = exactAssignments.map((exactAssignment) => {
+    cells = exactAssignments.map((exactAssignment, assignmentIndex) => {
         const { substrate } = exactAssignment,
           assignmentDigest = v5ProtocolDigest(exactAssignment),
-          nonce = Buffer.from(`${exactAssignment.replication}`.padEnd(32, "!"))
-            .toString("hex")
-            .slice(0, 64),
-          receiptKeyId = `receipt-${exactAssignment.replication}-${substrate}`,
+          nonce = createHash("sha256").update(exactAssignment.pairId).digest("hex"),
+          receiptKeyId = `receipt-${assignmentIndex}-${substrate}`,
           receiptKey = receiptKeyFor(receiptKeyId),
           record = createV5CellFixture({
             substrate,
@@ -154,7 +156,7 @@ function artifact(): V5LiveArtifact {
             assignmentDigest,
             launcherSpecDigest: d,
             nonce,
-            isolationId: `cell:${exactAssignment.replication}:${substrate}`,
+            isolationId: `cell:${assignmentIndex}:${substrate}`,
             fault: exactAssignment.fault,
             receiptKey,
           });
@@ -372,7 +374,7 @@ function observed(value: number, unit: string, provenance: string): V2Measure {
   };
 }
 
-function projectedEvidence(a: V5LiveArtifact) {
+function projectedEvidence(a: V5LiveArtifact, completeAccounting = false) {
   const portable: V5PortableEvidence[] = [],
     accounting: V5AccountingEvidence[] = [];
   for (const cell of a.cells) {
@@ -405,9 +407,9 @@ function projectedEvidence(a: V5LiveArtifact) {
         cell.substrate,
         score,
         {
-          tokens: unknown("token"),
-          computeUnits: unknown("compute-unit"),
-          moneyUsd: unknown("USD"),
+          tokens: completeAccounting ? observed(1, "token", "accounting-collector") : unknown("token"),
+          computeUnits: completeAccounting ? observed(1, "compute-unit", "accounting-collector") : unknown("compute-unit"),
+          moneyUsd: completeAccounting ? observed(1, "USD", "accounting-collector") : unknown("USD"),
         },
         {
           keyId: "accounting-key",
@@ -671,4 +673,27 @@ test("final bundle replays analysis and publishes immutably despite orphan tempo
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
+});
+
+test("production external closure accepts a complete independently signed V5 study", () => {
+  const a = artifact(), evidence = projectedEvidence(a, true), projectionTrust = { ...trust,
+    graderPublicKeys: { "grader-key": grader.publicKey.export({ type: "spki", format: "pem" }).toString() },
+    accountingPublicKeys: { "accounting-key": accountant.publicKey.export({ type: "spki", format: "pem" }).toString() },
+  }, bundle = finalizeVerifiedR24V5Bundle(a, evidence.portable, evidence.accounting, projectionTrust, "2026-07-15T12:01:00Z"),
+    closureIds = ["preregistration", "equivalence", "triage", "closure"], dependencyIds = ["R15", "R16", "R21", "R22", "R23"] as const,
+    closureKeys = Object.fromEntries(closureIds.map((id) => [id, generateKeyPairSync("ed25519")])), dependencyKeys = Object.fromEntries(dependencyIds.map((id) => [id, generateKeyPairSync("ed25519")])),
+    closurePublicKeys = Object.fromEntries(closureIds.map((id) => [id, closureKeys[id]!.publicKey.export({ type: "spki", format: "pem" }).toString()])),
+    digest = (x: unknown) => `sha256:${createHash("sha256").update(canonicalSemanticJson(x)).digest("hex")}`,
+    signed = <T,>(purpose: "preregistration" | "equivalence" | "triage" | "closure", keyId: string, body: T, signedAt: string): ClosureSigned<T> => { const value = { body, digest: digest(body), keyId, signedAt }, signature = sign(null, Buffer.from(canonicalSemanticJson({ purpose, ...value })), closureKeys[keyId]!.privateKey).toString("base64"); return { ...value, signature }; },
+    preregistration = signed("preregistration", "preregistration", { planDigest: digest(a.plan), designDigest: matchedBenchmarkDigest(a.plan.design), authorizedBefore: "2026-07-14T00:00:00Z", minimumIndependentUnits: 2, minimumRepetitions: 4, minimumFaultStrata: 2, requiredMetrics: [...V2_METRICS], requireCompletePairs: true as const, requireOrderSensitivity: true as const, requireLeaveUnitOut: true as const, requireLeaveFaultOut: true as const }, "2026-07-14T00:00:00Z"),
+    equivalence = a.plan.pairSummaries.flatMap(({ pairId }) => ["isolation", "credential-scope", "provider-revision", "provider-config", "provider-command"].map((path) => { const h = a.cells.find((x) => x.pairId === pairId && x.substrate === "hermes")!, p = a.cells.find((x) => x.pairId === pairId && x.substrate === "paperclip")!; return signed("equivalence", "equivalence", { pairId, path, hermesDigest: h.locks.find((x) => x.path === path)!.digest, paperclipDigest: p.locks.find((x) => x.path === path)!.digest, equivalent: true as const, evidenceDigest: digest({ pairId, path }) }, "2026-07-15T12:02:00Z"); })),
+    triage = deriveR24DifferenceInventory(bundle).map((difference) => signed("triage", "triage", { differenceId: difference.id, disposition: "expected-substrate" as const, rationale: `registered substrate difference in ${difference.category}`, evidenceDigests: [digest(difference)] }, "2026-07-15T12:02:00Z")),
+    dependencyRegistry = Object.fromEntries(dependencyIds.map((checkpoint) => [checkpoint, { verifierId: `verifier-${checkpoint}`, policyDigest: digest(`policy-${checkpoint}`), role: `dependency-${checkpoint}`, keyId: `dependency-key-${checkpoint}`, publicKeyPem: dependencyKeys[checkpoint]!.publicKey.export({ type: "spki", format: "pem" }).toString() }])) as R24ExternalClosureTrust["dependencyRegistry"],
+    dependencies = dependencyIds.map((checkpoint) => { const registered = dependencyRegistry[checkpoint], artifact = { checkpoint, closed: true }, body = { checkpoint, artifact, artifactDigest: digest(artifact), policyDigest: registered.policyDigest, verifierId: registered.verifierId, role: registered.role, keyId: registered.keyId, verifiedAt: "2026-07-15T11:00:00Z" }; return { ...body, signature: sign(null, Buffer.from(canonicalSemanticJson(body)), dependencyKeys[checkpoint]!.privateKey).toString("base64") }; }),
+    externalTrust: R24ExternalClosureTrust = { ...projectionTrust, closurePublicKeys, dependencyRegistry,
+      verifyClosureSignature: (purpose, value) => verify(null, Buffer.from(canonicalSemanticJson({ purpose, body: value.body, digest: value.digest, keyId: value.keyId, signedAt: value.signedAt })), closurePublicKeys[value.keyId]!, Buffer.from(value.signature, "base64")),
+      verifyDependency: (value) => { const { signature, ...body } = value; return verify(null, Buffer.from(canonicalSemanticJson(body)), dependencyRegistry[value.checkpoint].publicKeyPem, Buffer.from(signature, "base64")); },
+    }, closureBody = { schema: "autonomy.r24-external-closure.v2" as const, closureClaim: true as const, bundle, bundleDigest: bundle.digest, preregistration, equivalence, triage, dependencies, generatedAt: "2026-07-15T12:03:00Z" }, closureSigned = signed("closure", "closure", closureBody, closureBody.generatedAt),
+    campaign: R24ExternalCampaign = { ...closureBody, signerKeyId: closureSigned.keyId, digest: closureSigned.digest, signature: closureSigned.signature };
+  expect(verifyR24ExternalClosure(campaign, externalTrust)).toEqual({ closed: true, studyConclusion: "inconclusive", bundleDigest: bundle.digest, pairs: 8, differences: triage.length });
 });

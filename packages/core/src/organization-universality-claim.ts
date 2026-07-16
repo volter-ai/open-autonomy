@@ -30,11 +30,13 @@ export type UniversalityMetricContract = {
   assurance: "static" | "conformance" | "native-executed" | "independently-reproduced";
 };
 export type UniversalityClaimRegistration = {
-  schema: "open-autonomy.universality-claim.v1";
+  schema: "open-autonomy.universality-claim.v2";
   campaignId: string;
   registeredAt: string;
   domain: "autonomous-software-organizations";
   sourceSelectionRule: string;
+  sourceCensusContractDigest: `sha256:${string}`;
+  forcingSupplementDigest: `sha256:${string}`;
   compositionSelectionRule: string;
   sourcePopulationId: string;
   compositionPopulationId: string;
@@ -86,12 +88,12 @@ export function freezeUniversalityClaim(value: UniversalityClaimRegistration): F
     const keys = Object.keys(actual).sort(), wanted = [...expected].sort();
     if (JSON.stringify(keys) !== JSON.stringify(wanted)) throw Error(`${label} schema must be exact`);
   };
-  exactKeys(value, ["schema","campaignId","registeredAt","domain","sourceSelectionRule","compositionSelectionRule",
+  exactKeys(value, ["schema","campaignId","registeredAt","domain","sourceSelectionRule","sourceCensusContractDigest","forcingSupplementDigest","compositionSelectionRule",
     "sourcePopulationId","compositionPopulationId","censusAt","executionSamplingRule","executionSamplingSeed",
     "undefinedDenominatorPolicy","assurancePolicyId","metrics"], "universality claim");
-  if (value.schema !== "open-autonomy.universality-claim.v1" || !value.campaignId ||
+  if (value.schema !== "open-autonomy.universality-claim.v2" || !value.campaignId ||
       !Number.isFinite(Date.parse(value.registeredAt)) || value.domain !== "autonomous-software-organizations" ||
-      !value.sourceSelectionRule || !value.compositionSelectionRule || !value.sourcePopulationId ||
+      !value.sourceSelectionRule || !/^sha256:[a-f0-9]{64}$/.test(value.sourceCensusContractDigest) || !/^sha256:[a-f0-9]{64}$/.test(value.forcingSupplementDigest) || !value.compositionSelectionRule || !value.sourcePopulationId ||
       !value.compositionPopulationId || !Number.isFinite(Date.parse(value.censusAt)) || Date.parse(value.registeredAt) >= Date.parse(value.censusAt) || !value.executionSamplingRule ||
       !value.executionSamplingSeed || value.undefinedDenominatorPolicy !== "invalidate-campaign" || !value.assurancePolicyId)
     throw Error("universality claim identity invalid");
@@ -133,7 +135,7 @@ export function verifyHistoricalUniversalityClaimDigest(value: FrozenUniversalit
 
 export function freezeCampaignSupersession(value: CampaignSupersession, predecessor: FrozenUniversalityClaim, successor: FrozenUniversalityClaim): FrozenCampaignSupersession {
   verifyHistoricalUniversalityClaimDigest(predecessor);
-  verifyFrozenUniversalityClaim(successor);
+  if(successor.schema==="open-autonomy.universality-claim.v2")verifyFrozenUniversalityClaim(successor);else verifyHistoricalUniversalityClaimDigest(successor);
   const keys=Object.keys(value).sort(), expected=["schema","predecessorCampaign","predecessorDigest","successorCampaign","successorDigest","reason","predecessorStatus"].sort();
   if (JSON.stringify(keys)!==JSON.stringify(expected) || value.schema!=="open-autonomy.campaign-supersession.v1" ||
       value.predecessorCampaign!==predecessor.campaignId || value.predecessorDigest!==predecessor.digest ||

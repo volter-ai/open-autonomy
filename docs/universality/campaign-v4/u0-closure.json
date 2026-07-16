@@ -1,0 +1,17 @@
+{
+  "schema": "open-autonomy.universality-checkpoint-closure.v1",
+  "checkpoint": "U0",
+  "status": "complete",
+  "assurance": "property-tested",
+  "claimDigest": "sha256:57732096f76b3b3c17f65000d61b9279c3cc913ff835ec310f2189a6fab1f7e1",
+  "supersessionDigest": "sha256:ac8a087d1060b1bf0f26526023f4c3263e666f7868cbad11e99a6e6836a08eed",
+  "sourceCensusContractDigest": "sha256:bd011a010b85d8ef98cd06b5bba4ca676168e309341f84ccba788c59b1564563",
+  "forcingSupplementDigest": "sha256:05ead15c3f0a1bb19e2f90df1b472909368fc22a61d0df4fbcd73ef1013ddb79",
+  "semanticCoverage": ["claim identity and versioned historical custody","prospective registration and census cutoff","operational population instant","finite disjoint exhaustive star and creation-date partitioning","fork and archived inclusion","raw response custody and accepted response schema","bounded pass retry and immediate invalidation transitions","two-pass convergence encoding","total all-and-only domain classification","exact independent-review sampling and conflict adjudication","zero-weight forcing identities and adoption overlap","metric formulas, weights, assurance classes, floors, and undefined-denominator invalidation"],
+  "falsifiersExercised": ["historical schema substitution","overlapping range split","unbounded or ambiguous retry","malformed response acceptance","review sample floor substitution","forcing population credit","forcing out-of-domain laundering","duplicate forcing identity","metric omission or duplication","weakened threshold","formula or population substitution","reversed chronology","forged supersession join","post-freeze digest mutation"],
+  "evidence": ["docs/universality/campaign-v4/claim.json","docs/universality/campaign-v4/source-census-contract.json","docs/universality/campaign-v4/forcing-supplement.json","docs/universality/campaign-v4/supersession.json","packages/core/src/organization-universality-claim.ts","packages/core/src/organization-universality-census-contract.ts","packages/core/src/organization-universality-claim.test.ts","packages/core/src/organization-universality-census-contract.test.ts"],
+  "skepticalReview": {"round1":"rejected v3: false future registration, descriptive partitioning, non-reconstructible historical snapshot, unbound predicate and forcing set","round2":"rejected v4 draft: historical schema break, fork mismatch, prose state machine, missing classification and forcing-overlap rules","round3":"rejected: ambiguous review sample, conflicting retry transitions, missing forcing domain eligibility and response success schema","round4":"accepted: closed structured operational census, exact review sampling, coherent transitions, total classification, forcing eligibility, versioned history, truthful chronology, and no v4 crawl evidence"},
+  "obligationAccounting": {"open":0,"discharged":14,"deferredExternal":0},
+  "residuals": [],
+  "next": "U1"
+}

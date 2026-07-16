@@ -1,0 +1,10 @@
+{
+  "schema": "open-autonomy.campaign-supersession.v1",
+  "predecessorCampaign": "organization-universality-2026-v2",
+  "predecessorDigest": "sha256:3e254540db8dfb13d630858ed5469429d8503b856aff00acb19087f5c3a41f38",
+  "successorCampaign": "organization-universality-2026-v3",
+  "successorDigest": "sha256:5ece8b5bdc044e1331918cabeae2dcbff4f2f5504b41a7ed048aada36fb44e0f",
+  "reason": "v2's four keyword searches could prove complete screening only inside those query frames, not the preregistered requirement to census every public GitHub repository above the adoption threshold; v3 prospectively freezes exhaustive partitioned enumeration before any compilation or execution result exists",
+  "predecessorStatus": "invalidated-before-u1-closure",
+  "digest": "sha256:d4282f0217d92c779cb6b296425f6a7d78530d6f684ed7099d5c1d3686ed6d57"
+}

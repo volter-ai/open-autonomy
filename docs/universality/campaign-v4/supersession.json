@@ -1,0 +1,10 @@
+{
+  "schema": "open-autonomy.campaign-supersession.v1",
+  "predecessorCampaign": "organization-universality-2026-v3",
+  "predecessorDigest": "sha256:5ece8b5bdc044e1331918cabeae2dcbff4f2f5504b41a7ed048aada36fb44e0f",
+  "successorCampaign": "organization-universality-2026-v4",
+  "successorDigest": "sha256:57732096f76b3b3c17f65000d61b9279c3cc913ff835ec310f2189a6fab1f7e1",
+  "reason": "v3 described partitioning in prose but did not freeze a total algorithm, operational snapshot semantics, raw-evidence contract, exact domain predicate, or forcing members; v4 freezes those objects before its census begins",
+  "predecessorStatus": "invalidated-before-u1-closure",
+  "digest": "sha256:ac8a087d1060b1bf0f26526023f4c3263e666f7868cbad11e99a6e6836a08eed"
+}

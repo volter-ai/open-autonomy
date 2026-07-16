@@ -171,6 +171,13 @@ time, plus non-GitHub systems only when comparable adoption is supported by a pr
 Stars select the population but never weight semantic facts. Unpopular vendor provenance alone does not qualify a
 system. A separately reported forcing-function supplement covers semantic families missing from the adoption census.
 
+For a mutable provider without historical snapshot reads, “frozen census time” is operational: it is the completion
+timestamp of the preregistered converged capture, before its cutoff—not an unknowable reconstruction of provider state
+at a later wall-clock instant. The campaign must freeze the exhaustive partition algorithm, raw-response custody,
+convergence relation, classification protocol, and invalidation conditions before capture. If the provider cannot be
+partitioned completely or the required consecutive captures do not converge, the campaign is invalid; it may not
+silently replace the population with keyword searches or a convenience sample.
+
 ## U2. Substrate-component population and composition corpus
 
 Freeze `SubstrateComponent`, remote-service, and admissible `SubstrateComposition` populations before backend work.

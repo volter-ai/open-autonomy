@@ -65,6 +65,7 @@ export * from './organization-command-transports';
 export * from './organization-slack-http-runtime';
 export * from './organization-slack-web-api-port';
 export * from './organization-r20-external-campaign';
+export * from './organization-r21-external-campaign';
 export * from './organization-runtime-reliability';
 export * from './organization-counterfactual-planner';
 export * from './organization-experiment';

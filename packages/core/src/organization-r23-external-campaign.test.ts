@@ -25,6 +25,12 @@ import {
   type R23Campaign,
   type R23Dimension,
 } from "./organization-r23-external-campaign";
+import {
+  acceptR23Collection, acceptR23CollectorIntent, acceptR23Evidence, acceptR23Registration,
+  acceptR23Summary, assembleR23, createR23State, expectedR23Cells, issueR23Collection,
+  issueR23CollectorIntent, issueR23Evidence, issueR23Registration, issueR23Summary,
+  type R23Kind, type R23Request, type R23Response,
+} from "../../../bench/dev/evidence/r23-acquisition";
 const d = (x: string) => `sha256:${x.repeat(64).slice(0, 64)}` as const,
   k = () => generateKeyPairSync("ed25519"),
   pem = (x: ReturnType<typeof k>) =>
@@ -458,7 +464,7 @@ function fixture() {
   );
   return {
     campaign: campaign as R23Campaign,
-    _keys: { eventKey, pk, collect },
+    _keys: { reg, collect, privacy, eventKey, normalizationKey, pk, humans },
     trust: {
       dependencies,
       workIds: ["w1", "w2"],
@@ -502,6 +508,30 @@ test("verifies full derived R23 metrics and signed dimensioned accounting", () =
   const { campaign, trust } = fixture();
   expect(verifyR23ExternalCampaign(campaign, trust).closureClaim).toBe(true);
   expect(campaign.summary.metrics).toHaveLength(17);
+});
+test("reconstructs the exact registered accounting product through causal acquisition", () => {
+  const { campaign: source, trust, _keys: keys } = fixture(), publicKeys: Record<string, string> = {
+    registration: pem(keys.reg), collector: pem(keys.collect), privacy: pem(keys.privacy), event: pem(keys.eventKey), normalization: pem(keys.normalizationKey),
+    p1: pem(keys.pk.p1), p2: pem(keys.pk.p2), h1: pem(keys.humans.h1), h2: pem(keys.humans.h2),
+  }, state = createR23State({ campaignId: source.registration.campaignId, createdAt: at(0), registrationKeyId: "registration", collectorKeyId: "collector", privacyKeyId: "privacy", eventKeyId: "event", normalizationKeyId: "normalization", providerKeyIds: { p1: "p1", p2: "p2" }, humanKeyIds: { h1: "h1", h2: "h2" }, publicKeys });
+  const keyFor = (q: R23Request) => q.action === "registration" ? "registration" : q.action === "summary" || q.action === "collector-intent" || q.action === "collection" ? "collector" : q.kind === "normalization" ? "normalization" : q.kind === "enrollments" ? "privacy" : q.kind === "works" || q.kind === "events" ? "event" : q.signerId;
+  const privateKeys: any = { registration: keys.reg.privateKey, collector: keys.collect.privateKey, privacy: keys.privacy.privateKey, event: keys.eventKey.privateKey, normalization: keys.normalizationKey.privateKey, p1: keys.pk.p1.privateKey, p2: keys.pk.p2.privateKey, h1: keys.humans.h1.privateKey, h2: keys.humans.h2.privateKey };
+  const respond = (q: R23Request, fragment: unknown): R23Response => { const signerKeyId = keyFor(q), body = { schema: "open-autonomy.bench-r23-acquisition-response.v1" as const, requestDigest: `sha256:${createHash("sha256").update(canonicalSemanticJson(q)).digest("hex")}` as const, fragmentDigest: `sha256:${createHash("sha256").update(canonicalSemanticJson(fragment)).digest("hex")}` as const, signerKeyId, signedAt: at(9) }; return { ...body, signature: sign(null, Buffer.from(canonicalSemanticJson(body)), privateKeys[signerKeyId]).toString("base64"), fragment }; };
+  const acceptOne = (kind: R23Kind, id: string, fragment: any) => { const q = issueR23Evidence(state, kind, id, kind === "attempts" ? fragment.providerId : undefined); acceptR23Evidence(state, kind, id, respond(q, fragment)); };
+  let q = issueR23Registration(state); acceptR23Registration(state, respond(q, source.registration));
+  acceptOne("normalization", "registry", source.normalizationRegistry);
+  for (const x of source.enrollments) acceptOne("enrollments", encodeURIComponent(x.humanId), x);
+  for (const x of source.attempts) acceptOne("attempts", [x.workId, String(x.attempt)].map(encodeURIComponent).join("/"), x);
+  for (const x of source.works) acceptOne("works", encodeURIComponent(x.workId), x);
+  for (const x of source.invoices) acceptOne("invoices", [x.providerId, x.dimension].map(encodeURIComponent).join("/"), x);
+  for (const x of source.providerUsage) acceptOne("usage", [x.workId, String(x.attempt), x.providerId, x.dimension].map(encodeURIComponent).join("/"), x);
+  for (const x of source.humanTimings) acceptOne("humans", [x.workId, x.humanId, x.taskId].map(encodeURIComponent).join("/"), x);
+  for (const x of source.events) acceptOne("events", [x.workId, x.kind].map(encodeURIComponent).join("/"), x);
+  expect(Object.values(expectedR23Cells(state)).reduce((n, xs) => n + xs.length, 0)).toBe(33);
+  q = issueR23Summary(state); acceptR23Summary(state, respond(q, source.summary));
+  q = issueR23CollectorIntent(state); const { signature: _, ...intent } = source.collector; acceptR23CollectorIntent(state, respond(q, intent));
+  q = issueR23Collection(state); acceptR23Collection(state, respond(q, { campaignSignature: source.collector.signature }));
+  const assembled = assembleR23(state); expect(canonicalSemanticJson(assembled)).toBe(canonicalSemanticJson(source)); expect(verifyR23ExternalCampaign(assembled, trust).closureClaim).toBe(true);
 });
 test("rejects invoice, charge, normalization, enrollment, terminal, metric and autonomy fraud", () => {
   const ms = [

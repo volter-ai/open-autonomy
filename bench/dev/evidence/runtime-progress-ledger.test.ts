@@ -8,6 +8,7 @@ import {
   verifyR20ReadinessEvidence,
   verifyR21ReadinessEvidence,
   verifyR22ReadinessEvidence,
+  verifyR23ReadinessEvidence,
   verifyR24ReadinessEvidence,
   verifyR27ReadinessEvidence,
   verifyR28ReadinessEvidence,
@@ -32,6 +33,7 @@ test("imports every bound partial-evidence residual while preserving unknown obl
     expect.objectContaining({ checkpoint: "R20" }),
     expect.objectContaining({ checkpoint: "R21" }),
     expect.objectContaining({ checkpoint: "R22" }),
+    expect.objectContaining({ checkpoint: "R23" }),
     expect.objectContaining({ checkpoint: "R24" }),
     expect.objectContaining({ checkpoint: "R27" }),
     expect.objectContaining({ checkpoint: "R28" }),
@@ -88,6 +90,7 @@ test("rejects omission, drift, or closure inflation in R21 structural readiness"
   expect(() => verifyR21ReadinessEvidence(root, erased)).toThrow("cannot prove closure");
 });
 test("keeps R22 local custody and benchmark readiness structurally exact and non-closing",()=>{const evidence=JSON.parse(readFileSync(join(root,"docs/evidence/R22-STRUCTURAL-READINESS.json"),"utf8"));expect(verifyR22ReadinessEvidence(root,evidence)).toMatchObject({components:18,closureClaim:false});for(const mutate of [(x:any)=>x.components.pop(),(x:any)=>x.components[0].sha256="sha256:"+"0".repeat(64),(x:any)=>x.closureClaim=true,(x:any)=>x.doesNotProve=[]]){const changed=structuredClone(evidence);mutate(changed);expect(()=>verifyR22ReadinessEvidence(root,changed)).toThrow()}});
+test("binds R23 accounting acquisition without upgrading it to live closure",()=>{const evidence=JSON.parse(readFileSync(join(root,"docs/evidence/R23-STRUCTURAL-READINESS.json"),"utf8"));expect(verifyR23ReadinessEvidence(root,evidence)).toMatchObject({components:16,closureClaim:false});for(const mutate of [(x:any)=>x.components.pop(),(x:any)=>x.components[0].sha256="sha256:"+"0".repeat(64),(x:any)=>x.closureClaim=true,(x:any)=>x.doesNotProve=[]]){const changed=structuredClone(evidence);mutate(changed);expect(()=>verifyR23ReadinessEvidence(root,changed)).toThrow()}});
 
 test("fails closed on fabricated closure, omitted residual import, source drift, or upgraded assurance", () => {
   for (const mutate of [

@@ -3,7 +3,7 @@ import { chmodSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'nod
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { spawnSync } from 'node:child_process';
-import { REVIEW_RESULT_SCHEMA, type ReviewResult } from './finalize-agent-review';
+import { REVIEW_RESULT_SCHEMA, breakGlassClearsHead, type ReviewResult } from './finalize-agent-review';
 
 const SHA = 'c'.repeat(40);
 
@@ -127,5 +127,104 @@ describe('finalize-agent-review effects', () => {
     expect(run.log).toContain('open-autonomy-human-task');
     expect(run.log).toContain('issue edit 7');
     expect(run.log.indexOf('issue comment 7')).toBeLessThan(run.log.indexOf('issue edit 7'));
+  });
+});
+
+// The reviewer effect is the one place agent-review=failure is posted, and it re-fires on same-head reviewer
+// re-runs. A maintainer break-glass must NOT be clobbered by a re-posted failure (issue #234 integration).
+describe('breakGlassClearsHead — the failure-post guard (fail-closed, at-least-as-strict)', () => {
+  const REASON = 'direct maintainer fix; no tracked issue';
+  const maintainer = (perms: Record<string, string>) => (login: string) =>
+    ['admin', 'write', 'maintain'].includes(perms[login] ?? 'none');
+
+  test('a write+ maintainer break-glass on the exact head clears it', () => {
+    for (const perm of ['admin', 'write', 'maintain']) {
+      expect(breakGlassClearsHead(
+        [{ body: `/agent break-glass ${SHA} ${REASON}`, user: { login: 'alice' } }],
+        SHA,
+        maintainer({ alice: perm }),
+      )).toBe(true);
+    }
+  });
+
+  test('per-SHA: a break-glass bound to another SHA does not clear this head', () => {
+    expect(breakGlassClearsHead(
+      [{ body: `/agent break-glass ${'e'.repeat(40)} ${REASON}`, user: { login: 'alice' } }],
+      SHA,
+      maintainer({ alice: 'admin' }),
+    )).toBe(false);
+  });
+
+  test('a non-maintainer, an empty reason, or no comment never clears the head', () => {
+    expect(breakGlassClearsHead([{ body: `/agent break-glass ${SHA} ${REASON}`, user: { login: 'mallory' } }], SHA, maintainer({ mallory: 'read' }))).toBe(false);
+    expect(breakGlassClearsHead([{ body: `/agent break-glass ${SHA}`, user: { login: 'alice' } }], SHA, maintainer({ alice: 'admin' }))).toBe(false);
+    expect(breakGlassClearsHead([], SHA, maintainer({ alice: 'admin' }))).toBe(false);
+  });
+});
+
+// Live wiring: a failure verdict is DEFERRED (no status posted, exit 0) when a valid break-glass covers the
+// current head, and posts failure normally when the break-glass is for a stale SHA.
+describe('finalize defers a re-posted failure to a valid break-glass', () => {
+  const REASON = 'direct maintainer fix; no tracked issue';
+  const runWithComments = (comment: string, permission = 'admin'): { status: number | null; log: string; stdout: string } => {
+    const dir = mkdtempSync(join(tmpdir(), 'oa-finalize-bg-'));
+    const gh = join(dir, 'gh');
+    const artifact = join(dir, 'review.json');
+    const log = join(dir, 'gh.log');
+    writeFileSync(artifact, JSON.stringify({ ...success, verdict: 'failure', outcome: 'changes-requested', summary: 'no linked issue' }));
+    writeFileSync(gh, `#!/usr/bin/env bash
+set -eu
+printf '%s\\n' "$*" >> "$GH_LOG"
+case "$*" in
+  *"--json headRefOid,state"*) printf '{"headRefOid":"${SHA}","state":"OPEN"}\\n' ;;
+  *"issues/42/comments"*) printf '%s\\n' "$GH_COMMENTS" ;;
+  *"/permission"*) printf '%s\\n' "$GH_PERMISSION" ;;
+  *"--json comments"*) printf '[]\\n' ;;
+  *) printf '\\n' ;;
+esac
+`);
+    chmodSync(gh, 0o755);
+    try {
+      const run = spawnSync(process.execPath, ['scripts/finalize-agent-review.ts'], {
+        cwd: process.cwd(),
+        encoding: 'utf8',
+        env: {
+          ...process.env,
+          PATH: `${dir}:${process.env.PATH}`,
+          GH_LOG: log,
+          GH_COMMENTS: JSON.stringify([{ id: 7, body: comment, user: { login: 'alice' } }]),
+          GH_PERMISSION: permission,
+          GITHUB_REPOSITORY: 'acme/repo',
+          EXPECTED_PR: '42',
+          EXPECTED_SHA: SHA,
+          REVIEWER_JOB_RESULT: 'success',
+          REVIEW_RESULT_PATH: artifact,
+          HUMAN_APPROVAL_WORKFLOW: '',
+        },
+      });
+      return { status: run.status, log: readFileSync(log, 'utf8'), stdout: run.stdout };
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  };
+
+  test('a valid maintainer break-glass on the current head defers the failure (no status posted)', () => {
+    const run = runWithComments(`/agent break-glass ${SHA} ${REASON}`);
+    expect(run.status).toBe(0);
+    expect(run.log).not.toContain('state=failure');
+    expect(run.log).not.toContain('pr comment 42');
+    expect(run.stdout).toContain('DEFERRED');
+  });
+
+  test('a break-glass for a stale SHA does NOT defer — failure still posts', () => {
+    const run = runWithComments(`/agent break-glass ${'e'.repeat(40)} ${REASON}`);
+    expect(run.status).toBe(1);
+    expect(run.log).toContain('state=failure');
+  });
+
+  test('a non-maintainer break-glass does NOT defer — failure still posts', () => {
+    const run = runWithComments(`/agent break-glass ${SHA} ${REASON}`, 'read');
+    expect(run.status).toBe(1);
+    expect(run.log).toContain('state=failure');
   });
 });

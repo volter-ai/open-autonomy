@@ -149,6 +149,16 @@ export class SlackCommandTransport {
       });
       throw new Error("Slack request authentication failed");
     }
+    return this.handleVerified(authentication);
+  }
+  /** Process a request already authenticated and durably accepted by an HTTP ingress.
+   * Callers MUST NOT use this as an authentication bypass; it exists so an accepted
+   * request remains processable after Slack's replay-window timestamp expires. */
+  handleVerified(authentication: SlackRequestAuthentication): {
+    response_type: "ephemeral";
+    thread_ts: string;
+    blocks: SlackBlock[];
+  } {
     let payload: any;
     try {
       if (authentication.rawBody.trimStart().startsWith("{"))

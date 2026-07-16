@@ -152,6 +152,18 @@ export type V5LiveArtifact = {
     launcherDigest: string;
     launcherSpecDigest: string;
     inputLockDigest: string;
+    grader: {
+      policyDigest: string;
+      signerKeyId: string;
+      publicKeyFingerprint: string;
+      trustRegistryDigest: string;
+    };
+    accounting: {
+      policyDigest: string;
+      signerKeyId: string;
+      publicKeyFingerprint: string;
+      trustRegistryDigest: string;
+    };
     authorization: {
       algorithm: "Ed25519";
       signerKeyId: string;
@@ -463,6 +475,8 @@ export function verifyR24V5LiveArtifact(
         "launcherDigest",
         "launcherSpecDigest",
         "inputLockDigest",
+        "grader",
+        "accounting",
         "authorization",
         "bindings",
         "assignments",
@@ -481,6 +495,21 @@ export function verifyR24V5LiveArtifact(
     !dig(a.plan.launcherDigest) ||
     !dig(a.plan.launcherSpecDigest) ||
     !dig(a.plan.inputLockDigest) ||
+    !dig(a.plan.grader.policyDigest) ||
+    !a.plan.grader.signerKeyId ||
+    !/^[a-f0-9]{64}$/.test(a.plan.grader.publicKeyFingerprint) ||
+    !dig(a.plan.grader.trustRegistryDigest) ||
+    !dig(a.plan.accounting.policyDigest) ||
+    !a.plan.accounting.signerKeyId ||
+    !/^[a-f0-9]{64}$/.test(a.plan.accounting.publicKeyFingerprint) ||
+    !dig(a.plan.accounting.trustRegistryDigest) ||
+    a.plan.grader.trustRegistryDigest !==
+      a.plan.accounting.trustRegistryDigest ||
+    a.plan.grader.publicKeyFingerprint ===
+      a.plan.accounting.publicKeyFingerprint ||
+    a.plan.grader.signerKeyId === a.plan.accounting.signerKeyId ||
+    a.plan.grader.signerKeyId === a.plan.authorization.signerKeyId ||
+    a.plan.accounting.signerKeyId === a.plan.authorization.signerKeyId ||
     a.plan.authorization.algorithm !== "Ed25519" ||
     a.plan.authorization.signerKeyId !== trust.signerKeyId ||
     !verifySignature(

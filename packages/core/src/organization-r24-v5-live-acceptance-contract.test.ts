@@ -1,5 +1,18 @@
 import { expect, test } from "bun:test";
-import { generateKeyPairSync, sign } from "node:crypto";
+import {
+  createHash,
+  generateKeyPairSync,
+  sign,
+} from "node:crypto";
+import {
+  existsSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import {
   V5_NEGATIVE_CONTROLS,
   V5_SOURCE_ROLES,
@@ -21,12 +34,19 @@ import {
 } from "./organization-matched-benchmark";
 import {
   analyzeVerifiedR24V5Artifact,
+  collectSignedV5AccountingEvidence,
+  collectSignedV5PortableEvidence,
+  finalizeVerifiedR24V5Bundle,
   r24V5AccountingEvidenceDigest,
-  r24V5CellKey,
-  r24V5PortableEvidenceDigest,
   type V5AccountingEvidence,
   type V5PortableEvidence,
+  verifyR24V5MatchedBundle,
 } from "./organization-r24-v5-matched-projection";
+import {
+  assembleAuthorizedV5Artifact,
+  createAuthorizedV5Plan,
+} from "./organization-r24-v5-bundle-composer";
+import { writeR24V5BundleAtomic } from "./organization-r24-v5-bundle-store";
 import { createV5CellFixture } from "./test-support/organization-r24-v5-fixture";
 
 const d = "sha256:" + "a".repeat(64),
@@ -47,6 +67,10 @@ const d = "sha256:" + "a".repeat(64),
     ReturnType<typeof generateKeyPairSync>
   >,
   receiptKeyFor = (keyId: string) => `${keyId}:${"k".repeat(64)}`.slice(0, 48),
+  keyFingerprint = (key: ReturnType<typeof generateKeyPairSync>["publicKey"]) =>
+    createHash("sha256")
+      .update(key.export({ type: "spki", format: "der" }))
+      .digest("hex"),
   trust = {
     signerKeyId: "planner-key",
     publicKeyPem: plannerPublic,
@@ -212,6 +236,18 @@ function artifact(): V5LiveArtifact {
       launcherDigest: d,
       launcherSpecDigest: d,
       inputLockDigest,
+      grader: {
+        policyDigest: d,
+        signerKeyId: "grader-key",
+        publicKeyFingerprint: keyFingerprint(grader.publicKey),
+        trustRegistryDigest: "sha256:" + "c".repeat(64),
+      },
+      accounting: {
+        policyDigest: "sha256:" + "b".repeat(64),
+        signerKeyId: "accounting-key",
+        publicKeyFingerprint: keyFingerprint(accountant.publicKey),
+        trustRegistryDigest: "sha256:" + "c".repeat(64),
+      },
       bindings,
       assignments: exactAssignments,
       pairSummaries,
@@ -336,60 +372,11 @@ function observed(value: number, unit: string, provenance: string): V2Measure {
   };
 }
 
-function observedNativeMemory(
-  cell: V5LiveArtifact["cells"][number],
-): V2Measure {
-  const samples = cell.evidenceRecord.attempts.find(
-      (attempt) => attempt.kind === "launched",
-    )!.trace.externalMeter.raw.samples,
-    raw = { samples },
-    value = samples.slice(1).reduce((area, sample, index) => {
-      const previous = samples[index]!,
-        dt =
-          Number(BigInt(sample.monotonicNs) - BigInt(previous.monotonicNs)) /
-          1e6,
-        rss = (x: (typeof samples)[number]) =>
-          x.processes.reduce((sum, process) => sum + process.rssKiB, 0) * 1024;
-      return area + ((rss(previous) + rss(sample)) / 2) * dt;
-    }, 0);
-  return {
-    status: "observed",
-    value,
-    unit: "byte-ms",
-    provenance: "authenticated-native-procfs-integration",
-    raw,
-    rawDigest: matchedBenchmarkDigest(raw),
-  };
-}
-
 function projectedEvidence(a: V5LiveArtifact) {
   const portable: V5PortableEvidence[] = [],
     accounting: V5AccountingEvidence[] = [];
   for (const cell of a.cells) {
-    const cellKey = r24V5CellKey(cell.pairId, cell.substrate),
-      assignment = a.plan.assignments.find(
-        (x) => x.pairId === cell.pairId && x.substrate === cell.substrate,
-      )!,
-      evidenceBinding = {
-        artifactDigest: a.digest,
-        planDigest: v5ProtocolDigest(a.plan),
-        assignmentDigest: v5ProtocolDigest(assignment),
-        bindingDigest: cell.bindingDigest,
-        cellEvidenceRecordDigest: v5ProtocolDigest(cell.evidenceRecord),
-        nativeRunId: cell.native.runId,
-        challengeDigest: cell.challengeDigest,
-      },
-      score = observed(1, "ratio", "portable-grader"),
-      p: V5PortableEvidence = {
-        schema: "autonomy.r24-portable-evidence.v1",
-        cellKey,
-        ...evidenceBinding,
-        outcome: { accepted: true },
-        portableTrace: [{ grader: "portable" }],
-        portableScore: score,
-        signerKeyId: "grader-key",
-        signature: "",
-      },
+    const score = observed(1, "ratio", "portable-grader"),
       unknown = (unit: string): V2Measure => ({
         status: "unknown",
         value: null,
@@ -397,46 +384,39 @@ function projectedEvidence(a: V5LiveArtifact) {
         reason: "provider did not expose a signed observation",
         provenance: "accounting-collector",
       }),
-      ac: V5AccountingEvidence = {
-        schema: "autonomy.r24-accounting-evidence.v1",
-        cellKey,
-        ...evidenceBinding,
-        measures: {
+      p = collectSignedV5PortableEvidence(
+        a,
+        cell.pairId,
+        cell.substrate,
+        {
+          outcome: { accepted: true },
+          portableTrace: [{ grader: "portable" }],
           portableScore: score,
-          wallTimeMs: observed(
-            cell.meters.wall.value,
-            "ms",
-            "native-procfs-meter",
-          ),
-          cpuMs: observed(
-            cell.meters.cpu.value,
-            "ms",
-            "native-procfs-meter",
-          ),
-          memoryByteMs: observedNativeMemory(cell),
+        },
+        {
+          keyId: "grader-key",
+          sign: (digest) =>
+            sign(null, Buffer.from(digest), grader.privateKey).toString("base64"),
+        },
+      ),
+      ac = collectSignedV5AccountingEvidence(
+        a,
+        cell.pairId,
+        cell.substrate,
+        score,
+        {
           tokens: unknown("token"),
           computeUnits: unknown("compute-unit"),
           moneyUsd: unknown("USD"),
-          humanMinutes: observed(0, "minute", "signed-assistance-ledger"),
         },
-        nativeMeterJoins: {
-          wall: v5ProtocolDigest(cell.meters.wall),
-          cpu: v5ProtocolDigest(cell.meters.cpu),
-          maxRss: v5ProtocolDigest(cell.meters.maxRss),
+        {
+          keyId: "accounting-key",
+          sign: (digest) =>
+            sign(null, Buffer.from(digest), accountant.privateKey).toString(
+              "base64",
+            ),
         },
-        signerKeyId: "accounting-key",
-        signature: "",
-      };
-    p.signature = sign(
-      null,
-      Buffer.from(r24V5PortableEvidenceDigest(p)),
-      grader.privateKey,
-    ).toString("base64");
-    ac.signature = sign(
-      null,
-      Buffer.from(r24V5AccountingEvidenceDigest(ac)),
-      accountant.privateKey,
-    ).toString("base64");
+      );
     portable.push(p);
     accounting.push(ac);
   }
@@ -582,4 +562,113 @@ test("rejects cross-campaign evidence replay and globally overlapping evidence r
       "2026-07-15T12:01:00Z",
     ),
   ).toThrow("projected evidence cardinality mismatch");
+});
+
+test("production composer derives and signs the plan and artifact without caller summaries", () => {
+  const fixture = artifact(),
+    preparedCells = fixture.plan.assignments.map((assignment) => {
+      const cell = fixture.cells.find(
+          (candidate) =>
+            candidate.pairId === assignment.pairId &&
+            candidate.substrate === assignment.substrate,
+        )!,
+        authorized = fixture.plan.bindings.find(
+          (candidate) =>
+            candidate.pairId === assignment.pairId &&
+            candidate.substrate === assignment.substrate,
+        )!;
+      return {
+        assignment,
+        binding: cell.evidenceRecord.binding,
+        receiptKeyId: authorized.receiptKeyId,
+        receiptKey: receiptKeyFor(authorized.receiptKeyId),
+        sourceKeyIds: authorized.sourceKeyIds,
+      };
+    }),
+    plan = createAuthorizedV5Plan(
+      {
+        campaignDigest: fixture.plan.campaignDigest,
+        authorizedAt: fixture.plan.authorizedAt,
+        notAfter: fixture.plan.notAfter,
+        design: fixture.plan.design,
+        launcherDigest: fixture.plan.launcherDigest,
+        launcherSpecDigest: fixture.plan.launcherSpecDigest,
+        grader: fixture.plan.grader,
+        accounting: fixture.plan.accounting,
+        preparedCells,
+      },
+      {
+        keyId: "planner-key",
+        sign: (digest) =>
+          sign(null, Buffer.from(digest), planner.privateKey).toString("base64"),
+      },
+    ),
+    composed = assembleAuthorizedV5Artifact(
+      plan,
+      fixture.cells.map((cell) => cell.evidenceRecord),
+      Object.fromEntries(
+        preparedCells.map((cell) => [cell.receiptKeyId, cell.receiptKey]),
+      ),
+      fixture.generatedAt,
+      {
+        keyId: "result-custodian-key",
+        sign: (digest) =>
+          sign(null, Buffer.from(digest), resultCustodian.privateKey).toString(
+            "base64",
+          ),
+      },
+    );
+  expect(plan.assignments).toEqual(planMatchedV2(fixture.plan.design));
+  expect(verifyR24V5LiveArtifact(composed, trust)).toBe(true);
+});
+
+test("final bundle replays analysis and publishes immutably despite orphan temporaries", async () => {
+  const a = artifact(),
+    evidence = projectedEvidence(a),
+    projectionTrust = {
+      ...trust,
+      graderPublicKeys: {
+        "grader-key": grader.publicKey
+          .export({ type: "spki", format: "pem" })
+          .toString(),
+      },
+      accountingPublicKeys: {
+        "accounting-key": accountant.publicKey
+          .export({ type: "spki", format: "pem" })
+          .toString(),
+      },
+    },
+    bundle = finalizeVerifiedR24V5Bundle(
+      a,
+      evidence.portable,
+      evidence.accounting,
+      projectionTrust,
+      "2026-07-15T12:01:00Z",
+    ),
+    dir = mkdtempSync(join(tmpdir(), "oa-r24-v5-")),
+    path = join(dir, "bundle.json");
+  try {
+    expect(verifyR24V5MatchedBundle(bundle, projectionTrust)).toEqual(
+      bundle.analysis,
+    );
+    writeFileSync(`${path}.999.crashed.tmp`, "orphan");
+    const invalidFirstWriter = structuredClone(bundle);
+    invalidFirstWriter.digest = "sha256:" + "0".repeat(64);
+    await expect(
+      writeR24V5BundleAtomic(path, invalidFirstWriter, projectionTrust),
+    ).rejects.toThrow("digest invalid");
+    expect(existsSync(path)).toBe(false);
+    expect(await writeR24V5BundleAtomic(path, bundle, projectionTrust)).toBe(
+      bundle.digest,
+    );
+    expect(JSON.parse(readFileSync(path, "utf8")).digest).toBe(bundle.digest);
+    await expect(
+      writeR24V5BundleAtomic(path, bundle, projectionTrust),
+    ).rejects.toThrow();
+    const tampered = structuredClone(bundle);
+    tampered.analysis.createdAt = "2026-07-15T12:02:00Z";
+    expect(() => verifyR24V5MatchedBundle(tampered, projectionTrust)).toThrow();
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
 });

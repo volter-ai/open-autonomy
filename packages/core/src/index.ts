@@ -76,3 +76,4 @@ export * from './organization-experiment';
 export * from './organization-improvement-loop';
 export * from './organization-universality-claim';
 export * from './organization-universality-census-contract';
+export * from './organization-universality-census';

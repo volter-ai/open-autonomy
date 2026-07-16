@@ -52,6 +52,7 @@ export type SlackOutboxRecord = {
   schema: "autonomy.slack-http-outbox.v1";
   id: string;
   ingressKey: string;
+  channel: string;
   thread: string;
   response: ReturnType<SlackCommandTransport["handle"]>;
   preparedAt: string;
@@ -87,13 +88,14 @@ export interface SlackIngressStore {
   delivery(outboxId: string): SlackDeliveryReceipt | undefined;
 }
 export interface SlackResponsePort {
-  reconcile(idempotencyKey: string): SlackDeliveryReceipt | undefined;
+  reconcile(input: { idempotencyKey: string; channel: string; thread: string }): SlackDeliveryReceipt | undefined | Promise<SlackDeliveryReceipt | undefined>;
   deliver(input: {
     idempotencyKey: string;
+    channel: string;
     thread: string;
     response: SlackOutboxRecord["response"];
     priorAttempts: number;
-  }): SlackDeliveryReceipt;
+  }): SlackDeliveryReceipt | Promise<SlackDeliveryReceipt>;
 }
 
 function parsePayload(rawBody: string) {
@@ -187,10 +189,13 @@ export class SlackHttpRuntime {
       if (!claim) continue;
       try {
         const response = this.transport.handleVerified(ingress.authentication),
+          payload = parsePayload(ingress.authentication.rawBody),
+          channel = String(payload.event?.channel ?? payload.channel?.id ?? ""),
           outbox: SlackOutboxRecord = {
           schema: "autonomy.slack-http-outbox.v1",
           id: digest({ ingressKey: ingress.key, response }),
           ingressKey: ingress.key,
+          channel,
           thread: response.thread_ts,
           response,
             // Stable across crash/replay; wall-clock retry time is not semantic output.
@@ -205,12 +210,12 @@ export class SlackHttpRuntime {
     return processed;
   }
 
-  deliverPending(limit = 100) {
+  async deliverPending(limit = 100) {
     let delivered = 0;
     for (const outbox of this.store.pendingOutbox().slice(0, limit)) {
       const priorAttempts = this.store.deliveryAttempts(outbox.id).length,
         attempt = priorAttempts + 1;
-      const reconciled = this.responsePort.reconcile(outbox.id);
+      const reconciled = await this.responsePort.reconcile({ idempotencyKey: outbox.id, channel: outbox.channel, thread: outbox.thread });
       if (reconciled) {
         if (reconciled.outboxId !== outbox.id)
           throw Error("Slack reconciled receipt is not bound to outbox");
@@ -220,14 +225,15 @@ export class SlackHttpRuntime {
       }
       let receipt: SlackDeliveryReceipt;
       try {
-        receipt = this.responsePort.deliver({
+        receipt = await this.responsePort.deliver({
           idempotencyKey: outbox.id,
+          channel: outbox.channel,
           thread: outbox.thread,
           response: outbox.response,
           priorAttempts,
         });
       } catch (error) {
-        const accepted = this.responsePort.reconcile(outbox.id);
+        const accepted = await this.responsePort.reconcile({ idempotencyKey: outbox.id, channel: outbox.channel, thread: outbox.thread });
         if (accepted) {
           if (accepted.outboxId !== outbox.id)
             throw Error("Slack reconciled receipt is not bound to outbox");

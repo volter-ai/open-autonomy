@@ -80,8 +80,11 @@
   },
   "devDependencies": {
     "@modelcontextprotocol/sdk": "1.17.5",
+    "@slack/web-api": "7.17.0",
     "@types/bun": "^1.3.14",
     "@types/node": "^24.13.2",
+    "@volter/twin": "0.1.0",
+    "@volter/twin-slack": "0.1.0",
     "typescript": "^5.9.3",
     "yaml": "^2.9.0",
     "ztrack": "1.0.0"

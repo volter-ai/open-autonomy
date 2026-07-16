@@ -32,7 +32,7 @@ const timestamp = "1770000000",
       },
     });
 
-test("Slack HTTP runtime acknowledges before processing, survives restart, and deduplicates real retry delivery", () => {
+test("Slack HTTP runtime acknowledges before processing, survives restart, and deduplicates real retry delivery", async () => {
   const root = mkdtempSync(join(tmpdir(), "oa-slack-http-")),
     store = new FileSlackIngressStore(root),
     handled: string[] = [],
@@ -54,7 +54,7 @@ test("Slack HTTP runtime acknowledges before processing, survives restart, and d
       },
     } as any,
     responsePort = {
-      reconcile(idempotencyKey: string) { return delivered.get(idempotencyKey); },
+      reconcile(input: { idempotencyKey: string }) { return delivered.get(input.idempotencyKey); },
       deliver(input: { idempotencyKey: string }) {
         const n = (attempts.get(input.idempotencyKey) ?? 0) + 1;
         attempts.set(input.idempotencyKey, n);
@@ -92,7 +92,7 @@ test("Slack HTTP runtime acknowledges before processing, survives restart, and d
     expect(handled).toHaveLength(1);
     expect(store.pendingOutbox()).toHaveLength(1);
     const outboxId = store.pendingOutbox()[0]!.id;
-    expect(() => runtime.deliverPending()).toThrow("injected Slack Web API outage");
+    await expect(runtime.deliverPending()).rejects.toThrow("injected Slack Web API outage");
     expect(store.deliveryAttempts(outboxId)).toEqual([
       expect.objectContaining({ attempt: 1, outcome: "failed" }),
     ]);
@@ -106,7 +106,7 @@ test("Slack HTTP runtime acknowledges before processing, survives restart, and d
         () => "2026-02-02T02:40:02.000Z",
       );
     expect(restarted.processPending()).toBe(0);
-    expect(restarted.deliverPending()).toBe(1);
+    expect(await restarted.deliverPending()).toBe(1);
     const receipt = restartedStore.delivery(outboxId);
     expect(receipt?.attempt).toBe(2);
     expect(restartedStore.pendingOutbox()).toHaveLength(0);
@@ -177,7 +177,7 @@ test("Slack durable journal rejects corrupted private ingress state", () => {
   }
 });
 
-test("reconciles accept-then-timeout without posting a duplicate", () => {
+test("reconciles accept-then-timeout without posting a duplicate", async () => {
   const root = mkdtempSync(join(tmpdir(), "oa-slack-http-")), store = new FileSlackIngressStore(root);
   let posts = 0;
   const receipts = new Map<string, SlackDeliveryReceipt>(), runtime = new SlackHttpRuntime(
@@ -185,7 +185,7 @@ test("reconciles accept-then-timeout without posting a duplicate", () => {
     { handleVerified: () => ({ response_type: "ephemeral", thread_ts: "t", blocks: [] }) } as any,
     store,
     {
-      reconcile: (id) => receipts.get(id),
+      reconcile: (input) => receipts.get(input.idempotencyKey),
       deliver(input) {
         posts++;
         receipts.set(input.idempotencyKey, { schema: "autonomy.slack-http-delivery.v1",
@@ -199,8 +199,8 @@ test("reconciles accept-then-timeout without posting a duplicate", () => {
     const raw = event("Ev-timeout");
     expect(runtime.receive(auth(raw), raw).status).toBe(200);
     expect(runtime.processPending()).toBe(1);
-    expect(runtime.deliverPending()).toBe(1);
-    expect(runtime.deliverPending()).toBe(0);
+    expect(await runtime.deliverPending()).toBe(1);
+    expect(await runtime.deliverPending()).toBe(0);
     expect(posts).toBe(1);
   } finally { rmSync(root, { recursive: true, force: true }); }
 });

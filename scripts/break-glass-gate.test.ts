@@ -205,3 +205,53 @@ esac
     expect(run.log).not.toContain('state=success');
   });
 });
+
+// BREAK_GLASS_RE is DUPLICATED by design: the code-host gate (break-glass-gate.ts) and finalize
+// (finalize-agent-review.ts) each own a copy, and finalize is MIRRORED into a generic runtime that cannot
+// import the code-host gate script (packages/substrate-github/src/runtime/finalize-agent-review.ts) — so the
+// literal lives in three places. If they drift, a break-glass comment could be honored by one side and
+// rejected by the other (an agent-review posted that finalize won't re-accept, or vice versa), silently
+// breaking the audited bypass. This guard reads every file that defines BREAK_GLASS_RE, extracts the regex
+// LITERAL SOURCE, and asserts all copies are byte-identical. It fails if someone edits one copy and not the
+// rest — the sync obligation is enforced here, not left to reviewer vigilance.
+describe('BREAK_GLASS_RE — the duplicated literal stays byte-identical across all definers (drift guard)', () => {
+  // Every file that defines BREAK_GLASS_RE. Keep in lockstep with the copies (scripts/finalize + its runtime
+  // mirror). Paths are relative to the repo root (scripts/'s parent).
+  const REPO_ROOT = join(import.meta.dir, '..');
+  const DEFINERS = [
+    'scripts/break-glass-gate.ts',
+    'scripts/finalize-agent-review.ts',
+    'packages/substrate-github/src/runtime/finalize-agent-review.ts',
+  ];
+
+  // Extract the regex LITERAL SOURCE from a single-line `[export] const BREAK_GLASS_RE = /…/flags;`
+  // definition. The greedy `.*` runs to the last `/`+flags before the trailing `;`, so an escaped `\/`
+  // inside the pattern (there is one) is captured verbatim rather than mistaken for the closing delimiter.
+  const extractRegexSource = (src: string): string | undefined => {
+    const m = src.match(/\bBREAK_GLASS_RE\s*=\s*(\/.*\/[a-z]*)\s*;/);
+    return m?.[1];
+  };
+
+  const sources = DEFINERS.map((rel) => ({
+    rel,
+    literal: extractRegexSource(readFileSync(join(REPO_ROOT, rel), 'utf8')),
+  }));
+
+  test('every listed file actually defines BREAK_GLASS_RE (a removed/renamed copy fails loudly)', () => {
+    for (const { rel, literal } of sources) {
+      expect(literal, `no BREAK_GLASS_RE literal found in ${rel} — did it move or get renamed?`).toBeDefined();
+    }
+    // Sanity-check the extractor against the known shape, so a broken extractor can't make everything
+    // trivially "equal" by extracting nothing/garbage.
+    expect(sources[0].literal).toBe(String.raw`/^\/agent break-glass ([0-9a-fA-F]{40})\s+(.+\S)$/`);
+  });
+
+  test('all copies are byte-identical', () => {
+    const canonical = sources[0];
+    for (const other of sources.slice(1)) {
+      expect(other.literal, `BREAK_GLASS_RE drift: ${other.rel} != ${canonical.rel}`).toBe(canonical.literal);
+    }
+    // A single distinct-value assertion too, so the failure message shows the whole set on drift.
+    expect(new Set(sources.map((s) => s.literal)).size).toBe(1);
+  });
+});

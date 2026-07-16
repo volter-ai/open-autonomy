@@ -9,6 +9,7 @@
   "**/bun.lock",
   "scripts/finalize-agent-review.ts",
   "packages/substrate-github/src/runtime/finalize-agent-review.ts",
+  "scripts/break-glass-gate.ts",
   "scripts/review-result.ts",
   "packages/substrate-github/src/runtime/review-result.ts",
   "scripts/human-approval-gate.ts",

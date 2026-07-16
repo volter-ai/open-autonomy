@@ -51,6 +51,24 @@ The other actions are `accept-registration`, `issue-collector-intent`,
 R28, every issued request is persisted before exposure, and assembly still requires the production
 external verifier.
 
+R21 acquisition derives five exact evidence domains from the accepted registration: every
+service/region/ramp-or-soak cell, every fault/region cell, every lifecycle/service cell, one billing
+row per service, and every predeclared unfamiliar operator. Billing services are assigned to
+independent billing authorities before the campaign; operator evidence retains independent operator
+and custodian signatures. Category cells can run concurrently, but final collection requires all
+domains:
+
+```sh
+bun run acquire:r21 -- init --state campaign.state.json --registry external-registry.json
+bun run acquire:r21 -- issue-registration --state campaign.state.json --out registration.request.json
+bun run acquire:r21 -- issue-evidence --state campaign.state.json --category services --cell api/east/ramp/1 --out cell.request.json
+bun run acquire:r21 -- accept-evidence --state campaign.state.json --category services --cell api/east/ramp/1 --response cell.response.json
+bun run acquire:r21 -- status --state campaign.state.json
+```
+
+Collector intent, collection, and assembly use the same action names as R20. The status command
+reports required and accepted cardinalities per category.
+
 R27 evidence collection uses a separate, restart-safe custody protocol. Initialize it with an
 externally supplied registry whose roles have distinct Ed25519 public keys, then issue and accept
 one stage at a time:

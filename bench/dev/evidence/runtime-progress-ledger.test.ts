@@ -74,7 +74,7 @@ test("rejects omission or drift in R20 implementation and Volter simulation read
 
 test("rejects omission, drift, or closure inflation in R21 structural readiness", () => {
   const evidence = JSON.parse(readFileSync(join(root, "docs/evidence/R21-STRUCTURAL-READINESS.json"), "utf8"));
-  expect(verifyR21ReadinessEvidence(root, evidence)).toMatchObject({ components: 12, closureClaim: false });
+  expect(verifyR21ReadinessEvidence(root, evidence)).toMatchObject({ components: 16, closureClaim: false });
   expect(evidence.components.map((x: any) => x.path)).toEqual(expect.arrayContaining([
     "packages/core/src/organization-canonical.ts", "packages/core/src/organization-canonical.test.ts",
   ]));

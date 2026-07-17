@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { checkDepIntegrity, checkTermfleetInstalled, checkUncommittedHarness, needsRunner } from './guards.ts';
 import { defaultProc } from './proc.ts';
+import { generationValidationDigest } from './activation-integrity.ts';
 
 function tmpRepo(): string {
   return mkdtempSync(join(tmpdir(), 'oa-guards-'));
@@ -158,4 +159,67 @@ describe('checkUncommittedHarness (OA-03)', () => {
       rmSync(dir, { recursive: true, force: true });
     }
   });
+
+  test('only an exactly routed, validated, byte-intact activation generation receives deployment-artifact trust', () => {
+    const dir = tmpRepo();
+    try {
+      gitRepo(dir);
+      mkdirSync(join(dir, '.open-autonomy'), { recursive: true });
+      mkdirSync(join(dir, 'scheduler'), { recursive: true });
+      writeFileSync(join(dir, '.open-autonomy', 'generated.json'), JSON.stringify({
+        files: ['.open-autonomy/generated.json', 'scheduler/run.mjs'],
+      }));
+      writeFileSync(join(dir, 'scheduler', 'run.mjs'), '// portable source\n');
+      Bun.spawnSync(['git', 'add', '-A'], { cwd: dir });
+      Bun.spawnSync(['git', 'commit', '-q', '-m', 'source'], { cwd: dir });
+      const sha = Bun.spawnSync(['git', 'rev-parse', 'HEAD'], { cwd: dir }).stdout.toString().trim();
+      const home = join(dir, '.git', 'open-autonomy', 'activation');
+      const root = join(home, 'generations', sha);
+      mkdirSync(join(home, 'generations'), { recursive: true });
+      expect(Bun.spawnSync(['git', 'worktree', 'add', '--detach', root, sha], { cwd: dir }).exitCode).toBe(0);
+      writeFileSync(join(root, 'scheduler', 'run.mjs'), '// machine-local materialization\n');
+      const generation = {
+        sha,
+        root,
+        acceptedAt: new Date().toISOString(),
+        validatedAt: new Date().toISOString(),
+        validationDigest: generationValidationDigest(root),
+        activatedAt: new Date().toISOString(),
+      };
+      writeFileSync(join(home, 'config.json'), JSON.stringify({ schema: 'open-autonomy.activation-config.v1', profile: 'profiles/test', pollMs: 1000 }));
+      const writeState = (state: Record<string, unknown>) => writeFileSync(join(home, 'state.json'), JSON.stringify({
+        schema: 'open-autonomy.activation.v1',
+        draining: [],
+        ...state,
+      }));
+      const env = {
+        ...process.env,
+        AUTONOMY_ACTIVATION_HOME: home,
+        AUTONOMY_CONTROL_ROOT: root,
+        AUTONOMY_CONTROL_SHA: sha,
+      };
+
+      writeState({ active: generation });
+      expect(checkUncommittedHarness(root, defaultProc, env).ok).toBe(true);
+
+      expect(checkUncommittedHarness(root, defaultProc, { ...env, AUTONOMY_CONTROL_SHA: 'f'.repeat(40) }).ok).toBe(false);
+      expect(checkUncommittedHarness(root, defaultProc, { ...env, AUTONOMY_ACTIVATION_HOME: join(dir, 'forged') }).ok).toBe(false);
+      expect(checkUncommittedHarness(root, defaultProc, { ...env, AUTONOMY_CONTROL_ROOT: dir }).ok).toBe(false);
+
+      writeState({ staged: generation });
+      expect(checkUncommittedHarness(root, defaultProc, env).ok).toBe(false);
+      writeState({ lastFailed: { sha, at: new Date().toISOString(), reason: 'rejected' } });
+      expect(checkUncommittedHarness(root, defaultProc, env).ok).toBe(false);
+      writeState({ active: { ...generation, validatedAt: undefined } });
+      expect(checkUncommittedHarness(root, defaultProc, env).ok).toBe(false);
+      writeState({ active: { ...generation, validationDigest: undefined } });
+      expect(checkUncommittedHarness(root, defaultProc, env).ok).toBe(false);
+
+      writeState({ active: generation });
+      writeFileSync(join(root, 'scheduler', 'run.mjs'), '// mutated after validation\n');
+      expect(checkUncommittedHarness(root, defaultProc, env).ok).toBe(false);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  }, 15_000);
 });

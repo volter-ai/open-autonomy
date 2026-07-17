@@ -487,7 +487,44 @@ const subsequence = (a: any[], b: any[]) => {
       ? xs
       : op === "maximum"
         ? Math.max(...xs)
-        : xs.reduce((a, b) => a + b, 0) / xs.length;
+      : xs.reduce((a, b) => a + b, 0) / xs.length;
+
+/** Narrow public exposure of the evaluator's source-projection semantics. */
+export function projectU3ObservationSourceValue(
+  calculus: FrozenU3ObservationCalculus,
+  observationId: string,
+  value: unknown,
+): unknown {
+  const observation = calculus.observations.find((x) => x.id === observationId);
+  if (!observation) throw Error("source projection observation invalid");
+  const projection = calculus.projections.find(
+    (x) => x.id === observation.sourceProjectionId,
+  );
+  if (!projection) throw Error("source projection registry invalid");
+  if (
+    projection.operator !== "identity" &&
+    pointerParts(projection.operator, projection.argument) === null
+  )
+    throw Error("source projection pointer invalid");
+  return project(projection, value);
+}
+
+/** Computes and verifies the exact source-trace digest used in U3 reports. */
+export function computeU3SourceTraceDigest(
+  trace: U3TraceEvaluationInput["source"],
+): Sha {
+  preflight(trace);
+  return H(C(trace));
+}
+
+export function verifyU3SourceTraceDigest(
+  trace: U3TraceEvaluationInput["source"],
+  expected: Sha,
+): Sha {
+  if (!sha(expected) || !eq(computeU3SourceTraceDigest(trace), expected))
+    throw Error("source trace digest invalid");
+  return expected;
+}
 export function evaluateU3ObservationTrace(
   calculus: FrozenU3ObservationCalculus,
   contract: U3TraceEvaluationContract,

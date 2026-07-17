@@ -13,7 +13,10 @@ import {
   evaluateU3ObservationTrace,
   freezeU3TraceEvaluationContract,
   integrityU3Event,
+  computeU3SourceTraceDigest,
+  projectU3ObservationSourceValue,
   signU3Record,
+  verifyU3SourceTraceDigest,
   verifyU3EvaluationReport,
   verifyU3EvaluatorCalculusGitCustody,
 } from "./organization-u3-observation-evaluator";
@@ -181,6 +184,16 @@ function lossFixture() {
   loss.input.losses = [{ ...lossBare, receipt: signU3Record(K.evidence, lossBare) }];
   return loss;
 }
+
+test("public source projection and trace digest helpers are mechanically identical to evaluator semantics", () => {
+  const f = signedFixture(), observationId = f.calc.observations[0].id;
+  expect(projectU3ObservationSourceValue(f.calc, observationId, { value: 7 })).toBe(7);
+  expect(() => projectU3ObservationSourceValue(f.calc, "missing-observation", { value: 7 })).toThrow("observation invalid");
+  const digest = computeU3SourceTraceDigest(f.input.source);
+  expect(verifyU3SourceTraceDigest(f.input.source, digest)).toBe(digest);
+  const changed = structuredClone(f.input.source); changed.runId = "different-run";
+  expect(() => verifyU3SourceTraceDigest(changed, digest)).toThrow("digest invalid");
+});
 
 test("freezes bounded semantic shape registry and verifies calculus Git custody", () => {
   const f = signedFixture();

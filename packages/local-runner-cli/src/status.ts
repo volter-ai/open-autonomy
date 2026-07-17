@@ -5,13 +5,15 @@
 // informational only — it drives
 // nothing (the marker file stays the sole source of truth for pause/resume; last-fire is read-only
 // telemetry `oa status` surfaces, never a second control channel).
-import { mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { Session, SessionRunner } from './types.ts';
 import { isPaused, pausedMarkerPath, pauseReasonText } from './pause.ts';
 import { defaultSessionRunner, listSessionsBestEffort } from './sessions.ts';
 import { readControlGeneration, type ControlGeneration } from './control-generation.ts';
 import { readActivationRoutingState, type ActivationRoutingState } from './activation-paths.ts';
+import { loadSchedule } from './config.ts';
+import { resolveProvider } from './env.ts';
 
 function lastFireDir(cwd: string): string {
   return join(cwd, '.open-autonomy', 'runner-state', 'last-fire');
@@ -65,13 +67,55 @@ export interface StatusReport {
   rationale: string;
 }
 
+async function withProviderEnv<T>(provider: { url: string; source: string }, action: () => Promise<T>): Promise<T> {
+  const hadUrl = Object.hasOwn(process.env, 'TERMFLEET_PROVIDER_URL');
+  const url = process.env.TERMFLEET_PROVIDER_URL;
+  const hadSource = Object.hasOwn(process.env, 'AUTONOMY_PROVIDER_URL_SOURCE');
+  const source = process.env.AUTONOMY_PROVIDER_URL_SOURCE;
+  process.env.TERMFLEET_PROVIDER_URL = provider.url;
+  process.env.AUTONOMY_PROVIDER_URL_SOURCE = provider.source;
+  try {
+    return await action();
+  } finally {
+    if (hadUrl) process.env.TERMFLEET_PROVIDER_URL = url;
+    else delete process.env.TERMFLEET_PROVIDER_URL;
+    if (hadSource) process.env.AUTONOMY_PROVIDER_URL_SOURCE = source;
+    else delete process.env.AUTONOMY_PROVIDER_URL_SOURCE;
+  }
+}
+
+/** Probe through the runtime generation's own provider pin. The emitted runner resolves lazily in
+ * `list()`, so the scoped environment must cover runner construction and the list/fallback call. */
+async function statusSessions(
+  runtimeRoot: string,
+  sessionRunnerFactory: (cwd: string) => Promise<SessionRunner | null>,
+): Promise<Session[] | null> {
+  const schedulePath = join(runtimeRoot, 'scheduler', 'schedule.json');
+  if (!existsSync(schedulePath)) {
+    const runner = await sessionRunnerFactory(runtimeRoot);
+    return listSessionsBestEffort(runtimeRoot, runner);
+  }
+  let schedule;
+  try {
+    schedule = loadSchedule(runtimeRoot);
+  } catch (error) {
+    console.error(`[oa] status: refusing session probe with invalid runtime schedule: ${(error as Error).message}`);
+    return null;
+  }
+  const provider = await resolveProvider(schedule.env, process.env);
+  const probe = async () => {
+    const runner = await sessionRunnerFactory(runtimeRoot);
+    return listSessionsBestEffort(runtimeRoot, runner);
+  };
+  return provider ? withProviderEnv(provider, probe) : probe();
+}
+
 export async function status(opts: { cwd?: string; sessionRunnerFactory?: (cwd: string) => Promise<SessionRunner | null> } = {}): Promise<StatusReport> {
   const cwd = opts.cwd ?? process.cwd();
   const paused = isPaused(cwd);
   const activation = readActivationRoutingState(cwd);
   const runtimeRoot = activation?.active?.root ?? cwd;
-  const runner = await (opts.sessionRunnerFactory ?? defaultSessionRunner)(runtimeRoot);
-  const sessions = await listSessionsBestEffort(runtimeRoot, runner);
+  const sessions = await statusSessions(runtimeRoot, opts.sessionRunnerFactory ?? defaultSessionRunner);
   const lastFires = readLastFires(runtimeRoot);
   const controlGeneration = readControlGeneration(runtimeRoot);
 

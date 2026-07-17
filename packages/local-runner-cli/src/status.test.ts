@@ -12,6 +12,15 @@ function tmpRepo(): string {
   return mkdtempSync(join(tmpdir(), 'oa-status-'));
 }
 
+function writeSchedule(dir: string, providerUrl?: string): void {
+  mkdirSync(join(dir, 'scheduler'), { recursive: true });
+  writeFileSync(join(dir, 'scheduler', 'schedule.json'), JSON.stringify({
+    intervalSeconds: 900,
+    env: providerUrl ? { TERMFLEET_PROVIDER_URL: providerUrl } : {},
+    scripts: ['AUTONOMY_AGENT=manager node scripts/run-agent.mjs'],
+  }));
+}
+
 describe('recordFire / readLastFires — informational telemetry only, never a control channel', () => {
   test('recordFire writes a per-agent record readLastFires can read back', () => {
     const dir = tmpRepo();
@@ -51,6 +60,90 @@ describe('recordFire / readLastFires — informational telemetry only, never a c
 });
 
 describe('oa status', () => {
+  test('an emitted runner probe is scoped to the runtime schedule pin and restores the ambient environment', async () => {
+    const dir = tmpRepo();
+    const savedUrl = process.env.TERMFLEET_PROVIDER_URL;
+    const savedSource = process.env.AUTONOMY_PROVIDER_URL_SOURCE;
+    try {
+      writeSchedule(dir, 'http://install-scoped.test');
+      mkdirSync(join(dir, 'scripts'), { recursive: true });
+      writeFileSync(join(dir, 'scripts', 'autonomy-runner.mjs'), `
+        export class TermfleetRunner {
+          async list() {
+            return [{ id: process.env.TERMFLEET_PROVIDER_URL, agent: process.env.AUTONOMY_PROVIDER_URL_SOURCE, status: 'running' }];
+          }
+          async reapIdle() { return []; }
+        }
+      `);
+      delete process.env.TERMFLEET_PROVIDER_URL;
+      delete process.env.AUTONOMY_PROVIDER_URL_SOURCE;
+      const report = await status({ cwd: dir });
+      expect(report.sessions).toEqual([{ id: 'http://install-scoped.test', agent: 'schedule', status: 'running' }]);
+      expect(process.env.TERMFLEET_PROVIDER_URL).toBeUndefined();
+      expect(process.env.AUTONOMY_PROVIDER_URL_SOURCE).toBeUndefined();
+    } finally {
+      if (savedUrl === undefined) delete process.env.TERMFLEET_PROVIDER_URL;
+      else process.env.TERMFLEET_PROVIDER_URL = savedUrl;
+      if (savedSource === undefined) delete process.env.AUTONOMY_PROVIDER_URL_SOURCE;
+      else process.env.AUTONOMY_PROVIDER_URL_SOURCE = savedSource;
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test('ambient provider precedence is scoped across lazy list and restored exactly when probing throws', async () => {
+    const dir = tmpRepo();
+    const savedUrl = process.env.TERMFLEET_PROVIDER_URL;
+    const savedSource = process.env.AUTONOMY_PROVIDER_URL_SOURCE;
+    try {
+      writeSchedule(dir, 'http://schedule.test');
+      process.env.TERMFLEET_PROVIDER_URL = 'http://ambient.test';
+      process.env.AUTONOMY_PROVIDER_URL_SOURCE = 'original-source';
+      let observed: { url?: string; source?: string } = {};
+      await expect(status({
+        cwd: dir,
+        sessionRunnerFactory: async () => ({
+          async list() {
+            observed = { url: process.env.TERMFLEET_PROVIDER_URL, source: process.env.AUTONOMY_PROVIDER_URL_SOURCE };
+            throw new Error('provider unavailable');
+          },
+          async reapIdle() { return []; },
+        }),
+      })).resolves.toMatchObject({ sessions: null });
+      expect(observed).toEqual({ url: 'http://ambient.test', source: 'env' });
+      expect(process.env.TERMFLEET_PROVIDER_URL).toBe('http://ambient.test');
+      expect(process.env.AUTONOMY_PROVIDER_URL_SOURCE).toBe('original-source');
+    } finally {
+      if (savedUrl === undefined) delete process.env.TERMFLEET_PROVIDER_URL;
+      else process.env.TERMFLEET_PROVIDER_URL = savedUrl;
+      if (savedSource === undefined) delete process.env.AUTONOMY_PROVIDER_URL_SOURCE;
+      else process.env.AUTONOMY_PROVIDER_URL_SOURCE = savedSource;
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test('an empty ambient provider does not erase the runtime schedule pin', async () => {
+    const dir = tmpRepo();
+    const savedUrl = process.env.TERMFLEET_PROVIDER_URL;
+    try {
+      writeSchedule(dir, 'http://schedule.test');
+      process.env.TERMFLEET_PROVIDER_URL = '';
+      let observed: string | undefined;
+      await status({
+        cwd: dir,
+        sessionRunnerFactory: async () => ({
+          async list() { observed = process.env.TERMFLEET_PROVIDER_URL; return []; },
+          async reapIdle() { return []; },
+        }),
+      });
+      expect(observed).toBe('http://schedule.test');
+      expect(process.env.TERMFLEET_PROVIDER_URL).toBe('');
+    } finally {
+      if (savedUrl === undefined) delete process.env.TERMFLEET_PROVIDER_URL;
+      else process.env.TERMFLEET_PROVIDER_URL = savedUrl;
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
   test('reports fence PAUSED + reason + no sessions + no last-fire on a fresh install', async () => {
     const dir = tmpRepo();
     try {
@@ -116,8 +209,10 @@ describe('oa status', () => {
 
   test('reports active, staged/draining, last-failed generations and an exact rollback command', async () => {
     const dir = tmpRepo();
+    const savedUrl = process.env.TERMFLEET_PROVIDER_URL;
     try {
       spawnSync('git', ['init', '-q', '-b', 'main'], { cwd: dir });
+      pause({ cwd: dir, reason: 'operator review pending' });
       configureActivation({ profile: 'profiles/test', pollMs: 1000 }, { cwd: dir });
       let accepted = 'a'.repeat(40);
       let fail = false;
@@ -134,13 +229,33 @@ describe('oa status', () => {
       fail = true;
       await activateAcceptedGeneration({ cwd: dir, ops });
 
-      const report = await status({ cwd: dir, sessionRunnerFactory: async () => new StubSessionRunner() });
+      const activeRoot = join(activationHome(dir), 'fixture', 'b'.repeat(40));
+      writeSchedule(activeRoot, 'http://active-generation.test');
+      delete process.env.TERMFLEET_PROVIDER_URL;
+      let probedRoot = '';
+      let probedProvider = '';
+      const report = await status({
+        cwd: dir,
+        sessionRunnerFactory: async (runtimeRoot) => {
+          probedRoot = runtimeRoot;
+          return {
+            async list() { probedProvider = process.env.TERMFLEET_PROVIDER_URL ?? ''; return []; },
+            async reapIdle() { return []; },
+          };
+        },
+      });
+      expect(probedRoot).toBe(activeRoot);
+      expect(probedProvider).toBe('http://active-generation.test');
+      expect(report.paused).toBe(true);
+      expect(report.pauseReason).toContain('operator review pending');
       expect(report.activation?.active?.sha).toBe('b'.repeat(40));
       expect(report.rationale).toContain(`activation.active: ${'b'.repeat(40)}`);
       expect(report.rationale).toContain(`activation.draining: ${'a'.repeat(40)}`);
       expect(report.rationale).toContain(`activation.last-failed: ${'c'.repeat(40)} — invalid staged profile`);
       expect(report.rationale).toContain(`activation.rollback: oa rollback ${'a'.repeat(40)}`);
     } finally {
+      if (savedUrl === undefined) delete process.env.TERMFLEET_PROVIDER_URL;
+      else process.env.TERMFLEET_PROVIDER_URL = savedUrl;
       rmSync(dir, { recursive: true, force: true });
     }
   });

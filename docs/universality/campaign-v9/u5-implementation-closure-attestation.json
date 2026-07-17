@@ -1,0 +1,136 @@
+{
+  "schema": "open-autonomy.u5-closure-attestation.v1",
+  "checkpoint": "U5",
+  "status": "locally-attested-external-deferred",
+  "fixtureKind": "synthetic",
+  "empiricalRegistration": false,
+  "closureClaim": false,
+  "assurancePromotionAllowed": false,
+  "closureAnchor": {
+    "commit": "9f901a8c14ffde8f88fac701c820c856e2c0f8cf",
+    "closureDigest": "sha256:10ae9cfc3ddf90559645f29c2d82463fa9a2fea46e398a74ae1a5a6e4c469839",
+    "files": [
+      {
+        "kind": "source",
+        "path": "packages/core/src/organization-u5-implementation-closure.ts",
+        "sha256": "sha256:e0ca693cdb6af4b1548fd092fc8da71f6a22cdc2c6f6156f4417ffa306225526"
+      },
+      {
+        "kind": "test",
+        "path": "packages/core/src/organization-u5-implementation-closure.test.ts",
+        "sha256": "sha256:2d7d7b1ea1eea079cc8b83d986a47a0001fc0af0db87ade59fdf69e27e74570b"
+      },
+      {
+        "kind": "artifact",
+        "path": "docs/universality/campaign-v9/u5-implementation-closure.json",
+        "sha256": "sha256:ba77f4e6a493b38cd5bbcf2b8a5c9faeaf1e4c9cf18e6afc7ffd820c1d517c53"
+      }
+    ]
+  },
+  "closureAccountingBefore": {
+    "dischargedInternal": 15,
+    "pendingAttestationInternal": 1,
+    "openInternal": 0
+  },
+  "localAccountingAfter": {
+    "dischargedInternal": 16,
+    "pendingAttestationInternal": 0,
+    "openInternal": 0,
+    "totalInternal": 16,
+    "dischargedObligationId": "U5-I16"
+  },
+  "externalDeferred": [
+    {
+      "id": "U5-E1",
+      "requirement": "External-only; synthetic U5 evidence cannot discharge or promote: Register real U1 source denominator and weights",
+      "status": "deferred",
+      "dischargedBy": []
+    },
+    {
+      "id": "U5-E2",
+      "requirement": "External-only; synthetic U5 evidence cannot discharge or promote: Establish independent real policy authority and custodian",
+      "status": "deferred",
+      "dischargedBy": []
+    },
+    {
+      "id": "U5-E3",
+      "requirement": "External-only; synthetic U5 evidence cannot discharge or promote: Acquire real disposition evidence with authenticated custody",
+      "status": "deferred",
+      "dischargedBy": []
+    },
+    {
+      "id": "U5-E4",
+      "requirement": "External-only; synthetic U5 evidence cannot discharge or promote: Establish independent real semantic oracle authorities",
+      "status": "deferred",
+      "dischargedBy": []
+    },
+    {
+      "id": "U5-E5",
+      "requirement": "External-only; synthetic U5 evidence cannot discharge or promote: Complete external-human expert semantic review",
+      "status": "deferred",
+      "dischargedBy": []
+    },
+    {
+      "id": "U5-E6",
+      "requirement": "External-only; synthetic U5 evidence cannot discharge or promote: Standardize and independently classify extension strata",
+      "status": "deferred",
+      "dischargedBy": []
+    },
+    {
+      "id": "U5-E7",
+      "requirement": "External-only; synthetic U5 evidence cannot discharge or promote: Execute independent ledger and report replay",
+      "status": "deferred",
+      "dischargedBy": []
+    },
+    {
+      "id": "U5-E8",
+      "requirement": "External-only; synthetic U5 evidence cannot discharge or promote: Freeze real holdout chronology before evidence",
+      "status": "deferred",
+      "dischargedBy": []
+    },
+    {
+      "id": "U5-E9",
+      "requirement": "External-only; synthetic U5 evidence cannot discharge or promote: Complete empirical coverage inventory across all systems",
+      "status": "deferred",
+      "dischargedBy": []
+    },
+    {
+      "id": "U5-E10",
+      "requirement": "External-only; synthetic U5 evidence cannot discharge or promote: Authorize UG1 promotion only after all external requirements",
+      "status": "deferred",
+      "dischargedBy": []
+    }
+  ],
+  "skepticalReview": {
+    "status": "accepted",
+    "reviewedCommit": "9f901a8c14ffde8f88fac701c820c856e2c0f8cf",
+    "scope": [
+      "semantic I1-I16",
+      "E1-E10",
+      "evidence DAG",
+      "custody",
+      "attacks"
+    ],
+    "priorRejectionClassesResolved": [
+      "non-exact policy authority and denominator anchors",
+      "unpreserved canonical observations",
+      "unbounded or unreachable derived evidence DAG",
+      "opaque fallback for lowered dispositions",
+      "unclassified extension strata",
+      "canonical credit granted to opaque or abstracted dispositions",
+      "non-total fact ownership and evidence assignment",
+      "credit lattice count or weight inflation",
+      "coverage report not derived from verified ledger",
+      "cross-role owner or chronology aliasing",
+      "stale commit or blob anchors",
+      "premature 16-of-16 discharge before post-commit attestation"
+    ],
+    "evidenceKind": "synthetic-reviewer-process",
+    "externalHumanE5": false
+  },
+  "selfCustody": {
+    "status": "deferred-to-UG1",
+    "reason": "attestation structural code and test are custodied at UG1; no recursive self-attestation"
+  },
+  "digest": "sha256:c8985a420c88dc08698d18e2070e295a0397db3cfbd614535fbe43db93203290"
+}

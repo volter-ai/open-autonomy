@@ -12,7 +12,7 @@ import type { NormalizedSchedule, ProcRunner } from './types.ts';
 import { defaultProc } from './proc.ts';
 import { checkDepIntegrity, checkTermfleetInstalled, checkUncommittedHarness, needsRunner } from './guards.ts';
 import { defaultResolveDefaultProvider, resolveProvider } from './env.ts';
-import { acceptControlGeneration } from './control-generation.ts';
+import { acceptControlGeneration, acceptPinnedControlGeneration } from './control-generation.ts';
 
 export interface PreflightResult {
   ok: boolean;
@@ -31,6 +31,9 @@ export interface PreflightOptions {
    *  default dynamically imports the adopter repo's @termfleet/core. Failure is non-fatal (logged,
    *  resolution deferred to launch time) — verbatim run.mjs behavior. */
   resolveDefault?: () => Promise<{ baseUrl: string; source: string }>;
+  /** Atomic supervisor route. Active/draining generations bind their own immutable SHA instead of
+   * requiring every retained generation to equal today's remote default head. */
+  generationSha?: string;
 }
 
 export async function runPreflight(schedule: NormalizedSchedule, opts: PreflightOptions): Promise<PreflightResult> {
@@ -39,7 +42,9 @@ export async function runPreflight(schedule: NormalizedSchedule, opts: Preflight
   const cmds = schedule.jobs.map((job) => job.cmd);
 
   try {
-    const generation = acceptControlGeneration(opts.cwd, proc);
+    const generation = opts.generationSha
+      ? acceptPinnedControlGeneration(opts.cwd, opts.generationSha, proc)
+      : acceptControlGeneration(opts.cwd, proc);
     if (generation) {
       ambient.AUTONOMY_CONTROL_ROOT = opts.cwd;
       ambient.AUTONOMY_CONTROL_SHA = generation.sha;

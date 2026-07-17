@@ -27,13 +27,13 @@ type Sha = `sha256:${string}`;
 export const U4_INVENTORY_REPLAY_CERTIFICATE_SCHEMA =
   "open-autonomy.u4-inventory-replay-certificate.v1" as const;
 export const U4_REPLAY_SOURCE_ANCHORS = {
-  commit: "ec04d1de5aecc6530fc7eaffe3d736f28e4c2c12",
+  commit: "91c3340f2d3f53fab034bc655c7a49ce0545b4d4",
   sourcePath: "packages/core/src/organization-u4-source-inventory.ts",
   sourceSha256:
     "sha256:d213a2e4fc466fdcbaf000655df787a3f649aaec12030725ffa83e7c39269395",
   testPath: "packages/core/src/organization-u4-source-inventory.test.ts",
   testSha256:
-    "sha256:c6cfc3e90bff56169ae492e0143e6c7f32f78d3b895d253d2586bd87ec8c4d7b",
+    "sha256:c73625ab7265ee13566b42461eae7a3439a0db3b13fb53963a25b5cf72a4a166",
 } as const;
 export const U4_REPLAY_IMPLEMENTATION_PATHS = Object.freeze([
   "packages/core/src/organization-u4-probe-protocol.ts",

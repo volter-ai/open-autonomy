@@ -151,6 +151,7 @@ function unsigned(): U4ProbePlan {
         sourceVersion: "v1",
         factIds: ["fact.one"],
         observationIds: ["obs.one"],
+        factResultBindings: [{ factId: "fact.one", semanticSlotId: "value", observationIds: ["obs.one"], stdoutJsonPointer: "", sourceProjection: "u3-observation-source-value-v1", sharedProjectionEquivalenceId: null }],
         runtimeProbeProvenanceId: "p.probe",
         sourceBehaviorProvenanceId: "p.behavior",
         invocation: {
@@ -387,6 +388,13 @@ describe("U4 authenticated synthetic probe preregistration", () => {
         trusted,
       ),
     ).toThrow("fact denominator totality");
+  });
+  test("binds every fact bijectively to its exact observations and stdout projection", () => {
+    expect(() => freezeU4ProbePlan(signedPlan((p:any) => p.cases[0].factResultBindings.pop()), inventory, calculus, contract, trusted)).toThrow(/binding/);
+    expect(() => freezeU4ProbePlan(signedPlan((p:any) => p.cases[0].factResultBindings.push(structuredClone(p.cases[0].factResultBindings[0]))), inventory, calculus, contract, trusted)).toThrow(/binding/);
+    expect(() => freezeU4ProbePlan(signedPlan((p:any) => p.cases[0].factResultBindings[0].factId = "fact.other"), inventory, calculus, contract, trusted)).toThrow(/binding/);
+    expect(() => freezeU4ProbePlan(signedPlan((p:any) => p.cases[0].factResultBindings[0].observationIds = []), inventory, calculus, contract, trusted)).toThrow(/binding/);
+    expect(() => freezeU4ProbePlan(signedPlan((p:any) => p.cases[0].factResultBindings[0].stdoutJsonPointer = "forged"), inventory, calculus, contract, trusted)).toThrow(/binding/);
   });
   test("rejects cross-source empirical provenance", () => {
     const cross: any = structuredClone(inventory);

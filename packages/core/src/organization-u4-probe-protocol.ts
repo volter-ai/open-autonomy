@@ -101,6 +101,14 @@ export type U4ProbeCase = {
   sourceVersion: string;
   factIds: string[];
   observationIds: string[];
+  factResultBindings: Array<{
+    factId: string;
+    semanticSlotId: string;
+    observationIds: string[];
+    stdoutJsonPointer: string;
+    sourceProjection: "u3-observation-source-value-v1";
+    sharedProjectionEquivalenceId: string | null;
+  }>;
   runtimeProbeProvenanceId: string;
   sourceBehaviorProvenanceId: string;
   invocation: {
@@ -398,6 +406,7 @@ export function freezeU4ProbePlan(
         "sourceVersion",
         "factIds",
         "observationIds",
+        "factResultBindings",
         "runtimeProbeProvenanceId",
         "sourceBehaviorProvenanceId",
         "invocation",
@@ -409,6 +418,10 @@ export function freezeU4ProbePlan(
     );
     sorted(c.factIds, "fact ids");
     sorted(c.observationIds, "observation ids");
+    if (!Array.isArray(c.factResultBindings))
+      throw Error("U4 probe fact result bindings invalid");
+    if (C(c.factResultBindings.map(b=>b.factId)) !== C(c.factResultBindings.map(b=>b.factId).sort()))
+      throw Error("U4 probe fact result binding order invalid");
     if (c.id <= last) throw Error("U4 probe case order invalid");
     last = c.id;
     const s = sources.get(c.sourceId);
@@ -438,6 +451,26 @@ export function freezeU4ProbePlan(
     }
     if (C([...expected].sort()) !== C(c.observationIds))
       throw Error("U4 probe observation denominator invalid");
+    const bindingFacts = new Set<string>();
+    for (const b of c.factResultBindings) {
+      exact(b, ["factId", "semanticSlotId", "observationIds", "stdoutJsonPointer", "sourceProjection", "sharedProjectionEquivalenceId"], "fact result binding");
+      sorted(b.observationIds, "fact result observations");
+      const f = facts.get(b.factId);
+      if (!f || !c.factIds.includes(b.factId) || bindingFacts.has(b.factId) ||
+          b.semanticSlotId !== "value" || !/^$|^\/(?:[^~/]|~[01])+(?:\/(?:[^~/]|~[01])+)*$/.test(b.stdoutJsonPointer) ||
+          b.sourceProjection !== "u3-observation-source-value-v1" ||
+          (b.sharedProjectionEquivalenceId !== null && !id(b.sharedProjectionEquivalenceId)) ||
+          C(b.observationIds) !== C(f.mandatoryObservationIds))
+        throw Error("U4 probe fact result binding invalid");
+      bindingFacts.add(b.factId);
+    }
+    if (C([...bindingFacts].sort()) !== C(c.factIds))
+      throw Error("U4 probe fact result binding totality invalid");
+    for (const b of c.factResultBindings) {
+      const samePointer = c.factResultBindings.filter(x => x.stdoutJsonPointer === b.stdoutJsonPointer);
+      if (samePointer.length > 1 && (b.sharedProjectionEquivalenceId === null || samePointer.some(x => x.sharedProjectionEquivalenceId !== b.sharedProjectionEquivalenceId)))
+        throw Error("U4 probe shared projection equivalence invalid");
+    }
     for (const oid of c.observationIds) {
       const o = obs.get(oid);
       if (
@@ -752,10 +785,8 @@ export function freezeU4SourceBehaviorTraceJoin(
       e.adapterDigest !== c.invocation.adapterDigest
     )
       throw Error("U4 probe trace event join invalid");
-    if (
-      C(projectU3ObservationSourceValue(calculus, e.observationId, native)) !==
-      C(projectU3ObservationSourceValue(calculus, e.observationId, e.payload))
-    )
+    const bindings=c.factResultBindings.filter(b=>b.observationIds.includes(e.observationId)),payload=C(projectU3ObservationSourceValue(calculus,e.observationId,e.payload));
+    if(!bindings.length||bindings.some(b=>{let selected:any=native;for(const raw of b.stdoutJsonPointer.slice(1).split("/")){if(b.stdoutJsonPointer==="")break;const k=raw.replace(/~1/g,"/").replace(/~0/g,"~");if(selected===null||typeof selected!=="object"||!Object.prototype.hasOwnProperty.call(selected,k))throw Error("U4 probe trace stdout pointer invalid");selected=selected[k]}return C(projectU3ObservationSourceValue(calculus,e.observationId,selected))!==payload}))
       throw Error("U4 probe trace semantic projection mismatch");
     seen.add(e.observationId);
   }

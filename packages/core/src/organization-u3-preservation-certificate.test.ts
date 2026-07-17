@@ -11,7 +11,7 @@ const H = (x: string | Uint8Array) => `sha256:${createHash("sha256").update(x).d
   K = { source: "source-secret", lifted: "lifted-secret", evidence: "evidence-secret", provenance: "provenance-secret", custody: "custody-secret" },
   sort = <T extends { id: string }>(xs: T[]) => xs.sort((a, b) => a.id.localeCompare(b.id));
 
-function calculus(operator: "equal" | "refines" | "abstracts" = "equal", direction: "left-to-right" | "right-to-left" = "left-to-right", metric: "exact" | "absolute" | "relative" = "exact", bound = 0, shiftRight = false) {
+function calculus(operator: "equal" | "refines" | "abstracts" = "equal", direction: "left-to-right" | "right-to-left" = "left-to-right", metric: "exact" | "absolute" | "relative" = "exact", bound = 0, shiftRight = false, optionalLast = false) {
   const observations: Any[] = sort(U3_TAXONOMY.map((taxonomy, i) => ({
     id: `obs-${taxonomy}`, taxonomy, subjectSort: "provider", subjectKind: "worker", providerId: `provider-${i}`, componentId: null,
     nativeSchemaId: "event-schema", nativeSchemaVersion: "1", valueSchemaId: "value-schema", valueSchemaVersion: "1", sourceProjectionId: "value",
@@ -22,6 +22,7 @@ function calculus(operator: "equal" | "refines" | "abstracts" = "equal", directi
     left: { observationId: o.id, subjectKind: "worker", schemaId: "value-schema", schemaVersion: "1" }, right: { observationId: target.id, subjectKind: "worker", schemaId: "value-schema", schemaVersion: "1" },
     sourceProjectionId: "identity-value", targetProjectionId: "identity-value", direction: i === 0 && operator !== "equal" ? direction : "symmetric", operator: i === 0 ? operator : "equal", missing: "unknown" }); }));
   const variances = sort(comparisons.map((c, i) => ({ id: `variance-${c.id}`, comparisonId: c.id, operator: "accept-within", metric: i === 0 ? metric : "exact", unit: "event", clock: "monotonic", window: "trace", aggregation: "identity", missing: "unknown", bound: i === 0 ? bound : 0, minimumSamples: 1 })));
+  if (optionalLast) observations.at(-1)!.applicability[0].status = "optional";
   const body: U3ObservationCalculus = {
     schema: U3_OBSERVATION_CALCULUS_SCHEMA, fixtureKind: "synthetic", denominatorScope: "fixture-local", empiricalRegistration: false, closureClaim: false, campaignId: "organization-universality-2026-v9",
     predecessors: structuredClone(U3_PREDECESSORS) as Any,
@@ -29,12 +30,12 @@ function calculus(operator: "equal" | "refines" | "abstracts" = "equal", directi
     predicates: [{ id: "always", version: "1", operator: "always", argument: "" }],
     projections: [{ id: "identity-value", version: "1", operator: "identity", argument: "", inputSchemaId: "value-schema", inputSchemaVersion: "1", outputSchemaId: "value-schema", outputSchemaVersion: "1" }, { id: "value", version: "1", operator: "field", argument: "value", inputSchemaId: "event-schema", inputSchemaVersion: "1", outputSchemaId: "value-schema", outputSchemaVersion: "1" }],
     evidencePolicies: [{ id: "verified", required: true, minimum: "verification", referenceSchemaId: "event-schema", referenceSchemaVersion: "1" }], authenticationPolicies: [{ id: "mac", required: true, mechanism: "mac", trustRootSha256: S("b") }], strata: [{ id: "coding" }], observations, comparisons: comparisons as Any, variances: variances as Any,
-    profiles: [{ id: "base", lineageId: "coding", version: "1.0.0", stratumId: "coding", parentIds: [], observationIds: observations.map((x) => x.id), comparisonIds: comparisons.map((x) => x.id), varianceIds: variances.map((x) => x.id), forbiddenLossObservationIds: observations.map((x) => x.id), unknownPolicy: "report" }], profilePairs: [],
+    profiles: [{ id: "base", lineageId: "coding", version: "1.0.0", stratumId: "coding", parentIds: [], observationIds: observations.map((x) => x.id), comparisonIds: comparisons.map((x) => x.id), varianceIds: variances.map((x) => x.id), forbiddenLossObservationIds: observations.filter((x) => !optionalLast || x !== observations.at(-1)).map((x) => x.id), unknownPolicy: "report" }], profilePairs: [],
   };
   return freezeU3ObservationCalculus(body, { requireFixtureDigest: false });
 }
-function fixture(operator: "equal" | "refines" | "abstracts" = "equal", direction: "left-to-right" | "right-to-left" = "left-to-right", metric: "exact" | "absolute" | "relative" = "exact", bound = 0, values: [number, number] = [10, 10], shiftRight = false) {
-  const calc = calculus(operator, direction, metric, bound, shiftRight), shape = { id: "event-shape", schemaId: "event-schema", schemaVersion: "1", schemaDigest: S("a"), type: "object" as const, required: ["value"], properties: [{ name: "value", type: "number" as const }] }, valueShape = { id: "value-shape", schemaId: "value-schema", schemaVersion: "1", schemaDigest: S("9"), type: "number" as const, required: [], properties: [] };
+function fixture(operator: "equal" | "refines" | "abstracts" = "equal", direction: "left-to-right" | "right-to-left" = "left-to-right", metric: "exact" | "absolute" | "relative" = "exact", bound = 0, values: [number, number] = [10, 10], shiftRight = false, optionalLast = false) {
+  const calc = calculus(operator, direction, metric, bound, shiftRight, optionalLast), shape = { id: "event-shape", schemaId: "event-schema", schemaVersion: "1", schemaDigest: S("a"), type: "object" as const, required: ["value"], properties: [{ name: "value", type: "number" as const }] }, valueShape = { id: "value-shape", schemaId: "value-schema", schemaVersion: "1", schemaDigest: S("9"), type: "number" as const, required: [], properties: [] };
   const ctr = freezeU3TraceEvaluationContract({ schema: U3_EVALUATOR_SCHEMA, fixtureKind: "synthetic", calculusDigest: calc.digest,
     shapes: sort([{ ...shape, semanticDigest: H(C(shape)) }, { ...valueShape, semanticDigest: H(C(valueShape)) }]), adapters: [{ id: "adapter", version: "1", digest: S("c") }], compilers: [{ id: "compiler", version: "1", digest: S("d") }], runtimes: [{ id: "runtime", version: "1", digest: S("e") }],
     authorities: sort([{ id: "custody", role: "custodian" as const, trustRootDigest: S("f"), verificationKeyDigest: H(K.custody) }, { id: "evidence", role: "evidence-producer" as const, trustRootDigest: S("f"), verificationKeyDigest: H(K.evidence) }, { id: "lifted", role: "trace-producer" as const, trustRootDigest: S("b"), verificationKeyDigest: H(K.lifted) }, { id: "provenance", role: "provenance-producer" as const, trustRootDigest: S("f"), verificationKeyDigest: H(K.provenance) }, { id: "source", role: "trace-producer" as const, trustRootDigest: S("b"), verificationKeyDigest: H(K.source) }]),
@@ -57,12 +58,32 @@ function fixture(operator: "equal" | "refines" | "abstracts" = "equal", directio
   const input: Any = { schema: "open-autonomy.u3-trace-evaluation-input.v2", fixtureKind: "synthetic", calculusDigest: calc.digest, contractDigest: ctr.digest, profileId: "base", runId: "run", source: makeTrace("source", "source", values[0]), lifted: makeTrace("lifted", "lifted", values[1]), evidence, provenance, losses: [] };
   sort(evidence); sort(provenance);
   const trusted = { keys: K }, report = evaluateU3ObservationTrace(calc, ctr, input, trusted), assumptions = calc.profiles[0].observationIds.map((observationId) => {
-    const body = { assumptionId: `assumption-${observationId}`, observationId, predicateId: "declared-observation-domain" as const, promptContextDomain: `prompt-${observationId}`, providerLocalDomain: `provider-${observationId}`, probeDomain: "probe-synthetic", modelDomain: "model-synthetic", harnessDomain: "harness-synthetic", erasedDimensionIds: ["authentication", "causal-order", "custody", "epistemic", "evidence", "provenance", "run-identity", "side", "time", "trace-identity"] };
+    const body = { assumptionId: `assumption-${observationId}`, observationId, predicateId: "declared-observation-domain" as const, promptDomain: `prompt-${observationId}`, contextDomain: `context-${observationId}`, providerLocalDomain: `provider-${observationId}`, probeDomain: "probe-synthetic", modelDomain: "model-synthetic", harnessDomain: "harness-synthetic", erasedDimensionIds: ["authentication", "causal-order", "custody", "epistemic", "evidence", "provenance", "run-identity", "side", "time", "trace-identity"] };
     return { ...body, domainDigest: H(C(body)) };
   });
   return { calc, ctr, input, trusted, report, assumptions };
 }
 function certificate(operator: "equal" | "refines" | "abstracts" = "equal", direction: "left-to-right" | "right-to-left" = "left-to-right", metric: "exact" | "absolute" | "relative" = "exact", bound = 0, values: [number, number] = [10, 10], shiftRight = false) { const f = fixture(operator, direction, metric, bound, values, shiftRight); return { ...f, cert: createU3PreservationCertificate({ calculus: f.calc, contract: f.ctr, input: f.input, trusted: f.trusted, report: f.report, assumptions: f.assumptions, generatedAt: "2026-07-17T00:00:00.000Z" }) }; }
+function resignCertificateTrace(trace: Any) { const key = trace.side as "source" | "lifted", bare = (({ producerReceipt: _p, closureReceipt: _c, ...x }) => x)(trace), producerReceipt = signU3Record(K[key], bare), withProducer = { ...bare, producerReceipt }; Object.assign(trace, withProducer, { closureReceipt: signU3Record(K.custody, withProducer) }); }
+function removeCertificateObservation(f: ReturnType<typeof fixture>, side: "source" | "lifted", observationId: string) {
+  const trace = f.input[side], removed = trace.events.filter((x: Any) => x.observationId === observationId), evidenceIds = new Set(removed.map((x: Any) => x.evidenceId)), provenanceIds = new Set(removed.map((x: Any) => x.provenanceId));
+  trace.events = trace.events.filter((x: Any) => x.observationId !== observationId); f.input.evidence = f.input.evidence.filter((x: Any) => !evidenceIds.has(x.id)); f.input.provenance = f.input.provenance.filter((x: Any) => !provenanceIds.has(x.id)); resignCertificateTrace(trace);
+}
+function makeCertificateObservationIncompatible(f: ReturnType<typeof fixture>, side: "source" | "lifted", observationId: string) {
+  const trace = f.input[side], event = trace.events.find((x: Any) => x.observationId === observationId)!; event.payload.value = "not-a-number";
+  event.integrityDigest = integrityU3Event((({ integrityDigest: _i, authentication: _a, ...x }) => x)(event)); event.authentication.receipt = signU3Record(K[side], (({ authentication: _a, ...x }) => x)(event));
+  const evidence = f.input.evidence.find((x: Any) => x.id === event.evidenceId)!, bare = (({ receipt: _r, custodyReceipt: _c, ...x }) => x)(evidence); bare.payloadDigest = H(C(event.payload)); const receipt = signU3Record(K.evidence, bare), withProducer = { ...bare, receipt }; Object.assign(evidence, withProducer, { custodyReceipt: signU3Record(K.custody, withProducer) }); resignCertificateTrace(trace);
+}
+function issueCertificate(f: ReturnType<typeof fixture>) { f.report = evaluateU3ObservationTrace(f.calc, f.ctr, f.input, f.trusted); return createU3PreservationCertificate({ calculus: f.calc, contract: f.ctr, input: f.input, trusted: f.trusted, report: f.report, assumptions: f.assumptions, generatedAt: "2026-07-17T00:00:00.000Z" }); }
+function typedLossCertificate(stage: string) {
+  const f = fixture("equal", "left-to-right", "exact", 0, [10, 10], false, true), observation = f.calc.observations.at(-1)!, oid = observation.id;
+  removeCertificateObservation(f, "source", oid); removeCertificateObservation(f, "lifted", oid);
+  const provenanceBare: Any = { id: `provenance-loss-${stage}`, producerAuthorityId: "provenance", custodyAuthorityId: "custody", artifactDigest: H(`loss-artifact-${stage}`) }, producerReceipt = signU3Record(K.provenance, provenanceBare), provenanceWithProducer = { ...provenanceBare, producerReceipt };
+  f.input.provenance.push({ ...provenanceWithProducer, custodyReceipt: signU3Record(K.custody, provenanceWithProducer) });
+  const subject = { sort: observation.subjectSort, providerId: observation.providerId, componentId: observation.componentId }, lossBare: Any = { id: `loss-${stage}`, schema: "open-autonomy.u3-typed-loss.v1", runId: "run", observationId: oid, code: "adapter-unavailable", evidenceId: `evidence-loss-${stage}`, provenanceId: provenanceBare.id, subject, authorityId: "evidence" }, evidenceBare: Any = { id: lossBare.evidenceId, eventId: `loss-${oid}`, payloadDigest: H(C(lossBare)), runId: "run", subjectDigest: H(C(subject)), provenanceDigest: provenanceBare.artifactDigest, custodyDigest: H(C({ custodyAuthorityId: "custody" })), authorityId: "evidence", custodyAuthorityId: "custody" }, receipt = signU3Record(K.evidence, evidenceBare), evidenceWithProducer = { ...evidenceBare, receipt };
+  f.input.evidence.push({ ...evidenceWithProducer, custodyReceipt: signU3Record(K.custody, evidenceWithProducer) }); f.input.losses = [{ ...lossBare, receipt: signU3Record(K.evidence, lossBare) }]; sort(f.input.evidence); sort(f.input.provenance);
+  return Object.assign(f, { cert: issueCertificate(f) });
+}
 
 test("creates an exact replay certificate with an independently anchored fixture", () => {
   const f = certificate();
@@ -71,7 +92,7 @@ test("creates an exact replay certificate with an independently anchored fixture
   expect(f.cert.assumptions.map((x) => x.observationId)).toEqual(f.calc.profiles[0].observationIds);
   expect(verifyU3PreservationCertificate(f.cert, f.calc, f.ctr, f.trusted)).toEqual(f.cert);
   expect(() => verifyU3CertificateGitCustody()).not.toThrow();
-  expect(f.cert.digest).toBe("sha256:0244034f4c7559d77a777d4c16fb0044ffe4fa457e4c16e22c63a5fe378a8ca1");
+  expect(f.cert.digest).toBe("sha256:e3c534682e85093a02532dbae4d178c8549637829dfe4632fb9652cb7ba0ab8f");
 });
 
 test("rejects substitution, re-digest, version skew, surplus, trust, and bounded-resource attacks", () => {
@@ -88,6 +109,20 @@ test("rejects substitution, re-digest, version skew, surplus, trust, and bounded
   const trust = certificate(); trust.trusted = structuredClone(trust.trusted); trust.trusted.keys.source = "substituted"; expect(() => verifyU3PreservationCertificate(trust.cert, trust.calc, trust.ctr, trust.trusted)).toThrow();
   const cyclic = certificate(); cyclic.cert = structuredClone(cyclic.cert); (cyclic.cert as Any).self = cyclic.cert; expect(() => verifyU3PreservationCertificate(cyclic.cert, cyclic.calc, cyclic.ctr, cyclic.trusted)).toThrow("cyclic");
   const wide = certificate(); wide.cert = structuredClone(wide.cert); (wide.cert as Any).results = Array.from({ length: 9000 }, () => ({})); expect(() => verifyU3PreservationCertificate(wide.cert, wide.calc, wide.ctr, wide.trusted)).toThrow("collection bound");
+});
+test("binds prompt context provider probe model and harness domains without generalization", () => {
+  const base = certificate(), fields = ["promptDomain", "contextDomain", "providerLocalDomain", "probeDomain", "modelDomain", "harnessDomain"] as const;
+  for (const field of fields) {
+    const assumptions = structuredClone(base.assumptions), original = assumptions[0];
+    original[field] = `${original[field]}-alternate`;
+    const { domainDigest: _old, ...body } = original; original.domainDigest = H(C(body));
+    const scoped = createU3PreservationCertificate({ calculus: base.calc, contract: base.ctr, input: base.input, trusted: base.trusted, report: base.report, assumptions, generatedAt: "2026-07-17T00:00:00.000Z" });
+    expect(scoped.digest).not.toBe(base.cert.digest);
+    expect(scoped.assumptions[0][field]).toBe(original[field]);
+    expect(verifyU3PreservationCertificate(scoped, base.calc, base.ctr, base.trusted)).toEqual(scoped);
+    const substituted = structuredClone(base.cert); substituted.assumptions = assumptions;
+    expect(() => verifyU3PreservationCertificate(substituted, base.calc, base.ctr, base.trusted)).toThrow();
+  }
 });
 
 test("composition is deterministic, aligns the intermediate artifact, and conserves relations", () => {
@@ -140,4 +175,18 @@ test("composition rejects artifact substitution, unsupported relation mixing, qu
     const altered = certificate(); altered.cert = structuredClone(altered.cert); altered.cert.bindings.sourceInterfaceProjection.erasedDimensions = altered.cert.bindings.sourceInterfaceProjection.erasedDimensions.filter((x) => x !== dimension);
     expect(() => composeU3PreservationCertificates({ ...base, left: eq.cert, right: altered.cert, leftCalculus: eq.calc, leftContract: eq.ctr, leftTrusted: eq.trusted, rightCalculus: altered.calc, rightContract: altered.ctr, rightTrusted: altered.trusted })).toThrow();
   }
+});
+test("composition conserves violated unknown assumptions and outer witnesses", () => {
+  const compose = (left: ReturnType<typeof fixture> & { cert: ReturnType<typeof issueCertificate> }, right: ReturnType<typeof fixture> & { cert: ReturnType<typeof issueCertificate> }) => composeU3PreservationCertificates({ left: left.cert, right: right.cert, leftCalculus: left.calc, leftContract: left.ctr, leftTrusted: left.trusted, rightCalculus: right.calc, rightContract: right.ctr, rightTrusted: right.trusted, guarantees: [], generatedAt: "2026-07-17T03:00:00.000Z" });
+  const violatedLeft = certificate("equal", "left-to-right", "exact", 0, [10, 12]), violatedRight = certificate("equal", "left-to-right", "exact", 0, [12, 14]), violated = compose(violatedLeft, violatedRight);
+  expect(violated.results.some((x) => x.status === "violated")).toBe(true); expect(violated.assumptions).toEqual(violatedLeft.cert.assumptions); expect(violated.results[0].leftEndpoint).toEqual(violatedLeft.cert.results[0].leftEndpoint); expect(violated.results[0].rightEndpoint).toEqual(violatedRight.cert.results[0].rightEndpoint);
+  const unknownLeft = fixture(), unknownRight = fixture(), oid = unknownLeft.calc.observations[0].id;
+  removeCertificateObservation(unknownLeft, "lifted", oid); removeCertificateObservation(unknownRight, "source", oid);
+  const left = Object.assign(unknownLeft, { cert: issueCertificate(unknownLeft) }), right = Object.assign(unknownRight, { cert: issueCertificate(unknownRight) }), unknown = compose(left, right), row = unknown.results.find((x) => x.observationId === oid)!;
+  expect(row.status).toBe("unknown"); expect(row.operator).toBeNull(); expect(row.direction).toBeNull(); expect(row.witnessDigests).toHaveLength(2); expect(unknown.assumptions).toEqual(left.cert.assumptions);
+  const incompatibleLeft = fixture(), incompatibleRight = fixture(); makeCertificateObservationIncompatible(incompatibleLeft, "lifted", oid); makeCertificateObservationIncompatible(incompatibleRight, "source", oid);
+  const incompatibleL = Object.assign(incompatibleLeft, { cert: issueCertificate(incompatibleLeft) }), incompatibleR = Object.assign(incompatibleRight, { cert: issueCertificate(incompatibleRight) }), incompatible = compose(incompatibleL, incompatibleR), incompatibleRow = incompatible.results.find((x) => x.observationId === oid)!;
+  expect(incompatibleRow.status).toBe("incompatible"); expect(incompatibleRow.operator).toBeNull(); expect(incompatibleRow.direction).toBeNull();
+  const lossLeft = typedLossCertificate("left"), lossRight = typedLossCertificate("right"), losses = compose(lossLeft, lossRight), lossRow = losses.results.find((x) => x.status === "permitted-typed-loss")!;
+  expect(lossRow.lossIds).toEqual(["loss-left", "loss-right"]); expect(losses.typedLosses.map((x) => x.id)).toEqual(["loss-left", "loss-right"]); expect(lossRow.operator).toBeNull(); expect(lossRow.witnessDigest).not.toBe(lossLeft.cert.results.find((x) => x.status === "permitted-typed-loss")!.witnessDigest);
 });

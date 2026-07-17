@@ -35,7 +35,8 @@ export type U3CertificateDomain = {
   assumptionId: string;
   observationId: string;
   predicateId: "declared-observation-domain";
-  promptContextDomain: string;
+  promptDomain: string;
+  contextDomain: string;
   providerLocalDomain: string;
   probeDomain: string;
   modelDomain: string;
@@ -240,9 +241,9 @@ function verifyDomains(domains: U3CertificateDomain[], calculus: FrozenU3Observa
   if (!Array.isArray(domains) || C(domains.map((x) => x.observationId)) !== C(profile.observationIds))
     throw Error("assumption observation coverage invalid");
   for (const d of domains) {
-    exact(d, ["assumptionId", "observationId", "predicateId", "promptContextDomain", "providerLocalDomain", "probeDomain", "modelDomain", "harnessDomain", "erasedDimensionIds", "domainDigest"], "assumption");
+    exact(d, ["assumptionId", "observationId", "predicateId", "promptDomain", "contextDomain", "providerLocalDomain", "probeDomain", "modelDomain", "harnessDomain", "erasedDimensionIds", "domainDigest"], "assumption");
     const { domainDigest, ...domainBody } = d;
-    if (![d.assumptionId, d.observationId, d.promptContextDomain, d.providerLocalDomain, d.probeDomain, d.modelDomain, d.harnessDomain].every(id) ||
+    if (![d.assumptionId, d.observationId, d.promptDomain, d.contextDomain, d.providerLocalDomain, d.probeDomain, d.modelDomain, d.harnessDomain].every(id) ||
       d.predicateId !== "declared-observation-domain" || C(d.erasedDimensionIds) !== C(ERASED_DIMENSIONS) || domainDigest !== H(C(domainBody)))
       throw Error("assumption domain invalid");
   }

@@ -206,6 +206,36 @@ test("purely freezes and verifies independently anchored synthetic L1-L9", () =>
 });
 test("explicit trusted wrapper verifies predecessor Git custody", () =>
   expect(() => verifyU3PredecessorGitCustody()).not.toThrow());
+test("rejects isolated right-to-left projection topology reversal", () => {
+  const x: any = fixture();
+  x.comparisons[0].operator = "refines";
+  x.comparisons[0].direction = "right-to-left";
+  x.schemas.push({ id: "other-schema", version: "1", mediaType: "application/json", schemaSha256: S("e") }); x.schemas.sort((a: any, b: any) => a.id.localeCompare(b.id));
+  x.projections.push({ id: "rtl-source", version: "1", operator: "identity", argument: "", inputSchemaId: "event-schema", inputSchemaVersion: "1", outputSchemaId: "other-schema", outputSchemaVersion: "1" }); x.projections.sort((a: any, b: any) => a.id.localeCompare(b.id));
+  x.comparisons[0].sourceProjectionId = "rtl-source";
+  expect(() => freezeU3ObservationCalculus(x, { requireFixtureDigest: false })).toThrow("comparison projection topology invalid");
+});
+test("isolates excluded applicability evidence and predicate authority", () => {
+  const absentEvidence: any = fixture();
+  absentEvidence.observations[0].applicability[0] = { stratumId: "coding", status: "excluded", predicateId: "always", evidenceDigest: null, reason: "excluded by evidence" };
+  expect(() => freezeU3ObservationCalculus(absentEvidence, { requireFixtureDigest: false })).toThrow();
+  const unknownPredicate: any = fixture(); unknownPredicate.observations[0].applicability[0].predicateId = "unregistered";
+  expect(() => freezeU3ObservationCalculus(unknownPredicate, { requireFixtureDigest: false })).toThrow();
+});
+test("isolates metric unit window and aggregation variance dimensions", () => {
+  for (const mutate of [
+    (x: any) => { x.variances[0].metric = "unregistered"; },
+    (x: any) => { x.variances[0].unit = "token"; },
+    (x: any) => { x.variances[0].window = "instant"; },
+    (x: any) => { x.variances[0].aggregation = "mean"; },
+  ]) { const x: any = fixture(); mutate(x); expect(() => freezeU3ObservationCalculus(x, { requireFixtureDigest: false })).toThrow(); }
+});
+test("isolates cyclic depth UTF-8 and field resource bounds", () => {
+  const cyclic: any = fixture(); cyclic.self = cyclic; expect(() => freezeU3ObservationCalculus(cyclic, { requireFixtureDigest: false })).toThrow("cyclic");
+  const deep: any = fixture(); let cursor = deep; for (let i = 0; i < 70; i++) cursor = cursor.deep = {}; expect(() => freezeU3ObservationCalculus(deep, { requireFixtureDigest: false })).toThrow("resource bound");
+  const utf8: any = fixture(); utf8.projections[0].argument = "😀".repeat(65); expect(() => freezeU3ObservationCalculus(utf8, { requireFixtureDigest: false })).toThrow();
+  const field: any = fixture(); field.projections[0].argument = "x".repeat(257); expect(() => freezeU3ObservationCalculus(field, { requireFixtureDigest: false })).toThrow();
+});
 const attacks: [string, (x: any) => void][] = [
   ["exact false booleans", (x) => (x.empiricalRegistration = 0)],
   ["schema version join", (x) => (x.observations[0].valueSchemaVersion = "2")],

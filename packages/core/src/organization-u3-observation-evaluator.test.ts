@@ -189,6 +189,27 @@ test("freezes bounded semantic shape registry and verifies calculus Git custody"
   const bad: Any = structuredClone(shapeBody); bad.semanticDigest = S("0");
   expect(() => freezeU3TraceEvaluationContract({ ...(f.ctr as Any), shapes: [bad], digest: undefined })).toThrow();
 });
+test("rejects typed-loss observation overlap and mandatory-observation loss", () => {
+  const overlap = signedFixture(), loss = lossFixture();
+  overlap.input.losses = structuredClone(loss.input.losses);
+  overlap.input.evidence.push(...structuredClone(loss.input.evidence.filter((e: Any) => e.id === "evidence-loss")));
+  overlap.input.provenance.push(...structuredClone(loss.input.provenance.filter((p: Any) => p.id === "provenance-loss")));
+  sort(overlap.input.evidence); sort(overlap.input.provenance);
+  expect(() => evaluateU3ObservationTrace(overlap.calc, overlap.ctr, overlap.input, overlap.trusted)).toThrow("loss/observation exclusivity invalid");
+
+  const mandatory = lossFixture(), { digest: _digest, ...body } = structuredClone(mandatory.calc) as Any;
+  body.observations.find((o: Any) => o.id === "obs-optional").applicability[0].status = "mandatory";
+  body.profiles[0].forbiddenLossObservationIds.push("obs-optional"); body.profiles[0].forbiddenLossObservationIds.sort();
+  mandatory.calc = freezeU3ObservationCalculus(body, { requireFixtureDigest: false }); mandatory.ctr = contract(mandatory.calc);
+  mandatory.input.calculusDigest = mandatory.calc.digest; mandatory.input.contractDigest = mandatory.ctr.digest;
+  expect(() => evaluateU3ObservationTrace(mandatory.calc, mandatory.ctr, mandatory.input, mandatory.trusted)).toThrow("typed loss invalid");
+});
+test("isolates evaluator cycle depth field and aggregate work bounds", () => {
+  const cyclic = signedFixture(); cyclic.input.self = cyclic.input; expect(() => evaluateU3ObservationTrace(cyclic.calc, cyclic.ctr, cyclic.input, cyclic.trusted)).toThrow("cyclic");
+  const deep = signedFixture(); let cursor: Any = deep.input; for (let i = 0; i < 55; i++) cursor = cursor.deep = {}; expect(() => evaluateU3ObservationTrace(deep.calc, deep.ctr, deep.input, deep.trusted)).toThrow("work bound");
+  const field = signedFixture(); field.input.runId = "x".repeat(5000); expect(() => evaluateU3ObservationTrace(field.calc, field.ctr, field.input, field.trusted)).toThrow("field bound");
+  const wide = signedFixture(); wide.input.losses = Array.from({ length: 5000 }, (_, i) => ({ i })); expect(() => evaluateU3ObservationTrace(wide.calc, wide.ctr, wide.input, wide.trusted)).toThrow("collection bound");
+});
 
 test("E2E emits equivalent, refinement, abstraction, variance, violation, unknown, incompatible, and typed-loss terminals", () => {
   const cases: Array<[string, ReturnType<typeof signedFixture>, string]> = [

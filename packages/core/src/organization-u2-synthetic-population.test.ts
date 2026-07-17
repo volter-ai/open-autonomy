@@ -4,6 +4,7 @@ import {
   verifyFrozenU2SyntheticPopulation,
   U2_FACET_FAMILIES,
   canonicalU2OpportunityId,
+  aggregateU2FixtureWeights,
   type U2SyntheticPopulation,
 } from "./organization-u2-synthetic-population";
 const ev = "synthetic-fixture-assertion" as const,
@@ -168,6 +169,7 @@ test("freezes exhaustive synthetic U2 opportunity universe", () => {
     f.opportunities.filter((x) => x.disposition === "meaningful"),
   ).toHaveLength(5);
 });
+test("aggregates exact frozen meaningful-composition weights",()=>{const f=freezeU2SyntheticPopulation(fixture());expect(aggregateU2FixtureWeights(f)).toEqual({numerator:15,denominator:15,totalMeaningfulOpportunities:5});for(const weight of[0,-1,1.5,Number.MAX_SAFE_INTEGER]){const x=structuredClone(f)as any;x.compositions[0].weight=weight;expect(()=>aggregateU2FixtureWeights(x)).toThrow()}const x=structuredClone(f)as any;x.opportunities.find((o:any)=>o.disposition==="meaningful").compositionId="cell1";expect(()=>aggregateU2FixtureWeights(x)).toThrow("bijection")});
 test("opportunity tuple encoding is injective across hyphen boundaries", () => {
   const a = canonicalU2OpportunityId(["a", "b", "c-d"]),
     b = canonicalU2OpportunityId(["a", "b-c", "d"]);
@@ -175,6 +177,7 @@ test("opportunity tuple encoding is injective across hyphen boundaries", () => {
   expect(a).toBe("triple|1:a|1:b|3:c-d");
 });
 const attacks: [string, (x: any) => void][] = [
+  ["three-owner floor collapse with conserved joins",x=>{const remove=new Set<string>();for(let g=0;g<4;g++){const base=`o${g*3}`;for(const i of[g*3+1,g*3+2]){const old=`o${i}`;remove.add(old);x.providers.find((p:any)=>p.id===`p${i}`).ownerId=base;x.components.find((c:any)=>c.componentId===`c${String(i).padStart(2,"0")}`).ownerId=base;for(const c of x.compositions)for(const r of c.components)if(r.componentId===`c${String(i).padStart(2,"0")}`)r.ownerId=base}}x.owners=x.owners.filter((o:any)=>!remove.has(o.id))}],
   ["opportunity omission", (x) => x.opportunities.pop()],
   ["opportunity surplus", (x) => x.opportunities.push(x.opportunities[0])],
   ["opportunity reorder", (x) => x.opportunities.reverse()],

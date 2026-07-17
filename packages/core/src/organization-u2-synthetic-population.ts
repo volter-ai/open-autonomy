@@ -646,3 +646,28 @@ export function verifyFrozenU2SyntheticPopulation(
   if (digest !== f.digest) throw Error("U2 digest mismatch");
   return f;
 }
+export function aggregateU2FixtureWeights(v: FrozenU2SyntheticPopulation) {
+  const meaningful = v.opportunities.filter((x) => x.disposition === "meaningful"),
+    rawIds = meaningful.map((x) => x.compositionId),
+    compositionIds = v.compositions.map((x) => x.compositionId);
+  if (rawIds.some((x) => x === null))
+    throw Error("U2 weight aggregation bijection invalid");
+  const ids = rawIds as string[];
+  if (
+    new Set(ids).size !== ids.length ||
+    canon([...ids].sort(cmp)) !== canon([...compositionIds].sort(cmp))
+  )
+    throw Error("U2 weight aggregation bijection invalid");
+  let total = 0;
+  for (const c of v.compositions) {
+    if (!Number.isSafeInteger(c.weight) || c.weight <= 0)
+      throw Error("U2 aggregation weight invalid");
+    total += c.weight;
+    if (!Number.isSafeInteger(total)) throw Error("U2 aggregation total unsafe");
+  }
+  return {
+    numerator: total,
+    denominator: total,
+    totalMeaningfulOpportunities: meaningful.length,
+  };
+}

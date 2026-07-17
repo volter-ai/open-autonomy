@@ -1,0 +1,34 @@
+{
+  "schema": "open-autonomy.github-census-invalidation.v1",
+  "campaignId": "organization-universality-2026-v8",
+  "registrationCommit": "fb6a04cd18ea8fcdefec03f1f6ef057e4c8a2d23",
+  "captureImplementationCommit": "f95d3bb081653f619425b11687a82d5529d026c7",
+  "sourceCensusContractDigest": "sha256:ca96f62934461a5effed077ee4d0813039d23ddb89eafe649791714beacbc615",
+  "reason": "four-total-attempts-with-fewer-than-two-complete-passes",
+  "attempts": [
+    {
+      "attempt": 1,
+      "startedAt": "2026-07-17T01:20:42.519Z",
+      "status": "failed",
+      "failure": "cross-range-membership-drift"
+    },
+    {
+      "attempt": 2,
+      "startedAt": "2026-07-17T01:32:06.394Z",
+      "status": "failed",
+      "failure": "cross-range-membership-drift"
+    },
+    {
+      "attempt": 3,
+      "startedAt": "2026-07-17T01:46:13.261Z",
+      "status": "failed",
+      "failure": "cross-range-membership-drift"
+    },
+    {
+      "attempt": 4,
+      "startedAt": "2026-07-17T01:54:27.495Z",
+      "status": "failed",
+      "failure": "transport-failure"
+    }
+  ]
+}

@@ -207,6 +207,7 @@ const inventory=():U4SourceInventory=>{
 const trustedFor=(v:any):U4TrustedVerificationInputs=>({authorityKeys:authoritySpecs.map(([authorityId,ownerId,role])=>({authorityId,ownerId,role,keyBase64:key(authorityId).toString("base64"),verificationKeyDigest:H(key(authorityId))})).sort((a,b)=>a.authorityId.localeCompare(b.authorityId)),chronology:{...v.chronologyPolicy,freezerAuthorityId:v.freezerAuthorityId,receipt:v.freezeReceipt}});
 const valid=()=>{const v=inventory();return[v,calculus(),registry(),trustedFor(v)] as const;};
 const rejects=(mut:(v:any,t:any)=>void,re:RegExp)=>{const [v,c,r,t]=valid();mut(v,t);expect(()=>freezeU4SourceInventory(v,c,r,t)).toThrow(re);};
+const resignFact=(f:any)=>{f.factReceipt=mac("a-semantic","u4-fact",{...f,factReceipt:undefined,criticalityEvidence:{...f.criticalityEvidence,receipt:undefined}});};
 test("freezes authenticated fixture against verified U3 and registry",()=>{const [v,c,r,t]=valid(),f=freezeU4SourceInventory(v,c,r,t),replayed=verifyFrozenU4SourceInventory(f,c,r,t);expect(replayed).not.toBe(f);expect(Object.isFrozen(replayed.facts[0])).toBe(true);});
 test("hard anchors U3 custody",()=>expect(()=>verifyU4U3GitCustody()).not.toThrow());
 test("rejects registry calculus authority and receipt substitutions",()=>{const [v,c,r,t]=valid(),x:any=structuredClone(r);x.digest=H("x");expect(()=>freezeU4SourceInventory(v,c,x,t)).toThrow(/registry/);const y:any=structuredClone(c);y.digest=H("x");expect(()=>freezeU4SourceInventory(v,y,r,t)).toThrow(/digest/);rejects(v=>v.authorities.find((a:any)=>a.id==="a-spec").ownerId="implementer",/trusted key|independence/);rejects(v=>v.provenance[0].bodyReceipt="00",/provenance/);});
@@ -225,4 +226,25 @@ test("source custody owner schema path and extraction topology resist substituti
   rejects(v=>{v.nativeSchemas[0].pathPrefix="/foo";v.nativeSchemas[0].producerReceipt=mac("a-schema","u4-native-schema",{id:v.nativeSchemas[0].id,version:v.nativeSchemas[0].version,sourceId:v.nativeSchemas[0].sourceId,pathPrefix:"/foo",schemaSha256:v.nativeSchemas[0].schemaSha256,semanticSchemaDigest:v.nativeSchemas[0].semanticSchemaDigest});v.facts[1].nativePath="/foobar";},/native schema join|fact identity/);
   rejects(v=>v.conflicts[0].leftJsonPointer="/missing",/extraction/);
   rejects(v=>{const c=v.conflicts[0];c.adjudicationEvidenceProvenanceId="unreachable";const body={...c,adjudicationEvidenceDigest:undefined,adjudicationReceipt:undefined,evidenceProvenanceSha256:undefined};c.adjudicationEvidenceDigest=computeU4AdjudicationEvidenceDigest(body);c.adjudicationReceipt=mac("a-adjudicator","u4-adjudication",{...c,adjudicationReceipt:undefined});},/adjudicator/);
+});
+test("I6 rejects assurance promotion and incoherent default absence knowledge states",()=>{
+  rejects(v=>v.assurance.level="empirically-validated",/assurance/);
+  rejects(v=>v.assurance.externalTruth="established",/assurance/);
+  rejects(v=>v.assurance.promotionAllowed=true,/assurance/);
+  rejects(v=>{const f=v.facts.find((x:any)=>x.taxonomy==="failure");f.absence="implicit";resignFact(f);},/fact|coherence/);
+  rejects(v=>{const f=v.facts.find((x:any)=>x.taxonomy==="omissions");f.default={status:"present",valueJson:"true"};resignFact(f);},/fact|coherence/);
+  rejects(v=>{const f=v.facts.find((x:any)=>x.taxonomy==="omissions");f.absence=null;resignFact(f);},/fact|coherence/);
+});
+test("I17 rejects re-signed extensionClass opaqueVersion extends and domain substitutions",()=>{
+  rejects(v=>{const f=v.facts.find((x:any)=>x.taxonomy==="extensions");f.semantic.extensionClass=null;resignFact(f);},/fact|coherence/);
+  rejects(v=>{const f=v.facts.find((x:any)=>x.taxonomy==="extensions");f.semantic.opaqueVersion="";resignFact(f);},/fact|coherence/);
+  rejects(v=>{const f=v.facts.find((x:any)=>x.taxonomy==="extensions");f.semantic.relation="declares";resignFact(f);},/coherence/);
+  rejects(v=>{const f=v.facts.find((x:any)=>x.taxonomy==="extensions");f.semantic.domain="runtime";f.semantic.extensionClass=null;f.semantic.opaqueVersion=null;resignFact(f);},/coherence/);
+});
+test("I18 rejects re-signed authority failure lifecycle relation-domain substitutions",()=>{
+  rejects(v=>{const f=v.facts.find((x:any)=>x.taxonomy==="failure");f.semantic.relation="transitions";resignFact(f);},/coherence/);
+  rejects(v=>{const f=v.facts.find((x:any)=>x.taxonomy==="failure");f.semantic.domain="lifecycle";resignFact(f);},/coherence/);
+  rejects(v=>{const f=v.facts.find((x:any)=>x.taxonomy==="lifecycle");f.semantic.relation="fails-with";resignFact(f);},/coherence/);
+  rejects(v=>{const f=v.facts.find((x:any)=>x.taxonomy==="lifecycle");f.semantic.domain="failure";resignFact(f);},/coherence/);
+  rejects(v=>{const f=v.facts.find((x:any)=>x.taxonomy==="authority");f.semantic.domain="failure";f.semantic.relation="fails-with";resignFact(f);},/coherence/);
 });

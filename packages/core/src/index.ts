@@ -80,3 +80,8 @@ export * from './organization-universality-census';
 export * from './organization-universality-window-contract';
 export * from './organization-universality-single-response-contract';
 export * from './organization-universality-index-observation-contract';
+export * from './organization-universality-occurrence-contract';
+export * from './organization-campaign-registration';
+export * from './organization-u1-occurrence-capture';
+export * from './organization-u1-classification-contract';
+export * from './organization-source-population-v3';

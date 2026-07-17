@@ -1,0 +1,135 @@
+{
+  "schema": "open-autonomy.u4-closure-attestation.v1",
+  "checkpoint": "U4",
+  "status": "locally-attested-external-deferred",
+  "fixtureKind": "synthetic",
+  "empiricalRegistration": false,
+  "closureClaim": false,
+  "assurancePromotionAllowed": false,
+  "closureAnchor": {
+    "commit": "cf58319d048bbcc64849b85f4f8db57b5afb8f65",
+    "closureDigest": "sha256:35fe3c46be2d10a9d2b711f8cac9c6223ecdd5623cdf3d4de3b7cb0fd73811fc",
+    "files": [
+      {
+        "kind": "source",
+        "path": "packages/core/src/organization-u4-implementation-closure.ts",
+        "sha256": "sha256:19135dc15b11ed4ce1e9874046a525b28609da64b49ce19dc12526b94924795d"
+      },
+      {
+        "kind": "test",
+        "path": "packages/core/src/organization-u4-implementation-closure.test.ts",
+        "sha256": "sha256:b0aca311ec83de97da922749ee1d56dcb643a8d9c38c8c7dd2c4393433f22970"
+      },
+      {
+        "kind": "artifact",
+        "path": "docs/universality/campaign-v9/u4-implementation-closure.json",
+        "sha256": "sha256:1984e37a6a7f26a33ef3448b68680265a3db9b17d1045bdff2417a923392b8c6"
+      }
+    ]
+  },
+  "closureAccountingBefore": {
+    "dischargedInternal": 24,
+    "pendingAttestationInternal": 1,
+    "openInternal": 0
+  },
+  "localAccountingAfter": {
+    "dischargedInternal": 25,
+    "pendingAttestationInternal": 0,
+    "openInternal": 0,
+    "totalInternal": 25,
+    "dischargedObligationId": "U4-I25"
+  },
+  "externalDeferred": [
+    {
+      "id": "U4-E1",
+      "requirement": "Obtain independent real authorities",
+      "status": "deferred",
+      "dischargedBy": []
+    },
+    {
+      "id": "U4-E2",
+      "requirement": "Acquire official specifications with authenticated custody",
+      "status": "deferred",
+      "dischargedBy": []
+    },
+    {
+      "id": "U4-E3",
+      "requirement": "Capture native-schema snapshots",
+      "status": "deferred",
+      "dischargedBy": []
+    },
+    {
+      "id": "U4-E4",
+      "requirement": "Execute real runtime probes",
+      "status": "deferred",
+      "dischargedBy": []
+    },
+    {
+      "id": "U4-E5",
+      "requirement": "Capture real source-behavior baselines",
+      "status": "deferred",
+      "dischargedBy": []
+    },
+    {
+      "id": "U4-E6",
+      "requirement": "Complete expert semantic review",
+      "status": "deferred",
+      "dischargedBy": []
+    },
+    {
+      "id": "U4-E7",
+      "requirement": "Perform real conflict adjudication",
+      "status": "deferred",
+      "dischargedBy": []
+    },
+    {
+      "id": "U4-E8",
+      "requirement": "Enforce holdout chronology",
+      "status": "deferred",
+      "dischargedBy": []
+    },
+    {
+      "id": "U4-E9",
+      "requirement": "Obtain independent replay",
+      "status": "deferred",
+      "dischargedBy": []
+    },
+    {
+      "id": "U4-E10",
+      "requirement": "Complete empirical inventory across all U1 systems",
+      "status": "deferred",
+      "dischargedBy": []
+    }
+  ],
+  "skepticalReview": {
+    "status": "accepted",
+    "reviewedCommit": "cf58319d048bbcc64849b85f4f8db57b5afb8f65",
+    "scope": [
+      "semantic I1-I25",
+      "E1-E10",
+      "evidence DAG",
+      "custody",
+      "attacks"
+    ],
+    "priorRejectionClassesResolved": [
+      "generated round-robin obligation mappings",
+      "wrong I/E numbering or semantics",
+      "incomplete evidence DAG with missing I18-I25 incoming edges or reachability",
+      "generic non-exact E1-E10 requirements",
+      "obsolete contradictory legacyDefs registry",
+      "semantic-key registry not enforced by verifier",
+      "missing direct I6 I17 I18 semantic attack tests",
+      "insufficient frontend I24 named evidence",
+      "stale commit or blob anchors",
+      "expensive Git custody before cheap validation enabling resource amplification",
+      "premature localGapIds empty and 25-of-25 discharge before post-commit attestation"
+    ],
+    "evidenceKind": "synthetic-reviewer-process",
+    "externalHumanE6": false
+  },
+  "selfCustody": {
+    "status": "deferred-to-UG1",
+    "reason": "attestation structural code and test are custodied at UG1; no recursive self-attestation"
+  },
+  "digest": "sha256:139d26bc123c9dfcd82e7d1ae95e6d99552bc93a3ef7c0aa04e316466b4656e1"
+}

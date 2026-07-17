@@ -46,14 +46,14 @@ export type U4ReplayImplementationCustodyManifest = {
 };
 export const U4_REPLAY_IMPLEMENTATION_CUSTODY_MANIFEST: U4ReplayImplementationCustodyManifest = Object.freeze({
   schema: "open-autonomy.u4-replay-implementation-custody.v1",
-  implementationCommit: "db40be14bf6223496a0a66324e82355d0b91f322",
+  implementationCommit: "63653b09a35c77d304eb41d96a27255010ee5db0",
   files: Object.freeze([
-    { path: U4_REPLAY_IMPLEMENTATION_PATHS[0], sha256: "sha256:4de0f71167d1e1f7591288fa70e12199ddb5baeed3a762708aba0c5aca989e0f" },
-    { path: U4_REPLAY_IMPLEMENTATION_PATHS[1], sha256: "sha256:0c487b5a1e25689feb66c028d06d9d3cf931d2d15c330618a20e1fd4a8e9a5b1" },
-    { path: U4_REPLAY_IMPLEMENTATION_PATHS[2], sha256: "sha256:444023dea031a248a31e3cee03bf4302c23c590e0cf7bb05978daf8e47fc01e5" },
-    { path: U4_REPLAY_IMPLEMENTATION_PATHS[3], sha256: "sha256:31636522e499c19d545622cec26a114aff8c4ec43996bd8fc7313fea12e0e126" },
+    { path: U4_REPLAY_IMPLEMENTATION_PATHS[0], sha256: "sha256:60aa47cf7d5c39d4f9edb2a6980804d3f2c2d731d8d5649c3b468d2e8d1cc601" },
+    { path: U4_REPLAY_IMPLEMENTATION_PATHS[1], sha256: "sha256:37d563d048604bef1dfc084dae5568f4c0e54a10ce37ece4247bb08d991eb74f" },
+    { path: U4_REPLAY_IMPLEMENTATION_PATHS[2], sha256: "sha256:4e05def3527b88277da8f86d911f161c77baa1c3e6c4b870192fdc06d186213b" },
+    { path: U4_REPLAY_IMPLEMENTATION_PATHS[3], sha256: "sha256:361646754f2330986056cf76c4c51a4dd4946f35ce4853fcd60c727756b87439" },
   ]),
-  digest: "sha256:21fc2eb7e22ab972efc8fdd2c94f979feb984d7706c74e85e268d909b23bd134",
+  digest: "sha256:aaf4afe7dffa55bc59294dd08e20255bcfebb84a8838a9c6f7ab588d75f0098f",
 }) as U4ReplayImplementationCustodyManifest;
 export const U4_REPLAY_IMPLEMENTATION_CUSTODY_DIGEST = U4_REPLAY_IMPLEMENTATION_CUSTODY_MANIFEST.digest;
 export type U4ReplayProbeEvidence = {

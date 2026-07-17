@@ -1,0 +1,18 @@
+{
+  "schema": "open-autonomy.universality-checkpoint-closure.v1",
+  "checkpoint": "U0",
+  "status": "complete",
+  "assurance": "property-tested",
+  "claimDigest": "sha256:88ce401ed34c9f83bc3a12d99298e67bd0d48cded753abd80ee2e55c63b5a512",
+  "supersessionDigest": "sha256:848e33d5b19b57ff46bf18294a7ca7e3037e7d7f3f208a18303ade6b46b8ed0e",
+  "sourceCensusContractDigest": "sha256:7900b070fdcfd7628318250e88bf381a893a9f388ab66878765e4f3de52f1ce8",
+  "forcingSupplementDigest": "sha256:caad741074367dda35c62e25cbda810ff80fe7760fbef003ebac4832b91b8cc4",
+  "predecessorInvalidation": "docs/universality/campaign-v6/u1-invalidation.json",
+  "semanticCoverage": ["versioned claim and complete historical custody","prospective finite two-pass result union","single accepted response per terminal range","terminal response count and member equality","pass-global node uniqueness and count equality","star and creation-range containment","created-at evidence schema","bounded retries and cutoff invalidation","total union-frame classification","forcing zero-weight and overlap semantics","metric formulas and floors","stable predecessor custody registration"],
+  "falsifiersExercised": ["offset-pagination membership drift","cross-range duplicate membership","terminal count mismatch","item outside star range","item outside creation range","missing created-at","continuous-window overclaim","classification-frame divergence","cutoff-response omission","forcing overlap credit laundering","active-capture successor registration","custody mutation during registration"],
+  "evidence": ["docs/universality/campaign-v6/u1-invalidation.json","docs/universality/campaign-v7/claim.json","docs/universality/campaign-v7/source-census-contract.json","docs/universality/campaign-v7/forcing-supplement.json","docs/universality/campaign-v7/supersession.json","packages/core/src/organization-universality-single-response-contract.ts","packages/core/src/organization-universality-single-response-contract.test.ts"],
+  "skepticalReview": {"round1":"rejected: single-response draft lacked pass-global uniqueness, terminal containment, created-at evidence, and unambiguous accepted-response semantics","round2":"rejected: successor registration did not fail closed on an active capture or prove stable predecessor custody","round3":"accepted: exact single-response semantics and stable 1146-file predecessor custody with all claim, forcing, contract, chronology, and supersession joins verified"},
+  "obligationAccounting": {"open":0,"discharged":12,"deferredExternal":0},
+  "residuals": [],
+  "next": "U1"
+}

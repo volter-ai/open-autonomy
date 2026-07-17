@@ -78,3 +78,4 @@ export * from './organization-universality-claim';
 export * from './organization-universality-census-contract';
 export * from './organization-universality-census';
 export * from './organization-universality-window-contract';
+export * from './organization-universality-single-response-contract';

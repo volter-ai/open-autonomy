@@ -1,0 +1,10 @@
+{
+  "schema": "open-autonomy.campaign-supersession.v1",
+  "predecessorCampaign": "organization-universality-2026-v6",
+  "predecessorDigest": "sha256:2979754c108c570a427664e31efbd5748e4b58686f84d84bbfd3bc760763cea8",
+  "successorCampaign": "organization-universality-2026-v7",
+  "successorDigest": "sha256:88ce401ed34c9f83bc3a12d99298e67bd0d48cded753abd80ee2e55c63b5a512",
+  "reason": "v6 exhausted four attempts because mutable offset pagination repeatedly changed leaf membership; v7 makes every terminal leaf a complete single accepted response while preserving the finite two-pass result union",
+  "predecessorStatus": "invalidated-before-u1-closure",
+  "digest": "sha256:848e33d5b19b57ff46bf18294a7ca7e3037e7d7f3f208a18303ade6b46b8ed0e"
+}

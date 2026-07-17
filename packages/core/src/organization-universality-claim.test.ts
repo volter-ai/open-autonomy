@@ -37,7 +37,7 @@ test("U0 rejects semantic denominator, weighting, population, and assurance subs
   }
 });
 test("U0 committed campaign artifact is an authentic frozen registration",()=>{
-  const artifact=JSON.parse(readFileSync("docs/universality/campaign-v6/claim.json","utf8")) as FrozenUniversalityClaim;
+  const artifact=JSON.parse(readFileSync("docs/universality/campaign-v7/claim.json","utf8")) as FrozenUniversalityClaim;
   expect(verifyFrozenUniversalityClaim(artifact)).toEqual(artifact);
   expect(artifact.metrics).toHaveLength(Object.keys(UNIVERSALITY_FLOORS).length);
   expect(artifact.sourceSelectionRule).toContain(artifact.sourceCensusContractDigest);
@@ -49,14 +49,16 @@ test("U0 preserves and explicitly invalidates every predecessor instead of rewri
   const v4=JSON.parse(readFileSync("docs/universality/campaign-v4/claim.json","utf8")) as FrozenUniversalityClaim;
   const v5=JSON.parse(readFileSync("docs/universality/campaign-v5/claim.json","utf8")) as FrozenUniversalityClaim;
   const v6=JSON.parse(readFileSync("docs/universality/campaign-v6/claim.json","utf8")) as FrozenUniversalityClaim;
+  const v7=JSON.parse(readFileSync("docs/universality/campaign-v7/claim.json","utf8")) as FrozenUniversalityClaim;
   const s12=JSON.parse(readFileSync("docs/universality/campaign-v2/supersession.json","utf8")) as FrozenCampaignSupersession;
   const s23=JSON.parse(readFileSync("docs/universality/campaign-v3/supersession.json","utf8")) as FrozenCampaignSupersession;
   const s34=JSON.parse(readFileSync("docs/universality/campaign-v4/supersession.json","utf8")) as FrozenCampaignSupersession;
   const s45=JSON.parse(readFileSync("docs/universality/campaign-v5/supersession.json","utf8")) as FrozenCampaignSupersession;
   const s56=JSON.parse(readFileSync("docs/universality/campaign-v6/supersession.json","utf8")) as FrozenCampaignSupersession;
-  expect(verifyHistoricalUniversalityClaimDigest(v1)).toEqual(v1); expect(verifyHistoricalUniversalityClaimDigest(v2)).toEqual(v2); expect(verifyHistoricalUniversalityClaimDigest(v3)).toEqual(v3); expect(verifyHistoricalUniversalityClaimDigest(v4)).toEqual(v4); expect(verifyHistoricalUniversalityClaimDigest(v5)).toEqual(v5); expect(verifyFrozenUniversalityClaim(v6)).toEqual(v6);
-  expect(verifyFrozenCampaignSupersession(s12,v1,v2)).toEqual(s12); expect(verifyFrozenCampaignSupersession(s23,v2,v3)).toEqual(s23); expect(verifyFrozenCampaignSupersession(s34,v3,v4)).toEqual(s34); expect(verifyFrozenCampaignSupersession(s45,v4,v5)).toEqual(s45); expect(verifyFrozenCampaignSupersession(s56,v5,v6)).toEqual(s56);
-  expect(Date.parse(v6.registeredAt)).toBeLessThan(Date.parse(v6.censusAt));
+  const s67=JSON.parse(readFileSync("docs/universality/campaign-v7/supersession.json","utf8")) as FrozenCampaignSupersession;
+  expect(verifyHistoricalUniversalityClaimDigest(v1)).toEqual(v1); expect(verifyHistoricalUniversalityClaimDigest(v2)).toEqual(v2); expect(verifyHistoricalUniversalityClaimDigest(v3)).toEqual(v3); expect(verifyHistoricalUniversalityClaimDigest(v4)).toEqual(v4); expect(verifyHistoricalUniversalityClaimDigest(v5)).toEqual(v5); expect(verifyHistoricalUniversalityClaimDigest(v6)).toEqual(v6); expect(verifyFrozenUniversalityClaim(v7)).toEqual(v7);
+  expect(verifyFrozenCampaignSupersession(s12,v1,v2)).toEqual(s12); expect(verifyFrozenCampaignSupersession(s23,v2,v3)).toEqual(s23); expect(verifyFrozenCampaignSupersession(s34,v3,v4)).toEqual(s34); expect(verifyFrozenCampaignSupersession(s45,v4,v5)).toEqual(s45); expect(verifyFrozenCampaignSupersession(s56,v5,v6)).toEqual(s56); expect(verifyFrozenCampaignSupersession(s67,v6,v7)).toEqual(s67);
+  expect(Date.parse(v7.registeredAt)).toBeLessThan(Date.parse(v7.censusAt));
 });
 test("U0 rejects impossible thresholds, surplus semantic fields, and vacuity-policy removal",()=>{
   const impossible:any=registration(); impossible.metrics[1].threshold=2; expect(()=>freezeUniversalityClaim(impossible)).toThrow("weakens normative floor");
@@ -64,17 +66,17 @@ test("U0 rejects impossible thresholds, surplus semantic fields, and vacuity-pol
   const vacuous:any=registration(); delete vacuous.undefinedDenominatorPolicy; expect(()=>freezeUniversalityClaim(vacuous)).toThrow("schema must be exact");
 });
 test("U0 closure is machine indexed, skeptic accepted, residual-free, and advances only to U1",()=>{
-  const closure=JSON.parse(readFileSync("docs/universality/campaign-v6/u0-closure.json","utf8"));
-  const claim=JSON.parse(readFileSync("docs/universality/campaign-v6/claim.json","utf8")) as FrozenUniversalityClaim;
+  const closure=JSON.parse(readFileSync("docs/universality/campaign-v7/u0-closure.json","utf8"));
+  const claim=JSON.parse(readFileSync("docs/universality/campaign-v7/claim.json","utf8")) as FrozenUniversalityClaim;
   expect(closure).toMatchObject({checkpoint:"U0",status:"complete",assurance:"property-tested",claimDigest:claim.digest,residuals:[],next:"U1"});
   expect(closure.skepticalReview.round1).toContain("rejected"); expect(Object.values(closure.skepticalReview).at(-1)).toContain("accepted");
   expect(closure.falsifiersExercised.length).toBeGreaterThanOrEqual(7); expect(closure.semanticCoverage.length).toBeGreaterThanOrEqual(9);
 });
 test("U0 verifier rejects reversed chronology and forged or surplus supersession joins",()=>{
   const reversed=registration(); reversed.censusAt="2026-07-15T00:00:00Z"; expect(()=>freezeUniversalityClaim(reversed)).toThrow("identity invalid");
-  const oldClaim=JSON.parse(readFileSync("docs/universality/campaign-v5/claim.json","utf8")) as FrozenUniversalityClaim;
-  const newClaim=JSON.parse(readFileSync("docs/universality/campaign-v6/claim.json","utf8")) as FrozenUniversalityClaim;
-  const value:any=JSON.parse(readFileSync("docs/universality/campaign-v6/supersession.json","utf8")); delete value.digest;
+  const oldClaim=JSON.parse(readFileSync("docs/universality/campaign-v6/claim.json","utf8")) as FrozenUniversalityClaim;
+  const newClaim=JSON.parse(readFileSync("docs/universality/campaign-v7/claim.json","utf8")) as FrozenUniversalityClaim;
+  const value:any=JSON.parse(readFileSync("docs/universality/campaign-v7/supersession.json","utf8")); delete value.digest;
   expect(freezeCampaignSupersession(value,oldClaim,newClaim).predecessorDigest).toBe(oldClaim.digest);
   value.successorCampaign="forged"; expect(()=>freezeCampaignSupersession(value,oldClaim,newClaim)).toThrow("join invalid");
   value.successorCampaign=newClaim.campaignId; value.alternateStatus="complete"; expect(()=>freezeCampaignSupersession(value,oldClaim,newClaim)).toThrow("join invalid");

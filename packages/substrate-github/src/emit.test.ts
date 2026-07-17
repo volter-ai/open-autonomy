@@ -43,6 +43,9 @@ describe('compileGithub — derived security data vs code-host resources', () =>
     // actor-execution runtime IS injected (the runner: how the credentialed box is wrapped):
     expect(out.generated['scripts/claude-agent-run.ts']).toBeDefined();
     expect(out.generated['scripts/agent-propose.ts']).toBeDefined(); // the emitted effect step invokes it
+    expect(JSON.parse(out.generated['.open-autonomy/autonomy.json']).agents.maintainer).toBeDefined();
+    expect(out.generated['scripts/runner.ts']).toContain("const path = '.open-autonomy/autonomy.json'");
+    expect(out.generated['scripts/runner.ts']).not.toContain('Bun.YAML');
     // code-host CI workflows + the gate scripts they call are RESOURCES (carried by the profile):
     expect(out.generated['.github/workflows/security.yml']).toBeUndefined();
     expect(out.generated['.github/dependabot.yml']).toBeUndefined();

@@ -40,6 +40,7 @@
     ".github/zizmor.yml",
     ".gitignore",
     ".open-autonomy/architecture-invariants.yml",
+    ".open-autonomy/autonomy.json",
     ".open-autonomy/autonomy.yml",
     ".open-autonomy/enforcement.json",
     ".open-autonomy/generated.json",

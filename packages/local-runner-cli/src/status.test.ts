@@ -69,8 +69,9 @@ describe('oa status', () => {
       mkdirSync(join(dir, 'scripts'), { recursive: true });
       writeFileSync(join(dir, 'scripts', 'autonomy-runner.mjs'), `
         export class TermfleetRunner {
+          constructor(opts = {}) { this.env = opts.env ?? process.env; }
           async list() {
-            return [{ id: process.env.TERMFLEET_PROVIDER_URL, agent: process.env.AUTONOMY_PROVIDER_URL_SOURCE, status: 'running' }];
+            return [{ id: this.env.TERMFLEET_PROVIDER_URL, agent: this.env.AUTONOMY_PROVIDER_URL_SOURCE, status: 'running' }];
           }
           async reapIdle() { return []; }
         }
@@ -101,9 +102,9 @@ describe('oa status', () => {
       let observed: { url?: string; source?: string } = {};
       await expect(status({
         cwd: dir,
-        sessionRunnerFactory: async () => ({
+        sessionRunnerFactory: async (_cwd, env) => ({
           async list() {
-            observed = { url: process.env.TERMFLEET_PROVIDER_URL, source: process.env.AUTONOMY_PROVIDER_URL_SOURCE };
+            observed = { url: env.TERMFLEET_PROVIDER_URL, source: env.AUTONOMY_PROVIDER_URL_SOURCE };
             throw new Error('provider unavailable');
           },
           async reapIdle() { return []; },
@@ -130,8 +131,8 @@ describe('oa status', () => {
       let observed: string | undefined;
       await status({
         cwd: dir,
-        sessionRunnerFactory: async () => ({
-          async list() { observed = process.env.TERMFLEET_PROVIDER_URL; return []; },
+        sessionRunnerFactory: async (_cwd, env) => ({
+          async list() { observed = env.TERMFLEET_PROVIDER_URL; return []; },
           async reapIdle() { return []; },
         }),
       });
@@ -236,10 +237,10 @@ describe('oa status', () => {
       let probedProvider = '';
       const report = await status({
         cwd: dir,
-        sessionRunnerFactory: async (runtimeRoot) => {
+        sessionRunnerFactory: async (runtimeRoot, env) => {
           probedRoot = runtimeRoot;
           return {
-            async list() { probedProvider = process.env.TERMFLEET_PROVIDER_URL ?? ''; return []; },
+            async list() { probedProvider = env.TERMFLEET_PROVIDER_URL ?? ''; return []; },
             async reapIdle() { return []; },
           };
         },

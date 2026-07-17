@@ -1,0 +1,593 @@
+{
+  "schema": "open-autonomy.universality-checkpoint-implementation-closure.v1",
+  "checkpoint": "U3",
+  "status": "implementation-complete-external-validation-deferred",
+  "scope": "local U3 observation calculus, authenticated synthetic trace evaluator, preservation certificates, composition algebra, deterministic validators, and adversarial proof machinery only; no empirical U3 result, U3 semantic closure, or UG1 passage is claimed",
+  "claimDigest": "sha256:753adcf34a43908d729b739bd62975cb38508a1a0c4963da6d6bf4c8cf8ae46c",
+  "implementationAnchors": {
+    "calculus": {
+      "sourceCommit": "d00c5190e3284482493328925a88e682404362be",
+      "sourcePath": "packages/core/src/organization-u3-observation-calculus.ts",
+      "sourceCommittedSha256": "sha256:bb313242dd918e934861a32ec8fd3f28bee59fee31bd79689dea68d20c7f843b",
+      "sourceCurrentSha256": "sha256:bb313242dd918e934861a32ec8fd3f28bee59fee31bd79689dea68d20c7f843b",
+      "evidenceCommit": "7f328f9314e6fdf6824e699bb80f0020df1154fa",
+      "testPath": "packages/core/src/organization-u3-observation-calculus.test.ts",
+      "testCommittedSha256": "sha256:48f1ac6a6dee36ff36ea761628c215faaaaf8e38c4b4e0bbc552f9819b8f5fcb",
+      "testCurrentSha256": "sha256:48f1ac6a6dee36ff36ea761628c215faaaaf8e38c4b4e0bbc552f9819b8f5fcb"
+    },
+    "evaluator": {
+      "sourceCommit": "743e563b3bc63005763d8a66c95e7a7e6faa6a48",
+      "sourcePath": "packages/core/src/organization-u3-observation-evaluator.ts",
+      "sourceCommittedSha256": "sha256:ee98925853f4fc49b056152cc1bbb5123539234c52bb59421198be7a31a0e86d",
+      "sourceCurrentSha256": "sha256:ee98925853f4fc49b056152cc1bbb5123539234c52bb59421198be7a31a0e86d",
+      "evidenceCommit": "17f36f111148e056795746a05ad259302ecf658c",
+      "testPath": "packages/core/src/organization-u3-observation-evaluator.test.ts",
+      "testCommittedSha256": "sha256:e6f961ce0928c2be354f82fc0475027cbf6027697afecd301f506dbe5b682ddd",
+      "testCurrentSha256": "sha256:e6f961ce0928c2be354f82fc0475027cbf6027697afecd301f506dbe5b682ddd"
+    },
+    "certificate": {
+      "predecessorSourceCommit": "fae0f596c7e005666f99cdc75c1454fd598ef5ba",
+      "predecessorSourceSha256": "sha256:e4f3bdfc848cf22fb2b4748c7a8a549cd1eb3d8402c2826eb145352a3df79d62",
+      "sourceCommit": "7f328f9314e6fdf6824e699bb80f0020df1154fa",
+      "sourcePath": "packages/core/src/organization-u3-preservation-certificate.ts",
+      "sourceCommittedSha256": "sha256:a8d828dd61ceda2c5862fdb417af16467c493cffb18dd522c9368a46b41c6e91",
+      "sourceCurrentSha256": "sha256:a8d828dd61ceda2c5862fdb417af16467c493cffb18dd522c9368a46b41c6e91",
+      "evidenceCommit": "7f328f9314e6fdf6824e699bb80f0020df1154fa",
+      "testPath": "packages/core/src/organization-u3-preservation-certificate.test.ts",
+      "testCommittedSha256": "sha256:204a2425c9b021397f96b0dcf285d1f1c9b4e8339f03fd47d3e946b9e26b35d3",
+      "testCurrentSha256": "sha256:204a2425c9b021397f96b0dcf285d1f1c9b4e8339f03fd47d3e946b9e26b35d3"
+    }
+  },
+  "obligations": [
+    {
+      "id": "U3-I1",
+      "claim": "The synthetic calculus is independently digest-anchored and canonical",
+      "evidence": [
+        {
+          "validator": "freezeU3ObservationCalculus",
+          "testFile": "packages/core/src/organization-u3-observation-calculus.test.ts",
+          "testName": "purely freezes and verifies independently anchored synthetic L1-L9",
+          "clause": "canonical calculus fixture has an independent digest"
+        },
+        {
+          "validator": "verifyU3PredecessorGitCustody",
+          "testFile": "packages/core/src/organization-u3-observation-calculus.test.ts",
+          "testName": "explicit trusted wrapper verifies predecessor Git custody",
+          "clause": "predecessor bytes and commits are custody checked"
+        }
+      ]
+    },
+    {
+      "id": "U3-I2",
+      "claim": "Every registered observation taxonomy member is represented exactly",
+      "evidence": [
+        {
+          "validator": "freezeU3ObservationCalculus",
+          "testFile": "packages/core/src/organization-u3-observation-calculus.test.ts",
+          "testName": "purely freezes and verifies independently anchored synthetic L1-L9",
+          "clause": "all registered taxonomy members are fixture covered"
+        }
+      ]
+    },
+    {
+      "id": "U3-I3",
+      "claim": "Observation schemas, versions, projections, and endpoints join exactly",
+      "evidence": [
+        {
+          "validator": "freezeU3ObservationCalculus",
+          "testFile": "packages/core/src/organization-u3-observation-calculus.test.ts",
+          "testName": "rejects schema version join",
+          "clause": "observation schema versions join the registry"
+        },
+        {
+          "validator": "freezeU3ObservationCalculus",
+          "testFile": "packages/core/src/organization-u3-observation-calculus.test.ts",
+          "testName": "rejects typed endpoint schema version",
+          "clause": "typed endpoint schema versions join observations"
+        },
+        {
+          "validator": "freezeU3ObservationCalculus",
+          "testFile": "packages/core/src/organization-u3-observation-calculus.test.ts",
+          "testName": "rejects projection version join",
+          "clause": "projection input and output versions join schemas"
+        },
+        {
+          "validator": "freezeU3ObservationCalculus",
+          "testFile": "packages/core/src/organization-u3-observation-calculus.test.ts",
+          "testName": "rejects observation unrelated projection",
+          "clause": "observation source projections must exist"
+        },
+        {
+          "validator": "freezeU3ObservationCalculus",
+          "testFile": "packages/core/src/organization-u3-observation-calculus.test.ts",
+          "testName": "rejects comparison unrelated source projection",
+          "clause": "comparison projections must exist"
+        },
+        {
+          "validator": "freezeU3ObservationCalculus",
+          "testFile": "packages/core/src/organization-u3-observation-calculus.test.ts",
+          "testName": "rejects isolated right-to-left projection topology reversal",
+          "clause": "directional endpoint and projection topology is exact"
+        }
+      ]
+    },
+    {
+      "id": "U3-I4",
+      "claim": "Applicability predicates and strata are total and evidence constrained",
+      "evidence": [
+        {
+          "validator": "freezeU3ObservationCalculus",
+          "testFile": "packages/core/src/organization-u3-observation-calculus.test.ts",
+          "testName": "isolates excluded applicability evidence and predicate authority",
+          "clause": "excluded applicability requires evidence and a registered predicate"
+        }
+      ]
+    },
+    {
+      "id": "U3-I5",
+      "claim": "Profile roots, lineage, versions, inheritance, and pairs are coherent",
+      "evidence": [
+        {
+          "validator": "freezeU3ObservationCalculus",
+          "testFile": "packages/core/src/organization-u3-observation-calculus.test.ts",
+          "testName": "rejects missing root profile",
+          "clause": "profile ancestry requires a root"
+        },
+        {
+          "validator": "freezeU3ObservationCalculus",
+          "testFile": "packages/core/src/organization-u3-observation-calculus.test.ts",
+          "testName": "rejects arbitrary profile version",
+          "clause": "profile versions are semantic versions"
+        },
+        {
+          "validator": "freezeU3ObservationCalculus",
+          "testFile": "packages/core/src/organization-u3-observation-calculus.test.ts",
+          "testName": "rejects parent major mismatch",
+          "clause": "child and parent major versions align"
+        },
+        {
+          "validator": "freezeU3ObservationCalculus",
+          "testFile": "packages/core/src/organization-u3-observation-calculus.test.ts",
+          "testName": "rejects parent lineage mismatch",
+          "clause": "child and parent lineage identities align"
+        },
+        {
+          "validator": "freezeU3ObservationCalculus",
+          "testFile": "packages/core/src/organization-u3-observation-calculus.test.ts",
+          "testName": "rejects parent effective loss",
+          "clause": "children cannot erase inherited effective observations"
+        },
+        {
+          "validator": "freezeU3ObservationCalculus",
+          "testFile": "packages/core/src/organization-u3-observation-calculus.test.ts",
+          "testName": "rejects pair omission",
+          "clause": "profile pair coverage is total"
+        },
+        {
+          "validator": "freezeU3ObservationCalculus",
+          "testFile": "packages/core/src/organization-u3-observation-calculus.test.ts",
+          "testName": "rejects pair orientation lie",
+          "clause": "profile pair orientation is derived"
+        },
+        {
+          "validator": "freezeU3ObservationCalculus",
+          "testFile": "packages/core/src/organization-u3-observation-calculus.test.ts",
+          "testName": "rejects unrelated profiles claim equivalence",
+          "clause": "unrelated profiles cannot claim equivalence"
+        }
+      ]
+    },
+    {
+      "id": "U3-I6",
+      "claim": "Comparison operators and directions obey the registered algebra",
+      "evidence": [
+        {
+          "validator": "freezeU3ObservationCalculus",
+          "testFile": "packages/core/src/organization-u3-observation-calculus.test.ts",
+          "testName": "rejects isolated right-to-left projection topology reversal",
+          "clause": "right-to-left algebra cannot reverse typed projection topology"
+        }
+      ]
+    },
+    {
+      "id": "U3-I7",
+      "claim": "Variance metrics, clocks, windows, units, and aggregation are typed",
+      "evidence": [
+        {
+          "validator": "freezeU3ObservationCalculus",
+          "testFile": "packages/core/src/organization-u3-observation-calculus.test.ts",
+          "testName": "isolates metric unit window and aggregation variance dimensions",
+          "clause": "metric unit window and aggregation are independently attacked"
+        }
+      ]
+    },
+    {
+      "id": "U3-I8",
+      "claim": "Mandatory observations and forbidden-loss sets cannot be weakened",
+      "evidence": [
+        {
+          "validator": "freezeU3ObservationCalculus",
+          "testFile": "packages/core/src/organization-u3-observation-calculus.test.ts",
+          "testName": "rejects mandatory observation loss",
+          "clause": "mandatory observations cannot be removed"
+        },
+        {
+          "validator": "freezeU3ObservationCalculus",
+          "testFile": "packages/core/src/organization-u3-observation-calculus.test.ts",
+          "testName": "rejects mandatory forbidden-loss removal",
+          "clause": "mandatory observations remain forbidden losses"
+        }
+      ]
+    },
+    {
+      "id": "U3-I9",
+      "claim": "Calculus parsing and hashing enforce finite canonical resource bounds",
+      "evidence": [
+        {
+          "validator": "freezeU3ObservationCalculus",
+          "testFile": "packages/core/src/organization-u3-observation-calculus.test.ts",
+          "testName": "isolates cyclic depth UTF-8 and field resource bounds",
+          "clause": "calculus cycle depth UTF-8 and field bounds reject"
+        },
+        {
+          "validator": "evaluateU3ObservationTrace",
+          "testFile": "packages/core/src/organization-u3-observation-evaluator.test.ts",
+          "testName": "isolates evaluator cycle depth field and aggregate work bounds",
+          "clause": "evaluator cycle depth field and aggregate work bounds reject"
+        }
+      ]
+    },
+    {
+      "id": "U3-I10",
+      "claim": "Evaluation contracts bind exact semantic shapes and tool registries",
+      "evidence": [
+        {
+          "validator": "freezeU3TraceEvaluationContract",
+          "testFile": "packages/core/src/organization-u3-observation-evaluator.test.ts",
+          "testName": "freezes bounded semantic shape registry and verifies calculus Git custody",
+          "clause": "contract shape and calculus custody are exact"
+        },
+        {
+          "validator": "freezeU3TraceEvaluationContract",
+          "testFile": "packages/core/src/organization-u3-observation-evaluator.test.ts",
+          "testName": "isolates evaluation contract tool registry schema identity version digest and reachability",
+          "clause": "adapter compiler and runtime registries enforce record schema identity version digest and exact trace reachability"
+        }
+      ]
+    },
+    {
+      "id": "U3-I11",
+      "claim": "Trace events are integrity protected and authenticated to exact authorities",
+      "evidence": [
+        {
+          "validator": "evaluateU3ObservationTrace",
+          "testFile": "packages/core/src/organization-u3-observation-evaluator.test.ts",
+          "testName": "rejects version, integrity, trust, causal, correlation, surplus custody, cycle, depth, and work attacks",
+          "clause": "event integrity authority and version attacks reject"
+        }
+      ]
+    },
+    {
+      "id": "U3-I12",
+      "claim": "Evidence and provenance records have exact authenticated custody joins",
+      "evidence": [
+        {
+          "validator": "evaluateU3ObservationTrace",
+          "testFile": "packages/core/src/organization-u3-observation-evaluator.test.ts",
+          "testName": "rejects forged loss custody, malformed quotients, and consistently re-digested report topology/accounting",
+          "clause": "evidence provenance and custody forgery rejects"
+        }
+      ]
+    },
+    {
+      "id": "U3-I13",
+      "claim": "Causal order is checked against declared wall and monotonic clocks",
+      "evidence": [
+        {
+          "validator": "evaluateU3ObservationTrace",
+          "testFile": "packages/core/src/organization-u3-observation-evaluator.test.ts",
+          "testName": "mixed wall/monotonic envelopes evaluate and policy attacks reach their authenticated checks",
+          "clause": "wall monotonic and causal envelopes are authenticated"
+        }
+      ]
+    },
+    {
+      "id": "U3-I14",
+      "claim": "All eight evaluation terminals are constructively reachable and typed",
+      "evidence": [
+        {
+          "validator": "evaluateU3ObservationTrace",
+          "testFile": "packages/core/src/organization-u3-observation-evaluator.test.ts",
+          "testName": "E2E emits equivalent, refinement, abstraction, variance, violation, unknown, incompatible, and typed-loss terminals",
+          "clause": "all eight evaluator terminal classes are reached"
+        }
+      ]
+    },
+    {
+      "id": "U3-I15",
+      "claim": "Optional losses require authenticated typed loss and exclusive inventory",
+      "evidence": [
+        {
+          "validator": "evaluateU3ObservationTrace",
+          "testFile": "packages/core/src/organization-u3-observation-evaluator.test.ts",
+          "testName": "rejects typed-loss observation overlap and mandatory-observation loss",
+          "clause": "loss observation exclusivity and mandatory-loss rejection are isolated"
+        },
+        {
+          "validator": "evaluateU3ObservationTrace",
+          "testFile": "packages/core/src/organization-u3-observation-evaluator.test.ts",
+          "testName": "E2E emits equivalent, refinement, abstraction, variance, violation, unknown, incompatible, and typed-loss terminals",
+          "clause": "valid optional typed loss is constructively reached"
+        }
+      ]
+    },
+    {
+      "id": "U3-I16",
+      "claim": "Result witnesses and accounting cover every consumed input exactly",
+      "evidence": [
+        {
+          "validator": "verifyU3EvaluationReport",
+          "testFile": "packages/core/src/organization-u3-observation-evaluator.test.ts",
+          "testName": "rejects forged loss custody, malformed quotients, and consistently re-digested report topology/accounting",
+          "clause": "report witness topology and accounting resist redigestion"
+        }
+      ]
+    },
+    {
+      "id": "U3-I17",
+      "claim": "Report verification independently replays the evaluator from exact inputs",
+      "evidence": [
+        {
+          "validator": "verifyU3EvaluationReport",
+          "testFile": "packages/core/src/organization-u3-observation-evaluator.test.ts",
+          "testName": "E2E emits equivalent, refinement, abstraction, variance, violation, unknown, incompatible, and typed-loss terminals",
+          "clause": "report verification independently replays every terminal fixture"
+        }
+      ]
+    },
+    {
+      "id": "U3-I18",
+      "claim": "Certificates bind exact calculus contract traces report tools and trust",
+      "evidence": [
+        {
+          "validator": "createU3PreservationCertificate",
+          "testFile": "packages/core/src/organization-u3-preservation-certificate.test.ts",
+          "testName": "creates an exact replay certificate with an independently anchored fixture",
+          "clause": "certificate fixture binds exact replay inputs and independent digest"
+        }
+      ]
+    },
+    {
+      "id": "U3-I19",
+      "claim": "Certificate verification replays authenticated evaluation rather than summaries",
+      "evidence": [
+        {
+          "validator": "verifyU3PreservationCertificate",
+          "testFile": "packages/core/src/organization-u3-preservation-certificate.test.ts",
+          "testName": "rejects substitution, re-digest, version skew, surplus, trust, and bounded-resource attacks",
+          "clause": "certificate substitutions version skew and redigestion reject"
+        }
+      ]
+    },
+    {
+      "id": "U3-I20",
+      "claim": "Prompt provider probe model and harness domains remain explicit assumptions",
+      "evidence": [
+        {
+          "validator": "verifyU3PreservationCertificate",
+          "testFile": "packages/core/src/organization-u3-preservation-certificate.test.ts",
+          "testName": "binds prompt context provider probe model and harness domains without generalization",
+          "clause": "prompt context provider probe model and harness domains each change the certificate"
+        }
+      ]
+    },
+    {
+      "id": "U3-I21",
+      "claim": "Composition joins exact typed intermediate endpoint identities bijectively",
+      "evidence": [
+        {
+          "validator": "composeU3PreservationCertificates",
+          "testFile": "packages/core/src/organization-u3-preservation-certificate.test.ts",
+          "testName": "composition is deterministic, aligns the intermediate artifact, and conserves relations",
+          "clause": "typed intermediate endpoint bijection composes non-diagonal paths"
+        }
+      ]
+    },
+    {
+      "id": "U3-I22",
+      "claim": "Guarantee discharge requires an unchanged exact domain and valid witness",
+      "evidence": [
+        {
+          "validator": "composeU3PreservationCertificates",
+          "testFile": "packages/core/src/organization-u3-preservation-certificate.test.ts",
+          "testName": "composition rejects artifact substitution, unsupported relation mixing, quotient mismatch, and assumption conflict",
+          "clause": "domain guarantee mismatch and changed-model discharge reject"
+        }
+      ]
+    },
+    {
+      "id": "U3-I23",
+      "claim": "Relation and quotient composition rejects unsupported directional algebra",
+      "evidence": [
+        {
+          "validator": "composeU3PreservationCertificates",
+          "testFile": "packages/core/src/organization-u3-preservation-certificate.test.ts",
+          "testName": "composition rejects artifact substitution, unsupported relation mixing, quotient mismatch, and assumption conflict",
+          "clause": "mixed direction relation and quotient algebra reject"
+        }
+      ]
+    },
+    {
+      "id": "U3-I24",
+      "claim": "Absolute and relative variance bounds compose by explicit typed algebra",
+      "evidence": [
+        {
+          "validator": "composeU3PreservationCertificates",
+          "testFile": "packages/core/src/organization-u3-preservation-certificate.test.ts",
+          "testName": "variance composition uses typed absolute and relative bound algebra",
+          "clause": "absolute relative direction and operator variance algebra is tested"
+        }
+      ]
+    },
+    {
+      "id": "U3-I25",
+      "claim": "Composition conserves terminal status losses assumptions and outer witnesses",
+      "evidence": [
+        {
+          "validator": "verifyU3ComposedPreservationCertificate",
+          "testFile": "packages/core/src/organization-u3-preservation-certificate.test.ts",
+          "testName": "composition conserves violated unknown assumptions and outer witnesses",
+          "clause": "violated unknown incompatible typed-loss assumptions and outer witnesses are not erased"
+        },
+        {
+          "validator": "verifyU3ComposedPreservationCertificate",
+          "testFile": "packages/core/src/organization-u3-preservation-certificate.test.ts",
+          "testName": "composition is deterministic, aligns the intermediate artifact, and conserves relations",
+          "clause": "composed certificate replay is deterministic"
+        }
+      ]
+    }
+  ],
+  "externalDeferred": [
+    {
+      "id": "U3-E1",
+      "requirement": "Empirical U1 strata determine the real U3 observation denominator",
+      "requires": [
+        "verified-u1-population-digest",
+        "stratum-membership-custody"
+      ]
+    },
+    {
+      "id": "U3-E2",
+      "requirement": "Independent authority freezes mandatory sets and U4 inventory interfaces",
+      "requires": [
+        "independent-authority-identity",
+        "registered-u4-inventory"
+      ]
+    },
+    {
+      "id": "U3-E3",
+      "requirement": "Native semantics and projections are externally established",
+      "requires": [
+        "native-schema-custody",
+        "projection-validity-evidence"
+      ]
+    },
+    {
+      "id": "U3-E4",
+      "requirement": "Independent experts adjudicate semantic equivalence",
+      "requires": [
+        "expert-independence",
+        "equivalence-adjudications"
+      ]
+    },
+    {
+      "id": "U3-E5",
+      "requirement": "Variance and fairness thresholds are externally calibrated",
+      "requires": [
+        "calibration-population",
+        "fairness-authority"
+      ]
+    },
+    {
+      "id": "U3-E6",
+      "requirement": "Preservation is run against real baselines",
+      "requires": [
+        "real-source-baselines",
+        "real-lifted-runs"
+      ]
+    },
+    {
+      "id": "U3-E7",
+      "requirement": "Identities clocks tool versions and custody are authenticated",
+      "requires": [
+        "external-trust-roots",
+        "authenticated-clock-and-version-receipts"
+      ]
+    },
+    {
+      "id": "U3-E8",
+      "requirement": "An independent party replays evaluation and certificates",
+      "requires": [
+        "independent-replayer",
+        "replay-receipts"
+      ]
+    },
+    {
+      "id": "U3-E9",
+      "requirement": "Holdout selection predates protected evaluation",
+      "requires": [
+        "timestamped-holdout-registration",
+        "protected-result-chronology"
+      ]
+    },
+    {
+      "id": "U3-E10",
+      "requirement": "Claims remain limited to observed prompt context provider probe model and harness domains",
+      "requires": [
+        "domain-registration",
+        "cross-domain-non-generalization-review"
+      ]
+    }
+  ],
+  "accounting": {
+    "openInternal": 0,
+    "dischargedInternal": 25,
+    "deferredExternal": 10
+  },
+  "prohibitedClaims": [
+    "a V9 empirical U3 observation population is registered",
+    "U3 semantic closure is complete",
+    "UG1 has passed",
+    "U4 empirical inventories or denominators are frozen"
+  ],
+  "skepticalReview": {
+    "finding": "local validators establish only a synthetic observation calculus, authenticated fixture evaluator, replayable certificates, and conservative composition algebra; empirical strata, native meaning, calibration, real baselines, external identity, replay, chronology, and domain generalization remain external",
+    "disposition": "external validation deferred; synthetic observations and denominators cannot be promoted or reused as empirical"
+  },
+  "downstreamBoundary": {
+    "allowed": [
+      "U4 interface development",
+      "U4 synthetic inventory fixtures",
+      "U4 property tests over synthetic fixtures"
+    ],
+    "forbidden": [
+      "U4 empirical inventories",
+      "U4 semantic checkpoint closure",
+      "publication or reuse of empirical U4 denominators",
+      "claiming UG1 passage"
+    ],
+    "releaseCondition": "verified external U1 and U2 population digests plus discharge of every U3-E1 through U3-E10 external obligation",
+    "prerequisiteIds": [
+      "U1-E1",
+      "U1-E2",
+      "U1-E3",
+      "U1-E4",
+      "U2-E1",
+      "U2-E2",
+      "U2-E3",
+      "U2-E4",
+      "U2-E5",
+      "U2-E6",
+      "U2-E7",
+      "U2-E8",
+      "U2-E9",
+      "U2-E10",
+      "U2-E11",
+      "U2-E12",
+      "U3-E1",
+      "U3-E2",
+      "U3-E3",
+      "U3-E4",
+      "U3-E5",
+      "U3-E6",
+      "U3-E7",
+      "U3-E8",
+      "U3-E9",
+      "U3-E10"
+    ]
+  },
+  "nextImplementation": "U4",
+  "nextExternal": "U1-E1",
+  "digest": "sha256:fc70da0f37e45052d736da547047dc3f2da4d73fe17795dcddf6421f03e048cb"
+}

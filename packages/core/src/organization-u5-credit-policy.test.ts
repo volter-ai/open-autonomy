@@ -1,6 +1,62 @@
-import{expect,test}from"bun:test";import attestation from"../../../docs/universality/campaign-v9/u4-implementation-closure-attestation.json";import{createU4AuthenticatedTestFixture}from"./organization-u4-test-fixture";import{U5_SYNTHETIC_CREDIT_POLICY,verifyU5CommittedBoundary}from"./organization-u5-credit-policy";
-const fixture=()=>createU4AuthenticatedTestFixture();
-test("hard anchors U4 denominator attestation and independently authenticated policy",()=>{const x=fixture();expect(()=>verifyU5CommittedBoundary(x.inventory,attestation,U5_SYNTHETIC_CREDIT_POLICY)).not.toThrow()});
-test("rejects coherent alternate policy weights and inventory denominator",()=>{const x=fixture(),p:any=structuredClone(U5_SYNTHETIC_CREDIT_POLICY);p.weightsByCriticality.critical=3;expect(()=>verifyU5CommittedBoundary(x.inventory,attestation,p)).toThrow(/alternate policy/);const i:any=structuredClone(x.inventory);i.facts=i.facts.slice(1);expect(()=>verifyU5CommittedBoundary(i,attestation,U5_SYNTHETIC_CREDIT_POLICY)).toThrow(/inventory denominator/)});
-test("rejects authority custodian owner chronology and receipt substitutions",()=>{const x=fixture();for(const mutate of[(p:any)=>p.policyAuthority.ownerId=p.custodian.ownerId,(p:any)=>p.evidenceNotBefore=p.issuedAt,(p:any)=>p.authorityReceipt="00",(p:any)=>p.custodyReceipt="00"]){const p:any=structuredClone(U5_SYNTHETIC_CREDIT_POLICY);mutate(p);expect(()=>verifyU5CommittedBoundary(x.inventory,attestation,p)).toThrow(/alternate policy|independence|authentication/)}});
-test("rejects attestation substitution and invalid custody root",()=>{const x=fixture(),a:any=structuredClone(attestation);a.digest="sha256:"+"0".repeat(64);expect(()=>verifyU5CommittedBoundary(x.inventory,a,U5_SYNTHETIC_CREDIT_POLICY)).toThrow(/attestation digest/);expect(()=>verifyU5CommittedBoundary(x.inventory,attestation,U5_SYNTHETIC_CREDIT_POLICY,{root:"/missing"})).toThrow(/commit custody/)});
+import { expect, test } from "bun:test";
+import attestation from "../../../docs/universality/campaign-v9/u4-implementation-closure-attestation.json";
+import { createU4AuthenticatedTestFixture } from "./organization-u4-test-fixture";
+import {
+  U5_SYNTHETIC_CREDIT_POLICY,
+  verifyU5CommittedBoundary,
+} from "./organization-u5-credit-policy";
+const fixture = () => createU4AuthenticatedTestFixture();
+test("hard anchors U4 denominator attestation and independently authenticated policy", () => {
+  const x = fixture();
+  expect(() =>
+    verifyU5CommittedBoundary(
+      x.inventory,
+      attestation,
+      U5_SYNTHETIC_CREDIT_POLICY,
+    ),
+  ).not.toThrow();
+});
+test("rejects coherent alternate policy weights and inventory denominator", () => {
+  const x = fixture(),
+    p: any = structuredClone(U5_SYNTHETIC_CREDIT_POLICY);
+  p.weightsByCriticality.critical = 3;
+  expect(() => verifyU5CommittedBoundary(x.inventory, attestation, p)).toThrow(
+    /alternate policy/,
+  );
+  const i: any = structuredClone(x.inventory);
+  i.facts = i.facts.slice(1);
+  expect(() =>
+    verifyU5CommittedBoundary(i, attestation, U5_SYNTHETIC_CREDIT_POLICY),
+  ).toThrow(/inventory denominator/);
+});
+test("rejects authority custodian owner chronology and receipt substitutions", () => {
+  const x = fixture();
+  for (const mutate of [
+    (p: any) => (p.policyAuthority.ownerId = p.custodian.ownerId),
+    (p: any) => (p.evidenceNotBefore = p.issuedAt),
+    (p: any) => (p.authorityReceipt = "00"),
+    (p: any) => (p.custodyReceipt = "00"),
+  ]) {
+    const p: any = structuredClone(U5_SYNTHETIC_CREDIT_POLICY);
+    mutate(p);
+    expect(() =>
+      verifyU5CommittedBoundary(x.inventory, attestation, p),
+    ).toThrow(/alternate policy|independence|authentication/);
+  }
+});
+test("rejects attestation substitution and invalid custody root", () => {
+  const x = fixture(),
+    a: any = structuredClone(attestation);
+  a.digest = "sha256:" + "0".repeat(64);
+  expect(() =>
+    verifyU5CommittedBoundary(x.inventory, a, U5_SYNTHETIC_CREDIT_POLICY),
+  ).toThrow(/attestation digest/);
+  expect(() =>
+    verifyU5CommittedBoundary(
+      x.inventory,
+      attestation,
+      U5_SYNTHETIC_CREDIT_POLICY,
+      { root: "/missing" },
+    ),
+  ).toThrow(/commit custody/);
+});

@@ -2,7 +2,7 @@
 // reaping, and opaque completion effects. It does not query tasks, PRs, or role-specific state.
 import { existsSync, mkdirSync, readFileSync, readdirSync, realpathSync, renameSync, unlinkSync, writeFileSync } from 'node:fs';
 import { join, resolve, sep } from 'node:path';
-import type { NormalizedJob, ProcRunner, Session, SessionRunner } from './types.ts';
+import type { NormalizedJob, ProcRunner, Session, SessionRunner, SessionRunnerFactory } from './types.ts';
 import { defaultProc } from './proc.ts';
 import { loadSchedule } from './config.ts';
 import { buildTickEnv } from './env.ts';
@@ -72,7 +72,7 @@ export interface StartOptions {
   signal?: AbortSignal;
   pollMs?: number;
   idleReapMs?: number;
-  sessionRunnerFactory?: (cwd: string) => Promise<SessionRunner | null>;
+  sessionRunnerFactory?: SessionRunnerFactory;
   ambient?: NodeJS.ProcessEnv;
   resolveDefault?: () => Promise<{ baseUrl: string; source: string }>;
   fastDeathMs?: number;
@@ -118,7 +118,7 @@ export async function start(opts: StartOptions = {}): Promise<void> {
     /* script-only schedule */
   }
 
-  const runner = await (opts.sessionRunnerFactory ?? defaultSessionRunner)(cwd);
+  const runner = await (opts.sessionRunnerFactory ?? defaultSessionRunner)(cwd, ambient);
   const durableState = loadDurableState(cwd);
   const states = new Map(schedule.jobs.map((job) => {
     const prior = durableState.jobs[job.name];
@@ -140,7 +140,7 @@ export async function start(opts: StartOptions = {}): Promise<void> {
   while (!signal?.aborted) {
     heartbeat += 1;
     const now = Date.now();
-    const sessions = await listSessionsBestEffort(cwd, runner);
+    const sessions = await listSessionsBestEffort(cwd, runner, ambient);
     const activeSessions = sessions?.filter(active) ?? [];
     let activeCount = activeSessions.filter((session) => scheduledAgents.has(session.agent)).length;
 

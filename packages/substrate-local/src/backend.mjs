@@ -21,10 +21,17 @@ import { RUNNER_DEFAULTS } from './runner-defaults.mjs';
 // Real local backend: drives termfleet via its ProviderClient SDK. The window name IS the agent; the
 // system never encodes anything else into it. Defaults come from RUNNER_DEFAULTS; TERMFLEET_* override.
 export class TermfleetRunner {
-  harness = process.env.TERMFLEET_AGENT || RUNNER_DEFAULTS.harness; // claude|codex|gemini — the coding CLI, not our agent
+  #env;
+  #cwd;
+  harness;
   #clientPromise;
+  constructor({ cwd = process.cwd(), env = process.env } = {}) {
+    this.#env = env;
+    this.#cwd = cwd;
+    this.harness = env.TERMFLEET_AGENT || RUNNER_DEFAULTS.harness; // claude|codex|gemini — the coding CLI, not our agent
+  }
   #client() {
-    return (this.#clientPromise ??= resolveDefaultProvider({ url: process.env.TERMFLEET_PROVIDER_URL }).then((p) => {
+    return (this.#clientPromise ??= resolveDefaultProvider({ url: this.#env.TERMFLEET_PROVIDER_URL }).then((p) => {
       // OA-09: log the effective provider + its origin on first resolve. The loop driver's own startup line
       // (emit.ts's LOOP_DRIVER) only covers processes it launches directly; a NESTED launch (the PM's own
       // `runner.ts launch developer ...`, or anyone driving this backend directly) resolves independently
@@ -38,8 +45,8 @@ export class TermfleetRunner {
       // TRIM (OA-09 Blocker 2): a set-but-empty/whitespace TERMFLEET_PROVIDER_URL is unset to the SDK (it
       // trims + falsy-checks `opts.url`), so it must read as unpinned here too — otherwise this line would
       // claim `env`/`schedule` while the SDK actually auto-discovered p.source.
-      const pinnedEnv = (process.env.TERMFLEET_PROVIDER_URL || '').trim();
-      const source = pinnedEnv ? process.env.AUTONOMY_PROVIDER_URL_SOURCE || 'env' : p.source;
+      const pinnedEnv = (this.#env.TERMFLEET_PROVIDER_URL || '').trim();
+      const source = pinnedEnv ? this.#env.AUTONOMY_PROVIDER_URL_SOURCE || 'env' : p.source;
       // stderr, never stdout — `list`/`launch`'s CLI output is a single JSON line on stdout that callers
       // (including this repo's own tests) parse directly; a diagnostic line ahead of it would corrupt that.
       console.error(`[runner] provider ${p.baseUrl} (${source})`);
@@ -58,7 +65,7 @@ export class TermfleetRunner {
     // claude, `$name` codex — emit.ts:436-437), and the launch's prompt file is resolved right here anyway —
     // so read it once, early, and check the corresponding skills path. A bare-name prompt (no prompt file at
     // all — e.g. no AUTONOMY_PROMPT_DIR set) has nothing deterministic to verify: skip.
-    const promptDir = process.env.AUTONOMY_PROMPT_DIR;
+    const promptDir = this.#env.AUTONOMY_PROMPT_DIR;
     const promptFile = promptDir ? `${promptDir}/${agent}.txt` : '';
     const promptExists = !!promptFile && existsSync(promptFile);
     const prompt = promptExists ? readFileSync(promptFile, 'utf8') : agent;
@@ -72,7 +79,7 @@ export class TermfleetRunner {
     if (invocation) {
       const behavior = invocation[1];
       const skillsRoot = this.harness === 'codex' ? '.codex/skills' : '.claude/skills';
-      const skillPath = join(process.cwd(), skillsRoot, behavior, 'SKILL.md');
+      const skillPath = join(this.#cwd, skillsRoot, behavior, 'SKILL.md');
       if (!existsSync(skillPath)) {
         throw new Error(
           `[runner] launch refused: ${agent}'s skill "${behavior}" is missing at ${skillPath} — the session ` +
@@ -89,31 +96,31 @@ export class TermfleetRunner {
     // CODE-HOST-BLIND: it injects no github/repo identity — a code-host agent resolves its own repo through
     // its own tool (e.g. `gh api repos/{owner}/{repo}/…`, which `gh` fills from the remote).
     const exported = {
-      ...Object.fromEntries(Object.entries(process.env).filter(([k]) => /^(TERMFLEET_.*|AUTONOMY.*|PATH)$/.test(k))),
+      ...Object.fromEntries(Object.entries(this.#env).filter(([k]) => /^(TERMFLEET_.*|AUTONOMY.*|PATH)$/.test(k))),
       ...params,
     };
     // Put the repo's local node_modules/.bin first so the agent reaches repo-pinned CLIs (e.g. a `-D`
     // ztrack) — exactly what `npm run`/`bun run` do, without the substrate naming any tool. cwd is the
     // repo (createAgentWindow runs the session there), so this is where its node_modules lives.
-    exported.PATH = `${process.cwd()}/node_modules/.bin:${exported.PATH ?? process.env.PATH ?? ''}`;
+    exported.PATH = `${this.#cwd}/node_modules/.bin:${exported.PATH ?? this.#env.PATH ?? ''}`;
     const setupCommand = Object.entries(exported)
       .map(([k, v]) => `export ${k}=${JSON.stringify(v ?? '')}`)
       .join('; ');
     // createAgentWindow blocks until the agent's first response; give its socket ack a generous timeout
     // (TERMFLEET_CREATE_TIMEOUT_MS overrides) so a real claude cold-start doesn't time out the launch and
     // lose the terminalId — the join key the post-session effect marker + the reaper depend on.
-    const createTimeoutMs = Number(process.env.TERMFLEET_CREATE_TIMEOUT_MS || RUNNER_DEFAULTS.createTimeoutMs);
+    const createTimeoutMs = Number(this.#env.TERMFLEET_CREATE_TIMEOUT_MS || RUNNER_DEFAULTS.createTimeoutMs);
     const ack = await client.createAgentWindow(
-      { agent: this.harness, name: agent, cwd: process.cwd(), prompt, setupCommand, createTimeoutMs },
+      { agent: this.harness, name: agent, cwd: this.#cwd, prompt, setupCommand, createTimeoutMs },
       { timeoutMs: createTimeoutMs },
     );
     const terminalId = ack.result?.terminalId;
     if (!terminalId) {
       throw new Error(`termfleet createAgentWindow returned no terminalId for agent "${agent}": ${ack.error ?? '(no error)'}`);
     }
-    const controlSha = (process.env.AUTONOMY_CONTROL_SHA || '').trim();
+    const controlSha = (this.#env.AUTONOMY_CONTROL_SHA || '').trim();
     if (controlSha) {
-      const controlRoot = (process.env.AUTONOMY_CONTROL_ROOT || process.cwd()).trim();
+      const controlRoot = (this.#env.AUTONOMY_CONTROL_ROOT || this.#cwd).trim();
       const dir = join(controlRoot, '.open-autonomy', 'runner-state', 'control-sessions');
       mkdirSync(dir, { recursive: true });
       writeFileSync(join(dir, `${terminalId.replace(/[^0-9A-Za-z._-]/g, '-')}.json`), `${JSON.stringify({
@@ -144,7 +151,7 @@ export class TermfleetRunner {
     const { snapshot, byId } = await this.#view();
     // id = the terminalId termfleet owns; agent = the window name we launched it under; status reflects
     // termfleet's real per-session activity (running | background | idle | awaiting-human).
-    return snapshot.windows.filter((w) => !!w.terminalId).map((w) => sessionOf(w, byId));
+    return snapshot.windows.filter((w) => !!w.terminalId).map((w) => sessionOf(w, byId, this.#env, this.#cwd));
   }
   // Close this install's OWN agent sessions that have been IDLE (termfleet `session_waiting`, no attention
   // signal) for >= idleMs — the local analogue of an ephemeral job ending when its work is done. Scope is
@@ -196,11 +203,11 @@ export class TermfleetRunner {
 // status vocab is running|paused|cancelled|done|failed, so: running/background -> running, idle
 // (session_waiting, no signal) -> done, attention `asking` -> paused, `errored` -> failed; a note carries
 // the finer distinction. No session yet (just launched) reads as running.
-function sessionOf(w, byId) {
+function sessionOf(w, byId, env = process.env, cwd = process.cwd()) {
   const s = w.lifecycle?.currentSessionId ? byId.get(w.lifecycle.currentSessionId) : undefined;
   let controlSha = '';
   try {
-    const root = (process.env.AUTONOMY_CONTROL_ROOT || process.cwd()).trim();
+    const root = (env.AUTONOMY_CONTROL_ROOT || cwd).trim();
     const receipt = JSON.parse(readFileSync(join(root, '.open-autonomy', 'runner-state', 'control-sessions', `${w.terminalId.replace(/[^0-9A-Za-z._-]/g, '-')}.json`), 'utf8'));
     controlSha = typeof receipt.controlSha === 'string' ? receipt.controlSha : '';
   } catch { /* pre-generation session */ }

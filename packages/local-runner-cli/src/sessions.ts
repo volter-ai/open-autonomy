@@ -11,10 +11,10 @@ import type { Session, SessionRunner } from './types.ts';
  *  `scripts/autonomy-runner.mjs` (a plain .mjs file with zero deps on this package, matching run.mjs's
  *  own import shape) and wraps its TermfleetRunner class. Returns null if unavailable (fresh install with
  *  no runner emitted yet, or the import throws) — callers degrade to the CLI-fallback path below. */
-export async function defaultSessionRunner(cwd: string = process.cwd()): Promise<SessionRunner | null> {
+export async function defaultSessionRunner(cwd: string = process.cwd(), env: NodeJS.ProcessEnv = process.env): Promise<SessionRunner | null> {
   try {
     const mod = await import(join(cwd, 'scripts', 'autonomy-runner.mjs'));
-    const runner = new mod.TermfleetRunner();
+    const runner = new mod.TermfleetRunner({ cwd, env });
     return {
       list: () => runner.list(),
       reapIdle: (opts) => runner.reapIdle(opts),
@@ -32,7 +32,7 @@ export async function defaultSessionRunner(cwd: string = process.cwd()): Promise
  *  degraded mode. Returns null (not []) on total failure so the caller can tell "confirmed nothing
  *  running" from "couldn't ask" and fail CLOSED — never risk stacking a second session on top of one the
  *  loop simply couldn't see. */
-export async function listSessionsBestEffort(cwd: string, runner: SessionRunner | null): Promise<Session[] | null> {
+export async function listSessionsBestEffort(cwd: string, runner: SessionRunner | null, env: NodeJS.ProcessEnv = process.env): Promise<Session[] | null> {
   if (runner) {
     try {
       return await runner.list();
@@ -40,7 +40,7 @@ export async function listSessionsBestEffort(cwd: string, runner: SessionRunner 
       console.error('[oa] session probe failed (runner.list):', (e as Error)?.message ?? e);
     }
   }
-  const r = spawnSync('node', [join(cwd, 'scripts', 'autonomy-runner.mjs'), 'list'], { cwd, encoding: 'utf8' });
+  const r = spawnSync('node', [join(cwd, 'scripts', 'autonomy-runner.mjs'), 'list'], { cwd, encoding: 'utf8', env });
   if (r.status === 0) {
     try {
       return JSON.parse(r.stdout || '[]');

@@ -1,0 +1,1214 @@
+{
+  "schema": "open-autonomy.u4-implementation-closure.v2",
+  "checkpoint": "U4",
+  "status": "ready-for-closure-attestation",
+  "fixtureKind": "synthetic",
+  "denominatorScope": "fixture-local",
+  "empiricalRegistration": false,
+  "closureClaim": false,
+  "assurancePromotionAllowed": false,
+  "laterAttestationRequired": true,
+  "implementationFiles": [
+    {
+      "id": "inventory-source",
+      "kind": "source",
+      "commit": "91c3340f2d3f53fab034bc655c7a49ce0545b4d4",
+      "path": "packages/core/src/organization-u4-source-inventory.ts",
+      "sha256": "sha256:d213a2e4fc466fdcbaf000655df787a3f649aaec12030725ffa83e7c39269395"
+    },
+    {
+      "id": "inventory-test",
+      "kind": "test",
+      "commit": "91c3340f2d3f53fab034bc655c7a49ce0545b4d4",
+      "path": "packages/core/src/organization-u4-source-inventory.test.ts",
+      "sha256": "sha256:c73625ab7265ee13566b42461eae7a3439a0db3b13fb53963a25b5cf72a4a166"
+    },
+    {
+      "id": "probe-source",
+      "kind": "source",
+      "commit": "b8b23711485c21d2b578051cfce424425c3ba081",
+      "path": "packages/core/src/organization-u4-probe-protocol.ts",
+      "sha256": "sha256:60aa47cf7d5c39d4f9edb2a6980804d3f2c2d731d8d5649c3b468d2e8d1cc601"
+    },
+    {
+      "id": "probe-test",
+      "kind": "test",
+      "commit": "b8b23711485c21d2b578051cfce424425c3ba081",
+      "path": "packages/core/src/organization-u4-probe-protocol.test.ts",
+      "sha256": "sha256:37d563d048604bef1dfc084dae5568f4c0e54a10ce37ece4247bb08d991eb74f"
+    },
+    {
+      "id": "extractor-source",
+      "kind": "source",
+      "commit": "b8b23711485c21d2b578051cfce424425c3ba081",
+      "path": "packages/core/src/organization-u4-evidence-extractor.ts",
+      "sha256": "sha256:f1769d3c6dc8e3dcb7ca64db88477eb609ae60dab6b482b30a93ab63482feb7f"
+    },
+    {
+      "id": "extractor-test",
+      "kind": "test",
+      "commit": "b8b23711485c21d2b578051cfce424425c3ba081",
+      "path": "packages/core/src/organization-u4-evidence-extractor.test.ts",
+      "sha256": "sha256:991a69a831d2e2060b89ade88ecb44b2407c21e55c53d90683eda1e00531c2eb"
+    },
+    {
+      "id": "triangulation-source",
+      "kind": "source",
+      "commit": "b8b23711485c21d2b578051cfce424425c3ba081",
+      "path": "packages/core/src/organization-u4-triangulation.ts",
+      "sha256": "sha256:d062aa8a3f6f158a689b041fed1d0434dcea3928887cbe5aee480df19e8f98b4"
+    },
+    {
+      "id": "triangulation-test",
+      "kind": "test",
+      "commit": "b8b23711485c21d2b578051cfce424425c3ba081",
+      "path": "packages/core/src/organization-u4-triangulation.test.ts",
+      "sha256": "sha256:3978b920ecc122f90cee80840513c732699c3e58dc14f5d96c9c3fdcf7c2c2c9"
+    },
+    {
+      "id": "bridge-source",
+      "kind": "source",
+      "commit": "b8b23711485c21d2b578051cfce424425c3ba081",
+      "path": "packages/core/src/organization-u4-probe-extraction-bridge.ts",
+      "sha256": "sha256:50f648dda4c7146eaa059fa73e0cda63e190c1e6656930505a1a8bbe1478911a"
+    },
+    {
+      "id": "bridge-test",
+      "kind": "test",
+      "commit": "b8b23711485c21d2b578051cfce424425c3ba081",
+      "path": "packages/core/src/organization-u4-probe-extraction-bridge.test.ts",
+      "sha256": "sha256:8e62502c2b47e3b3f313add4b389dc3f96ce1aa88701ae7b9e3fc3a0fe11d199"
+    },
+    {
+      "id": "replay-source",
+      "kind": "source",
+      "commit": "c9f581ee1321af1f70d7e9fb3e71272fae9b588a",
+      "path": "packages/core/src/organization-u4-inventory-replay-certificate.ts",
+      "sha256": "sha256:9ec5802a7dd1d899b47f8f230cd93355e429b8259241c2fc8deae4af65cd889e"
+    },
+    {
+      "id": "replay-test",
+      "kind": "test",
+      "commit": "c9f581ee1321af1f70d7e9fb3e71272fae9b588a",
+      "path": "packages/core/src/organization-u4-inventory-replay-certificate.test.ts",
+      "sha256": "sha256:9f7bc0135a8d6c1c275e1b3e97da9a3d1967d63b403b84c93b7f009f34c9cfc3"
+    }
+  ],
+  "obligations": [
+    {
+      "id": "U4-I1",
+      "requirement": "Schema and boundary are exact",
+      "claim": "Exact schema and assurance boundary reject substitution",
+      "validator": "verifyFrozenU4SourceInventory",
+      "evidenceNodeIds": [
+        "inventory-source",
+        "inventory-test"
+      ],
+      "testNames": [
+        "freezes authenticated fixture against verified U3 and registry",
+        "verifier redigests and resource bounds reject"
+      ]
+    },
+    {
+      "id": "U4-I2",
+      "requirement": "Deterministic fact identity is exact",
+      "claim": "Fact identities remain deterministic under authenticated replay",
+      "validator": "verifyFrozenU4SourceInventory",
+      "evidenceNodeIds": [
+        "inventory-source",
+        "inventory-test"
+      ],
+      "testNames": [
+        "compiled registry anchor rejects a consistently redigested population",
+        "enforces floors taxonomy native schemas and exact reachability"
+      ]
+    },
+    {
+      "id": "U4-I3",
+      "requirement": "Semantic payload contains relation from to domain default and absence",
+      "claim": "Semantic payload fields are authenticated",
+      "validator": "verifyFrozenU4SourceInventory",
+      "evidenceNodeIds": [
+        "inventory-source",
+        "inventory-test"
+      ],
+      "testNames": [
+        "enforces floors taxonomy native schemas and exact reachability",
+        "taxonomy coherence is per source and catches a second-source context gap"
+      ]
+    },
+    {
+      "id": "U4-I4",
+      "requirement": "Required source by taxonomy dimensions are total",
+      "claim": "Every source taxonomy dimension is populated",
+      "validator": "verifyU4TaxonomyCoherence",
+      "evidenceNodeIds": [
+        "inventory-source",
+        "inventory-test"
+      ],
+      "testNames": [
+        "enforces floors taxonomy native schemas and exact reachability",
+        "taxonomy coherence is per source and catches a second-source context gap"
+      ]
+    },
+    {
+      "id": "U4-I5",
+      "requirement": "Authenticated provenance graph is exact",
+      "claim": "Provenance graph custody and topology are authenticated",
+      "validator": "verifyFrozenU4SourceInventory",
+      "evidenceNodeIds": [
+        "inventory-source",
+        "inventory-test"
+      ],
+      "testNames": [
+        "source custody owner schema path and extraction topology resist substitution",
+        "rejects registry calculus authority and receipt substitutions"
+      ]
+    },
+    {
+      "id": "U4-I6",
+      "requirement": "Epistemics assurance default absence knowledge states are explicit",
+      "claim": "Knowledge states resist substitution",
+      "validator": "verifyFrozenU4SourceInventory",
+      "evidenceNodeIds": [
+        "inventory-source",
+        "inventory-test"
+      ],
+      "testNames": [
+        "enforces floors taxonomy native schemas and exact reachability",
+        "conflict redigest criticality floor schema resign and invalid dates reject",
+        "I6 rejects assurance promotion and incoherent default absence knowledge states"
+      ]
+    },
+    {
+      "id": "U4-I7",
+      "requirement": "Independent ownership and authority separation is enforced",
+      "claim": "Role aliasing fails closed",
+      "validator": "verifyFrozenU4SourceInventory",
+      "evidenceNodeIds": [
+        "inventory-source",
+        "inventory-test"
+      ],
+      "testNames": [
+        "trusted keys reject rekey-resign and producer-custodian role alias",
+        "rejects registry calculus authority and receipt substitutions"
+      ]
+    },
+    {
+      "id": "U4-I8",
+      "requirement": "Chronology and freeze ordering are authenticated",
+      "claim": "Backdating and post-freeze mutation fail",
+      "validator": "verifyFrozenU4SourceInventory",
+      "evidenceNodeIds": [
+        "inventory-source",
+        "inventory-test"
+      ],
+      "testNames": [
+        "rejects chronology conflict and freeze attacks",
+        "conflict redigest criticality floor schema resign and invalid dates reject"
+      ]
+    },
+    {
+      "id": "U4-I9",
+      "requirement": "Canonical hashing resource bounds and native schema integrity are enforced",
+      "claim": "Redigestion bounds and schema integrity fail closed",
+      "validator": "verifyFrozenU4SourceInventory",
+      "evidenceNodeIds": [
+        "inventory-source",
+        "inventory-test"
+      ],
+      "testNames": [
+        "verifier redigests and resource bounds reject",
+        "enforces floors taxonomy native schemas and exact reachability",
+        "compiled registry anchor rejects a consistently redigested population"
+      ]
+    },
+    {
+      "id": "U4-I10",
+      "requirement": "Criticality and floors are exact",
+      "claim": "Criticality downgrade and floor weakening fail",
+      "validator": "verifyFrozenU4SourceInventory",
+      "evidenceNodeIds": [
+        "inventory-source",
+        "inventory-test"
+      ],
+      "testNames": [
+        "conflict redigest criticality floor schema resign and invalid dates reject",
+        "enforces floors taxonomy native schemas and exact reachability"
+      ]
+    },
+    {
+      "id": "U4-I11",
+      "requirement": "Mandatory U3 observation joins are exact",
+      "claim": "Mandatory U3 observations are provenance joined",
+      "validator": "freezeU4ProbePlan",
+      "evidenceNodeIds": [
+        "inventory-source",
+        "inventory-test",
+        "probe-source",
+        "probe-test"
+      ],
+      "testNames": [
+        "hard anchors U3 custody",
+        "rejects mandatory-observation weakening and wrong provenance kind"
+      ]
+    },
+    {
+      "id": "U4-I12",
+      "requirement": "Exact fact to observation cardinality is bijective",
+      "claim": "Fact observation omission duplicate and surplus fail",
+      "validator": "freezeU4ProbePlan",
+      "evidenceNodeIds": [
+        "inventory-source",
+        "inventory-test",
+        "probe-source",
+        "probe-test"
+      ],
+      "testNames": [
+        "enforces floors taxonomy native schemas and exact reachability",
+        "binds every fact bijectively to its exact observations and stdout projection",
+        "rejects missing, duplicate, and surplus repetitions"
+      ]
+    },
+    {
+      "id": "U4-I13",
+      "requirement": "Deterministic four-stream extraction automatic triangulation and bridge qualification compose",
+      "claim": "All four streams compose exactly",
+      "validator": "verifyU4BridgeQualifiedTriangulation",
+      "evidenceNodeIds": [
+        "extractor-source",
+        "extractor-test",
+        "triangulation-source",
+        "triangulation-test",
+        "bridge-source",
+        "bridge-test"
+      ],
+      "testNames": [
+        "extracts the full authenticated denominator with one shared semantic slot across four streams",
+        "compiles every declared comparison pair and excludes nonasserting schema metadata",
+        "successful public bridge composes into a bridge-qualified triangulation certificate",
+        "qualified certificate rejects omission substitution and consistent redigestion"
+      ]
+    },
+    {
+      "id": "U4-I14",
+      "requirement": "Exact conflict integration and adjudication are authenticated",
+      "claim": "Conflict integration and independent adjudication are exact",
+      "validator": "createU4AutomaticTriangulation",
+      "evidenceNodeIds": [
+        "inventory-source",
+        "inventory-test",
+        "triangulation-source",
+        "triangulation-test"
+      ],
+      "testNames": [
+        "conflict redigest criticality floor schema resign and invalid dates reject",
+        "authenticates exact critical conflict topology and requires both independently custodied adjudications",
+        "rejects conflict inventory omission, surplus, replay, swapped receipts, and authority-owner aliasing"
+      ]
+    },
+    {
+      "id": "U4-I15",
+      "requirement": "Omissions are residual-free under a closed world",
+      "claim": "Omission surplus and residual accounting is exact",
+      "validator": "verifyU4EvidenceExtraction",
+      "evidenceNodeIds": [
+        "inventory-source",
+        "inventory-test",
+        "extractor-source",
+        "extractor-test",
+        "triangulation-source",
+        "triangulation-test"
+      ],
+      "testNames": [
+        "enforces floors taxonomy native schemas and exact reachability",
+        "rejects cherry-picking, omission, surplus, and semantic-slot remapping even when re-signed",
+        "accounts for every authenticated noncritical gap with signed dispositions and rejects attacks"
+      ]
+    },
+    {
+      "id": "U4-I16",
+      "requirement": "Per-source prompt skill context tool memory harness model totality is enforced",
+      "claim": "All per-source agent dimensions are total",
+      "validator": "verifyU4TaxonomyCoherence",
+      "evidenceNodeIds": [
+        "inventory-source",
+        "inventory-test"
+      ],
+      "testNames": [
+        "enforces floors taxonomy native schemas and exact reachability",
+        "taxonomy coherence is per source and catches a second-source context gap"
+      ]
+    },
+    {
+      "id": "U4-I17",
+      "requirement": "Extensions carry extensionClass and opaqueVersion",
+      "claim": "Extension identity resists substitution",
+      "validator": "verifyFrozenU4SourceInventory",
+      "evidenceNodeIds": [
+        "inventory-source",
+        "inventory-test"
+      ],
+      "testNames": [
+        "source custody owner schema path and extraction topology resist substitution",
+        "enforces floors taxonomy native schemas and exact reachability",
+        "I17 rejects re-signed extensionClass opaqueVersion extends and domain substitutions"
+      ]
+    },
+    {
+      "id": "U4-I18",
+      "requirement": "Authority failure lifecycle taxonomy domain relation coverage is total",
+      "claim": "Taxonomy-domain-relation coverage is coherent",
+      "validator": "verifyU4TaxonomyCoherence",
+      "evidenceNodeIds": [
+        "inventory-source",
+        "inventory-test"
+      ],
+      "testNames": [
+        "taxonomy coherence is per source and catches a second-source context gap",
+        "enforces floors taxonomy native schemas and exact reachability",
+        "rejects registry calculus authority and receipt substitutions",
+        "I18 rejects re-signed authority failure lifecycle relation-domain substitutions"
+      ]
+    },
+    {
+      "id": "U4-I19",
+      "requirement": "Preregistered probe protocol denominator and bounds are exact",
+      "claim": "Probe denominator and finite bounds freeze before execution",
+      "validator": "freezeU4ProbePlan",
+      "evidenceNodeIds": [
+        "probe-source",
+        "probe-test"
+      ],
+      "testNames": [
+        "freezes a preregistered denominator and rejects post-signature mutation",
+        "rejects empty cases, nested surplus fields, and non-finite or fractional bounds",
+        "invocation identity is repetition- and plan-bound"
+      ]
+    },
+    {
+      "id": "U4-I20",
+      "requirement": "Probe authentication authority and custody are exact",
+      "claim": "Probe bytes roles and receipts authenticate",
+      "validator": "freezeU4ProbeRun",
+      "evidenceNodeIds": [
+        "probe-source",
+        "probe-test"
+      ],
+      "testNames": [
+        "authenticates canonical raw bytes and rejects byte substitution",
+        "rejects noncanonical chronology and invalid authority separation",
+        "rejects independently consistent semantic disagreement, forged digest, and arbitrary unsigned agreeing events"
+      ]
+    },
+    {
+      "id": "U4-I21",
+      "requirement": "Source-behavior trace and fact-specific stdout event extraction bridge are exact",
+      "claim": "Fact-specific trace bridge agreement is exact",
+      "validator": "freezeU4SourceBehaviorTraceJoin",
+      "evidenceNodeIds": [
+        "probe-source",
+        "probe-test",
+        "bridge-source",
+        "bridge-test"
+      ],
+      "testNames": [
+        "binds every fact bijectively to its exact observations and stdout projection",
+        "rejects independently consistent semantic disagreement, forged digest, and arbitrary unsigned agreeing events",
+        "rejects stdout-event mismatch extraction candidate mismatch and contradictory repetitions",
+        "re-signed bindings enforce bijection and shared-pointer equivalence"
+      ]
+    },
+    {
+      "id": "U4-I22",
+      "requirement": "Exact run material witness and terminal totality is enforced",
+      "claim": "All run material witness and terminal outcomes are total",
+      "validator": "freezeU4VerifiedProbeBundle",
+      "evidenceNodeIds": [
+        "probe-source",
+        "probe-test",
+        "bridge-source",
+        "bridge-test"
+      ],
+      "testNames": [
+        "rejects missing, duplicate, and surplus repetitions",
+        "rejects incoherent termination and execution chronology",
+        "rejects missing surplus witnesses and a consistently redigested forgery",
+        "rejects material invocation join/run and event closure substitutions"
+      ]
+    },
+    {
+      "id": "U4-I23",
+      "requirement": "Deterministic composed replay certificate DAG and implementation custody are exact",
+      "claim": "Replay DAG topology package and implementation custody are exact",
+      "validator": "verifyU4InventoryReplayCertificate",
+      "evidenceNodeIds": [
+        "bridge-source",
+        "bridge-test",
+        "replay-source",
+        "replay-test"
+      ],
+      "testNames": [
+        "I23-I24 creates deterministic deeply frozen replay with exact topology",
+        "final replay requires the exact qualified composition package",
+        "I24 exact evidence topology rejects omission surplus and substitution",
+        "issuance and verification enforce executable Git custody"
+      ]
+    },
+    {
+      "id": "U4-I24",
+      "requirement": "Frontend immutability owner-key result binding strict post-freeze and post-all-runs chronology are exact",
+      "claim": "Frontend result and custody are immutable and chronologically bound",
+      "validator": "createU4InventoryReplayCertificate",
+      "evidenceNodeIds": [
+        "replay-source",
+        "replay-test"
+      ],
+      "testNames": [
+        "I24 frontend outcome is strictly post-freeze and owner-key bound",
+        "frontend outcome is strictly after every authenticated probe execution",
+        "I24 frontend cannot modify or re-sign frozen inventory",
+        "frontend cannot authenticate an arbitrary result digest",
+        "I24 exact evidence topology rejects omission surplus and substitution",
+        "issuance and verification enforce executable Git custody"
+      ]
+    },
+    {
+      "id": "U4-I25",
+      "requirement": "Machine-indexed closure is complete with pending post-commit attestation",
+      "claim": "Closure is residual-free and pending post-commit custody attestation",
+      "validator": "verifyU4ImplementationClosure",
+      "evidenceNodeIds": [
+        "closure-self"
+      ],
+      "testNames": [
+        "I25 verifies deterministic deeply frozen U4 implementation closure"
+      ]
+    }
+  ],
+  "externalDeferred": [
+    {
+      "id": "U4-E1",
+      "requirement": "Obtain independent real authorities",
+      "status": "deferred",
+      "dischargedBy": []
+    },
+    {
+      "id": "U4-E2",
+      "requirement": "Acquire official specifications with authenticated custody",
+      "status": "deferred",
+      "dischargedBy": []
+    },
+    {
+      "id": "U4-E3",
+      "requirement": "Capture native-schema snapshots",
+      "status": "deferred",
+      "dischargedBy": []
+    },
+    {
+      "id": "U4-E4",
+      "requirement": "Execute real runtime probes",
+      "status": "deferred",
+      "dischargedBy": []
+    },
+    {
+      "id": "U4-E5",
+      "requirement": "Capture real source-behavior baselines",
+      "status": "deferred",
+      "dischargedBy": []
+    },
+    {
+      "id": "U4-E6",
+      "requirement": "Complete expert semantic review",
+      "status": "deferred",
+      "dischargedBy": []
+    },
+    {
+      "id": "U4-E7",
+      "requirement": "Perform real conflict adjudication",
+      "status": "deferred",
+      "dischargedBy": []
+    },
+    {
+      "id": "U4-E8",
+      "requirement": "Enforce holdout chronology",
+      "status": "deferred",
+      "dischargedBy": []
+    },
+    {
+      "id": "U4-E9",
+      "requirement": "Obtain independent replay",
+      "status": "deferred",
+      "dischargedBy": []
+    },
+    {
+      "id": "U4-E10",
+      "requirement": "Complete empirical inventory across all U1 systems",
+      "status": "deferred",
+      "dischargedBy": []
+    }
+  ],
+  "evidenceNodes": [
+    {
+      "id": "inventory-source",
+      "kind": "source",
+      "ref": "91c3340f2d3f53fab034bc655c7a49ce0545b4d4:packages/core/src/organization-u4-source-inventory.ts",
+      "custodyStatus": "committed"
+    },
+    {
+      "id": "inventory-test",
+      "kind": "test",
+      "ref": "91c3340f2d3f53fab034bc655c7a49ce0545b4d4:packages/core/src/organization-u4-source-inventory.test.ts",
+      "custodyStatus": "committed"
+    },
+    {
+      "id": "probe-source",
+      "kind": "source",
+      "ref": "b8b23711485c21d2b578051cfce424425c3ba081:packages/core/src/organization-u4-probe-protocol.ts",
+      "custodyStatus": "committed"
+    },
+    {
+      "id": "probe-test",
+      "kind": "test",
+      "ref": "b8b23711485c21d2b578051cfce424425c3ba081:packages/core/src/organization-u4-probe-protocol.test.ts",
+      "custodyStatus": "committed"
+    },
+    {
+      "id": "extractor-source",
+      "kind": "source",
+      "ref": "b8b23711485c21d2b578051cfce424425c3ba081:packages/core/src/organization-u4-evidence-extractor.ts",
+      "custodyStatus": "committed"
+    },
+    {
+      "id": "extractor-test",
+      "kind": "test",
+      "ref": "b8b23711485c21d2b578051cfce424425c3ba081:packages/core/src/organization-u4-evidence-extractor.test.ts",
+      "custodyStatus": "committed"
+    },
+    {
+      "id": "triangulation-source",
+      "kind": "source",
+      "ref": "b8b23711485c21d2b578051cfce424425c3ba081:packages/core/src/organization-u4-triangulation.ts",
+      "custodyStatus": "committed"
+    },
+    {
+      "id": "triangulation-test",
+      "kind": "test",
+      "ref": "b8b23711485c21d2b578051cfce424425c3ba081:packages/core/src/organization-u4-triangulation.test.ts",
+      "custodyStatus": "committed"
+    },
+    {
+      "id": "bridge-source",
+      "kind": "source",
+      "ref": "b8b23711485c21d2b578051cfce424425c3ba081:packages/core/src/organization-u4-probe-extraction-bridge.ts",
+      "custodyStatus": "committed"
+    },
+    {
+      "id": "bridge-test",
+      "kind": "test",
+      "ref": "b8b23711485c21d2b578051cfce424425c3ba081:packages/core/src/organization-u4-probe-extraction-bridge.test.ts",
+      "custodyStatus": "committed"
+    },
+    {
+      "id": "replay-source",
+      "kind": "source",
+      "ref": "c9f581ee1321af1f70d7e9fb3e71272fae9b588a:packages/core/src/organization-u4-inventory-replay-certificate.ts",
+      "custodyStatus": "committed"
+    },
+    {
+      "id": "replay-test",
+      "kind": "test",
+      "ref": "c9f581ee1321af1f70d7e9fb3e71272fae9b588a:packages/core/src/organization-u4-inventory-replay-certificate.test.ts",
+      "custodyStatus": "committed"
+    },
+    {
+      "id": "closure-self",
+      "kind": "closure-self",
+      "ref": "organization-u4-implementation-closure.ts/.test.ts + artifact",
+      "custodyStatus": "pending-post-commit-attestation"
+    },
+    {
+      "id": "U4-I1",
+      "kind": "obligation",
+      "ref": "verifyFrozenU4SourceInventory",
+      "custodyStatus": "not-applicable"
+    },
+    {
+      "id": "U4-I2",
+      "kind": "obligation",
+      "ref": "verifyFrozenU4SourceInventory",
+      "custodyStatus": "not-applicable"
+    },
+    {
+      "id": "U4-I3",
+      "kind": "obligation",
+      "ref": "verifyFrozenU4SourceInventory",
+      "custodyStatus": "not-applicable"
+    },
+    {
+      "id": "U4-I4",
+      "kind": "obligation",
+      "ref": "verifyU4TaxonomyCoherence",
+      "custodyStatus": "not-applicable"
+    },
+    {
+      "id": "U4-I5",
+      "kind": "obligation",
+      "ref": "verifyFrozenU4SourceInventory",
+      "custodyStatus": "not-applicable"
+    },
+    {
+      "id": "U4-I6",
+      "kind": "obligation",
+      "ref": "verifyFrozenU4SourceInventory",
+      "custodyStatus": "not-applicable"
+    },
+    {
+      "id": "U4-I7",
+      "kind": "obligation",
+      "ref": "verifyFrozenU4SourceInventory",
+      "custodyStatus": "not-applicable"
+    },
+    {
+      "id": "U4-I8",
+      "kind": "obligation",
+      "ref": "verifyFrozenU4SourceInventory",
+      "custodyStatus": "not-applicable"
+    },
+    {
+      "id": "U4-I9",
+      "kind": "obligation",
+      "ref": "verifyFrozenU4SourceInventory",
+      "custodyStatus": "not-applicable"
+    },
+    {
+      "id": "U4-I10",
+      "kind": "obligation",
+      "ref": "verifyFrozenU4SourceInventory",
+      "custodyStatus": "not-applicable"
+    },
+    {
+      "id": "U4-I11",
+      "kind": "obligation",
+      "ref": "freezeU4ProbePlan",
+      "custodyStatus": "not-applicable"
+    },
+    {
+      "id": "U4-I12",
+      "kind": "obligation",
+      "ref": "freezeU4ProbePlan",
+      "custodyStatus": "not-applicable"
+    },
+    {
+      "id": "U4-I13",
+      "kind": "obligation",
+      "ref": "verifyU4BridgeQualifiedTriangulation",
+      "custodyStatus": "not-applicable"
+    },
+    {
+      "id": "U4-I14",
+      "kind": "obligation",
+      "ref": "createU4AutomaticTriangulation",
+      "custodyStatus": "not-applicable"
+    },
+    {
+      "id": "U4-I15",
+      "kind": "obligation",
+      "ref": "verifyU4EvidenceExtraction",
+      "custodyStatus": "not-applicable"
+    },
+    {
+      "id": "U4-I16",
+      "kind": "obligation",
+      "ref": "verifyU4TaxonomyCoherence",
+      "custodyStatus": "not-applicable"
+    },
+    {
+      "id": "U4-I17",
+      "kind": "obligation",
+      "ref": "verifyFrozenU4SourceInventory",
+      "custodyStatus": "not-applicable"
+    },
+    {
+      "id": "U4-I18",
+      "kind": "obligation",
+      "ref": "verifyU4TaxonomyCoherence",
+      "custodyStatus": "not-applicable"
+    },
+    {
+      "id": "U4-I19",
+      "kind": "obligation",
+      "ref": "freezeU4ProbePlan",
+      "custodyStatus": "not-applicable"
+    },
+    {
+      "id": "U4-I20",
+      "kind": "obligation",
+      "ref": "freezeU4ProbeRun",
+      "custodyStatus": "not-applicable"
+    },
+    {
+      "id": "U4-I21",
+      "kind": "obligation",
+      "ref": "freezeU4SourceBehaviorTraceJoin",
+      "custodyStatus": "not-applicable"
+    },
+    {
+      "id": "U4-I22",
+      "kind": "obligation",
+      "ref": "freezeU4VerifiedProbeBundle",
+      "custodyStatus": "not-applicable"
+    },
+    {
+      "id": "U4-I23",
+      "kind": "obligation",
+      "ref": "verifyU4InventoryReplayCertificate",
+      "custodyStatus": "not-applicable"
+    },
+    {
+      "id": "U4-I24",
+      "kind": "obligation",
+      "ref": "createU4InventoryReplayCertificate",
+      "custodyStatus": "not-applicable"
+    },
+    {
+      "id": "U4-I25",
+      "kind": "obligation",
+      "ref": "verifyU4ImplementationClosure",
+      "custodyStatus": "not-applicable"
+    },
+    {
+      "id": "U4-CLOSURE",
+      "kind": "closure",
+      "ref": "U4",
+      "custodyStatus": "not-applicable"
+    }
+  ],
+  "evidenceEdges": [
+    {
+      "from": "inventory-source",
+      "to": "U4-I1"
+    },
+    {
+      "from": "inventory-test",
+      "to": "U4-I1"
+    },
+    {
+      "from": "inventory-source",
+      "to": "U4-I2"
+    },
+    {
+      "from": "inventory-test",
+      "to": "U4-I2"
+    },
+    {
+      "from": "inventory-source",
+      "to": "U4-I3"
+    },
+    {
+      "from": "inventory-test",
+      "to": "U4-I3"
+    },
+    {
+      "from": "inventory-source",
+      "to": "U4-I4"
+    },
+    {
+      "from": "inventory-test",
+      "to": "U4-I4"
+    },
+    {
+      "from": "inventory-source",
+      "to": "U4-I5"
+    },
+    {
+      "from": "inventory-test",
+      "to": "U4-I5"
+    },
+    {
+      "from": "inventory-source",
+      "to": "U4-I6"
+    },
+    {
+      "from": "inventory-test",
+      "to": "U4-I6"
+    },
+    {
+      "from": "inventory-source",
+      "to": "U4-I7"
+    },
+    {
+      "from": "inventory-test",
+      "to": "U4-I7"
+    },
+    {
+      "from": "inventory-source",
+      "to": "U4-I8"
+    },
+    {
+      "from": "inventory-test",
+      "to": "U4-I8"
+    },
+    {
+      "from": "inventory-source",
+      "to": "U4-I9"
+    },
+    {
+      "from": "inventory-test",
+      "to": "U4-I9"
+    },
+    {
+      "from": "inventory-source",
+      "to": "U4-I10"
+    },
+    {
+      "from": "inventory-test",
+      "to": "U4-I10"
+    },
+    {
+      "from": "inventory-source",
+      "to": "U4-I11"
+    },
+    {
+      "from": "inventory-test",
+      "to": "U4-I11"
+    },
+    {
+      "from": "probe-source",
+      "to": "U4-I11"
+    },
+    {
+      "from": "probe-test",
+      "to": "U4-I11"
+    },
+    {
+      "from": "inventory-source",
+      "to": "U4-I12"
+    },
+    {
+      "from": "inventory-test",
+      "to": "U4-I12"
+    },
+    {
+      "from": "probe-source",
+      "to": "U4-I12"
+    },
+    {
+      "from": "probe-test",
+      "to": "U4-I12"
+    },
+    {
+      "from": "extractor-source",
+      "to": "U4-I13"
+    },
+    {
+      "from": "extractor-test",
+      "to": "U4-I13"
+    },
+    {
+      "from": "triangulation-source",
+      "to": "U4-I13"
+    },
+    {
+      "from": "triangulation-test",
+      "to": "U4-I13"
+    },
+    {
+      "from": "bridge-source",
+      "to": "U4-I13"
+    },
+    {
+      "from": "bridge-test",
+      "to": "U4-I13"
+    },
+    {
+      "from": "inventory-source",
+      "to": "U4-I14"
+    },
+    {
+      "from": "inventory-test",
+      "to": "U4-I14"
+    },
+    {
+      "from": "triangulation-source",
+      "to": "U4-I14"
+    },
+    {
+      "from": "triangulation-test",
+      "to": "U4-I14"
+    },
+    {
+      "from": "inventory-source",
+      "to": "U4-I15"
+    },
+    {
+      "from": "inventory-test",
+      "to": "U4-I15"
+    },
+    {
+      "from": "extractor-source",
+      "to": "U4-I15"
+    },
+    {
+      "from": "extractor-test",
+      "to": "U4-I15"
+    },
+    {
+      "from": "triangulation-source",
+      "to": "U4-I15"
+    },
+    {
+      "from": "triangulation-test",
+      "to": "U4-I15"
+    },
+    {
+      "from": "inventory-source",
+      "to": "U4-I16"
+    },
+    {
+      "from": "inventory-test",
+      "to": "U4-I16"
+    },
+    {
+      "from": "inventory-source",
+      "to": "U4-I17"
+    },
+    {
+      "from": "inventory-test",
+      "to": "U4-I17"
+    },
+    {
+      "from": "inventory-source",
+      "to": "U4-I18"
+    },
+    {
+      "from": "inventory-test",
+      "to": "U4-I18"
+    },
+    {
+      "from": "probe-source",
+      "to": "U4-I19"
+    },
+    {
+      "from": "probe-test",
+      "to": "U4-I19"
+    },
+    {
+      "from": "probe-source",
+      "to": "U4-I20"
+    },
+    {
+      "from": "probe-test",
+      "to": "U4-I20"
+    },
+    {
+      "from": "probe-source",
+      "to": "U4-I21"
+    },
+    {
+      "from": "probe-test",
+      "to": "U4-I21"
+    },
+    {
+      "from": "bridge-source",
+      "to": "U4-I21"
+    },
+    {
+      "from": "bridge-test",
+      "to": "U4-I21"
+    },
+    {
+      "from": "probe-source",
+      "to": "U4-I22"
+    },
+    {
+      "from": "probe-test",
+      "to": "U4-I22"
+    },
+    {
+      "from": "bridge-source",
+      "to": "U4-I22"
+    },
+    {
+      "from": "bridge-test",
+      "to": "U4-I22"
+    },
+    {
+      "from": "bridge-source",
+      "to": "U4-I23"
+    },
+    {
+      "from": "bridge-test",
+      "to": "U4-I23"
+    },
+    {
+      "from": "replay-source",
+      "to": "U4-I23"
+    },
+    {
+      "from": "replay-test",
+      "to": "U4-I23"
+    },
+    {
+      "from": "replay-source",
+      "to": "U4-I24"
+    },
+    {
+      "from": "replay-test",
+      "to": "U4-I24"
+    },
+    {
+      "from": "closure-self",
+      "to": "U4-I25"
+    },
+    {
+      "from": "U4-I1",
+      "to": "U4-CLOSURE"
+    },
+    {
+      "from": "U4-I2",
+      "to": "U4-CLOSURE"
+    },
+    {
+      "from": "U4-I3",
+      "to": "U4-CLOSURE"
+    },
+    {
+      "from": "U4-I4",
+      "to": "U4-CLOSURE"
+    },
+    {
+      "from": "U4-I5",
+      "to": "U4-CLOSURE"
+    },
+    {
+      "from": "U4-I6",
+      "to": "U4-CLOSURE"
+    },
+    {
+      "from": "U4-I7",
+      "to": "U4-CLOSURE"
+    },
+    {
+      "from": "U4-I8",
+      "to": "U4-CLOSURE"
+    },
+    {
+      "from": "U4-I9",
+      "to": "U4-CLOSURE"
+    },
+    {
+      "from": "U4-I10",
+      "to": "U4-CLOSURE"
+    },
+    {
+      "from": "U4-I11",
+      "to": "U4-CLOSURE"
+    },
+    {
+      "from": "U4-I12",
+      "to": "U4-CLOSURE"
+    },
+    {
+      "from": "U4-I13",
+      "to": "U4-CLOSURE"
+    },
+    {
+      "from": "U4-I14",
+      "to": "U4-CLOSURE"
+    },
+    {
+      "from": "U4-I15",
+      "to": "U4-CLOSURE"
+    },
+    {
+      "from": "U4-I16",
+      "to": "U4-CLOSURE"
+    },
+    {
+      "from": "U4-I17",
+      "to": "U4-CLOSURE"
+    },
+    {
+      "from": "U4-I18",
+      "to": "U4-CLOSURE"
+    },
+    {
+      "from": "U4-I19",
+      "to": "U4-CLOSURE"
+    },
+    {
+      "from": "U4-I20",
+      "to": "U4-CLOSURE"
+    },
+    {
+      "from": "U4-I21",
+      "to": "U4-CLOSURE"
+    },
+    {
+      "from": "U4-I22",
+      "to": "U4-CLOSURE"
+    },
+    {
+      "from": "U4-I23",
+      "to": "U4-CLOSURE"
+    },
+    {
+      "from": "U4-I24",
+      "to": "U4-CLOSURE"
+    },
+    {
+      "from": "U4-I25",
+      "to": "U4-CLOSURE"
+    }
+  ],
+  "semanticCoverage": {
+    "obligationIds": [
+      "U4-I1",
+      "U4-I2",
+      "U4-I3",
+      "U4-I4",
+      "U4-I5",
+      "U4-I6",
+      "U4-I7",
+      "U4-I8",
+      "U4-I9",
+      "U4-I10",
+      "U4-I11",
+      "U4-I12",
+      "U4-I13",
+      "U4-I14",
+      "U4-I15",
+      "U4-I16",
+      "U4-I17",
+      "U4-I18",
+      "U4-I19",
+      "U4-I20",
+      "U4-I21",
+      "U4-I22",
+      "U4-I23",
+      "U4-I24",
+      "U4-I25"
+    ],
+    "externalIds": [
+      "U4-E1",
+      "U4-E2",
+      "U4-E3",
+      "U4-E4",
+      "U4-E5",
+      "U4-E6",
+      "U4-E7",
+      "U4-E8",
+      "U4-E9",
+      "U4-E10"
+    ],
+    "localGapIds": []
+  },
+  "accounting": {
+    "dischargedInternal": 24,
+    "pendingAttestationInternal": 1,
+    "openInternal": 0,
+    "deferredExternal": 10
+  },
+  "digest": "sha256:35fe3c46be2d10a9d2b711f8cac9c6223ecdd5623cdf3d4de3b7cb0fd73811fc"
+}

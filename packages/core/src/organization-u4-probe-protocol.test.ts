@@ -4,12 +4,15 @@ import {
   freezeU4ProbePlan,
   freezeU4ProbeRun,
   freezeU4SourceBehaviorTraceJoin,
+  freezeU4VerifiedProbeBundle,
   signU4ProbeRecord,
   assertU4ProbeRunTotality,
   computeU4ProbeInvocationId,
+  computeU4ProbeCorrelationId,
   type U4ProbePlan,
   type U4ProbeRun,
   type U4SourceBehaviorTraceJoin,
+  type U4VerifiedProbeBundle,
 } from "./organization-u4-probe-protocol";
 import { computeU3SourceTraceDigest } from "./organization-u3-observation-evaluator";
 
@@ -75,10 +78,30 @@ const inventory: any = {
     },
   ],
   provenance: [
-    { id: "p.official", kind: "official-spec", sourceVersion: "v1" },
-    { id: "p.schema", kind: "native-schema", sourceVersion: "v1" },
-    { id: "p.probe", kind: "runtime-probe", sourceVersion: "v1" },
-    { id: "p.behavior", kind: "source-behavior", sourceVersion: "v1" },
+    {
+      id: "p.official",
+      sourceId: "source.one",
+      kind: "official-spec",
+      sourceVersion: "v1",
+    },
+    {
+      id: "p.schema",
+      sourceId: "source.one",
+      kind: "native-schema",
+      sourceVersion: "v1",
+    },
+    {
+      id: "p.probe",
+      sourceId: "source.one",
+      kind: "runtime-probe",
+      sourceVersion: "v1",
+    },
+    {
+      id: "p.behavior",
+      sourceId: "source.one",
+      kind: "source-behavior",
+      sourceVersion: "v1",
+    },
   ],
 };
 const calculus: any = {
@@ -233,7 +256,12 @@ function joinFixture(
   const event = {
       id: "event.one",
       runId: r.runId,
-      correlationId: r.invocationId,
+      correlationId: computeU4ProbeCorrelationId(
+        r.invocationId,
+        "obs.one",
+        "sample.one",
+      ),
+      sampleId: "sample.one",
       observationId: "obs.one",
       adapterId: "adapter.one",
       adapterVersion: "v1",
@@ -339,6 +367,33 @@ describe("U4 authenticated synthetic probe preregistration", () => {
         contract,
         trusted,
       ),
+    ).toThrow("provenance");
+  });
+  test("requires exact-once coverage of the complete empirical fact denominator", () => {
+    const two: any = structuredClone(inventory);
+    two.facts.push({ ...structuredClone(two.facts[0]), id: "fact.two" });
+    two.sources[0].factIds.push("fact.two");
+    expect(() =>
+      freezeU4ProbePlan(signedPlan(), two, calculus, contract, trusted),
+    ).toThrow("fact denominator totality");
+    expect(() =>
+      freezeU4ProbePlan(
+        signedPlan((p) => {
+          p.cases.push({ ...structuredClone(p.cases[0]), id: "case.two" });
+        }),
+        inventory,
+        calculus,
+        contract,
+        trusted,
+      ),
+    ).toThrow("fact denominator totality");
+  });
+  test("rejects cross-source empirical provenance", () => {
+    const cross: any = structuredClone(inventory);
+    cross.provenance.find((p: any) => p.id === "p.probe").sourceId =
+      "source.other";
+    expect(() =>
+      freezeU4ProbePlan(signedPlan(), cross, calculus, contract, trusted),
     ).toThrow("provenance");
   });
   test("rejects empty cases, nested surplus fields, and non-finite or fractional bounds", () => {
@@ -596,5 +651,67 @@ describe("U4 authenticated synthetic probe preregistration", () => {
     expect(() => assertU4ProbeRunTotality(p, [mk(0), mk(1), mk(2)])).toThrow(
       "totality",
     );
+  });
+  test("exported aggregate boundary rejects nominal inventory calculus and registry objects", () => {
+    const p = freezeU4ProbePlan(
+      signedPlan(
+        (x) => (x.cases[0].expected.allowedTermination = ["exited", "timeout"]),
+      ),
+      inventory,
+      calculus,
+      contract,
+      trusted,
+    );
+    const runs = [0, 1].map((i) =>
+      freezeU4ProbeRun(
+        signedRun(p, (r) => {
+          r.repetition = i;
+          r.runId = `run.${i}`;
+          r.invocationId = computeU4ProbeInvocationId(p.digest, "case.one", i);
+          r.termination = "timeout";
+          r.exitCode = null;
+          r.signal = null;
+        }),
+        p,
+        inventory,
+        trusted,
+      ),
+    );
+    const bundle: U4VerifiedProbeBundle = {
+      schema: "open-autonomy.u4-verified-probe-bundle.v1",
+      fixtureKind: "synthetic",
+      denominatorScope: "fixture-local",
+      empiricalRegistration: false,
+      closureClaim: false,
+      inventoryDigest: inventory.digest,
+      calculusDigest: calculus.digest,
+      u3ContractDigest: contract.digest,
+      u3TrustAnchorDigest:
+        "sha256:5f17e3a9bb6fb1f00e70e65ed40b23b1efe21e3ec0f4211ba28473d206fac35c",
+      materialDigests: [],
+      plan: p,
+      executions: runs
+        .map((run) => ({
+          invocationId: run.invocationId,
+          disposition: "noncredit" as const,
+          noncreditReason: "timeout" as const,
+          run,
+          join: null,
+          u3InputDigest: null,
+          u3ReportDigest: null,
+        }))
+        .sort((a, b) => a.invocationId.localeCompare(b.invocationId)),
+    };
+    expect(() =>
+      freezeU4VerifiedProbeBundle(
+        bundle,
+        [],
+        inventory,
+        calculus,
+        contract,
+        trusted,
+        { digest: H("forged-registry") } as any,
+      ),
+    ).toThrow();
   });
 });

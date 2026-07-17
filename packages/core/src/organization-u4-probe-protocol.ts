@@ -12,8 +12,11 @@ import {
 } from "./organization-u3-observation-evaluator";
 import type {
   FrozenU4SourceInventory,
+  FrozenU4SyntheticSourceRegistry,
   U4TrustedVerificationInputs,
 } from "./organization-u4-source-inventory";
+import { verifyFrozenU4SourceInventory } from "./organization-u4-source-inventory";
+import { verifyFrozenU3ObservationCalculus } from "./organization-u3-observation-calculus";
 
 type Sha = `sha256:${string}`;
 export const U4_PROBE_PROTOCOL_SCHEMA =
@@ -200,6 +203,11 @@ export const computeU4ProbeInvocationId = (
   caseId: string,
   repetition: number,
 ) => `inv.${H(C({ planDigest, caseId, repetition })).slice(7, 31)}`;
+export const computeU4ProbeCorrelationId = (
+  invocationId: string,
+  observationId: string,
+  sampleId: string,
+) => `corr.${H(C({ invocationId, observationId, sampleId })).slice(7, 31)}`;
 const digest = (domain: string, x: unknown) => H(`${domain}\0${C(x)}`);
 
 function auth(inventory: FrozenU4SourceInventory, trusted: U4ProbeKeys) {
@@ -409,7 +417,11 @@ export function freezeU4ProbePlan(
     if (
       c.sourceVersion !== prov.get(c.runtimeProbeProvenanceId)?.sourceVersion ||
       prov.get(c.runtimeProbeProvenanceId)?.kind !== "runtime-probe" ||
-      prov.get(c.sourceBehaviorProvenanceId)?.kind !== "source-behavior"
+      prov.get(c.runtimeProbeProvenanceId)?.sourceId !== c.sourceId ||
+      prov.get(c.sourceBehaviorProvenanceId)?.kind !== "source-behavior" ||
+      prov.get(c.sourceBehaviorProvenanceId)?.sourceVersion !==
+        c.sourceVersion ||
+      prov.get(c.sourceBehaviorProvenanceId)?.sourceId !== c.sourceId
     )
       throw Error("U4 probe provenance invalid");
     const expected = new Set<string>();
@@ -457,6 +469,24 @@ export function freezeU4ProbePlan(
       throw Error("U4 probe input canonicalization invalid");
     }
   }
+  // The preregistration denominator is the inventory, not the planner's
+  // selection. Every fact backed by both empirical provenance kinds must occur
+  // in exactly one case; omissions and duplicate credit opportunities fail.
+  const empiricalFactIds = inventory.facts
+    .filter((f) => {
+      const kinds = new Set(
+        f.provenanceIds.map((pid) => prov.get(pid)?.kind).filter(Boolean),
+      );
+      return kinds.has("runtime-probe") && kinds.has("source-behavior");
+    })
+    .map((f) => f.id)
+    .sort();
+  const plannedFactIds = input.cases.flatMap((c) => c.factIds).sort();
+  if (
+    C(empiricalFactIds) !== C(plannedFactIds) ||
+    new Set(plannedFactIds).size !== plannedFactIds.length
+  )
+    throw Error("U4 probe fact denominator totality invalid");
   const pbody = body(input, "plannerReceipt", "custodyReceipt");
   if (
     !au.ok(
@@ -568,12 +598,8 @@ export function freezeU4ProbeRun(
           )
   )
     throw Error("U4 probe termination invalid");
-  if (input.termination === "exited")
-    try {
-      if (C(JSON.parse(out.toString("utf8"))) !== out.toString("utf8")) throw 0;
-    } catch {
-      throw Error("U4 probe stdout canonicalization invalid");
-    }
+  // A malformed exited response is retained as an authenticated noncredit
+  // terminal by the aggregate bundle; only a trace join may claim semantics.
   const au = auth(inventory, trusted);
   authority(
     au,
@@ -694,7 +720,12 @@ export function freezeU4SourceBehaviorTraceJoin(
     .filter(
       (e) =>
         e.runId === run.runId &&
-        e.correlationId === run.invocationId &&
+        e.correlationId ===
+          computeU4ProbeCorrelationId(
+            run.invocationId,
+            e.observationId,
+            e.sampleId,
+          ) &&
         c.observationIds.includes(e.observationId),
     )
     .map((e) => e.id)
@@ -709,7 +740,12 @@ export function freezeU4SourceBehaviorTraceJoin(
     if (
       !e ||
       e.runId !== run.runId ||
-      e.correlationId !== run.invocationId ||
+      e.correlationId !==
+        computeU4ProbeCorrelationId(
+          run.invocationId,
+          e.observationId,
+          e.sampleId,
+        ) ||
       !c.observationIds.includes(e.observationId) ||
       e.adapterId !== c.invocation.adapterId ||
       e.adapterVersion !== c.invocation.adapterVersion ||
@@ -821,4 +857,275 @@ export function assertU4ProbeRunTotality(
     actual = runs.map((r) => r.invocationId).sort();
   if (C(expected) !== C(actual) || new Set(actual).size !== actual.length)
     throw Error("U4 probe repetition totality invalid");
+}
+
+export type U4VerifiedProbeBundle = {
+  schema: "open-autonomy.u4-verified-probe-bundle.v1";
+  fixtureKind: "synthetic";
+  denominatorScope: "fixture-local";
+  empiricalRegistration: false;
+  closureClaim: false;
+  inventoryDigest: Sha;
+  calculusDigest: Sha;
+  u3ContractDigest: Sha;
+  u3TrustAnchorDigest: Sha;
+  materialDigests: Sha[];
+  plan: FrozenU4ProbePlan;
+  executions: Array<{
+    invocationId: string;
+    disposition: "credited" | "noncredit";
+    noncreditReason: "failed" | "timeout" | "malformed-output" | null;
+    run: FrozenU4ProbeRun;
+    join: FrozenU4SourceBehaviorTraceJoin | null;
+    u3InputDigest: Sha | null;
+    u3ReportDigest: Sha | null;
+  }>;
+};
+export type FrozenU4VerifiedProbeBundle = U4VerifiedProbeBundle & {
+  digest: Sha;
+};
+export type U4ProbeVerificationMaterial = {
+  invocationId: string;
+  u3Input: U3TraceEvaluationInput;
+  u3Trusted: U3TrustedKeys;
+};
+
+export const computeU4ProbeMaterialDigest = (
+  material: U4ProbeVerificationMaterial,
+) => digest("open-autonomy.u4-probe-verification-material.v1", material);
+
+export const computeU4SyntheticU3TrustAnchorDigest = (
+  contract: U3TraceEvaluationContract,
+  u3Trusted: U3TrustedKeys,
+) =>
+  H(
+    `open-autonomy.u4-synthetic-u3-trust-anchor.v1\0${C({ contract, u3Trusted })}`,
+  );
+
+// Fixture-local trust registrations are compiled independently of submitted
+// probe evidence. Real/empirical trust registration is an external campaign.
+export const U4_SYNTHETIC_U3_TRUST_ANCHOR_DIGESTS = Object.freeze([
+  "sha256:5f17e3a9bb6fb1f00e70e65ed40b23b1efe21e3ec0f4211ba28473d206fac35c",
+  "sha256:4f520d5248260091b6b5d18246a78c1b4bd14a7db0ac092e9889b56976b9257d",
+  "sha256:710aeb9ade7748050dce7a1b0ce8753dc6d3d3c769fac7cf91f25d1311c860ef",
+  "sha256:b2aa37c63b637a907e0cbb2cdef45f8e5ea7a7033eb49c8aade005dc071d5b54",
+] as const);
+
+export function freezeU4VerifiedProbeBundle(
+  input: U4VerifiedProbeBundle,
+  materials: U4ProbeVerificationMaterial[],
+  inventory: FrozenU4SourceInventory,
+  calculus: FrozenU3ObservationCalculus,
+  contract: U3TraceEvaluationContract,
+  trusted: U4ProbeKeys,
+  registry: FrozenU4SyntheticSourceRegistry,
+): FrozenU4VerifiedProbeBundle {
+  bounded(input);
+  bounded(materials);
+  const verifiedCalculus = verifyFrozenU3ObservationCalculus(calculus, {
+      requireFixtureDigest: false,
+    }),
+    verifiedInventory = verifyFrozenU4SourceInventory(
+      inventory,
+      verifiedCalculus,
+      registry,
+      trusted,
+    );
+  if (
+    verifiedCalculus.digest !== calculus.digest ||
+    verifiedInventory.digest !== inventory.digest
+  )
+    throw Error("U4 probe verified boundary mismatch");
+  exact(
+    input,
+    [
+      "schema",
+      "fixtureKind",
+      "denominatorScope",
+      "empiricalRegistration",
+      "closureClaim",
+      "inventoryDigest",
+      "calculusDigest",
+      "u3ContractDigest",
+      "u3TrustAnchorDigest",
+      "materialDigests",
+      "plan",
+      "executions",
+    ],
+    "verified bundle",
+  );
+  if (
+    input.schema !== "open-autonomy.u4-verified-probe-bundle.v1" ||
+    input.fixtureKind !== "synthetic" ||
+    input.denominatorScope !== "fixture-local" ||
+    input.empiricalRegistration !== false ||
+    input.closureClaim !== false ||
+    input.inventoryDigest !== inventory.digest ||
+    input.calculusDigest !== calculus.digest ||
+    input.u3ContractDigest !== contract.digest
+  )
+    throw Error("U4 probe bundle boundary invalid");
+  const { digest: _pd, ...planBody } = input.plan;
+  const plan = freezeU4ProbePlan(
+    planBody as U4ProbePlan,
+    inventory,
+    calculus,
+    contract,
+    trusted,
+  );
+  if (plan.digest !== input.plan.digest)
+    throw Error("U4 probe bundle plan replay invalid");
+  if (!Array.isArray(input.executions) || !input.executions.length)
+    throw Error("U4 probe bundle executions empty");
+  const material = new Map<string, U4ProbeVerificationMaterial>();
+  if (!Array.isArray(materials))
+    throw Error("U4 probe bundle materials invalid");
+  for (const m of materials) {
+    exact(m, ["invocationId", "u3Input", "u3Trusted"], "bundle material");
+    if (!id(m.invocationId) || material.has(m.invocationId))
+      throw Error("U4 probe bundle material identity invalid");
+    material.set(m.invocationId, m);
+  }
+  const actualMaterialDigests = materials
+    .map(computeU4ProbeMaterialDigest)
+    .sort();
+  const trustPolicies = [
+    ...new Set(
+      (materials.length ? materials : [{ u3Trusted: { keys: {} } }]).map((m) =>
+        computeU4SyntheticU3TrustAnchorDigest(contract, m.u3Trusted),
+      ),
+    ),
+  ];
+  if (
+    !Array.isArray(input.materialDigests) ||
+    input.materialDigests.some((x) => !/^sha256:[0-9a-f]{64}$/.test(x)) ||
+    new Set(input.materialDigests).size !== input.materialDigests.length ||
+    C(input.materialDigests) !== C(actualMaterialDigests)
+  )
+    throw Error("U4 probe bundle material topology invalid");
+  if (
+    trustPolicies.length !== 1 ||
+    input.u3TrustAnchorDigest !== trustPolicies[0] ||
+    !U4_SYNTHETIC_U3_TRUST_ANCHOR_DIGESTS.includes(trustPolicies[0] as any)
+  )
+    throw Error("U4 probe independent U3 trust anchor invalid");
+  const runs: FrozenU4ProbeRun[] = [],
+    seen = new Set<string>(),
+    runIds = new Set<string>();
+  let previous = "";
+  for (const execution of input.executions) {
+    exact(
+      execution,
+      [
+        "invocationId",
+        "disposition",
+        "noncreditReason",
+        "run",
+        "join",
+        "u3InputDigest",
+        "u3ReportDigest",
+      ],
+      "bundle execution",
+    );
+    if (
+      !id(execution.invocationId) ||
+      execution.invocationId <= previous ||
+      seen.has(execution.invocationId) ||
+      execution.run.invocationId !== execution.invocationId
+    )
+      throw Error("U4 probe bundle execution order invalid");
+    previous = execution.invocationId;
+    seen.add(execution.invocationId);
+    const { digest: _rd, ...runBody } = execution.run;
+    const run = freezeU4ProbeRun(
+      runBody as U4ProbeRun,
+      plan,
+      inventory,
+      trusted,
+    );
+    if (run.digest !== execution.run.digest)
+      throw Error("U4 probe bundle run replay invalid");
+    if (runIds.has(run.runId))
+      throw Error("U4 probe bundle run identity invalid");
+    runIds.add(run.runId);
+    runs.push(run);
+    if (execution.disposition === "credited") {
+      if (
+        execution.noncreditReason !== null ||
+        !execution.join ||
+        run.termination !== "exited"
+      )
+        throw Error("U4 probe bundle credited terminal invalid");
+      const m = material.get(execution.invocationId);
+      if (!m) throw Error("U4 probe bundle material missing");
+      let parsed: unknown;
+      try {
+        const text = Buffer.from(run.stdoutBase64, "base64").toString("utf8");
+        parsed = JSON.parse(text);
+        if (C(parsed) !== text) throw 0;
+      } catch {
+        throw Error("U4 probe bundle credited output invalid");
+      }
+      const { digest: _jd, ...joinBody } = execution.join;
+      const join = freezeU4SourceBehaviorTraceJoin(
+        joinBody as U4SourceBehaviorTraceJoin,
+        run,
+        plan,
+        inventory,
+        calculus,
+        contract,
+        m.u3Input,
+        m.u3Trusted,
+        trusted,
+      );
+      const report = evaluateU3ObservationTrace(
+        calculus,
+        contract,
+        m.u3Input,
+        m.u3Trusted,
+      );
+      if (
+        join.digest !== execution.join.digest ||
+        execution.u3InputDigest !==
+          digest("open-autonomy.u4-probe-u3-input.v1", m.u3Input) ||
+        execution.u3ReportDigest !== report.digest
+      )
+        throw Error("U4 probe bundle credited replay invalid");
+      material.delete(execution.invocationId);
+    } else {
+      if (
+        execution.join !== null ||
+        execution.u3InputDigest !== null ||
+        execution.u3ReportDigest !== null ||
+        material.has(execution.invocationId)
+      )
+        throw Error("U4 probe bundle noncredit evidence invalid");
+      const malformed =
+        run.termination === "exited" &&
+        (() => {
+          try {
+            const t = Buffer.from(run.stdoutBase64, "base64").toString("utf8");
+            return C(JSON.parse(t)) !== t;
+          } catch {
+            return true;
+          }
+        })();
+      const expected =
+        run.termination === "failed"
+          ? "failed"
+          : run.termination === "timeout"
+            ? "timeout"
+            : malformed
+              ? "malformed-output"
+              : null;
+      if (!expected || execution.noncreditReason !== expected)
+        throw Error("U4 probe bundle noncredit terminal invalid");
+    }
+  }
+  assertU4ProbeRunTotality(plan, runs);
+  if (material.size) throw Error("U4 probe bundle surplus material invalid");
+  return freeze({
+    ...structuredClone(input),
+    digest: digest(input.schema, input),
+  });
 }

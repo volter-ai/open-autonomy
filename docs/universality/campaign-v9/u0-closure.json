@@ -1,0 +1,91 @@
+{
+  "schema": "open-autonomy.universality-checkpoint-closure.v1",
+  "checkpoint": "U0",
+  "status": "complete",
+  "assurance": "v9-design-property-tested-and-v8-predecessor-custody-replayed",
+  "claimDigest": "sha256:753adcf34a43908d729b739bd62975cb38508a1a0c4963da6d6bf4c8cf8ae46c",
+  "supersessionDigest": "sha256:c3d9cff918b3841cd8af2f66f5436d137fcb7c54a9552afd95c57d9b0953acce",
+  "sourceCensusContractDigest": "sha256:01fd32a2be6731d47b1eef9c73a90a14e1cce554e330ee006d8387d92ce846dd",
+  "forcingSupplementDigest": "sha256:6ac36647ca223925e40754362c98f692ba5950daf43cb14344b4bd47d2e511a9",
+  "registrationManifestDigest": "sha256:2b74a714b1a4dbfcabc559291751f4446b0c4c5870a643511753a1cec2176fd5",
+  "predecessorInvalidationDigest": "sha256:394f1240acd55faf8df3d88f0097707ce41a041a0f48f2a59f1ce1cde886639a",
+  "semanticCoverage": [
+    "complete v8 predecessor raw-custody replay and terminal invalidation",
+    "property-tested v9 ordered accepted-request transcript including empty terminal responses",
+    "property-tested v9 lossless terminal occurrence multiset",
+    "github-node-id equivalence quotient with unit population weight",
+    "cross-range repetition retained as index-drift evidence",
+    "distinct physical-attempt and complete-pass identities",
+    "canonical successful-transcript attempt-history and whole-custody digests",
+    "deterministic star and UTC-day partition replay",
+    "provider-owned response surplus retention with required-field validation",
+    "v9 exact captured sidecar and response-body byte-custody contract",
+    "atomic idempotent registration bundle publication",
+    "portable bundle joins with explicit local Git provenance boundary"
+  ],
+  "falsifiersExercised": [
+    "threshold mutation",
+    "cross-range duplicate invalidation",
+    "occurrence double weighting",
+    "zero-item terminal omission",
+    "tail range syntax substitution",
+    "creation split extra query",
+    "mutable validated replay",
+    "request interleaving digest drift",
+    "physical retry renumbering semantic drift",
+    "raw response and sidecar byte substitution",
+    "provider surplus-field rejection",
+    "post-cutoff rate-limit retry",
+    "terminal custody loss",
+    "predecessor artifact byte substitution",
+    "partial registration publication"
+  ],
+  "evidence": [
+    "docs/universality/campaign-v8/u1-github-raw/invalidation.json",
+    "docs/universality/campaign-v9/predecessor-invalidation.json",
+    "docs/universality/campaign-v9/registration-manifest.json",
+    "docs/universality/campaign-v9/claim.json",
+    "docs/universality/campaign-v9/source-census-contract.json",
+    "docs/universality/campaign-v9/forcing-supplement.json",
+    "docs/universality/campaign-v9/supersession.json",
+    "packages/core/src/organization-universality-occurrence-contract.ts",
+    "packages/core/src/organization-universality-occurrence-contract.test.ts",
+    "packages/core/src/organization-campaign-registration.ts",
+    "packages/core/src/organization-campaign-registration.test.ts",
+    "packages/core/src/organization-u1-occurrence-capture.ts",
+    "packages/core/src/organization-u1-occurrence-capture.test.ts",
+    "packages/core/src/organization-universality-claim.ts",
+    "packages/core/src/organization-universality-claim.test.ts"
+  ],
+  "skepticalReview": {
+    "rounds1To3": "rejected: inherited policy validation, occurrence algebra, zero-item responses, and trusted joins were incomplete",
+    "rounds4To6": "rejected: live provider schemas, raw replay, creation partition, attempt custody, and bundle verification diverged from retained evidence",
+    "rounds7To8": "rejected: canonical request ordering, portable predecessor terminality, and provider required-field validation remained incomplete",
+    "round9": "accepted: occurrence contract and atomic registration boundary were commit-ready",
+    "captureRounds1To3": "rejected: retries, invalidation custody, cutoff-bounded rate limits, adapter URL binding, and canonical terminal evidence were incomplete",
+    "captureRound4": "accepted: operational local capture engine preserved typed terminal custody and passed all adversarial regressions"
+  },
+  "obligations": [
+    {"id":"U0-O1","claim":"numeric claim grammar and non-lowerable floors are frozen","evidence":"packages/core/src/organization-universality-claim.test.ts","falsifier":"threshold mutation"},
+    {"id":"U0-O2","claim":"source census selection semantics are content addressed","evidence":"docs/universality/campaign-v9/source-census-contract.json","falsifier":"occurrence double weighting"},
+    {"id":"U0-O3","claim":"forcing functions remain zero-weight with node-ID overlap","evidence":"docs/universality/campaign-v9/forcing-supplement.json","falsifier":"occurrence double weighting"},
+    {"id":"U0-O4","claim":"v8 invalidation is exact and evidence indexed","evidence":"docs/universality/campaign-v9/predecessor-invalidation.json","falsifier":"predecessor artifact byte substitution"},
+    {"id":"U0-O5","claim":"campaign succession is digest joined","evidence":"docs/universality/campaign-v9/supersession.json","falsifier":"predecessor artifact byte substitution"},
+    {"id":"U0-O6","claim":"registration publishes an exact five-file byte bundle","evidence":"docs/universality/campaign-v9/registration-manifest.json","falsifier":"partial registration publication"},
+    {"id":"U0-O7","claim":"zero-item and duplicate occurrences have executable algebra","evidence":"packages/core/src/organization-universality-occurrence-contract.test.ts","falsifier":"zero-item terminal omission"},
+    {"id":"U0-O8","claim":"raw sidecar and body substitution fail closed","evidence":"packages/core/src/organization-universality-occurrence-contract.test.ts","falsifier":"raw response and sidecar byte substitution"},
+    {"id":"U0-O9","claim":"predecessor and registration custody replay from bytes","evidence":"packages/core/src/organization-campaign-registration.test.ts","falsifier":"predecessor artifact byte substitution"},
+    {"id":"U0-O10","claim":"capture retries preserve typed terminal custody","evidence":"packages/core/src/organization-u1-occurrence-capture.test.ts","falsifier":"terminal custody loss"},
+    {"id":"U0-O11","claim":"rate-limit transitions cannot issue work after cutoff","evidence":"packages/core/src/organization-u1-occurrence-capture.test.ts","falsifier":"post-cutoff rate-limit retry"}
+  ],
+  "declaredBoundaries": [
+    {"id":"U0-B1","statement":"U0 closes the preregistered claim and executable census design; empirical v9 population capture and classification remain U1 work","next":"U1"}
+  ],
+  "obligationAccounting": {
+    "open": 0,
+    "discharged": 11,
+    "deferredExternal": 0
+  },
+  "residuals": [],
+  "next": "U1"
+}

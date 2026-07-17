@@ -195,7 +195,13 @@ const validatePayload = (
     case "preserved": {
       exact(
         p,
-        ["sourceBytes", "targetBytes", "sourceDigest", "targetDigest"],
+        [
+          "sourceBytes",
+          "targetBytes",
+          "sourceDigest",
+          "targetDigest",
+          "mandatoryObservations",
+        ],
         "preservation payload",
       );
       const bytes = C({
@@ -207,7 +213,15 @@ const validatePayload = (
         p.sourceBytes === bytes &&
         p.targetBytes === oracle.data.targetArtifact.bytes &&
         p.sourceDigest === H(bytes) &&
-        p.targetDigest === H(oracle.data.targetArtifact.bytes)
+        p.targetDigest === H(oracle.data.targetArtifact.bytes) &&
+        Array.isArray(p.mandatoryObservations) &&
+        C(p.mandatoryObservations) ===
+          C(oracle.data.loweringResult.observations) &&
+        C(p.mandatoryObservations.map((x: any) => x.observationId).sort()) ===
+          C([...fact.mandatoryObservationIds].sort()) &&
+        p.mandatoryObservations.every(
+          (x: any) => x.sourceValue === x.targetValue,
+        )
       )
         return;
       break;

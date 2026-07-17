@@ -73,6 +73,7 @@ const H = (x: string) =>
             targetBytes: factBytes,
             sourceDigest: H(factBytes),
             targetDigest: H(factBytes),
+            mandatoryObservations: observations,
           };
         if (d === "derived") {
           const cut = Math.max(1, Math.floor(f.denotation.length / 2));
@@ -520,6 +521,20 @@ test("rejects duplicate evaluation candidate IDs despite coherent evidence signa
     x.evidenceRegistry[0] = resign(p.evidence, { payload });
     x.accounting = z.account(x.ledger);
   }, /inexpressible evidence semantics/);
+});
+test("rejects re-signed preserved witnesses with omitted or divergent mandatory observations", () => {
+  const check = (mutate: (p: any) => void) =>
+    attack((x, z) => {
+      const p = z.pair(z.u.inventory.facts[0], "preserved", null),
+        payload = structuredClone(p.evidence.payload);
+      mutate(payload);
+      x.evidenceRegistry[0] = resign(p.evidence, { payload });
+    }, /preservation payload|preserved evidence semantics/);
+  check((p) => p.mandatoryObservations.pop());
+  check((p) => {
+    p.mandatoryObservations[0].targetValue =
+      !p.mandatoryObservations[0].sourceValue;
+  });
 });
 test("rejects evidence DAG cycles unreachable dependencies and surplus", () => {
   attack((x) => {

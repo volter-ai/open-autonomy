@@ -883,11 +883,13 @@ export function compileLocal(ir: AutonomyIR, opts: { runner?: RunnerName; destDi
   const generated: Record<string, string> = {};
 
   // Shared layer: the manifest, generated the same way for every substrate (unless carried verbatim).
+  const manifest = emitAutonomy(ir) as Record<string, unknown>;
   if (!ir.resources.includes('.open-autonomy/autonomy.yml')) {
-    const manifest = emitAutonomy(ir) as Record<string, unknown>;
     generated['.open-autonomy/autonomy.yml'] = stringifyYaml(manifest);
-    generated['.open-autonomy/autonomy.json'] = `${JSON.stringify(manifest, null, 2)}\n`;
   }
+  // Runtime consumers use the dependency-free JSON form. It is always derived from the IR, including
+  // legacy profiles that carry a display/back-compat autonomy.yml resource.
+  generated['.open-autonomy/autonomy.json'] = `${JSON.stringify(manifest, null, 2)}\n`;
   // Shared layer: the substrate-neutral runtime scripts, minus the github-only ones.
   for (const [path, content] of Object.entries(runtimeFiles())) {
     if (!GITHUB_ONLY.has(path)) generated[path] = content;

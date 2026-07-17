@@ -7,7 +7,7 @@
 // telemetry `oa status` surfaces, never a second control channel).
 import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import type { Session, SessionRunner } from './types.ts';
+import type { Session, SessionRunnerFactory } from './types.ts';
 import { isPaused, pausedMarkerPath, pauseReasonText } from './pause.ts';
 import { defaultSessionRunner, listSessionsBestEffort } from './sessions.ts';
 import { readControlGeneration, type ControlGeneration } from './control-generation.ts';
@@ -67,33 +67,16 @@ export interface StatusReport {
   rationale: string;
 }
 
-async function withProviderEnv<T>(provider: { url: string; source: string }, action: () => Promise<T>): Promise<T> {
-  const hadUrl = Object.hasOwn(process.env, 'TERMFLEET_PROVIDER_URL');
-  const url = process.env.TERMFLEET_PROVIDER_URL;
-  const hadSource = Object.hasOwn(process.env, 'AUTONOMY_PROVIDER_URL_SOURCE');
-  const source = process.env.AUTONOMY_PROVIDER_URL_SOURCE;
-  process.env.TERMFLEET_PROVIDER_URL = provider.url;
-  process.env.AUTONOMY_PROVIDER_URL_SOURCE = provider.source;
-  try {
-    return await action();
-  } finally {
-    if (hadUrl) process.env.TERMFLEET_PROVIDER_URL = url;
-    else delete process.env.TERMFLEET_PROVIDER_URL;
-    if (hadSource) process.env.AUTONOMY_PROVIDER_URL_SOURCE = source;
-    else delete process.env.AUTONOMY_PROVIDER_URL_SOURCE;
-  }
-}
-
 /** Probe through the runtime generation's own provider pin. The emitted runner resolves lazily in
- * `list()`, so the scoped environment must cover runner construction and the list/fallback call. */
+ * `list()`, so the explicit environment is retained by runner construction and the fallback call. */
 async function statusSessions(
   runtimeRoot: string,
-  sessionRunnerFactory: (cwd: string) => Promise<SessionRunner | null>,
+  sessionRunnerFactory: SessionRunnerFactory,
 ): Promise<Session[] | null> {
   const schedulePath = join(runtimeRoot, 'scheduler', 'schedule.json');
   if (!existsSync(schedulePath)) {
-    const runner = await sessionRunnerFactory(runtimeRoot);
-    return listSessionsBestEffort(runtimeRoot, runner);
+    const runner = await sessionRunnerFactory(runtimeRoot, process.env);
+    return listSessionsBestEffort(runtimeRoot, runner, process.env);
   }
   let schedule;
   try {
@@ -103,14 +86,14 @@ async function statusSessions(
     return null;
   }
   const provider = await resolveProvider(schedule.env, process.env);
-  const probe = async () => {
-    const runner = await sessionRunnerFactory(runtimeRoot);
-    return listSessionsBestEffort(runtimeRoot, runner);
-  };
-  return provider ? withProviderEnv(provider, probe) : probe();
+  const env: NodeJS.ProcessEnv = provider
+    ? { ...process.env, TERMFLEET_PROVIDER_URL: provider.url, AUTONOMY_PROVIDER_URL_SOURCE: provider.source }
+    : { ...process.env };
+  const runner = await sessionRunnerFactory(runtimeRoot, env);
+  return listSessionsBestEffort(runtimeRoot, runner, env);
 }
 
-export async function status(opts: { cwd?: string; sessionRunnerFactory?: (cwd: string) => Promise<SessionRunner | null> } = {}): Promise<StatusReport> {
+export async function status(opts: { cwd?: string; sessionRunnerFactory?: SessionRunnerFactory } = {}): Promise<StatusReport> {
   const cwd = opts.cwd ?? process.cwd();
   const paused = isPaused(cwd);
   const activation = readActivationRoutingState(cwd);

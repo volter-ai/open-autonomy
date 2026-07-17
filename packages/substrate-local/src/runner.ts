@@ -31,20 +31,27 @@ function sessionOf(w: Win, byId: Map<string, LifeSession>): Session {
 }
 
 export class TermfleetRunner implements Runner {
-  private harness = (process.env.TERMFLEET_AGENT || RUNNER_DEFAULTS.harness) as Harness; // which coding CLI termfleet runs
+  private readonly env: NodeJS.ProcessEnv;
+  private readonly cwd: string;
+  private readonly harness: Harness;
+  constructor(opts: { cwd?: string; env?: NodeJS.ProcessEnv } = {}) {
+    this.env = opts.env ?? process.env;
+    this.cwd = opts.cwd ?? process.cwd();
+    this.harness = (this.env.TERMFLEET_AGENT || RUNNER_DEFAULTS.harness) as Harness;
+  }
   // The provider client, resolved once. Discovery mirrors the CLI's: an explicit TERMFLEET_PROVIDER_URL,
   // else the current-context provider, else live local auto-discovery — done by termfleet's own SDK.
   private clientPromise?: Promise<ProviderClient>;
   private client(): Promise<ProviderClient> {
-    return (this.clientPromise ??= resolveDefaultProvider({ url: process.env.TERMFLEET_PROVIDER_URL }).then((p) => {
+    return (this.clientPromise ??= resolveDefaultProvider({ url: this.env.TERMFLEET_PROVIDER_URL }).then((p) => {
       // OA-09: log the effective provider + its origin on first resolve — see backend.mjs's twin (keep in
       // sync) for the full rationale. AUTONOMY_PROVIDER_URL_SOURCE (set by the loop driver) distinguishes
       // `schedule` (the durable compile-time pin) from `env` (a genuine ambient override); `env` is the
       // default when the hint is absent (this runner driven outside the loop). Unpinned, the SDK's own
       // `source` (current-context | auto-local) is used verbatim. TRIM (OA-09 Blocker 2): a set-but-
       // empty/whitespace value is unset to the SDK, so it must read as unpinned here too.
-      const pinnedEnv = (process.env.TERMFLEET_PROVIDER_URL || '').trim();
-      const source = pinnedEnv ? process.env.AUTONOMY_PROVIDER_URL_SOURCE || 'env' : p.source;
+      const pinnedEnv = (this.env.TERMFLEET_PROVIDER_URL || '').trim();
+      const source = pinnedEnv ? this.env.AUTONOMY_PROVIDER_URL_SOURCE || 'env' : p.source;
       // stderr, never stdout — `list`/`launch`'s CLI output is a single JSON line on stdout that callers
       // (including this repo's own tests) parse directly; a diagnostic line ahead of it would corrupt that.
       console.error(`[runner] provider ${p.baseUrl} (${source})`);
@@ -58,23 +65,23 @@ export class TermfleetRunner implements Runner {
     // provider, plus the opaque params verbatim (a profile may read e.g. $ZTRACK_ISSUE; the system doesn't).
     const exported: Record<string, string> = {
       ...Object.fromEntries(
-        Object.entries(process.env as Record<string, string>).filter(([k]) => /^(TERMFLEET_.*|AUTONOMY.*|PATH)$/.test(k)),
+        Object.entries(this.env as Record<string, string>).filter(([k]) => /^(TERMFLEET_.*|AUTONOMY.*|PATH)$/.test(k)),
       ),
       ...params,
     };
     // Put the repo's local node_modules/.bin first so the agent reaches repo-pinned CLIs (e.g. a `-D`
     // ztrack) — exactly what `npm run`/`bun run` do, without the substrate naming any tool. cwd is the
     // repo (createAgentWindow runs the session there), so this is where its node_modules lives.
-    exported.PATH = `${process.cwd()}/node_modules/.bin:${exported.PATH ?? process.env.PATH ?? ''}`;
+    exported.PATH = `${this.cwd}/node_modules/.bin:${exported.PATH ?? this.env.PATH ?? ''}`;
     const setupCommand = Object.entries(exported)
       .map(([k, v]) => `export ${k}=${JSON.stringify(v ?? '')}`)
       .join('; ');
-    const promptDir = process.env.AUTONOMY_PROMPT_DIR;
+    const promptDir = this.env.AUTONOMY_PROMPT_DIR;
     const promptFile = promptDir ? `${promptDir}/${agent}.txt` : '';
     // createAgentWindow takes the prompt as a string — read the per-harness launch prompt file if present,
     // else use the agent name (which activates the skill of that name in the harness).
     const prompt = promptFile && existsSync(promptFile) ? readFileSync(promptFile, 'utf8') : agent;
-    const ack = await client.createAgentWindow({ agent: this.harness, name: agent, cwd: process.cwd(), prompt, setupCommand });
+    const ack = await client.createAgentWindow({ agent: this.harness, name: agent, cwd: this.cwd, prompt, setupCommand });
     const terminalId = ack.result?.terminalId;
     if (!terminalId) {
       throw new Error(`termfleet createAgentWindow returned no terminalId for agent "${agent}": ${ack.error ?? '(no error)'}`);

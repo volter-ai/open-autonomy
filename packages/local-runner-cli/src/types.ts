@@ -38,6 +38,10 @@ export interface SessionRunner {
   reapIdle(opts: { idleMs: number; agents: Set<string>; since: Map<string, number> }): Promise<Array<{ agent: string; id: string }>>;
 }
 
+/** Constructs a runner against one explicit generation environment. Passing env rather than consulting
+ * process-global state lets active and draining generations coexist without provider races. */
+export type SessionRunnerFactory = (cwd: string, env: NodeJS.ProcessEnv) => Promise<SessionRunner | null>;
+
 /** One substrate job. Domain services decide whether useful work exists after the job launches. */
 export interface NormalizedJob {
   name: string;

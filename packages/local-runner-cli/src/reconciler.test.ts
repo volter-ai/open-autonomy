@@ -73,20 +73,23 @@ describe('generic substrate scheduler', () => {
       const ambient: NodeJS.ProcessEnv = {};
       const stop = new AbortController();
       let observed: { url?: string; source?: string } = {};
+      let receivedEnv: NodeJS.ProcessEnv | undefined;
       await start({
         cwd: dir,
         proc: procFor(dir).runner,
         ambient,
         signal: stop.signal,
-        sessionRunnerFactory: async () => {
+        sessionRunnerFactory: async (_cwd, env) => {
+          receivedEnv = env;
           observed = {
-            url: ambient.TERMFLEET_PROVIDER_URL,
-            source: ambient.AUTONOMY_PROVIDER_URL_SOURCE,
+            url: env.TERMFLEET_PROVIDER_URL,
+            source: env.AUTONOMY_PROVIDER_URL_SOURCE,
           };
           stop.abort();
           return new StubSessionRunner();
         },
       });
+      expect(receivedEnv).toBe(ambient);
       expect(observed).toEqual({ url: 'http://schedule-pinned', source: 'schedule' });
     } finally { rmSync(dir, { recursive: true, force: true }); }
   });

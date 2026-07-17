@@ -234,7 +234,14 @@ const verifyControlGeneration = (expectedSha) => {
   catch { throw new Error('[loop] control generation receipt is missing; restart the accepted scheduler'); }
   const head = gitControl(['rev-parse', 'HEAD']).stdout.toLowerCase();
   const accepted = generation.codeHost === 'github' && generation.defaultBranch ? controlRemoteSha(generation.defaultBranch) : expectedSha;
-  if (generation.schema !== 'open-autonomy.control-generation.v1' || generation.sha !== expectedSha || head !== expectedSha || accepted !== expectedSha) {
+  let retained = false;
+  if (activationHome) {
+    try {
+      const state = JSON.parse(readFileSync(join(activationHome, 'state.json'), 'utf8'));
+      retained = [state.active, state.previous, ...(state.draining || [])].some((entry) => entry && entry.sha === expectedSha);
+    } catch {}
+  }
+  if (generation.schema !== 'open-autonomy.control-generation.v1' || generation.sha !== expectedSha || head !== expectedSha || (accepted !== expectedSha && !retained)) {
     throw new Error('[loop] stale/missing control generation for ' + expectedSha.slice(0, 12) + '; pending effect retained');
   }
 };
@@ -273,7 +280,11 @@ if (once && dispatchIndex !== -1) {
 // PAUSE GATE (OA-07): fences belong to jobs, not to the loop as a whole. The default schedule still uses
 // .open-autonomy/paused for every job, while adopter target config may give groups independent markers.
 // Evaluate the markers at tick-fire time so creating/removing one takes effect without restarting the loop.
-const fencePath = (job) => job.fence ? join(here, '..', job.fence) : null;
+const activationHome = (process.env.AUTONOMY_ACTIVATION_HOME || '').trim();
+const fencePath = (job) => !job.fence ? null
+  : activationHome && job.fence === '.open-autonomy/paused'
+    ? join(activationHome, 'paused')
+    : join(here, '..', job.fence);
 const blockedFences = () => new Set(jobs.flatMap((job) => {
   const path = fencePath(job);
   return path && existsSync(path) ? [job.fence] : [];
@@ -592,7 +603,7 @@ const fireJobs = (dueJobs, { triggerKind = 'cron', reportSkips = false } = {}) =
   const results = [];
   const skipped = [];
   for (const job of dueJobs) {
-    if (job.fence && existsSync(join(here, '..', job.fence))) {
+    if (job.fence && existsSync(fencePath(job))) {
       skipped.push({ job, reason: 'fenced by ' + job.fence });
       continue;
     }

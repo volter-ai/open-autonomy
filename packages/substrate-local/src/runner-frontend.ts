@@ -50,6 +50,10 @@ export function installRoot(cwd = process.cwd(), env: NodeJS.ProcessEnv = proces
 
 const controlPath = (relative: string): string =>
   resolve(installRoot(), relative);
+const fenceControlPath = (fence: string): string => {
+  const activation = (process.env.AUTONOMY_ACTIVATION_HOME ?? '').trim();
+  return activation && fence === '.open-autonomy/paused' ? resolve(activation, 'paused') : controlPath(fence);
+};
 
 // --- the PAUSE gate (OA-07): defense in depth at the launch seam -------------------------------------
 // The scheduler (scheduler/run.mjs) is the primary fence — it never fires a tick while paused. This is the
@@ -200,7 +204,17 @@ function activeControlGeneration(codeHost: string): ControlGeneration | null {
   if (codeHost === 'github') {
     const branch = generation.defaultBranch ?? '';
     const remote = branch ? git(['ls-remote', 'origin', `refs/heads/${branch}`], installRoot()).stdout.trim().split(/\s+/)[0]?.toLowerCase() : '';
-    if (!branch || remote !== generation.sha) {
+    let retained = false;
+    const activationHome = (process.env.AUTONOMY_ACTIVATION_HOME ?? '').trim();
+    if (activationHome) {
+      try {
+        const state = JSON.parse(readFileSync(resolve(activationHome, 'state.json'), 'utf8')) as {
+          active?: { sha?: string }; previous?: { sha?: string }; draining?: Array<{ sha?: string }>;
+        };
+        retained = [state.active, state.previous, ...(state.draining ?? [])].some((entry) => entry?.sha === generation.sha);
+      } catch { /* malformed activation state never grants retention */ }
+    }
+    if ((!branch || remote !== generation.sha) && !retained) {
       throw new ControlGenerationError(
         `[runner] accepted remote generation changed: expected ${generation.sha.slice(0, 12)} at origin/${branch || '(unknown)'}. ` +
           'Stop, update the control checkout, and restart before launching more work.',
@@ -698,7 +712,7 @@ export async function launch(agent: string, params: LaunchParams = {}): Promise<
   }
 
   const fence = typeof params.fence === 'string' && params.fence ? params.fence : PAUSED_PATH;
-  const resolvedFence = controlPath(fence);
+  const resolvedFence = fenceControlPath(fence);
   if (existsSync(resolvedFence)) {
     console.error(pausedMessage(fence));
     throw new PausedError();
@@ -846,6 +860,9 @@ export async function launch(agent: string, params: LaunchParams = {}): Promise<
             AUTONOMY_CONTROL_ROOT: installRoot(),
             AUTONOMY_CONTROL_SHA: generation!.sha,
             AUTONOMY_TRUSTED_RUNNER: join(installRoot(), 'scripts', 'runner.ts'),
+            ...(process.env.AUTONOMY_ACTIVATION_HOME
+              ? { AUTONOMY_ACTIVATION_HOME: process.env.AUTONOMY_ACTIVATION_HOME }
+              : {}),
             ...(ghBox.propose_dispatch_checks?.length
               ? { EXTRA_CHECK_WORKFLOWS: ghBox.propose_dispatch_checks.join(',') }
               : {}),

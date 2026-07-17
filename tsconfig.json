@@ -14,6 +14,7 @@
       "@open-autonomy/core": ["packages/core/src/index.ts"],
       "@open-autonomy/core/runner": ["packages/core/src/runner.ts"],
       "@open-autonomy/substrate-local": ["packages/substrate-local/src/index.ts"],
+      "@open-autonomy/dry-run": ["packages/dry-run/src/index.ts"],
       "@open-autonomy/substrate-github": ["packages/substrate-github/src/index.ts"]
     }
   },

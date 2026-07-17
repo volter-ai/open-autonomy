@@ -12,6 +12,9 @@
     "oa": "./src/bin/oa.ts"
   },
   "dependencies": {
+    "@open-autonomy/core": "workspace:*",
+    "@open-autonomy/dry-run": "workspace:*",
+    "@open-autonomy/substrate-local": "workspace:*",
     "yaml": "^2.9.0"
   }
 }

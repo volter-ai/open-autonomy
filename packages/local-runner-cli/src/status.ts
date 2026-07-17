@@ -11,6 +11,7 @@ import type { Session, SessionRunner } from './types.ts';
 import { isPaused, pausedMarkerPath, pauseReasonText } from './pause.ts';
 import { defaultSessionRunner, listSessionsBestEffort } from './sessions.ts';
 import { readControlGeneration, type ControlGeneration } from './control-generation.ts';
+import { readActivationRoutingState, type ActivationRoutingState } from './activation-paths.ts';
 
 function lastFireDir(cwd: string): string {
   return join(cwd, '.open-autonomy', 'runner-state', 'last-fire');
@@ -60,16 +61,19 @@ export interface StatusReport {
   sessions: Session[] | null;
   lastFires: LastFireRecord[];
   controlGeneration: ControlGeneration | null;
+  activation: ActivationRoutingState | null;
   rationale: string;
 }
 
 export async function status(opts: { cwd?: string; sessionRunnerFactory?: (cwd: string) => Promise<SessionRunner | null> } = {}): Promise<StatusReport> {
   const cwd = opts.cwd ?? process.cwd();
   const paused = isPaused(cwd);
-  const runner = await (opts.sessionRunnerFactory ?? defaultSessionRunner)(cwd);
-  const sessions = await listSessionsBestEffort(cwd, runner);
-  const lastFires = readLastFires(cwd);
-  const controlGeneration = readControlGeneration(cwd);
+  const activation = readActivationRoutingState(cwd);
+  const runtimeRoot = activation?.active?.root ?? cwd;
+  const runner = await (opts.sessionRunnerFactory ?? defaultSessionRunner)(runtimeRoot);
+  const sessions = await listSessionsBestEffort(runtimeRoot, runner);
+  const lastFires = readLastFires(runtimeRoot);
+  const controlGeneration = readControlGeneration(runtimeRoot);
 
   const rationaleLines: string[] = [];
   rationaleLines.push(paused
@@ -83,6 +87,15 @@ export async function status(opts: { cwd?: string; sessionRunnerFactory?: (cwd: 
   rationaleLines.push(controlGeneration
     ? `control-generation: ${controlGeneration.sha} (${controlGeneration.codeHost || 'undeclared'}).`
     : 'control-generation: none recorded (the accepted scheduler has not started).');
+  if (activation) {
+    rationaleLines.push(`activation.active: ${activation.active?.sha ?? 'none'}.`);
+    rationaleLines.push(`activation.staged: ${activation.staged?.sha ?? 'none'}.`);
+    rationaleLines.push(`activation.draining: ${activation.draining.map((generation) => generation.sha).join(', ') || 'none'}.`);
+    rationaleLines.push(activation.lastFailed
+      ? `activation.last-failed: ${activation.lastFailed.sha} — ${activation.lastFailed.reason}.`
+      : 'activation.last-failed: none.');
+    if (activation.previous) rationaleLines.push(`activation.rollback: oa rollback ${activation.previous.sha}`);
+  }
 
   return {
     paused,
@@ -91,6 +104,7 @@ export async function status(opts: { cwd?: string; sessionRunnerFactory?: (cwd: 
     sessions,
     lastFires,
     controlGeneration,
+    activation,
     rationale: rationaleLines.join('\n'),
   };
 }

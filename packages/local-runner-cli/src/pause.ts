@@ -6,8 +6,11 @@
 // holding state of its own.
 import { existsSync, mkdirSync, readFileSync, unlinkSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
+import { configuredActivationHome } from './activation-paths.ts';
 
 export function pausedMarkerPath(cwd: string = process.cwd()): string {
+  const activation = configuredActivationHome(cwd);
+  if (activation) return join(activation, 'paused');
   return join(cwd, '.open-autonomy', 'paused');
 }
 

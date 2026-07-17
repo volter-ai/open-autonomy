@@ -1,0 +1,222 @@
+{
+  "schema": "open-autonomy.source-census-occurrence-contract.v5",
+  "id": "oa-source-census-occurrence-2026-v9",
+  "campaignId": "organization-universality-2026-v9",
+  "domainPredicate": "runtime-autonomously-executes-software-work-or-coordinates-two-or-more-agent-roles-sessions-or-work-items-toward-software-work",
+  "adoption": {
+    "provider": "github",
+    "metric": "stargazers_count",
+    "threshold": 1000,
+    "includeForks": true,
+    "includeArchived": true
+  },
+  "enumeration": {
+    "rootQuery": "stars:>=1000 fork:true",
+    "pageSize": 100,
+    "sort": "stars",
+    "order": "desc",
+    "traversal": "depth-first-low-range-first",
+    "starPartition": {
+      "lowerBound": 1000,
+      "upperBoundSource": "first-empty-tail-probe-threshold-minus-one",
+      "interval": "closed-integer",
+      "split": "lo-to-floor-midpoint-and-floor-midpoint-plus-one-to-hi"
+    },
+    "overflowPartition": {
+      "field": "created",
+      "precision": "utc-day",
+      "lowerBound": "2007-10-29",
+      "upperBoundSource": "utc-date-of-pass-started-at",
+      "interval": "closed-day",
+      "split": "lo-to-floor-midpoint-and-floor-midpoint-plus-one-to-hi",
+      "terminal": "single-utc-day",
+      "unpartitionable": "invalidate-campaign"
+    }
+  },
+  "completion": {
+    "pass": {
+      "rootRequest": "replaced-by-query-only-tail-probe",
+      "tailProbe": "accepted-per-page-100-page-1-stars-gte-thresholds-2000-times-powers-of-two-until-first-zero-total-count",
+      "tailProbeTermination": "total-count-zero-and-items-length-zero-otherwise-malformed-response-schema",
+      "rangeRequest": "exactly-one-accepted-per-page-100-page-1-response-per-visited-range",
+      "maximumTotalAttempts": 4,
+      "retryableFailures": [
+        "transport-failure",
+        "non-rate-limit-non-200",
+        "malformed-response-schema",
+        "incomplete-results-true",
+        "terminal-item-ineligible-or-created-outside-query"
+      ],
+      "retryTransition": "retain-failed-evidence-discard-pass-and-restart-from-root",
+      "rateLimitTransition": "on-403-with-valid-x-ratelimit-reset-retry-same-request-until-cutoff-without-consuming-pass-attempt",
+      "immediateInvalidations": [
+        "unpartitionable-overflow-leaf",
+        "accepted-response-at-or-after-cutoff",
+        "raw-body-digest-mismatch",
+        "normalized-name-mapped-to-distinct-node-ids"
+      ]
+    },
+    "leaf": {
+      "maximumResults": 100,
+      "acceptedResponse": "same-per-page-100-response-used-for-count-and-members",
+      "incompleteResults": "must-be-false",
+      "completeness": "total-count-at-most-100-and-items-length-equals-total-count",
+      "occurrenceAccounting": "ordered-terminal-occurrence-count-equals-sum-of-terminal-returned-counts",
+      "identityQuotient": "all-terminal-occurrences-retained-and-quotiented-exactly-on-github-node-id",
+      "crossRangeRepetition": "retain-every-occurrence-as-index-drift-evidence-never-add-population-weight",
+      "containment": "query-membership-is-authoritative-returned-stars-must-only-meet-global-threshold-and-created-at-must-lie-in-created-range-when-present",
+      "pagination": "forbidden",
+      "occurrenceEncoding": {
+        "schema": "open-autonomy.source-census-terminal-occurrence.v1",
+        "fields": [
+          "schema",
+          "attemptId",
+          "completePassOrdinal",
+          "requestPosition",
+          "itemPosition",
+          "requestKey",
+          "requestDigest",
+          "responseDigest",
+          "nodeId",
+          "observedAt",
+          "queryStars",
+          "queryCreated",
+          "returned"
+        ],
+        "identity": "zero-based-position-completePassOrdinal-requestPosition-itemPosition-with-node-id-equivalence-quotient",
+        "ordering": "ascending-completePassOrdinal-then-requestPosition-then-itemPosition",
+        "serialization": "canonical-json",
+        "returnedFields": [
+          "repository",
+          "stars",
+          "defaultBranch",
+          "license",
+          "fork",
+          "archived",
+          "createdAt",
+          "description",
+          "topics",
+          "htmlUrl"
+        ]
+      },
+      "replayAlgebra": {
+        "version": "u1-terminal-replay-algebra.v1",
+        "requestSchema": "open-autonomy.source-census-terminal-request.v1",
+        "passSchema": "open-autonomy.source-census-complete-pass.v1",
+        "replaySchema": "open-autonomy.source-census-terminal-replay.v1",
+        "attemptSchema": "open-autonomy.source-census-attempt-history.v1",
+        "totalOrder": "completePassOrdinal-requestPosition-itemPosition-all-zero-based-ascending",
+        "acceptedRequestOrder": "ascending-attemptNumber-then-zero-based-requestPosition",
+        "wholeCustodyOrder": "attempts-by-attemptNumber-passes-by-completePassOrdinal-requests-by-attemptNumber-requestPosition-occurrences-by-completePassOrdinal-requestPosition-itemPosition",
+        "digestDomains": {
+          "occurrence": "open-autonomy.u1.occurrence.v1",
+          "orderedOccurrences": "open-autonomy.u1.ordered-occurrences.v1",
+          "nodeQuotient": "open-autonomy.u1.node-id-quotient.v1",
+          "multiplicity": "open-autonomy.u1.multiplicity-summary.v1",
+          "frame": "open-autonomy.u1.two-pass-frame.v1",
+          "successfulTranscript": "open-autonomy.u1.successful-transcript.v1",
+          "attemptHistory": "open-autonomy.u1.attempt-history.v1",
+          "wholeCustody": "open-autonomy.u1.whole-custody.v1",
+          "acceptedResponse": "open-autonomy.u1.accepted-response-identity.v1"
+        },
+        "requestKinds": [
+          "tail-probe",
+          "nonterminal-range",
+          "terminal-range"
+        ],
+        "fixedQuery": {
+          "fork": true,
+          "perPage": 100,
+          "page": 1,
+          "sort": "stars",
+          "order": "desc"
+        },
+        "custody": {
+          "encoding": "base64",
+          "sidecar": "exact-captured-sidecar-json-bytes",
+          "responseBody": "exact-uncompressed-response-body-bytes"
+        },
+        "attemptHistoryAuthority": "unauthenticated-non-normative-history-excluded-from-replay-digests"
+      }
+    },
+    "aggregation": {
+      "requiredCompletePasses": 2,
+      "observationScope": "finite-union-of-results-observed-in-first-two-complete-provider-query-passes",
+      "eligibility": "stargazers-count-at-least-1000-in-either-complete-pass",
+      "samplingFrame": "union-of-unique-node-ids-across-first-two-complete-passes",
+      "frameFreezeTime": "completion-of-second-complete-pass",
+      "unobservedNodes": "not-observed-eligible-in-either-pass-outside-frame-and-not-claimed",
+      "merge": "retain-both-pass-observations-ordered-by-pass-then-observed-at",
+      "canonicalAdoptionValue": "maximum-stargazers-count-across-retained-pass-observations",
+      "crossPassEquality": "not-required-star-and-leaf-churn-are-observations-not-membership-failures",
+      "occurrenceRetention": "retain-every-terminal-occurrence-before-node-id-quotient",
+      "populationUnit": "one-per-github-node-id-regardless-of-occurrence-multiplicity",
+      "passPresence": "derive-two-boolean-bits-per-node-id-from-occurrences-foreign-keyed-to-the-two-complete-pass-ledger-records",
+      "occurrenceMergeOrder": "completePassOrdinal-then-zero-based-requestPosition-then-zero-based-itemPosition; observedAt-only-selects-canonical-metadata",
+      "canonicalProjection": "maximum-returned-stars-and-latest-observation-by-observedAt-completePassOrdinal-requestPosition-itemPosition-with-bytewise-tie-break",
+      "digests": [
+        "ordered-occurrences",
+        "node-id-quotient",
+        "multiplicity-summary",
+        "two-pass-frame"
+      ],
+      "nonAtomicityClaim": "exhaustive-replay-of-retained-response-bytes-for-preregistered-finite-queries-not-an-authenticated-provider-or-atomic-continuous-github-snapshot"
+    }
+  },
+  "classification": {
+    "samplingFrame": "union-of-unique-node-ids-across-first-two-complete-passes",
+    "dispositions": [
+      "in-domain",
+      "out-of-domain"
+    ],
+    "totality": "exactly-one-final-disposition-per-sampling-frame-member",
+    "inclusion": "all-and-only-in-domain-dispositions",
+    "primaryScreen": "every-sampling-frame-member",
+    "independentReview": {
+      "primaryInDomain": "all",
+      "primaryOutDomainRankInput": "utf8(open-autonomy.u1.out-domain-review.v1\\0)+utf8(github-node-id)",
+      "hash": "sha256",
+      "order": "ascending-unsigned-digest-bytes-then-ascending-utf8-node-id",
+      "cardinality": "ceil(primary-out-domain-count/100)",
+      "withoutReplacement": true
+    },
+    "conflictRule": "third-reviewer-adjudicates-every-disagreement",
+    "postResultExclusion": "forbidden"
+  },
+  "evidence": {
+    "retain": [
+      "exact-response-body-bytes",
+      "response-headers",
+      "request-url",
+      "observed-at"
+    ],
+    "bodyDigest": "sha256-exact-response-body-bytes",
+    "acceptedResponse": {
+      "httpStatus": 200,
+      "contentTypePrefix": "application/json",
+      "json": "object-with-nonnegative-integer-total_count-boolean-incomplete_results-and-items-array",
+      "requiredItemFields": [
+        "node_id",
+        "full_name",
+        "stargazers_count",
+        "fork",
+        "archived",
+        "default_branch",
+        "created_at"
+      ],
+      "createdAt": "valid-utc-instant-with-yyyy-mm-dd-prefix"
+    },
+    "primaryIdentity": "github-node-id",
+    "secondaryIdentity": "case-insensitive-full-name-must-not-alias"
+  },
+  "invalidation": [
+    "unpartitionable-overflow-leaf",
+    "four-total-attempts-with-fewer-than-two-complete-passes",
+    "second-complete-pass-after-cutoff",
+    "accepted-response-at-or-after-cutoff",
+    "raw-body-digest-mismatch",
+    "normalized-name-mapped-to-distinct-node-ids"
+  ],
+  "censusCutoff": "2026-07-30T23:59:59.999Z",
+  "digest": "sha256:01fd32a2be6731d47b1eef9c73a90a14e1cce554e330ee006d8387d92ce846dd"
+}

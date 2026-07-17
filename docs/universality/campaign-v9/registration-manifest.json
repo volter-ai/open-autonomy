@@ -1,0 +1,39 @@
+{
+  "schema": "open-autonomy.campaign-registration-manifest.v1",
+  "campaignId": "organization-universality-2026-v9",
+  "predecessorCampaignId": "organization-universality-2026-v8",
+  "predecessorClaimDigest": "sha256:622538c24f771ba1c38a22d1ba4472cf68cdfbb9b1bb603965b27c3784db257a",
+  "predecessorInvalidationDigest": "sha256:394f1240acd55faf8df3d88f0097707ce41a041a0f48f2a59f1ce1cde886639a",
+  "claimDigest": "sha256:753adcf34a43908d729b739bd62975cb38508a1a0c4963da6d6bf4c8cf8ae46c",
+  "censusContractDigest": "sha256:01fd32a2be6731d47b1eef9c73a90a14e1cce554e330ee006d8387d92ce846dd",
+  "forcingSupplementDigest": "sha256:6ac36647ca223925e40754362c98f692ba5950daf43cb14344b4bd47d2e511a9",
+  "supersessionDigest": "sha256:c3d9cff918b3841cd8af2f66f5436d137fcb7c54a9552afd95c57d9b0953acce",
+  "files": [
+    {
+      "path": "claim.json",
+      "bytes": 7442,
+      "digest": "sha256:b8da679f4242e5a10dba70eb365041bc54e284751fcd879736dad37e3feec18a"
+    },
+    {
+      "path": "forcing-supplement.json",
+      "bytes": 1420,
+      "digest": "sha256:86c0486ef50f0f097661d84538acb79b1ba0c42032644d975fe19f7563b20827"
+    },
+    {
+      "path": "predecessor-invalidation.json",
+      "bytes": 418559,
+      "digest": "sha256:d856abd3f2e63c5d0d620806d2f08e5cec578fb8e3021b0349ccdbd9b491de47"
+    },
+    {
+      "path": "source-census-contract.json",
+      "bytes": 9888,
+      "digest": "sha256:72f9363799e50c3368909f52a976a6e1586817cc501f3c37ce7695410f8b8930"
+    },
+    {
+      "path": "supersession.json",
+      "bytes": 716,
+      "digest": "sha256:89b0cb8cdfbe77d0fc6544e678de9c7028379282a78f77e7aa0b01b0cc02ceee"
+    }
+  ],
+  "digest": "sha256:2b74a714b1a4dbfcabc559291751f4446b0c4c5870a643511753a1cec2176fd5"
+}

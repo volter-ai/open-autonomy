@@ -1,0 +1,10 @@
+{
+  "schema": "open-autonomy.campaign-supersession.v1",
+  "predecessorCampaign": "organization-universality-2026-v8",
+  "predecessorDigest": "sha256:622538c24f771ba1c38a22d1ba4472cf68cdfbb9b1bb603965b27c3784db257a",
+  "successorCampaign": "organization-universality-2026-v9",
+  "successorDigest": "sha256:753adcf34a43908d729b739bd62975cb38508a1a0c4963da6d6bf4c8cf8ae46c",
+  "reason": "v8 treated repeated node IDs across nominally disjoint live-index leaves as pass failure; v9 losslessly retains ordered occurrences and uses the node-ID quotient as the population unit",
+  "predecessorStatus": "invalidated-before-u1-closure",
+  "digest": "sha256:c3d9cff918b3841cd8af2f66f5436d137fcb7c54a9552afd95c57d9b0953acce"
+}

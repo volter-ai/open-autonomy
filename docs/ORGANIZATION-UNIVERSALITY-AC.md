@@ -166,17 +166,19 @@ popularity weights, structural strata, licenses, and selection provenance. Disti
 audit corpora. Include all systems above the preregistered adoption rule plus structural forcing functions; no
 post-result exclusions.
 
-The adoption census must include every in-domain public system with at least 1,000 GitHub stars at the frozen census
-time, plus non-GitHub systems only when comparable adoption is supported by a preregistered independent measure.
+The adoption census must include every in-domain public system observed with at least 1,000 GitHub stars in either of
+the first two internally complete provider-query passes, plus non-GitHub systems only when comparable adoption is
+supported by a preregistered independent measure.
 Stars select the population but never weight semantic facts. Unpopular vendor provenance alone does not qualify a
 system. A separately reported forcing-function supplement covers semantic families missing from the adoption census.
 
-For a mutable provider without historical snapshot reads, “frozen census time” is operational: it is the completion
-timestamp of the preregistered converged capture, before its cutoff—not an unknowable reconstruction of provider state
-at a later wall-clock instant. The campaign must freeze the exhaustive partition algorithm, raw-response custody,
-convergence relation, classification protocol, and invalidation conditions before capture. If the provider cannot be
-partitioned completely or the required consecutive captures do not converge, the campaign is invalid; it may not
-silently replace the population with keyword searches or a convenience sample.
+For a mutable provider without historical snapshot reads, the sampling frame is operational: it is the finite union
+of repositories observed eligible in the first two preregistered, internally complete provider-query passes, frozen
+when the second pass completes before the cutoff. This is not a claim of continuous coverage between query times or
+an unknowable reconstruction of provider state at one instant. The campaign must freeze the exhaustive partition
+algorithm, raw-response custody, pass completion, union/observation rules, classification protocol, and invalidation
+conditions before capture. If the provider cannot be partitioned completely or two complete passes are not obtained,
+the campaign is invalid; it may not silently use keyword searches or a convenience sample.
 
 ## U2. Substrate-component population and composition corpus
 

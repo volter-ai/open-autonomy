@@ -1,0 +1,10 @@
+{
+  "schema": "open-autonomy.campaign-supersession.v1",
+  "predecessorCampaign": "organization-universality-2026-v5",
+  "predecessorDigest": "sha256:becaea59149f6ac914a2d218ca85c64465a25916aadac53b76ab787eee822921",
+  "successorCampaign": "organization-universality-2026-v6",
+  "successorDigest": "sha256:2979754c108c570a427664e31efbd5748e4b58686f84d84bbfd3bc760763cea8",
+  "reason": "v5 required equality of mutable star values and partition leaf counts that was not obtained and confounded membership with non-membership observations; v6 freezes the finite union of two independently complete passes while retaining all per-pass observations",
+  "predecessorStatus": "invalidated-before-u1-closure",
+  "digest": "sha256:7694359f3292b29f2d6d8c5c043617ed465b0c25c8f18d4a7567e971fcab333c"
+}

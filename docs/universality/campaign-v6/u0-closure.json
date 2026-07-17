@@ -1,0 +1,22 @@
+{
+  "schema": "open-autonomy.universality-checkpoint-closure.v1",
+  "checkpoint": "U0",
+  "status": "complete",
+  "assurance": "property-tested",
+  "claimDigest": "sha256:2979754c108c570a427664e31efbd5748e4b58686f84d84bbfd3bc760763cea8",
+  "supersessionDigest": "sha256:7694359f3292b29f2d6d8c5c043617ed465b0c25c8f18d4a7567e971fcab333c",
+  "sourceCensusContractDigest": "sha256:0ea64b34f3573e9faf0bd22cb50776b7cdcdb000ba37648ef31f22878854d68e",
+  "forcingSupplementDigest": "sha256:5f3f3af0c039ff3386e51705bd2c57201c5a3f8d0ab0f8406d0790905240c373",
+  "predecessorInvalidation": "docs/universality/campaign-v5/u1-invalidation.json",
+  "semanticCoverage": ["versioned claim and complete historical custody","prospective finite two-pass provider-query result union","finite exhaustive partition state machine","raw response custody","bounded retries and cutoff invalidation","union membership and retained per-pass observations","total union-frame domain classification","exact independent review sampling","forcing zero-weight and union-overlap semantics","metric formulas and floors","predecessor partial-attempt custody","exact schemas without surplus semantic fields"],
+  "falsifiersExercised": ["continuous-window overclaim","instantaneous-state overclaim","classification-frame divergence","cross-pass equality reintroduction","cutoff-response omission","forcing overlap credit laundering","forcing nonzero population weight","surplus completion semantics","surplus forcing semantics","raw evidence mutation","forged claim join","weakened metric floor"],
+  "evidence": ["docs/universality/campaign-v5/u1-invalidation.json","docs/universality/campaign-v6/claim.json","docs/universality/campaign-v6/source-census-contract.json","docs/universality/campaign-v6/forcing-supplement.json","docs/universality/campaign-v6/supersession.json","packages/core/src/organization-universality-window-contract.ts","packages/core/src/organization-universality-window-contract.test.ts"],
+  "skepticalReview": {
+    "round1": "rejected: classification frame, observation scope, cutoff invalidation, forcing structure, and predecessor wording were incomplete",
+    "round2": "rejected: completion accepted surplus semantic fields discarded by the inherited-contract projection",
+    "round3": "accepted: exact completion schema added; all other semantics, 177-file predecessor custody, chronology, and digest joins independently verified"
+  },
+  "obligationAccounting": {"open": 0, "discharged": 12, "deferredExternal": 0},
+  "residuals": [],
+  "next": "U1"
+}

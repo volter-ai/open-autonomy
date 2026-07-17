@@ -1,0 +1,27 @@
+{
+  "schema": "open-autonomy.forcing-window-supplement.v2",
+  "id": "oa-forcing-window-supplement-2026-v6",
+  "campaignId": "organization-universality-2026-v6",
+  "populationWeight": 0,
+  "domainEligibility": "same-primary-independent-and-third-reviewer-conflict-protocol-as-adoption-census",
+  "outOfDomain": "invalidate-campaign",
+  "overlap": "any-final-in-domain-node-in-two-pass-sampling-frame-counts-once-as-adoption-weight-1-otherwise-counts-once-as-forcing-weight-0",
+  "members": [
+    {
+      "repository": "microsoft/conductor",
+      "structuralStratum": "deterministic-router-agent-sdk-parallel-subworkflow",
+      "rationale": "Exercises declarative multi-agent routing, parallel groups, subworkflows, scripts, and human gates below the adoption threshold."
+    },
+    {
+      "repository": "saltbo/agent-kanban",
+      "structuralStratum": "persistent-board-daemon-leader-worker-pr-lifecycle",
+      "rationale": "Exercises a controller-to-board-to-worktree-worker topology with leader decomposition, review, and merge lifecycle."
+    },
+    {
+      "repository": "edspencer/herdctl",
+      "structuralStratum": "source-controlled-scheduled-isolated-fleet-messaging-bridge",
+      "rationale": "Exercises a perpetual fleet controller with isolation, schedules, triggers, and Slack or Discord interaction."
+    }
+  ],
+  "digest": "sha256:5f3f3af0c039ff3386e51705bd2c57201c5a3f8d0ab0f8406d0790905240c373"
+}

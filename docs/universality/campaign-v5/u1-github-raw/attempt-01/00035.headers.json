@@ -1,0 +1,29 @@
+{
+  "url": "https://api.github.com/search/repositories?q=stars%3A1017..1032%20fork%3Atrue&sort=stars&order=desc&per_page=100&page=3",
+  "startedAt": "2026-07-17T00:03:21.204Z",
+  "observedAt": "2026-07-17T00:03:21.258Z",
+  "status": 403,
+  "headers": {
+    "access-control-allow-origin": "*",
+    "access-control-expose-headers": "ETag, Link, Location, Retry-After, X-GitHub-OTP, X-RateLimit-Limit, X-RateLimit-Remaining, X-RateLimit-Used, X-RateLimit-Resource, X-RateLimit-Reset, X-OAuth-Scopes, X-Accepted-OAuth-Scopes, X-Poll-Interval, X-GitHub-Media-Type, X-GitHub-SSO, X-GitHub-Request-Id, Deprecation, Sunset",
+    "content-length": "539",
+    "content-security-policy": "default-src 'none'",
+    "content-type": "application/json; charset=utf-8",
+    "date": "Fri, 17 Jul 2026 00:03:17 GMT",
+    "referrer-policy": "origin-when-cross-origin, strict-origin-when-cross-origin",
+    "server": "github.com",
+    "strict-transport-security": "max-age=31536000; includeSubdomains; preload",
+    "vary": "Accept-Encoding, Accept, X-Requested-With",
+    "x-content-type-options": "nosniff",
+    "x-frame-options": "deny",
+    "x-github-media-type": "github.v3; format=json",
+    "x-github-request-id": "E67A:695F2:2C94265:9A6DAD0:6A597144",
+    "x-ratelimit-limit": "30",
+    "x-ratelimit-remaining": "0",
+    "x-ratelimit-reset": "1784246597",
+    "x-ratelimit-resource": "search",
+    "x-ratelimit-used": "30",
+    "x-xss-protection": "0"
+  },
+  "bodyDigest": "sha256:bec212952f15b7dd44de0667b08f52acebc2ea12527f508e7fa9ec609e6c3912"
+}

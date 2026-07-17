@@ -66,10 +66,10 @@ export const U4_REPLAY_LAST_FINALIZED_IMPLEMENTATION_CUSTODY_MANIFEST: U4ReplayI
   ]),
   digest: "sha256:aaf4afe7dffa55bc59294dd08e20255bcfebb84a8838a9c6f7ab588d75f0098f",
 }) as U4ReplayImplementationCustodyManifest;
-/** Phase-E pre-refresh state: the expanded closure-critical path denominator
- * cannot be claimed until a post-implementation commit is frozen in phase F. */
-export const U4_REPLAY_IMPLEMENTATION_CUSTODY_MANIFEST:null=null;
-export const U4_REPLAY_IMPLEMENTATION_CUSTODY_DIGEST:null=null;
+export const U4_REPLAY_IMPLEMENTATION_CUSTODY_MANIFEST:U4ReplayImplementationCustodyManifest=Object.freeze({schema:"open-autonomy.u4-replay-implementation-custody.v1",implementationCommit:"b8b23711485c21d2b578051cfce424425c3ba081",files:Object.freeze([
+  {path:U4_REPLAY_IMPLEMENTATION_PATHS[0],sha256:"sha256:60aa47cf7d5c39d4f9edb2a6980804d3f2c2d731d8d5649c3b468d2e8d1cc601"},{path:U4_REPLAY_IMPLEMENTATION_PATHS[1],sha256:"sha256:37d563d048604bef1dfc084dae5568f4c0e54a10ce37ece4247bb08d991eb74f"},{path:U4_REPLAY_IMPLEMENTATION_PATHS[2],sha256:"sha256:c467d58e3e86c0867e7e0bbea97c0874c7b6be6f503f2f3cae37421795b66d8d"},{path:U4_REPLAY_IMPLEMENTATION_PATHS[3],sha256:"sha256:99dd332bc1e7dae868624db57378eb07047ca45ce7406759fadbbd96760324b6"},{path:U4_REPLAY_IMPLEMENTATION_PATHS[4],sha256:"sha256:50f648dda4c7146eaa059fa73e0cda63e190c1e6656930505a1a8bbe1478911a"},{path:U4_REPLAY_IMPLEMENTATION_PATHS[5],sha256:"sha256:8e62502c2b47e3b3f313add4b389dc3f96ce1aa88701ae7b9e3fc3a0fe11d199"},{path:U4_REPLAY_IMPLEMENTATION_PATHS[6],sha256:"sha256:f1769d3c6dc8e3dcb7ca64db88477eb609ae60dab6b482b30a93ab63482feb7f"},{path:U4_REPLAY_IMPLEMENTATION_PATHS[7],sha256:"sha256:991a69a831d2e2060b89ade88ecb44b2407c21e55c53d90683eda1e00531c2eb"},{path:U4_REPLAY_IMPLEMENTATION_PATHS[8],sha256:"sha256:d062aa8a3f6f158a689b041fed1d0434dcea3928887cbe5aee480df19e8f98b4"},{path:U4_REPLAY_IMPLEMENTATION_PATHS[9],sha256:"sha256:3978b920ecc122f90cee80840513c732699c3e58dc14f5d96c9c3fdcf7c2c2c9"},{path:U4_REPLAY_IMPLEMENTATION_PATHS[10],sha256:"sha256:abb1d9fe9fa902f5c527ebd7d8a1ec2dd52a7cddc5e1a54d5ed6779bbe0b88ef"},{path:U4_REPLAY_IMPLEMENTATION_PATHS[11],sha256:"sha256:a52a7e9f0672041f4c06281b8e7e83db2d7a20b237329ae149c536c51940c9b2"}
+]),digest:"sha256:621e8d70f55edeffab5e06c029dd6b52bbc617f006ad50cbc73c42890c0b0a85"}) as U4ReplayImplementationCustodyManifest;
+export const U4_REPLAY_IMPLEMENTATION_CUSTODY_DIGEST=U4_REPLAY_IMPLEMENTATION_CUSTODY_MANIFEST.digest;
 export type U4ReplayProbeEvidence = {
   bundle: FrozenU4VerifiedProbeBundle;
   materials: U4ProbeVerificationMaterial[];
@@ -97,7 +97,7 @@ export type U4InventoryReplayCertificate = {
   freezeReceiptDigest: Sha;
   probeCertificateDigest: Sha;
   frontendOutcomeDigest: Sha;
-  implementationCustodyDigest: null;
+  implementationCustodyDigest: Sha;
   qualifiedTriangulationDigest:Sha;bridgeDigest:Sha;witnessDenominatorDigest:Sha;triangulationDigest:Sha;
   evidenceNodes: Array<{
     id: string;
@@ -211,6 +211,7 @@ export function verifyU4ReplaySourceGitCustody(root = process.cwd()) {
 }
 export const computeU4ReplayImplementationCustodyDigest = (body: Omit<U4ReplayImplementationCustodyManifest, "digest">) =>
   H(`open-autonomy.u4-replay-implementation-custody.v1\0${C(body)}`);
+const verifiedImplementationCustody=new Set<string>();
 export function verifyU4ReplayImplementationCustody(
   manifest: U4ReplayImplementationCustodyManifest,
   expectedDigest: Sha,
@@ -228,10 +229,12 @@ export function verifyU4ReplayImplementationCustody(
       manifest.files.some(x => !sha(x.sha256))) throw Error("U4 replay implementation custody manifest invalid");
   const commit = spawnSync("git", ["rev-parse", "--verify", `${manifest.implementationCommit}^{commit}`], { cwd: root, encoding: "utf8" });
   if (commit.status !== 0 || commit.stdout.trim() !== manifest.implementationCommit) throw Error("U4 replay implementation commit custody invalid");
+  const cacheKey=`${root}\0${manifest.digest}\0${commit.stdout.trim()}`;if(verifiedImplementationCustody.has(cacheKey))return freeze(structuredClone(manifest));
   for (const file of manifest.files) {
     const shown = spawnSync("git", ["show", `${manifest.implementationCommit}:${file.path}`], { cwd: root });
     if (shown.status !== 0 || !shown.stdout || H(shown.stdout) !== file.sha256) throw Error("U4 replay implementation byte custody invalid");
   }
+  verifiedImplementationCustody.add(cacheKey);
   return freeze(structuredClone(manifest));
 }
 function verifyProbeBundle(
@@ -372,6 +375,7 @@ function body(
       { id: "frontend-outcome", digest: frontendOutcomeDigest },
       { id: "freeze-receipt", digest: freezeReceiptDigest },
       { id: "inventory", digest: inventory.digest },
+      { id: "implementation-custody", digest: U4_REPLAY_IMPLEMENTATION_CUSTODY_DIGEST },
       { id: "bridge", digest: qualification.bridgeDigest },
       { id: "bridge-qualified-triangulation", digest: qualification.digest },
       { id: "triangulation", digest: qualification.triangulationDigest },
@@ -389,6 +393,7 @@ function body(
       { from: "freeze-receipt", to: "frontend-outcome", relation: "precedes" },
       { from: "inventory", to: "frontend-outcome", relation: "precedes" },
       { from: "inventory", to: "probe-plan", relation: "requires" },
+      { from: "implementation-custody", to: "bridge-qualified-triangulation", relation: "binds" },
       { from: "probe-bundle", to: "bridge", relation: "requires" },
       { from: "witness-denominator", to: "bridge", relation: "binds" },
       { from: "bridge", to: "bridge-qualified-triangulation", relation: "requires" },
@@ -464,6 +469,7 @@ export function createU4InventoryReplayCertificate(
   { root = process.cwd() } = {},
 ) {
   verifyU4ReplaySourceGitCustody(root);
+  verifyU4ReplayImplementationCustody(U4_REPLAY_IMPLEMENTATION_CUSTODY_MANIFEST,U4_REPLAY_IMPLEMENTATION_CUSTODY_DIGEST,root);
   bounded(
     inventoryInput,
     calculusInput,
@@ -515,6 +521,7 @@ export function verifyU4InventoryReplayCertificate(
   options = {},
 ) {
   verifyU4ReplaySourceGitCustody((options as any).root ?? process.cwd());
+  verifyU4ReplayImplementationCustody(U4_REPLAY_IMPLEMENTATION_CUSTODY_MANIFEST,U4_REPLAY_IMPLEMENTATION_CUSTODY_DIGEST,(options as any).root ?? process.cwd());
   bounded(
     certificate,
     inventory,

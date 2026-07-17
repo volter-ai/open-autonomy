@@ -867,7 +867,7 @@ import {
   verifyU4ReplaySourceGitCustody,
   verifyU4ReplayImplementationCustody,
   U4_REPLAY_IMPLEMENTATION_CUSTODY_MANIFEST,
-  U4_REPLAY_LAST_FINALIZED_IMPLEMENTATION_CUSTODY_MANIFEST,
+  U4_REPLAY_IMPLEMENTATION_PATHS,
   U4_REPLAY_IMPLEMENTATION_CUSTODY_DIGEST,
   computeU4ReplayImplementationCustodyDigest,
   computeU4FrontendReplayResultDigest,
@@ -932,8 +932,8 @@ test("I23-I24 creates deterministic deeply frozen replay with exact topology", (
   expect(a.evidenceNodes.map((n) => n.id)).toContain(`join.${invocation}`);
   expect(a.evidenceNodes.map((n) => n.id)).toContain(`material.${invocation}`);
   expect(a.implementationCustodyDigest).toBe(U4_REPLAY_IMPLEMENTATION_CUSTODY_DIGEST);
-  expect(a.evidenceNodes).toHaveLength(18);
-  expect(a.evidenceEdges).toHaveLength(23);
+  expect(a.evidenceNodes).toHaveLength(19);
+  expect(a.evidenceEdges).toHaveLength(24);
   expect(
     verifyU4InventoryReplayCertificate(
       a,
@@ -949,13 +949,13 @@ test("final replay rejects all-noncredit and mixed bundles without closure-quali
 test("aggregate replay rejects execution omission duplicate run identity and missing credited material",()=>{const x:any=replayVariant([{caseId:"case",repetition:0,kind:"credited"},{caseId:"case",repetition:1,kind:"noncredit"}]),omitted=structuredClone(x.probeBundle);omitted.bundle.executions.pop();expect(()=>createU4InventoryReplayCertificate(x.inventory,x.calculus,x.sourceRegistry,x.trusted,omitted,x.bridgeEvidence,x.outcome)).toThrow(/totality|probe/);const missing=structuredClone(x.probeBundle);missing.materials=[];expect(()=>createU4InventoryReplayCertificate(x.inventory,x.calculus,x.sourceRegistry,x.trusted,missing,x.bridgeEvidence,x.outcome)).toThrow(/material|probe/);const duplicate=structuredClone(x.probeBundle),target=duplicate.bundle.executions.find((e:any)=>e.disposition==="noncredit"),{digest:_,...rb}=target.run;void _;rb.runId=duplicate.bundle.executions.find((e:any)=>e.disposition==="credited").run.runId;rb.operatorReceipt="";rb.custodyReceipt="";const signed={...rb};delete signed.operatorReceipt;delete signed.custodyReceipt;rb.operatorReceipt=mac("a-probe","u4-probe-run",signed);rb.custodyReceipt=mac("a-custody","u4-probe-run-custody",{...signed,operatorAuthorityId:rb.operatorAuthorityId,operatorReceipt:rb.operatorReceipt});target.run=freezeU4ProbeRun(rb,duplicate.bundle.plan,x.inventory,x.trusted);expect(()=>createU4InventoryReplayCertificate(x.inventory,x.calculus,x.sourceRegistry,x.trusted,duplicate,x.bridgeEvidence,x.outcome)).toThrow(/run identity|probe/)});
 test("I23 binds committed inventory source bytes", () =>
   expect(() => verifyU4ReplaySourceGitCustody()).not.toThrow());
-test("I23 exposes an explicit pre-refresh implementation custody state", () => {
-  expect(U4_REPLAY_IMPLEMENTATION_CUSTODY_MANIFEST).toBeNull();expect(U4_REPLAY_IMPLEMENTATION_CUSTODY_DIGEST).toBeNull();
-  const finalized=U4_REPLAY_LAST_FINALIZED_IMPLEMENTATION_CUSTODY_MANIFEST;
+test("I23 binds the exact expanded twelve-path implementation custody denominator", () => {
+  const finalized=U4_REPLAY_IMPLEMENTATION_CUSTODY_MANIFEST;expect(finalized.files).toHaveLength(12);expect(finalized.files.map(x=>x.path)).toEqual([...U4_REPLAY_IMPLEMENTATION_PATHS]);expect(()=>verifyU4ReplayImplementationCustody(finalized,U4_REPLAY_IMPLEMENTATION_CUSTODY_DIGEST)).not.toThrow();
   for (const mutate of [
     (v:any)=>v.implementationCommit="0000000000000000000000000000000000000000",
     (v:any)=>v.files[0].path="packages/core/src/wrong.ts",
     (v:any)=>v.files[0].sha256=H("wrong"),
+    (v:any)=>v.files[10].sha256=H("wrong-internal-fixture"),
   ]) {
     const v:any=structuredClone(finalized);mutate(v);const{digest:_,...body}=v;void _;v.digest=computeU4ReplayImplementationCustodyDigest(body);
     expect(()=>verifyU4ReplayImplementationCustody(v,v.digest)).toThrow(/custody/);

@@ -25,9 +25,9 @@ export interface RunInfo {
 
 // Resolve a logical agent name to its launchable unit (the github workflow file) from the manifest.
 function workflowFile(agent: string): string {
-  const path = '.open-autonomy/autonomy.yml';
+  const path = '.open-autonomy/autonomy.json';
   const manifest = existsSync(path)
-    ? (Bun.YAML.parse(readFileSync(path, 'utf8')) as { agents?: Record<string, { workflowFile?: string }> })
+    ? (JSON.parse(readFileSync(path, 'utf8')) as { agents?: Record<string, { workflowFile?: string }> })
     : {};
   const file = manifest.agents?.[agent]?.workflowFile;
   if (!file) throw new Error(`runner: no launchable unit for agent "${agent}" (no workflowFile in the manifest)`);

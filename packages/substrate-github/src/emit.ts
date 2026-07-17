@@ -658,10 +658,14 @@ export function runtimeFiles(): Record<string, string> {
 
 export function compileGithub(ir: AutonomyIR): CompileOutput {
   const generated: Record<string, string> = {};
+  const manifest = emitAutonomy(ir) as Record<string, unknown>;
   // The manifest is generated unless the profile carries a hand-authored autonomy.yml verbatim.
   if (!ir.resources.includes('.open-autonomy/autonomy.yml')) {
-    generated['.open-autonomy/autonomy.yml'] = stringifyYaml(emitAutonomy(ir) as Record<string, unknown>);
+    generated['.open-autonomy/autonomy.yml'] = stringifyYaml(manifest);
   }
+  // Generated runtime code must work at the supported Bun floor without an ambient YAML global or an
+  // adopter dependency. JSON remains canonical and is always derived from the validated IR.
+  generated['.open-autonomy/autonomy.json'] = `${JSON.stringify(manifest, null, 2)}\n`;
   // Every agent generates its workflow, named for the agent (substrate-derived — no profile-pinned
   // filename). The proxy's OIDC trust is repo-based (any workflow under .github/workflows/), so names are
   // the substrate's to choose.

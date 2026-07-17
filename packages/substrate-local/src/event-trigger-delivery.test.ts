@@ -5,7 +5,7 @@
 // LOUD (never silently drop the trigger) — this is the gap docs/SPEC.md's conformance section names but
 // BL-22 dev/04 left unimplemented (a per-feature target/substrate check), and BACKLOG.md records it as open.
 import { describe, expect, test } from 'bun:test';
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { AutonomyIR } from '@open-autonomy/core';
@@ -173,6 +173,27 @@ describe('compileLocal — emits the review-delivery reconciler (OA2b) only when
     // The reviewer AGENT NAME must be resolved at runtime from the manifest, never baked in as a literal.
     expect(src).not.toMatch(/'reviewer'/);
     expect(src).toContain('reviewerFor(manifest, proposerRole)');
+  });
+
+  test('the emitted reconciler recovers the real review edge without Bun.YAML', async () => {
+    const out = compileLocal(irWithReviewEdge);
+    const dir = mkdtempSync(join(tmpdir(), 'oa-json-manifest-'));
+    const prior = process.cwd();
+    try {
+      mkdirSync(join(dir, '.open-autonomy'), { recursive: true });
+      writeFileSync(join(dir, '.open-autonomy', 'autonomy.json'), out.generated['.open-autonomy/autonomy.json']);
+      const modulePath = join(dir, 'reconcile-open-reviews.mjs');
+      writeFileSync(modulePath, out.generated['scripts/reconcile-open-reviews.mjs']);
+      process.chdir(dir);
+      const mod = await import(`${modulePath}?${Date.now()}`) as {
+        readManifest: () => { agents?: Record<string, { review?: string }> };
+      };
+      expect(mod.readManifest().agents?.develop?.review).toBe('reviewer');
+      expect(out.generated['scripts/reconcile-open-reviews.mjs']).not.toContain('Bun.YAML');
+    } finally {
+      process.chdir(prior);
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 
   test('NOT emitted when no proposer declares a review: edge (nothing to deliver)', () => {

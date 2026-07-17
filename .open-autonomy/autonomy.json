@@ -1,0 +1,296 @@
+{
+  "schema": "open-autonomy.autonomy.v1",
+  "codeHost": "github",
+  "documents": {
+    "resources": [
+      ".github/ISSUE_TEMPLATE/bug_report.yml",
+      ".github/ISSUE_TEMPLATE/public_agent_session.yml",
+      ".github/workflows/merge.yml",
+      ".github/workflows/human-approval.yml",
+      ".github/workflows/security.yml",
+      ".github/workflows/security-gate.yml",
+      ".github/workflows/open-autonomy-preflight.yml",
+      ".github/dependabot.yml",
+      ".gitattributes",
+      ".gitignore",
+      ".open-autonomy/architecture-invariants.yml",
+      ".open-autonomy/review-rubric.yml",
+      ".open-autonomy/roadmap.yml",
+      ".open-autonomy/strategist-sources.json",
+      ".open-autonomy/strategy-rubric.yml",
+      ".open-autonomy/version.json",
+      "AGENTS.md",
+      "CHANGELOG.md",
+      "README.md",
+      "VERSION",
+      "bun.lock",
+      "docs/CONSTITUTION.md",
+      "docs/PROJECT.md",
+      "docs/ROADMAP.md",
+      "docs/VISION.md",
+      "docs/standards/code.md",
+      "docs/standards/docs.md",
+      "docs/standards/security.md",
+      "docs/standards/tests.md",
+      "docs/standards/issue-and-evidence.md",
+      "package.json",
+      "scripts/open-autonomy-config.ts",
+      "scripts/open-autonomy-preflight.ts",
+      "scripts/open-autonomy-upgrade-cli.ts",
+      "scripts/rearm-auto-merge.ts",
+      "scripts/reconcile-merged-issues.ts",
+      "scripts/human-approval-gate.ts",
+      "scripts/check-supply-chain.ts"
+    ],
+    "roles": {
+      "vision": "docs/VISION.md",
+      "constitution": "docs/CONSTITUTION.md",
+      "roadmap": ".open-autonomy/roadmap.yml"
+    }
+  },
+  "skills": {
+    "draft": ".codex/skills/draft",
+    "develop": ".codex/skills/develop",
+    "pm": ".codex/skills/pm",
+    "reviewer": ".codex/skills/reviewer",
+    "planner": ".codex/skills/planner",
+    "strategist": ".codex/skills/strategist",
+    "strategy_reviewer": ".codex/skills/strategy-reviewer",
+    "audit": ".codex/skills/audit"
+  },
+  "agents": {
+    "draft": {
+      "skill": "draft",
+      "workflowFile": "draft.yml",
+      "params": {
+        "ZTRACK_ISSUE": "subject.ref"
+      },
+      "triggers": {
+        "dispatch": true
+      },
+      "timeout": 15,
+      "capabilities": [
+        "tasks:author",
+        "tasks:converse"
+      ]
+    },
+    "develop": {
+      "skill": "develop",
+      "workflowFile": "develop.yml",
+      "params": {
+        "ZTRACK_ISSUE": "subject.ref"
+      },
+      "triggers": {
+        "issue_comment": {
+          "types": [
+            "created"
+          ]
+        }
+      },
+      "timeout": 90,
+      "capabilities": [
+        "code:propose",
+        "tasks:converse"
+      ],
+      "review": "reviewer"
+    },
+    "pm": {
+      "skill": "pm",
+      "workflowFile": "pm.yml",
+      "triggers": {
+        "schedule": "*/30 * * * *"
+      },
+      "timeout": 30,
+      "capabilities": [
+        "tasks:converse",
+        "tasks:author",
+        "agent:launch",
+        "agent:list",
+        "agent:cancel"
+      ]
+    },
+    "reviewer": {
+      "skill": "reviewer",
+      "workflowFile": "reviewer.yml",
+      "params": {
+        "TARGET_REF": "subject.ref",
+        "SUBJECT_TEXT": "subject.text",
+        "ACTOR_ROLE": "subject.actorRole"
+      },
+      "triggers": {
+        "issue_comment": {
+          "types": [
+            "created"
+          ]
+        },
+        "pull_request_target": {
+          "types": [
+            "opened",
+            "synchronize",
+            "reopened",
+            "ready_for_review"
+          ]
+        }
+      },
+      "timeout": 20,
+      "capabilities": [
+        "code:review",
+        "tasks:converse"
+      ],
+      "result": {
+        "schema": "open-autonomy.review.v1"
+      }
+    },
+    "planner": {
+      "skill": "planner",
+      "workflowFile": "planner.yml",
+      "triggers": {
+        "schedule": "17 6 * * *"
+      },
+      "timeout": 15,
+      "capabilities": [
+        "tasks:converse",
+        "tasks:author",
+        "code:propose@roadmap"
+      ],
+      "review": "strategy_reviewer"
+    },
+    "strategist": {
+      "skill": "strategist",
+      "workflowFile": "strategist.yml",
+      "triggers": {
+        "schedule": "23 7 * * 1"
+      },
+      "timeout": 25,
+      "capabilities": [
+        "code:propose@roadmap"
+      ],
+      "review": "strategy_reviewer"
+    },
+    "strategy_reviewer": {
+      "skill": "strategy-reviewer",
+      "workflowFile": "strategy_reviewer.yml",
+      "params": {
+        "TARGET_REF": "subject.ref",
+        "SUBJECT_TEXT": "subject.text",
+        "ACTOR_ROLE": "subject.actorRole"
+      },
+      "triggers": {
+        "issue_comment": {
+          "types": [
+            "created"
+          ]
+        },
+        "pull_request_target": {
+          "types": [
+            "opened",
+            "synchronize",
+            "reopened"
+          ]
+        }
+      },
+      "timeout": 20,
+      "capabilities": [
+        "code:review",
+        "tasks:converse"
+      ],
+      "result": {
+        "schema": "open-autonomy.review.v1"
+      }
+    },
+    "maintainer": {
+      "kind": "human",
+      "skill": "maintainer",
+      "triggers": {
+        "dispatch": true
+      },
+      "capabilities": [
+        "tasks:converse",
+        "code:review"
+      ]
+    },
+    "audit": {
+      "skill": "audit",
+      "workflowFile": "audit.yml",
+      "params": {
+        "TARGET_REF": "subject.ref"
+      },
+      "triggers": {
+        "dispatch": true,
+        "schedule": "51 9 * * 0"
+      },
+      "capabilities": [
+        "tasks:converse",
+        "code:propose@docs/audits"
+      ]
+    }
+  },
+  "policy": {
+    "tracker": {
+      "ztrackPreset": "simple-gh-sdlc"
+    },
+    "gh-actions": {
+      "proxy_host": "volter-agent-model-proxy.aaron-0ed.workers.dev",
+      "oidc_audience": "volter-agent-model-proxy",
+      "model": "deepseek/deepseek-v4-flash",
+      "bot_name": "volter-agent",
+      "bot_email": "volter-agent@users.noreply.github.com",
+      "propose_dispatch_checks": [
+        "security-gate.yml"
+      ]
+    },
+    "autonomy": {
+      "max_open_agent_prs": 5,
+      "max_develop_attempts": 2
+    },
+    "human": {
+      "maintainers_var": "PUBLIC_AGENT_MAINTAINERS",
+      "sla_minutes": 1440
+    },
+    "risk": {
+      "human_required_paths": [
+        ".github/workflows/**",
+        ".open-autonomy/autonomy.yml",
+        "docs/CONSTITUTION.md",
+        ".open-autonomy/architecture-invariants.yml",
+        ".codex/skills/**",
+        ".claude/skills/**",
+        "profiles/**/skills/**",
+        "**/bun.lock",
+        "scripts/finalize-agent-review.ts",
+        "packages/substrate-github/src/runtime/finalize-agent-review.ts",
+        "scripts/break-glass-gate.ts",
+        "scripts/review-result.ts",
+        "packages/substrate-github/src/runtime/review-result.ts",
+        "scripts/human-approval-gate.ts",
+        "scripts/rearm-auto-merge.ts",
+        "scripts/reconcile-merged-issues.ts",
+        "scripts/check-supply-chain.ts",
+        "profiles/self-driving/scripts/human-approval-gate.ts",
+        "profiles/self-driving/scripts/rearm-auto-merge.ts",
+        "profiles/self-driving/scripts/reconcile-merged-issues.ts",
+        "profiles/self-driving/scripts/check-supply-chain.ts",
+        "docs/VISION.md"
+      ]
+    },
+    "merge": {
+      "maintainer_block_labels": [
+        "do-not-merge",
+        "human-required",
+        "agent-blocked",
+        "agent-paused",
+        "agent-maintainer-hold"
+      ]
+    },
+    "planner": {
+      "issue_origin_label_prefix": "origin:",
+      "phase_label_prefix": "phase:",
+      "priority_labels": {
+        "high": "priority:high",
+        "medium": "priority:medium",
+        "low": "priority:low"
+      }
+    },
+    "maxConcurrent": 5
+  }
+}

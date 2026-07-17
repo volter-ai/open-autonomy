@@ -1,11 +1,12 @@
 {
-  "schema": "open-autonomy.u5-phase-a-denominator.v1",
-  "custodyStatus": "pending-u5-phase-a-commit",
+  "schema": "open-autonomy.u5-phase-a-denominator.v2",
+  "custodyStatus": "pending-post-commit-attestation",
   "inventoryDigest": "sha256:43cf3b527e903d9d2293f4d3082149a0123135d271848d9aace2bf7d98d259b9",
   "sourceRegistryDigest": "sha256:3f6900cf4dc70d8387f87062ee8c2df8d554ad65800bad609b2b7a984c3894d8",
   "calculusDigest": "sha256:4fdc2d9fd0ffd8987af8bf02034032105c84fde3fb905d346039376d4bf8c3e2",
   "factCount": 17,
-  "factDenominatorDigest": "sha256:9adb211884003690602da7717207fb14de4cf706c03c8cfb06a1ba5d539ee382",
+  "factDenominatorDigestAlgorithm": "sha256(open-autonomy.u5-fact-denominator.v2\\0 || canonical-json({inventoryDigest,sourceRegistryDigest,calculusDigest,factCount,factIds}))",
+  "factDenominatorDigest": "sha256:19342ac7a2236fe29960734d63ca41a7e2c9be612eb8a64c5e356876f644c6bb",
   "factIds": [
     "source.authority.d8027108bf1d8d34",
     "source.configuration.dec853147d7c3634",

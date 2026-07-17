@@ -41,12 +41,21 @@ export const U4_REPLAY_IMPLEMENTATION_PATHS = Object.freeze([
 export type U4ReplayImplementationCustodyManifest = {
   schema: "open-autonomy.u4-replay-implementation-custody.v1";
   implementationCommit: string;
-  files: Array<{ path: (typeof U4_REPLAY_IMPLEMENTATION_PATHS)[number]; sha256: Sha }>;
+  files: ReadonlyArray<{ path: (typeof U4_REPLAY_IMPLEMENTATION_PATHS)[number]; sha256: Sha }>;
   digest: Sha;
 };
-/** Finalized only after commit A exists. A permanent certificate issuer must
- * require this compiled digest; null is an explicit pre-commit state. */
-export const U4_REPLAY_IMPLEMENTATION_CUSTODY_DIGEST: Sha | null = null;
+export const U4_REPLAY_IMPLEMENTATION_CUSTODY_MANIFEST: U4ReplayImplementationCustodyManifest = Object.freeze({
+  schema: "open-autonomy.u4-replay-implementation-custody.v1",
+  implementationCommit: "db40be14bf6223496a0a66324e82355d0b91f322",
+  files: Object.freeze([
+    { path: U4_REPLAY_IMPLEMENTATION_PATHS[0], sha256: "sha256:4de0f71167d1e1f7591288fa70e12199ddb5baeed3a762708aba0c5aca989e0f" },
+    { path: U4_REPLAY_IMPLEMENTATION_PATHS[1], sha256: "sha256:0c487b5a1e25689feb66c028d06d9d3cf931d2d15c330618a20e1fd4a8e9a5b1" },
+    { path: U4_REPLAY_IMPLEMENTATION_PATHS[2], sha256: "sha256:444023dea031a248a31e3cee03bf4302c23c590e0cf7bb05978daf8e47fc01e5" },
+    { path: U4_REPLAY_IMPLEMENTATION_PATHS[3], sha256: "sha256:31636522e499c19d545622cec26a114aff8c4ec43996bd8fc7313fea12e0e126" },
+  ]),
+  digest: "sha256:21fc2eb7e22ab972efc8fdd2c94f979feb984d7706c74e85e268d909b23bd134",
+}) as U4ReplayImplementationCustodyManifest;
+export const U4_REPLAY_IMPLEMENTATION_CUSTODY_DIGEST = U4_REPLAY_IMPLEMENTATION_CUSTODY_MANIFEST.digest;
 export type U4ReplayProbeEvidence = {
   bundle: FrozenU4VerifiedProbeBundle;
   materials: U4ProbeVerificationMaterial[];
@@ -73,6 +82,7 @@ export type U4InventoryReplayCertificate = {
   freezeReceiptDigest: Sha;
   probeCertificateDigest: Sha;
   frontendOutcomeDigest: Sha;
+  implementationCustodyDigest: Sha;
   evidenceNodes: Array<{
     id: string;
     digest: Sha;
@@ -344,6 +354,7 @@ function body(
       { id: "frontend-outcome", digest: frontendOutcomeDigest },
       { id: "freeze-receipt", digest: freezeReceiptDigest },
       { id: "inventory", digest: inventory.digest },
+      { id: "implementation-custody", digest: U4_REPLAY_IMPLEMENTATION_CUSTODY_DIGEST },
       { id: "probe-bundle", digest: probe.digest },
       { id: "probe-materials", digest: materialsDigest },
       { id: "probe-plan", digest: probe.plan.digest },
@@ -357,6 +368,7 @@ function body(
       { from: "freeze-receipt", to: "frontend-outcome", relation: "precedes" },
       { from: "inventory", to: "frontend-outcome", relation: "precedes" },
       { from: "inventory", to: "probe-plan", relation: "requires" },
+      { from: "implementation-custody", to: "probe-bundle", relation: "binds" },
       { from: "probe-plan", to: "probe-bundle", relation: "requires" },
       { from: "probe-materials", to: "probe-bundle", relation: "binds" },
       { from: "probe-bundle", to: "frontend-outcome", relation: "precedes" },
@@ -410,6 +422,7 @@ function body(
     freezeReceiptDigest,
     probeCertificateDigest: probe.digest,
     frontendOutcomeDigest,
+    implementationCustodyDigest: U4_REPLAY_IMPLEMENTATION_CUSTODY_DIGEST,
     evidenceNodes: nodes,
     evidenceEdges: edges,
   };
@@ -424,6 +437,7 @@ export function createU4InventoryReplayCertificate(
   { root = process.cwd() } = {},
 ) {
   verifyU4ReplaySourceGitCustody(root);
+  verifyU4ReplayImplementationCustody(U4_REPLAY_IMPLEMENTATION_CUSTODY_MANIFEST, U4_REPLAY_IMPLEMENTATION_CUSTODY_DIGEST, root);
   bounded(
     inventoryInput,
     calculusInput,
@@ -471,6 +485,7 @@ export function verifyU4InventoryReplayCertificate(
   options = {},
 ) {
   verifyU4ReplaySourceGitCustody((options as any).root ?? process.cwd());
+  verifyU4ReplayImplementationCustody(U4_REPLAY_IMPLEMENTATION_CUSTODY_MANIFEST, U4_REPLAY_IMPLEMENTATION_CUSTODY_DIGEST, (options as any).root ?? process.cwd());
   bounded(
     certificate,
     inventory,
@@ -495,6 +510,7 @@ export function verifyU4InventoryReplayCertificate(
       "freezeReceiptDigest",
       "probeCertificateDigest",
       "frontendOutcomeDigest",
+      "implementationCustodyDigest",
       "evidenceNodes",
       "evidenceEdges",
       "digest",

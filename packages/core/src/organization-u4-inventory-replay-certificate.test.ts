@@ -867,6 +867,10 @@ import {
   createU4InventoryReplayCertificate,
   verifyU4InventoryReplayCertificate,
   verifyU4ReplaySourceGitCustody,
+  verifyU4ReplayImplementationCustody,
+  U4_REPLAY_IMPLEMENTATION_CUSTODY_MANIFEST,
+  U4_REPLAY_IMPLEMENTATION_CUSTODY_DIGEST,
+  computeU4ReplayImplementationCustodyDigest,
   computeU4FrontendReplayResultDigest,
 } from "./organization-u4-inventory-replay-certificate";
 import {
@@ -1383,8 +1387,9 @@ test("I23-I24 creates deterministic deeply frozen replay with exact topology", (
   expect(a.evidenceNodes.map((n) => n.id)).toContain(`run.${invocation}`);
   expect(a.evidenceNodes.map((n) => n.id)).toContain(`join.${invocation}`);
   expect(a.evidenceNodes.map((n) => n.id)).toContain(`material.${invocation}`);
-  expect(a.evidenceNodes).toHaveLength(14);
-  expect(a.evidenceEdges).toHaveLength(18);
+  expect(a.implementationCustodyDigest).toBe(U4_REPLAY_IMPLEMENTATION_CUSTODY_DIGEST);
+  expect(a.evidenceNodes).toHaveLength(15);
+  expect(a.evidenceEdges).toHaveLength(19);
   expect(
     verifyU4InventoryReplayCertificate(
       a,
@@ -1404,11 +1409,26 @@ test("I23-I24 replays an authenticated all-noncredit denominator with terminal t
   expect(a.evidenceNodes.map(n=>n.id)).not.toContain(`material.${invocation}`);
   expect(()=>verifyU4InventoryReplayCertificate(a,x.inventory,x.calculus,x.sourceRegistry,x.trusted,x.probeBundle,x.outcome)).not.toThrow();
 });
-test("I23-I24 replays a mixed credited and noncredit denominator",()=>{const x=replayVariant([{caseId:"case",repetition:0,kind:"credited"},{caseId:"case",repetition:1,kind:"noncredit"}]),a=createU4InventoryReplayCertificate(x.inventory,x.calculus,x.sourceRegistry,x.trusted,x.probeBundle,x.outcome);expect(x.probeBundle.bundle.executions.map((e:any)=>e.disposition).sort()).toEqual(["credited","noncredit"]);expect(a.evidenceNodes).toHaveLength(17);expect(a.evidenceEdges).toHaveLength(23);expect(a.evidenceNodes.filter(n=>n.id.startsWith("join."))).toHaveLength(1);expect(a.evidenceNodes.filter(n=>n.id.startsWith("terminal."))).toHaveLength(1)});
-test("I23-I24 replays exact multi-case and repetition denominators",()=>{const x=replayVariant([{caseId:"case.a",repetition:0,kind:"credited"},{caseId:"case.a",repetition:1,kind:"noncredit"},{caseId:"case.b",repetition:0,kind:"credited"}],true),a=createU4InventoryReplayCertificate(x.inventory,x.calculus,x.sourceRegistry,x.trusted,x.probeBundle,x.outcome);expect(x.probeBundle.bundle.executions).toHaveLength(3);expect(new Set(x.probeBundle.bundle.executions.map((e:any)=>e.run.caseId))).toEqual(new Set(["case.a","case.b"]));expect(a.evidenceNodes).toHaveLength(21);expect(a.evidenceEdges).toHaveLength(30);expect(a.evidenceNodes.filter(n=>n.id.startsWith("execution."))).toHaveLength(3)});
+test("I23-I24 replays a mixed credited and noncredit denominator",()=>{const x=replayVariant([{caseId:"case",repetition:0,kind:"credited"},{caseId:"case",repetition:1,kind:"noncredit"}]),a=createU4InventoryReplayCertificate(x.inventory,x.calculus,x.sourceRegistry,x.trusted,x.probeBundle,x.outcome);expect(x.probeBundle.bundle.executions.map((e:any)=>e.disposition).sort()).toEqual(["credited","noncredit"]);expect(a.evidenceNodes).toHaveLength(18);expect(a.evidenceEdges).toHaveLength(24);expect(a.evidenceNodes.filter(n=>n.id.startsWith("join."))).toHaveLength(1);expect(a.evidenceNodes.filter(n=>n.id.startsWith("terminal."))).toHaveLength(1)});
+test("I23-I24 replays exact multi-case and repetition denominators",()=>{const x=replayVariant([{caseId:"case.a",repetition:0,kind:"credited"},{caseId:"case.a",repetition:1,kind:"noncredit"},{caseId:"case.b",repetition:0,kind:"credited"}],true),a=createU4InventoryReplayCertificate(x.inventory,x.calculus,x.sourceRegistry,x.trusted,x.probeBundle,x.outcome);expect(x.probeBundle.bundle.executions).toHaveLength(3);expect(new Set(x.probeBundle.bundle.executions.map((e:any)=>e.run.caseId))).toEqual(new Set(["case.a","case.b"]));expect(a.evidenceNodes).toHaveLength(22);expect(a.evidenceEdges).toHaveLength(31);expect(a.evidenceNodes.filter(n=>n.id.startsWith("execution."))).toHaveLength(3)});
 test("aggregate replay rejects execution omission duplicate run identity and missing credited material",()=>{const x:any=replayVariant([{caseId:"case",repetition:0,kind:"credited"},{caseId:"case",repetition:1,kind:"noncredit"}]),omitted=structuredClone(x.probeBundle);omitted.bundle.executions.pop();expect(()=>createU4InventoryReplayCertificate(x.inventory,x.calculus,x.sourceRegistry,x.trusted,omitted,x.outcome)).toThrow(/totality|probe/);const missing=structuredClone(x.probeBundle);missing.materials=[];expect(()=>createU4InventoryReplayCertificate(x.inventory,x.calculus,x.sourceRegistry,x.trusted,missing,x.outcome)).toThrow(/material|probe/);const duplicate=structuredClone(x.probeBundle),target=duplicate.bundle.executions.find((e:any)=>e.disposition==="noncredit"),{digest:_,...rb}=target.run;void _;rb.runId=duplicate.bundle.executions.find((e:any)=>e.disposition==="credited").run.runId;rb.operatorReceipt="";rb.custodyReceipt="";const signed={...rb};delete signed.operatorReceipt;delete signed.custodyReceipt;rb.operatorReceipt=mac("a-probe","u4-probe-run",signed);rb.custodyReceipt=mac("a-custody","u4-probe-run-custody",{...signed,operatorAuthorityId:rb.operatorAuthorityId,operatorReceipt:rb.operatorReceipt});target.run=freezeU4ProbeRun(rb,duplicate.bundle.plan,x.inventory,x.trusted);expect(()=>createU4InventoryReplayCertificate(x.inventory,x.calculus,x.sourceRegistry,x.trusted,duplicate,x.outcome)).toThrow(/run identity|probe/)});
 test("I23 binds committed inventory source bytes", () =>
   expect(() => verifyU4ReplaySourceGitCustody()).not.toThrow());
+test("I23 binds the exact committed replay implementation manifest", () => {
+  expect(() => verifyU4ReplayImplementationCustody(U4_REPLAY_IMPLEMENTATION_CUSTODY_MANIFEST,U4_REPLAY_IMPLEMENTATION_CUSTODY_DIGEST)).not.toThrow();
+  for (const mutate of [
+    (v:any)=>v.implementationCommit="0000000000000000000000000000000000000000",
+    (v:any)=>v.files[0].path="packages/core/src/wrong.ts",
+    (v:any)=>v.files[0].sha256=H("wrong"),
+  ]) {
+    const v:any=structuredClone(U4_REPLAY_IMPLEMENTATION_CUSTODY_MANIFEST);mutate(v);const{digest:_,...body}=v;void _;v.digest=computeU4ReplayImplementationCustodyDigest(body);
+    expect(()=>verifyU4ReplayImplementationCustody(v,v.digest)).toThrow(/custody/);
+  }
+  const wrongDigest:any=structuredClone(U4_REPLAY_IMPLEMENTATION_CUSTODY_MANIFEST);wrongDigest.digest=H("wrong");
+  expect(()=>verifyU4ReplayImplementationCustody(wrongDigest,U4_REPLAY_IMPLEMENTATION_CUSTODY_DIGEST)).toThrow(/custody/);
+  const surplus:any=structuredClone(U4_REPLAY_IMPLEMENTATION_CUSTODY_MANIFEST);surplus.extra=true;
+  expect(()=>verifyU4ReplayImplementationCustody(surplus,U4_REPLAY_IMPLEMENTATION_CUSTODY_DIGEST)).toThrow(/schema/);
+});
 test("I23 requires a concrete verified probe bundle without placeholder trust", () => {
   const x = replayInputs();
   expect(() =>
@@ -1631,11 +1651,14 @@ test("I24 exact evidence topology rejects omission surplus and substitution", ()
       x.probeBundle,
       x.outcome,
     );
+  const missingCustody:any=structuredClone(a);delete missingCustody.implementationCustodyDigest;
+  expect(()=>verifyU4InventoryReplayCertificate(missingCustody,x.inventory,x.calculus,x.sourceRegistry,x.trusted,x.probeBundle,x.outcome)).toThrow(/schema/);
   for (const mutate of [
     (v: any) => v.evidenceNodes.pop(),
     (v: any) => v.evidenceNodes.push({ id: "surplus", digest: H("x") }),
     (v: any) => (v.evidenceEdges[0].to = "frontend-outcome"),
     (v: any) => (v.probeCertificateDigest = H("other")),
+    (v: any) => (v.implementationCustodyDigest = H("other")),
   ]) {
     const v = structuredClone(a);
     mutate(v);

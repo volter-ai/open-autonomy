@@ -193,6 +193,16 @@ describe('atomic accepted-generation activation (#243)', () => {
 
   test('a superseded generation fires nothing and stays alive until its SHA-bound session drains', async () => {
     const dir = repo(false);
+    const generationSha = spawnSync('git', ['rev-parse', 'HEAD'], { cwd: dir, encoding: 'utf8' }).stdout.trim();
+    await activateAcceptedGeneration({
+      cwd: dir,
+      ops: {
+        async detectAccepted() { return { sha: generationSha, acceptedAt: new Date().toISOString() }; },
+        async stage() { return dir; },
+        async validate() {},
+        async health() {},
+      },
+    });
     mkdirSync(join(dir, 'scheduler'), { recursive: true });
     writeFileSync(join(dir, 'scheduler', 'schedule.json'), JSON.stringify({
       intervalSeconds: 1,
@@ -207,7 +217,7 @@ describe('atomic accepted-generation activation (#243)', () => {
     };
     const runner: SessionRunner = {
       async list() {
-        return live ? [{ id: 'old-session', agent: 'job-1', status: 'running', controlSha: A }] : [];
+        return live ? [{ id: 'old-session', agent: 'job-1', status: 'running', controlSha: generationSha }] : [];
       },
       async reapIdle() { return []; },
     };
@@ -216,7 +226,7 @@ describe('atomic accepted-generation activation (#243)', () => {
       cwd: dir,
       proc,
       pollMs: 10,
-      generationSha: A,
+      generationSha,
       canFire: () => false,
       stopWhenDrained: true,
       sessionRunnerFactory: async () => runner,

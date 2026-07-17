@@ -1,7 +1,7 @@
 // The accepted local control generation. Candidate worktrees are application data; the checkout whose
 // default-branch commit passed review is the authority that schedules, publishes, and launches review.
 import { mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
 import { defaultProc } from './proc.ts';
 import type { ProcRunner } from './types.ts';
 import { readActivationRoutingState } from './activation-paths.ts';
@@ -99,6 +99,36 @@ export function acceptControlGeneration(cwd: string, proc: ProcRunner = defaultP
     sha,
     codeHost: host,
     ...(defaultBranch ? { defaultBranch } : {}),
+    acceptedAt: new Date().toISOString(),
+  };
+  writeGeneration(cwd, generation);
+  return generation;
+}
+
+/** Bind a supervisor-started active/draining reconciler to its immutable generation. Unlike an ordinary
+ * start, a retained drain-only generation is expected not to equal today's origin head. Central routing
+ * state supplies the authority boundary; checkout HEAD must still exactly match the routed SHA/root. */
+export function acceptPinnedControlGeneration(
+  cwd: string,
+  expectedSha: string,
+  proc: ProcRunner = defaultProc,
+): ControlGeneration | null {
+  const host = codeHost(cwd);
+  if (host !== 'github' && host !== 'local-git') return null;
+  if (!SHA.test(expectedSha)) throw new Error(`[oa] invalid pinned control generation: ${expectedSha}`);
+  const head = git(proc, cwd, ['rev-parse', 'HEAD']).toLowerCase();
+  if (head !== expectedSha) {
+    throw new Error(`[oa] pinned control generation mismatch: expected ${expectedSha.slice(0, 12)}, checkout HEAD is ${head.slice(0, 12) || '(unresolved)'}`);
+  }
+  const state = readActivationRoutingState(cwd, proc);
+  const routed = [state?.active, ...(state?.draining ?? [])].find((generation) => generation?.sha === expectedSha);
+  if (!routed || resolve(routed.root) !== resolve(cwd)) {
+    throw new Error(`[oa] pinned control generation ${expectedSha.slice(0, 12)} is not an active/draining root in central activation state`);
+  }
+  const generation: ControlGeneration = {
+    schema: 'open-autonomy.control-generation.v1',
+    sha: expectedSha,
+    codeHost: host,
     acceptedAt: new Date().toISOString(),
   };
   writeGeneration(cwd, generation);

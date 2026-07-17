@@ -1,0 +1,65 @@
+{
+  "schema": "open-autonomy.universality-checkpoint-implementation-closure.v1",
+  "checkpoint": "U1",
+  "status": "implementation-complete-external-validation-deferred",
+  "scope": "local deterministic implementation and proof machinery only; no v9 empirical source population is claimed",
+  "claimDigest": "sha256:753adcf34a43908d729b739bd62975cb38508a1a0c4963da6d6bf4c8cf8ae46c",
+  "sourceCensusContractDigest": "sha256:01fd32a2be6731d47b1eef9c73a90a14e1cce554e330ee006d8387d92ce846dd",
+  "forcingSupplementDigest": "sha256:6ac36647ca223925e40754362c98f692ba5950daf43cb14344b4bd47d2e511a9",
+  "obligations": [
+    {"id":"U1-I1","claim":"capture executes the frozen finite query program","evidence":"packages/core/src/organization-u1-occurrence-capture.test.ts"},
+    {"id":"U1-I2","claim":"every accepted response retains exact sidecar and body bytes","evidence":"packages/core/src/organization-universality-occurrence-contract.test.ts"},
+    {"id":"U1-I3","claim":"terminal occurrences quotient to one node-ID population unit","evidence":"packages/core/src/organization-universality-occurrence-contract.test.ts"},
+    {"id":"U1-I4","claim":"capture retries and invalidations preserve total custody","evidence":"packages/core/src/organization-u1-occurrence-capture.test.ts"},
+    {"id":"U1-I5","claim":"classification batches, retries, and phase barriers are deterministic","evidence":"packages/core/src/organization-u1-classification-runner.test.ts"},
+    {"id":"U1-I6","claim":"raw model bytes bind exact decisions and reasons","evidence":"packages/core/src/organization-source-population-v3.test.ts"},
+    {"id":"U1-I7","claim":"registered forcing repositories bind exact node-ID pair records under the frozen authentication-policy reference","evidence":"packages/core/src/organization-source-population-v3.test.ts"},
+    {"id":"U1-I8","claim":"commit and repository document custody precede every review attempt","evidence":"packages/core/src/organization-source-population-v3.test.ts"},
+    {"id":"U1-I9","claim":"out-of-domain frame members retain custody without becoming candidates","evidence":"packages/core/src/organization-source-population-v3.test.ts"},
+    {"id":"U1-I10","claim":"forcing out-of-domain is terminal including frame overlap","evidence":"packages/core/src/organization-u1-classification-runner.test.ts"},
+    {"id":"U1-I11","claim":"runner output freezes unchanged as a v3 population","evidence":"packages/core/src/organization-u1-classification-runner.test.ts"},
+    {"id":"U1-I12","claim":"shared content blobs preserve distinct repository evidence identities","evidence":"packages/core/src/organization-source-population-v3.test.ts"},
+    {"id":"U1-I13","claim":"every primary classification binds an exact raw-byte descriptor whose entity kind is SourceSystem, SourceOrganization, NativePlatform, or BehaviorHarness","evidence":"packages/core/src/organization-source-population-v3.test.ts"},
+    {"id":"U1-I14","claim":"entity-kind identifiers are normalized, nullable, mutually exclusive, and constrained by kind-specific non-null invariants","evidence":"packages/core/src/organization-source-population-v3.test.ts"},
+    {"id":"U1-I15","claim":"every descriptor has a nonempty normalized structural stratum and every forcing member including adoption overlap joins the registered forcing stratum","evidence":"packages/core/src/organization-u1-classification-runner.test.ts"},
+    {"id":"U1-I16","claim":"candidate descriptors are exact copies of the verified primary descriptor","evidence":"packages/core/src/organization-source-population-v3.test.ts"},
+    {"id":"U1-I17","claim":"candidate license is derived exactly from canonical replay metadata and is null for forcing members without replay metadata","evidence":"packages/core/src/organization-source-population-v3.test.ts"}
+  ],
+  "externalDeferred": [
+    {"id":"U1-E1","requirement":"execute two complete GitHub provider-query passes before cutoff","requires":"real GitHub service and elapsed provider observations"},
+    {"id":"U1-E2","requirement":"classify the frozen frame with primary independent and adjudicator authorities","requires":"authenticated distinct reviewer authorities and real provider observations for every required review role"},
+    {"id":"U1-E3","requirement":"resolve and capture exact repository commits and documents for every classified member","requires":"real repository service state"},
+    {"id":"U1-E4","requirement":"authenticate the authority that binds every registered forcing repository to its provider node ID","requires":"an external forcing-identity authority and authenticated mapping observation"}
+  ],
+  "accounting": {
+    "openInternal": 0,
+    "dischargedInternal": 17,
+    "deferredExternal": 4
+  },
+  "prohibitedClaims": [
+    "v9 empirical source population is complete",
+    "U1 semantic population gate is externally validated",
+    "universality denominators are frozen from live v9 results"
+  ],
+  "skepticalReview": {
+    "capture": "accepted after exact replay, retry, cutoff, adapter, and invalidation-custody repairs",
+    "population": "accepted after registered forcing joins, semantic model bytes, causal evidence, batching, retries, and forcing-overlap repairs",
+    "runner": "accepted after unchanged runner-output-to-v3 verification and shared evidence derivation"
+  },
+  "downstreamBoundary": {
+    "allowed": [
+      "U2 interface and fixture development that declares its population input synthetic",
+      "U2 property tests whose denominators are fixture-local"
+    ],
+    "forbidden": [
+      "U2 checkpoint or semantic closure",
+      "registration of a U2 empirical corpus",
+      "publication or reuse of downstream empirical denominators",
+      "treating this implementation closure as a completed U1 population gate"
+    ],
+    "releaseCondition": "a separately verified external U1 source-population.v3 digest produced after all external U1 obligations are discharged",
+    "prerequisiteIds": ["U1-E1", "U1-E2", "U1-E3", "U1-E4"]
+  },
+  "nextImplementation": "U2",
+  "nextExternal": "U1-E1"
+}

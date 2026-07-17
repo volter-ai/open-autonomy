@@ -19,10 +19,10 @@ export function configuredActivationHome(cwd = process.cwd(), proc: ProcRunner =
 }
 
 export interface ActivationRoutingState {
-  active?: { sha: string; root: string; acceptedAt: string; validatedAt?: string; activatedAt?: string };
-  previous?: { sha: string; root: string; acceptedAt: string; validatedAt?: string; activatedAt?: string };
-  staged?: { sha: string; root: string; acceptedAt: string; validatedAt?: string; activatedAt?: string };
-  draining: Array<{ sha: string; root: string; acceptedAt: string; validatedAt?: string; activatedAt?: string }>;
+  active?: { sha: string; root: string; acceptedAt: string; validatedAt?: string; validationDigest?: string; activatedAt?: string };
+  previous?: { sha: string; root: string; acceptedAt: string; validatedAt?: string; validationDigest?: string; activatedAt?: string };
+  staged?: { sha: string; root: string; acceptedAt: string; validatedAt?: string; validationDigest?: string; activatedAt?: string };
+  draining: Array<{ sha: string; root: string; acceptedAt: string; validatedAt?: string; validationDigest?: string; activatedAt?: string }>;
   lastFailed?: { sha: string; at: string; reason: string };
   transition?: { targetSha: string; previousSha?: string; phase: string };
 }

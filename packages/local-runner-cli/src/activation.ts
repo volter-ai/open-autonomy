@@ -29,6 +29,7 @@ import { doctor } from './doctor.ts';
 import { defaultProc } from './proc.ts';
 import type { ProcRunner } from './types.ts';
 import { activationHome } from './activation-paths.ts';
+import { generationValidationDigest } from './activation-integrity.ts';
 export { activationHome } from './activation-paths.ts';
 
 const SHA = /^[0-9a-f]{40}$/;
@@ -47,6 +48,7 @@ export interface ActivationGeneration {
   root: string;
   acceptedAt: string;
   validatedAt?: string;
+  validationDigest?: string;
   activatedAt?: string;
 }
 
@@ -78,7 +80,7 @@ export interface ActivationResult {
 export interface ActivationOps {
   detectAccepted(): Promise<{ sha: string; acceptedAt: string }>;
   stage(sha: string): Promise<string>;
-  validate(generation: ActivationGeneration): Promise<void>;
+  validate(generation: ActivationGeneration): Promise<{ validationDigest?: string } | void>;
   health(generation: ActivationGeneration): Promise<void>;
 }
 
@@ -289,6 +291,7 @@ export function liveActivationOps(cwd: string, config: ActivationConfig, proc: P
       const conformance = await runConformance(new ExecRunner(conformancePath), { name: 'exec' });
       try { unlinkSync(conformancePath); } catch { /* diagnostic only */ }
       if (!conformance.passedCore) throw new Error('core runner conformance failed');
+      return { validationDigest: generationValidationDigest(root) };
     },
     async health(generation) {
       const root = realpathSync(generation.root);
@@ -357,7 +360,8 @@ export async function activateAcceptedGeneration(opts: ActivationOptions = {}): 
     ledger?.append('activation', 'stage', { sha: target.sha, root });
     checkpoint(cwd, proc, state, 'staged', target.sha, opts.interruptAfter);
 
-    await ops.validate(generation);
+    const validation = await ops.validate(generation);
+    if (validation?.validationDigest) generation.validationDigest = validation.validationDigest;
     generation.validatedAt = iso(now);
     state.staged = generation;
     ledger?.append('activation', 'validate', { sha: target.sha, ok: true });

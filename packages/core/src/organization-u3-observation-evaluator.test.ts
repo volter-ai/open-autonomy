@@ -189,6 +189,30 @@ test("freezes bounded semantic shape registry and verifies calculus Git custody"
   const bad: Any = structuredClone(shapeBody); bad.semanticDigest = S("0");
   expect(() => freezeU3TraceEvaluationContract({ ...(f.ctr as Any), shapes: [bad], digest: undefined })).toThrow();
 });
+test("isolates evaluation contract tool registry schema identity version digest and reachability", () => {
+  for (const registry of ["adapters", "compilers", "runtimes"] as const) {
+    const attacks: Array<(tool: Any) => void> = [
+      (tool) => { delete tool.id; },
+      (tool) => { tool.surplus = true; },
+      (tool) => { tool.id = " invalid"; },
+      (tool) => { tool.version = " invalid"; },
+      (tool) => { tool.digest = "sha256:00"; },
+    ];
+    for (const attack of attacks) {
+      const f = signedFixture(), { digest: _digest, ...body } = structuredClone(f.ctr) as Any;
+      attack(body[registry][0]);
+      expect(() => freezeU3TraceEvaluationContract(body)).toThrow();
+    }
+    for (const inventory of ["omission", "surplus", "substitution"] as const) {
+      const f = signedFixture(), { digest: _digest, ...body } = structuredClone(f.ctr) as Any;
+      if (inventory === "omission") body[registry] = [];
+      if (inventory === "surplus") body[registry].push({ id: `${registry}-unused`, version: "1", digest: S("7") });
+      if (inventory === "substitution") body[registry][0].id = `${registry}-substituted`;
+      f.ctr = freezeU3TraceEvaluationContract(body); f.input.contractDigest = f.ctr.digest;
+      expect(() => evaluateU3ObservationTrace(f.calc, f.ctr, f.input, f.trusted)).toThrow();
+    }
+  }
+});
 test("rejects typed-loss observation overlap and mandatory-observation loss", () => {
   const overlap = signedFixture(), loss = lossFixture();
   overlap.input.losses = structuredClone(loss.input.losses);

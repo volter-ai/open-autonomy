@@ -1,0 +1,10 @@
+{
+  "schema": "open-autonomy.campaign-supersession.v1",
+  "predecessorCampaign": "organization-universality-2026-v7",
+  "predecessorDigest": "sha256:88ce401ed34c9f83bc3a12d99298e67bd0d48cded753abd80ee2e55c63b5a512",
+  "successorCampaign": "organization-universality-2026-v8",
+  "successorDigest": "sha256:622538c24f771ba1c38a22d1ba4472cf68cdfbb9b1bb603965b27c3784db257a",
+  "reason": "v7 exhausted four attempts because search-index qualifier membership and returned live star metadata are non-atomic; v8 bounds by empty tail queries and retains query ranges as membership observations",
+  "predecessorStatus": "invalidated-before-u1-closure",
+  "digest": "sha256:24977228058a43a86f6edf79530e138b355f845faedefa60c9e11aceb87dd5af"
+}

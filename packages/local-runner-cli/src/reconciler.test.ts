@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'bun:test';
+import { spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, unlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -6,6 +7,7 @@ import { pathToFileURL } from 'node:url';
 import { backoffMsFor, markWorkspaceLeasesObserved, reconcilePendingEffects, reconcileWorkspaceLeases, start } from './reconciler.ts';
 import { StubProc, ok } from './test-support/stub-proc.ts';
 import { StubSessionRunner } from './test-support/stub-session-runner.ts';
+import { defaultProc } from './proc.ts';
 
 function repo(schedule: object, withRunner = false): string {
   const dir = realpathSync(mkdtempSync(join(tmpdir(), 'oa-scheduler-')));
@@ -24,6 +26,27 @@ function procFor(dir: string): StubProc {
     (cmd, args) => cmd === 'node' && args[0] === '--input-type=module',
     () => ok(pathToFileURL(join(dir, 'node_modules', 'termfleet', 'index.js')).href + '\n'),
   );
+}
+
+const CONTROL_SHA = 'a'.repeat(40);
+function generationEffect(dir: string, value: Record<string, unknown>): Record<string, unknown> {
+  const state = join(dir, '.open-autonomy', 'runner-state');
+  mkdirSync(state, { recursive: true });
+  writeFileSync(join(state, 'control-generation.json'), JSON.stringify({
+    schema: 'open-autonomy.control-generation.v1', sha: CONTROL_SHA, codeHost: 'local-git', acceptedAt: new Date().toISOString(),
+  }));
+  return {
+    schema: 'open-autonomy.effect-marker.v2',
+    controlRoot: dir,
+    controlSha: CONTROL_SHA,
+    ...value,
+  };
+}
+
+function effectProc(dir: string): StubProc {
+  return new StubProc()
+    .onArgs('git', ['rev-parse', 'HEAD'], () => ok(`${CONTROL_SHA}\n`))
+    .onArgs('git', ['diff', '--quiet'], () => ok());
 }
 
 async function waitFor(predicate: () => boolean, timeoutMs = 2000): Promise<void> {
@@ -220,9 +243,9 @@ test('a failed post-session effect keeps its durable marker and retries until su
     const effectsDir = join(dir, '.open-autonomy', 'runner-state', 'effects');
     mkdirSync(effectsDir, { recursive: true });
     const marker = join(effectsDir, 'session-1.json');
-    writeFileSync(marker, JSON.stringify({ id: 'session-1', agent: 'worker', effect: 'scripts/effect.ts', worktree: dir }));
+    writeFileSync(marker, JSON.stringify(generationEffect(dir, { id: 'session-1', agent: 'worker', effect: 'scripts/effect.ts', worktree: dir })));
     let succeeds = false;
-    const proc = new StubProc().onArgs('bun', ['scripts/effect.ts'], () => ({ status: succeeds ? 0 : 1, stdout: '', stderr: '' }));
+    const proc = effectProc(dir).onArgs('bun', [join(dir, 'scripts', 'effect.ts')], () => ({ status: succeeds ? 0 : 1, stdout: '', stderr: '' }));
     const runner = new StubSessionRunner();
 
     await reconcilePendingEffects(dir, runner, proc.runner);
@@ -239,9 +262,9 @@ test('a completion effect waits while its fresh session lease is not yet observa
     const effectsDir = join(dir, '.open-autonomy', 'runner-state', 'effects');
     mkdirSync(effectsDir, { recursive: true });
     const marker = join(effectsDir, 'session-bootstrap.json');
-    writeFileSync(marker, JSON.stringify({ id: 'session-bootstrap', agent: 'worker', effect: 'scripts/effect.ts', worktree: dir }));
+    writeFileSync(marker, JSON.stringify(generationEffect(dir, { id: 'session-bootstrap', agent: 'worker', effect: 'scripts/effect.ts', worktree: dir })));
     const lease = workspaceLease(dir, 'session-bootstrap', dir, new Date().toISOString());
-    const proc = new StubProc().onArgs('bun', ['scripts/effect.ts'], () => ok(''));
+    const proc = effectProc(dir).onArgs('bun', [join(dir, 'scripts', 'effect.ts')], () => ok(''));
     const runner = new StubSessionRunner();
 
     await reconcilePendingEffects(dir, runner, proc.runner);
@@ -257,20 +280,98 @@ test('a completion effect waits while its fresh session lease is not yet observa
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });
 
+test('a stale-generation effect is retained and executes nothing', async () => {
+  const dir = repo({ jobs: [] });
+  try {
+    const effects = join(dir, '.open-autonomy', 'runner-state', 'effects');
+    mkdirSync(effects, { recursive: true });
+    const marker = join(effects, 'stale.json');
+    writeFileSync(marker, JSON.stringify(generationEffect(dir, {
+      id: 'stale', agent: 'develop', effect: 'scripts/effect.ts', worktree: dir, controlSha: 'b'.repeat(40),
+    })));
+    const proc = effectProc(dir).onArgs('bun', [join(dir, 'scripts', 'effect.ts')], () => ok('should-not-run'));
+    await reconcilePendingEffects(dir, new StubSessionRunner(), proc.runner);
+    expect(existsSync(marker)).toBe(true);
+    expect(proc.calls.some((call) => call.cmd === 'bun')).toBe(false);
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
 test('a reaped session is persisted as observed so its ready effect does not wait out bootstrap grace', async () => {
   const dir = repo({ jobs: [{ name: 'maintenance', command: 'bun maintenance.ts', intervalSeconds: 60 }] });
   try {
     const effectsDir = join(dir, '.open-autonomy', 'runner-state', 'effects');
     mkdirSync(effectsDir, { recursive: true });
     const marker = join(effectsDir, 'session-reaped.json');
-    writeFileSync(marker, JSON.stringify({ id: 'session-reaped', agent: 'worker', effect: 'scripts/effect.ts', worktree: dir }));
+    writeFileSync(marker, JSON.stringify(generationEffect(dir, { id: 'session-reaped', agent: 'worker', effect: 'scripts/effect.ts', worktree: dir })));
     const lease = workspaceLease(dir, 'session-reaped', dir, new Date().toISOString());
-    const proc = new StubProc().onArgs('bun', ['scripts/effect.ts'], () => ok(''));
+    const proc = effectProc(dir).onArgs('bun', [join(dir, 'scripts', 'effect.ts')], () => ok(''));
 
     markWorkspaceLeasesObserved(dir, ['session-reaped']);
     expect(JSON.parse(readFileSync(lease, 'utf8')).observedLiveAt).toBeTruthy();
     await reconcilePendingEffects(dir, new StubSessionRunner(), proc.runner);
     expect(existsSync(marker)).toBe(false);
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+test('a malicious candidate cannot substitute proposer, runner, reviewer doctrine, or policy before merge', async () => {
+  const dir = repo({ jobs: [] });
+  const candidate = join(dir, '.worktrees', 'agent-issue-42');
+  try {
+    const git = (args: string[]) => {
+      const result = spawnSync('git', args, { cwd: dir, encoding: 'utf8' });
+      if (result.status !== 0) throw new Error(result.stderr || result.stdout);
+      return result.stdout.trim();
+    };
+    git(['init', '-q', '-b', 'main']);
+    git(['config', 'user.email', 'generation@example.invalid']);
+    git(['config', 'user.name', 'generation-test']);
+    mkdirSync(join(dir, 'scripts'), { recursive: true });
+    // The accepted proposer invokes only the runner path supplied by the reconciler. This tiny fixture is
+    // deliberately executable so the sentinels prove the whole control->candidate-cwd->trusted-runner trace.
+    writeFileSync(join(dir, 'scripts', 'agent-propose.ts'), [
+      "import { spawnSync } from 'node:child_process';",
+      "import { writeFileSync } from 'node:fs';",
+      "writeFileSync('trusted-proposer.txt', process.env.AUTONOMY_CONTROL_SHA || '');",
+      "const r = spawnSync('bun', [process.env.AUTONOMY_TRUSTED_RUNNER!, 'launch', 'reviewer', '--workspace', 'isolated'], { stdio: 'inherit', env: process.env });",
+      'process.exit(r.status ?? 1);',
+    ].join('\n'));
+    writeFileSync(join(dir, 'scripts', 'runner.ts'), "import { writeFileSync } from 'node:fs'; writeFileSync('trusted-reviewer.txt', process.env.AUTONOMY_CONTROL_SHA || '');\n");
+    git(['add', '-A']);
+    git(['commit', '-q', '-m', 'accepted control generation']);
+    const sha = git(['rev-parse', 'HEAD']);
+    const state = join(dir, '.open-autonomy', 'runner-state');
+    mkdirSync(join(state, 'effects'), { recursive: true });
+    writeFileSync(join(state, 'control-generation.json'), JSON.stringify({
+      schema: 'open-autonomy.control-generation.v1', sha, codeHost: 'local-git', acceptedAt: new Date().toISOString(),
+    }));
+
+    for (const path of [
+      'scripts/agent-propose.ts',
+      'scripts/runner.ts',
+      '.claude/skills/reviewer/SKILL.md',
+      '.open-autonomy/autonomy.json',
+    ]) {
+      mkdirSync(join(candidate, path.split('/').slice(0, -1).join('/')), { recursive: true });
+      writeFileSync(join(candidate, path), `candidate-controlled ${path}\n`);
+    }
+    writeFileSync(join(state, 'effects', 'malicious.json'), JSON.stringify({
+      schema: 'open-autonomy.effect-marker.v2',
+      id: 'malicious',
+      agent: 'develop',
+      effect: 'scripts/agent-propose.ts',
+      worktree: candidate,
+      env: {},
+      controlRoot: dir,
+      controlSha: sha,
+    }));
+
+    await reconcilePendingEffects(dir, new StubSessionRunner(), defaultProc);
+    expect(readFileSync(join(candidate, 'trusted-proposer.txt'), 'utf8')).toBe(sha);
+    expect(readFileSync(join(candidate, 'trusted-reviewer.txt'), 'utf8')).toBe(sha);
+    expect(readFileSync(join(candidate, 'scripts', 'agent-propose.ts'), 'utf8')).toContain('candidate-controlled');
+    expect(readFileSync(join(candidate, 'scripts', 'runner.ts'), 'utf8')).toContain('candidate-controlled');
+    expect(existsSync(join(candidate, 'malicious-control-executed.txt'))).toBe(false);
+    expect(existsSync(join(state, 'effects', 'malicious.json'))).toBe(false);
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });
 

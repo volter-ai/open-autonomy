@@ -187,14 +187,73 @@ export function cronToSeconds(cron: string): number {
 // still working (running / background-running), one a human took over, or one asking/errored is never
 // reaped — keeping the "take over at any time" guarantee. `--once` fires a single tick and exits (no reap).
 const LOOP_DRIVER = `#!/usr/bin/env node
-import { existsSync, mkdirSync, readFileSync, readdirSync, realpathSync, unlinkSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, readdirSync, realpathSync, renameSync, unlinkSync, writeFileSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
-import { dirname, join, sep } from 'node:path';
+import { dirname, join, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 const here = dirname(fileURLToPath(import.meta.url));
+const controlRoot = realpathSync(resolve(here, '..'));
 const SCHEDULE = process.env.AUTONOMY_SCHEDULE || 'scheduler/schedule.json';
 const args = process.argv.slice(2);
 const schedule = JSON.parse(readFileSync(SCHEDULE, 'utf8'));
+const gitControl = (args) => {
+  const result = spawnSync('git', args, { cwd: controlRoot, encoding: 'utf8' });
+  return { status: result.status, stdout: (result.stdout || '').trim() };
+};
+const controlReceiptPath = join(controlRoot, '.open-autonomy', 'runner-state', 'control-generation.json');
+const controlHost = () => {
+  try { return JSON.parse(readFileSync(join(controlRoot, '.open-autonomy', 'autonomy.json'), 'utf8')).codeHost || ''; }
+  catch { return ''; }
+};
+const controlRemoteSha = (branch) => (gitControl(['ls-remote', 'origin', 'refs/heads/' + branch]).stdout.split(/\\s+/)[0] || '').toLowerCase();
+const acceptControlGeneration = () => {
+  const codeHost = controlHost();
+  if (codeHost !== 'github') return null;
+  const sha = gitControl(['rev-parse', 'HEAD']).stdout.toLowerCase();
+  const localHead = gitControl(['symbolic-ref', '--quiet', '--short', 'refs/remotes/origin/HEAD']).stdout;
+  let defaultBranch = localHead.startsWith('origin/') ? localHead.slice('origin/'.length) : '';
+  if (!defaultBranch) {
+    const symref = gitControl(['ls-remote', '--symref', 'origin', 'HEAD']).stdout;
+    defaultBranch = /^ref: refs\\/heads\\/([^\\t]+)\\tHEAD$/m.exec(symref)?.[1] || '';
+  }
+  const accepted = defaultBranch ? controlRemoteSha(defaultBranch) : '';
+  if (!/^[0-9a-f]{40}$/.test(sha) || !defaultBranch || accepted !== sha) {
+    throw new Error('[loop] control generation refused: checkout HEAD ' + (sha.slice(0, 12) || '(unresolved)') +
+      ' is not accepted origin/' + (defaultBranch || '(unknown)') + ' ' + (accepted.slice(0, 12) || '(unresolved)') + '. Stop, update, and restart.');
+  }
+  const generation = { schema: 'open-autonomy.control-generation.v1', sha, codeHost, defaultBranch, acceptedAt: new Date().toISOString() };
+  mkdirSync(dirname(controlReceiptPath), { recursive: true });
+  const temporary = controlReceiptPath + '.' + process.pid + '.tmp';
+  writeFileSync(temporary, JSON.stringify(generation, null, 2) + '\\n');
+  renameSync(temporary, controlReceiptPath);
+  return generation;
+};
+const verifyControlGeneration = (expectedSha) => {
+  let generation;
+  try { generation = JSON.parse(readFileSync(controlReceiptPath, 'utf8')); }
+  catch { throw new Error('[loop] control generation receipt is missing; restart the accepted scheduler'); }
+  const head = gitControl(['rev-parse', 'HEAD']).stdout.toLowerCase();
+  const accepted = generation.codeHost === 'github' && generation.defaultBranch ? controlRemoteSha(generation.defaultBranch) : expectedSha;
+  if (generation.schema !== 'open-autonomy.control-generation.v1' || generation.sha !== expectedSha || head !== expectedSha || accepted !== expectedSha) {
+    throw new Error('[loop] stale/missing control generation for ' + expectedSha.slice(0, 12) + '; pending effect retained');
+  }
+};
+const verifyControlPaths = (expectedSha, paths) => {
+  const result = spawnSync('git', ['diff', '--quiet', expectedSha, '--', ...new Set(paths.filter(Boolean))], { cwd: controlRoot });
+  if (result.status !== 0) throw new Error('[loop] control generation bytes changed outside review: ' + paths.join(', ') + '; pending effect retained');
+};
+let controlGeneration = null;
+try {
+  controlGeneration = acceptControlGeneration(controlRoot);
+  if (controlGeneration) {
+    process.env.AUTONOMY_CONTROL_ROOT = controlRoot;
+    process.env.AUTONOMY_CONTROL_SHA = controlGeneration.sha;
+    console.error('[loop] control generation ' + controlGeneration.sha.slice(0, 12) + ' (' + controlGeneration.codeHost + ')');
+  }
+} catch (error) {
+  console.error(error?.message ?? error);
+  process.exit(1);
+}
 // Jobs are the only emitted schedule contract. Accept historical scripts for upgrades, but never require
 // a profile policy flag to select a scheduler implementation.
 const jobs = Array.isArray(schedule.jobs)
@@ -632,7 +691,7 @@ async function reconcilePendingEffects(runner) {
   for (const file of files) {
     const path = join(EFFECTS_DIR, file);
     let marker;
-    try { marker = JSON.parse(readFileSync(path, 'utf8')); } catch { try { unlinkSync(path); } catch {} continue; }
+    try { marker = JSON.parse(readFileSync(path, 'utf8')); } catch { parkLegacyEffect(path, file, 'marker is not valid JSON'); continue; }
     if (live.has(marker.id)) continue; // session still running -> its effect runs after it finishes
     // A fresh co-located workspace lease means the provider may simply not list the new terminal yet.
     // Old effect markers without leases retain their historical immediate reconciliation behavior.
@@ -641,14 +700,47 @@ async function reconcilePendingEffects(runner) {
       const createdAt = Date.parse(lease.createdAt);
       if (!lease.observedLiveAt && Number.isFinite(createdAt) && Date.now() - createdAt < WORKSPACE_LEASE_BOOTSTRAP_GRACE_MS) continue;
     } catch {}
-    console.log(\`[loop] post-session effect: \${marker.agent} (\${marker.id}) -> \${marker.effect} in \${marker.worktree}\`);
-    const result = spawnSync('bun', [marker.effect], { cwd: marker.worktree, stdio: 'inherit', env: Object.assign({}, process.env, marker.env) });
+    if (marker.schema !== 'open-autonomy.effect-marker.v2' || !marker.controlRoot || !marker.controlSha) {
+      parkLegacyEffect(path, file, 'marker predates accepted control generations');
+      continue;
+    }
+    let markerControlRoot;
+    try { markerControlRoot = realpathSync(resolve(marker.controlRoot)); } catch { markerControlRoot = ''; }
+    if (markerControlRoot !== controlRoot) {
+      console.error(\`[loop] effect \${file} names another control root; retaining marker\`);
+      continue;
+    }
+    try {
+      verifyControlGeneration(marker.controlSha);
+      verifyControlPaths(marker.controlSha, [marker.effect, 'scripts/runner.ts', '.open-autonomy/autonomy.json', '.open-autonomy/autonomy.yml']);
+    }
+    catch (error) { console.error(\`[loop] effect \${file} refused: \${error?.message ?? error}\`); continue; }
+    const effect = resolve(controlRoot, marker.effect);
+    if (effect !== controlRoot && !effect.startsWith(controlRoot + sep)) {
+      console.error(\`[loop] effect \${file} escapes the accepted control root; retaining marker\`);
+      continue;
+    }
+    console.log(\`[loop] post-session effect: \${marker.agent} (\${marker.id}) [control \${marker.controlSha.slice(0, 12)}] -> \${effect} in \${marker.worktree}\`);
+    const result = spawnSync('bun', [effect], { cwd: marker.worktree, stdio: 'inherit', env: Object.assign({}, process.env, marker.env, {
+      AUTONOMY_CONTROL_ROOT: controlRoot,
+      AUTONOMY_CONTROL_SHA: marker.controlSha,
+      AUTONOMY_TRUSTED_RUNNER: join(controlRoot, 'scripts', 'runner.ts'),
+    }) });
     if (result.status === 0 && !result.error) {
       try { unlinkSync(path); } catch {}
     } else {
       console.error(\`[loop] post-session effect failed; retaining \${file} for retry: \${result.error?.message ?? \`exit \${result.status ?? 'unknown'}\`}\`);
     }
   }
+}
+function parkLegacyEffect(path, file, reason) {
+  const dir = join(here, '..', '.open-autonomy', 'runner-state', 'effect-quarantine');
+  mkdirSync(dir, { recursive: true });
+  const parked = join(dir, file);
+  try { renameSync(path, parked); } catch { return; }
+  const command = 'oa recover-effect ' + parked + ' --control-sha <accepted-sha>';
+  writeFileSync(parked + '.recovery.txt', reason + '.\\nInspect the marker, then recover explicitly:\\n' + command + '\\n');
+  console.error('[loop] parked effect ' + file + ': ' + reason + '. Inspect it, then run: ' + command);
 }
 async function reconcileWorkspaceLeases(runner) {
   let files = [];

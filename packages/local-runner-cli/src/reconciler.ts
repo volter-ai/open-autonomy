@@ -1,7 +1,7 @@
 // Generic local substrate loop. It realizes cadence, fences, concurrency, retries, session singleton,
 // reaping, and opaque completion effects. It does not query tasks, PRs, or role-specific state.
-import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, unlinkSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { existsSync, mkdirSync, readFileSync, readdirSync, realpathSync, renameSync, unlinkSync, writeFileSync } from 'node:fs';
+import { join, resolve, sep } from 'node:path';
 import type { NormalizedJob, ProcRunner, Session, SessionRunner } from './types.ts';
 import { defaultProc } from './proc.ts';
 import { loadSchedule } from './config.ts';
@@ -9,6 +9,7 @@ import { buildTickEnv } from './env.ts';
 import { defaultSessionRunner, listSessionsBestEffort } from './sessions.ts';
 import { recordFire } from './status.ts';
 import { runPreflight } from './preflight.ts';
+import { verifyControlGeneration, verifyControlPaths } from './control-generation.ts';
 
 const FAST_DEATH_MS = 60_000;
 const BACKOFF_CAP_MS = 30 * 60 * 1000;
@@ -225,11 +226,20 @@ async function reconcilePendingEffects(cwd: string, runner: SessionRunner, proc:
   }
   for (const file of files) {
     const path = join(effectsDir, file);
-    let marker: { id: string; agent: string; effect: string; worktree: string; env?: Record<string, string> };
+    let marker: {
+      schema?: string;
+      id: string;
+      agent: string;
+      effect: string;
+      worktree: string;
+      env?: Record<string, string>;
+      controlRoot?: string;
+      controlSha?: string;
+    };
     try {
       marker = JSON.parse(readFileSync(path, 'utf8'));
     } catch {
-      try { unlinkSync(path); } catch { /* ignore */ }
+      parkLegacyEffect(cwd, path, file, 'marker is not valid JSON');
       continue;
     }
     if (live.has(marker.id)) continue;
@@ -243,14 +253,69 @@ async function reconcilePendingEffects(cwd: string, runner: SessionRunner, proc:
     } catch {
       /* no readable lease: preserve backward-compatible effect reconciliation */
     }
-    console.log(`[oa] post-session effect: ${marker.agent} (${marker.id}) -> ${marker.effect} in ${marker.worktree}`);
-    const result = proc('bun', [marker.effect], { cwd: marker.worktree, stdio: 'inherit', env: { ...process.env, ...marker.env } });
+    if (
+      marker.schema !== 'open-autonomy.effect-marker.v2' ||
+      !marker.controlRoot ||
+      !marker.controlSha
+    ) {
+      parkLegacyEffect(cwd, path, file, 'marker predates accepted control generations');
+      continue;
+    }
+    let root = '';
+    let activeRoot = '';
+    try {
+      root = realpathSync(resolve(marker.controlRoot));
+      activeRoot = realpathSync(resolve(cwd));
+    } catch { /* invalid root stays empty and fails closed below */ }
+    if (!root || root !== activeRoot) {
+      console.error(`[oa] effect ${file} names control root ${root}, not active root ${resolve(cwd)}; retaining marker`);
+      continue;
+    }
+    try {
+      verifyControlGeneration(cwd, marker.controlSha, proc);
+      verifyControlPaths(cwd, marker.controlSha, [
+        marker.effect,
+        'scripts/runner.ts',
+        '.open-autonomy/autonomy.json',
+        '.open-autonomy/autonomy.yml',
+      ], proc);
+    } catch (error) {
+      console.error(`[oa] effect ${file} refused: ${(error as Error).message}; retaining marker`);
+      continue;
+    }
+    const effect = resolve(root, marker.effect);
+    if (effect !== root && !effect.startsWith(root + sep)) {
+      console.error(`[oa] effect ${file} escapes the accepted control root; retaining marker`);
+      continue;
+    }
+    console.log(`[oa] post-session effect: ${marker.agent} (${marker.id}) [control ${marker.controlSha.slice(0, 12)}] -> ${effect} in ${marker.worktree}`);
+    const result = proc('bun', [effect], {
+      cwd: marker.worktree,
+      stdio: 'inherit',
+      env: {
+        ...process.env,
+        ...marker.env,
+        AUTONOMY_CONTROL_ROOT: root,
+        AUTONOMY_CONTROL_SHA: marker.controlSha,
+        AUTONOMY_TRUSTED_RUNNER: join(root, 'scripts', 'runner.ts'),
+      },
+    });
     if (result.status === 0 && !result.error) {
       try { unlinkSync(path); } catch { /* ignore */ }
     } else {
       console.error(`[oa] post-session effect failed; retaining ${file} for retry: ${result.error?.message ?? `exit ${result.status ?? 'unknown'}`}`);
     }
   }
+}
+
+function parkLegacyEffect(cwd: string, path: string, file: string, reason: string): void {
+  const quarantine = join(cwd, '.open-autonomy', 'runner-state', 'effect-quarantine');
+  mkdirSync(quarantine, { recursive: true });
+  const parked = join(quarantine, file);
+  try { renameSync(path, parked); } catch { return; }
+  const command = `oa recover-effect ${parked} --control-sha <accepted-sha>`;
+  writeFileSync(`${parked}.recovery.txt`, `${reason}.\nInspect the marker, then recover explicitly:\n${command}\n`);
+  console.error(`[oa] parked effect ${file}: ${reason}. Inspect it, then run: ${command}`);
 }
 
 export { reconcilePendingEffects };

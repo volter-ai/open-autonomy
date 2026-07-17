@@ -12,6 +12,7 @@ import type { NormalizedSchedule, ProcRunner } from './types.ts';
 import { defaultProc } from './proc.ts';
 import { checkDepIntegrity, checkTermfleetInstalled, checkUncommittedHarness, needsRunner } from './guards.ts';
 import { defaultResolveDefaultProvider, resolveProvider } from './env.ts';
+import { acceptControlGeneration } from './control-generation.ts';
 
 export interface PreflightResult {
   ok: boolean;
@@ -36,6 +37,19 @@ export async function runPreflight(schedule: NormalizedSchedule, opts: Preflight
   const proc = opts.proc ?? defaultProc;
   const ambient = opts.ambient ?? process.env;
   const cmds = schedule.jobs.map((job) => job.cmd);
+
+  try {
+    const generation = acceptControlGeneration(opts.cwd, proc);
+    if (generation) {
+      ambient.AUTONOMY_CONTROL_ROOT = opts.cwd;
+      ambient.AUTONOMY_CONTROL_SHA = generation.sha;
+      console.error(`[oa] control generation ${generation.sha.slice(0, 12)} (${generation.codeHost})`);
+    }
+  } catch (error) {
+    const message = (error as Error).message;
+    console.error(message);
+    return { ok: false, message };
+  }
 
   if (needsRunner(cmds)) {
     const termfleet = checkTermfleetInstalled(opts.cwd);

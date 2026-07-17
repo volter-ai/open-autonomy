@@ -22,7 +22,7 @@
 // designed to catch.
 import { afterEach, describe, expect, test } from 'bun:test';
 import { spawnSync } from 'node:child_process';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import type { AutonomyIR } from '@open-autonomy/core';
@@ -78,6 +78,15 @@ function gitOk(dir: string, args: string[]): string {
   return r.stdout.trim();
 }
 
+function acceptGeneration(dir: string): void {
+  const sha = gitOk(dir, ['rev-parse', 'HEAD']);
+  const state = join(dir, '.open-autonomy', 'runner-state');
+  mkdirSync(state, { recursive: true });
+  writeFileSync(join(state, 'control-generation.json'), `${JSON.stringify({
+    schema: 'open-autonomy.control-generation.v1', sha, codeHost: 'github', defaultBranch: 'main', acceptedAt: new Date().toISOString(),
+  }, null, 2)}\n`);
+}
+
 // installStubTermfleet is now shared (packages/substrate-local/src/test-support/stub-termfleet.ts, imported
 // above) — OA-18's doctor --live tests need the identical stub with extra knobs (dead-vs-survives,
 // captureTerminal content), so it was extracted rather than re-hand-rolled. Calling it with no extra env
@@ -117,6 +126,7 @@ function scaffold(): { dir: string } {
   gitOk(dir, ['remote', 'add', 'origin', '.']);
   gitOk(dir, ['fetch', '-q', 'origin', 'main']);
   gitOk(dir, ['symbolic-ref', 'refs/remotes/origin/HEAD', 'refs/remotes/origin/main']);
+  acceptGeneration(dir);
   return { dir };
 }
 
@@ -140,10 +150,26 @@ function env(extra: Record<string, string> = {}): NodeJS.ProcessEnv {
 // --- B. the REAL emitted scripts/runner.ts — launch()'s pre-check (AC-1, AC-2, AC-3, AC-5) --------------
 
 describe('scripts/runner.ts launch — the skill pre-check (runner-frontend.ts verbatim)', () => {
+  test('a missing generation receipt refuses before worktree creation or termfleet spend', () => {
+    const { dir } = scaffold();
+    rmSync(join(dir, '.open-autonomy', 'runner-state', 'control-generation.json'));
+    const sentinel = join(dir, 'sentinel.log');
+    const r = spawnSync('bun', ['scripts/runner.ts', 'launch', 'develop', '--branch', 'agent/issue-6'], {
+      cwd: dir,
+      encoding: 'utf8',
+      env: env({ OA08_SESSION_SENTINEL: sentinel }),
+    });
+    expect(r.status).toBe(1);
+    expect(r.stderr).toContain('control generation is missing');
+    expect(existsSync(sentinel)).toBe(false);
+    expect(existsSync(join(dir, '.worktrees')) ? readdirSync(join(dir, '.worktrees')) : []).toEqual([]);
+  });
+
   test('AC-1: committed skill deletion, --branch -> refuses fast, no session, no effect marker', () => {
     const { dir } = scaffold();
     gitOk(dir, ['rm', '-r', '.claude/skills/develop']);
     gitOk(dir, ['commit', '-q', '-m', 'break develop']);
+    acceptGeneration(dir);
     const sentinel = join(dir, 'sentinel.log');
 
     const r = spawnSync('bun', ['scripts/runner.ts', 'launch', 'develop', '--ref', '7', '--branch', 'agent/issue-7'], {
@@ -180,6 +206,7 @@ describe('scripts/runner.ts launch — the skill pre-check (runner-frontend.ts v
     const { dir } = scaffold();
     gitOk(dir, ['rm', '-r', '.claude/skills/develop']);
     gitOk(dir, ['commit', '-q', '-m', 'break develop']);
+    acceptGeneration(dir);
     const sentinel = join(dir, 'sentinel.log');
 
     const r = spawnSync('bun', ['scripts/runner.ts', 'launch', 'develop', '--ref', '7'], {
@@ -221,6 +248,7 @@ describe('scripts/runner.ts launch — the skill pre-check (runner-frontend.ts v
     // Break develop, then attempt the launch: it must refuse AND leave NO worktree/branch behind.
     gitOk(dir, ['rm', '-r', '.claude/skills/develop']);
     gitOk(dir, ['commit', '-q', '-m', 'break develop']);
+    acceptGeneration(dir);
     const sentinel = join(dir, 'sentinel.log');
     const first = spawnSync('bun', ['scripts/runner.ts', 'launch', 'develop', '--ref', '7', '--branch', 'agent/issue-7'], {
       cwd: dir,
@@ -238,6 +266,7 @@ describe('scripts/runner.ts launch — the skill pre-check (runner-frontend.ts v
     writeFileSync(join(dir, '.claude', 'skills', 'develop', 'SKILL.md'), `---\nname: develop\n---\n\n# develop\n`);
     gitOk(dir, ['add', '-A']);
     gitOk(dir, ['commit', '-q', '-m', 'restore develop skill on trunk']);
+    acceptGeneration(dir);
 
     // Retry the SAME branch: a FRESH worktree is built off the now-fixed trunk HEAD, the skill resolves, and
     // the launch SUCCEEDS — the whole point of the N=2 retry (spec :163-165) actually works now.
@@ -259,6 +288,7 @@ describe('scripts/runner.ts launch — the skill pre-check (runner-frontend.ts v
     const { dir } = scaffold();
     gitOk(dir, ['rm', '-r', '.claude/skills/develop']);
     gitOk(dir, ['commit', '-q', '-m', 'break develop']);
+    acceptGeneration(dir);
     const wt = join(dir, '.worktrees', 'agent-issue-7');
     gitOk(dir, ['worktree', 'add', '-b', 'agent/issue-7', wt, 'HEAD']); // pre-existing worktree, skill-less base
     expect(existsSync(wt)).toBe(true);
@@ -294,8 +324,16 @@ describe('scripts/runner.ts launch — the skill pre-check (runner-frontend.ts v
       encoding: 'utf8',
       env: env({ OA08_SESSION_SENTINEL: sentinel }),
     });
-    const sessions = JSON.parse(list.stdout || '[]') as Array<{ status: string }>;
+    const sessions = JSON.parse(list.stdout || '[]') as Array<{ status: string; controlSha?: string }>;
     expect(sessions.some((s) => s.status === 'running')).toBe(true); // `list` shows it running, as today
+    const accepted = gitOk(dir, ['rev-parse', 'HEAD']);
+    expect(sessions.find((s) => s.status === 'running')?.controlSha).toBe(accepted);
+    const effectFile = readdirSync(join(dir, '.open-autonomy', 'runner-state', 'effects')).find((file) => file.endsWith('.json'))!;
+    const marker = JSON.parse(readFileSync(join(dir, '.open-autonomy', 'runner-state', 'effects', effectFile), 'utf8'));
+    expect(marker.schema).toBe('open-autonomy.effect-marker.v2');
+    expect(marker.controlSha).toBe(accepted);
+    expect(realpathSync(marker.controlRoot)).toBe(realpathSync(dir));
+    expect(realpathSync(marker.env.AUTONOMY_TRUSTED_RUNNER)).toBe(realpathSync(join(dir, 'scripts', 'runner.ts')));
   });
 
   test('workspace-only isolation creates a fresh real worktree and never records a proposal effect', () => {
@@ -325,7 +363,7 @@ describe('scripts/runner.ts launch — the skill pre-check (runner-frontend.ts v
     expect(effectsCount(dir)).toBe(0);
   });
 
-  test('workspace-only isolation refuses a stale same-named skill before termfleet spend', () => {
+  test('workspace-only isolation refuses a feature-checkout scheduler before mixing it with remote control doctrine', () => {
     const { dir } = scaffold();
     gitOk(dir, ['checkout', '-q', '-b', 'feature/new-doctrine']);
     writeFileSync(
@@ -343,11 +381,10 @@ describe('scripts/runner.ts launch — the skill pre-check (runner-frontend.ts v
     });
 
     expect(r.status).not.toBe(0);
-    expect(r.stderr).toContain('skill "develop" is stale');
-    expect(r.stderr).toContain('content differs from the control checkout');
-    expect(r.stderr).toContain('remote default branch');
+    expect(r.stderr).toContain('control checkout changed');
+    expect(r.stderr).toContain('active generation');
     expect(existsSync(sentinel)).toBe(false);
-    expect(readdirSync(join(dir, '.worktrees'))).toEqual([]); // refused launch cleaned its fresh worktree
+    expect(existsSync(join(dir, '.worktrees')) ? readdirSync(join(dir, '.worktrees')) : []).toEqual([]); // refused before any worktree exists
     expect(gitOk(dir, ['branch', '--list', 'autonomy/run-develop-*'])).toBe('');
   });
 });

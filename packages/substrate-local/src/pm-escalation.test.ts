@@ -71,6 +71,14 @@ function gitOk(dir: string, args: string[]): string {
   if (r.status !== 0) throw new Error(`git ${args.join(' ')} failed in ${dir}: ${r.stderr || r.stdout}`);
   return r.stdout.trim();
 }
+function acceptGeneration(dir: string): void {
+  const sha = gitOk(dir, ['rev-parse', 'HEAD']);
+  const state = join(dir, '.open-autonomy', 'runner-state');
+  mkdirSync(state, { recursive: true });
+  writeFileSync(join(state, 'control-generation.json'), JSON.stringify({
+    schema: 'open-autonomy.control-generation.v1', sha, codeHost: 'github', defaultBranch: 'main', acceptedAt: new Date().toISOString(),
+  }));
+}
 
 // Verbatim duplicate of launch-verification.test.ts's installStubTermfleet — that file is owned by another
 // builder and is NOT edited here; this is this file's own copy, per this task's explicit instruction to
@@ -217,6 +225,7 @@ function scaffold(): { dir: string; issueId: string } {
   gitOk(dir, ['remote', 'add', 'origin', '.']);
   gitOk(dir, ['fetch', '-q', 'origin', 'main']);
   gitOk(dir, ['symbolic-ref', 'refs/remotes/origin/HEAD', 'refs/remotes/origin/main']);
+  acceptGeneration(dir);
   return { dir, issueId };
 }
 
@@ -237,6 +246,7 @@ describe('OA-08 AC-7: canned PM escalation over the REAL model-free runner-refus
     // skill" scenario (the cause is never fixed across these 3 ticks — the escalation must fire on its own).
     gitOk(dir, ['rm', '-r', '.claude/skills/develop']);
     gitOk(dir, ['commit', '-q', '-m', 'break develop (permanently, for this AC-7 demo)']);
+    acceptGeneration(dir);
 
     // Sanity: the board starts clean.
     expect(readLabels(dir, issueId)).toEqual([]);

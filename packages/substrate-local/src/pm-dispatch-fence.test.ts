@@ -104,6 +104,22 @@ function gitOk(dir: string, args: string[]): string {
   return r.stdout.trim();
 }
 
+// Every positive GitHub-backed launch must explicitly accept the exact default-branch generation it
+// delegates authority to. The fixture's origin points at itself, so refresh this receipt after each
+// committed board seed that is expected to dispatch.
+function acceptGeneration(dir: string): void {
+  const sha = gitOk(dir, ['rev-parse', 'HEAD']);
+  const state = join(dir, '.open-autonomy', 'runner-state');
+  mkdirSync(state, { recursive: true });
+  writeFileSync(join(state, 'control-generation.json'), `${JSON.stringify({
+    schema: 'open-autonomy.control-generation.v1',
+    sha,
+    codeHost: 'github',
+    defaultBranch: 'main',
+    acceptedAt: new Date().toISOString(),
+  }, null, 2)}\n`);
+}
+
 // Resolves the repo's pinned ztrack CLI, for this test file's OWN scaffold/fixture calls (`ztrack init` /
 // `issue create` / `issue edit`) — a private duplicate of the driver's identical helper (mirrors OA-08's
 // test file, which duplicates its own copy rather than importing the driver's internals for setup).
@@ -217,6 +233,7 @@ describe('OA-07 AC-7: allowlist fence enforced over the REAL board + REAL launch
     const unlabeledId = createIssue(dir, 'OA-07 AC-7: pre-existing backlog item (not opted in)', '# Backlog item\n\nOrdinary pre-existing work.' + DEV_AC_BODY);
     gitOk(dir, ['add', '-A']);
     gitOk(dir, ['commit', '-q', '-m', 'seed board: one oa-approved + one unlabeled ready issue']);
+    acceptGeneration(dir);
 
     const sentinel = join(dir, 'sentinel.log');
     const runEnv = env({ OA_STUB_TF_SESSIONS_FILE: sentinel });
@@ -267,6 +284,7 @@ describe('OA-07 AC-7 CONTRAST (order-independent non-tautology positive control)
     addLabel(dir, id, 'oa-approved'); // the ONLY change from the fenced issue in the main AC-7 test above
     gitOk(dir, ['add', '-A']);
     gitOk(dir, ['commit', '-q', '-m', 'seed board: single ready, oa-approved issue (positive control)']);
+    acceptGeneration(dir);
 
     const sentinel = join(dir, 'sentinel.log');
     const runEnv = env({ OA_STUB_TF_SESSIONS_FILE: sentinel });

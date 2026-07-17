@@ -13,6 +13,7 @@
 //   AGENT_BOT_NAME   / AGENT_BOT_EMAIL   git author identity for the agent-proposed commit
 //   REVIEW_WORKFLOW  the reviewer's workflow to dispatch on github (empty if no review edge / non-github runner)
 //   REVIEW_AGENT     the reviewer AGENT to launch via the runner seam (a local runner's review-edge realization)
+//   AUTONOMY_TRUSTED_RUNNER absolute runner.ts from the accepted local control generation
 //   GH_TOKEN, GITHUB_RUN_ID  (the repo is resolved from the remote via gh's {owner}/{repo} placeholders)
 import { execFileSync } from 'node:child_process';
 
@@ -91,6 +92,7 @@ if (import.meta.main) {
   const rid = `ir-${agentName}-${runId}`;
   const reviewWorkflow = (env.REVIEW_WORKFLOW ?? '').trim();
   const reviewAgent = (env.REVIEW_AGENT ?? '').trim();
+  const trustedRunner = (env.AUTONOMY_TRUSTED_RUNNER ?? 'scripts/runner.ts').trim();
   const isNumericRef = /^[0-9]+$/.test(ref);
   const branch = ref ? `agent/issue-${ref}` : `agent/${rid}`;
 
@@ -193,7 +195,11 @@ if (import.meta.main) {
   if (reviewWorkflow) dispatch('review', [reviewWorkflow, '-f', `issue_number=${prNumber}`]);
   else if (reviewAgent && prNumber) {
     for (let i = 0; i < 6; i++) {
-      if (ok('bun', ['scripts/runner.ts', 'launch', reviewAgent, '--ref', prNumber])) break;
+      // Local review is authority-bearing: invoke the runner selected by the accepted control generation,
+      // and give the reviewer a fresh workspace based on that generation. The candidate worktree remains
+      // this effect's proposal data/cwd, but cannot substitute its runner, reviewer skill, manifest, or
+      // finalizer before those changes themselves merge.
+      if (ok('bun', [trustedRunner, 'launch', reviewAgent, '--ref', prNumber, '--workspace', 'isolated'])) break;
       sleep(4);
     }
   }

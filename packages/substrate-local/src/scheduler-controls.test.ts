@@ -133,7 +133,6 @@ describe('emitted scheduler hard controls', () => {
       mkdirSync(leases, { recursive: true });
       mkdirSync(effects, { recursive: true });
       mkdirSync(worktree);
-      mkdirSync(join(worktree, 'scripts'));
       writeFileSync(join(dir, 'scheduler', 'run.mjs'), run);
       writeFileSync(join(dir, 'scheduler', 'schedule.json'), JSON.stringify({ jobs: [] }));
       writeFileSync(join(dir, 'scripts', 'autonomy-runner.mjs'), `
@@ -143,13 +142,25 @@ describe('emitted scheduler hard controls', () => {
           async reapIdle(){ return existsSync(${JSON.stringify(reapMarker)}) ? [{ id: 'fresh', agent: 'test' }] : []; }
         }
       `);
-      writeFileSync(join(worktree, 'scripts', 'effect.mjs'), `import { writeFileSync } from 'node:fs'; writeFileSync(${JSON.stringify(effectSentinel)}, 'ran');\n`);
+      writeFileSync(join(dir, 'scripts', 'effect.mjs'), `import { writeFileSync } from 'node:fs'; writeFileSync(${JSON.stringify(effectSentinel)}, 'ran');\n`);
       const lease = (id: string, path: string, createdAt: string) => JSON.stringify({
         schema: 'open-autonomy.workspace-lease.v1', id, agent: 'test', branch: `test/${id}`, worktree: path, createdAt,
       });
       writeFileSync(fresh, lease('fresh', worktree, new Date().toISOString()));
       writeFileSync(stale, lease('stale', join(dir, 'missing'), '1970-01-01T00:00:00.000Z'));
-      writeFileSync(effectMarker, JSON.stringify({ id: 'fresh', agent: 'test', effect: 'scripts/effect.mjs', worktree }));
+      spawnSync('git', ['init', '-q', '-b', 'main'], { cwd: dir });
+      spawnSync('git', ['config', 'user.email', 'scheduler@example.invalid'], { cwd: dir });
+      spawnSync('git', ['config', 'user.name', 'scheduler-test'], { cwd: dir });
+      spawnSync('git', ['add', 'scheduler/run.mjs', 'scheduler/schedule.json', 'scripts/autonomy-runner.mjs', 'scripts/effect.mjs'], { cwd: dir });
+      spawnSync('git', ['commit', '-q', '-m', 'accepted test control'], { cwd: dir });
+      const controlSha = spawnSync('git', ['rev-parse', 'HEAD'], { cwd: dir, encoding: 'utf8' }).stdout.trim();
+      writeFileSync(join(dir, '.open-autonomy', 'runner-state', 'control-generation.json'), JSON.stringify({
+        schema: 'open-autonomy.control-generation.v1', sha: controlSha, codeHost: 'local-git', acceptedAt: new Date().toISOString(),
+      }));
+      writeFileSync(effectMarker, JSON.stringify({
+        schema: 'open-autonomy.effect-marker.v2', id: 'fresh', agent: 'test', effect: 'scripts/effect.mjs', worktree,
+        controlRoot: dir, controlSha, env: {},
+      }));
       child = spawn('node', ['scheduler/run.mjs'], {
         cwd: dir,
         env: { ...process.env, AUTONOMY_REAP_POLL_MS: '1000', AUTONOMY_WORKSPACE_LEASE_GRACE_MS: '60000' },

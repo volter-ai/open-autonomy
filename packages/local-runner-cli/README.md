@@ -36,6 +36,8 @@ Once it is published, adopting the CLI is a packaging/release change—not a new
 | `oa status` | fence state + rationale, accepted control generation, live sessions (via the runner SDK), and last-fire info per job | — (new) |
 | `oa dispatch <agent>` | fire one declared agent job now, bypassing cadence only; fence, environment, singleton, and `maxConcurrent` remain enforced | `node scheduler/run.mjs --dispatch <agent>` |
 | `oa recover-effect <marker> --control-sha <sha>` | after inspection, bind one parked pre-generation effect marker to the still-active accepted generation | — |
+| `oa activate --profile <path> [...]` | first use configures immutable accepted-generation activation; every use fetches, stages, validates, and atomically routes to the remote default branch | — |
+| `oa rollback [sha]` | atomically route back to the retained previous (or named draining) generation | — |
 | `oa doctor [--live] [--json]` | offline: OA-04 dep-integrity probe + fence state + `schedule.json` parse + prompts/skills existence per declared agent; `--live` additionally probes the provider `/healthz` over the network | — (new; folds in checks that used to live only in `bin/doctor.ts`/`bin/collision-check.ts`) |
 | `oa provider up` | (TG.1) bring up a termfleet console+provider on a repo-unique, genuinely-free port pair (never the box defaults 7373/7402/7620/7621); verify the thing that answered is REALLY termfleet (never a foreign occupant); pin `TERMFLEET_PROVIDER_URL` durably into `scheduler/schedule.json`'s `env`. Idempotent: no-ops on a healthy pin, restarts a dead one on the SAME pinned ports. | — (new) |
 | `oa provider status` | report whether the pinned provider (and console) are up and really answering as termfleet | — (new) |
@@ -61,6 +63,17 @@ Once it is published, adopting the CLI is a packaging/release change—not a new
 - **Generation-less effects are evidence, not executable instructions.** An old or malformed marker is
   moved to `runner-state/effect-quarantine` with an exact `oa recover-effect` command. Recovery requires
   an operator to inspect it and bind it to the still-active SHA; nothing silently guesses its authority.
+- **Activation never pulls a dirty checkout in place.** `oa activate --profile profiles/<name>` stores its
+  local configuration and one atomic routing record under the repository's git-common directory, stages
+  each accepted SHA as a detached immutable worktree, then requires profile lint, local compile/upgrade
+  convergence, offline doctor, and core runner conformance before the pointer can switch. `oa start`
+  becomes the supervisor automatically once configured. New fires follow the active generation; old
+  reconcilers become drain-only until their SHA-bound sessions/effects finish. Worktrees remain available
+  for inspection and rollback.
+- **Pause is routing-wide operator state.** On first activation configuration, the existing
+  `.open-autonomy/paused` intent is imported into the git-common activation state. Thereafter `oa pause`,
+  `oa resume`, the scheduler, and direct Runner launches all read that one marker, so staging, switching,
+  restart, and rollback cannot implicitly resume work.
 - **`schedule.json` accepts both shapes.** Legacy `{ intervalSeconds, scripts: string[] }` and the new
   generic job form:
 

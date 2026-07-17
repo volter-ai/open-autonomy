@@ -1,10 +1,12 @@
 import { describe, expect, test } from 'bun:test';
+import { spawnSync } from 'node:child_process';
 import { mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { pause } from './pause.ts';
 import { readLastFires, recordFire, status } from './status.ts';
 import { StubSessionRunner } from './test-support/stub-session-runner.ts';
+import { activateAcceptedGeneration, activationHome, configureActivation, type ActivationOps } from './activation.ts';
 
 function tmpRepo(): string {
   return mkdtempSync(join(tmpdir(), 'oa-status-'));
@@ -107,6 +109,37 @@ describe('oa status', () => {
       const r = await status({ cwd: dir, sessionRunnerFactory: async () => new StubSessionRunner() });
       expect(r.controlGeneration?.sha).toBe(sha);
       expect(r.rationale).toContain(`control-generation: ${sha} (github)`);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test('reports active, staged/draining, last-failed generations and an exact rollback command', async () => {
+    const dir = tmpRepo();
+    try {
+      spawnSync('git', ['init', '-q', '-b', 'main'], { cwd: dir });
+      configureActivation({ profile: 'profiles/test', pollMs: 1000 }, { cwd: dir });
+      let accepted = 'a'.repeat(40);
+      let fail = false;
+      const ops: ActivationOps = {
+        async detectAccepted() { return { sha: accepted, acceptedAt: new Date().toISOString() }; },
+        async stage(sha) { const root = join(activationHome(dir), 'fixture', sha); mkdirSync(root, { recursive: true }); return root; },
+        async validate() { if (fail) throw new Error('invalid staged profile'); },
+        async health() {},
+      };
+      await activateAcceptedGeneration({ cwd: dir, ops });
+      accepted = 'b'.repeat(40);
+      await activateAcceptedGeneration({ cwd: dir, ops });
+      accepted = 'c'.repeat(40);
+      fail = true;
+      await activateAcceptedGeneration({ cwd: dir, ops });
+
+      const report = await status({ cwd: dir, sessionRunnerFactory: async () => new StubSessionRunner() });
+      expect(report.activation?.active?.sha).toBe('b'.repeat(40));
+      expect(report.rationale).toContain(`activation.active: ${'b'.repeat(40)}`);
+      expect(report.rationale).toContain(`activation.draining: ${'a'.repeat(40)}`);
+      expect(report.rationale).toContain(`activation.last-failed: ${'c'.repeat(40)} — invalid staged profile`);
+      expect(report.rationale).toContain(`activation.rollback: oa rollback ${'a'.repeat(40)}`);
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }

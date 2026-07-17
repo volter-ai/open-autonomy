@@ -70,6 +70,7 @@ import { computeMaturity } from './maturity.ts';
 import type { MaturityOptions } from './maturity.ts';
 import type { InstallTarget } from './signal-sets.ts';
 import { runInstallDelegate } from './install-delegate.ts';
+import { activationHome, configuredActivationHome, readActivationRoutingState } from './activation-paths.ts';
 
 function pkgVersion(): string {
   try {
@@ -83,7 +84,7 @@ function pkgVersion(): string {
 
 const HELP = `oa <command> [args]  (@volter/oa v${pkgVersion()}) — the local open-autonomy substrate as a CLI
 
-  oa start                     continuous generic job scheduler (was: node scheduler/run.mjs)
+  oa start                     continuous scheduler; follows atomic generations when activation is configured
   oa once                      make one pass over jobs, respecting fences and concurrency
   oa pause [reason]             touch the conventional .open-autonomy/paused job fence
   oa resume                     remove .open-autonomy/paused and re-arm jobs assigned that fence
@@ -91,6 +92,10 @@ const HELP = `oa <command> [args]  (@volter/oa v${pkgVersion()}) — the local o
   oa dispatch <agent>           fire one declared agent job now, bypassing cadence only
   oa recover-effect <marker> --control-sha <sha>
                                 bind one inspected legacy marker to the active accepted generation
+  oa activate [--profile <path>] [--provider-url <url>] [--local-schedule-config <path>] [--poll-ms <n>]
+                                configure (when --profile is given), stage, validate, and atomically activate
+                                the remote default branch; reruns are idempotent
+  oa rollback [sha]             atomically route back to the retained previous (or named) generation
   oa doctor [--live] [--json]   offline checks: dep-integrity + fence + schedule.json + prompts/skills;
                                 --live additionally probes the termfleet provider's /healthz over the network
   oa maturity [--json] [--profile-dir <path>] [--profile <name>] [--target local|gh-actions]
@@ -126,10 +131,30 @@ directory (the repo root) — nothing is bundled or cached from a prior install.
 export async function runCli(argv: string[]): Promise<number> {
   const [cmd, ...rest] = argv;
   const cwd = process.cwd();
+  const activeRuntime = (): { cwd: string; ambient: NodeJS.ProcessEnv } => {
+    const state = readActivationRoutingState(cwd);
+    const generation = state?.active;
+    if (configuredActivationHome(cwd) && !generation) {
+      throw new Error('[oa] activation is configured but has no validated active generation; run `oa activate` before firing work');
+    }
+    if (!generation) return { cwd, ambient: process.env };
+    return {
+      cwd: generation.root,
+      ambient: {
+        ...process.env,
+        AUTONOMY_ACTIVATION_HOME: activationHome(cwd),
+        AUTONOMY_CONTROL_ROOT: generation.root,
+        AUTONOMY_CONTROL_SHA: generation.sha,
+      },
+    };
+  };
 
   if (!cmd || cmd === 'start') {
     try {
-      await start({ cwd });
+      if (configuredActivationHome(cwd)) {
+        const { superviseActivation } = await import('./activation-supervisor.ts');
+        await superviseActivation({ cwd });
+      } else await start({ cwd });
       return 0;
     } catch (e) {
       // A preflight failure already printed its guard message inside runPreflight; surface the summary +
@@ -138,8 +163,39 @@ export async function runCli(argv: string[]): Promise<number> {
       return 1;
     }
   }
+  if (cmd === 'activate') {
+    const { activateAcceptedGeneration, configureActivation, readActivationConfig } = await import('./activation.ts');
+    const flag = (name: string): string | undefined => {
+      const i = rest.indexOf(name);
+      return i >= 0 && i + 1 < rest.length ? rest[i + 1] : undefined;
+    };
+    const profile = flag('--profile');
+    if (profile) {
+      configureActivation({
+        profile,
+        ...(flag('--provider-url') ? { providerUrl: flag('--provider-url')! } : {}),
+        ...(flag('--local-schedule-config') ? { localScheduleConfig: flag('--local-schedule-config')! } : {}),
+        pollMs: Number(flag('--poll-ms') ?? 60_000),
+      }, { cwd });
+    } else if (!readActivationConfig(cwd)) {
+      console.error('[oa] activate: first use requires --profile <repo-relative-profile>');
+      return 2;
+    }
+    const result = await activateAcceptedGeneration({ cwd });
+    console.log(`[oa] activate: ${result.action}${result.state.active ? ` ${result.state.active.sha}` : ''}`);
+    if (result.reason) console.error(`[oa] activate: ${result.reason}`);
+    return result.ok ? 0 : 1;
+  }
+  if (cmd === 'rollback') {
+    const { rollbackActivation } = await import('./activation.ts');
+    const result = rollbackActivation({ cwd, ...(rest[0] ? { sha: rest[0] } : {}) });
+    if (result.ok) console.log(`[oa] rollback: active ${result.state.active?.sha}`);
+    else console.error(`[oa] rollback refused: ${result.reason}`);
+    return result.ok ? 0 : 1;
+  }
   if (cmd === '--once' || cmd === 'once') {
-    const r = await once({ cwd });
+    const runtime = activeRuntime();
+    const r = await once({ cwd: runtime.cwd, ambient: runtime.ambient });
     if (r.reason) console.error(`[oa] once: ${r.reason}`);
     return r.ok ? 0 : 1;
   }
@@ -164,7 +220,9 @@ export async function runCli(argv: string[]): Promise<number> {
       console.error('[oa] dispatch: requires an agent name — oa dispatch <agent>');
       return 1;
     }
-    const r = dispatch(agent, { cwd });
+    const runtime = activeRuntime();
+    Object.assign(process.env, runtime.ambient);
+    const r = dispatch(agent, { cwd: runtime.cwd });
     if (r.reason) console.error(r.reason);
     return r.ok ? 0 : 1;
   }
@@ -177,7 +235,7 @@ export async function runCli(argv: string[]): Promise<number> {
       return 1;
     }
     const { recoverEffect } = await import('./effect-recovery.ts');
-    const result = recoverEffect(marker, sha, { cwd });
+    const result = recoverEffect(marker, sha, { cwd: activeRuntime().cwd });
     if (!result.ok) {
       console.error(`[oa] recover-effect refused: ${result.reason}`);
       return 1;
@@ -188,7 +246,8 @@ export async function runCli(argv: string[]): Promise<number> {
   if (cmd === 'doctor') {
     const json = rest.includes('--json');
     const live = rest.includes('--live');
-    const r = await doctor({ cwd, live });
+    const runtime = activeRuntime();
+    const r = await doctor({ cwd: runtime.cwd, live, env: runtime.ambient });
     console.log(json ? JSON.stringify(r, null, 2) : formatDoctorReport(r));
     return r.ok ? 0 : 1;
   }

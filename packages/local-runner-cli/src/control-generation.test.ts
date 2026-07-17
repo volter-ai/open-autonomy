@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { acceptControlGeneration, controlGenerationPath, verifyControlGeneration, verifyControlPaths } from './control-generation.ts';
 import { recoverEffect } from './effect-recovery.ts';
+import { activateAcceptedGeneration, configureActivation, type ActivationOps } from './activation.ts';
 
 function git(cwd: string, args: string[]): string {
   const result = spawnSync('git', args, { cwd, encoding: 'utf8' });
@@ -62,6 +63,30 @@ describe('accepted control generation', () => {
       git(other, ['push', '-q', 'origin', 'main']);
       expect(() => verifyControlGeneration(f.dir, accepted.sha)).toThrow('accepted remote generation changed');
       expect(JSON.parse(readFileSync(controlGenerationPath(f.dir), 'utf8')).sha).toBe(accepted.sha);
+    } finally { f.cleanup(); }
+  });
+
+  test('a remote-advanced SHA remains valid only while the atomic activation record retains it for drain/rollback', async () => {
+    const f = fixture();
+    try {
+      const accepted = acceptControlGeneration(f.dir)!;
+      configureActivation({ profile: 'profiles/test', pollMs: 1000 }, { cwd: f.dir });
+      const ops: ActivationOps = {
+        async detectAccepted() { return { sha: accepted.sha, acceptedAt: new Date().toISOString() }; },
+        async stage() { return f.dir; },
+        async validate() {},
+        async health() {},
+      };
+      await activateAcceptedGeneration({ cwd: f.dir, ops });
+      const other = join(dirname(f.dir), 'retained-other');
+      git(dirname(f.dir), ['clone', '-q', f.remote, other]);
+      git(other, ['config', 'user.email', 'other@example.invalid']);
+      git(other, ['config', 'user.name', 'other']);
+      writeFileSync(join(other, 'next.txt'), 'next\n');
+      git(other, ['add', '-A']);
+      git(other, ['commit', '-q', '-m', 'next accepted generation']);
+      git(other, ['push', '-q', 'origin', 'main']);
+      expect(verifyControlGeneration(f.dir, accepted.sha).sha).toBe(accepted.sha);
     } finally { f.cleanup(); }
   });
 

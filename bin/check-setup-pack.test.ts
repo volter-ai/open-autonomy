@@ -108,7 +108,30 @@ describe('checkPackDrift — real contradictions are caught (not a stub)', () =>
     rmSync(dir, { recursive: true, force: true });
   });
 
-  test('manual-after-review declaring agent-review FAILS (self-check on a shared token is dishonest)', () => {
+  test('manual-after-review accepts independent native agent-review followed by an explicit human landing', () => {
+    const ir = IR_WITH_REVIEWER.replace(
+      'policy:',
+      ['  maintainer:', '    kind: human', '    behavior: maintainer', '    capabilities: [tasks:converse, code:review]', '    triggers: [{ dispatch: true }]', 'policy:'].join('\n'),
+    );
+    const dir = fixture({
+      ir,
+      pack: [
+        'landing_mode: manual-after-review',
+        'check_realizations:',
+        '  - { check: agent-review, via: native }',
+        'board_seed_recipe: { originator_skill: pm, promotion_fence: state, import_verb: x, landing_path: direct }',
+        'maturity_signals: { m3_tool: doctor, m4_predicate: ztrack, m6_signal: per-issue }',
+        'terminal_stage: M5',
+        '',
+      ].join('\n'),
+      provision: JSON.stringify({ branch_protection: { required_checks: ['agent-review'] } }),
+    });
+    const errors = checkPackDrift(dir);
+    expect(errors).toEqual([]);
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  test('manual-after-review with no kind:human actor FAILS', () => {
     const dir = fixture({
       ir: IR_WITH_REVIEWER,
       pack: [
@@ -123,7 +146,30 @@ describe('checkPackDrift — real contradictions are caught (not a stub)', () =>
       provision: JSON.stringify({ branch_protection: { required_checks: ['agent-review'] } }),
     });
     const errors = checkPackDrift(dir);
-    expect(errors.some((e) => e.includes("manual-after-review"))).toBe(true);
+    expect(errors.some((e) => e.includes('manual-after-review') && e.includes('kind:human'))).toBe(true);
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  test('manual-after-review agent-review with no code:review actor FAILS', () => {
+    const ir = IR_NO_REVIEWER.replace(
+      'policy:',
+      ['  maintainer:', '    kind: human', '    behavior: maintainer', '    capabilities: [tasks:converse]', '    triggers: [{ dispatch: true }]', 'policy:'].join('\n'),
+    );
+    const dir = fixture({
+      ir,
+      pack: [
+        'landing_mode: manual-after-review',
+        'check_realizations:',
+        '  - { check: agent-review, via: native }',
+        'board_seed_recipe: { originator_skill: pm, promotion_fence: state, import_verb: x, landing_path: direct }',
+        'maturity_signals: { m3_tool: doctor, m4_predicate: ztrack, m6_signal: per-issue }',
+        'terminal_stage: M5',
+        '',
+      ].join('\n'),
+      provision: JSON.stringify({ branch_protection: { required_checks: ['agent-review'] } }),
+    });
+    const errors = checkPackDrift(dir);
+    expect(errors.some((e) => e.includes('agent-review') && e.includes('code:review'))).toBe(true);
     rmSync(dir, { recursive: true, force: true });
   });
 

@@ -57,8 +57,9 @@ operate, with the `ci`/GHAS/signing gotchas called out).
 
 `provision.json`'s `required_checks` = `[ci, agent-review, human-approval, supply-chain, code-scan,
 secret-scan]`, enforced on **every** PR including bot-authored agent PRs. A bot PR fires no `pull_request`
-(GITHUB_TOKEN anti-recursion), so the **propose effect dispatches** the gate workflows so their status posts on
-the head SHA — wired via `policy.box.gh-actions.propose_dispatch_checks` (→ `EXTRA_CHECK_WORKFLOWS` →
+(GITHUB_TOKEN anti-recursion), so the **propose effect sends default-branch-only `repository_dispatch` events**
+to the gate workflows so their statuses post on the head SHA — wired via
+`policy.box.gh-actions.propose_dispatch_checks` (→ `EXTRA_CHECK_WORKFLOWS` →
 `scripts/agent-propose.ts`), the same mechanism that dispatches `ci`/`agent-review`/`human-approval`:
 - `supply-chain.yml` (C7) — lockfile integrity + `bun audit`, posts `supply-chain`. **Hard block.**
 - `code-scan.yml` (C8) — **Semgrep OSS** static analysis (free, no account, no GHAS), posts `code-scan`.

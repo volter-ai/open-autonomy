@@ -1,11 +1,10 @@
 import { describe, expect, test } from 'bun:test';
-import { resolveBaseBranch, type ResolveBaseBranchDeps } from './agent-propose';
+import { checkDispatchArgs, resolveBaseBranch, type ResolveBaseBranchDeps } from './agent-propose';
 
-// resolveBaseBranch is the only pure/exported logic in agent-propose.ts — the rest of the file is the
-// PROPOSE effect itself (git/gh side effects), gated behind `import.meta.main` so importing the module for
-// this test doesn't run it. These deps stub the two real calls the function makes (`gh api .../default_branch`
-// and `git symbolic-ref refs/remotes/origin/HEAD`) plus `sleep`, so retries are exercised without shelling
-// out or actually pausing.
+// The PROPOSE effect's git/gh side effects are gated behind `import.meta.main`, so importing its small pure
+// helpers does not run them. These deps stub the two real calls resolveBaseBranch makes (`gh api
+// .../default_branch` and `git symbolic-ref refs/remotes/origin/HEAD`) plus `sleep`, so retries are exercised
+// without shelling out or actually pausing.
 const depsWith = (over: Partial<ResolveBaseBranchDeps>): ResolveBaseBranchDeps => {
   const sleeps: number[] = [];
   return {
@@ -69,5 +68,27 @@ describe('resolveBaseBranch — api retries -> local git origin/HEAD -> literal 
     });
     expect(resolveBaseBranch(deps)).toBe('main');
     expect(calls).toBe(1);
+  });
+});
+
+describe('checkDispatchArgs — trusted default-branch gate trigger', () => {
+  test('uses repository_dispatch with a deterministic event type and bound payload', () => {
+    expect(checkDispatchArgs('security-gate.yml', 'a'.repeat(40), '42')).toEqual([
+      'api', '-X', 'POST', 'repos/{owner}/{repo}/dispatches',
+      '-f', 'event_type=open-autonomy-security-gate',
+      '-f', `client_payload[sha]=${'a'.repeat(40)}`,
+      '-f', 'client_payload[pr]=42',
+    ]);
+  });
+
+  test('cannot carry a caller-selected workflow ref', () => {
+    const args = checkDispatchArgs('security-gate.yml', 'b'.repeat(40), '7');
+    expect(args).not.toContain('--ref');
+    expect(args).not.toContain('workflow');
+    expect(args).not.toContain('run');
+  });
+
+  test('rejects a workflow name that cannot map to a bounded event type', () => {
+    expect(() => checkDispatchArgs('../security gate.yml', 'a'.repeat(40), '1')).toThrow('invalid dispatched check workflow name');
   });
 });

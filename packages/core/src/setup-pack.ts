@@ -27,8 +27,9 @@ import type { AutonomyIR, Trigger } from './ir';
 export type LandingMode = 'auto-merge' | 'manual-after-review' | 'pr-free';
 
 // How a required check actually POSTS its status — names don't self-realize (DESIGN §Q0):
-//  - 'propose_dispatch_checks' — the proposer's effect step explicitly workflow_dispatches a check-only
-//     workflow named in `policy.box['gh-actions'].propose_dispatch_checks` (e.g. security-gate.yml).
+//  - 'propose_dispatch_checks' — the proposer's effect sends a default-branch-only repository_dispatch
+//     event derived from the workflow named in `policy.box['gh-actions'].propose_dispatch_checks`
+//     (e.g. security-gate.yml). A caller-selectable workflow_dispatch ref is forbidden for status writers.
 //  - 'authored-workflow' — a real, standing workflow file the repo must carry for the name to ever post at
 //     all (e.g. `ci`, `human-approval` — TA.3's "a required check with no workflow behind it wedges every
 //     PR forever").

@@ -1,78 +1,104 @@
 name: codeql-gate
-# C8 as a BLOCKING required check on bot PRs (the gap the auditor flagged). The proposer effect dispatches
-# this with the PR head sha; it runs CodeQL on that revision and posts a `codeql` commit status. Gate logic:
-#   - analysis errors (real failure)                      -> failure (block)
-#   - analysis OK + open error/critical alerts on the ref -> failure (block)
-#   - analysis OK + none found (or alerts API unavailable, e.g. no GHAS on a private repo) -> success
-# It NEVER wedges on an API hiccup or a missing-GHAS private repo (it degrades to success with an honest
-# description, like dependency-review.yml — see README G3). The monitoring `codeql.yml` (Security tab, weekly)
-# is unchanged; this is its dispatched, blocking realization for the agent-PR path.
+# C8 blocking CodeQL realization for bot PRs. repository_dispatch fixes the workflow revision to the
+# default branch. Candidate analysis has security-events authority but no status authority; a separate
+# exact-head publisher consumes only GitHub's immutable job result and code-scanning API state.
 on:
-  workflow_dispatch:
-    inputs:
-      sha: { description: "head SHA to gate", required: true, type: string }
-      pr: { description: "PR number (to resolve the head ref for alert lookup)", required: false, type: string }
+  repository_dispatch:
+    types: [open-autonomy-codeql-gate]
 permissions:
   contents: read
-  statuses: write
-  security-events: write
-  actions: read
 jobs:
-  codeql-gate:
+  publish-pending:
     runs-on: ubuntu-latest
+    permissions: { contents: read, pull-requests: read, statuses: write }
     steps:
-      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+      - name: Bind exact PR head and post pending
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.client_payload.pr }}
+          SHA: ${{ github.event.client_payload.sha }}
+        run: |
+          actual="$(gh api "repos/$GITHUB_REPOSITORY/pulls/$PR" --jq .head.sha)"
+          test "$actual" = "$SHA"
+          gh api -X POST "repos/$GITHUB_REPOSITORY/statuses/$SHA" \
+            -f state=pending -f context=codeql -f description="running CodeQL on the proposed revision" >/dev/null
+
+  analyze:
+    needs: publish-pending
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+      actions: read
+    steps:
+      - name: Check out candidate without retaining a repository credential
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
         with:
-          ref: ${{ github.event.inputs.sha }}
-      - name: Post pending status
-        env: { GH_TOKEN: "${{ github.token }}", SHA: "${{ github.event.inputs.sha }}" }
-        run: gh api -X POST "repos/{owner}/{repo}/statuses/${SHA}" -f state=pending -f context=codeql -f description="running CodeQL on the proposed revision" >/dev/null
+          ref: ${{ github.event.client_payload.sha }}
+          persist-credentials: false
       - name: Initialize CodeQL
-        id: init
-        continue-on-error: true
         uses: github/codeql-action/init@dd903d2e4f5405488e5ef1422510ee31c8b32357 # v3.36.2
         with:
           languages: javascript-typescript
       - name: Analyze
-        id: analyze
-        continue-on-error: true
         uses: github/codeql-action/analyze@dd903d2e4f5405488e5ef1422510ee31c8b32357 # v3.36.2
         with:
           category: "/language:javascript-typescript"
-          upload: always   # publish results so alerts are created for this commit (the gate reads them)
-      - name: Decide + post codeql status
+          upload: always
+
+  publish-result:
+    needs: [publish-pending, analyze]
+    if: ${{ always() && needs.publish-pending.result == 'success' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+      statuses: write
+      security-events: read
+    steps:
+      - name: Re-bind exact PR head, inspect alerts, and publish result
         env:
           GH_TOKEN: ${{ github.token }}
-          SHA: ${{ github.event.inputs.sha }}
-          ANALYZE_OUTCOME: ${{ steps.analyze.outcome }}
+          PR: ${{ github.event.client_payload.pr }}
+          SHA: ${{ github.event.client_payload.sha }}
+          ANALYSIS_RESULT: ${{ needs.analyze.result }}
         run: |
-          set -uo pipefail
-          if [ "${ANALYZE_OUTCOME}" != "success" ]; then
-            gh api -X POST "repos/{owner}/{repo}/statuses/${SHA}" -f state=failure -f context=codeql -f description="CodeQL analysis did not complete" >/dev/null
-            echo "::error::CodeQL analysis did not complete"; exit 1
+          actual="$(gh api "repos/$GITHUB_REPOSITORY/pulls/$PR" --jq .head.sha)"
+          test "$actual" = "$SHA"
+          if [ "$ANALYSIS_RESULT" != success ]; then
+            gh api -X POST "repos/$GITHUB_REPOSITORY/statuses/$SHA" \
+              -f state=failure -f context=codeql -f description="CodeQL analysis did not complete" >/dev/null
+            exit 1
           fi
-          # Key on the COMMIT SHA, never the ref: a detached PR-head checkout makes CodeQL attribute alerts to
-          # the default branch, so a ref-filtered query misses them (false pass). Wait until code scanning has
-          # INDEXED an analysis for this commit, then count high/critical/error findings AT this commit. If the
-          # alerts API is unavailable (no GHAS on a private repo), degrade to pass with an honest note.
+
           indexed=""
           for i in $(seq 1 30); do
-            a="$(gh api 'repos/{owner}/{repo}/code-scanning/analyses?per_page=50' --jq "any(.[]; .commit_sha==\"${SHA}\")" 2>/dev/null || echo na)"
-            if [ "$a" = "na" ]; then
-              gh api -X POST "repos/{owner}/{repo}/statuses/${SHA}" -f state=success -f context=codeql -f description="CodeQL ran; alerts API unavailable (needs GHAS on private repos) — see Security tab" >/dev/null
-              echo "::warning::alerts API unavailable — passed on analysis completion"; exit 0
+            a="$(gh api "repos/$GITHUB_REPOSITORY/code-scanning/analyses?per_page=50" \
+              --jq "any(.[]; .commit_sha==\"${SHA}\")" 2>/dev/null || echo na)"
+            if [ "$a" = na ]; then
+              gh api -X POST "repos/$GITHUB_REPOSITORY/statuses/$SHA" \
+                -f state=success -f context=codeql \
+                -f description="CodeQL ran; alerts API unavailable — see Security tab" >/dev/null
+              exit 0
             fi
-            [ "$a" = "true" ] && { indexed=1; break; }
+            [ "$a" = true ] && { indexed=1; break; }
             sleep 5
           done
           if [ -z "$indexed" ]; then
-            gh api -X POST "repos/{owner}/{repo}/statuses/${SHA}" -f state=success -f context=codeql -f description="CodeQL ran; results not indexed in time — see Security tab" >/dev/null
-            echo "::warning::analysis not indexed in time — passed"; exit 0
+            gh api -X POST "repos/$GITHUB_REPOSITORY/statuses/$SHA" \
+              -f state=success -f context=codeql \
+              -f description="CodeQL ran; results not indexed in time — see Security tab" >/dev/null
+            exit 0
           fi
-          bad="$(gh api 'repos/{owner}/{repo}/code-scanning/alerts?state=open&per_page=100' \
-                  --jq "[.[] | select(.most_recent_instance.commit_sha==\"${SHA}\") | select(.rule.security_severity_level==\"high\" or .rule.security_severity_level==\"critical\" or .rule.severity==\"error\")] | length" 2>/dev/null || echo 0)"
+          bad="$(gh api "repos/$GITHUB_REPOSITORY/code-scanning/alerts?state=open&per_page=100" \
+            --jq "[.[] | select(.most_recent_instance.commit_sha==\"${SHA}\") | select(.rule.security_severity_level==\"high\" or .rule.security_severity_level==\"critical\" or .rule.severity==\"error\")] | length" \
+            2>/dev/null || echo 0)"
           if [ "${bad:-0}" -gt 0 ]; then
-            gh api -X POST "repos/{owner}/{repo}/statuses/${SHA}" -f state=failure -f context=codeql -f description="${bad} high/critical/error CodeQL finding(s) at this commit" >/dev/null
-            echo "::error::${bad} blocking CodeQL finding(s)"; exit 1
+            gh api -X POST "repos/$GITHUB_REPOSITORY/statuses/$SHA" \
+              -f state=failure -f context=codeql \
+              -f description="${bad} high/critical/error CodeQL finding(s)" >/dev/null
+            exit 1
           fi
-          gh api -X POST "repos/{owner}/{repo}/statuses/${SHA}" -f state=success -f context=codeql -f description="CodeQL clean (no high/critical findings at this commit)" >/dev/null
+          gh api -X POST "repos/$GITHUB_REPOSITORY/statuses/$SHA" \
+            -f state=success -f context=codeql \
+            -f description="CodeQL clean (no high/critical findings)" >/dev/null

@@ -110,7 +110,8 @@ policy:
     # gh-actions runner config. The base profile SHIPS a security scan (security.yml) but, before this,
     # never made it a required merge gate: a bot PR fires no pull_request (GITHUB_TOKEN anti-recursion), so
     # security.yml never ran on the agent-PR path and a security finding could never block a merge. Mirrors
-    # soc2-baseline's propose_dispatch_checks: the proposer effect dispatches security-gate.yml (the
+    # soc2-baseline's propose_dispatch_checks: the proposer effect sends security-gate.yml's default-branch
+    # repository_dispatch event (the
     # dispatched, blocking realization of security.yml) with the PR head sha so its `security` status posts
     # and native auto-merge waits for it. model/proxy/bot fall back to defaults.
     gh-actions:

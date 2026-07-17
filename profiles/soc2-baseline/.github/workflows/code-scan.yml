@@ -1,38 +1,70 @@
 name: code-scan
-# C8 as a no-signup, no-GHAS BLOCKING required check on bot PRs: Semgrep OSS (free, no account) statically
-# analyses the head and posts a `code-scan` commit status, failing on any finding. Dispatched by the proposer
-# effect. Works on PRIVATE repos with zero signup — the self-managed alternative to GitHub CodeQL/code scanning
-# (which needs GHAS on private). The richer CodeQL stays available as monitoring (codeql.yml) where GHAS exists.
+# C8 no-signup, no-GHAS blocking static analysis. repository_dispatch fixes the workflow revision to the
+# default branch; only the credentialless analysis job sees candidate bytes, and GitHub's job conclusion is
+# the sole result consumed by the exact-head status publisher.
 on:
-  workflow_dispatch:
-    inputs:
-      sha: { description: "head SHA to scan + post the status on", required: true, type: string }
-      pr: { description: "PR number (context only)", required: false, type: string }
+  repository_dispatch:
+    types: [open-autonomy-code-scan]
 permissions:
   contents: read
-  statuses: write
 jobs:
-  code-scan:
+  publish-pending:
     runs-on: ubuntu-latest
+    permissions: { contents: read, pull-requests: read, statuses: write }
     steps:
-      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
-        with:
-          ref: ${{ github.event.inputs.sha }}
-      - name: Post pending
-        env: { GH_TOKEN: "${{ github.token }}", SHA: "${{ github.event.inputs.sha }}" }
-        run: gh api -X POST "repos/{owner}/{repo}/statuses/${SHA}" -f state=pending -f context=code-scan -f description="static analysis (Semgrep OSS)" >/dev/null
-      - name: Semgrep scan + post result
-        env: { GH_TOKEN: "${{ github.token }}", SHA: "${{ github.event.inputs.sha }}" }
+      - name: Bind exact PR head and post pending
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.client_payload.pr }}
+          SHA: ${{ github.event.client_payload.sha }}
         run: |
-          set +e
+          actual="$(gh api "repos/$GITHUB_REPOSITORY/pulls/$PR" --jq .head.sha)"
+          test "$actual" = "$SHA"
+          gh api -X POST "repos/$GITHUB_REPOSITORY/statuses/$SHA" \
+            -f state=pending -f context=code-scan -f description="static analysis (Semgrep OSS)" >/dev/null
+
+  scan:
+    needs: publish-pending
+    runs-on: ubuntu-latest
+    permissions: { contents: read }
+    steps:
+      - name: Check out candidate without retaining a repository credential
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        with:
+          ref: ${{ github.event.client_payload.sha }}
+          path: candidate
+          persist-credentials: false
+      - name: Semgrep scan without a status credential
+        run: |
           python3 -m pip install --quiet semgrep || pipx install semgrep
-          # Registry rulesets are free + no-account (no SEMGREP_APP_TOKEN). --severity ERROR = block on real bugs.
-          semgrep --quiet --config=p/security-audit --config=p/javascript --config=p/secrets --severity=ERROR --json --output sem.json . ; rc=$?
-          n="$(jq '.results | length' sem.json 2>/dev/null || echo 0)"
-          n="${n:-0}"
+          semgrep --quiet --config=p/security-audit --config=p/javascript --config=p/secrets \
+            --severity=ERROR --json --output sem.json candidate
+          test -f sem.json
+          n="$(jq '.results | length' sem.json)"
           if [ "$n" -gt 0 ]; then
-            state=failure; desc="Semgrep found ${n} finding(s)"
-            jq -r '.results[] | "  - " + (.check_id) + " @ " + (.path) + ":" + (.start.line|tostring)' sem.json 2>/dev/null | head -5
-          else state=success; desc="Semgrep clean (no error-severity findings)"; fi
-          gh api -X POST "repos/{owner}/{repo}/statuses/${SHA}" -f state="$state" -f context=code-scan -f description="$desc" >/dev/null
-          [ "$state" = success ]
+            jq -r '.results[] | "  - " + (.check_id) + " @ " + (.path) + ":" + (.start.line|tostring)' sem.json | head -5
+            exit 1
+          fi
+
+  publish-result:
+    needs: [publish-pending, scan]
+    if: ${{ always() && needs.publish-pending.result == 'success' }}
+    runs-on: ubuntu-latest
+    permissions: { contents: read, pull-requests: read, statuses: write }
+    steps:
+      - name: Re-bind exact PR head and publish immutable scan result
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.client_payload.pr }}
+          SHA: ${{ github.event.client_payload.sha }}
+          SCAN_RESULT: ${{ needs.scan.result }}
+        run: |
+          actual="$(gh api "repos/$GITHUB_REPOSITORY/pulls/$PR" --jq .head.sha)"
+          test "$actual" = "$SHA"
+          state=failure; desc="Semgrep found an error-severity finding or failed"
+          if [ "$SCAN_RESULT" = success ]; then
+            state=success; desc="Semgrep clean (no error-severity findings)"
+          fi
+          gh api -X POST "repos/$GITHUB_REPOSITORY/statuses/$SHA" \
+            -f state="$state" -f context=code-scan -f description="$desc" >/dev/null
+          test "$state" = success

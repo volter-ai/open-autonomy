@@ -42,6 +42,25 @@ const dispatch = (label: string, args: string[]): void => {
   process.stdout.write(`${label} dispatch failed after retries (non-fatal)\n`);
 };
 
+// A status-writing gate MUST execute its workflow from the code host's accepted default branch. Unlike
+// workflow_dispatch, repository_dispatch has no caller-selectable workflow ref: GitHub always loads the
+// handler from the default branch. The candidate SHA remains DATA in client_payload, never workflow code.
+export function checkDispatchArgs(workflow: string, sha: string, pr: string): string[] {
+  const stem = workflow.replace(/^.*\//, '').replace(/\.ya?ml$/i, '');
+  if (!/^[a-z0-9][a-z0-9-]{0,79}$/i.test(stem)) throw new Error(`invalid dispatched check workflow name: ${workflow}`);
+  return [
+    'api', '-X', 'POST', 'repos/{owner}/{repo}/dispatches',
+    '-f', `event_type=open-autonomy-${stem}`,
+    '-f', `client_payload[sha]=${sha}`,
+    '-f', `client_payload[pr]=${pr}`,
+  ];
+}
+
+const dispatchCheck = (workflow: string, sha: string, pr: string): void => {
+  for (let i = 0; i < 6; i++) { if (ok('gh', checkDispatchArgs(workflow, sha, pr))) return; sleep(4); }
+  process.stdout.write(`${workflow} repository dispatch failed after retries (non-fatal)\n`);
+};
+
 // Resolve the PR's base branch — the repo's default branch, whatever it's actually called (main, master,
 // dev, trunk, …). A real adopter hit this: a transient `gh api` hiccup during a propose run fell straight
 // through to the hardcoded 'main' literal on a repo whose default branch is `dev` (no `main` branch exists
@@ -210,9 +229,12 @@ if (import.meta.main) {
   // check only posts on the head SHA if the proposer KICKS it here — otherwise that required check stays
   // unposted and native auto-merge never fires (the PR wedges). The list is empty for profiles that don't set
   // policy.box.gh-actions.propose_dispatch_checks, so this is a no-op everywhere except where it's declared.
-  // Each gate workflow takes `sha` + `pr` inputs and posts a commit status named after its own check context.
+  // Each gate workflow handles its derived `open-autonomy-<filename-stem>` repository_dispatch event,
+  // reads `sha` + `pr` from client_payload, and posts its own check context. repository_dispatch is
+  // load-bearing: GitHub always runs the DEFAULT-BRANCH workflow, so the candidate cannot select a modified
+  // status-writer with `--ref` (which workflow_dispatch would allow).
   const extraChecks = (env.EXTRA_CHECK_WORKFLOWS ?? '').split(',').map((s) => s.trim()).filter(Boolean);
-  for (const wf of extraChecks) dispatch(wf, [wf, '-f', `sha=${headSha}`, '-f', `pr=${prNumber}`]);
+  for (const wf of extraChecks) dispatchCheck(wf, headSha, prNumber);
 
   // EXTRA agent-reviewers (e.g. the advisory compliance-verifier): a bot PR fires no pull_request_target, so the
   // proposer kicks each with the agent-reviewer `issue_number=<pr>` shape (NOT the gate sha/pr shape), exactly

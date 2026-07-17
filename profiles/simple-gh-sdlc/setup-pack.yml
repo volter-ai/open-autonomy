@@ -14,7 +14,7 @@ landing_mode: auto-merge
 # compatibility path. Neither needs a separately authored/dispatched workflow. `security` is the dispatched,
 # blocking realization of security.yml
 # (.github/workflows/security-gate.yml) — a bot-opened PR fires no `pull_request`
-# (GITHUB_TOKEN anti-recursion), so the proposer's effect step explicitly workflow_dispatches it, per
+# (GITHUB_TOKEN anti-recursion), so the proposer sends its default-branch-only repository_dispatch event, per
 # `policy.box['gh-actions'].propose_dispatch_checks: [security-gate.yml]` in ir.yml.
 check_realizations:
   - check: ci

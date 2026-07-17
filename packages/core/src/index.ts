@@ -13,3 +13,4 @@ export * from './ir-yaml';
 export * from './upgrade';
 export * from './setup-pack';
 export * from './recommend';
+export * from './settings-merge';

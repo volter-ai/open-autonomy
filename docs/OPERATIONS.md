@@ -470,6 +470,28 @@ An upgrade may encounter a pending marker from before generation pinning. It is 
 it explicitly with `oa recover-effect <marker> --control-sha <sha>`; it is never silently discarded or run
 under an inferred generation.
 
+### Atomic local activation
+
+For an unattended GitHub-backed local install, configure the accepted-generation supervisor once:
+
+```bash
+oa activate --profile profiles/<your-profile> \
+  --provider-url http://127.0.0.1:<install-provider-port>
+oa start
+```
+
+Activation fetches the remote default branch but never checks it out over the operator's working tree.
+It creates an immutable detached worktree for the accepted SHA under git-common local state, validates
+that the committed installation converges with its declared local profile (including target-local data),
+runs offline doctor and core conformance, then changes one atomic routing record. A failed validation
+leaves the old generation active. A cold-start failure after the switch rolls the pointer back and records
+the rejected SHA/reason. Re-observing an active or previously rejected SHA is idempotent.
+
+The operator pause is central local state after configuration. It survives staging, activation, restart,
+and rollback. Existing SHA-bound sessions/effects drain under their old generation; only new work uses the
+new generation. Inspect the exact state with `oa status`; it reports active, staged, draining, last-failed,
+and the exact `oa rollback <sha>` command when a previous generation exists.
+
 Each tick fires the cron agents in `scheduler/schedule.json` (for `simple-sdlc` that's the PM; the
 PM then launches the workers). To use Codex instead of Claude Code:
 

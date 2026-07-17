@@ -4,6 +4,7 @@ import { mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { defaultProc } from './proc.ts';
 import type { ProcRunner } from './types.ts';
+import { readActivationRoutingState } from './activation-paths.ts';
 
 export interface ControlGeneration {
   schema: 'open-autonomy.control-generation.v1';
@@ -52,6 +53,11 @@ function writeGeneration(cwd: string, generation: ControlGeneration): void {
   const temporary = `${path}.${process.pid}.tmp`;
   writeFileSync(temporary, `${JSON.stringify(generation, null, 2)}\n`);
   renameSync(temporary, path);
+}
+
+function retainedByAtomicActivation(cwd: string, sha: string, proc: ProcRunner): boolean {
+  const state = readActivationRoutingState(cwd, proc);
+  return !!state && [state.active, state.previous, ...state.draining].some((generation) => generation?.sha === sha);
 }
 
 export function readControlGeneration(cwd: string): ControlGeneration | null {
@@ -120,7 +126,7 @@ export function verifyControlGeneration(
   if (recorded.codeHost === 'github') {
     const branch = recorded.defaultBranch;
     const accepted = branch ? remoteSha(proc, cwd, branch).toLowerCase() : '';
-    if (!branch || accepted !== expectedSha) {
+    if ((!branch || accepted !== expectedSha) && !retainedByAtomicActivation(cwd, expectedSha, proc)) {
       throw new Error(
         `[oa] accepted remote generation changed: expected ${expectedSha.slice(0, 12)} at origin/${branch ?? '(unknown)'}. ` +
           'Stop, update the control checkout, and restart; the pending effect was retained.',

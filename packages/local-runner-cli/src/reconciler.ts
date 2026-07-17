@@ -10,6 +10,7 @@ import { defaultSessionRunner, listSessionsBestEffort } from './sessions.ts';
 import { recordFire } from './status.ts';
 import { runPreflight } from './preflight.ts';
 import { verifyControlGeneration, verifyControlPaths } from './control-generation.ts';
+import { resolvedFencePath } from './activation-paths.ts';
 
 const FAST_DEATH_MS = 60_000;
 const BACKOFF_CAP_MS = 30 * 60 * 1000;
@@ -76,10 +77,16 @@ export interface StartOptions {
   resolveDefault?: () => Promise<{ baseUrl: string; source: string }>;
   fastDeathMs?: number;
   onHeartbeat?: (n: number) => void;
+  /** Atomic-activation supervisor hook. False drains this generation: no new fires, while reaping and
+   * completion effects continue. Ordinary callers omit it and retain the historical behavior. */
+  canFire?: () => boolean;
+  stopWhenDrained?: boolean;
+  generationSha?: string;
 }
 
 const active = (session: Session): boolean => session.status === 'running' || session.status === 'paused' || session.status === 'awaiting-human';
-const fenced = (cwd: string, job: NormalizedJob): boolean => !!job.fence && existsSync(join(cwd, job.fence));
+const fenced = (cwd: string, job: NormalizedJob, env: NodeJS.ProcessEnv): boolean =>
+  !!job.fence && existsSync(resolvedFencePath(cwd, job.fence, env));
 
 export async function start(opts: StartOptions = {}): Promise<void> {
   const cwd = opts.cwd ?? process.cwd();
@@ -161,11 +168,12 @@ export async function start(opts: StartOptions = {}): Promise<void> {
         }
       }
 
-      if (fenced(cwd, job) || inFlight || (!!job.agent && activeCount >= schedule.maxConcurrent)) continue;
+      if (opts.canFire && !opts.canFire()) continue;
+      if (fenced(cwd, job, ambient) || inFlight || (!!job.agent && activeCount >= schedule.maxConcurrent)) continue;
       if (now < state.backoffUntil || now < state.nextFireAt) continue;
 
       const env = buildTickEnv(schedule.env, ambient, 'cron');
-      const result = proc(job.cmd, [], { shell: true, stdio: 'inherit', env });
+      const result = proc(job.cmd, [], { cwd, shell: true, stdio: 'inherit', env });
       state.lastFire = now;
       recordFire(cwd, job.name, job.cmd);
       durableState.jobs[job.name] = {
@@ -204,8 +212,24 @@ export async function start(opts: StartOptions = {}): Promise<void> {
     }
 
     opts.onHeartbeat?.(heartbeat);
+    if (opts.stopWhenDrained && opts.canFire && !opts.canFire()) {
+      const belongsToGeneration = activeSessions.some((session) => {
+        const sha = typeof session.controlSha === 'string' ? session.controlSha : '';
+        return sha ? sha === opts.generationSha : scheduledAgents.has(session.agent);
+      });
+      if (!belongsToGeneration && !hasPendingGenerationState(cwd)) return;
+    }
     await sleep(pollMs, signal);
   }
+}
+
+function hasPendingGenerationState(cwd: string): boolean {
+  for (const name of ['effects', 'workspaces']) {
+    try {
+      if (readdirSync(join(cwd, '.open-autonomy', 'runner-state', name)).some((file) => file.endsWith('.json'))) return true;
+    } catch { /* absent means empty */ }
+  }
+  return false;
 }
 
 // Effects are deliberately opaque to the scheduler: it runs the recorded command after the associated

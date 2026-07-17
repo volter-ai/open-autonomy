@@ -7,6 +7,7 @@ import { runPreflight } from './preflight.ts';
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { activeScheduledSessionCount } from './capacity.ts';
+import { resolvedFencePath } from './activation-paths.ts';
 
 export interface OnceResult {
   ok: boolean;
@@ -22,7 +23,7 @@ export async function once(
   const ambient = opts.ambient ?? process.env;
 
   const schedule = loadSchedule(cwd);
-  const activeJobs = schedule.jobs.filter((job) => !job.fence || !existsSync(join(cwd, job.fence)));
+  const activeJobs = schedule.jobs.filter((job) => !job.fence || !existsSync(resolvedFencePath(cwd, job.fence, ambient)));
   if (!activeJobs.length) return { ok: true, fired: 0 };
 
   // The full run.mjs guard chain (termfleet / OA-04 / OA-09 origin log + AUTONOMY_PROVIDER_URL_SOURCE
@@ -54,7 +55,7 @@ export async function once(
       skipped += 1;
       continue;
     }
-    const result = proc(job.cmd, [], { shell: true, stdio: 'inherit', env });
+    const result = proc(job.cmd, [], { cwd, shell: true, stdio: 'inherit', env });
     results.push(result);
     if (job.agent && result.status === 0 && !result.error) active = (active ?? 0) + 1;
   }

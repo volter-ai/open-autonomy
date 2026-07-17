@@ -13,6 +13,7 @@ import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { activeScheduledSessionCount } from './capacity.ts';
 import { acceptControlGeneration } from './control-generation.ts';
+import { resolvedFencePath } from './activation-paths.ts';
 
 export interface DispatchResult {
   ok: boolean;
@@ -35,7 +36,7 @@ export function dispatch(agentName: string, opts: { cwd?: string; proc?: ProcRun
   if (!job) {
     return { ok: false, matched: null, reason: `[oa] dispatch: no scheduled job matches agent "${agentName}" (declared: ${schedule.jobs.map((candidate) => candidate.agent).filter(Boolean).join(', ') || 'none'})` };
   }
-  if (job.fence && existsSync(join(cwd, job.fence))) {
+  if (job.fence && existsSync(resolvedFencePath(cwd, job.fence))) {
     return { ok: false, matched: job.cmd, reason: `[oa] dispatch: job "${job.name}" is fenced by ${job.fence}` };
   }
   const env = buildTickEnv(schedule.env, process.env, 'dispatch');
@@ -57,6 +58,6 @@ export function dispatch(agentName: string, opts: { cwd?: string; proc?: ProcRun
   // one-off act (this file's own header comment), never the reconciler's automatic heartbeat, even though
   // it fires the exact same schedule-line STRING (which may itself carry AUTONOMY_SINGLETON=1 baked in —
   // that alone is not a "this was automatic" signal; see env.ts's own doc comment on buildTickEnv).
-  const result = proc(job.cmd, [], { shell: true, stdio: 'inherit', env });
+  const result = proc(job.cmd, [], { cwd, shell: true, stdio: 'inherit', env });
   return { ok: result.status === 0 && !result.error, matched: job.cmd, result };
 }

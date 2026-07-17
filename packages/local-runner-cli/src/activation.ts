@@ -13,6 +13,7 @@ import {
 } from 'node:fs';
 import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import {
+  applyUpgrade,
   ExecRunner,
   missingCopySourcesIn,
   parseIr,
@@ -20,6 +21,7 @@ import {
   runConformance,
   settingsMergeStrategies,
   validateSkillFrontmatterIn,
+  type UpgradePlan,
 } from '@open-autonomy/core';
 import { compileLocal, type LocalScheduleConfig } from '@open-autonomy/substrate-local';
 import type { Ledger } from '@open-autonomy/dry-run';
@@ -194,6 +196,37 @@ function assertInside(root: string, child: string, label: string): void {
   if (rel === '..' || rel.startsWith(`..${sep}`) || isAbsolute(rel)) throw new Error(`${label} escapes generation root`);
 }
 
+/** Materialize accepted profile source plus machine-local target configuration into a staged
+ * generation. Git history remains the accepted source authority; generated substrate files are the
+ * deployment artifact, so local provider ports/config never have to be committed. */
+export function materializeAcceptedGeneration(
+  routingRoot: string,
+  root: string,
+  config: ActivationConfig,
+): UpgradePlan {
+  const profileDir = resolve(root, config.profile);
+  assertInside(root, profileDir, 'profile');
+  const irPath = join(profileDir, 'ir.yml');
+  if (!existsSync(irPath)) throw new Error(`activation profile is missing: ${config.profile}/ir.yml`);
+  const ir = parseIr(readFileSync(irPath, 'utf8'));
+  if (!ir.targets.includes('local')) throw new Error(`activation profile ${config.profile} does not declare target local`);
+  let scheduleConfig: LocalScheduleConfig | undefined;
+  if (config.localScheduleConfig) {
+    const path = resolve(routingRoot, config.localScheduleConfig);
+    assertInside(routingRoot, path, 'localScheduleConfig');
+    scheduleConfig = JSON.parse(readFileSync(path, 'utf8')) as LocalScheduleConfig;
+  }
+  const compiled = compileLocal(ir, { destDir: root, providerUrl: config.providerUrl, scheduleConfig });
+  const errors = [
+    ...missingCopySourcesIn(compiled, profileDir).map((path) => `missing copy source: ${path}`),
+    ...validateSkillFrontmatterIn(ir, profileDir),
+  ];
+  if (errors.length) throw new Error(`profile lint failed: ${errors.join('; ')}`);
+  const plan = planUpgrade(compiled, profileDir, root, { prune: true, mergeStrategies: settingsMergeStrategies });
+  applyUpgrade(plan, compiled, profileDir, root, settingsMergeStrategies);
+  return plan;
+}
+
 export function liveActivationOps(cwd: string, config: ActivationConfig, proc: ProcRunner = defaultProc): ActivationOps {
   const routingRoot = realpathSync(resolve(cwd));
   const home = activationHome(routingRoot, proc);
@@ -218,6 +251,7 @@ export function liveActivationOps(cwd: string, config: ActivationConfig, proc: P
       const sourceModules = join(routingRoot, 'node_modules');
       const stagedModules = join(root, 'node_modules');
       if (existsSync(sourceModules) && !existsSync(stagedModules)) symlinkSync(sourceModules, stagedModules, 'dir');
+      materializeAcceptedGeneration(routingRoot, root, config);
       return realpathSync(root);
     },
     async validate(generation) {

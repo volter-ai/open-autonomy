@@ -8,6 +8,7 @@ import {
   activateAcceptedGeneration,
   activationHome,
   configureActivation,
+  materializeAcceptedGeneration,
   readActivationState,
   rollbackActivation,
   type ActivationGeneration,
@@ -66,6 +67,42 @@ function simulatedOps(root: string, state: { accepted: string; failValidation?: 
 }
 
 describe('atomic accepted-generation activation (#243)', () => {
+  test('staging materializes a machine-local provider pin without requiring it in the accepted source commit', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'oa253-materialize-'));
+    tmps.push(dir);
+    const profile = join(dir, 'profiles', 'test');
+    mkdirSync(join(profile, 'scripts'), { recursive: true });
+    writeFileSync(join(profile, 'scripts', 'pm.mjs'), 'export default true;\n');
+    writeFileSync(join(profile, 'ir.yml'), [
+      'schema: autonomy.ir.v1',
+      'targets: [local]',
+      'codeHost: local-git',
+      'agents:',
+      '  pm:',
+      '    behavior: scripts/pm.mjs',
+      '    capabilities: [tasks:converse]',
+      '    triggers:',
+      '      - cron: "*/15 * * * *"',
+      'policy:',
+      '  box: {}',
+      'resources: [scripts/pm.mjs]',
+      '',
+    ].join('\n'));
+    mkdirSync(join(dir, '.open-autonomy'), { recursive: true });
+    writeFileSync(join(dir, '.open-autonomy', 'paused'), 'operator pause\n');
+    const base = { schema: 'open-autonomy.activation-config.v1' as const, profile: 'profiles/test', pollMs: 1000 };
+
+    materializeAcceptedGeneration(dir, dir, base);
+    expect(JSON.parse(readFileSync(join(dir, 'scheduler', 'schedule.json'), 'utf8')).env).toEqual({});
+
+    const providerUrl = 'http://127.0.0.1:45678';
+    const configured = materializeAcceptedGeneration(dir, dir, { ...base, providerUrl });
+    expect(configured.changes).toEqual([{ action: 'update', path: 'scheduler/schedule.json' }]);
+    expect(JSON.parse(readFileSync(join(dir, 'scheduler', 'schedule.json'), 'utf8')).env.TERMFLEET_PROVIDER_URL).toBe(providerUrl);
+    expect(readFileSync(join(dir, '.open-autonomy', 'paused'), 'utf8')).toContain('operator pause');
+    expect(materializeAcceptedGeneration(dir, dir, { ...base, providerUrl }).changes).toEqual([]);
+  });
+
   test('same workflow handles activate, no-op, drain, validation rejection, rollback, and central pause preservation', async () => {
     const dir = repo(true);
     const clock = virtualClock(Date.parse('2026-07-16T00:00:00Z'));

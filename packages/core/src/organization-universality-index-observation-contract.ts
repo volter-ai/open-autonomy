@@ -204,3 +204,8 @@ export function verifySourceCensusIndexObservationContract(
     throw Error("index-observation census contract digest mismatch");
   return frozen;
 }
+export const sourceCensusIndexObservationConstants = {
+  pass,
+  leaf,
+  invalidation,
+} as const;

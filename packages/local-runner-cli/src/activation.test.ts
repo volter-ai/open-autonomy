@@ -4,6 +4,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { assertDryRunConfig, installEgressGuard, openLedger, virtualClock } from '@open-autonomy/dry-run';
+import { gitCodeHost, makeGitRepo } from '@open-autonomy/dry-run/git';
 import {
   activateAcceptedGeneration,
   activationHome,
@@ -186,6 +187,135 @@ describe('atomic accepted-generation activation (#243)', () => {
       ]);
       expect(guard.allowed).toEqual([]);
       expect(guard.blocked).toEqual([]);
+    } finally {
+      guard.uninstall();
+    }
+  });
+
+  test('one hermetic ledger binds governed issue-to-merge actions to the activated SHA', async () => {
+    assertDryRunConfig({
+      endpoints: { codeHost: 'http://127.0.0.1:9999' },
+      credentials: { token: 'fake-governed-lifecycle' },
+    });
+    const guard = installEgressGuard();
+    try {
+      const root = mkdtempSync(join(tmpdir(), 'oa-governed-lifecycle-'));
+      tmps.push(root);
+      const scenario = makeGitRepo(root, 'main');
+      const codeHost = gitCodeHost(scenario);
+      const clock = virtualClock(Date.parse('2026-07-16T00:00:00.000Z'));
+      const ledger = openLedger(join(root, 'proof', 'actions.jsonl'), clock.now);
+      const tick = () => clock.advance(1_000);
+      const issue = { number: 1, title: 'Upgrade governed control plane' };
+
+      ledger.append('code-host', 'issue-intake', issue);
+      tick();
+      ledger.append('planning', 'maintainer-select', { issue: issue.number, disposition: 'ready' });
+      tick();
+      const pr = await codeHost.developerImplements({
+        issueBranch: 'agent/issue-1',
+        base: 'main',
+        title: issue.title,
+        path: 'change.txt',
+        content: 'accepted change\n',
+      });
+      const headSha = await codeHost.getBranchHead(pr.head);
+      ledger.append('code-host', 'isolated-implementation', { issue: issue.number, branch: pr.head, headSha });
+      tick();
+      ledger.append('code-host', 'open-pr', { issue: issue.number, pr: pr.number, headSha, autoMerge: false });
+
+      const required = ['test', 'security', 'agent-review', 'human-approval'] as const;
+      const checks = new Map<string, { sha: string; state: 'success' }>();
+      const landingDecision = () => ({
+        eligible: required.every((context) => checks.get(context)?.sha === headSha),
+        missing: required.filter((context) => checks.get(context)?.sha !== headSha),
+      });
+      for (const context of required.slice(0, -1)) {
+        tick();
+        checks.set(context, { sha: headSha, state: 'success' });
+        ledger.append('checks', 'exact-head-success', { context, headSha });
+      }
+
+      // The negative gate is part of the same trail: three green checks cannot land or activate.
+      let decision = landingDecision();
+      expect(decision).toEqual({ eligible: false, missing: ['human-approval'] });
+      expect((await codeHost.listPullRequests({ base: 'main', state: 'open' })).map((candidate) => candidate.number)).toEqual([pr.number]);
+      expect(ledger.entries().some((entry) => entry.port === 'activation')).toBe(false);
+
+      tick();
+      checks.set('human-approval', { sha: headSha, state: 'success' });
+      ledger.append('checks', 'exact-head-success', { context: 'human-approval', headSha, actorType: 'human' });
+      decision = landingDecision();
+      expect(decision).toEqual({ eligible: true, missing: [] });
+      tick();
+      ledger.append('governance', 'eligible-for-manual-landing', { pr: pr.number, headSha, required: [...required] });
+      expect((await codeHost.listPullRequests({ base: 'main', state: 'open' }))).toHaveLength(1);
+
+      // Eligibility has no side effect. A distinct human operation performs the real local-git merge.
+      tick();
+      ledger.append('human', 'merge', { pr: pr.number, actorType: 'human', reviewedHeadSha: headSha });
+      const mergeSha = codeHost.mergePr(pr.number);
+      expect(mergeSha).toMatch(/^[0-9a-f]{40}$/);
+      expect(scenario.headOf('main')).toBe(mergeSha);
+
+      tick();
+      const activation = await activateAcceptedGeneration({
+        cwd: scenario.work,
+        ledger,
+        now: clock.now,
+        ops: {
+          async detectAccepted() { return { sha: mergeSha, acceptedAt: new Date(clock.now()).toISOString() }; },
+          async stage(sha) {
+            const path = join(activationHome(scenario.work), 'sim', sha);
+            mkdirSync(path, { recursive: true });
+            return path;
+          },
+          async validate(generation) {
+            if (generation.sha !== mergeSha) throw new Error('activation SHA diverged from human merge');
+          },
+          async health(generation) {
+            if (generation.sha !== mergeSha) throw new Error('cold start used the wrong generation');
+          },
+        },
+      });
+      expect(activation.ok).toBe(true);
+      expect(activation.state.active?.sha).toBe(mergeSha);
+      const activeSha = activation.state.active?.sha;
+      if (!activeSha) throw new Error('activation completed without an active generation');
+
+      const artifact = {
+        schema: 'open-autonomy.lifecycle-proof.v1',
+        issue: issue.number,
+        pr: pr.number,
+        reviewedHeadSha: headSha,
+        mergeSha,
+        activeSha,
+        actions: ledger.entries(),
+        egress: { allowed: guard.allowed, blocked: guard.blocked },
+      };
+      const proofPath = join(root, 'proof', 'lifecycle.json');
+      writeFileSync(proofPath, `${JSON.stringify(artifact, null, 2)}\n`);
+      const proof = JSON.parse(readFileSync(proofPath, 'utf8')) as typeof artifact;
+      expect(proof.schema).toBe('open-autonomy.lifecycle-proof.v1');
+      expect(proof.mergeSha).toBe(proof.activeSha);
+      expect(proof.actions.map((entry) => `${entry.port}:${entry.action}`)).toEqual([
+        'code-host:issue-intake',
+        'planning:maintainer-select',
+        'code-host:isolated-implementation',
+        'code-host:open-pr',
+        'checks:exact-head-success',
+        'checks:exact-head-success',
+        'checks:exact-head-success',
+        'checks:exact-head-success',
+        'governance:eligible-for-manual-landing',
+        'human:merge',
+        'activation:accepted-update-detected',
+        'activation:stage',
+        'activation:validate',
+        'activation:switch',
+        'activation:cold-start-health',
+      ]);
+      expect(proof.egress).toEqual({ allowed: [], blocked: [] });
     } finally {
       guard.uninstall();
     }

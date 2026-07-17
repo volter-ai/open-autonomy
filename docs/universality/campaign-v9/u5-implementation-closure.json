@@ -1,0 +1,773 @@
+{
+  "schema": "open-autonomy.u5-implementation-closure.v1",
+  "checkpoint": "U5",
+  "status": "ready-for-closure-attestation",
+  "fixtureKind": "synthetic",
+  "denominatorScope": "fixture-local",
+  "empiricalRegistration": false,
+  "closureClaim": false,
+  "assurancePromotionAllowed": false,
+  "laterAttestationRequired": true,
+  "implementationFiles": [
+    {
+      "id": "policy-source",
+      "kind": "source",
+      "commit": "f75067773568add3cb087b9d13f83721ec7cd526",
+      "path": "packages/core/src/organization-u5-credit-policy.ts",
+      "sha256": "sha256:7952ae96306e513f6cce8996af14ac1068cf3e7c4b9cb879867220d0cc3690bc"
+    },
+    {
+      "id": "policy-test",
+      "kind": "test",
+      "commit": "f75067773568add3cb087b9d13f83721ec7cd526",
+      "path": "packages/core/src/organization-u5-credit-policy.test.ts",
+      "sha256": "sha256:cb964fd0ad33c2aad31db31af16df74b77d3a3e06b1df1b043367c3d16c3c9f6"
+    },
+    {
+      "id": "ledger-source",
+      "kind": "source",
+      "commit": "f94c7466596acdf2e6ee6d1a227633b0d1643404",
+      "path": "packages/core/src/organization-u5-disposition-ledger.ts",
+      "sha256": "sha256:8f9345ee74196c2b2d9b79ccadcd94615932683c4f11737ea382fab44b7080c1"
+    },
+    {
+      "id": "ledger-test",
+      "kind": "test",
+      "commit": "f94c7466596acdf2e6ee6d1a227633b0d1643404",
+      "path": "packages/core/src/organization-u5-disposition-ledger.test.ts",
+      "sha256": "sha256:b1af3ecba0c34feb8250c827edfc713712226d9a6838483a987c987a603e6f39"
+    },
+    {
+      "id": "report-source",
+      "kind": "source",
+      "commit": "f75067773568add3cb087b9d13f83721ec7cd526",
+      "path": "packages/core/src/organization-u5-coverage-report.ts",
+      "sha256": "sha256:495750cf63b5763fbc2acec7756f920fd7e0eb2a48acf3f205df5d101c330bf9"
+    },
+    {
+      "id": "report-test",
+      "kind": "test",
+      "commit": "f75067773568add3cb087b9d13f83721ec7cd526",
+      "path": "packages/core/src/organization-u5-coverage-report.test.ts",
+      "sha256": "sha256:179e65cb343c38f02dc78053a1b4f407f2a948eedec05a4988ee2c4a20db88ff"
+    },
+    {
+      "id": "denominator-artifact",
+      "kind": "artifact",
+      "commit": "ce7e851c2bb1cf8e79d15c4b25944b4983bd7247",
+      "path": "docs/universality/campaign-v9/u5-phase-a-denominator.json",
+      "sha256": "sha256:927ac1f8ad4f5f6ca50eba3218410b18ba4f9ba229beffcde8dff864b2eabb0f"
+    }
+  ],
+  "obligations": [
+    {
+      "id": "U5-I1",
+      "requirement": "Committed U4 boundary policy denominator and exact fact custody are hard anchored",
+      "validator": "verifyU5CommittedBoundary",
+      "evidenceNodeIds": [
+        "policy-source",
+        "policy-test",
+        "denominator-artifact"
+      ],
+      "testNames": [
+        "hard anchors U4 denominator attestation and independently authenticated policy",
+        "rejects coherent alternate policy weights and inventory denominator"
+      ]
+    },
+    {
+      "id": "U5-I2",
+      "requirement": "Synthetic credit policy weights authority custody chronology and no-alternate-policy identity are authenticated",
+      "validator": "verifyU5CommittedBoundary",
+      "evidenceNodeIds": [
+        "policy-source",
+        "policy-test"
+      ],
+      "testNames": [
+        "rejects authority custodian owner chronology and receipt substitutions",
+        "rejects attestation substitution and invalid custody root"
+      ]
+    },
+    {
+      "id": "U5-I3",
+      "requirement": "Preserved disposition requires oracle-backed canonical equality and exact mandatory observations",
+      "validator": "freezeU5DispositionLedger",
+      "evidenceNodeIds": [
+        "ledger-source",
+        "ledger-test"
+      ],
+      "testNames": [
+        "rejects coherent re-signed semantic bypasses for all eight witnesses",
+        "rejects random correctly signed payloads for every evidence discriminator"
+      ]
+    },
+    {
+      "id": "U5-I4",
+      "requirement": "Derived disposition requires bounded acyclic exact-reachability operation DAG and recomputed output",
+      "validator": "freezeU5DispositionLedger",
+      "evidenceNodeIds": [
+        "ledger-source",
+        "ledger-test"
+      ],
+      "testNames": [
+        "rejects evidence DAG cycles unreachable dependencies and surplus",
+        "rejects unused derived dependencies and classifier-row substitution"
+      ]
+    },
+    {
+      "id": "U5-I5",
+      "requirement": "Lowered disposition requires explicit maps losses exact observations and no opaque fallback",
+      "validator": "freezeU5DispositionLedger",
+      "evidenceNodeIds": [
+        "ledger-source",
+        "ledger-test"
+      ],
+      "testNames": [
+        "rejects coherent re-signed semantic bypasses for all eight witnesses",
+        "rejects authenticated semantic evidence replay across all eight dispositions"
+      ]
+    },
+    {
+      "id": "U5-I6",
+      "requirement": "Extension disposition requires exact identity namespace version independently signed classifier and three sub-strata",
+      "validator": "freezeU5DispositionLedger",
+      "evidenceNodeIds": [
+        "ledger-source",
+        "ledger-test"
+      ],
+      "testNames": [
+        "requires an independent authenticated extension classifier",
+        "rejects unused derived dependencies and classifier-row substitution"
+      ]
+    },
+    {
+      "id": "U5-I7",
+      "requirement": "Opaque disposition authenticates request response termination events and earns interoperability only",
+      "validator": "freezeU5DispositionLedger",
+      "evidenceNodeIds": [
+        "ledger-source",
+        "ledger-test",
+        "report-source",
+        "report-test"
+      ],
+      "testNames": [
+        "rejects coherent re-signed semantic bypasses for all eight witnesses",
+        "all opaque and all abstracted remain zero canonical with exact denominators"
+      ]
+    },
+    {
+      "id": "U5-I8",
+      "requirement": "Abstracted disposition requires preregistered observations and oracle-replayed indistinguishable traces with zero canonical credit",
+      "validator": "freezeU5DispositionLedger",
+      "evidenceNodeIds": [
+        "ledger-source",
+        "ledger-test",
+        "report-source",
+        "report-test"
+      ],
+      "testNames": [
+        "rejects coherent re-signed semantic bypasses for all eight witnesses",
+        "all opaque and all abstracted remain zero canonical with exact denominators"
+      ]
+    },
+    {
+      "id": "U5-I9",
+      "requirement": "Unsupported disposition requires typed replayable non-generic capability diagnostic",
+      "validator": "freezeU5DispositionLedger",
+      "evidenceNodeIds": [
+        "ledger-source",
+        "ledger-test"
+      ],
+      "testNames": [
+        "rejects coherent re-signed semantic bypasses for all eight witnesses",
+        "rejects random correctly signed payloads for every evidence discriminator"
+      ]
+    },
+    {
+      "id": "U5-I10",
+      "requirement": "Inexpressible disposition requires finite infeasible candidates and deletion-minimal unsatisfied core",
+      "validator": "freezeU5DispositionLedger",
+      "evidenceNodeIds": [
+        "ledger-source",
+        "ledger-test"
+      ],
+      "testNames": [
+        "rejects duplicate evaluation candidate IDs despite coherent evidence signature",
+        "rejects coherent re-signed semantic bypasses for all eight witnesses"
+      ]
+    },
+    {
+      "id": "U5-I11",
+      "requirement": "Every frozen fact has exactly one signed row owner oracle evidence record and exact reachable dependency closure",
+      "validator": "freezeU5DispositionLedger",
+      "evidenceNodeIds": [
+        "ledger-source",
+        "ledger-test"
+      ],
+      "testNames": [
+        "freezes total synthetic credit ledger against U4 inventory and attestation",
+        "rejects duplicate omitted surplus facts and evidence owner alias or surplus",
+        "rejects evidence DAG cycles unreachable dependencies and surplus"
+      ]
+    },
+    {
+      "id": "U5-I12",
+      "requirement": "Canonical credit is exclusive to preserved derived lowered and all disposition and extension strata reconcile exact counts and weights",
+      "validator": "freezeU5DispositionLedger",
+      "evidenceNodeIds": [
+        "ledger-source",
+        "ledger-test"
+      ],
+      "testNames": [
+        "property: exact credit lattice holds across every disposition and extension substratum",
+        "rejects credit inflation relabel policy substitution and noncanonical canonical credit"
+      ]
+    },
+    {
+      "id": "U5-I13",
+      "requirement": "Coverage product lattice is derived only from verified ledger with count weight contributor and fact-ID digests",
+      "validator": "buildU5CoverageReport",
+      "evidenceNodeIds": [
+        "report-source",
+        "report-test"
+      ],
+      "testNames": [
+        "coverage derives only from fully verified authenticated ledger",
+        "mixed lattice reconciles exact zero-credit products and contributor digests",
+        "reports opaque opportunity and complete diagnostic denominators"
+      ]
+    },
+    {
+      "id": "U5-I14",
+      "requirement": "Policy evidence oracle classifier row report authority and custody owners keys and chronology remain separated",
+      "validator": "verifyFrozenU5CoverageReport",
+      "evidenceNodeIds": [
+        "ledger-source",
+        "ledger-test",
+        "report-source",
+        "report-test"
+      ],
+      "testNames": [
+        "rejects forged evidence bytes custody chronology and owner aliasing",
+        "rejects oracle forgery substitution and evidence outside campaign chronology",
+        "report chronology and cross-role ownership fail closed"
+      ]
+    },
+    {
+      "id": "U5-I15",
+      "requirement": "Policy ledger and report replay canonical digests bounds overflow resources and deep freeze fail closed",
+      "validator": "verifyFrozenU5CoverageReport",
+      "evidenceNodeIds": [
+        "policy-source",
+        "policy-test",
+        "ledger-source",
+        "ledger-test",
+        "report-source",
+        "report-test"
+      ],
+      "testNames": [
+        "rejects weight accounting redigest promotion resource and cycle attacks",
+        "rejects self-digested fake ledger and contributor substitution",
+        "report authority and custody receipts are replay-bound"
+      ]
+    },
+    {
+      "id": "U5-I16",
+      "requirement": "Machine-indexed U5 internal closure evidence DAG is complete and pending only its own post-commit attestation",
+      "validator": "verifyU5ImplementationClosure",
+      "evidenceNodeIds": [
+        "closure-self"
+      ],
+      "testNames": [
+        "verifies exact machine-indexed U5 implementation closure"
+      ]
+    }
+  ],
+  "externalDeferred": [
+    {
+      "id": "U5-E1",
+      "requirement": "External-only; synthetic U5 evidence cannot discharge or promote: Register real U1 source denominator and weights",
+      "status": "deferred",
+      "dischargedBy": []
+    },
+    {
+      "id": "U5-E2",
+      "requirement": "External-only; synthetic U5 evidence cannot discharge or promote: Establish independent real policy authority and custodian",
+      "status": "deferred",
+      "dischargedBy": []
+    },
+    {
+      "id": "U5-E3",
+      "requirement": "External-only; synthetic U5 evidence cannot discharge or promote: Acquire real disposition evidence with authenticated custody",
+      "status": "deferred",
+      "dischargedBy": []
+    },
+    {
+      "id": "U5-E4",
+      "requirement": "External-only; synthetic U5 evidence cannot discharge or promote: Establish independent real semantic oracle authorities",
+      "status": "deferred",
+      "dischargedBy": []
+    },
+    {
+      "id": "U5-E5",
+      "requirement": "External-only; synthetic U5 evidence cannot discharge or promote: Complete external-human expert semantic review",
+      "status": "deferred",
+      "dischargedBy": []
+    },
+    {
+      "id": "U5-E6",
+      "requirement": "External-only; synthetic U5 evidence cannot discharge or promote: Standardize and independently classify extension strata",
+      "status": "deferred",
+      "dischargedBy": []
+    },
+    {
+      "id": "U5-E7",
+      "requirement": "External-only; synthetic U5 evidence cannot discharge or promote: Execute independent ledger and report replay",
+      "status": "deferred",
+      "dischargedBy": []
+    },
+    {
+      "id": "U5-E8",
+      "requirement": "External-only; synthetic U5 evidence cannot discharge or promote: Freeze real holdout chronology before evidence",
+      "status": "deferred",
+      "dischargedBy": []
+    },
+    {
+      "id": "U5-E9",
+      "requirement": "External-only; synthetic U5 evidence cannot discharge or promote: Complete empirical coverage inventory across all systems",
+      "status": "deferred",
+      "dischargedBy": []
+    },
+    {
+      "id": "U5-E10",
+      "requirement": "External-only; synthetic U5 evidence cannot discharge or promote: Authorize UG1 promotion only after all external requirements",
+      "status": "deferred",
+      "dischargedBy": []
+    }
+  ],
+  "evidenceNodes": [
+    {
+      "id": "policy-source",
+      "kind": "source",
+      "ref": "f75067773568add3cb087b9d13f83721ec7cd526:packages/core/src/organization-u5-credit-policy.ts",
+      "custodyStatus": "committed"
+    },
+    {
+      "id": "policy-test",
+      "kind": "test",
+      "ref": "f75067773568add3cb087b9d13f83721ec7cd526:packages/core/src/organization-u5-credit-policy.test.ts",
+      "custodyStatus": "committed"
+    },
+    {
+      "id": "ledger-source",
+      "kind": "source",
+      "ref": "f94c7466596acdf2e6ee6d1a227633b0d1643404:packages/core/src/organization-u5-disposition-ledger.ts",
+      "custodyStatus": "committed"
+    },
+    {
+      "id": "ledger-test",
+      "kind": "test",
+      "ref": "f94c7466596acdf2e6ee6d1a227633b0d1643404:packages/core/src/organization-u5-disposition-ledger.test.ts",
+      "custodyStatus": "committed"
+    },
+    {
+      "id": "report-source",
+      "kind": "source",
+      "ref": "f75067773568add3cb087b9d13f83721ec7cd526:packages/core/src/organization-u5-coverage-report.ts",
+      "custodyStatus": "committed"
+    },
+    {
+      "id": "report-test",
+      "kind": "test",
+      "ref": "f75067773568add3cb087b9d13f83721ec7cd526:packages/core/src/organization-u5-coverage-report.test.ts",
+      "custodyStatus": "committed"
+    },
+    {
+      "id": "denominator-artifact",
+      "kind": "artifact",
+      "ref": "ce7e851c2bb1cf8e79d15c4b25944b4983bd7247:docs/universality/campaign-v9/u5-phase-a-denominator.json",
+      "custodyStatus": "committed"
+    },
+    {
+      "id": "closure-self",
+      "kind": "closure-self",
+      "ref": "organization-u5-implementation-closure.ts/.test.ts + artifact",
+      "custodyStatus": "pending-post-commit-attestation"
+    },
+    {
+      "id": "U5-I1",
+      "kind": "obligation",
+      "ref": "verifyU5CommittedBoundary",
+      "custodyStatus": "not-applicable"
+    },
+    {
+      "id": "U5-I2",
+      "kind": "obligation",
+      "ref": "verifyU5CommittedBoundary",
+      "custodyStatus": "not-applicable"
+    },
+    {
+      "id": "U5-I3",
+      "kind": "obligation",
+      "ref": "freezeU5DispositionLedger",
+      "custodyStatus": "not-applicable"
+    },
+    {
+      "id": "U5-I4",
+      "kind": "obligation",
+      "ref": "freezeU5DispositionLedger",
+      "custodyStatus": "not-applicable"
+    },
+    {
+      "id": "U5-I5",
+      "kind": "obligation",
+      "ref": "freezeU5DispositionLedger",
+      "custodyStatus": "not-applicable"
+    },
+    {
+      "id": "U5-I6",
+      "kind": "obligation",
+      "ref": "freezeU5DispositionLedger",
+      "custodyStatus": "not-applicable"
+    },
+    {
+      "id": "U5-I7",
+      "kind": "obligation",
+      "ref": "freezeU5DispositionLedger",
+      "custodyStatus": "not-applicable"
+    },
+    {
+      "id": "U5-I8",
+      "kind": "obligation",
+      "ref": "freezeU5DispositionLedger",
+      "custodyStatus": "not-applicable"
+    },
+    {
+      "id": "U5-I9",
+      "kind": "obligation",
+      "ref": "freezeU5DispositionLedger",
+      "custodyStatus": "not-applicable"
+    },
+    {
+      "id": "U5-I10",
+      "kind": "obligation",
+      "ref": "freezeU5DispositionLedger",
+      "custodyStatus": "not-applicable"
+    },
+    {
+      "id": "U5-I11",
+      "kind": "obligation",
+      "ref": "freezeU5DispositionLedger",
+      "custodyStatus": "not-applicable"
+    },
+    {
+      "id": "U5-I12",
+      "kind": "obligation",
+      "ref": "freezeU5DispositionLedger",
+      "custodyStatus": "not-applicable"
+    },
+    {
+      "id": "U5-I13",
+      "kind": "obligation",
+      "ref": "buildU5CoverageReport",
+      "custodyStatus": "not-applicable"
+    },
+    {
+      "id": "U5-I14",
+      "kind": "obligation",
+      "ref": "verifyFrozenU5CoverageReport",
+      "custodyStatus": "not-applicable"
+    },
+    {
+      "id": "U5-I15",
+      "kind": "obligation",
+      "ref": "verifyFrozenU5CoverageReport",
+      "custodyStatus": "not-applicable"
+    },
+    {
+      "id": "U5-I16",
+      "kind": "obligation",
+      "ref": "verifyU5ImplementationClosure",
+      "custodyStatus": "not-applicable"
+    },
+    {
+      "id": "U5-CLOSURE",
+      "kind": "closure",
+      "ref": "U5",
+      "custodyStatus": "not-applicable"
+    }
+  ],
+  "evidenceEdges": [
+    {
+      "from": "policy-source",
+      "to": "U5-I1"
+    },
+    {
+      "from": "policy-test",
+      "to": "U5-I1"
+    },
+    {
+      "from": "denominator-artifact",
+      "to": "U5-I1"
+    },
+    {
+      "from": "policy-source",
+      "to": "U5-I2"
+    },
+    {
+      "from": "policy-test",
+      "to": "U5-I2"
+    },
+    {
+      "from": "ledger-source",
+      "to": "U5-I3"
+    },
+    {
+      "from": "ledger-test",
+      "to": "U5-I3"
+    },
+    {
+      "from": "ledger-source",
+      "to": "U5-I4"
+    },
+    {
+      "from": "ledger-test",
+      "to": "U5-I4"
+    },
+    {
+      "from": "ledger-source",
+      "to": "U5-I5"
+    },
+    {
+      "from": "ledger-test",
+      "to": "U5-I5"
+    },
+    {
+      "from": "ledger-source",
+      "to": "U5-I6"
+    },
+    {
+      "from": "ledger-test",
+      "to": "U5-I6"
+    },
+    {
+      "from": "ledger-source",
+      "to": "U5-I7"
+    },
+    {
+      "from": "ledger-test",
+      "to": "U5-I7"
+    },
+    {
+      "from": "report-source",
+      "to": "U5-I7"
+    },
+    {
+      "from": "report-test",
+      "to": "U5-I7"
+    },
+    {
+      "from": "ledger-source",
+      "to": "U5-I8"
+    },
+    {
+      "from": "ledger-test",
+      "to": "U5-I8"
+    },
+    {
+      "from": "report-source",
+      "to": "U5-I8"
+    },
+    {
+      "from": "report-test",
+      "to": "U5-I8"
+    },
+    {
+      "from": "ledger-source",
+      "to": "U5-I9"
+    },
+    {
+      "from": "ledger-test",
+      "to": "U5-I9"
+    },
+    {
+      "from": "ledger-source",
+      "to": "U5-I10"
+    },
+    {
+      "from": "ledger-test",
+      "to": "U5-I10"
+    },
+    {
+      "from": "ledger-source",
+      "to": "U5-I11"
+    },
+    {
+      "from": "ledger-test",
+      "to": "U5-I11"
+    },
+    {
+      "from": "ledger-source",
+      "to": "U5-I12"
+    },
+    {
+      "from": "ledger-test",
+      "to": "U5-I12"
+    },
+    {
+      "from": "report-source",
+      "to": "U5-I13"
+    },
+    {
+      "from": "report-test",
+      "to": "U5-I13"
+    },
+    {
+      "from": "ledger-source",
+      "to": "U5-I14"
+    },
+    {
+      "from": "ledger-test",
+      "to": "U5-I14"
+    },
+    {
+      "from": "report-source",
+      "to": "U5-I14"
+    },
+    {
+      "from": "report-test",
+      "to": "U5-I14"
+    },
+    {
+      "from": "policy-source",
+      "to": "U5-I15"
+    },
+    {
+      "from": "policy-test",
+      "to": "U5-I15"
+    },
+    {
+      "from": "ledger-source",
+      "to": "U5-I15"
+    },
+    {
+      "from": "ledger-test",
+      "to": "U5-I15"
+    },
+    {
+      "from": "report-source",
+      "to": "U5-I15"
+    },
+    {
+      "from": "report-test",
+      "to": "U5-I15"
+    },
+    {
+      "from": "closure-self",
+      "to": "U5-I16"
+    },
+    {
+      "from": "U5-I1",
+      "to": "U5-CLOSURE"
+    },
+    {
+      "from": "U5-I2",
+      "to": "U5-CLOSURE"
+    },
+    {
+      "from": "U5-I3",
+      "to": "U5-CLOSURE"
+    },
+    {
+      "from": "U5-I4",
+      "to": "U5-CLOSURE"
+    },
+    {
+      "from": "U5-I5",
+      "to": "U5-CLOSURE"
+    },
+    {
+      "from": "U5-I6",
+      "to": "U5-CLOSURE"
+    },
+    {
+      "from": "U5-I7",
+      "to": "U5-CLOSURE"
+    },
+    {
+      "from": "U5-I8",
+      "to": "U5-CLOSURE"
+    },
+    {
+      "from": "U5-I9",
+      "to": "U5-CLOSURE"
+    },
+    {
+      "from": "U5-I10",
+      "to": "U5-CLOSURE"
+    },
+    {
+      "from": "U5-I11",
+      "to": "U5-CLOSURE"
+    },
+    {
+      "from": "U5-I12",
+      "to": "U5-CLOSURE"
+    },
+    {
+      "from": "U5-I13",
+      "to": "U5-CLOSURE"
+    },
+    {
+      "from": "U5-I14",
+      "to": "U5-CLOSURE"
+    },
+    {
+      "from": "U5-I15",
+      "to": "U5-CLOSURE"
+    },
+    {
+      "from": "U5-I16",
+      "to": "U5-CLOSURE"
+    }
+  ],
+  "semanticCoverage": {
+    "obligationIds": [
+      "U5-I1",
+      "U5-I2",
+      "U5-I3",
+      "U5-I4",
+      "U5-I5",
+      "U5-I6",
+      "U5-I7",
+      "U5-I8",
+      "U5-I9",
+      "U5-I10",
+      "U5-I11",
+      "U5-I12",
+      "U5-I13",
+      "U5-I14",
+      "U5-I15",
+      "U5-I16"
+    ],
+    "externalIds": [
+      "U5-E1",
+      "U5-E2",
+      "U5-E3",
+      "U5-E4",
+      "U5-E5",
+      "U5-E6",
+      "U5-E7",
+      "U5-E8",
+      "U5-E9",
+      "U5-E10"
+    ],
+    "localGapIds": []
+  },
+  "accounting": {
+    "dischargedInternal": 15,
+    "pendingAttestationInternal": 1,
+    "openInternal": 0,
+    "deferredExternal": 10
+  },
+  "digest": "sha256:10ae9cfc3ddf90559645f29c2d82463fa9a2fea46e398a74ae1a5a6e4c469839"
+}

@@ -57,7 +57,7 @@ export function checkPackDrift(profileDir: string): string[] {
     if (!requires(cr.check))
       errors.push(`${profileDir}: check_realizations declares '${cr.check}' but it is not in required_checks — a realization for a check nobody requires is dead pack state`);
 
-  // --- 2. landing_mode = auto-merge REQUIRES an independent agent-review realization + reviewer agent --
+  // --- 2. auto-merge REQUIRES independent agent review; any declared agent-review is native + real -----
   if (pack.landing_mode === 'auto-merge') {
     if (!realizes('agent-review'))
       errors.push(`${profileDir}: landing_mode is 'auto-merge' but the pack ships no 'agent-review' check_realizations entry (auto-merge needs an independent review status to gate on)`);
@@ -65,12 +65,19 @@ export function checkPackDrift(profileDir: string): string[] {
       errors.push(`${profileDir}: landing_mode is 'auto-merge' but no agent in ir.yml holds code:review (no independent reviewer to post agent-review)`);
   }
 
-  // --- 3. landing_mode = manual-after-review must NOT self-check via agent-review -----------------------
-  // (DESIGN §Q0: "it ships no agent-review status at all — a self-check on a single shared token would be
-  // dishonest"). A pack that claims manual-after-review while also declaring agent-review is contradicting
-  // its own doctrine.
-  if (pack.landing_mode === 'manual-after-review' && (realizes('agent-review') || requires('agent-review')))
-    errors.push(`${profileDir}: landing_mode is 'manual-after-review' but declares an 'agent-review' check — this profile's own doctrine is that a self-check on one shared token is dishonest (no agent-review status should exist here)`);
+  if (requires('agent-review')) {
+    const review = (pack.check_realizations ?? []).find((entry) => entry.check === 'agent-review');
+    if (!hasCapability('code:review'))
+      errors.push(`${profileDir}: required_checks includes 'agent-review' but no agent in ir.yml holds code:review`);
+    if (review && review.via !== 'native')
+      errors.push(`${profileDir}: 'agent-review' must use the substrate-native bound-result realization, not '${review.via}'`);
+  }
+
+  // --- 3. manual-after-review describes WHO LANDS, independently of who performs prior review ----------
+  // It may carry an independent agent-review check, or rely on the declared human actor for review, but the
+  // final landing action is always human. Never infer or fabricate that person from the mode name.
+  if (pack.landing_mode === 'manual-after-review' && !hasHumanActor)
+    errors.push(`${profileDir}: landing_mode is 'manual-after-review' but ir.yml declares no kind:human actor (the manual landing seam must be explicit)`);
 
   // --- 4. landing_mode = pr-free must not carry any GitHub merge-gate fields ------------------------
   if (pack.landing_mode === 'pr-free') {

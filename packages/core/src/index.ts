@@ -84,4 +84,5 @@ export * from './organization-universality-occurrence-contract';
 export * from './organization-campaign-registration';
 export * from './organization-u1-occurrence-capture';
 export * from './organization-u1-classification-contract';
+export * from './organization-u1-classification-runner';
 export * from './organization-source-population-v3';

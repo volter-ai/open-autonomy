@@ -4,7 +4,7 @@
 // unit-tested in packages/core/src/upgrade.test.ts; THIS file pins the CLI WIRING end-to-end, so reverting
 // either settingsMergeStrategies arg in autonomy-upgrade.ts goes red here.
 import { describe, expect, test } from 'bun:test';
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, unlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -15,9 +15,27 @@ function run(cmd: string, args: string[], cwd = REPO_ROOT): { exitCode: number; 
   return { exitCode: r.exitCode, stdout: r.stdout.toString('utf8'), stderr: r.stderr.toString('utf8') };
 }
 const compile = (args: string[]) => run('bun', [join(REPO_ROOT, 'bin', 'autonomy-compile.ts'), ...args]);
-// The upgrade CLI compiles via compileGithub, so target it with the github-carrying profile.
-const upgrade = (dir: string, extra: string[] = []) =>
-  run('bun', [join(REPO_ROOT, 'bin', 'autonomy-upgrade.ts'), '--profile', join(REPO_ROOT, 'profiles', 'simple-gh-sdlc'), '--target', dir, ...extra]);
+const upgrade = (dir: string, extra: string[] = [], substrate = 'gh-actions') =>
+  run('bun', [
+    join(REPO_ROOT, 'bin', 'autonomy-upgrade.ts'),
+    '--profile', join(REPO_ROOT, 'profiles', 'simple-gh-sdlc'),
+    '--target', dir,
+    '--substrate', substrate,
+    ...extra,
+  ]);
+
+function tree(root: string): Record<string, string> {
+  const out: Record<string, string> = {};
+  const walk = (dir: string): void => {
+    for (const entry of readdirSync(dir, { withFileTypes: true })) {
+      const path = join(dir, entry.name);
+      if (entry.isDirectory()) walk(path);
+      else out[path.slice(root.length + 1)] = readFileSync(path).toString('base64');
+    }
+  };
+  walk(root);
+  return out;
+}
 
 describe('autonomy-upgrade CLI — settings.json merge wiring (AC-7, Finding 1)', () => {
   test('upgrade --apply PRESERVES a merged .claude/settings.json: permissions survive, Stop hook stays length 1', () => {
@@ -75,6 +93,86 @@ describe('autonomy-upgrade CLI — settings.json merge wiring (AC-7, Finding 1)'
       const after = JSON.parse(readFileSync(join(dir, '.claude', 'settings.json'), 'utf8'));
       expect(after.hooks).toBeUndefined(); // STILL no Stop hook — the opt-out held across upgrade
       expect(after._openAutonomyStopHookOptOut).toBe(true); // sentinel untouched
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  }, 60_000);
+});
+
+describe('autonomy-upgrade CLI — substrate-aware local planning and apply (#241)', () => {
+  test('requires an explicit known substrate', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'oa241-usage-'));
+    try {
+      const args = ['--profile', join(REPO_ROOT, 'profiles', 'simple-gh-sdlc'), '--target', dir];
+      const missing = run('bun', [join(REPO_ROOT, 'bin', 'autonomy-upgrade.ts'), ...args]);
+      expect(missing.exitCode).toBe(2);
+      expect(missing.stderr).toContain('--substrate <local|gh-actions>');
+      const unknown = run('bun', [join(REPO_ROOT, 'bin', 'autonomy-upgrade.ts'), ...args, '--substrate', 'magic']);
+      expect(unknown.exitCode).toBe(2);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test('local dry-run plans local machinery and writes zero bytes', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'oa241-dry-'));
+    try {
+      writeFileSync(join(dir, 'owned.txt'), 'keep\n');
+      const before = tree(dir);
+      const result = upgrade(dir, [], 'local');
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout).toContain('scheduler/run.mjs');
+      expect(result.stdout).toContain('scheduler/schedule.json');
+      expect(result.stdout).toContain('scripts/runner.ts');
+      expect(tree(dir)).toEqual(before);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test('local target data is planned/applied and a second dry-run converges to zero', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'oa241-local-'));
+    const configPath = join(dir, 'schedule-config.json');
+    try {
+      writeFileSync(configPath, JSON.stringify({
+        schema: 'open-autonomy.local-schedule-config.v1',
+        defaults: { retrySeconds: 4321 },
+      }));
+      const extra = ['--provider-url', 'http://127.0.0.1:7602', '--local-schedule-config', configPath];
+      const first = upgrade(dir, extra, 'local');
+      expect(first.exitCode).toBe(0);
+      expect(first.stdout).toContain('scheduler/schedule.json');
+      const applied = upgrade(dir, [...extra, '--apply'], 'local');
+      expect(applied.exitCode).toBe(0);
+      const schedule = JSON.parse(readFileSync(join(dir, 'scheduler', 'schedule.json'), 'utf8')) as {
+        env: Record<string, string>;
+        jobs: Array<{ retrySeconds: number }>;
+      };
+      expect(schedule.jobs.length).toBeGreaterThan(0);
+      expect(schedule.jobs.every((job) => job.retrySeconds === 4321)).toBe(true);
+      expect(schedule.env.TERMFLEET_PROVIDER_URL).toBe('http://127.0.0.1:7602');
+      const second = upgrade(dir, extra, 'local');
+      expect(second.exitCode).toBe(0);
+      expect(second.stdout).toContain('upgrade-changes=0');
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  }, 60_000);
+
+  test('local apply preserves an operator-removed pause fence and hand-authored unowned files', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'oa241-owned-'));
+    try {
+      const initial = compile(['simple-gh-sdlc', 'local', dir]);
+      expect(initial.exitCode).toBe(0);
+      const pause = join(dir, '.open-autonomy', 'paused');
+      expect(readFileSync(pause, 'utf8')).toContain('PAUSED');
+      unlinkSync(pause);
+      const custom = join(dir, 'scripts', 'adopter-owned.ts');
+      writeFileSync(custom, 'export const keep = true;\n');
+      const result = upgrade(dir, ['--apply', '--prune'], 'local');
+      expect(result.exitCode).toBe(0);
+      expect(() => readFileSync(pause)).toThrow();
+      expect(readFileSync(custom, 'utf8')).toContain('keep = true');
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }

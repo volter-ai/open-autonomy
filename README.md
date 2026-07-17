@@ -188,7 +188,7 @@ open-autonomy compile <profileName|profileDir> <local|gh-actions> [outDir] [--fo
 open-autonomy lint <profileDir>                                          # validate a profile of your own — writes nothing
 open-autonomy preflight                                                  # make an adopter repo install-ready (run after installing the runner deps)
 open-autonomy conformance <exec|termfleet|gh-actions>                    # run the substrate conformance battery ("github" still accepted)
-open-autonomy upgrade --profile <dir> --target <dir> [--apply]           # re-compile an installation in place
+open-autonomy upgrade --profile <dir> --target <dir> --substrate local|gh-actions [--apply] # re-compile an installation in place
 ```
 
 The first argument is a **bundled profile name** (`self-driving`, `simple-gh-sdlc`, `simple-sdlc`, `hello` — shipped with the

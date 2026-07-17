@@ -7,7 +7,7 @@
 //   open-autonomy compile <profileName|profileDir> <local|gh-actions> [outDir]
 //   open-autonomy lint <profileDir>
 //   open-autonomy conformance <exec|termfleet|gh-actions> [probeAgent]
-//   open-autonomy upgrade --profile <dir> --target <dir> [--apply]
+//   open-autonomy upgrade --profile <dir> --target <dir> --substrate <local|gh-actions> [--apply]
 //
 // Each subcommand reads process.argv.slice(2); we re-frame argv so the delegated
 // entrypoint sees only its own arguments, then import it (its top-level runs).
@@ -31,7 +31,7 @@ const HELP = `open-autonomy <command> [args]
   doctor [--live] [--json] [--branch-prefix oa-doctor]          prove a compiled local-runner install end-to-end (self/env/provider/auth/harness/skills[/live]); run after preflight + before leaving the loop unattended
   harness-push [--repo o/r --branch b]                          push an OA harness/skill update past the enforce_admins gate (relax -> push -> restore)
   conformance <exec|termfleet|gh-actions> [probeAgent]          run the substrate conformance battery
-  upgrade --profile <dir> --target <dir> [--apply]              re-compile an installation in place (dry run without --apply)
+  upgrade --profile <dir> --target <dir> --substrate <target>   re-compile an installation in place (dry run without --apply)
   install [args]                                                (TE.8) the one-shot install agent — SOURCE-CHECKOUT ONLY (see below)
 
 Adopt into the CURRENT repo (existing repo — additive overlays, write no README.md/package.json/.gitignore):

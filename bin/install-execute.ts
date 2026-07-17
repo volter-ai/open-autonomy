@@ -375,33 +375,36 @@ export function stepInstallDeps(sel: SelectionRecordRef, opts: { proc: ProcRunne
 const AUTONOMY_COMPILE_SCRIPT = 'bin/autonomy-compile.ts';
 const PROVISION_TARGET_REPO_SCRIPT = 'scripts/provision-target-repo.ts';
 
-export function stepCompile(sel: SelectionRecordRef, opts: { proc: ProcRunner; force?: boolean; dryRun?: boolean }): ExecuteStepResult {
+export function stepCompile(sel: SelectionRecordRef, opts: { proc: ProcRunner; profileDir?: string; force?: boolean; dryRun?: boolean }): ExecuteStepResult {
+  // SELECT already resolved and validated this profile under the caller's profilesRoot. Preserve that
+  // identity through EXECUTE instead of reinterpreting a custom name against OA's bundled catalog.
+  const profileArg = opts.profileDir ?? sel.profile;
   if (opts.dryRun) {
     // bin/autonomy-compile.ts's OWN built-in dry-run mode (its own file header: "With no outDir, prints the
     // installation's file list (a dry run)") — reused verbatim rather than re-derived: omitting the outDir
     // positional is the exact mechanism that script already uses to guarantee zero writes (compileLocal's
     // own `outDir` branch — the ENTIRE materialize/clobber-guard/write path — never runs at all). This is
     // real, already-proven-safe production code, not a bespoke simulation of it.
-    const args = [AUTONOMY_COMPILE_SCRIPT, sel.profile, sel.substrate];
+    const args = [AUTONOMY_COMPILE_SCRIPT, profileArg, sel.substrate];
     const r = opts.proc('bun', args, {});
     if (r.status !== 0) {
-      return step('compile', 'blocked', `[DRY-RUN] bun bin/autonomy-compile.ts ${sel.profile} ${sel.substrate} (no outDir — the tool's own built-in dry-run) failed (exit ${r.status}): ${firstLine(r.stderr || r.stdout)}`);
+      return step('compile', 'blocked', `[DRY-RUN] bun bin/autonomy-compile.ts ${profileArg} ${sel.substrate} (no outDir — the tool's own built-in dry-run) failed (exit ${r.status}): ${firstLine(r.stderr || r.stdout)}`);
     }
     const wouldWrite = r.stdout.split('\n').map((l) => l.trim()).filter(Boolean);
     return step(
       'compile',
       'ok',
       `[DRY-RUN] would compile ${sel.profile}@${sel.substrate} into ${sel.detect.repoDir} — ${wouldWrite.length} file(s) ` +
-        `(via \`bun bin/autonomy-compile.ts ${sel.profile} ${sel.substrate}\`'s own built-in dry-run/list mode — no outDir arg, ` +
+        `(via \`bun bin/autonomy-compile.ts ${profileArg} ${sel.substrate}\`'s own built-in dry-run/list mode — no outDir arg, ` +
         `so materialize/write never runs). NOT written.`,
       { dryRun: true, wouldWrite },
     );
   }
-  const args = [AUTONOMY_COMPILE_SCRIPT, sel.profile, sel.substrate, sel.detect.repoDir];
+  const args = [AUTONOMY_COMPILE_SCRIPT, profileArg, sel.substrate, sel.detect.repoDir];
   if (opts.force) args.push('--force');
   const r = opts.proc('bun', args, {});
   if (r.status !== 0) {
-    return step('compile', 'blocked', `bun bin/autonomy-compile.ts ${sel.profile} ${sel.substrate} ${sel.detect.repoDir} failed (exit ${r.status}): ${firstLine(r.stderr || r.stdout)}`);
+    return step('compile', 'blocked', `bun bin/autonomy-compile.ts ${profileArg} ${sel.substrate} ${sel.detect.repoDir} failed (exit ${r.status}): ${firstLine(r.stderr || r.stdout)}`);
   }
   return step('compile', 'ok', `compiled ${sel.profile}@${sel.substrate} into ${sel.detect.repoDir}: ${firstLine(r.stdout)}`);
 }
@@ -938,7 +941,7 @@ export async function runExecute(opts: ExecuteOptions): Promise<ExecuteReport> {
 
   // D1 fix: compile MUST run before install-deps — see the file-header "EXECUTE order" note above for the
   // full root cause + rationale (a fresh self-driving install used to self-clobber at the compile step).
-  steps.push(stepCompile(sel, { proc, force: opts.force, dryRun }));
+  steps.push(stepCompile(sel, { proc, profileDir, force: opts.force, dryRun }));
   {
     const h = haltIfBlocked();
     if (h) return h;

@@ -7,7 +7,7 @@
 // here ever shells out to a real `gh`, launches a real agent, or touches a real GitHub repo (see this
 // file's own SAFETY comments at the planner-dispatch and provisioning tests).
 import { describe, expect, test } from 'bun:test';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { getSetupPack, type SetupPack } from '@open-autonomy/core';
@@ -1145,6 +1145,8 @@ describe('checkBoardSeededWithDrafts', () => {
 describe('runExecute — step ordering + fail-closed halt', () => {
   test('local target: all 7 steps run in order, GitHub-only steps report skipped, planner dispatch mocked ok', async () => {
     const dir = track(mkdtempSync(join(tmpdir(), 'oa-te5-')));
+    const customProfilesRoot = join(dir, 'adopter-profiles');
+    cpSync(join(PROFILES_ROOT, 'simple-sdlc'), join(customProfilesRoot, 'simple-sdlc'), { recursive: true });
     initGitRepo(dir);
     mkdirSync(join(dir, 'scheduler'), { recursive: true });
     writeFileSync(join(dir, 'scheduler', 'schedule.json'), JSON.stringify({ intervalSeconds: 900, env: {}, scripts: ['bun scripts/sweep.ts'] }));
@@ -1152,10 +1154,12 @@ describe('runExecute — step ordering + fail-closed halt', () => {
     const recordFile = writeRecord(dir, 'simple-sdlc', dir);
 
     const seenIds: string[] = [];
+    let compiledProfile = '';
     const proc: ProcRunner = (cmd, args) => {
       seenIds.push(`${cmd} ${args[0] ?? ''}`);
       if (cmd === 'npm') return okResult('installed');
       if (cmd === 'bun' && args[0]?.includes('autonomy-compile.ts')) {
+        compiledProfile = args[1] ?? '';
         // Simulate a real compile's on-disk effect just enough for the next steps (commit-harness, and
         // CRITICAL#2's seed-board-drafts loud-failure guard) to see what a real compile would have written —
         // the compile subprocess itself is stubbed (a real compile is exercised separately, in this unit's
@@ -1173,6 +1177,7 @@ describe('runExecute — step ordering + fail-closed halt', () => {
     const report = await runExecute({
       record: recordFile,
       proc,
+      profilesRoot: customProfilesRoot,
       bringUp: { isPortFree: () => true, spawnImpl: () => ({ pid: 1, unref: () => {} }), fetchImpl: stubFetch(), rangeStart: 41000, rangeEnd: 41100 },
     });
 
@@ -1182,6 +1187,7 @@ describe('runExecute — step ordering + fail-closed halt', () => {
     expect(report.steps.find((s) => s.id === 'ci-and-provision')!.status).toBe('skipped'); // local-git profile
     expect(report.steps.find((s) => s.id === 'provider-up')!.status).toBe('ok');
     expect(report.steps.find((s) => s.id === 'seed-board-drafts')!.status).toBe('ok');
+    expect(compiledProfile).toBe(join(customProfilesRoot, 'simple-sdlc'));
     // never touches ready/oa-approved: this whole run's only board-mutation-shaped call is the single
     // mocked planner dispatch at the very end — nothing before it issues any board-labeling call.
     expect(seenIds.filter((c) => c.includes('run-agent.mjs')).length).toBe(1);
@@ -1447,7 +1453,7 @@ describe('META — every risky call site in install-execute.ts checks dryRun fir
     assertGuardedByDryRun("opts.proc('npm', ['install', 'termfleet']");
   });
   test('stepCompile: the REAL (outDir-writing) compile call site is dryRun-guarded', () => {
-    assertGuardedByDryRun("const args = [AUTONOMY_COMPILE_SCRIPT, sel.profile, sel.substrate, sel.detect.repoDir];");
+    assertGuardedByDryRun("const args = [AUTONOMY_COMPILE_SCRIPT, profileArg, sel.substrate, sel.detect.repoDir];");
   });
   test('stepDirectionFill: the real applyDirectionFill(repoDir, fill) write is dryRun-guarded', () => {
     assertGuardedByDryRun('const written = applyDirectionFill(repoDir, fill);');

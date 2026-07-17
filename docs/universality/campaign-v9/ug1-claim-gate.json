@@ -1,0 +1,82 @@
+{
+  "schema": "open-autonomy.ug1-claim-gate.v1",
+  "campaign": "v9",
+  "gate": "UG1",
+  "status": "implementation-complete-external-validation-deferred",
+  "passed": false,
+  "fixtureKind": "synthetic",
+  "empiricalRegistration": false,
+  "promotionAllowed": false,
+  "retroactiveMutationAllowed": false,
+  "checkpoints": [
+    {
+      "checkpoint": "U0",
+      "commit": "1a904e46187238013245a0e07868caebe8e9f570",
+      "artifactPath": "docs/universality/campaign-v9/u0-closure.json",
+      "byteDigest": "sha256:4b044575710d772c7d8edf1f8a14e5e6ba7b026ae785fc3b150f5ee2e9b73901",
+      "status": "complete",
+      "externalValidation": "not-deferred"
+    },
+    {
+      "checkpoint": "U1",
+      "commit": "ac2da0d8ae9241f49abcc07f19456e512afeb6d7",
+      "artifactPath": "docs/universality/campaign-v9/u1-implementation-closure.json",
+      "byteDigest": "sha256:b997ec1b7ac848c96c9296cc598500586924f93dbce2110f86472af4775271f5",
+      "status": "implementation-complete-external-validation-deferred",
+      "externalValidation": "deferred"
+    },
+    {
+      "checkpoint": "U2",
+      "commit": "f8a99078da701740c2df818682655a9af750cb4f",
+      "artifactPath": "docs/universality/campaign-v9/u2-implementation-closure.json",
+      "byteDigest": "sha256:c38f5a1ea68c1172f5e8689f5795afdff8fb3ca4d088b9ee95889ba54f1ca93d",
+      "status": "implementation-complete-external-validation-deferred",
+      "externalValidation": "deferred"
+    },
+    {
+      "checkpoint": "U3",
+      "commit": "7af2e958a7d92157bda932070b6763b3cde6f6d6",
+      "artifactPath": "docs/universality/campaign-v9/u3-implementation-closure.json",
+      "byteDigest": "sha256:9d043694ae78e2fd61ddc96bbf21d9331f03e26beb50a11098ddcff03fb64fb0",
+      "status": "implementation-complete-external-validation-deferred",
+      "externalValidation": "deferred"
+    },
+    {
+      "checkpoint": "U4",
+      "commit": "db93bdf4e8340522d23ad0ed1497250a2650a560",
+      "artifactPath": "docs/universality/campaign-v9/u4-implementation-closure-attestation.json",
+      "byteDigest": "sha256:dcb1e467a86592f4aa421dfc4add208c02e3ea76dbbe94dfc54d445ee4436922",
+      "status": "locally-attested-external-deferred",
+      "externalValidation": "deferred"
+    },
+    {
+      "checkpoint": "U5",
+      "commit": "7c83643ea716e6675550f4e22396258ddc19ee86",
+      "artifactPath": "docs/universality/campaign-v9/u5-implementation-closure-attestation.json",
+      "byteDigest": "sha256:a6c501e14ab8446521271b1b903a72f4c7240a9ef06e6caecfaf5cf68f775a5d",
+      "status": "locally-attested-external-deferred",
+      "externalValidation": "deferred"
+    }
+  ],
+  "evidenceGraph": [
+    { "checkpoint": "U0", "dependsOn": [] },
+    { "checkpoint": "U1", "dependsOn": ["U0"] },
+    { "checkpoint": "U2", "dependsOn": ["U0", "U1"] },
+    { "checkpoint": "U3", "dependsOn": ["U0", "U1", "U2"] },
+    { "checkpoint": "U4", "dependsOn": ["U1", "U3"] },
+    { "checkpoint": "U5", "dependsOn": ["U3", "U4"] }
+  ],
+  "accounting": {
+    "checkpointCount": 6,
+    "implementationCheckpointCount": 6,
+    "externalDeferredCount": 5,
+    "passedCount": 0
+  },
+  "prohibitedClaims": [
+    "UG1 has passed",
+    "external U1-U5 validation is complete",
+    "synthetic evidence is empirical",
+    "later gates may mutate U0-U5 anchors"
+  ],
+  "digest": "sha256:118393d898ae02eb552d28f96bd2e799421b3c83c5d36c95614b12cb5bdf6343"
+}

@@ -19,6 +19,9 @@ import {
   type U4ProbeVerificationMaterial,
 } from "./organization-u4-probe-protocol";
 import type { U3TraceEvaluationContract } from "./organization-u3-observation-evaluator";
+import {verifyU4BridgeQualifiedTriangulation,type U4BridgeQualifiedTriangulation,type U4ProbeExtractionBridge} from "./organization-u4-probe-extraction-bridge";
+import type {U4EvidenceExtraction,U4ExtractionSpecification} from "./organization-u4-evidence-extractor";
+import type {U4TriangulationInput} from "./organization-u4-triangulation";
 
 type Sha = `sha256:${string}`;
 export const U4_INVENTORY_REPLAY_CERTIFICATE_SCHEMA =
@@ -37,6 +40,14 @@ export const U4_REPLAY_IMPLEMENTATION_PATHS = Object.freeze([
   "packages/core/src/organization-u4-probe-protocol.test.ts",
   "packages/core/src/organization-u4-inventory-replay-certificate.ts",
   "packages/core/src/organization-u4-inventory-replay-certificate.test.ts",
+  "packages/core/src/organization-u4-probe-extraction-bridge.ts",
+  "packages/core/src/organization-u4-probe-extraction-bridge.test.ts",
+  "packages/core/src/organization-u4-evidence-extractor.ts",
+  "packages/core/src/organization-u4-evidence-extractor.test.ts",
+  "packages/core/src/organization-u4-triangulation.ts",
+  "packages/core/src/organization-u4-triangulation.test.ts",
+  "packages/core/src/organization-u4-test-fixture.ts",
+  "packages/core/src/organization-u4-probe-test-fixture.ts",
 ] as const);
 export type U4ReplayImplementationCustodyManifest = {
   schema: "open-autonomy.u4-replay-implementation-custody.v1";
@@ -44,7 +55,7 @@ export type U4ReplayImplementationCustodyManifest = {
   files: ReadonlyArray<{ path: (typeof U4_REPLAY_IMPLEMENTATION_PATHS)[number]; sha256: Sha }>;
   digest: Sha;
 };
-export const U4_REPLAY_IMPLEMENTATION_CUSTODY_MANIFEST: U4ReplayImplementationCustodyManifest = Object.freeze({
+export const U4_REPLAY_LAST_FINALIZED_IMPLEMENTATION_CUSTODY_MANIFEST: U4ReplayImplementationCustodyManifest = Object.freeze({
   schema: "open-autonomy.u4-replay-implementation-custody.v1",
   implementationCommit: "63653b09a35c77d304eb41d96a27255010ee5db0",
   files: Object.freeze([
@@ -55,12 +66,16 @@ export const U4_REPLAY_IMPLEMENTATION_CUSTODY_MANIFEST: U4ReplayImplementationCu
   ]),
   digest: "sha256:aaf4afe7dffa55bc59294dd08e20255bcfebb84a8838a9c6f7ab588d75f0098f",
 }) as U4ReplayImplementationCustodyManifest;
-export const U4_REPLAY_IMPLEMENTATION_CUSTODY_DIGEST = U4_REPLAY_IMPLEMENTATION_CUSTODY_MANIFEST.digest;
+/** Phase-E pre-refresh state: the expanded closure-critical path denominator
+ * cannot be claimed until a post-implementation commit is frozen in phase F. */
+export const U4_REPLAY_IMPLEMENTATION_CUSTODY_MANIFEST:null=null;
+export const U4_REPLAY_IMPLEMENTATION_CUSTODY_DIGEST:null=null;
 export type U4ReplayProbeEvidence = {
   bundle: FrozenU4VerifiedProbeBundle;
   materials: U4ProbeVerificationMaterial[];
   u3Contract: U3TraceEvaluationContract;
 };
+export type U4ReplayBridgeEvidence={qualified:U4BridgeQualifiedTriangulation;bridge:U4ProbeExtractionBridge;extraction:U4EvidenceExtraction;specification:U4ExtractionSpecification;triangulationInput:U4TriangulationInput};
 export type U4FrontendOutcome = {
   schema: "open-autonomy.u4-frontend-outcome.v1";
   at: string;
@@ -82,7 +97,8 @@ export type U4InventoryReplayCertificate = {
   freezeReceiptDigest: Sha;
   probeCertificateDigest: Sha;
   frontendOutcomeDigest: Sha;
-  implementationCustodyDigest: Sha;
+  implementationCustodyDigest: null;
+  qualifiedTriangulationDigest:Sha;bridgeDigest:Sha;witnessDenominatorDigest:Sha;triangulationDigest:Sha;
   evidenceNodes: Array<{
     id: string;
     digest: Sha;
@@ -273,9 +289,10 @@ export const computeU4FrontendReplayResultDigest = (
   probeBundleDigest: Sha,
   u3ContractDigest: Sha,
   materialDigests: Sha[],
+  qualifiedTriangulationDigest:Sha=H("missing-qualified-triangulation"),bridgeDigest:Sha=H("missing-bridge"),witnessDenominatorDigest:Sha=H("missing-witness-denominator"),triangulationDigest:Sha=H("missing-triangulation"),
 ) =>
   H(
-    `open-autonomy.u4-frontend-replay-result.v1\0${C({ inventoryDigest, calculusDigest, sourceRegistryDigest, probeBundleDigest, u3ContractDigest, materialDigests })}`,
+    `open-autonomy.u4-frontend-replay-result.v1\0${C({ inventoryDigest, calculusDigest, sourceRegistryDigest, probeBundleDigest, u3ContractDigest, materialDigests,qualifiedTriangulationDigest,bridgeDigest,witnessDenominatorDigest,triangulationDigest })}`,
   );
 function verifyOutcome(
   v0: U4FrontendOutcome,
@@ -340,6 +357,7 @@ function body(
   registry: FrozenU4SyntheticSourceRegistry,
   probe: FrozenU4VerifiedProbeBundle,
   materials: U4ProbeVerificationMaterial[],
+  qualification:U4BridgeQualifiedTriangulation,
   outcome: U4FrontendOutcome,
 ): Omit<U4InventoryReplayCertificate, "digest"> {
   const freezeReceiptDigest = H(inventory.freezeReceipt),
@@ -354,7 +372,10 @@ function body(
       { id: "frontend-outcome", digest: frontendOutcomeDigest },
       { id: "freeze-receipt", digest: freezeReceiptDigest },
       { id: "inventory", digest: inventory.digest },
-      { id: "implementation-custody", digest: U4_REPLAY_IMPLEMENTATION_CUSTODY_DIGEST },
+      { id: "bridge", digest: qualification.bridgeDigest },
+      { id: "bridge-qualified-triangulation", digest: qualification.digest },
+      { id: "triangulation", digest: qualification.triangulationDigest },
+      { id: "witness-denominator", digest: qualification.witnessDenominatorDigest },
       { id: "probe-bundle", digest: probe.digest },
       { id: "probe-materials", digest: materialsDigest },
       { id: "probe-plan", digest: probe.plan.digest },
@@ -368,7 +389,11 @@ function body(
       { from: "freeze-receipt", to: "frontend-outcome", relation: "precedes" },
       { from: "inventory", to: "frontend-outcome", relation: "precedes" },
       { from: "inventory", to: "probe-plan", relation: "requires" },
-      { from: "implementation-custody", to: "probe-bundle", relation: "binds" },
+      { from: "probe-bundle", to: "bridge", relation: "requires" },
+      { from: "witness-denominator", to: "bridge", relation: "binds" },
+      { from: "bridge", to: "bridge-qualified-triangulation", relation: "requires" },
+      { from: "triangulation", to: "bridge-qualified-triangulation", relation: "binds" },
+      { from: "bridge-qualified-triangulation", to: "frontend-outcome", relation: "precedes" },
       { from: "probe-plan", to: "probe-bundle", relation: "requires" },
       { from: "probe-materials", to: "probe-bundle", relation: "binds" },
       { from: "probe-bundle", to: "frontend-outcome", relation: "precedes" },
@@ -423,6 +448,7 @@ function body(
     probeCertificateDigest: probe.digest,
     frontendOutcomeDigest,
     implementationCustodyDigest: U4_REPLAY_IMPLEMENTATION_CUSTODY_DIGEST,
+    qualifiedTriangulationDigest:qualification.digest,bridgeDigest:qualification.bridgeDigest,witnessDenominatorDigest:qualification.witnessDenominatorDigest,triangulationDigest:qualification.triangulationDigest,
     evidenceNodes: nodes,
     evidenceEdges: edges,
   };
@@ -433,17 +459,18 @@ export function createU4InventoryReplayCertificate(
   registry: FrozenU4SyntheticSourceRegistry,
   trusted: U4TrustedVerificationInputs,
   probeEvidence: U4ReplayProbeEvidence,
+  bridgeEvidence:U4ReplayBridgeEvidence,
   outcomeInput: U4FrontendOutcome,
   { root = process.cwd() } = {},
 ) {
   verifyU4ReplaySourceGitCustody(root);
-  verifyU4ReplayImplementationCustody(U4_REPLAY_IMPLEMENTATION_CUSTODY_MANIFEST, U4_REPLAY_IMPLEMENTATION_CUSTODY_DIGEST, root);
   bounded(
     inventoryInput,
     calculusInput,
     registry,
     trusted,
     probeEvidence,
+    bridgeEvidence,
     outcomeInput,
   );
   const calculus = verifyFrozenU3ObservationCalculus(calculusInput, {
@@ -462,6 +489,7 @@ export function createU4InventoryReplayCertificate(
       registry,
       trusted,
     ),
+    qualification=verifyU4BridgeQualifiedTriangulation(bridgeEvidence.qualified,bridgeEvidence.bridge,inventory,calculus,registry,trusted,probeEvidence,bridgeEvidence.extraction,bridgeEvidence.specification,bridgeEvidence.triangulationInput),
     expected = computeU4FrontendReplayResultDigest(
       inventory.digest,
       calculus.digest,
@@ -469,9 +497,10 @@ export function createU4InventoryReplayCertificate(
       probe.digest,
       probe.u3ContractDigest,
       probe.materialDigests,
+      qualification.digest,qualification.bridgeDigest,qualification.witnessDenominatorDigest,qualification.triangulationDigest,
     ),
     outcome = verifyOutcome(outcomeInput, inventory, trusted, expected, probe),
-    b = body(inventory, calculus, registry, probe, probeEvidence.materials, outcome);
+    b = body(inventory, calculus, registry, probe, probeEvidence.materials, qualification,outcome);
   return freeze({ ...b, digest: certificateDigest(b) });
 }
 export function verifyU4InventoryReplayCertificate(
@@ -481,11 +510,11 @@ export function verifyU4InventoryReplayCertificate(
   registry: FrozenU4SyntheticSourceRegistry,
   trusted: U4TrustedVerificationInputs,
   probeEvidence: U4ReplayProbeEvidence,
+  bridgeEvidence:U4ReplayBridgeEvidence,
   outcome: U4FrontendOutcome,
   options = {},
 ) {
   verifyU4ReplaySourceGitCustody((options as any).root ?? process.cwd());
-  verifyU4ReplayImplementationCustody(U4_REPLAY_IMPLEMENTATION_CUSTODY_MANIFEST, U4_REPLAY_IMPLEMENTATION_CUSTODY_DIGEST, (options as any).root ?? process.cwd());
   bounded(
     certificate,
     inventory,
@@ -493,6 +522,7 @@ export function verifyU4InventoryReplayCertificate(
     registry,
     trusted,
     probeEvidence,
+    bridgeEvidence,
     outcome,
   );
   exact(
@@ -511,6 +541,7 @@ export function verifyU4InventoryReplayCertificate(
       "probeCertificateDigest",
       "frontendOutcomeDigest",
       "implementationCustodyDigest",
+      "qualifiedTriangulationDigest","bridgeDigest","witnessDenominatorDigest","triangulationDigest",
       "evidenceNodes",
       "evidenceEdges",
       "digest",
@@ -523,6 +554,7 @@ export function verifyU4InventoryReplayCertificate(
     registry,
     trusted,
     probeEvidence,
+    bridgeEvidence,
     outcome,
     options,
   );

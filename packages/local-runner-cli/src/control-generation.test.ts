@@ -3,7 +3,7 @@ import { spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
-import { acceptControlGeneration, controlGenerationPath, verifyControlGeneration, verifyControlPaths } from './control-generation.ts';
+import { acceptControlGeneration, acceptPinnedControlGeneration, controlGenerationPath, verifyControlGeneration, verifyControlPaths } from './control-generation.ts';
 import { recoverEffect } from './effect-recovery.ts';
 import { activateAcceptedGeneration, configureActivation, type ActivationOps } from './activation.ts';
 
@@ -86,7 +86,26 @@ describe('accepted control generation', () => {
       git(other, ['add', '-A']);
       git(other, ['commit', '-q', '-m', 'next accepted generation']);
       git(other, ['push', '-q', 'origin', 'main']);
+      expect(acceptPinnedControlGeneration(f.dir, accepted.sha)?.sha).toBe(accepted.sha);
       expect(verifyControlGeneration(f.dir, accepted.sha).sha).toBe(accepted.sha);
+      expect(() => acceptPinnedControlGeneration(f.dir, 'b'.repeat(40))).toThrow('pinned control generation mismatch');
+    } finally { f.cleanup(); }
+  });
+
+  test('a forged pinned env cannot bless a root absent from active/draining central routing', async () => {
+    const f = fixture();
+    try {
+      const accepted = acceptControlGeneration(f.dir)!;
+      configureActivation({ profile: 'profiles/test', pollMs: 1000 }, { cwd: f.dir });
+      expect(() => acceptPinnedControlGeneration(f.dir, accepted.sha)).toThrow('not an active/draining root');
+      const ops: ActivationOps = {
+        async detectAccepted() { return { sha: accepted.sha, acceptedAt: new Date().toISOString() }; },
+        async stage() { return join(f.dir, 'different-root'); },
+        async validate() {},
+        async health() {},
+      };
+      await activateAcceptedGeneration({ cwd: f.dir, ops });
+      expect(() => acceptPinnedControlGeneration(f.dir, accepted.sha)).toThrow('not an active/draining root');
     } finally { f.cleanup(); }
   });
 

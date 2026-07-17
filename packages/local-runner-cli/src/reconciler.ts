@@ -102,6 +102,7 @@ export async function start(opts: StartOptions = {}): Promise<void> {
     cwd,
     proc,
     ambient,
+    ...(opts.generationSha ? { generationSha: opts.generationSha } : {}),
     ...(opts.resolveDefault ? { resolveDefault: opts.resolveDefault } : {}),
   });
   if (!pre.ok) throw new Error(pre.message ?? '[oa] start: preflight failed — see errors above');

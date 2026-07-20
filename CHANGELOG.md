@@ -4,6 +4,10 @@
 
 ### Fixed
 
+- Local worktrees now keep workspace dependency links inside the worktree instead of resolving them
+  through the control checkout, managed virtual-tmux providers register their stable identity with the
+  local Termfleet console on every ensure, and transient read-only provider snapshots receive one bounded
+  retry without ever retrying lifecycle mutations.
 - Workflow reruns now use distinct model-proxy identities instead of colliding with the original attempt.
 - Reviewer runs now wait for live required checks before model judgment, route mechanical failures back
   to rework instead of parking them on a person, allocate no bounded model run when those checks fail, and

@@ -619,8 +619,12 @@ const ensureOwnedProvider = () => {
   process.env.AUTONOMY_PROVIDER_URL_SOURCE = 'managed';
   console.error(
     '[loop] provider ' + managedProvider.url + ' (managed:' + managedProvider.name +
-      ', ' + (result?.action || 'ensured') + ', instance ' + (result?.instanceId || 'unknown') + ')',
+      ', ' + (result?.action || 'ensured') + ', instance ' + (result?.instanceId || 'unknown') +
+      ', console ' + (result?.console?.visible ? 'registered' : 'not registered') + ')',
   );
+  if (result?.console && !result.console.visible) {
+    console.error('[loop] provider console registration pending at ' + result.console.consoleUrl + ': ' + result.console.detail);
+  }
   return true;
 };
 if (needsRunner && managedProvider) {

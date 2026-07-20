@@ -7,7 +7,7 @@
 // which base ensureWorktree picks; it only lets a caller ask "which one, and what SHA").
 import { afterEach, describe, expect, test } from 'bun:test';
 import { spawnSync } from 'node:child_process';
-import { existsSync, mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { AutonomyIR } from '@open-autonomy/core';
@@ -83,7 +83,7 @@ describe('worktreeProbe (in-process export)', () => {
   // — proven live as `pnpm db:migrate` dying "knex not found" inside a fresh worktree even though the main
   // checkout had `apps/server/node_modules/.bin/knex`. ensureWorktree must link EVERY declared workspace
   // member's node_modules into the new worktree, not just the root's.
-  test('links a workspace MEMBER\'s own node_modules into the worktree too (pnpm-style non-hoisted layout), not just the root', () => {
+  test('mirrors a workspace MEMBER\'s node_modules while keeping relative workspace links inside the worktree', () => {
     const { dir } = scaffoldLocalGitRepo();
     // Declare an npm/yarn/bun-style workspaces field so the member glob is discoverable without relying on
     // the bare apps/packages convention fallback. Also declare a "packages/foo" SOURCE file (committed) so
@@ -94,12 +94,16 @@ describe('worktreeProbe (in-process export)', () => {
     writeFileSync(join(dir, 'package.json'), JSON.stringify({ name: 'host-app', workspaces: ['packages/*'] }));
     mkdirSync(join(dir, 'packages', 'foo'), { recursive: true });
     writeFileSync(join(dir, 'packages', 'foo', 'package.json'), JSON.stringify({ name: '@host-app/foo' }));
+    mkdirSync(join(dir, 'packages', 'shared'), { recursive: true });
+    writeFileSync(join(dir, 'packages', 'shared', 'value.txt'), 'committed-worktree-value\n');
     gitIn(dir, 'add', '-A');
     gitIn(dir, 'commit', '-q', '-m', 'declare packages/* workspace with a member package.json');
     // Now create the (gitignored, uncommitted) node_modules dirs — root AND the member's own — the same
     // shape `pnpm install` leaves on disk without ever touching git.
     mkdirSync(join(dir, 'packages', 'foo', 'node_modules', '.bin'), { recursive: true });
     writeFileSync(join(dir, 'packages', 'foo', 'node_modules', '.bin', 'some-tool'), '#!/bin/sh\necho hi\n');
+    mkdirSync(join(dir, 'packages', 'foo', 'node_modules', '@host-app'), { recursive: true });
+    symlinkSync('../../../shared', join(dir, 'packages', 'foo', 'node_modules', '@host-app', 'shared'));
     mkdirSync(join(dir, 'node_modules'), { recursive: true });
     writeFileSync(join(dir, 'node_modules', 'marker.txt'), 'root\n');
 
@@ -111,10 +115,18 @@ describe('worktreeProbe (in-process export)', () => {
       const rootLink = join(result.worktree, 'node_modules');
       const memberLink = join(result.worktree, 'packages', 'foo', 'node_modules');
       expect(existsSync(rootLink)).toBe(true);
-      expect(realpathSync(rootLink)).toBe(realpathSync(join(dir, 'node_modules')));
+      expect(lstatSync(rootLink).isDirectory()).toBe(true);
+      expect(lstatSync(rootLink).isSymbolicLink()).toBe(false);
       expect(existsSync(memberLink)).toBe(true);
-      expect(realpathSync(memberLink)).toBe(realpathSync(join(dir, 'packages', 'foo', 'node_modules')));
+      expect(lstatSync(memberLink).isDirectory()).toBe(true);
+      expect(lstatSync(memberLink).isSymbolicLink()).toBe(false);
       expect(existsSync(join(result.worktree, 'packages', 'foo', 'node_modules', '.bin', 'some-tool'))).toBe(true);
+      // Mutate the control checkout only AFTER the worktree exists. A correctly recreated relative link
+      // still reaches the committed worktree package; the old outer-directory symlink reached this mutation.
+      writeFileSync(join(dir, 'packages', 'shared', 'value.txt'), 'control-checkout-mutation\n');
+      const resolvedShared = realpathSync(join(memberLink, '@host-app', 'shared'));
+      expect(resolvedShared).toBe(realpathSync(join(result.worktree, 'packages', 'shared')));
+      expect(readFileSync(join(memberLink, '@host-app', 'shared', 'value.txt'), 'utf8')).toBe('committed-worktree-value\n');
       sh('git', ['worktree', 'remove', '--force', result.worktree], dir);
       sh('git', ['branch', '-D', branch], dir);
     } finally {

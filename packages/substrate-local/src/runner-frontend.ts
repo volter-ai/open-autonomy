@@ -18,7 +18,19 @@
 //
 // Emitted verbatim by compileLocal as scripts/runner.ts so an agent's `import './runner.js'` resolves.
 import { spawnSync } from 'node:child_process';
-import { existsSync, readFileSync, readdirSync, writeFileSync, appendFileSync, mkdirSync, symlinkSync } from 'node:fs';
+import {
+  appendFileSync,
+  chmodSync,
+  copyFileSync,
+  existsSync,
+  lstatSync,
+  mkdirSync,
+  readFileSync,
+  readdirSync,
+  readlinkSync,
+  symlinkSync,
+  writeFileSync,
+} from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { basename, dirname, join, resolve } from 'node:path';
 
@@ -592,24 +604,65 @@ export function workspaceMemberNodeModulesDirs(): string[] {
   return [...dirs];
 }
 
-// Best-effort-symlink `<dir>/node_modules` from the main checkout into the same relative path inside
-// `worktree`, for the root AND every workspace-member directory that has its own node_modules. Every link
-// is independently best-effort (try/catch swallow, never throw) — a missing/failed symlink for any one
-// package just means THAT package falls back to root/global resolution inside the worktree, exactly like
-// the pre-existing root-only behavior already degraded.
+/** Materialize a shallow node_modules layout in a worktree without re-installing packages. The outer
+ * directory MUST be real: pnpm workspace links inside a member node_modules are relative (for example
+ * `@scope/shared -> ../../../../packages/shared`). If the whole member node_modules is one symlink back to
+ * the control checkout, the kernel resolves that inner relative link from the control checkout too and an
+ * isolated agent silently imports/builds trunk packages. Recreate symlinks with their original link text so
+ * those relative workspace links resolve against the worktree, while ordinary dependency directories and
+ * the pnpm store remain cheap links to the already-installed control checkout.
+ *
+ * Scope directories need one extra shallow level because the workspace link lives below `@scope/`.
+ * `.bin` also gets a real directory: symlink entries retain their relative targets, while the occasional
+ * manager-generated regular shim is copied with its executable mode so `$0`/relative imports are evaluated
+ * from the worktree layout. Everything is independently best-effort, matching the old link behavior. */
+function mirrorNodeModulesDirectory(source: string, destination: string, copyRegularFiles = false): void {
+  try {
+    mkdirSync(destination, { recursive: true });
+  } catch {
+    return;
+  }
+  let entries: string[] = [];
+  try {
+    entries = readdirSync(source);
+  } catch {
+    return;
+  }
+  for (const entry of entries) {
+    const from = join(source, entry);
+    const to = join(destination, entry);
+    if (existsSync(to)) continue;
+    try {
+      const stat = lstatSync(from);
+      if (stat.isSymbolicLink()) {
+        symlinkSync(readlinkSync(from), to);
+      } else if (stat.isDirectory() && (entry === '.bin' || entry.startsWith('@'))) {
+        mirrorNodeModulesDirectory(from, to, entry === '.bin');
+      } else if (stat.isDirectory()) {
+        symlinkSync(from, to, 'dir');
+      } else if (copyRegularFiles) {
+        copyFileSync(from, to);
+        chmodSync(to, stat.mode);
+      } else {
+        symlinkSync(from, to, 'file');
+      }
+    } catch {
+      /* best-effort: one unusable dependency entry must not prevent the agent workspace from launching */
+    }
+  }
+}
+
+// Best-effort-mirror `<dir>/node_modules` from the main checkout into the same relative path inside
+// `worktree`, for the root AND every workspace member that has its own node_modules. The mirror shares all
+// installed package bytes but preserves worktree-local resolution for relative workspace links.
 function linkNodeModulesInto(worktree: string): void {
   const roots = [resolve('.'), ...workspaceMemberNodeModulesDirs()];
   for (const dir of roots) {
     const source = join(dir, 'node_modules');
     const relDir = dir === resolve('.') ? '' : dir.slice(resolve('.').length + 1);
-    const linkPath = join(worktree, relDir, 'node_modules');
-    if (!existsSync(source) || existsSync(linkPath)) continue;
-    try {
-      mkdirSync(dirname(linkPath), { recursive: true });
-      symlinkSync(source, linkPath, 'dir');
-    } catch {
-      /* best-effort: a missing symlink just means that package falls back to root/global tools */
-    }
+    const destination = join(worktree, relDir, 'node_modules');
+    if (!existsSync(source) || existsSync(destination)) continue;
+    mirrorNodeModulesDirectory(source, destination);
   }
 }
 

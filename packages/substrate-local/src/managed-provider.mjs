@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { spawn } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import {
   closeSync,
   existsSync,
@@ -188,8 +188,6 @@ function spawnProvider(config, repoRoot) {
         '127.0.0.1',
         '--port',
         String(new URL(config.url).port),
-        '--no-console-announce',
-        'true',
       ],
       {
         cwd: config.runtimeDir,
@@ -208,6 +206,41 @@ function spawnProvider(config, repoRoot) {
   }
   writeFileSync(join(config.runtimeDir, 'provider.pid'), `${child.pid ?? ''}\n`, { mode: 0o600 });
   return { pid: child.pid, exited: () => child.exitCode !== null };
+}
+
+/** Make the owned provider visible in the ordinary local Termfleet console. The provider runtime keeps an
+ * isolated TERMFLEET_HOME so its ownership/current-provider records cannot collide with a person's global
+ * Termfleet context; registration therefore has to be explicit. It is repeated on every ensure (including
+ * healthy reuse), which makes it self-healing after either the console or its registry restarts.
+ *
+ * Console absence is not a provider failure: headless installs are valid and the scheduler must keep its
+ * pinned provider alive. The next ensure retries registration and reports the current visibility result. */
+export function registerManagedProvider(config, repoRoot, options = {}) {
+  const consoleUrl = (options.consoleUrl || process.env.TERMFLEET_CONSOLE_URL || 'http://127.0.0.1:7373').replace(/\/$/, '');
+  const cli = options.cli || resolveTermfleetCli(repoRoot);
+  const run = options.spawnSync ?? spawnSync;
+  const result = run(
+    process.execPath,
+    [
+      cli,
+      'registry',
+      'register-local',
+      '--console-url',
+      consoleUrl,
+      '--url',
+      config.url,
+      '--label',
+      config.name,
+      '--alias',
+      config.name,
+    ],
+    { cwd: config.runtimeDir, encoding: 'utf8', timeout: 5_000 },
+  );
+  if (result.status === 0) {
+    return { visible: true, consoleUrl, detail: `registered as ${config.name}` };
+  }
+  const detail = String(result.stderr || result.stdout || `exit ${result.status ?? 'unknown'}`).trim();
+  return { visible: false, consoleUrl, detail };
 }
 
 async function acquireLock(runtimeDir, wait, timeoutMs = 10_000) {
@@ -257,11 +290,15 @@ export async function ensureManagedProvider(input, options = {}) {
   const release = await acquireLock(config.runtimeDir, wait, options.lockTimeoutMs);
   const probe = options.probe ?? probeManagedProvider;
   const launch = options.spawn ?? ((cfg) => spawnProvider(cfg, repoRoot));
+  const register = options.register ?? ((cfg) => registerManagedProvider(cfg, repoRoot, options));
   try {
     const owner = readOwner(config);
     const initial = await probe(config.url);
     const healthy = assertOwnedHealth(config, owner, initial, 'managed provider reuse refused');
-    if (healthy) return { action: 'reused', config, instanceId: healthy.instanceId, pid: undefined };
+    if (healthy) {
+      const registration = await register(config);
+      return { action: 'reused', config, instanceId: healthy.instanceId, pid: undefined, registration };
+    }
 
     const child = launch(config);
     const deadline = Date.now() + (options.startTimeoutMs ?? 20_000);
@@ -283,7 +320,8 @@ export async function ensureManagedProvider(input, options = {}) {
       throw new Error(`managed provider ${config.name} restarted with instance ${startedHealth.instanceId}, expected ${owner.instanceId}; refusing identity drift`);
     }
     const claimed = owner ?? writeOwner(config, startedHealth);
-    return { action: owner ? 'restarted' : 'started', config, instanceId: claimed.instanceId, pid: child.pid };
+    const registration = await register(config);
+    return { action: owner ? 'restarted' : 'started', config, instanceId: claimed.instanceId, pid: child.pid, registration };
   } finally {
     release();
   }
@@ -294,7 +332,14 @@ async function main() {
   const schedule = JSON.parse(readFileSync(schedulePath, 'utf8'));
   if (!schedule.provider) throw new Error(`schedule has no managed provider configuration: ${schedulePath}`);
   const result = await ensureManagedProvider(schedule.provider, { repoRoot: resolve(dirname(schedulePath), '..') });
-  console.log(JSON.stringify({ action: result.action, name: result.config.name, url: result.config.url, instanceId: result.instanceId, pid: result.pid ?? null }));
+  console.log(JSON.stringify({
+    action: result.action,
+    name: result.config.name,
+    url: result.config.url,
+    instanceId: result.instanceId,
+    pid: result.pid ?? null,
+    console: result.registration,
+  }));
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {

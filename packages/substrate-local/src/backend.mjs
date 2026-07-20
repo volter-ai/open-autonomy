@@ -18,6 +18,24 @@ import { ProviderClient, providerRefFromUrl } from 'termfleet';
 import { resolveDefaultProvider } from '@termfleet/core/local-providers.js';
 import { RUNNER_DEFAULTS } from './runner-defaults.mjs';
 
+/** One bounded retry for the provider's read-only observation pair. A virtual-tmux snapshot performs a
+ * real tmux observation and can occasionally outlive the transport's request window under load; treating
+ * one such read as the lifecycle truth produces noisy reap failures even though the provider is healthy.
+ * Mutating operations are never retried here. */
+export async function observeProvider(client, { attempts = 2, retryMs = 250, wait = (ms) => new Promise((done) => setTimeout(done, ms)) } = {}) {
+  let lastError;
+  for (let attempt = 0; attempt < attempts; attempt++) {
+    try {
+      const [life, snapshot] = await Promise.all([client.lifecycle(), client.snapshot()]);
+      return { life, snapshot };
+    } catch (error) {
+      lastError = error;
+      if (attempt + 1 < attempts) await wait(retryMs);
+    }
+  }
+  throw lastError;
+}
+
 // Real local backend: drives termfleet via its ProviderClient SDK. The window name IS the agent; the
 // system never encodes anything else into it. Defaults come from RUNNER_DEFAULTS; TERMFLEET_* override.
 export class TermfleetRunner {
@@ -143,7 +161,7 @@ export class TermfleetRunner {
   // `lifecycle.currentSessionId`; the session carries the real activity `state` (+ attention `signal`).
   async #view() {
     const client = await this.#client();
-    const [life, snapshot] = await Promise.all([client.lifecycle(), client.snapshot()]);
+    const { life, snapshot } = await observeProvider(client);
     const byId = new Map((life.sessions || []).map((s) => [s.sessionId, s]));
     return { client, snapshot, byId };
   }

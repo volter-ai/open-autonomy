@@ -7,7 +7,7 @@ import type { AutonomyIR } from '@open-autonomy/core';
 import { compileLocal } from './emit';
 // The implementation is emitted verbatim as plain Node JavaScript into adopter repositories.
 // @ts-expect-error deliberately no TypeScript declaration for the emitted runtime module
-import { ensureManagedProvider, validateManagedProviderConfig } from './managed-provider.mjs';
+import { ensureManagedProvider, registerManagedProvider, validateManagedProviderConfig } from './managed-provider.mjs';
 
 const skillAgentIr: AutonomyIR = {
   schema: 'autonomy.ir.v1',
@@ -142,6 +142,7 @@ console.log(JSON.stringify({ action: count === 1 ? 'started' : 'reused', instanc
       let spawns = 0;
       const result = await ensureManagedProvider(config, {
         probe: async () => health('provider-1'),
+        register: async () => ({ visible: true }),
         spawn: () => {
           spawns += 1;
           return { pid: 12, exited: () => false };
@@ -161,6 +162,7 @@ console.log(JSON.stringify({ action: count === 1 ? 'started' : 'reused', instanc
       await expect(
         ensureManagedProvider(config, {
           probe: async () => health('foreign-provider'),
+          register: async () => ({ visible: true }),
           spawn: () => ({ pid: 12, exited: () => false }),
         }),
       ).rejects.toThrow('refusing to adopt');
@@ -176,6 +178,7 @@ console.log(JSON.stringify({ action: count === 1 ? 'started' : 'reused', instanc
       let spawns = 0;
       const result = await ensureManagedProvider(config, {
         probe: async () => (probes++ === 0 ? { reachable: false } : health('provider-1')),
+        register: async () => ({ visible: true }),
         spawn: () => {
           spawns += 1;
           return { pid: 12, exited: () => false };
@@ -188,6 +191,7 @@ console.log(JSON.stringify({ action: count === 1 ? 'started' : 'reused', instanc
 
       const reused = await ensureManagedProvider(config, {
         probe: async () => health('provider-1'),
+        register: async () => ({ visible: true }),
         spawn: () => {
           throw new Error('must not spawn');
         },
@@ -205,6 +209,7 @@ console.log(JSON.stringify({ action: count === 1 ? 'started' : 'reused', instanc
       let probes = 0;
       const result = await ensureManagedProvider(config, {
         probe: async () => (probes++ === 0 ? { reachable: false } : health('provider-1')),
+        register: async () => ({ visible: true }),
         spawn: () => ({ pid: 13, exited: () => false }),
         sleep: async () => {},
       });
@@ -222,6 +227,7 @@ console.log(JSON.stringify({ action: count === 1 ? 'started' : 'reused', instanc
       await expect(
         ensureManagedProvider(config, {
           probe: async () => (probes++ === 0 ? { reachable: false } : health('provider-2')),
+          register: async () => ({ visible: true }),
           spawn: () => ({ pid: 13, exited: () => false }),
           sleep: async () => {},
         }),
@@ -236,6 +242,29 @@ console.log(JSON.stringify({ action: count === 1 ? 'started' : 'reused', instanc
     try {
       expect(() => validateManagedProviderConfig({ ...config, url: 'http://localhost:17620' })).toThrow('explicit loopback');
       expect(() => validateManagedProviderConfig({ ...config, name: 'Ponder' })).toThrow('lowercase');
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test('registers the stable provider URL, label, and alias through the local console registry', () => {
+    const { dir, config } = fixture();
+    try {
+      let invocation: { cmd: string; args: string[]; options: unknown } | undefined;
+      const result = registerManagedProvider(config, process.cwd(), {
+        consoleUrl: 'http://127.0.0.1:7373',
+        cli: '/repo/node_modules/termfleet/dist/cli.js',
+        spawnSync: (cmd: string, args: string[], options: unknown) => {
+          invocation = { cmd, args, options };
+          return { status: 0, stdout: '{}', stderr: '' };
+        },
+      });
+      expect(result.visible).toBe(true);
+      const args = invocation?.args ?? [];
+      expect(args).toContain('register-local');
+      expect(args).toContain('http://127.0.0.1:7373');
+      expect(args).toContain('http://127.0.0.1:17620');
+      expect(args.filter((value: string) => value === 'ponder-open-autonomy')).toHaveLength(2);
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }

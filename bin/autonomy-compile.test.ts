@@ -645,3 +645,52 @@ describe('autonomy-compile — --provider-url (OA-09)', () => {
     }
   }, 30_000);
 });
+
+describe('autonomy-compile — managed provider ownership', () => {
+  test('emits a named reusable virtual-tmux provider and its lifecycle script', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'oa-managed-provider-cli-'));
+    try {
+      const r = compile([
+        'simple-sdlc',
+        'local',
+        dir,
+        '--provider-url',
+        'http://127.0.0.1:17620',
+        '--managed-provider-name',
+        'ponder-open-autonomy',
+        '--provider-runtime-dir',
+        '/Volumes/PeakSSD/Ponder-runtime/termfleet-provider',
+      ]);
+      expect(r.exitCode).toBe(0);
+      const schedule = JSON.parse(readFileSync(join(dir, 'scheduler', 'schedule.json'), 'utf8')) as {
+        provider: { name: string; url: string; runtimeDir: string; tmuxSocket: string };
+      };
+      expect(schedule.provider).toMatchObject({
+        name: 'ponder-open-autonomy',
+        url: 'http://127.0.0.1:17620',
+        runtimeDir: '/Volumes/PeakSSD/Ponder-runtime/termfleet-provider',
+        tmuxSocket: 'ponder-open-autonomy',
+      });
+      expect(existsSync(join(dir, 'scheduler', 'ensure-provider.mjs'))).toBe(true);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  }, 30_000);
+
+  test('requires a fixed provider URL and refuses a non-loopback endpoint', () => {
+    const missing = compile(['simple-sdlc', 'local', '--managed-provider-name', 'ponder-open-autonomy']);
+    expect(missing.exitCode).toBe(2);
+    expect(missing.stderr).toContain('requires --provider-url');
+
+    const remote = compile([
+      'simple-sdlc',
+      'local',
+      '--managed-provider-name',
+      'ponder-open-autonomy',
+      '--provider-url',
+      'http://192.0.2.10:17620',
+    ]);
+    expect(remote.exitCode).toBe(2);
+    expect(remote.stderr).toContain('explicit loopback');
+  });
+});

@@ -63,6 +63,13 @@ function runnerFrontendSrc(): string {
     'runner-frontend.ts',
   ));
 }
+let _managedProvider: string | undefined;
+function managedProviderSrc(): string {
+  return (_managedProvider ??= readSiblingOrThrow(
+    () => readFileSync(join(dirname(fileURLToPath(import.meta.url)), 'managed-provider.mjs'), 'utf8'),
+    'managed-provider.mjs',
+  ));
+}
 // NOTE: a github code host's propose effect (turning a finished proposer's worktree into a PR) is NOT a
 // scheduled script. It is a per-session LIFECYCLE effect: runner.ts records it at launch and the loop driver
 // runs it when that session finishes (reconcilePendingEffects above) — the local mirror of github's
@@ -276,6 +283,7 @@ if (once && dispatchIndex !== -1) {
   console.error('[loop] choose either --once or --dispatch <job>, not both.');
   process.exit(2);
 }
+const managedProvider = schedule.provider?.mode === 'managed' ? schedule.provider : null;
 
 // PAUSE GATE (OA-07): fences belong to jobs, not to the loop as a whole. The default schedule still uses
 // .open-autonomy/paused for every job, while adopter target config may give groups independent markers.
@@ -391,7 +399,22 @@ if (needsRunner) {
       return 'could not parse the resolved specifier for "' + spec + '": ' + (probe.stdout || '').trim();
     }
     const expectedPrefix = pkgDir + sep;
-    if (resolvedPath !== pkgDir && !resolvedPath.startsWith(expectedPrefix)) {
+    // pnpm installs node_modules/<name> as a symlink into node_modules/.pnpm/. Node resolves to that REAL
+    // package path, which is healthy even though it is not string-wise below node_modules/<name>. A true
+    // workspace/self-reference collision resolves to the repo source tree and fails both comparisons.
+    let realPkgDir = pkgDir;
+    try {
+      realPkgDir = realpathSync(pkgDir);
+    } catch {
+      /* leave as pkgDir */
+    }
+    const realPrefix = realPkgDir + sep;
+    if (
+      resolvedPath !== pkgDir &&
+      !resolvedPath.startsWith(expectedPrefix) &&
+      resolvedPath !== realPkgDir &&
+      !resolvedPath.startsWith(realPrefix)
+    ) {
       return '"' + spec + '" resolved OUTSIDE node_modules/' + name + '/ (to ' + resolvedPath + ') — a self-reference, not the installed package';
     }
     // realpathSync-escape branch: reached when resolution DID land string-wise inside node_modules/<name>/
@@ -444,44 +467,46 @@ if (needsRunner) {
   // as "no pin -> use schedule", yet the tick's merge (\`Object.assign({}, schedule.env, process.env)\`) let
   // that empty string OVERRIDE the schedule pin, so the child auto-discovered while this line claimed the pin
   // held. Fix: TRIM both sides (empty/whitespace ⇒ unset), identically to buildTickEnv's normalization.
-  const ambientPin = (process.env.TERMFLEET_PROVIDER_URL || '').trim();
-  const schedulePin = ((schedule.env && schedule.env.TERMFLEET_PROVIDER_URL) || '').trim();
-  let providerUrl;
-  let providerSource;
-  if (ambientPin) {
-    providerUrl = ambientPin;
-    providerSource = 'env';
-  } else if (schedulePin) {
-    providerUrl = schedulePin;
-    providerSource = 'schedule';
-  } else {
-    try {
-      const { resolveDefaultProvider } = await import('@termfleet/core/local-providers.js');
-      const resolved = await resolveDefaultProvider({});
-      providerUrl = resolved.baseUrl;
-      providerSource = resolved.source;
-    } catch (e) {
-      console.error(\`[loop] provider: none resolved yet (\${e?.message ?? e}) — will be resolved (or fail loudly) at launch time.\`);
+  if (!managedProvider) {
+    const ambientPin = (process.env.TERMFLEET_PROVIDER_URL || '').trim();
+    const schedulePin = ((schedule.env && schedule.env.TERMFLEET_PROVIDER_URL) || '').trim();
+    let providerUrl;
+    let providerSource;
+    if (ambientPin) {
+      providerUrl = ambientPin;
+      providerSource = 'env';
+    } else if (schedulePin) {
+      providerUrl = schedulePin;
+      providerSource = 'schedule';
+    } else {
+      try {
+        const { resolveDefaultProvider } = await import('@termfleet/core/local-providers.js');
+        const resolved = await resolveDefaultProvider({});
+        providerUrl = resolved.baseUrl;
+        providerSource = resolved.source;
+      } catch (e) {
+        console.error(\`[loop] provider: none resolved yet (\${e?.message ?? e}) — will be resolved (or fail loudly) at launch time.\`);
+      }
     }
-  }
-  if (providerUrl) {
+    if (providerUrl) {
     // stderr, matching this file's own convention for diagnostic lines (PAUSED/COLLISION above) — stdout
     // here carries no structured output of its own, but keeping ALL of the loop's own log noise off stdout
     // is what lets a future consumer safely pipe/parse this process's stdout.
-    console.error(\`[loop] provider \${providerUrl} (\${providerSource})\`);
-    // Pin the scheduler process itself to the same resolved provider before constructing its in-process
-    // lifecycle runner below. Child launches already receive buildTickEnv(), but the reaper/effect/workspace
-    // reconciler is not a child: without this assignment it can resolve a current context or auto-local
-    // provider independently while launches use the schedule pin.
-    process.env.TERMFLEET_PROVIDER_URL = providerUrl;
-    // Re-export the ORIGIN as a hint (AUTONOMY_PROVIDER_URL_SOURCE) so both the in-process lifecycle runner
-    // and a NESTED resolve — this tick's run-agent.mjs -> autonomy-runner.mjs, or any nested
-    // \`runner.ts launch ...\` — report the same schedule-vs-env distinction. By the time those processes
-    // run, schedule.env and process.env are already merged (fireTick below / runner-frontend.ts's own env
-    // spread), so this is the only point that still knows which side the pin came from. Matched by the
-    // AUTONOMY.* export filter in backend.mjs/runner.ts's launch(), so it also propagates transitively into
-    // launched agent sessions.
-    process.env.AUTONOMY_PROVIDER_URL_SOURCE = providerSource;
+      console.error(\`[loop] provider \${providerUrl} (\${providerSource})\`);
+      // Pin the scheduler process itself to the same resolved provider before constructing its in-process
+      // lifecycle runner below. Child launches already receive buildTickEnv(), but the reaper/effect/workspace
+      // reconciler is not a child: without this assignment it can resolve a current context or auto-local
+      // provider independently while launches use the schedule pin.
+      process.env.TERMFLEET_PROVIDER_URL = providerUrl;
+      // Re-export the ORIGIN as a hint (AUTONOMY_PROVIDER_URL_SOURCE) so both the in-process lifecycle runner
+      // and a NESTED resolve — this tick's run-agent.mjs -> autonomy-runner.mjs, or any nested
+      // \`runner.ts launch ...\` — report the same schedule-vs-env distinction. By the time those processes
+      // run, schedule.env and process.env are already merged (fireJobs below / runner-frontend.ts's own env
+      // spread), so this is the only point that still knows which side the pin came from. Matched by the
+      // AUTONOMY.* export filter in backend.mjs/runner.ts's launch(), so it also propagates transitively into
+      // launched agent sessions.
+      process.env.AUTONOMY_PROVIDER_URL_SOURCE = providerSource;
+    }
   }
 }
 
@@ -560,6 +585,49 @@ if (isGitRepo && existsSync(GENERATED_MANIFEST)) {
   }
 }
 
+// A managed provider belongs to this one autonomy install. Every scheduler start and every later tick
+// checks that the fixed loopback URL carries the same durable Termfleet instance identity. It starts the
+// provider when absent, reuses it when healthy, and refuses a foreign occupant or an ambient override.
+// The ensure script keeps provider state outside the repository so deleting worktrees/node_modules cannot
+// delete the provider identity or its tmux socket state.
+let managedProviderFresh = false;
+const ensureOwnedProvider = () => {
+  if (!managedProvider) return true;
+  const ambient = (process.env.TERMFLEET_PROVIDER_URL || '').trim();
+  if (ambient && ambient !== managedProvider.url) {
+    console.error(
+      '[loop] managed provider collision: TERMFLEET_PROVIDER_URL=' + ambient +
+        ' conflicts with owned provider ' + managedProvider.name + ' at ' + managedProvider.url +
+        '; refusing to attach to another provider.',
+    );
+    return false;
+  }
+  const ensured = spawnSync(process.execPath, [join(here, 'ensure-provider.mjs')], {
+    cwd: join(here, '..'),
+    encoding: 'utf8',
+    env: { ...process.env, AUTONOMY_SCHEDULE: SCHEDULE },
+  });
+  if (ensured.status !== 0) {
+    if (ensured.stdout) process.stderr.write(ensured.stdout);
+    if (ensured.stderr) process.stderr.write(ensured.stderr);
+    console.error('[loop] managed provider ensure failed; no autonomy work was launched.');
+    return false;
+  }
+  let result;
+  try { result = JSON.parse((ensured.stdout || '').trim()); } catch {}
+  process.env.TERMFLEET_PROVIDER_URL = managedProvider.url;
+  process.env.AUTONOMY_PROVIDER_URL_SOURCE = 'managed';
+  console.error(
+    '[loop] provider ' + managedProvider.url + ' (managed:' + managedProvider.name +
+      ', ' + (result?.action || 'ensured') + ', instance ' + (result?.instanceId || 'unknown') + ')',
+  );
+  return true;
+};
+if (needsRunner && managedProvider) {
+  if (!ensureOwnedProvider()) process.exit(1);
+  managedProviderFresh = true;
+}
+
 // The env each tick passes to a launched command. Precedence (UNCHANGED, documented doctrine): ambient
 // process.env overrides schedule.env. One normalization (OA-09 Blocker 2): a set-but-EMPTY ambient
 // TERMFLEET_PROVIDER_URL is treated as UNSET so it can't SHADOW a real schedule pin — the SDK itself treats
@@ -597,6 +665,17 @@ const activeSessionCount = (env) => {
   } catch { return null; }
 };
 const fireJobs = (dueJobs, { triggerKind = 'cron', reportSkips = false } = {}) => {
+  if (managedProvider) {
+    if (!managedProviderFresh && !ensureOwnedProvider()) {
+      const skipped = dueJobs.map((job) => ({ job, reason: 'managed provider unavailable' }));
+      if (reportSkips) {
+        for (const skippedJob of skipped)
+          console.error('[loop] dispatch refused for "' + skippedJob.job.name + '": ' + skippedJob.reason + '.');
+      }
+      return { results: [], skipped };
+    }
+    managedProviderFresh = false;
+  }
   const env = Object.assign({}, buildTickEnv(), { AUTONOMY_TRIGGER_KIND: triggerKind });
   const maxConcurrent = Number(schedule.maxConcurrent || Number.POSITIVE_INFINITY);
   let active = Number.isFinite(maxConcurrent) ? activeSessionCount(env) : 0;
@@ -954,7 +1033,17 @@ export function undeliverableEventAgents(ir: AutonomyIR): string[] {
     .map(([role]) => role);
 }
 
-export function compileLocal(ir: AutonomyIR, opts: { runner?: RunnerName; destDir?: string; providerUrl?: string; scheduleConfig?: LocalScheduleConfig } = {}): CompileOutput {
+export function compileLocal(
+  ir: AutonomyIR,
+  opts: {
+    runner?: RunnerName;
+    destDir?: string;
+    providerUrl?: string;
+    scheduleConfig?: LocalScheduleConfig;
+    managedProviderName?: string;
+    providerRuntimeDir?: string;
+  } = {},
+): CompileOutput {
   const runner = opts.runner ?? 'termfleet';
   if (!SUPPORTED_RUNNERS.includes(runner)) {
     throw new Error(`unsupported runner "${runner}"; supported: ${SUPPORTED_RUNNERS.join(', ')}`);
@@ -1006,6 +1095,7 @@ export function compileLocal(ir: AutonomyIR, opts: { runner?: RunnerName; destDi
   // The single source of the runner's defaults (harness, cli, provider url, timeout). The vendored .mjs
   // runtime imports this instead of re-hardcoding literals; TERMFLEET_* env vars override at runtime.
   generated['scripts/runner-defaults.mjs'] = runnerDefaultsModule();
+  if (opts.managedProviderName) generated['scheduler/ensure-provider.mjs'] = managedProviderSrc();
 
   // NOTE: the ztrack loop Stop hook (.claude/settings.json) is NOT emitted here. It is Claude Code harness
   // config — what the AGENT does (drive-to-green), identical wherever Claude Code runs — so it belongs to the
@@ -1057,7 +1147,38 @@ export function compileLocal(ir: AutonomyIR, opts: { runner?: RunnerName; destDi
   // artifact instead. Precedence is UNCHANGED: LOOP_DRIVER's fireTick still does
   // `Object.assign({}, schedule.env, process.env)` — an ambient TERMFLEET_PROVIDER_URL still overrides this
   // compiled default, matching the documented TERMFLEET_* override doctrine (runner-config.ts).
-  const env = opts.providerUrl ? { TERMFLEET_PROVIDER_URL: opts.providerUrl } : {};
+  if (opts.managedProviderName && !opts.providerUrl) {
+    throw new Error('managedProviderName requires providerUrl so the owned provider has one durable endpoint');
+  }
+  if (opts.managedProviderName && !/^[a-z0-9][a-z0-9._-]{2,63}$/.test(opts.managedProviderName)) {
+    throw new Error('managedProviderName must be 3-64 lowercase letters, digits, dots, underscores, or hyphens');
+  }
+  if (opts.managedProviderName && opts.providerRuntimeDir !== undefined && !opts.providerRuntimeDir.trim()) {
+    throw new Error('providerRuntimeDir must be a non-empty durable path');
+  }
+  let managedProviderUrl: string | undefined;
+  if (opts.managedProviderName && opts.providerUrl) {
+    const parsed = new URL(opts.providerUrl);
+    if (parsed.protocol !== 'http:' || parsed.hostname !== '127.0.0.1' || !parsed.port || parsed.pathname !== '/' || parsed.search || parsed.hash) {
+      throw new Error('a managed provider URL must be an explicit loopback URL such as http://127.0.0.1:17620');
+    }
+    managedProviderUrl = parsed.origin;
+  }
+  const env = opts.providerUrl ? { TERMFLEET_PROVIDER_URL: managedProviderUrl ?? opts.providerUrl } : {};
+  const provider = opts.managedProviderName
+    ? {
+        schema: 'open-autonomy.managed-provider.v1',
+        mode: 'managed',
+        kind: 'virtual-tmux',
+        name: opts.managedProviderName,
+        url: managedProviderUrl,
+        runtimeDir: opts.providerRuntimeDir ?? `~/.open-autonomy/providers/${opts.managedProviderName}`,
+        tmuxSocket: opts.managedProviderName,
+        count: 1,
+        maxWindows: 16,
+        reapEndedAfterSeconds: 300,
+      }
+    : undefined;
   const cronJobs = cronAgents.map(([role, agent]) => {
     const script = isScript(agent.behavior);
     const baseRetry = Math.min(300, cronToSeconds(cronOf(agent) as string));
@@ -1084,6 +1205,7 @@ export function compileLocal(ir: AutonomyIR, opts: { runner?: RunnerName; destDi
     schema: 'open-autonomy.local-schedule.v2',
     ...(ir.policy.maxConcurrent ? { maxConcurrent: ir.policy.maxConcurrent } : {}),
     env,
+    ...(provider ? { provider } : {}),
     jobs,
   }, null, 2)}\n`;
   generated['.open-autonomy/enforcement.json'] = `${JSON.stringify(enforcementReport(ir, 'local'), null, 2)}\n`;

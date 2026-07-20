@@ -55,6 +55,39 @@ describe('scheduler/run.mjs --once — the termfleet pre-flight guard', () => {
     }
   });
 
+  test('a healthy pnpm virtual-store install is accepted (real resolution lands in node_modules/.pnpm)', () => {
+    const dir = scaffold(skillAgentIr);
+    try {
+      const termfleetReal = join(dir, 'node_modules', '.pnpm', 'termfleet@0.2.0', 'node_modules', 'termfleet');
+      mkdirSync(termfleetReal, { recursive: true });
+      writeFileSync(
+        join(termfleetReal, 'package.json'),
+        JSON.stringify({ name: 'termfleet', version: '0.2.0', type: 'module', exports: { '.': './index.js' } }),
+      );
+      writeFileSync(join(termfleetReal, 'index.js'), 'export const x = 1;\n');
+      symlinkSync(termfleetReal, join(dir, 'node_modules', 'termfleet'), 'dir');
+
+      const coreReal = join(dir, 'node_modules', '.pnpm', '@termfleet+core@0.2.1', 'node_modules', '@termfleet', 'core');
+      mkdirSync(coreReal, { recursive: true });
+      writeFileSync(
+        join(coreReal, 'package.json'),
+        JSON.stringify({ name: '@termfleet/core', version: '0.2.1', type: 'module', exports: { './local-providers.js': './local-providers.js' } }),
+      );
+      writeFileSync(
+        join(coreReal, 'local-providers.js'),
+        `export async function resolveDefaultProvider() { throw new Error('none'); }\n`,
+      );
+      mkdirSync(join(dir, 'node_modules', '@termfleet'), { recursive: true });
+      symlinkSync(coreReal, join(dir, 'node_modules', '@termfleet', 'core'), 'dir');
+
+      const r = spawnSync('node', ['scheduler/run.mjs', '--once'], { cwd: dir, encoding: 'utf8' });
+      expect(r.stderr).not.toContain('COLLISION');
+      expect(r.status).toBe(0);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
   test('a script-only schedule (no skill agent) never needs the runner — no termfleet warning at all', () => {
     const dir = scaffold(scriptOnlyIr);
     try {

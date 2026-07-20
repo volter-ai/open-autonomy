@@ -96,6 +96,7 @@ const requiredEntries = [
   'package/dist/cli.js',
   'package/dist/egress-guard.sh',
   'package/dist/backend.mjs',
+  'package/dist/managed-provider.mjs',
   'package/dist/runner-frontend.ts',
   'package/dist/control-backend.mjs',
   ...bundledProfiles.map((p) => `package/profiles/${p}/ir.yml`),

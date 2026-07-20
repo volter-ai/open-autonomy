@@ -184,7 +184,7 @@ bun run autonomy conformance exec   # check the Runner contract on the reference
 One command is the front door — `open-autonomy <verb>` (alias `oa`):
 
 ```bash
-open-autonomy compile <profileName|profileDir> <local|gh-actions> [outDir] [--force]  # compile a profile onto a substrate ("github" still accepted)
+open-autonomy compile <profileName|profileDir> <local|gh-actions> [outDir] [--force]  # add --provider-url/--managed-provider-name/--provider-runtime-dir for an owned local provider
 open-autonomy lint <profileDir>                                          # validate a profile of your own — writes nothing
 open-autonomy preflight                                                  # make an adopter repo install-ready (run after installing the runner deps)
 open-autonomy conformance <exec|termfleet|gh-actions>                    # run the substrate conformance battery ("github" still accepted)

@@ -146,9 +146,8 @@ Check these **before step 1** — each is a reason to stop and resolve first, no
 - **No `package.json` in the target repo.** The runner needs JS deps (`termfleet`, `ztrack`); a repo with
   no `package.json` (e.g. a pure Go/Python/Rust repo) can't host it as-is.
 - **A shared or lived-in box.** A termfleet provider can launch terminal sessions **as your user,
-  box-wide** — before you start your own (step 2), check whether one is already running (step 1's
-  `preflight`, step 2's `/healthz` probe), and always pin `TERMFLEET_PROVIDER_URL` (step 2, "Pin the
-  provider").
+  box-wide**. Use step 2's named, install-owned managed provider; never allow the loop to discover or
+  attach to another project's machine-global provider.
 - **A public repo.** Anyone who can open an issue or comment can put text in front of the agents — a
   prompt injection runs with your own token (push, secrets, PRs). Don't install onto a public repo where
   outside contributors can reach the agents unless issue/comment authorship is restricted to maintainers,
@@ -233,81 +232,36 @@ missing or logged-out CLI. So sign in *first*:
 There is no separate "open-autonomy login" — the agent uses your coding CLI's own session, so your
 local subscription/key is what's billed.
 
-### 2. Start termfleet (console + a local provider)
+### 2. Choose the install's provider identity
 
-The local runner (the termfleet SDK's `ProviderClient`) talks to a termfleet **console** + **provider**
-running on your machine. **termfleet already runs as machine-wide infrastructure on many dev boxes** — the
-box's own provider may already hold the doc-default ports, and a second `serve` on a bound port fails
-*silently* behind `&`. Check first, and use a **repo-unique prefix + a free port pair**, never the box
-defaults:
+Give each local install one stable, unmistakable virtual-tmux provider identity. Choose a repo-specific
+name, a fixed free loopback port, and a durable runtime directory **outside the repository and its
+worktrees**:
 
 ```bash
-# pick a repo-unique prefix and a free port pair — NOT the box defaults 7373/7402
-TF_PREFIX="$(basename "$PWD")-oa"; TF_CONSOLE=7573; TF_PROVIDER=7602
-npx termfleet console serve --name "$TF_PREFIX" --port "$TF_CONSOLE" &
-npx termfleet provider serve --kind virtual-tmux --prefix "$TF_PREFIX" --count 1 --port "$TF_PROVIDER" &
-export TERMFLEET_PROVIDER_URL="http://127.0.0.1:$TF_PROVIDER"   # pin it — see "Pin the provider" below
+export OA_PROVIDER_NAME="$(basename "$PWD" | tr '[:upper:]' '[:lower:]')-open-autonomy"
+export OA_PROVIDER_URL="http://127.0.0.1:7602"       # choose a repo-unique free port
+export OA_PROVIDER_RUNTIME="$HOME/.local/state/open-autonomy/providers/$OA_PROVIDER_NAME"
 ```
 
-**Is a port really free?** Probe `/healthz` and read the BODY SHAPE — never the root path:
+The compile command in step 3 records all three. The scheduler then owns the lifecycle: on every start it
+starts that provider if absent, and on later starts and ticks it reuses the same provider. The runtime
+directory persists Termfleet's `instanceId`, ownership record, PID, logs, registry, tmux layout, and a
+dedicated tmux socket name. Deleting `node_modules` or a git worktree does not delete this identity.
 
-```bash
-curl -sS "http://127.0.0.1:$TF_PROVIDER/healthz"
-```
+Ownership is fail-closed. A managed scheduler never consults machine-global `termfleet use` state or
+auto-discovery, never accepts an ambient `TERMFLEET_PROVIDER_URL` pointing elsewhere, and never adopts an
+unclaimed process already listening on its port. It exits before launching an agent if the port belongs to
+another provider, a console, or any other service. This matters because a provider can launch terminal
+sessions as your user.
 
-- `{"ok":true,"provider":"<kind>",...}` → an existing termfleet **provider** already holds that port.
-- `{"ok":true,"service":"console"}` → an existing termfleet **console** already holds it.
-- *any other* HTTP answer (including a plain 404 on `/`) → **something else** is occupying it.
-- only a **connection refused** means free.
+You do **not** need to start a console or provider manually. If you deliberately operate external
+Termfleet infrastructure instead, omit `--managed-provider-name` and `--provider-runtime-dir`, start it
+with `npx termfleet provider serve --kind virtual-tmux ...`, and retain the older `--provider-url`-only
+behavior. External mode remains operator-owned and allows the documented ambient override precedence.
 
-`curl -fsS http://127.0.0.1:$PORT/` (the `-f` + root-path form) **cannot** tell these apart: `-f` treats a
-provider's 404-on-`/` as failure too, so it reads an *occupied* port as *free* and a second `serve` on the
-same port then fails silently behind `&`. `npx --yes open-autonomy preflight` (step 1) runs this
-classification for you automatically, naming whatever it finds (kind + instance, or the occupying
-pid/command).
-
-Sanity-check that a session can launch (this is the same call the loop makes):
-
-```bash
-npx termfleet claude new -y --prompt "say hello"
-# -y auto-approves the panel-review prompt that fires once any panel already exists
-# (true after your very first launch, and always true on a shared provider)
-```
-
-`termfleet sessions recent` is **user-global** — it lists every project's sessions on this box (it reads
-the coding harness's own `~/.claude/projects` transcript index), not just yours. Filter to what you
-started, and use `--live` for the real-time view:
-
-```bash
-npx termfleet sessions recent --live --prefix "$TF_PREFIX"
-```
-
-Open `http://127.0.0.1:7573` (or whichever `$TF_CONSOLE` port you chose) for the optional visual console.
-
-#### Pin the provider
-
-`TERMFLEET_PROVIDER_URL` is not just a tiebreaker for an ambiguous auto-discovery — on a **shared or
-lived-in box it is required**. A termfleet provider can launch terminal sessions **as your user, box-wide**;
-an unpinned loop resolves its provider through a chain that can silently pick up someone else's: `--url`
-flag → `TERMFLEET_PROVIDER_URL` → a machine-global `termfleet use` context in `~/.termfleet/current.json`
-(set by **any** project on the box) → zero-config auto-discovery over every advertised local provider
-(`~/.termfleet/providers/*.json`). Export the pin as above, or make it **durable** — survives new shells,
-supervisors, and re-runs — by compiling it into the schedule:
-
-```bash
-npx open-autonomy compile simple-sdlc local . --provider-url "$TERMFLEET_PROVIDER_URL"
-```
-
-This writes the pin into `scheduler/schedule.json`'s `env`, so every tick (and every session it launches)
-carries it. An ambient `TERMFLEET_PROVIDER_URL` still **overrides** the compiled pin at runtime (the
-documented TERMFLEET_* override doctrine, unchanged) — and both the loop driver and the runner backend
-print one line naming the **effective provider URL and its source** (`env` / `schedule` / `current-context`
-/ `auto-local`) on the first tick, so a misattachment is visible immediately instead of silent.
-
-> termfleet is loopback-only by default and makes no outbound requests unless you configure a
-> registry — fine for a single closed-source machine. Keep the console/provider ports bound to loopback:
-> anyone who can reach the provider can launch terminal sessions **as your user**, so never bind or
-> port-forward them to a non-local interface.
+> Keep managed providers on explicit `http://127.0.0.1:<port>` URLs. Never bind or port-forward them to a
+> non-local interface: anyone who can reach the provider can launch terminal sessions as your user.
 
 ### 3. Compile a profile into your repo
 
@@ -320,7 +274,10 @@ cd my-repo
 npx open-autonomy compile hello local .
 
 # local-git code host — fully local, PR-free, no GitHub (the four-agent PM/draft/develop/review loop).
-npx open-autonomy compile simple-sdlc local .
+npx open-autonomy compile simple-sdlc local . \
+  --provider-url "$OA_PROVIDER_URL" \
+  --managed-provider-name "$OA_PROVIDER_NAME" \
+  --provider-runtime-dir "$OA_PROVIDER_RUNTIME"
 
 # GitHub code host — agents run locally, changes land as auto-merging PRs on GitHub.
 npx open-autonomy compile simple-gh-sdlc local .
@@ -328,6 +285,10 @@ npx open-autonomy compile simple-gh-sdlc local .
 # Human-supervised GitHub loop — Manager executes, Planner grows product work, Kaizen studies process.
 npx open-autonomy compile simple-gh local .
 ```
+
+Use the same three provider flags for `hello` or `simple-gh-sdlc`; only the profile name changes. A
+managed compile emits `scheduler/ensure-provider.mjs` and records the ownership contract in
+`scheduler/schedule.json`.
 
 This is an **overlay**: it lays down `scheduler/` (the loop driver + schedule), `scripts/` (the local
 runner), the agent skills under `.claude/skills/` + `.codex/skills/`, `.claude/settings.json` (see the
@@ -503,20 +464,20 @@ With the `hello` profile, the first **unpaused** `--once` tick launches a `greet
 it in `termfleet sessions recent --live` and the console. That confirms the whole local path works.
 
 **Keeping it running (unattended):** a backgrounded `node scheduler/run.mjs &` **dies on terminal close,
-logout, or reboot** — so does the termfleet console/provider from step 2. For a loop that survives, run it
+logout, or reboot**. The managed provider is detached and the next scheduler start reuses or restarts it,
+but the scheduler itself still needs supervision. For a loop that survives, run it
 under a supervisor that restarts it: a `launchd` plist (macOS), a `systemd --user` unit (Linux), or at
 minimum `nohup node scheduler/run.mjs >> ~/oa-loop.log 2>&1 &` inside a persistent `tmux`, plus a liveness
 check that the process is up. `docs/INSTALL-AGENT.md`'s
 ["Durable operation, observability & re-runs"](./INSTALL-AGENT.md#durable-operation-observability--re-runs)
 has the fuller treatment (feeding the backlog, worktree housekeeping, idle spend).
 
-**Stopping the loop:** `Ctrl-C` the scheduler (or `kill` its PID if you backgrounded it). The
-termfleet console/provider from step 2 are separate background processes — stop them with `kill %1 %2`
-in the shell that started them (or `pkill -f "termfleet (console|provider)"`). Stopping the scheduler
-stops new launches; a worker session already running in tmux finishes on its own (kill it from the
-termfleet console if you need it gone now). On the local runner this is also your spend stop — there
-is no proxy cap, so a stopped loop is what bounds model billing. (This same stop sequence is the first
-step of a full [Stop & teardown](#stop--teardown) below.)
+**Stopping the loop:** `Ctrl-C` the scheduler (or `kill` its PID if you backgrounded it). Stopping the
+scheduler stops new launches; the install-owned provider remains available for the next scheduler run,
+and a worker session already running in tmux finishes on its own. Close a worker through Termfleet if you
+need it gone now. On the local runner this is also your spend stop — there is no proxy cap, so a stopped
+loop is what bounds model billing. (Full provider removal is a separate, explicit teardown action; never
+delete its runtime directory as routine repository cleanup.)
 
 ### 6. Give the loop work — by code host
 
@@ -742,22 +703,26 @@ npx open-autonomy doctor --live     # one real session, cancelled either way —
 ### Stop & teardown
 
 **Pausing (not uninstalling):** to stop the loop without backing OA out, use the stop sequence in
-[step 5, "Stopping the loop"](#5-run-the-loop) (`Ctrl-C`/`kill` the scheduler + `kill %1 %2` the termfleet
-console/provider) — that's also your spend stop on the local runner. The softer, same-tick kill-switch is
+[step 5, "Stopping the loop"](#5-run-the-loop) (`Ctrl-C`/`kill` the scheduler; leave its owned provider
+available for reuse) — that's also your spend stop on the local runner. The softer, same-tick kill-switch is
 `touch .open-autonomy/paused` (step 5): it fences new dispatch without killing the process.
 
 **Full teardown (how you back OA out entirely):** there is no one-command uninstall; reverse what the
 install armed, in order:
 
 ```bash
-# 1. stop the loop + termfleet
-pkill -f scheduler/run.mjs ; pkill -f 'termfleet (console|provider)'
+# 1. stop the exact scheduler PID, then the exact install-owned provider PID recorded in the runtime dir
+kill <scheduler-pid>
+OA_PROVIDER_RUNTIME=$(node -p "JSON.parse(require('fs').readFileSync('scheduler/schedule.json')).provider.runtimeDir")
+OA_PROVIDER_PID=$(tr -d '\n' < "$OA_PROVIDER_RUNTIME/provider.pid")
+ps -p "$OA_PROVIDER_PID" -o command= | grep -F -- "--prefix $(node -p "JSON.parse(require('fs').readFileSync('scheduler/schedule.json')).provider.name")" \
+  && kill "$OA_PROVIDER_PID"
 
 # 2. GitHub code host only (simple-gh-sdlc) — disarm the gate; skip for local-git, which has no gate
 gh repo edit <owner>/<repo> --enable-auto-merge=false
 gh api -X DELETE "repos/<owner>/<repo>/branches/<default-branch>/protection"
 
-# 3. remove the harness commit + runtime scratch
+# 3. remove the harness commit + disposable worktrees (archive the provider runtime separately if desired)
 git revert --no-edit <install-commit>   # or git rm the overlay paths; then push if you're on the GitHub code host
 git worktree prune ; rm -rf .worktrees .open-autonomy/runner-state
 
@@ -778,8 +743,8 @@ README or `docs/INSTALL-AGENT.md`; make them link here instead.
 | # | Load-bearing fact | Lives in |
 |---|---|---|
 | 1 | Commit the overlay — worktrees only see committed files | [Step 4, "Commit the harness"](#4-commit-the-harness) |
-| 2 | Repo-unique ports/prefix + check-the-port-first (never the box defaults) | [Step 2, "Start termfleet"](#2-start-termfleet-console--a-local-provider) |
-| 3 | Provider pinning (`TERMFLEET_PROVIDER_URL`) | [Step 2 → "Pin the provider"](#pin-the-provider) |
+| 2 | Repo-unique provider name, fixed loopback port, and durable runtime identity | [Step 2, "Choose the install's provider identity"](#2-choose-the-installs-provider-identity) |
+| 3 | Managed ownership, pinning, reuse, and collision refusal | [Step 2, "Choose the install's provider identity"](#2-choose-the-installs-provider-identity) |
 | 4 | Teardown / how to back OA out | [Stop & teardown](#stop--teardown), above |
 | 5 | Stop-conditions (no `package.json`; shared box; public repo; no-PR-CI ⇒ never auto-merge; admin/plan) | [Stop-conditions before you start](#stop-conditions-before-you-start), above step 1 |
 | 6 | Durability/observability (loop dies on terminal close/logout/reboot; daemonize with nohup+tmux / systemd / launchd; worktree pruning; idle spend) | [Step 5, "Keeping it running (unattended)"](#5-run-the-loop) → fuller: [`INSTALL-AGENT.md#durable-operation-observability--re-runs`](./INSTALL-AGENT.md#durable-operation-observability--re-runs) |
@@ -801,19 +766,17 @@ The agent loop is the same everywhere; a few controls vary by **axis** (runner �
 
 ### Troubleshooting
 
-- **`createAgentWindow returned no terminalId …`** — the console/provider (step 2) aren't running, or your
-  agent CLI isn't installed/logged in (step 1). Re-run the `npx termfleet claude new -y --prompt "hi"`
-  sanity check in isolation (`-y` is required here too — the panel-review guard fires once any panel exists,
-  which it will after the first sanity check).
+- **`createAgentWindow returned no terminalId …`** — inspect the managed provider's `provider.log` under
+  `schedule.provider.runtimeDir`, run `node scheduler/ensure-provider.mjs`, and verify your agent CLI is
+  installed/logged in (step 1). The ensure command is provider-only and spends nothing.
 - **The loop does nothing each tick (`simple-sdlc`)** — there's no eligible work. Confirm
   `ztrack issue view` shows items and that they're in a state the PM can advance.
 - **Wrong agent launches** — set `TERMFLEET_AGENT=claude` or `=codex` explicitly; the default is
   `claude`.
-- **Pin a specific provider (required on a shared/lived-in box)** — set `TERMFLEET_PROVIDER_URL` to your
-  own provider's URL before running the loop, or make it durable across shells/supervisors/re-runs with
-  `npx open-autonomy compile <profile> local . --provider-url <url>` (lands in `scheduler/schedule.json`).
-  The loop driver and the runner backend print the effective provider + its source (`env` / `schedule` /
-  `current-context` / `auto-local`) on the first tick — check that line first if you suspect misattachment.
+- **Use one install-owned provider (required on a shared/lived-in box)** — compile with `--provider-url`,
+  `--managed-provider-name`, and `--provider-runtime-dir` as shown in steps 2–3. The loop prints the owned
+  name, action (`started`/`restarted`/`reused`), and durable instance ID. A conflicting ambient
+  `TERMFLEET_PROVIDER_URL` is refused rather than treated as an override.
 - **`preflight` names a foreign occupant on 7373/7402** — a pre-existing termfleet (or anything else) may
   already hold the doc-default ports on this box; `npx --yes open-autonomy preflight` classifies each
   candidate port (free / termfleet provider / termfleet console / foreign service) and prescribes a

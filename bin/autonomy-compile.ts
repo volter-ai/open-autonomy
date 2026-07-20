@@ -2,6 +2,7 @@
 // Compile a profile (an `autonomy.ir.v1` ir.yml) onto a substrate, producing an installation.
 //   bun bin/autonomy-compile.ts <profileName|profileDir> <local|gh-actions> [outDir] [--force]
 //     [--provider-url <url>] [--local-schedule-config <json>]
+//     [--managed-provider-name <name>] [--provider-runtime-dir <path>]
 //   ("github" accepted as alias for gh-actions)
 // The first arg is either a BUNDLED profile name (e.g. `self-driving`, resolved to the profiles/ shipped
 // with this package) or a path to a profile dir of your own. With no outDir, prints the installation's file
@@ -98,8 +99,12 @@ const providerUrlFlagIdx = rawArgs.indexOf('--provider-url');
 const providerUrl = providerUrlFlagIdx >= 0 ? rawArgs[providerUrlFlagIdx + 1] : undefined;
 const scheduleConfigFlagIdx = rawArgs.indexOf('--local-schedule-config');
 const scheduleConfigPath = scheduleConfigFlagIdx >= 0 ? rawArgs[scheduleConfigFlagIdx + 1] : undefined;
+const managedProviderNameFlagIdx = rawArgs.indexOf('--managed-provider-name');
+const managedProviderName = managedProviderNameFlagIdx >= 0 ? rawArgs[managedProviderNameFlagIdx + 1] : undefined;
+const providerRuntimeDirFlagIdx = rawArgs.indexOf('--provider-runtime-dir');
+const providerRuntimeDir = providerRuntimeDirFlagIdx >= 0 ? rawArgs[providerRuntimeDirFlagIdx + 1] : undefined;
 const usage =
-  'usage: autonomy-compile <profileName|profileDir> <local|gh-actions> [outDir] [--force] [--provider-url <url>] [--local-schedule-config <json>]';
+  'usage: autonomy-compile <profileName|profileDir> <local|gh-actions> [outDir] [--force] [--provider-url <url>] [--local-schedule-config <json>] [--managed-provider-name <name>] [--provider-runtime-dir <path>]';
 if (providerUrlFlagIdx >= 0) {
   // A missing value, OR the next token being ANOTHER flag (`--provider-url --force` would silently swallow
   // `--force` as the URL), OR an unparseable URL — all reject rather than emit a garbage pin into
@@ -129,11 +134,48 @@ if (scheduleConfigFlagIdx >= 0) {
     process.exit(2);
   }
 }
+if (managedProviderNameFlagIdx >= 0 && (!managedProviderName || managedProviderName.startsWith('-'))) {
+  console.error(`${usage}\n  --managed-provider-name requires a stable unique name (e.g. ponder-open-autonomy)`);
+  process.exit(2);
+}
+if (providerRuntimeDirFlagIdx >= 0 && (!providerRuntimeDir || providerRuntimeDir.startsWith('-'))) {
+  console.error(`${usage}\n  --provider-runtime-dir requires a durable path outside disposable worktrees`);
+  process.exit(2);
+}
+if (managedProviderName && !providerUrl) {
+  console.error(`${usage}\n  --managed-provider-name requires --provider-url`);
+  process.exit(2);
+}
+if (managedProviderName && !/^[a-z0-9][a-z0-9._-]{2,63}$/.test(managedProviderName)) {
+  console.error(`${usage}\n  --managed-provider-name must be 3-64 lowercase letters, digits, dots, underscores, or hyphens`);
+  process.exit(2);
+}
+if (managedProviderName && providerUrl) {
+  const parsedProviderUrl = new URL(providerUrl);
+  if (
+    parsedProviderUrl.protocol !== 'http:' ||
+    parsedProviderUrl.hostname !== '127.0.0.1' ||
+    !parsedProviderUrl.port ||
+    parsedProviderUrl.pathname !== '/' ||
+    parsedProviderUrl.search ||
+    parsedProviderUrl.hash
+  ) {
+    console.error(`${usage}\n  a managed provider URL must be explicit loopback, e.g. http://127.0.0.1:17620`);
+    process.exit(2);
+  }
+}
+if (providerRuntimeDir && !managedProviderName) {
+  console.error(`${usage}\n  --provider-runtime-dir requires --managed-provider-name`);
+  process.exit(2);
+}
+const valueFlagIndexes = new Set([
+  providerUrlFlagIdx,
+  scheduleConfigFlagIdx,
+  managedProviderNameFlagIdx,
+  providerRuntimeDirFlagIdx,
+].filter((i) => i >= 0).flatMap((i) => [i, i + 1]));
 const [profileArg, substrateArg, outDir] = rawArgs.filter(
-  (a, i) =>
-    a !== '--force' &&
-    (providerUrlFlagIdx < 0 || (i !== providerUrlFlagIdx && i !== providerUrlFlagIdx + 1)) &&
-    (scheduleConfigFlagIdx < 0 || (i !== scheduleConfigFlagIdx && i !== scheduleConfigFlagIdx + 1)),
+  (a, i) => a !== '--force' && !valueFlagIndexes.has(i),
 );
 // `gh-actions` is the runner-substrate; accept `github` as a back-compat alias. `local` unchanged.
 const substrate = substrateArg === 'github' ? 'gh-actions' : substrateArg;
@@ -147,6 +189,9 @@ if (providerUrl && substrate !== 'local') {
 if (scheduleConfig && substrate !== 'local') {
   console.error(`open-autonomy: --local-schedule-config only applies to the "local" substrate`);
   process.exit(2);
+}
+if (managedProviderName && substrate !== 'local') {
+  console.error(`open-autonomy: WARNING — managed provider flags only apply to the "local" substrate; ignored for "${substrate}".`);
 }
 
 const profileDir = resolveProfile(profileArg);
@@ -174,7 +219,13 @@ let out: CompileOutput;
 try {
   out =
     substrate === 'local'
-      ? (await import('@open-autonomy/substrate-local')).compileLocal(ir, { destDir: outDir, providerUrl, scheduleConfig })
+      ? (await import('@open-autonomy/substrate-local')).compileLocal(ir, {
+          destDir: outDir,
+          providerUrl,
+          scheduleConfig,
+          managedProviderName,
+          providerRuntimeDir,
+        })
       : (await import('@open-autonomy/substrate-github')).compileGithub(ir);
 } catch (e) {
   // A lazy sibling-data read (emit.ts) throws an actionable packaging-bug Error naming the missing file —
@@ -352,6 +403,15 @@ if (outDir) {
       `     (an uncommitted harness produces workers that die at launch with \`Unknown command: /develop\`):\n` +
       `       ${cd}git add ${stagePaths.join(' ')}  &&  git commit -m "Install the open-autonomy harness"\n` +
       `     (no push required on local-git; see docs/OPERATIONS.md#local-runner-quickstart, step 4)\n`;
+    const providerStep = managedProviderName
+      ? `  3. Managed provider: this install owns "${managedProviderName}" at ${providerUrl}. The scheduler starts it\n` +
+        `     when absent and reuses the same durable instance on every later start/tick. Verify provider-only\n` +
+        `     (no coding agent launch), then repeat and confirm the same instanceId with action "reused":\n` +
+        `       ${cd}node scheduler/ensure-provider.mjs\n`
+      : `  3. External termfleet provider: start a repo-unique virtual-tmux provider, then make its URL durable\n` +
+        `     with --provider-url. For install-owned automatic start/reuse, recompile with all three flags:\n` +
+        `       --provider-url http://127.0.0.1:<free-port> --managed-provider-name <repo>-open-autonomy\n` +
+        `       --provider-runtime-dir ~/.local/state/open-autonomy/providers/<repo>-open-autonomy\n`;
     console.log(
       `\nNext steps (local loop — open-autonomy v${CLI_VERSION}):\n` +
         `  1. Prereqs: Node 22.18+ (the ztrack preset is .mts), tmux. Add termfleet to this repo (the runner uses its SDK),\n` +
@@ -359,14 +419,7 @@ if (outDir) {
         `     ports for a foreign termfleet/other occupant + your CI's lockfile compat):\n` +
         `       ${cd}npm install termfleet  &&  npx --yes open-autonomy preflight\n` +
         `  2. Sign in to your agent CLI: run \`claude\` then \`/login\`  (or \`codex login\`)\n` +
-        `  3. Start termfleet (console + a local provider) — a REPO-UNIQUE prefix/port pair, not the box defaults\n` +
-        `     7373/7402 (a pre-existing termfleet on this box may already hold those):\n` +
-        `       TF_PREFIX=$(basename "$PWD")-oa; TF_CONSOLE=7573; TF_PROVIDER=7602\n` +
-        `       npx termfleet console serve --name "$TF_PREFIX" --port $TF_CONSOLE &\n` +
-        `       npx termfleet provider serve --kind virtual-tmux --prefix "$TF_PREFIX" --count 1 --port $TF_PROVIDER &\n` +
-        `       export TERMFLEET_PROVIDER_URL=http://127.0.0.1:$TF_PROVIDER   # PIN — required on a shared/lived-in box.\n` +
-        `     Make the pin DURABLE (survives new shells/supervisors/re-runs) by recompiling with it:\n` +
-        `       ${cd}npx open-autonomy compile ${profileArg} local . --provider-url "$TERMFLEET_PROVIDER_URL"\n` +
+        providerStep +
         tracker +
         commitStep +
         `  ${runStepNum}. Run the loop:  ${cd}node scheduler/run.mjs --once   (one tick)  |  node scheduler/run.mjs   (continuous)\n` +

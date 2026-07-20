@@ -259,8 +259,15 @@ git diff package.json
 npx --yes open-autonomy preflight
 
 # 2. The overlay — additive; generates NO package.json/README/.gitignore over the repo (`--yes` so a cold
-#    box doesn't hang on npx's install prompt — open-autonomy isn't a local dep):
-npx --yes open-autonomy compile simple-gh-sdlc local .
+#    box doesn't hang on npx's install prompt — open-autonomy isn't a local dep). Give this install one
+#    named provider, fixed loopback URL, and runtime directory outside the repo/worktrees:
+OA_PROVIDER_NAME="$(basename "$PWD" | tr '[:upper:]' '[:lower:]')-open-autonomy"
+OA_PROVIDER_URL="http://127.0.0.1:7602" # choose a repo-unique free port
+OA_PROVIDER_RUNTIME="$HOME/.local/state/open-autonomy/providers/$OA_PROVIDER_NAME"
+npx --yes open-autonomy compile simple-gh-sdlc local . \
+  --provider-url "$OA_PROVIDER_URL" \
+  --managed-provider-name "$OA_PROVIDER_NAME" \
+  --provider-runtime-dir "$OA_PROVIDER_RUNTIME"
 
 # 3. The tracker, linked to GitHub Issues (writes .volter/ config, committed with the harness):
 npx ztrack init --preset simple-gh-sdlc --sync github --repo <owner>/<repo>
@@ -313,27 +320,15 @@ JSON
 # confirm protection took (errors on a free private plan / non-admin / under-scoped token → STOP, tell human):
 gh api "repos/<owner>/<repo>/branches/<default-branch>/protection/required_status_checks/contexts" --jq '.'
 
-# 7. Start termfleet + sign in to the coding CLI BEFORE running the loop. The canonical console + provider
-#    recipe (the exact `npx termfleet console serve` / `provider serve` commands, the repo-unique
-#    prefix/port choice, the /healthz body-shape probe) is docs/OPERATIONS.md#2-start-termfleet-console--a-local-provider
-#    — run those two commands now, with these agent-specific deltas on top:
-#    - On a shared/lived-in box, NEVER attach to a console/provider this install did not start — a
-#      termfleet provider can launch terminal sessions as the HUMAN's user, box-wide. Re-use is defensible
-#      ONLY on a single-user box where this install started that provider itself — and even then, still
-#      pin (auto-discovery / a stray `termfleet use` can still drift).
-#    - Treat an already-answering port as a hard ABORT, not a human eyeball judgment call: the /healthz
-#      probe only tells you WHETHER something answers, never that it's YOURS; Phase 4's `doctor --json` is
-#      the identity check.
-TF_PREFIX="$(basename "$PWD")-oa"; TF_CONSOLE=7573; TF_PROVIDER=7602   # repo-unique — NOT the box defaults 7373/7402
-curl -sS "http://127.0.0.1:$TF_CONSOLE/healthz" 2>/dev/null | grep -q '"ok":true' \
-  && { echo "ABORT: port $TF_CONSOLE already answers — pick a different --port for $TF_PREFIX"; exit 1; }
-curl -sS "http://127.0.0.1:$TF_PROVIDER/healthz" 2>/dev/null | grep -q '"ok":true' \
-  && { echo "ABORT: port $TF_PROVIDER already answers — pick a different --port for $TF_PREFIX"; exit 1; }
-# both ports free — now run docs/OPERATIONS.md step 2's `console serve` / `provider serve` commands with
-# --name/--prefix "$TF_PREFIX" and --port "$TF_CONSOLE"/"$TF_PROVIDER" (background both with `&`), then:
-export TERMFLEET_PROVIDER_URL="http://127.0.0.1:$TF_PROVIDER"   # PIN — required in shared environments
-#   claude → /login    then sanity-check:  npx termfleet claude new -y --prompt "say hi"
-#   (-y auto-approves the panel-review prompt that fires once any panel already exists)
+# 7. Do not start or select a machine-global provider. The committed scheduler owns the named provider
+#    from step 2: it starts it on the first run and reuses the same durable Termfleet instance thereafter.
+#    Before the first tick, a provider-only check is safe and launches no coding agent:
+AUTONOMY_SCHEDULE=scheduler/schedule.json node scheduler/ensure-provider.mjs
+AUTONOMY_SCHEDULE=scheduler/schedule.json node scheduler/ensure-provider.mjs # must report "reused" + same instanceId
+#    Then inspect it through the exact pinned endpoint from scheduler/schedule.json:
+npx termfleet providers health --url "$OA_PROVIDER_URL"
+npx termfleet list --url "$OA_PROVIDER_URL" # one no-agent panel is expected; no PM/developer session yet
+#    A foreign occupant or conflicting ambient TERMFLEET_PROVIDER_URL is a hard failure before any launch.
 ```
 
 Then author + file the **first issue** (Phase-2 #6). The PM keys on the **`ready` label** (not the assignee),
@@ -472,7 +467,8 @@ Phase 4 proves *one* merge. For the loop to actually run a backlog over days, se
 - **Make the loop durable.** `node scheduler/run.mjs &` dies on terminal close / logout / reboot. Run it
   under a supervisor that restarts it: a `launchd` plist (macOS) / `systemd --user` unit (Linux), or at
   minimum `nohup node scheduler/run.mjs >> ~/oa-loop.log 2>&1 &` inside a persistent `tmux`. Add a liveness
-  check (is the process up?). The same goes for the termfleet console/provider.
+  check (is the process up?). The provider is detached and install-owned; every scheduler restart ensures
+  and reuses it automatically.
 - **Feed the backlog.** The loop runs whatever is `ready` on the GitHub board. Add work the same way as the
   first issue (`ztrack issue create … --state ready` → `ztrack sync github` → label `ready`). A `ready` issue
   **must already carry** a `## Acceptance Criteria` block and the top `Assignee: <login>` line — the PM never
@@ -528,7 +524,8 @@ Phase 4 proves *one* merge. For the loop to actually run a backlog over days, se
 
 ### Teardown (how the human backs OA out)
 
-The canonical teardown sequence (stop the loop + termfleet, disarm the GitHub gate, revert/remove the
+The canonical teardown sequence (stop the loop, explicitly stop/remove the owned provider only for a full
+uninstall, disarm the GitHub gate, revert/remove the
 harness commit, prune worktrees/runner-state, optionally remove the deps) is
 `docs/OPERATIONS.md#stop--teardown` — run it as written; this setup (`simple-gh-sdlc` on `local`) uses all
 of it, including the GitHub-gate-disarm step. There is no local-git-only delta here: nothing about this

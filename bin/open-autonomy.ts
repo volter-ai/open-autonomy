@@ -25,7 +25,7 @@ export {}; // make this a module so top-level await is allowed (delegation uses 
 
 const HELP = `open-autonomy <command> [args]
 
-  compile <profileName|profileDir> <local|gh-actions> [outDir]  compile a profile onto a substrate (dry run without outDir)
+  compile <profileName|profileDir> <local|gh-actions> [outDir]  compile a profile (local supports --provider-url, --managed-provider-name, --provider-runtime-dir)
   lint <profileDir>                                             validate a profile of your own: parses + compiles to every declared target + checks skill/folder names, writes nothing
   preflight                                                     make an adopter repo install-ready (verifies termfleet's PTY module loads + lockfile vs CI Node); run after installing the runner deps
   doctor [--live] [--json] [--branch-prefix oa-doctor]          prove a compiled local-runner install end-to-end (self/env/provider/auth/harness/skills[/live]); run after preflight + before leaving the loop unattended

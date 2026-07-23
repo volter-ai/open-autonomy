@@ -56,7 +56,7 @@ jobs:
     steps:
       # Check out the BASE (trusted main) for the gate script — NEVER the PR head. The gate reads PR metadata
       # via the API only; no untrusted PR code is executed.
-      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ github.event.repository.default_branch }}
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
